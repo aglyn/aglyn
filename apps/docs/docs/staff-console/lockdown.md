@@ -123,6 +123,31 @@ real error.
 4. Lift it from the same page. Lifting also evicts stale notice pages, restores
    member write access, and is audited like the lock was.
 
+### Never take a lock or a lift on trust
+
+A click is a request. A click that misses — the page settles, a banner
+collapses, the button moves — looks exactly like one that worked, and the
+dangerous half is a *lift* you believe happened: a controlled 60-second action
+becomes an outage nobody is watching.
+
+So the page never claims a state it has not read back:
+
+- Every lock and lift answers with the server's **re-read of the target**, and
+  the workspace/site/account card shows that verdict — `LOCKED` or
+  `NOT LOCKED` — stamped with the time it was read. It is a snapshot, not a
+  live view, which is why the time is on it.
+- **Check state** re-reads one target without touching it. Use it freely; it
+  is available to every staff role, not just `super`.
+- The verdict is discarded the moment you change the scope or the target id —
+  a panel about the previous target is worse than no panel.
+- The target id now **stays** after a submit, so `Unlock` is live immediately
+  after a lock instead of being a disabled control.
+- **Actions taken in this session** lists everything that reached the server,
+  with the time. If you clicked and no new line appeared, the click did not
+  register — check the state and click again.
+- A write that returns but whose re-read disagrees is reported as
+  `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
+
 ### What the audit row records
 
 Every lock and lift writes an `adminAudit` row carrying the actor, the `scope`,

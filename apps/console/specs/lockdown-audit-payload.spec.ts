@@ -22,8 +22,9 @@
  */
 
 /**
- * AGL-1572 — what the `adminAudit` row REMEMBERS about a lockdown, proved by
- * driving /api/admin/lockdown in-process on all five scopes.
+ * /api/admin/lockdown driven in-process on all five scopes — what the
+ * `adminAudit` row REMEMBERS about a lockdown (AGL-1572), and what the route
+ * TELLS THE OPERATOR about the state afterwards (AGL-1571).
  *
  * The drill (2026-08-14) armed both of its locks with a 15-minute dead-man
  * expiry, the expiry was genuinely applied to the carrier docs, and the audit
@@ -63,11 +64,17 @@ jest.mock('firebase-admin/firestore', () => ({
 }))
 
 const mockDocHandle = (path: string) => ({
-  get: async () => ({
-    exists: mockStore[path] !== undefined,
-    data: () => mockStore[path],
-    get: (field: string) => mockStore[path]?.[field],
-  }),
+  // A real DocumentSnapshot is IMMUTABLE — it is the doc as of the read, not
+  // a live view. The route depends on that: it captures `before` from a
+  // snapshot taken ahead of the write and reads it again when it audits.
+  get: async () => {
+    const data = mockStore[path] ? { ...mockStore[path] } : undefined
+    return {
+      exists: data !== undefined,
+      data: () => data,
+      get: (field: string) => data?.[field],
+    }
+  },
   set: async (data: Record<string, unknown>) => {
     mockStore[path] = data
   },
@@ -112,25 +119,40 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   invalidateUserLockdownCache: () => undefined,
 }))
 
+/** The `suspended*` half of what the real org/host helpers write. */
+const mockApplySuspension = (path: string, action: string) => {
+  const doc = { ...(mockStore[path] ?? {}) }
+  if (action === 'lock') doc['suspendedAt'] = Date.now()
+  else delete doc['suspendedAt']
+  mockStore[path] = doc
+}
+
 jest.mock('../utils/server/org-lockdown', () => ({
   __esModule: true,
-  applyOrgLockdown: async ({ orgId, action }: { orgId: string; action: string }) => ({
-    orgId,
-    action,
-    membersUpdated: 1,
-    tokensRevoked: action === 'lock' ? 1 : 0,
-    revokeTruncated: false,
-    revalidated: [],
-  }),
-  applyHostLockdown: async ({ hostId, action }: { hostId: string; action: string }) => ({
-    hostId,
-    action,
-    revalidated: { ok: true, reason: 'ok' },
-  }),
+  // These stand in for the real four-effect helpers, but they DO move the
+  // carrier doc: the route's post-write read-back is under test, and a mock
+  // that wrote nothing would make every verification fail for a reason that
+  // has nothing to do with the route.
+  applyOrgLockdown: async ({ orgId, action }: { orgId: string; action: string }) => {
+    mockApplySuspension(`orgs/${orgId}`, action)
+    return {
+      orgId,
+      action,
+      membersUpdated: 1,
+      tokensRevoked: action === 'lock' ? 1 : 0,
+      revokeTruncated: false,
+      revalidated: [],
+    }
+  },
+  applyHostLockdown: async ({ hostId, action }: { hostId: string; action: string }) => {
+    mockApplySuspension(`hosts/${hostId}`, action)
+    return { hostId, action, revalidated: { ok: true, reason: 'ok' } }
+  },
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const route = require('../app/api/admin/lockdown/route') as {
+  GET: (request: Request) => Promise<Response>
   POST: (request: Request) => Promise<Response>
 }
 
@@ -147,6 +169,14 @@ async function post(body: Record<string, unknown>): Promise<Response> {
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
+    }),
+  )
+}
+
+async function get(query: string): Promise<Response> {
+  return route.GET(
+    new Request(`https://app.aglyn.com/api/admin/lockdown${query}`, {
+      headers: { authorization: 'Bearer staff-token' },
     }),
   )
 }
@@ -414,5 +444,154 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
     })
     expect(response.status).toBe(400)
     expect(mockAuditRows).toEqual([])
+  })
+})
+
+describe('AGL-1571 · a write answers with what the server reads back', () => {
+  it('a lock returns the post-write state, confirmed', async () => {
+    const until = untilMs()
+    const response = await post({
+      action: 'lock',
+      scope: 'feature',
+      targetId: 'uploads',
+      reason: 'security',
+      untilMs: until,
+      message: NOTICE,
+    })
+    const payload = await response.json()
+    // `ok` only says the request was accepted. `confirmed` says the target
+    // was re-read afterwards and actually agrees — the two are different
+    // claims, and the drill turned on exactly that difference.
+    expect(payload.confirmed).toBe(true)
+    expect(payload.verified).toMatchObject({
+      scope: 'feature',
+      targetId: 'uploads',
+      exists: true,
+      locked: true,
+      reason: 'security',
+      message: NOTICE,
+      untilMs: until,
+    })
+    expect(typeof payload.verified.readAtMs).toBe('number')
+  })
+
+  it('a lift returns NOT locked — read back, not assumed', async () => {
+    mockStore[`${LOCKDOWNS_COLLECTION}/feature--uploads`] = {
+      scope: 'feature',
+      feature: 'uploads',
+      reason: 'security',
+      atMs: Date.now(),
+    }
+    const payload = await (
+      await post({ action: 'unlock', scope: 'feature', targetId: 'uploads' })
+    ).json()
+    expect(payload.confirmed).toBe(true)
+    expect(payload.verified).toMatchObject({ locked: false, reason: null })
+  })
+
+  it('an ORG lock reads the org doc carrier back, not the request it just got', async () => {
+    mockStore['orgs/hz_KgetqSq'] = { name: 'Acme' }
+    const payload = await (
+      await post({
+        action: 'lock',
+        scope: 'org',
+        targetId: 'hz_KgetqSq',
+        reason: 'security',
+      })
+    ).json()
+    expect(payload.confirmed).toBe(true)
+    expect(payload.verified).toMatchObject({
+      scope: 'org',
+      targetId: 'hz_KgetqSq',
+      exists: true,
+      locked: true,
+    })
+  })
+
+  it('a write that did not take comes back NOT confirmed', async () => {
+    // The failure the console must never render as a success: the request
+    // was accepted, and the target still disagrees. Simulated by an org
+    // helper that reports success without moving the carrier.
+    const orgLockdown = require('../utils/server/org-lockdown')
+    const real = orgLockdown.applyOrgLockdown
+    orgLockdown.applyOrgLockdown = async ({ orgId }: { orgId: string }) => ({
+      orgId,
+      action: 'lock',
+      membersUpdated: 0,
+      tokensRevoked: 0,
+      revokeTruncated: false,
+      revalidated: [],
+    })
+    try {
+      mockStore['orgs/hz_KgetqSq'] = { name: 'Acme' }
+      const payload = await (
+        await post({
+          action: 'lock',
+          scope: 'org',
+          targetId: 'hz_KgetqSq',
+          reason: 'security',
+        })
+      ).json()
+      expect(payload.ok).toBe(true)
+      expect(payload.confirmed).toBe(false)
+      expect(payload.verified.locked).toBe(false)
+    } finally {
+      orgLockdown.applyOrgLockdown = real
+    }
+  })
+
+  it('the scoped GET probe reads one target and writes nothing', async () => {
+    const until = untilMs()
+    mockStore['orgs/hz_KgetqSq'] = {
+      name: 'Acme',
+      // Orgs carry `suspendedAt` as a Timestamp, hosts as epoch ms; the
+      // probe has to answer in one currency or the page cannot render it.
+      suspendedAt: { toMillis: () => 1_700_000_000_000 },
+      suspendedReasonCode: 'security',
+      suspendedMessage: NOTICE,
+      suspendedUntilMs: until,
+    }
+    const payload = await (
+      await get('?scope=org&targetId=hz_KgetqSq')
+    ).json()
+    expect(payload.state).toMatchObject({
+      scope: 'org',
+      targetId: 'hz_KgetqSq',
+      exists: true,
+      locked: true,
+      reason: 'security',
+      message: NOTICE,
+      untilMs: until,
+      atMs: 1_700_000_000_000,
+    })
+    // A read-only probe. If checking state could change it, an operator
+    // would learn not to check.
+    expect(mockAuditRows).toEqual([])
+  })
+
+  it('a mistyped org id reads as NO SUCH TARGET, not as unlocked', async () => {
+    // The dangerous conflation: "this org is fine" and "you are asking
+    // about an org that does not exist" must never render the same.
+    const payload = await (await get('?scope=org&targetId=typo')).json()
+    expect(payload.state).toMatchObject({ exists: false, locked: false })
+  })
+
+  it('the probe is open to a non-super staff role, unlike a write', async () => {
+    // Reading state is how an operator avoids the belief this issue is
+    // about; gating it behind the write role would push them back to
+    // trusting the click.
+    mockDecodedToken['staffRole'] = 'support'
+    expect((await get('?scope=platform')).status).toBe(200)
+    expect(
+      (await post({ action: 'lock', scope: 'platform', reason: 'manual' })).status,
+    ).toBe(403)
+  })
+
+  it('the probe validates its target like a write does', async () => {
+    expect((await get('?scope=nonsense&targetId=x')).status).toBe(400)
+    expect((await get('?scope=org')).status).toBe(400)
+    expect((await get('?scope=feature&targetId=not-a-feature')).status).toBe(400)
+    // No scope at all is still the collection listing, unchanged.
+    expect((await get('')).status).toBe(200)
   })
 })

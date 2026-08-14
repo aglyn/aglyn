@@ -34,6 +34,14 @@
  *
  * Every action — lock AND unlock — writes an `adminAudit` row.
  *
+ * Every action also ANSWERS WITH A FRESH READ of what it wrote (AGL-1571).
+ * A click is a request, and a request that never left the pointer looks
+ * exactly like one that succeeded — the drill's missed lift was caught only
+ * because someone went back to Firestore instead of trusting the click. So
+ * the route states the post-condition (`verified`) and whether it matches
+ * the intent (`confirmed`) rather than leaving the console to assume it,
+ * and the same read is available on its own as a scoped GET probe.
+ *
  * Where this is operated from: /admin/lockdown (StaffGuard'd page). The
  * runbook is apps/docs/docs/staff-console/lockdown.md.
  */
@@ -132,8 +140,132 @@ async function audit(options: {
   })
 }
 
+/**
+ * One target's lock state as the SERVER currently sees it (AGL-1571).
+ *
+ * `readAtMs` is the server's clock at the moment of the read, and it is the
+ * field that does the work: the staff page shows it verbatim so a panel is
+ * always a statement about a moment, never an implicit "now". A panel that
+ * cannot go stale invisibly is the only kind an operator can safely believe.
+ */
+export interface LockState {
+  scope: string
+  targetId: string
+  /** False only when the org/host doc itself is missing — a typo'd id. */
+  exists: boolean
+  locked: boolean
+  reason: string | null
+  message: string | null
+  untilMs: number | null
+  /** When the lock was engaged, if it is. */
+  atMs: number | null
+  readAtMs: number
+}
+
+type AdminFirestore = ReturnType<ReturnType<typeof firebaseAdmin.app>['firestore']>
+
+/** `suspendedAt` is a Timestamp on orgs and plain epoch ms on hosts. */
+function toMillis(value: unknown): number | null {
+  if (typeof value === 'number') return value
+  if (value && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis()
+  }
+  return null
+}
+
+/**
+ * Re-read a target's lock state from Firestore, whichever carrier holds it —
+ * `lockdowns/*` for platform/feature/user, the `suspended*` family on the
+ * org/host doc for the other two.
+ *
+ * This is the drill's own safety move made part of the product. The lockdown
+ * drill only caught a lift that never registered because it went back to
+ * Firestore instead of trusting the click; a click is a request, and a
+ * request that never left the pointer looks exactly like one that succeeded.
+ * Every write below answers with a fresh read of what it wrote, so the
+ * console can state the post-condition rather than assume it.
+ */
+async function readLockState(
+  firestore: AdminFirestore,
+  scope: string,
+  targetId: string,
+): Promise<LockState> {
+  const base = { scope, targetId, readAtMs: Date.now() }
+  if (scope === 'org' || scope === 'host') {
+    const snapshot = await firestore
+      .collection(scope === 'org' ? 'orgs' : 'hosts')
+      .doc(targetId)
+      .get()
+    return {
+      ...base,
+      exists: snapshot.exists,
+      locked: snapshot.exists && snapshot.get('suspendedAt') != null,
+      reason: snapshot.get('suspendedReasonCode') ?? null,
+      message: snapshot.get('suspendedMessage') ?? null,
+      untilMs: snapshot.get('suspendedUntilMs') ?? null,
+      atMs: toMillis(snapshot.get('suspendedAt')),
+    }
+  }
+  const docId =
+    scope === 'platform'
+      ? PLATFORM_LOCKDOWN_DOC_ID
+      : scope === 'feature'
+        ? featureLockdownDocId(
+            targetId as Parameters<typeof featureLockdownDocId>[0],
+          )
+        : userLockdownDocId(targetId)
+  const snapshot = await firestore
+    .collection(LOCKDOWNS_COLLECTION)
+    .doc(docId)
+    .get()
+  const data = snapshot.data()
+  return {
+    ...base,
+    // These scopes carry the lock in the doc's EXISTENCE, so there is no
+    // such thing as a missing target — absent is simply unlocked.
+    exists: true,
+    locked: data != null,
+    reason: (data?.['reason'] as string) ?? null,
+    message: (data?.['message'] as string) ?? null,
+    untilMs: (data?.['untilMs'] as number) ?? null,
+    atMs: (data?.['atMs'] as number) ?? null,
+  }
+}
+
+/**
+ * What a write answers with: not "your request succeeded" but "here is the
+ * target, read back after the write". `confirmed` compares that read against
+ * what was asked for — a `false` means the write returned and the state
+ * still disagrees, which the console has to surface as an alarm rather than
+ * a quiet success.
+ */
+async function actionResponse(options: {
+  firestore: AdminFirestore
+  scope: string
+  targetId: string
+  action: 'lock' | 'unlock'
+  extra?: object
+}): Promise<Response> {
+  const verified = await readLockState(
+    options.firestore,
+    options.scope,
+    options.targetId,
+  )
+  return Response.json(
+    {
+      ok: true,
+      scope: options.scope,
+      action: options.action,
+      verified,
+      confirmed: verified.locked === (options.action === 'lock'),
+      ...options.extra,
+    },
+    { status: 200 },
+  )
+}
+
 async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } =
+  const { method, body, query, headers: rawHeaders } =
     await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   const authorization = headers.authorization ?? ''
@@ -155,6 +287,36 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
 
     if (method === 'GET') {
+      // A scoped probe: "what is the state of THIS target, right now".
+      // Read-only and open to every staff role, like the list below — the
+      // super gate exists to stop writes, and an operator who cannot check
+      // whether a lock is still engaged is the whole failure mode of
+      // AGL-1571. Org and host state is unreachable from the lockdowns
+      // collection, so without this the panic page could say nothing at all
+      // about the two scopes whose locks are widest.
+      const probeScope = String(query?.['scope'] ?? '')
+      if (probeScope) {
+        if (!SCOPES.has(probeScope)) {
+          return Response.json({ error: 'Unknown scope' }, { status: 400 })
+        }
+        const probeTarget = String(query?.['targetId'] ?? '').trim()
+        if (probeScope !== 'platform' && !probeTarget) {
+          return Response.json({ error: 'Missing targetId' }, { status: 400 })
+        }
+        if (probeScope === 'feature' && !isLockdownFeatureKey(probeTarget)) {
+          return Response.json(
+            {
+              error: `Unknown feature — one of: ${LOCKDOWN_FEATURE_KEYS.join(', ')}`,
+            },
+            { status: 400 },
+          )
+        }
+        return Response.json(
+          { state: await readLockState(firestore, probeScope, probeTarget) },
+          { status: 200 },
+        )
+      }
+
       // The current-state read for the staff page: the lockdowns collection
       // (platform + user scopes). Org/host lockdowns live on their own docs
       // and are visible on the org/host staff surfaces.
@@ -264,7 +426,7 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
-      return Response.json({ ok: true, scope, action }, { status: 200 })
+      return actionResponse({ firestore, scope, targetId: '', action })
     }
 
     /*==========================================
@@ -317,10 +479,13 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
-      return Response.json(
-        { ok: true, scope, action, feature: targetId },
-        { status: 200 },
-      )
+      return actionResponse({
+        firestore,
+        scope,
+        targetId,
+        action,
+        extra: { feature: targetId },
+      })
     }
 
     /*==========================================
@@ -388,7 +553,7 @@ async function handler(request: Request): Promise<Response> {
           ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
-      return Response.json({ ok: true, scope, action }, { status: 200 })
+      return actionResponse({ firestore, scope, targetId, action })
     }
 
     /*==========================================
@@ -431,7 +596,7 @@ async function handler(request: Request): Promise<Response> {
           tokensRevoked: result.tokensRevoked,
         },
       })
-      return Response.json({ ok: true, scope, action, ...result }, { status: 200 })
+      return actionResponse({ firestore, scope, targetId, action, extra: result })
     }
 
     /*==========================================
@@ -465,7 +630,7 @@ async function handler(request: Request): Promise<Response> {
         ...(action === 'lock' ? auditLockShape(lock) : {}),
       },
     })
-    return Response.json({ ok: true, scope, action, ...result }, { status: 200 })
+    return actionResponse({ firestore, scope, targetId, action, extra: result })
   } catch (error) {
     console.error('[admin/lockdown] failed', error)
     return Response.json({ error: 'Lockdown action failed' }, { status: 500 })
