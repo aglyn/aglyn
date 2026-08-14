@@ -37,6 +37,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { QRCodeSVG } from 'qrcode.react'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -617,12 +618,32 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               'order completes automatically once paid. Stripe Terminal ' +
               'readers can replace this step later.'}
           </Typography>
+          {/* Encoded in this browser, never fetched (AGL-1671). The previous
+              revision pointed an `<img>` at api.qrserver.com, which put the
+              LIVE Stripe payment URL — a link that pays the order for whoever
+              opens it — in a query string to a third party with no contract,
+              no DPA and no logging guarantee, on every card sale. It also
+              meant a register with no internet could not take a card.
+
+              `level="L"` is what that endpoint was being asked for (its
+              default `ecc`). The two numbers are MEASURED, not matched: a
+              317-character Stripe Checkout URL is a 61x61 symbol, so the old
+              220px/no-quiet-zone render gave 3.61px per module. `marginSize`
+              adds the 4-module quiet zone the spec requires and goQR omitted
+              — which matters more here than it looks, since the dialog paper
+              is dark in dark mode and the symbol had no white border of its
+              own. Paying for that out of 220px would shrink modules to
+              3.19px; 256px puts them at 3.71px, so every module is LARGER
+              than what shipped and the quiet zone is free. `maxWidth="xs"`
+              leaves ~396px of content, so it still centres with room. */}
           <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Box
-              component="img"
-              alt="Payment QR"
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(cardUrl)}`}
-              sx={{ width: 220, height: 220 }}
+            <QRCodeSVG
+              value={cardUrl}
+              size={256}
+              level="L"
+              marginSize={4}
+              title="Payment QR"
+              role="img"
             />
           </Box>
           <Button size="small" href={cardUrl} target="_blank">
