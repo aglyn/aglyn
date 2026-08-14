@@ -509,9 +509,10 @@ function featureLockdownNotice(
 }
 
 /**
- * Which feature key, if any, gates a plugin-API dispatcher path (AGL-1510).
- * Lives here (pure, beside the enum) so the dispatcher's wiring is one call
- * and the mapping is unit-testable without a route harness.
+ * Which feature keys gate a plugin-API dispatcher path (AGL-1510, plural
+ * since AGL-1545). Lives here (pure, beside the enum) so the dispatcher's
+ * wiring is one call and the mapping is unit-testable without a route
+ * harness.
  *
  * - `ai/assist` → `ai-assist` (gated even while the route 501s without an
  *   API key — the switch predates the key on purpose).
@@ -519,24 +520,29 @@ function featureLockdownNotice(
  *   every artifact kind. `marketplace/update-artifact` is included — it
  *   re-copies a publisher's version into the org, which is an install by
  *   another name and the same vector a malicious listing would ride.
- * - `marketplace/checkout` → `checkout`: it creates NEW Stripe checkout
- *   sessions exactly like the billing route, and a mid-charge Stripe bug
- *   does not care which surface started the session.
+ * - `marketplace/checkout` → BOTH `checkout` and `marketplace-installs`
+ *   (AGL-1545): it creates NEW Stripe checkout sessions exactly like the
+ *   billing route, and it is also the front door of a paid install — a
+ *   malicious-listing incident must stop buyers PAYING for the artifact
+ *   under investigation, not merely refuse the install after the money
+ *   moved. Each key keeps its own staff-bypass rule when composed.
  *
  * Publish/review/report paths map to nothing: a marketplace incident must
  * not stop publishers reporting or staff reviewing.
  */
-export function lockdownFeatureForPluginApiPath(
+export function lockdownFeaturesForPluginApiPath(
   path: string,
-): LockdownFeatureKey | null {
-  if (path === 'ai/assist') return 'ai-assist'
-  if (path === 'marketplace/checkout') return 'checkout'
+): LockdownFeatureKey[] {
+  if (path === 'ai/assist') return ['ai-assist']
+  if (path === 'marketplace/checkout') {
+    return ['checkout', 'marketplace-installs']
+  }
   if (
     path === 'marketplace/install' ||
     path.startsWith('marketplace/install-') ||
     path === 'marketplace/update-artifact'
   ) {
-    return 'marketplace-installs'
+    return ['marketplace-installs']
   }
-  return null
+  return []
 }

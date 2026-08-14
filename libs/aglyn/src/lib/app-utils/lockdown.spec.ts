@@ -23,7 +23,7 @@ import {
   LOCKDOWN_FEATURE_LABELS,
   LOCKDOWN_FEATURE_STAFF_BYPASS,
   LOCKDOWN_MESSAGE_MAX,
-  lockdownFeatureForPluginApiPath,
+  lockdownFeaturesForPluginApiPath,
   lockdownNotice,
   lockdownRetryAfterSeconds,
   normalizeHostLockdown,
@@ -277,9 +277,9 @@ describe('FEATURE scope (AGL-1510) — the pure half', () => {
   })
 })
 
-describe('lockdownFeatureForPluginApiPath — the dispatcher map', () => {
+describe('lockdownFeaturesForPluginApiPath — the dispatcher map', () => {
   it('ai/assist is gated even while the handler 501s without a key', () => {
-    expect(lockdownFeatureForPluginApiPath('ai/assist')).toBe('ai-assist')
+    expect(lockdownFeaturesForPluginApiPath('ai/assist')).toEqual(['ai-assist'])
   })
 
   it('installs-as-a-class: every install path plus update-artifact', () => {
@@ -293,16 +293,21 @@ describe('lockdownFeatureForPluginApiPath — the dispatcher map', () => {
       'marketplace/install-email-template',
       'marketplace/update-artifact',
     ]) {
-      expect(`${path} → ${lockdownFeatureForPluginApiPath(path)}`).toBe(
+      expect(`${path} → ${lockdownFeaturesForPluginApiPath(path)}`).toBe(
         `${path} → marketplace-installs`,
       )
     }
   })
 
-  it('marketplace checkout is checkout — a NEW Stripe session either way', () => {
-    expect(lockdownFeatureForPluginApiPath('marketplace/checkout')).toBe(
+  it('marketplace checkout gates on BOTH checkout and marketplace-installs (AGL-1545)', () => {
+    // A paid purchase is a new Stripe session AND the front door of an
+    // install: a malicious-listing incident must stop buyers PAYING for
+    // the artifact under investigation, not merely refuse the install
+    // after the money moved.
+    expect(lockdownFeaturesForPluginApiPath('marketplace/checkout')).toEqual([
       'checkout',
-    )
+      'marketplace-installs',
+    ])
   })
 
   it('publish, report and review paths map to NOTHING — the incident response must not gag its own inputs', () => {
@@ -315,9 +320,7 @@ describe('lockdownFeatureForPluginApiPath — the dispatcher map', () => {
       'marketplace/connect',
       'anything/else',
     ]) {
-      expect(`${path} → ${lockdownFeatureForPluginApiPath(path)}`).toBe(
-        `${path} → null`,
-      )
+      expect(lockdownFeaturesForPluginApiPath(path)).toEqual([])
     }
   })
 })

@@ -99,7 +99,7 @@ const CHOKEPOINTS: Chokepoint[] = [
     feature: 'marketplace-installs + ai-assist + checkout (plugin surface)',
     file: 'apps/console/app/api/[...pluginApi]/route.ts',
     wiring: [
-      'lockdownFeatureForPluginApiPath(path)',
+      'lockdownFeaturesForPluginApiPath(path)',
       'featureLockdownRefusal({ feature, staff })',
     ],
     why:

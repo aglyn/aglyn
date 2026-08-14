@@ -16,7 +16,7 @@
  */
 
 import {
-  lockdownFeatureForPluginApiPath,
+  lockdownFeaturesForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
   resolvePluginApiRoute,
@@ -142,13 +142,13 @@ async function dispatch(
   // `ai/assist` → ai-assist (gated even while the handler 501s without an
   // API key — the switch predates the key), `marketplace/install*` and
   // `update-artifact` → marketplace-installs (installs-as-a-class), and
-  // `marketplace/checkout` → checkout (a NEW Stripe session is a NEW
-  // Stripe session, whichever surface starts it). Staff bypass follows
-  // LOCKDOWN_FEATURE_STAFF_BYPASS: granted for installs/ai-assist (staff
-  // reproduce and verify during the incident), refused for checkout (a
-  // staff session still charges a real card).
-  const feature = lockdownFeatureForPluginApiPath(path)
-  if (feature) {
+  // `marketplace/checkout` → checkout AND marketplace-installs (AGL-1545:
+  // a paid purchase is a new Stripe session and the front door of an
+  // install — either incident stops it). Staff bypass follows
+  // LOCKDOWN_FEATURE_STAFF_BYPASS per key: granted for installs/ai-assist
+  // (staff reproduce and verify during the incident), refused for
+  // checkout (a staff session still charges a real card).
+  for (const feature of lockdownFeaturesForPluginApiPath(path)) {
     const featureLocked = await featureLockdownRefusal({ feature, staff })
     if (featureLocked) return featureLocked
   }
