@@ -79,6 +79,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 0,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
+    // Marketplace take rate (AGL-46/1543): free-plan sellers pay a higher
+    // share. `marketplaceSelling` is false here, so this rate only prices
+    // an org GRANTED selling via a per-org feature override — and any org
+    // whose dead subscription resolved it down to free.
+    marketplaceFeePct: 30,
     features: {
       abTesting: false,
       versioning: false,
@@ -152,6 +157,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // norm (Wix/BigCommerce/Squarespace-Core = 0% platform fee). See the
     // Pricing Decision Log + Competitive Benchmark.
     transactionFeeDigitalPct: 5,
+    marketplaceFeePct: 20,
     features: {
       abTesting: false,
       versioning: false,
@@ -223,6 +229,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder
     // (Starter 5 → Pro 3 → Business 2 → Scale 1 → Advanced/Agency 0).
     transactionFeeDigitalPct: 3,
+    marketplaceFeePct: 20,
     features: {
       abTesting: false,
       versioning: true,
@@ -292,6 +299,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 2,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 2,
+    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -364,6 +372,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 3,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 1,
+    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -433,6 +442,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 5,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
+    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -506,6 +516,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: 20,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
+    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -587,6 +598,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     posRegisters: UNLIMITED,
     transactionFeePhysicalPct: 0,
     transactionFeeDigitalPct: 0,
+    marketplaceFeePct: 20,
     features: {
       abTesting: true,
       versioning: true,
@@ -1606,6 +1618,27 @@ export function resolveTransactionFeePct(
       ? entitlements.transactionFeePhysicalPct
       : entitlements.transactionFeeDigitalPct
   return Number.isFinite(pct) && pct > 0 ? pct : 0
+}
+
+/**
+ * Platform take rate % for a MARKETPLACE listing sale (AGL-1543), priced
+ * off the SELLER org. Resolved through `resolveOrgEntitlements` — so a
+ * dead subscription prices as free-plan (30%) even while the stale `plan`
+ * field still names a paid tier, and a negotiated per-org
+ * `entitlements.marketplaceFeePct` override wins over the plan default.
+ * Resolve per request from the org doc; never cache the answer.
+ *
+ * An out-of-range or missing value falls back to the FREE-plan rate — the
+ * conservative direction. A malformed override must never zero the
+ * platform's cut.
+ */
+export function resolveMarketplaceFeePct(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const pct = resolveOrgEntitlements(org).marketplaceFeePct
+  return Number.isFinite(pct) && pct >= 0 && pct <= 100
+    ? pct
+    : PLAN_ENTITLEMENTS.free.marketplaceFeePct
 }
 
 /** True when the org's plan (or overrides) enables the boolean feature. */

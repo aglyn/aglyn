@@ -15,9 +15,14 @@
  * limitations under the License.
  */
 
-import { MARKETPLACE_PLATFORM_FEE_PERCENT, MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN } from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  checkEntitlement,
+  resolveMarketplaceFeePct,
+  Route,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import {
   canActAsPublisher,
   resolvePublisherProfile,
@@ -60,6 +65,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
+    // Review gating holds on the PAID path too (AGL-1543): browse hides
+    // rejected/submitted/in_review listings, so a direct checkout call must
+    // not be a side door that takes money for one. Absent = legacy = listed
+    // (AGL-432), and the same 404 as an unknown listing — purchasability is
+    // not a probe for review state.
+    const reviewStatus = listing.reviewStatus as string | undefined
+    if (reviewStatus && reviewStatus !== 'listed' && reviewStatus !== 'verified') {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     const priceUsd = Number(listing.priceUsd ?? 0)
     if (!(priceUsd > 0)) {
       return res.status(400).json({ error: 'Listing is free' })
@@ -77,14 +91,22 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'The publisher has not enabled payouts yet' })
     }
 
-    // Publisher's plan sets the platform share (free plan pays more); read
-    // the seller org directly now that profileId is its id (AGL-652).
+    // The platform's cut comes from ENTITLEMENTS (AGL-1543), never the raw
+    // `plan` field: `resolveMarketplaceFeePct` prices a dead subscription
+    // as free-plan (30%) while the stale field still says pro, and honors
+    // a negotiated per-org `marketplaceFeePct` override. Same read gates
+    // SALE time on `marketplaceSelling` — publish already refuses without
+    // it, and a publisher who downgrades must stop selling, not merely
+    // stop publishing. Resolved per request; entitlements are never cached.
     const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
-    const sellerPlan = (sellerOrgDoc.get('plan') as string | undefined) ?? 'free'
-    const feePercent =
-      sellerPlan === 'free'
-        ? MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN
-        : MARKETPLACE_PLATFORM_FEE_PERCENT
+    const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
+    if (!checkEntitlement(sellerOrg, 'marketplaceSelling')) {
+      return res.status(409).json({
+        error:
+          "The publisher's current plan does not include marketplace selling",
+      })
+    }
+    const feePercent = resolveMarketplaceFeePct(sellerOrg)
     const amountCents = Math.round(priceUsd * 100)
     const feeCents = Math.round((amountCents * feePercent) / 100)
 
