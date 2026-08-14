@@ -66,4 +66,32 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
           })
       }
     }
+
+    // Refund revocation (AGL-1546): a FULL refund un-buys the listing —
+    // the install gate treats a purchase with `refundedAt` as absent. Only
+    // `refunded: true` (the whole charge) revokes; a partial refund is a
+    // concession, not a revocation. Keyed by the payment intent stored at
+    // completion, and idempotent: a Stripe redelivery restamps the same
+    // values on the same doc. Requires the platform webhook endpoint to be
+    // subscribed to `charge.refunded` (AGL-1549).
+    if (type === 'charge.refunded' && object?.refunded === true) {
+      const paymentIntentId = String(object?.payment_intent ?? '')
+      if (paymentIntentId) {
+        const firestore = firebaseAdmin.app().firestore()
+        const purchases = await firestore
+          .collection('marketplacePurchases')
+          .where('paymentIntentId', '==', paymentIntentId)
+          .limit(1)
+          .get()
+        if (!purchases.empty) {
+          await purchases.docs[0].ref.set(
+            {
+              refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              refundedCents: Number(object?.amount_refunded ?? 0),
+            },
+            { merge: true },
+          )
+        }
+      }
+    }
 }

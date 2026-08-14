@@ -140,3 +140,52 @@ describe('marketplace purchase record (AGL-46/1544)', () => {
     expect(adminMock.__writes).toHaveLength(0)
   })
 })
+
+describe('refund revocation (AGL-1546)', () => {
+  const refundEvent = (over: Record<string, unknown> = {}) => ({
+    type: 'charge.refunded',
+    object: {
+      id: 'ch_1',
+      payment_intent: 'pi_1',
+      refunded: true,
+      amount_refunded: 10825,
+      ...over,
+    },
+    event: {},
+  })
+
+  it('a FULL refund stamps the purchase and is idempotent', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(
+      adminMock.__store['marketplacePurchases/cs_test_1'],
+    ).toMatchObject({ refundedAt: 'NOW', refundedCents: 10825 })
+    // Redelivery restamps the same values — never a second doc, never a
+    // throw that would 500 the whole platform webhook.
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(
+      Object.keys(adminMock.__store).filter((key) =>
+        key.startsWith('marketplacePurchases/'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('a PARTIAL refund is a concession, not a revocation', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    await marketplaceBillingWebhookHandler(
+      refundEvent({ refunded: false, amount_refunded: 500 }) as any,
+    )
+    expect(
+      adminMock.__store['marketplacePurchases/cs_test_1']?.['refundedAt'],
+    ).toBeUndefined()
+  })
+
+  it('an unknown payment intent writes nothing', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    adminMock.__writes.length = 0
+    await marketplaceBillingWebhookHandler(
+      refundEvent({ payment_intent: 'pi_other' }) as any,
+    )
+    expect(adminMock.__writes).toHaveLength(0)
+  })
+})
