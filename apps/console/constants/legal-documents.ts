@@ -101,7 +101,39 @@ export interface LegalDocumentManifestEntry {
  *     marketing/sales-outreach use, and §11 gains a call/text opt-out. The
  *     capability was already live — `users/{uid}.phoneNumber` is written by
  *     `/api/auth/session` and `/api/auth/sso-jit` — and the policy was silent.
- *   - AGL-1565, Terms: see the note below, added with that issue's own commit.
+ *   - AGL-1565, Terms: §19.12's Texas DTPA waiver is REMOVED — §17.42 needs a
+ *     signed writing with the consumer represented by counsel of their own
+ *     selection, which clickwrap structurally cannot be, so the clause bound
+ *     nobody while inviting an unconscionability argument against the clauses
+ *     around it, and 0 of 10 benchmarked peers attempt any consumer-statute
+ *     waiver. It is replaced by a sentence saying no such waiver is asked for.
+ *     §18.2 now applies the AAA's CONSUMER rules, with any in-person hearing
+ *     in the consumer's own locality, where the user is an individual using
+ *     the Services primarily for personal, family, or household purposes, and
+ *     Commercial rules in every other case (Webflow's precedent). §15.5 gains
+ *     the carve-outs the cap had in neither direction: death or personal
+ *     injury, fraud, gross negligence or willful misconduct, and any
+ *     non-waivable consumer right. §15.3's $50 floor was re-read under the
+ *     consumer posture and is still correctly scoped to unpaid use.
+ *
+ * ⚠️ §7's licence for "internal business OR PERSONAL purposes" is DELIBERATE
+ * and MUST NOT BE "FIXED". Consumers — solo founders and pre-entity
+ * individuals starting a business — are an intended ICP (Zach, 2026-08-14),
+ * so §7 correctly describes the market. An earlier pass on the same day
+ * recommended deleting "or personal" and scoping the beta to business use;
+ * that recommendation is REVERSED and must not be quietly re-reversed. It was
+ * never an escape anyway: Texas DTPA §17.45(4) counts businesses under $25M
+ * in assets as consumers, so the entire ICP — agencies included — sits inside
+ * the statute either way. §19.12 and §18.2 were what misdescribed the market;
+ * §7 was not.
+ *
+ * ⚠️ TCPA is NOT solved by any of this. The v4 Privacy Policy discloses
+ * marketing calls and texts; a disclosure is not consent, and consumers being
+ * a real ICP is where the TCPA bites hardest. No outbound calling or texting
+ * programme should start until the consent mechanism is designed, and §11's
+ * STOP/opt-out promise has no suppression list behind it yet. Recorded as
+ * counsel questions in `Platform Docs/Legal/Analysis/` — privacy benchmark
+ * items 9-10, terms benchmark items 1, 2, 2b, 2c, 4.
  *
  * Both documents also move their "Last updated" date to August 14, 2026, which
  * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
