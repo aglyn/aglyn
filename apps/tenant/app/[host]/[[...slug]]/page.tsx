@@ -21,6 +21,7 @@ import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
+import SiteAnalytics from './site-analytics'
 import type { Props } from './types'
 
 // ISR: the old getStaticPaths used `fallback: 'blocking'` with per-page
@@ -718,6 +719,21 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
           dangerouslySetInnerHTML={{ __html: json }}
         />
       ))}
+      {/* Measurement and consent, mounted ABOVE the plugin gate (AGL-1550).
+          A sibling of `CatchAllClient`, never a descendant: the pageview
+          beacon, the GA mounts and the consent machinery need a host and a
+          screen id and nothing else — no plugin, no canvas, no observable —
+          and living under the gate is what let AGL-1541 silence all three at
+          once. This is the ErrorBeacon shape (AGL-1538) one level down, at
+          the first point that knows which host and screen it is measuring.
+
+          `result.props.data.host` is the SAME object `CatchAllClient`
+          receives below, so Flight serializes it once and this costs no
+          payload. Rendered FIRST so it hydrates before the page body. */}
+      <SiteAnalytics
+        host={result.props.data?.host as any}
+        screenId={(result.props.data?.screen?.data as any)?.$id}
+      />
       {/* The client suspends until the org-enabled site plugins register
           (AGL-417). Deliberately NO Suspense boundary here (AGL-1541): with
           one, the plugin-gate suspension pushed the ENTIRE page out of the
