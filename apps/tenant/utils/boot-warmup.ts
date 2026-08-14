@@ -55,7 +55,22 @@ export function warmFirestoreAtBoot(): void {
     // `firebaseAdmin.app().firestore()` call returns. The SDK still creates
     // a gRPC client transparently if a streaming call ever asks for one —
     // none exists in the tenant server tree today.
-    firestore.settings({ preferRest: true })
+    //
+    // NEVER against the emulator (AGL-1504). Over REST the Admin SDK sends
+    // the real service-account credentials from `apps/tenant/.env` instead of
+    // the emulator's `Bearer owner` token, so the admin bypass is lost and
+    // every read is rules-evaluated and denied — `403 "Property staff is
+    // undefined on object. for 'list'"`. Nothing surfaces that: the loader
+    // catches, and the page 404s, so a correctly seeded emulator looks like
+    // an empty one. AGL-1504 fixed this for `tenant-prod-smoke.mjs` by
+    // setting the kill switch in its own env, which left every other
+    // emulator run — including `npm run serve:tenant:emulated`, the target
+    // `require-emulator.mjs` sends people to — still broken. Gate it here
+    // instead, as that issue recommended: the warm read below is still
+    // worth firing locally, only the transport choice is wrong.
+    if (!process.env.FIRESTORE_EMULATOR_HOST) {
+      firestore.settings({ preferRest: true })
+    }
   } catch {
     // `settings()` throws if the instance has already been used (dev-server
     // reloads re-run register against a live process). The warm read below
