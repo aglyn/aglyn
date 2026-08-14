@@ -119,6 +119,7 @@ describe('checkoutCustomerParams (AGL-941)', () => {
     // queries, which reads to a user as invoices going missing.
     expect(checkoutCustomerParams('cus_123', 'owner@example.com')).toEqual({
       customer: 'cus_123',
+      'customer_update[address]': 'auto',
     })
   })
 
@@ -127,7 +128,36 @@ describe('checkoutCustomerParams (AGL-941)', () => {
     // preference — a session that sets both fails and nobody can upgrade.
     const params = checkoutCustomerParams('cus_123', 'owner@example.com')
     expect('customer_email' in params).toBe(false)
-    expect(Object.keys(params)).toEqual(['customer'])
+    expect(Object.keys(params).sort()).toEqual([
+      'customer',
+      'customer_update[address]',
+    ])
+  })
+
+  it('saves the collected address onto a REUSED customer (AGL-1537)', () => {
+    // Automatic tax resolves an existing customer's tax location from the
+    // CUSTOMER record, not from the address typed into the session — so a
+    // reused customer with no stored address would make an `automatic_tax`
+    // session unresolvable. `customer_update[address]=auto` writes the
+    // session's billing address back onto the customer.
+    expect(
+      checkoutCustomerParams('cus_123', 'owner@example.com')[
+        'customer_update[address]'
+      ],
+    ).toBe('auto')
+  })
+
+  it('CONTROL — never sends customer_update without a customer', () => {
+    // Stripe rejects `customer_update` on a session that has no `customer`,
+    // so leaking it onto the first-subscribe (customer_email) path would
+    // break every first purchase.
+    expect(
+      'customer_update[address]' in
+        checkoutCustomerParams(undefined, 'owner@example.com'),
+    ).toBe(false)
+    expect(
+      'customer_update[address]' in checkoutCustomerParams('', ''),
+    ).toBe(false)
   })
 
   it('CONTROL — first subscribe still identifies the buyer by email', () => {
