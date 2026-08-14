@@ -35,7 +35,7 @@ does not exist.
 | Subprocessor | Purpose |
 | --- | --- |
 | **Google Cloud / Firebase** | Primary datastore (Firestore), authentication, file storage. US region. |
-| **Google reCAPTCHA** | Bot protection on authentication and data access, via Firebase App Check. |
+| **Google reCAPTCHA** | App Check attestation for Firebase client SDK traffic (invisible v3). Not a user-facing challenge, and not used on site forms. |
 | **Google Analytics** | Product and site analytics for `aglyn.com`, the console and these docs — a single GA4 property. Configured for measurement only: Google Signals off, ads personalization disabled in every region, no Google Ads account linked, no user-provided data collection, email redaction on, 14-month retention. |
 | **Vercel** | Application hosting and CDN for the console, published sites and docs. |
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
@@ -61,14 +61,20 @@ ask and we will send them. This table is the engineering view and may lag them.
 
 ## Authorization
 
-- **Every read and write is gated by Firestore security rules** — an 883-line
-  ruleset evaluated by Google's infrastructure, not by our application. A bug
+- **Every read and write made from the browser is gated by Firestore security
+  rules** — evaluated by Google's infrastructure, not by our application. A bug
   in our code cannot grant access the rules deny.
 - Rules are **per document**, not per collection. Site collaborators scoped to
   one site cannot read another site's data, and that boundary is enforced at
   the database rather than in a UI filter.
 - Server routes that use the Admin SDK — which bypasses rules by design —
-  **re-check scope independently** before answering.
+  **re-check scope independently** before answering. A substantial part of the
+  product runs on that path, so the ruleset is the authority over client
+  traffic rather than a single chokepoint in front of everything.
+- **Cloud Storage is a different shape.** Its ruleset denies direct client
+  access outright; every legitimate file read or write goes through an Admin
+  SDK route or a per-object download token. Nothing there is gated by rules
+  because nothing there is permitted by rules.
 
 ## API surface
 
@@ -80,11 +86,25 @@ ask and we will send them. This table is the engineering view and may lag them.
   subdomains) returns its response with no permissive CORS header, so a
   cross-origin page cannot read it, and it refuses to answer on any hostname
   that is not a registered workspace.
-- **Firebase App Check** is enforced on Firestore and Authentication, so
-  requests must come from an attested app rather than a script holding a
-  stolen key.
-- **Rate limiting** is durable and shared across serverless instances, rather
-  than per-instance memory that resets on every cold start.
+- **Firebase App Check** (invisible reCAPTCHA v3) is enforced on **Firebase
+  client SDK traffic** — Firestore reads and writes made from the browser, and
+  Identity Platform — so that traffic must come from an attested app rather
+  than a script holding a stolen key. It does **not** cover our own API routes:
+  those run on the Admin SDK, which is outside the attestation boundary.
+- **The public form-submission endpoint has no attestation and no CAPTCHA.** A
+  published site's lead-capture form is open to the internet by design. What
+  stands in front of it is a honeypot field, a durable per-IP rate limit, and a
+  per-site ceiling that caps what a submission flood can add to your bill.
+  Whether attestation belongs there is an open question we have not settled;
+  until we do, this is what the endpoint actually has.
+- **Rate limiting** is durable and shared across serverless instances —
+  Firestore-backed, rather than per-instance memory that resets on every cold
+  start — on the endpoints where a single success is expensive: sign-in and
+  passkey flows, password reset, email verification, workspace creation, form
+  submission, and page-protection unlock. Lower-consequence endpoints, and the
+  per-key quota on the public REST API, still use an in-process counter that is
+  per instance. If the durable store is unreachable the limiter degrades to
+  that in-process counter rather than failing open.
 
 ## Customer data and deletion
 
@@ -100,14 +120,28 @@ ask and we will send them. This table is the engineering view and may lag them.
 
 ## Third-party plugins
 
-The marketplace runs third-party code, which we treat as untrusted:
+The marketplace runs third-party code. Most of it we treat as untrusted, and we
+are explicit below about the tier that is not:
 
-- Plugin bundles execute on a **separate origin** under a restrictive Content
-  Security Policy, so a plugin cannot reach the console's cookies or DOM.
-- Every published version is **content-addressed by SHA-256**; the running
-  bytes are the reviewed bytes.
-- Staff can **revoke a plugin version platform-wide**, and revocation is
-  enforced at render time rather than only blocking new installs.
+- **Sandboxed by default.** A plugin's UI executes in an iframe on a **separate
+  origin** under a restrictive Content Security Policy, so it cannot reach the
+  console's cookies or DOM. The console refuses to render a plugin at all if
+  that origin is ever configured same-origin. Outbound network access is
+  proxied through an allowlisted egress route that carries none of your
+  credentials.
+- **A staff-signed "realm" tier runs inside the application.** Plugins that
+  register real components need the app's own realm, with the access that
+  implies — so that tier is not sandboxed, and saying otherwise would be the
+  more comfortable claim rather than the true one. It is gated on a staff trust
+  grant plus an **Ed25519 signature** verified before execution, and it fails
+  closed when the signing key is absent.
+- Every published version is **content-addressed by SHA-256**, and the hash is
+  recomputed over the fetched bytes before they execute — on both tiers — so
+  the running bytes are the reviewed bytes.
+- Staff can **revoke or take down a plugin version platform-wide**, and that is
+  enforced at render time on plugins already installed, not only against new
+  ones. A review *rejection* is a weaker thing and we do not conflate them: it
+  blocks new installs and leaves existing ones running.
 
 ## Availability
 
