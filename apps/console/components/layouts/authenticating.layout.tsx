@@ -29,10 +29,25 @@ export interface AuthenticatingLayoutProps
   extends Partial<BackgroundImageComponentProps> {
   requireEmailVerification?: boolean
   signingOut?: boolean
+  /**
+   * Suspend every redirect this layout would make (AGL-1524). Set while the
+   * page under it is redeeming a one-shot auth action code: the redemption is
+   * a client-side call whose in-flight request a navigation can abort, so a
+   * layout-level bounce here can silently cancel an email verification while
+   * looking exactly like success. The page owns all navigation in that state.
+   */
+  holdRedirects?: boolean
 }
 
 function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
-  const { children, sx, requireEmailVerification, signingOut, ...rest } = props
+  const {
+    children,
+    sx,
+    requireEmailVerification,
+    signingOut,
+    holdRedirects,
+    ...rest
+  } = props
   const router = useRouter()
   const auth = useAuth()
   const { status, data: signInCheckResult } = useSigninCheck()
@@ -43,6 +58,9 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   const searchParams = useSearchParams()
 
   useEffect(() => {
+    // A one-shot code is being redeemed on this URL — no redirect may fire
+    // until the page resolves it (AGL-1524).
+    if (holdRedirects) return void 0
     if (authLoading) return void 0
     if (signedIn && signingOut) return void 0
     if (!signedIn && !signingOut) return void 0
@@ -117,6 +135,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     authLoading,
     continueUrl,
     emailVerified,
+    holdRedirects,
     signingOut,
     pushContinued,
     requireEmailVerification,

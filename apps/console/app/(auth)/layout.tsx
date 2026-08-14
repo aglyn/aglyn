@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import type { ReactNode } from 'react'
 import AuthenticatingLayout from '../../components/layouts/authenticating.layout'
 
@@ -30,13 +30,22 @@ import AuthenticatingLayout from '../../components/layouts/authenticating.layout
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const verifyEmailPage = pathname?.startsWith('/verify-email')
   return (
     <AuthenticatingLayout
       signingOut={pathname?.startsWith('/signout')}
       // On /verify-email, keep a signed-in-but-unverified user put instead of
       // bouncing them into the app; a verified user still falls through to the
       // continue URL (AGL-479).
-      requireEmailVerification={pathname?.startsWith('/verify-email')}
+      requireEmailVerification={verifyEmailPage}
+      // A one-shot code from an emailed link is being redeemed by the page
+      // (AGL-1524). The layout must not navigate AT ALL while it is on the
+      // URL: its continue-URL bounce for a verified session is a hard-ish
+      // exit that can abort the apply mid-flight, and its bare
+      // `/verify-email` push strips the code. The page owns every exit from
+      // this state — success navigates itself, failure stays to show why.
+      holdRedirects={verifyEmailPage && Boolean(searchParams?.get('oobCode'))}
     >
       {children}
     </AuthenticatingLayout>
