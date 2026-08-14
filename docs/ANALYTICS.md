@@ -7,7 +7,7 @@ than a silently-missing metric.
 
 Written for AGL-1561. Related: AGL-1538 (the GA properties themselves),
 AGL-1498 (visitor consent), AGL-1550 (why the tenant mounts sit above the
-plugin gate), AGL-1559 (the open property-structure decision).
+plugin gate), AGL-1559 (the property consolidation).
 
 ---
 
@@ -15,21 +15,26 @@ plugin gate), AGL-1559 (the open property-structure decision).
 
 | Property | Measurement id | Surface |
 | --- | --- | --- |
-| Aglyn — Console (302497406) | `G-YW5PG16YTM` | `app.aglyn.com`, Firebase-linked, live since AGL-118 |
-| Aglyn — Marketing (257010770) | `G-BQ49X14QCD` | `aglyn.com`, first data 2026-08-14 |
+| Aglyn — Console (302497406) | `G-YW5PG16YTM` | **both** `app.aglyn.com` and `aglyn.com`, via one web stream (3230351080); Firebase-linked, live since AGL-118 |
+| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | — | retired 2026-08-14, collecting nothing. **Do not delete** — it holds the only copy of its own ~1 day of history. |
+
+**One property, one stream, both domains** (AGL-1559, done 2026-08-14). A single
+measurement id serves both surfaces, because the `_gl` linker is honoured
+per-tag: two ids would give a visitor a fresh `client_id` on the domain hop.
+Separate the surfaces in reports with the built-in **Hostname** dimension.
 
 **Google Signals is OFF and ads personalization is 0/307 regions on both.
 Keep it that way** — the live privacy policy's flat "we do not sell or share"
 denial depends on it, and the server-side sender asserts `non_personalized_ads`
 per hit so a dashboard change cannot quietly opt revenue into ads.
 
-> ⚠️ **These are two separate properties, so a journey from `aglyn.com` to
-> `app.aglyn.com/signup` crosses a property boundary and GA cannot attribute
-> the signup to the marketing channel that produced it.** "Signups per channel"
-> is therefore unanswerable today. **AGL-1559** carries the options and the
-> recommendation (consolidate into one property with cross-domain measurement)
-> and is Zach's call. Nothing in this document changes when it is decided —
-> both surfaces read their measurement id from configuration.
+Cross-domain measurement is configured on the tag (Contains `aglyn.com`, which
+matches `app.aglyn.com` too; plus legacy `aglyn.io`), and `aglyn.com` is listed
+as an **unwanted referral** — without that second half the console keeps
+attributing sessions to `aglyn.com / referral` and overwrites the true source,
+so the consolidation would not actually fix attribution. A journey from
+`aglyn.com` to `app.aglyn.com/signup` is now one session with the original
+channel retained, which is what makes "signups per channel" answerable.
 
 ---
 
@@ -149,29 +154,34 @@ submitted field value.
 
 ---
 
-## What Zach must configure in the GA UI
+## GA UI configuration
 
-None of this is code, and none of it happens automatically.
+Done 2026-08-14 (AGL-1559) on property 302497406:
 
-1. **Mark the key events.** Admin → Events → *Mark as key event*:
-   `sign_up`, `generate_lead`, `purchase`, `site_published`, `stripe_connected`.
-   Until this is done they are ordinary events and will not appear as
-   conversions in any report.
-2. **Register the custom dimensions.** Admin → Custom definitions → *Create
-   custom dimension*, event-scoped, one per param that is not already a GA4
-   reserved param: `method`, `form_name`, `form_location`, `billing_interval`,
-   `first_publish`. **A param that is not registered is collected but not
-   reportable** — it will simply not appear as a breakdown, which reads exactly
-   like the event not carrying it.
-3. **Create `GA4_API_SECRET`** — Admin → Data streams → the stream → *Measurement
-   Protocol API secrets* → Create. Then set it, plus `GA4_MEASUREMENT_ID`, in
-   the Vercel production environment (marked sensitive). Without both, the
-   server-side `purchase` is a silent no-op — which is the correct behaviour on
-   self-hosted deployments and in development.
-4. **Decide AGL-1559** (one property vs two). If consolidating, the exact steps
-   are in that issue, including the "List unwanted referrals" step that is the
-   half everyone forgets.
-5. Leave Google Signals and ads personalization **off**.
+- cross-domain measurement and the unwanted-referrals list (above);
+- **custom dimensions registered**, all event-scoped: `method`, `form_name`,
+  `form_location`, `billing_interval`, `first_publish`. **A param that is not
+  registered is collected but not reportable** — it simply does not appear as a
+  breakdown, which reads exactly like the event not carrying it;
+- privacy posture verified: Google Signals **off**, ads personalization **0 of
+  307 regions**, user-provided data collection **off**, no Google Ads link,
+  data retention **14 months** (event and user), email redaction **on**.
+  Leave all of it that way — the live privacy policy's flat "we do not sell or
+  share" denial rests on it.
+
+### Still outstanding
+
+1. **Mark the remaining key events.** Admin → Events → *Mark as key event*.
+   `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
+   an event be marked **until it has been seen at least once**, so
+   `generate_lead`, `site_published`, `begin_checkout` and `stripe_connected`
+   have to wait for their first hit. Until marked they are ordinary events and
+   appear as conversions nowhere.
+2. **Create `GA4_API_SECRET`** — Admin → Data streams → the stream → *Measurement
+   Protocol API secrets* → Create. Then set it, plus `GA4_MEASUREMENT_ID`
+   (`G-YW5PG16YTM`), in the Vercel production environment (marked sensitive).
+   Without both, the server-side `purchase` is a silent no-op — which is the
+   correct behaviour on self-hosted deployments and in development.
 
 ### Environment variables
 
