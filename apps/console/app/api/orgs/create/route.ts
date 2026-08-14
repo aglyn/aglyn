@@ -25,6 +25,7 @@ import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 import {
+  consumeRateLimit,
   createOrganization,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -95,6 +96,49 @@ async function handler(request: Request): Promise<Response> {
       uid: decoded.uid,
     })
     if (locked) return locked
+
+    // Rate limit (AGL-1534) — the always-on layer under the AGL-1510 signups
+    // feature-lock. The AGL-1523 grace above admits a brand-new unverified
+    // account, so scripted org minting is one account-creation away; the
+    // grace bounds each account to ONE org, this bounds the RATE. Same
+    // durable limiter as every other consequence endpoint (AGL-794), keyed
+    // per uid (a scripted account, a stuck client) AND per IP (a bot farm
+    // rotating accounts behind one address). Fails soft by design: a limiter
+    // outage must not block signups. Deliberately AFTER the 451/423/403
+    // refusals — they win the spec-pinned order, and a refused request never
+    // burns a token.
+    const ip = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+    const perUid = await consumeRateLimit(`org-create:${decoded.uid}`, {
+      limit: 3,
+      windowMs: 60 * 60 * 1000,
+    })
+    const perIp = await consumeRateLimit(`org-create-ip:${ip}`, {
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+    })
+    // `.allowed`, not the result object — a truthiness check would be
+    // permanently true and the limit would never bite.
+    const overLimit = !perUid.allowed ? perUid : !perIp.allowed ? perIp : null
+    if (overLimit) {
+      // This copy is what a person reads: provisionSignUpOrg forwards the
+      // body's `error` to the workspace picker via the AGL-1523 marker.
+      return Response.json(
+        {
+          error:
+            'Too many new workspaces in a short time — wait a while and ' +
+            'try again. The name you typed is kept.',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(
+              Math.max(1, Math.ceil((overLimit.resetMs - Date.now()) / 1000)),
+            ),
+          },
+        },
+      )
+    }
+
     const orgId = await createOrganization({
       name,
       slug,

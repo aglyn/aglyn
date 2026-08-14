@@ -59,6 +59,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
     }),
   },
+  // Always under the AGL-1534 limit here — its own spec
+  // (org-create-rate-limit.spec.ts) owns the 429 behaviour.
+  consumeRateLimit: jest.fn(async () => ({
+    allowed: true,
+    limit: 3,
+    remaining: 2,
+    resetMs: Date.now() + 60 * 60 * 1000,
+    degraded: false,
+  })),
   createOrganization: (...args: unknown[]) => mockCreateOrganization(...args),
   emailUnverifiedResponse: () =>
     Response.json(
