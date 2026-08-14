@@ -225,6 +225,36 @@ const shots = [
     settleMs: 2500,
   },
   {
+    // Error pages card (AGL-1599). The site-protection docs used to caption
+    // the custom-domains shot of this same page as "where maintenance mode is
+    // toggled" — right page, wrong card, and the toggle is nowhere in that
+    // frame. Same scroll trick as setup-languages below, since Setup is one
+    // long tab and only the top of it fits a 900px viewport.
+    out: 'site-protection/setup-error-pages.png',
+    path: `/${HOST_BASE}/setup`,
+    waitFor: 'Custom domain',
+    settleMs: 2500,
+    actions: [{ scroll: 'text=Error pages', settleMs: 1000 }],
+    // Clips off the host tab strip. The seed account (`e2e@aglyn.test`) is
+    // STAFF, and staff keep release-flagged-off tabs with a flag badge that a
+    // customer never sees — `release_contacts` is defaultEnabled:false, so the
+    // strip renders "⚑ CONTACTS" here and nowhere in a real customer console
+    // (secondary-nav-bar.component.tsx: `if (!isStaff) return []`). The
+    // AGL-1598 note that org pages render identically for staff covers the
+    // /admin strip only; this is a separate mechanism and it does leak.
+    clip: { x: 0, y: 44, width: 1440, height: 856 },
+  },
+  {
+    // The ORG marketplace (AGL-975 retired the per-site tab, so `/hosts/…/
+    // marketplace` is not the surface any more). The previous shot predated
+    // both AGL-975 and AGL-1011: it was headed "Community components" and its
+    // org strip had no Plugins tab.
+    out: 'guides/marketplace-browse.png',
+    path: `/${ORG_SLUG}/marketplace`,
+    waitFor: 'Realm demo',
+    settleMs: 2500,
+  },
+  {
     out: 'multilingual/setup-languages.png',
     path: `/${HOST_BASE}/setup`,
     waitFor: 'Custom domain',

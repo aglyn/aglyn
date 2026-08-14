@@ -14,7 +14,7 @@ block library**, and a **blog** with content collections.
 scale with your tier.
 :::
 
-![Templates in the marketplace marketplace](/img/guides/marketplace-browse.png)
+![The Besigner elements drawer, with the Sections & Blocks library at the top of the list](/img/besigner/elements-drawer.png)
 
 ## Site templates & starter gallery
 
@@ -22,7 +22,10 @@ scale with your tier.
   screens for you. Starters are copied into your site's own
   [template library](./templates-library.md), so you can edit and version them like any
   other template.
-- **Save a site as a template**, then browse and install marketplace templates.
+- **Save a site as a template** from **Setup → Site template**, which publishes it to the
+  marketplace — see [save & share a template](./save-a-template.md). Browsing and installing
+  marketplace templates happens in the **Start from a template** picker, opened by the
+  **Templates** button on the Screens, Layouts and Components lists.
 
 ## Section & block library
 

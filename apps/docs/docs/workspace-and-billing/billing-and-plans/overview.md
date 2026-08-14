@@ -10,7 +10,7 @@ Your **plan** determines which features you can use and how much of each. Aglyn 
 **entitlements** (can you use a feature) and **quotas** (how much) throughout the product,
 and shows **usage meters** so you always know where you stand.
 
-![The Billing page in the Aglyn console: the current plan card with subscription status, cancel and payment-method actions, beside the plan comparison and usage meters](/img/billing-and-plans/billing-page.png)
+![The Billing page in the Aglyn console: the Current plan card with subscription status, Manage payment methods and Cancel subscription actions, beside the Usage card's meters](/img/billing-and-plans/billing-page.png)
 
 :::info Plan availability
 Every site has a plan. **Free**, **Starter**, **Pro**, **Business**, **Scale**, **Advanced**,

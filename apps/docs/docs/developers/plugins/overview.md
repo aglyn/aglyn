@@ -10,12 +10,18 @@ description: Extend Aglyn with sandboxed plugins — install from the marketplac
 **organization marketplace** (**Marketplace** in the org navigation), configure them per
 site, and they run **sandboxed** so they can't compromise your site.
 
-The marketplace lives at the **organization** level — a single **Marketplace** destination
-with **Browse**, **Installed**, and **Publish** tabs — rather than inside each site.
+The marketplace lives at the **organization** level rather than inside each site. Its own
+Navigation panel lists **Browse All** and **Installed**; publishers additionally get
+**Upload / Publish**, **Publisher Profile**, **Listings**, **Payouts** and **Sales**.
 
-![The organization Marketplace in the Aglyn console — Browse, Installed and Publish tabs](/img/guides/marketplace-browse.png)
+**Marketplace is now purely the market.** Turning plugins on and off for the workspace moved
+out to its own **Plugins** section in the org navigation, next to Marketplace. **Installed**
+remains as a convenience for uninstalling something you just installed — every row links
+through to Plugins.
 
-![The Marketplace Installed tab, where workspace admins enable plugins and manage installs](/img/plugins/org-plugins-page.png)
+![The organization Marketplace, on Browse All, with its Navigation panel listing Installed and the publisher sections](/img/guides/marketplace-browse.png)
+
+![The org Plugins section: an "Installed from the marketplace" card above "Built in", each first-party plugin with an on/off switch](/img/plugins/org-plugins-page.png)
 
 ```mermaid
 flowchart LR

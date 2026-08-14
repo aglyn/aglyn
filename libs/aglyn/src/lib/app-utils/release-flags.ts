@@ -118,7 +118,7 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   },
   {
     key: 'release_marketplace',
-    label: 'Marketplace marketplace',
+    label: 'Marketplace',
     description: 'Marketplace browsing, publishing and plugin installs.',
     defaultEnabled: true,
     navTabId: 'nav-tab-marketplace',
