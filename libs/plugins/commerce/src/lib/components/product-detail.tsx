@@ -32,6 +32,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 import { CART_UPDATED_EVENT } from './cart'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
@@ -106,6 +107,12 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const site = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
+
+    // The single-product ("buy now") path returns the shopper to this page
+    // rather than to the cart, so the PDP is the second of the two surfaces
+    // that has to be able to report `purchase` (AGL-1641). Both mount points
+    // share one guard, so a page carrying a cart AND a PDP still sends one.
+    useStorefrontPurchaseEvent(hostId, siteFetch)
     // Seeded from the server-resolved page data (AGL-659) so the PDP renders
     // its real content in the SSR HTML. Starting at null meant the server
     // emitted a <Skeleton> and the crawler got a product page with no

@@ -35,6 +35,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'cart'
@@ -322,6 +323,13 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const siteFetch = Aglyn.useSiteFetch()
   const [cart, setCart] = useState<CartView | null>(null)
   const [open, setOpen] = useState(false)
+
+  // Closes the merchant's ecommerce funnel (AGL-1641). Stripe returns a cart
+  // checkout to the page it started on — this one — so the `purchase` that
+  // `begin_checkout` above has never had a counterpart to is reported here.
+  // No-ops on every ordinary render: the hook returns immediately unless the
+  // URL carries `?order=success&session_id=…`.
+  useStorefrontPurchaseEvent(hostId, siteFetch)
 
   const refresh = useCallback(async () => {
     if (!hostId) return

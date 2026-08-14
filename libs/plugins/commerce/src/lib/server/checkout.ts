@@ -265,7 +265,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               String(accountId),
           }
         : {}),
-      success_url: `${backUrl}${separator}order=success`,
+      // Substituted by Stripe on redirect — see the note in `cart-checkout.ts`
+      // (AGL-1641). The single-product path returns the shopper to the product
+      // page, so the `purchase` is reported by the PDP rather than the cart.
+      success_url: `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${backUrl}${separator}order=canceled`,
       'metadata[type]': isSubscription
         ? 'commerce-subscription'

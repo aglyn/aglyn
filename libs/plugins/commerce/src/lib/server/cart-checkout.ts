@@ -302,7 +302,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
     const separator = backUrl.includes('?') ? '&' : '?'
-    params.set('success_url', `${backUrl}${separator}order=success`)
+    // `{CHECKOUT_SESSION_ID}` is substituted by Stripe on redirect (AGL-1641).
+    // Without it the return URL said only that SOMETHING succeeded, so the
+    // storefront could not name the order it had just completed — which is why
+    // `purchase` could not be reported at all. It is also the order doc id and
+    // becomes the GA `transaction_id`, so GA4's own de-duplication makes a
+    // refresh of this page harmless.
+    params.set(
+      'success_url',
+      `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
+    )
     params.set('cancel_url', `${backUrl}${separator}order=canceled`)
     if (email) params.set('customer_email', email)
     params.set('metadata[type]', 'commerce-cart')
