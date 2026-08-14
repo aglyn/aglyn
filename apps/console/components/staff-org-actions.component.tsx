@@ -21,6 +21,7 @@ import {
   LOCKDOWN_REASON_CODES,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
+  RELEASE_FLAGS,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -62,34 +63,75 @@ export const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   })),
 ]
 
-/** Every numeric entitlement staff may override (AGL-201). */
-export const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
-  { key: 'hostLimit', label: 'Sites' },
-  { key: 'screensPerHost', label: 'Screens / site' },
-  { key: 'sharedLayoutsPerHost', label: 'Layouts / site' },
-  { key: 'storagePerHostMb', label: 'Storage MB' },
-  { key: 'totalSiteSizeMb', label: 'Site size MB' },
-  { key: 'membersPerHost', label: 'Members / site' },
-  { key: 'managersPerOrg', label: 'Team seats' },
-  { key: 'maxManagersPerOrg', label: 'Max team seats' },
-  { key: 'maxMembersPerHost', label: 'Max member seats' },
-  { key: 'bandwidthGb', label: 'Bandwidth GB' },
-  { key: 'formSubmissionsPerMonth', label: 'Form subs / mo' },
-  { key: 'variablesPerHost', label: 'Variables' },
-  { key: 'functionsPerHost', label: 'Functions' },
-  { key: 'workflowsPerHost', label: 'Workflows' },
-  { key: 'workflowRunsPerMonth', label: 'Workflow runs / mo' },
-  { key: 'servicesPerHost', label: 'Booking services' },
-  { key: 'redirectsPerHost', label: 'Redirects' },
-  { key: 'contactsPerHost', label: 'Contacts' },
+/**
+ * Wording for the numeric entitlements. Labels ONLY — never the list
+ * itself (AGL-1635).
+ *
+ * The list used to live here as a hand-written array, and had drifted eight
+ * keys behind the plan model: `templatesPerHost`, `apiRequestsPerMonth`,
+ * `productsPerHost`, `inventoryLocations`, `posRegisters` and the three fee
+ * percentages were unreachable from this dialog, so setting a negotiated
+ * transaction fee meant hand-writing a Firestore document.
+ *
+ * That is exactly the AGL-549 bug, which was fixed for the feature booleans
+ * by deriving them and never fixed here. `QUOTA_FIELDS` is now derived too,
+ * and anything absent from this map falls back to a humanised key rather
+ * than dropping out.
+ */
+const QUOTA_LABELS: Readonly<Record<string, string>> = {
+  hostLimit: 'Sites',
+  screensPerHost: 'Screens / site',
+  sharedLayoutsPerHost: 'Layouts / site',
+  storagePerHostMb: 'Storage MB',
+  totalSiteSizeMb: 'Site size MB',
+  membersPerHost: 'Members / site',
+  managersPerOrg: 'Team seats',
+  maxManagersPerOrg: 'Max team seats',
+  maxMembersPerHost: 'Max member seats',
+  bandwidthGb: 'Bandwidth GB',
+  formSubmissionsPerMonth: 'Form subs / mo',
+  variablesPerHost: 'Variables',
+  functionsPerHost: 'Functions',
+  workflowsPerHost: 'Workflows',
+  workflowRunsPerMonth: 'Workflow runs / mo',
+  servicesPerHost: 'Booking services',
+  redirectsPerHost: 'Redirects',
+  contactsPerHost: 'Contacts',
   // Campaign sends only (AGL-1438); transactional mail is uncapped.
-  { key: 'emailSendsPerMonth', label: 'Campaign email sends / mo' },
-  { key: 'actionRunsPerMonth', label: 'Action runs / mo' },
-  { key: 'datasetsPerOrg', label: 'Datasets (org)' },
-  { key: 'maxDatasetsPerOrg', label: 'Max datasets (org)' },
-  { key: 'recordsPerDataset', label: 'Records / dataset' },
-  { key: 'dataStorageMbPerOrg', label: 'Data storage MB (org)' },
-]
+  emailSendsPerMonth: 'Campaign email sends / mo',
+  actionRunsPerMonth: 'Action runs / mo',
+  datasetsPerOrg: 'Datasets (org)',
+  maxDatasetsPerOrg: 'Max datasets (org)',
+  recordsPerDataset: 'Records / dataset',
+  dataStorageMbPerOrg: 'Data storage MB (org)',
+  templatesPerHost: 'Templates / site',
+  apiRequestsPerMonth: 'API requests / mo',
+  productsPerHost: 'Products / site',
+  inventoryLocations: 'Inventory locations',
+  posRegisters: 'POS registers (base)',
+  transactionFeePhysicalPct: 'Txn fee physical %',
+  transactionFeeDigitalPct: 'Txn fee digital %',
+  marketplaceFeePct: 'Marketplace fee %',
+}
+
+/** `maxDatasetsPerOrg` → `Max datasets per org`, for a key nobody labelled. */
+const humanizeKey = (key: string): string => {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase()
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+/**
+ * Every numeric entitlement staff may override (AGL-201), derived from the
+ * plan model so a new quota cannot silently drop out (AGL-1635).
+ *
+ * `free` is the source because every plan carries the same key set; the
+ * resolver applies any numeric key found on `org.entitlements`, so the set
+ * it accepts and the set shown here are now the same set by construction.
+ */
+export const QUOTA_FIELDS: Array<{ key: string; label: string }> =
+  Object.entries(PLAN_ENTITLEMENTS.free)
+    .filter(([, value]) => typeof value === 'number')
+    .map(([key]) => ({ key, label: QUOTA_LABELS[key] ?? humanizeKey(key) }))
 
 /** Every boolean feature flag, overridable as inherit / on / off. */
 // Every feature key, derived from the plan model so new flags (the
@@ -97,10 +139,36 @@ export const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
 // override dialog again (AGL-549).
 export const FLAG_FIELDS: string[] = Object.keys(PLAN_ENTITLEMENTS.free.features)
 
+/**
+ * Per-org RELEASE-flag overrides (AGL-1635) — a THIRD family, and not the
+ * same question as `FLAG_FIELDS`.
+ *
+ * A feature override asks whether the org's plan includes something that
+ * exists. A release override asks whether an unreleased feature is switched
+ * on for this one customer, and is the only way to grant one org early
+ * access: the platform-wide flag is all-or-nothing, and its percentage
+ * rollout picks its members by hash, not by choice.
+ *
+ * Derived from the registry, so a flag added later appears here without
+ * anyone remembering to add it — the reason the admin bar
+ * (`release_edit_bar`) was missing was that no such surface existed at all.
+ */
+export const RELEASE_FLAG_FIELDS: ReadonlyArray<{
+  key: string
+  label: string
+  defaultEnabled: boolean
+}> = RELEASE_FLAGS.map((definition) => ({
+  key: definition.key,
+  label: definition.label,
+  defaultEnabled: definition.defaultEnabled,
+}))
+
 /** Count of explicit overrides on an org doc, for the row chip. */
 export const overrideCount = (org: any): number =>
   Object.keys(org?.entitlements ?? {}).filter((key) => key !== 'features')
-    .length + Object.keys(org?.entitlements?.features ?? {}).length
+    .length +
+  Object.keys(org?.entitlements?.features ?? {}).length +
+  Object.keys(org?.releaseFlags ?? {}).length
 
 /**
  * The staff org actions — plan/entitlement OVERRIDE, SUSPEND/unsuspend and
@@ -146,6 +214,7 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     plan: string
     quotas: Record<string, string>
     flags: Record<string, '' | 'on' | 'off'>
+    releaseFlags: Record<string, '' | 'on' | 'off'>
     before: any
   } | null>(null)
 
@@ -301,14 +370,22 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       if (value === true) flags[key] = 'on'
       if (value === false) flags[key] = 'off'
     }
+    const releaseFlags: Record<string, '' | 'on' | 'off'> = {}
+    for (const field of RELEASE_FLAG_FIELDS) {
+      const value = org.releaseFlags?.[field.key]
+      if (value === true) releaseFlags[field.key] = 'on'
+      if (value === false) releaseFlags[field.key] = 'off'
+    }
     setEditor({
       id: org.$id,
       plan: org.plan ?? '',
       quotas,
       flags,
+      releaseFlags,
       before: {
         plan: org.plan ?? null,
         entitlements: org.entitlements ?? null,
+        releaseFlags: org.releaseFlags ?? null,
       },
     })
   }, [org])
@@ -361,6 +438,29 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       Object.keys(entitlements).length > 0 ||
       Object.keys(explicitFeatures).length > 0
     if (hasOverrides) entitlements['features'] = features
+    // Release-flag overrides (AGL-1635) use the same inherit/on/off contract
+    // and the same `deleteField()` sentinel as the features above, for the
+    // same AGL-1109 reason: this write is `{ merge: true }`, so an inherited
+    // flag that is merely omitted keeps whatever was stored. "Inherit" has
+    // to DELETE.
+    const releaseFlags: Record<
+      string,
+      boolean | ReturnType<typeof deleteField>
+    > = {}
+    const explicitReleaseFlags: Record<string, boolean> = {}
+    for (const field of RELEASE_FLAG_FIELDS) {
+      const state = editor.releaseFlags[field.key] ?? ''
+      if (state === 'on') {
+        releaseFlags[field.key] = true
+        explicitReleaseFlags[field.key] = true
+      } else if (state === 'off') {
+        releaseFlags[field.key] = false
+        explicitReleaseFlags[field.key] = false
+      } else {
+        releaseFlags[field.key] = deleteField()
+      }
+    }
+    const hasReleaseOverrides = Object.keys(explicitReleaseFlags).length > 0
     const after = {
       plan: plan || null,
       // The audit row records the resulting STATE, never the sentinels — a
@@ -368,6 +468,7 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       entitlements: hasOverrides
         ? { ...entitlements, features: explicitFeatures }
         : null,
+      releaseFlags: hasReleaseOverrides ? explicitReleaseFlags : null,
     }
     try {
       await setDoc(
@@ -375,6 +476,7 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         {
           plan: plan || deleteField(),
           entitlements: hasOverrides ? entitlements : deleteField(),
+          releaseFlags: hasReleaseOverrides ? releaseFlags : deleteField(),
           updatedAt: Timestamp.now(),
         },
         { merge: true },
@@ -546,6 +648,53 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
                 </TextField>
               )
             })}
+          </Stack>
+          <Typography variant="subtitle2">
+            {'Release flag overrides'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'Early access to an UNRELEASED feature for this organization ' +
+              'only — a different question from the plan features above. ' +
+              'Inherit follows the platform flag and its rollout; forcing ' +
+              'wins over both. Super staff only.'}
+          </Typography>
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {RELEASE_FLAG_FIELDS.map((field) => (
+              <TextField
+                key={field.key}
+                select
+                size="small"
+                label={field.label}
+                value={editor?.releaseFlags[field.key] ?? ''}
+                onChange={(event) =>
+                  setEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          releaseFlags: {
+                            ...prev.releaseFlags,
+                            [field.key]: event.target.value as any,
+                          },
+                        }
+                      : prev,
+                  )
+                }
+                sx={{ width: 168 }}
+              >
+                <MenuItem value="">
+                  {/*
+                    The registry default, NOT the live Remote Config value:
+                    this dialog does not read the template, and a percentage
+                    rollout has no single answer for one org anyway. Naming
+                    it "default" rather than "on"/"off" keeps it from
+                    reading as the current verdict.
+                  */}
+                  {`Inherit (default ${field.defaultEnabled ? 'on' : 'off'})`}
+                </MenuItem>
+                <MenuItem value="on">{'Force on'}</MenuItem>
+                <MenuItem value="off">{'Force off'}</MenuItem>
+              </TextField>
+            ))}
           </Stack>
         </DialogContent>
         <DialogActions>

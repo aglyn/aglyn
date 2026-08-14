@@ -110,6 +110,18 @@ service cloud.firestore {
       // Every console surface writes all four through an Admin-SDK route, so
       // denying them client-side costs the product nothing.
       //
+      // `releaseFlags` (AGL-1635) is denied to the org admin AND to billing
+      // staff, which is stricter than `entitlements` beside it. It is the
+      // per-org override of a RELEASE flag — "is this feature launched" —
+      // and the platform-wide editor for the same flags
+      // (/api/admin/flags) is already super-staff-only, on the reasoning
+      // that flipping one changes what customers see. Scoping the flip to a
+      // single org does not change its class, so the two surfaces agree:
+      // super staff only. It is also not a billing act — nothing about it
+      // is priced, so the billing-staff branch has no business in it, and
+      // an unreleased feature forced on for one org is a support and
+      // liability question rather than a commercial one.
+      //
       // The org `suspended*` family is Admin-SDK-only for EVERY client,
       // super staff included (AGL-1517). AGL-1505 removed the last client
       // writer — the legacy staff toggle now POSTs /api/admin/lockdown — and
@@ -126,12 +138,14 @@ service cloud.firestore {
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
+             'releaseFlags',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
+             'releaseFlags',
              'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',

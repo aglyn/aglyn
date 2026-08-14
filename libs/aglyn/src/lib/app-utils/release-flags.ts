@@ -282,3 +282,66 @@ export function isReleaseFlagOn(
   if (percent >= 100) return true
   return releaseFlagBucket(flagKey, subjectId) < percent
 }
+
+/**
+ * Per-org release-flag overrides (AGL-1635), stored on the org doc at
+ * `releaseFlags`. A present key is a staff DECISION about one organization
+ * and wins over both the Remote Config value and the rollout bucket; an
+ * absent key inherits.
+ *
+ * A separate field from `entitlements.features` on purpose: those ask
+ * whether the org's PLAN includes a feature, these ask whether a
+ * not-yet-released feature is switched on for this one customer. Folding
+ * them together would make "granted by the deal" and "previewing an
+ * unreleased build" indistinguishable at the point a support question is
+ * asked.
+ *
+ * Why the org doc and not a Remote Config condition: RC conditions are
+ * template-global and would need one published condition per org, with a
+ * template publish (a manual, separate deploy) for every grant.
+ */
+export type OrgReleaseFlagOverrides = Partial<Record<ReleaseFlagKey, boolean>>
+
+/**
+ * Sanitises whatever is actually stored at `org.releaseFlags`.
+ *
+ * Tolerant for the same reason `parseReleaseFlagValue` is: this map is
+ * hand-editable in the Firebase console and survives registry renames, so a
+ * retired flag key or a non-boolean must be dropped rather than allowed to
+ * gate anything. Unknown keys are discarded — a stale key can never grant a
+ * flag that no longer exists, and a typo silently inherits instead of
+ * silently forcing.
+ */
+export function parseOrgReleaseFlagOverrides(
+  raw: unknown,
+): OrgReleaseFlagOverrides {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const overrides: OrgReleaseFlagOverrides = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'boolean' && isReleaseFlagKey(key)) {
+      overrides[key] = value
+    }
+  }
+  return overrides
+}
+
+/**
+ * The gating verdict with a per-org override applied on top of
+ * `isReleaseFlagOn`.
+ *
+ * The override is checked FIRST and short-circuits, so a forced-off flag
+ * stays off for an org even while the flag is globally enabled — the
+ * per-org kill switch is half the point, not just the per-org grant. Every
+ * release-flag gate resolves through here so the console, the tenant
+ * runtime and the API dispatchers cannot disagree about one org.
+ */
+export function isReleaseFlagOnForOrg(
+  flagKey: ReleaseFlagKey,
+  value: ReleaseFlagValue,
+  subjectId: string | null | undefined,
+  overrides: OrgReleaseFlagOverrides | null | undefined,
+): boolean {
+  const override = overrides?.[flagKey]
+  if (typeof override === 'boolean') return override
+  return isReleaseFlagOn(flagKey, value, subjectId)
+}

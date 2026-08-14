@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { isReleaseFlagOn, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgDoc,
-  getServerReleaseFlagValues,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   mintEditAccessToken,
 } from '@aglyn/tenant-data-admin'
@@ -77,8 +77,7 @@ async function handler(request: Request): Promise<Response> {
     // Dark until released (and the kill switch): tokens stop being minted
     // the moment the flag flips off, and the tenant verify route refuses
     // outstanding ones too.
-    const flags = await getServerReleaseFlagValues()
-    if (!isReleaseFlagOn('release_edit_bar', flags.release_edit_bar, orgId)) {
+    if (!(await isServerReleaseFlagOnForOrg('release_edit_bar', orgId))) {
       return Response.json({ error: 'Not available' }, { status: 404 })
     }
 

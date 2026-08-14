@@ -278,9 +278,13 @@ describe('StaffOrgActions (AGL-939)', () => {
     const [, audit] = auditPayload()
     expect(audit.action).toBe('org.override')
     expect(audit.actorUid).toBe('staff-1')
+    // `releaseFlags` joined the audited before-state in AGL-1635; an org
+    // with no per-org release override records an explicit null rather than
+    // omitting the key, so a reader can tell "none set" from "not recorded".
     expect(audit.before).toEqual({
       plan: 'pro',
       entitlements: { hostLimit: 5 },
+      releaseFlags: null,
     })
     // The audit row records resulting STATE — no delete sentinels.
     expect(audit.after.plan).toBe('pro')

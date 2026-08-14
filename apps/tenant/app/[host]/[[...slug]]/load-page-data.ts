@@ -402,6 +402,7 @@ const loadPageDataCached = cache(
                 {
                   subjectId:
                     (orgRes.org as { $id?: string })?.$id ?? hostId,
+                  orgId: (orgRes.org as { $id?: string })?.$id ?? null,
                 },
               )
             return {
@@ -529,6 +530,7 @@ const loadPageDataCached = cache(
               ),
               {
                 subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
+                orgId: (orgRes.org as { $id?: string })?.$id ?? null,
               },
             )
           const collectionShowBranding = !Aglyn.resolveOrgEntitlements(
@@ -761,7 +763,10 @@ const loadPageDataCached = cache(
         orgRes.org as never,
         hostRes.host as never,
       ),
-      { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
+      {
+        subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
+        orgId: (orgRes.org as { $id?: string })?.$id ?? null,
+      },
     )
     // The release gate keeps its original failure semantics — a throw still
     // reaches the outer catch and 404s — but it is no longer awaited on the

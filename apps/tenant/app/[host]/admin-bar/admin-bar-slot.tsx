@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { isReleaseFlagOn } from '@aglyn/aglyn/server'
-import { getServerReleaseFlagValues } from '@aglyn/tenant-data-admin'
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin'
 import { getHostCached } from '../host-data'
 import AdminBarStub from './admin-bar-stub'
 
@@ -34,6 +33,11 @@ const CONSOLE_ORIGIN =
  * values are a 60s-TTL module cache. Both are baked into the ISR page, so a
  * flag flip propagates within a revalidation, same as any content change.
  *
+ * The verdict runs through `isServerReleaseFlagOnForOrg` (AGL-1635) so the
+ * org's per-org override is applied — the same resolver the edit-context
+ * and edit-access routes use, so the bar, the token mint and the token
+ * redemption cannot disagree about one org.
+ *
  * Fails silent by design: an error resolving the flag or the host must
  * never take down a published page for a convenience surface.
  */
@@ -44,13 +48,8 @@ export default async function AdminBarSlot({ host }: { host: string }) {
       | { $id?: string; orgId?: string }
       | undefined
     if (!hostDoc?.$id) return null
-    const flags = await getServerReleaseFlagValues()
     if (
-      !isReleaseFlagOn(
-        'release_edit_bar',
-        flags.release_edit_bar,
-        hostDoc.orgId ?? null,
-      )
+      !(await isServerReleaseFlagOnForOrg('release_edit_bar', hostDoc.orgId))
     ) {
       return null
     }

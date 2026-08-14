@@ -18,9 +18,11 @@
 import {
   filterPluginsByReleaseFlags,
   isReleaseFlagKey,
-  isReleaseFlagOn,
+  isReleaseFlagOnForOrg,
+  parseOrgReleaseFlagOverrides,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
+  type OrgReleaseFlagOverrides,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn/server'
@@ -90,25 +92,105 @@ export async function getServerReleaseFlagValues(): Promise<
 }
 
 /**
+ * Per-org release-flag overrides (AGL-1635), read off `orgs/{orgId}`.
+ *
+ * Cached on the same TTL as the template read above, and for the same
+ * reason: these are consulted on every published page render and every API
+ * dispatch, so an uncached read would add a Firestore round trip to the hot
+ * path. A grant therefore takes up to a minute to land, matching how long a
+ * flag flip already takes — one propagation story, not two.
+ *
+ * Keyed by orgId because a subject may be a uid or a hostId, and only an
+ * org can carry overrides. Failure is silent and yields `{}`: a missing org
+ * doc or a denied read must gate exactly as "no override set", never as an
+ * error that takes a published page down.
+ */
+const orgCache = new Map<string, { at: number; overrides: OrgReleaseFlagOverrides }>()
+
+export async function getOrgReleaseFlagOverrides(
+  orgId: string | null | undefined,
+): Promise<OrgReleaseFlagOverrides> {
+  if (!orgId) return {}
+  const hit = orgCache.get(orgId)
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.overrides
+  let overrides: OrgReleaseFlagOverrides = {}
+  try {
+    const snapshot = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('orgs')
+      .doc(orgId)
+      .get()
+    overrides = parseOrgReleaseFlagOverrides(snapshot.data()?.['releaseFlags'])
+  } catch {
+    // No Firestore here, or the doc is unreadable — inherit, never fail.
+  }
+  orgCache.set(orgId, { at: Date.now(), overrides })
+  return overrides
+}
+
+/**
+ * The verdict for ONE flag and ONE org, overrides applied (AGL-1635).
+ *
+ * The surfaces that gate a single flag server-side — the tenant admin bar
+ * slot, edit-context redemption, edit-access minting — resolve through here
+ * rather than reading `getServerReleaseFlagValues()` and calling
+ * `isReleaseFlagOn` themselves, so a per-org grant reaches all of them at
+ * once. A gate that kept the old two-step would silently ignore overrides,
+ * which is the failure this issue exists to fix.
+ */
+export async function isServerReleaseFlagOnForOrg(
+  flagKey: ReleaseFlagKey,
+  orgId: string | null | undefined,
+): Promise<boolean> {
+  const [values, overrides] = await Promise.all([
+    getServerReleaseFlagValues(),
+    getOrgReleaseFlagOverrides(orgId),
+  ])
+  return isReleaseFlagOnForOrg(flagKey, values[flagKey], orgId ?? null, overrides)
+}
+
+/** Test seam: drops both caches so a spec can change a verdict. */
+export function __resetReleaseFlagCaches(): void {
+  cache = undefined
+  orgCache.clear()
+}
+
+/**
  * The server half of the plugin release gate (AGL-422): subtracts
  * flagged-off first-party plugins from an effective set, with the same
  * subject bucketing the console client uses (`subjectId` = orgId, so a
  * whole workspace gets a rollout verdict together). The staff bypass is
  * only paid for when something was actually subtracted AND the request
  * carries a bearer token — the common all-flags-on path never verifies.
+ *
+ * AGL-1635: `orgId` carries the per-org overrides. It is passed separately
+ * from `subjectId` because the two are not the same thing — callers fall
+ * back to a hostId as the rollout subject when the org lookup misses, and a
+ * hostId must never be read as an org id here.
  */
 export async function filterEnabledPluginsByReleaseFlags(
   pluginIds: readonly string[],
   options: {
     subjectId?: string | null
+    /** The org whose overrides apply, when the caller resolved one. */
+    orgId?: string | null
     /** Raw Authorization header, when the caller has one (API dispatch). */
     authorization?: string | null
   },
 ): Promise<string[]> {
-  const values = await getServerReleaseFlagValues()
+  const [values, overrides] = await Promise.all([
+    getServerReleaseFlagValues(),
+    getOrgReleaseFlagOverrides(options.orgId),
+  ])
   const isFlagOn = (flagKey: string): boolean =>
     isReleaseFlagKey(flagKey)
-      ? isReleaseFlagOn(flagKey, values[flagKey], options.subjectId ?? null)
+      ? isReleaseFlagOnForOrg(
+          flagKey,
+          values[flagKey],
+          options.subjectId ?? null,
+          overrides,
+        )
       : true
   const filtered = filterPluginsByReleaseFlags(pluginIds, isFlagOn)
   if (filtered.length === pluginIds.length) return filtered

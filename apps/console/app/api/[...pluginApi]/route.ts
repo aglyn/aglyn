@@ -100,6 +100,7 @@ async function dispatch(
         [pluginId],
         {
           subjectId: resolved?.orgId ?? hostId,
+          orgId: resolved?.orgId ?? null,
           authorization: request.headers.get('authorization'),
         },
       )
