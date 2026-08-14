@@ -63,8 +63,12 @@ export function CommerceGlanceCard(props: { hostId: string }) {
         order.status !== 'canceled' &&
         order.status !== 'refunded',
     )
+    // The legacy flat `amountCents` as the fallback, matching every other
+    // money reader (AGL-1747). This card had the modern read but not the
+    // fallback, so a Commerce Starter order (AGL-90) rendered as $0.00.
     const revenueCents = recentWindow.reduce(
-      (sum, order) => sum + Number(order.totals?.totalCents ?? 0),
+      (sum, order) =>
+        sum + Number(order.totals?.totalCents ?? order.amountCents ?? 0),
       0,
     )
     const lowStock = (productDocs ?? []).filter((product: any) => {
@@ -166,7 +170,11 @@ export function CommerceGlanceCard(props: { hostId: string }) {
                     sx={{ alignItems: 'center' }}
                   >
                     <Typography variant="caption">
-                      {money(Number(order.totals?.totalCents ?? 0))}
+                      {money(
+                        Number(
+                          order.totals?.totalCents ?? order.amountCents ?? 0,
+                        ),
+                      )}
                     </Typography>
                     <Chip size="small" label={order.status ?? 'paid'} />
                   </Stack>

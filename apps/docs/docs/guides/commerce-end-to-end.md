@@ -166,6 +166,13 @@ The **Products** hub's **Orders** tab lists every sale with product, period,
 status, and channel filters plus **Export CSV** and **Draft order** (build an
 order by hand and send a payment link).
 
+**Export CSV** writes the orders currently shown — the filters apply — as
+`orders.csv`, one row per order: `date`, `product`, `amountUsd`, `feeUsd`,
+`customerEmail`, `coupon`, `orderId`, `status`, `channel`, `refundedUsd`,
+`netUsd`. `amountUsd` is the gross charge, so subtract `refundedUsd` (or read
+`netUsd`) when reconciling against a Stripe payout. Orders with several line
+items name the first and count the rest, e.g. `Blue Mug +2 more`.
+
 ![The Orders tab with seeded orders showing order numbers, status chips, totals, and filters](/img/guides/commerce-orders-tab.png)
 
 Open an order for the detail dialog — customer, line items, totals, timeline,

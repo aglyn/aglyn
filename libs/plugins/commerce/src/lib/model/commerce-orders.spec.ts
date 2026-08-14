@@ -16,13 +16,16 @@
  */
 
 import {
+  ORDERS_CSV_HEADER,
   appendOrderEvent,
+  buildOrdersCsv,
   canTransitionOrder,
   computeBuyNowOrder,
   computeCheckoutSessionTotals,
   computeOrderTotals,
   formatOrderNumber,
   liftLegacyOrder,
+  orderContainsProduct,
 } from './commerce-orders'
 
 describe('canTransitionOrder', () => {
@@ -504,6 +507,224 @@ describe('liftLegacyOrder', () => {
       ],
     }
     expect(liftLegacyOrder(shaped).status).toBe('fulfilled')
+  })
+})
+
+describe('orderContainsProduct', () => {
+  it('matches a line item, and still matches the legacy flat field', () => {
+    const cartOrder = {
+      lineItems: [
+        { productId: 'mug', name: 'Blue Mug', quantity: 1, unitAmountCents: 1 },
+        { productId: 'lid', name: 'Lid', quantity: 1, unitAmountCents: 1 },
+      ],
+    }
+    // The line the flat-field-only filter could never reach.
+    expect(orderContainsProduct(cartOrder, 'lid')).toBe(true)
+    expect(orderContainsProduct(cartOrder, 'mug')).toBe(true)
+    expect(orderContainsProduct(cartOrder, 'other')).toBe(false)
+    expect(orderContainsProduct({ productId: 'legacy' }, 'legacy')).toBe(true)
+    expect(orderContainsProduct({}, 'anything')).toBe(false)
+  })
+})
+
+/**
+ * AGL-1747. Each case is one real writer's stored shape, and every cell is
+ * asserted individually — per AGL-1711, a total-only assertion passes against
+ * a row whose every component is wrong.
+ */
+describe('buildOrdersCsv', () => {
+  const at = (iso: string) => ({ toDate: () => new Date(iso) })
+  const cells = (csv: string, row: number) => csv.split('\n')[row].split(',')
+
+  /** `pos-order.ts`: lineItems + totals, and no flat field anywhere. */
+  const posCashOrder = {
+    $id: 'pos1',
+    number: 12,
+    status: 'paid' as const,
+    channel: 'pos' as const,
+    lineItems: [
+      { productId: 'pad', name: 'Brake Pads', quantity: 2, unitAmountCents: 1250 },
+      { productId: 'lev', name: 'Levers', quantity: 1, unitAmountCents: 4000 },
+    ],
+    totals: {
+      itemsCents: 6500,
+      shippingCents: 0,
+      taxCents: 536,
+      discountCents: 0,
+      feeCents: 195,
+      totalCents: 7036,
+    },
+    customerEmail: 'walkin@example.com',
+    createdAt: at('2026-08-14T15:04:05.000Z'),
+  }
+
+  it('exports a POS order at what it actually charged, not $0.00', () => {
+    const row = cells(buildOrdersCsv([posCashOrder]), 1)
+    expect(row[0]).toBe('2026-08-14T15:04:05.000Z')
+    // Two lines, so the first is named and the rest counted.
+    expect(row[1]).toBe('Brake Pads +1 more')
+    expect(row[2]).toBe('70.36') // was 0.00 — `amountCents` is never written
+    expect(row[3]).toBe('1.95') // was 0.00 — nor is `feeCents`
+    expect(row[4]).toBe('walkin@example.com')
+    expect(row[5]).toBe('')
+    expect(row[6]).toBe('pos1')
+    expect(row[7]).toBe('paid')
+    expect(row[8]).toBe('pos')
+    expect(row[9]).toBe('0.00')
+    expect(row[10]).toBe('70.36')
+  })
+
+  it('exports a draft order at its totals, and keeps it pending', () => {
+    const row = cells(
+      buildOrdersCsv([
+        {
+          $id: 'draft1',
+          status: 'pending' as const,
+          channel: 'draft' as const,
+          lineItems: [
+            { productId: 'kit', name: 'Tune-up Kit', quantity: 1, unitAmountCents: 8900 },
+          ],
+          totals: {
+            itemsCents: 8900,
+            shippingCents: 0,
+            taxCents: 0,
+            discountCents: 0,
+            feeCents: 267,
+            totalCents: 8900,
+          },
+          customerEmail: 'buyer@example.com',
+          // `serverTimestamp` reads back null on the local snapshot.
+          createdAtMs: Date.parse('2026-08-13T09:00:00.000Z'),
+        },
+      ]),
+      1,
+    )
+    expect(row[0]).toBe('2026-08-13T09:00:00.000Z')
+    expect(row[1]).toBe('Tune-up Kit')
+    expect(row[2]).toBe('89.00') // was 0.00
+    expect(row[3]).toBe('2.67') // was 0.00
+    expect(row[7]).toBe('pending')
+    expect(row[8]).toBe('draft')
+  })
+
+  it('names the products on a cart order, which carries no flat productId', () => {
+    const row = cells(
+      buildOrdersCsv([
+        {
+          $id: 'cart1',
+          status: 'paid' as const,
+          channel: 'online' as const,
+          lineItems: [
+            { productId: 'mug', name: 'Blue Mug', quantity: 2, unitAmountCents: 1600 },
+            { productId: 'lid', name: 'Lid', quantity: 1, unitAmountCents: 400 },
+            { productId: 'box', name: 'Gift Box', quantity: 1, unitAmountCents: 800 },
+          ],
+          totals: {
+            itemsCents: 4400,
+            shippingCents: 599,
+            taxCents: 201,
+            discountCents: 0,
+            feeCents: 150,
+            totalCents: 5200,
+          },
+          couponCode: 'SPRING',
+          // The webhook writes these two but never `productId`.
+          amountCents: 5200,
+          feeCents: 150,
+          createdAt: at('2026-08-12T12:00:00.000Z'),
+        },
+      ]),
+      1,
+    )
+    expect(row[1]).toBe('Blue Mug +2 more') // was blank
+    expect(row[2]).toBe('52.00')
+    expect(row[3]).toBe('1.50')
+    expect(row[5]).toBe('SPRING')
+  })
+
+  it('splits a refunded order into gross, refunded and net', () => {
+    const row = cells(
+      buildOrdersCsv([
+        {
+          $id: 'ref1',
+          status: 'refunded' as const,
+          channel: 'online' as const,
+          lineItems: [
+            { productId: 'p', name: 'Jersey', quantity: 1, unitAmountCents: 9000 },
+          ],
+          totals: {
+            itemsCents: 9000,
+            shippingCents: 0,
+            taxCents: 0,
+            discountCents: 0,
+            feeCents: 270,
+            totalCents: 9000,
+          },
+          refundedCents: 3000,
+          createdAt: at('2026-08-11T00:00:00.000Z'),
+        },
+      ]),
+      1,
+    )
+    expect(row[2]).toBe('90.00')
+    expect(row[7]).toBe('refunded')
+    expect(row[9]).toBe('30.00')
+    expect(row[10]).toBe('60.00')
+  })
+
+  it('still exports a legacy flat row, with its real product name', () => {
+    const row = cells(
+      buildOrdersCsv(
+        [
+          {
+            $id: 'legacy1',
+            productId: 'p9',
+            amountCents: 2500,
+            feeCents: 75,
+            createdAt: at('2026-01-02T03:04:05.000Z'),
+          },
+        ],
+        // liftLegacyOrder would name the synthesised line "Product"; the map
+        // still has to win for these rows.
+        { p9: 'Vintage Bell' },
+      ),
+      1,
+    )
+    expect(row[1]).toBe('Vintage Bell')
+    expect(row[2]).toBe('25.00')
+    expect(row[3]).toBe('0.75')
+    expect(row[7]).toBe('paid')
+    expect(row[8]).toBe('online')
+  })
+
+  it('quotes cells containing the delimiter, and emits the header', () => {
+    const csv = buildOrdersCsv([
+      {
+        $id: 'q1',
+        status: 'paid' as const,
+        lineItems: [
+          {
+            productId: 'x',
+            name: 'Bolts, 10mm ("hex")',
+            quantity: 1,
+            unitAmountCents: 500,
+          },
+        ],
+        totals: {
+          itemsCents: 500,
+          shippingCents: 0,
+          taxCents: 0,
+          discountCents: 0,
+          feeCents: 0,
+          totalCents: 500,
+        },
+      },
+    ])
+    expect(csv.split('\n')[0]).toBe(ORDERS_CSV_HEADER)
+    expect(ORDERS_CSV_HEADER.split(',')).toHaveLength(11)
+    expect(csv).toContain('"Bolts, 10mm (""hex"")"')
+    // No timestamp of any kind — an empty date cell, not a crash.
+    expect(csv.split('\n')[1].split(',')[0]).toBe('')
   })
 })
 

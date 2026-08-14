@@ -92,8 +92,13 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const visibleOrders = useMemo(() => {
     const now = Date.now() / 1000
     return orders.filter((order: any) => {
-      if (productFilter && order.productId !== productFilter) return false
       const lifted = CommerceModel.liftLegacyOrder(order)
+      // Line items first (AGL-1747): the flat `productId` is written only by
+      // the two buy-now Stripe paths, so matching on it alone hid every cart,
+      // POS and draft order behind the product filter.
+      if (productFilter && !CommerceModel.orderContainsProduct(lifted, productFilter)) {
+        return false
+      }
       if (statusFilter && lifted.status !== statusFilter) return false
       if (channelFilter && (lifted.channel ?? 'online') !== channelFilter) {
         return false
@@ -105,29 +110,10 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     })
   }, [orders, productFilter, dateFilter, statusFilter, channelFilter])
   const handleExportCsv = useCallback(() => {
-    const escape = (cell: string) =>
-      /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
-    const lines = [
-      'date,product,amountUsd,feeUsd,customerEmail,coupon,orderId',
-      ...visibleOrders.map((order: any) =>
-        [
-          order.createdAt?.toDate?.()
-            ? order.createdAt.toDate().toISOString()
-            : '',
-          productNames[order.productId] ?? order.productId ?? '',
-          ((order.amountCents ?? 0) / 100).toFixed(2),
-          ((order.feeCents ?? 0) / 100).toFixed(2),
-          order.customerEmail ?? '',
-          order.couponCode ?? '',
-          order.$id,
-        ]
-          .map((cell) => escape(String(cell)))
-          .join(','),
-      ),
-    ]
-    const url = URL.createObjectURL(
-      new Blob([lines.join('\n')], { type: 'text/csv' }),
-    )
+    // The rows themselves are built by the pure model helper (AGL-1747) so the
+    // column-by-column arithmetic is unit-testable without a Firestore mock.
+    const csv = CommerceModel.buildOrdersCsv(visibleOrders, productNames)
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = 'orders.csv'

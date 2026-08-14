@@ -448,6 +448,139 @@ export function liftLegacyOrder(raw: Partial<HostOrder>): HostOrder {
   }
 }
 
+/**
+ * An orders-console row: the stored doc plus the Firestore id the collection
+ * hook attaches. `createdAt` is typed structurally rather than against the
+ * Firestore SDK — this module is pure and installs no client.
+ */
+export interface OrderExportRow extends Partial<HostOrder> {
+  $id?: string
+  createdAt?: { toDate?: () => Date } | null
+}
+
+/**
+ * Does this order contain `productId`?
+ *
+ * Line items first, legacy flat `productId` as the fallback — the same test
+ * `gate.ts`, `download.ts` and `reviews.ts` already apply. Only the two
+ * buy-now-shaped Stripe paths ever write the flat field, so a legacy-only
+ * check silently excludes every cart, POS and draft order.
+ */
+export function orderContainsProduct(
+  order: Partial<HostOrder>,
+  productId: string,
+): boolean {
+  return (
+    (order.lineItems ?? []).some((line) => line.productId === productId) ||
+    order.productId === productId
+  )
+}
+
+/** `12345` -> `123.45`, the CSV's money format. */
+function usd(cents: number): string {
+  return (cents / 100).toFixed(2)
+}
+
+/**
+ * Header for {@link buildOrdersCsv}. The original seven columns (AGL-96) keep
+ * their names AND their positions, so a saved import mapping — by name or by
+ * index — still resolves; the four reconciliation columns are appended.
+ */
+export const ORDERS_CSV_HEADER =
+  'date,product,amountUsd,feeUsd,customerEmail,coupon,orderId,' +
+  'status,channel,refundedUsd,netUsd'
+
+/**
+ * The orders console's `orders.csv` (AGL-1747).
+ *
+ * ## What was wrong
+ *
+ * The export read `amountCents`, `feeCents` and `productId` — the legacy
+ * Commerce Starter flat fields (AGL-90) — and nothing else. Checked writer by
+ * writer, only the two buy-now-shaped Stripe paths write them:
+ *
+ * | Order path | `amountCents` | `productId` |
+ * | -- | -- | -- |
+ * | buy-now (`commerce-order`, `billing-webhook.ts`) | yes | yes |
+ * | cart (`commerce-cart`, `billing-webhook.ts`) | yes | **no** |
+ * | POS cash and POS card (`pos-order.ts`) | **no** | **no** |
+ * | draft (`draft-order.ts`, paid by `commerce-draft`) | **no** | **no** |
+ *
+ * So every POS and draft order exported as `$0.00` and every cart order
+ * exported with a blank product, each beside a plausible date, email and order
+ * id — nothing in the file signals that the number is missing rather than
+ * genuinely zero. The console screen was right the whole time: the table row
+ * beside the export button, the detail dialog, the analytics card and lifetime
+ * purchases all read `totals` with the flat field only as a fallback. The
+ * export was the sole reader that had the precedence backwards, and a CSV is
+ * the artefact that reaches a bookkeeper.
+ *
+ * ## What "correct" means
+ *
+ * Per AGL-1711's lesson, the useful test is not "do the parts sum" but "does
+ * each column match what was actually charged" — a total-only assertion passes
+ * against a row whose every component is wrong. The spec therefore pins each
+ * cell of a worked example individually.
+ *
+ * ## Refunds
+ *
+ * `amountUsd` stays gross, which is what it has always meant, and the appended
+ * `refundedUsd`/`netUsd` carry the rest. A refunded order previously exported
+ * at its gross with nothing beside it to say so — the same class of error, in
+ * that the file understated nothing but overstated revenue.
+ */
+export function buildOrdersCsv(
+  orders: OrderExportRow[],
+  productNames: Record<string, string> = {},
+): string {
+  const escape = (cell: string) =>
+    /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
+  return [
+    ORDERS_CSV_HEADER,
+    ...orders.map((order) => {
+      const lifted = liftLegacyOrder(order)
+      // The STORED line items, not the lifted ones: `liftLegacyOrder` gives a
+      // legacy flat row a synthetic line named "Product", which would shadow
+      // the real name the `productNames` lookup still recovers for those rows.
+      const lineItems = order.lineItems ?? []
+      // A cart order has several lines and no single product; name the first
+      // and count the rest, the way the table row renders it. `serverTimestamp`
+      // reads back null until the write lands, so `createdAtMs` — which every
+      // modern writer sets alongside it — covers the local snapshot.
+      const date =
+        order.createdAt?.toDate?.() ??
+        (order.createdAtMs ? new Date(order.createdAtMs) : null)
+      const product =
+        lineItems[0]?.name ??
+        productNames[order.productId ?? ''] ??
+        order.productId ??
+        ''
+      const totalCents = Number(
+        lifted.totals?.totalCents ?? order.amountCents ?? 0,
+      )
+      const feeCents = Number(lifted.totals?.feeCents ?? order.feeCents ?? 0)
+      const refundedCents = Number(order.refundedCents ?? 0)
+      return [
+        date ? date.toISOString() : '',
+        lineItems.length > 1
+          ? `${product} +${lineItems.length - 1} more`
+          : product,
+        usd(totalCents),
+        usd(feeCents),
+        order.customerEmail ?? '',
+        order.couponCode ?? '',
+        order.$id ?? '',
+        lifted.status,
+        lifted.channel ?? 'online',
+        usd(refundedCents),
+        usd(totalCents - refundedCents),
+      ]
+        .map((cell) => escape(String(cell)))
+        .join(',')
+    }),
+  ].join('\n')
+}
+
 /** Appends a timeline event immutably (webhook + console share this). */
 export function appendOrderEvent(
   order: Pick<HostOrder, 'timeline'>,
