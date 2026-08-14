@@ -1080,6 +1080,79 @@ describe('hosts', () => {
   })
 
   /**
+   * AGL-1668. `formSubmissions` is the row the metered counter counts, and it
+   * was in none of the catch-all's three exclusion lists — so an editor could
+   * `add()` a submission straight into `hosts/{hostId}/formSubmissions` and
+   * never touch `counters/formSubmissions[YYYY-MM]`, the document
+   * /api/billing/report-usage invoices from and AGL-1655's abuse ceiling is
+   * evaluated against. The counter itself was never reachable (AGL-1367 put
+   * `counters` in all three lists, asserted directly above), so this is not a
+   * way to LOWER a bill or reset the ceiling — it is a way to add rows that
+   * were never billed at all, and to hold submissions the Free plan's 20/month
+   * wall would have refused.
+   *
+   * CREATE ONLY, and that is the whole point. The issue guessed update and
+   * delete would follow the `counters` precedent; they must not. The inbox
+   * plugin marks a submission read with a client `updateDoc` and deletes one
+   * with a client `deleteDoc` (`inbox-console-page.tsx:122,133,152`) — both
+   * are the product working, and neither moves the counter, so denying them
+   * would break the reader to close nothing. The narrowest deny is the right
+   * one.
+   */
+  it('an editor cannot forge an unbilled form submission (AGL-1668)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'formSubmissions', 'fs-seed'),
+        { formName: 'contact', fields: { email: 'a@b.test' }, read: false },
+      )
+    })
+    // A PATH question, not a role one: a site admin has the same incentive to
+    // hold submissions the meter never saw, and no more right to the row.
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `create hosts/{hostId}/formSubmissions as ${uid}`,
+        setDoc(doc(authed(uid), 'hosts', HOST, 'formSubmissions', `fs-${uid}`), {
+          formName: 'contact', fields: { email: 'forged@b.test' },
+        }),
+      )
+      // `{document=**}` spans deeper paths and nothing re-grants under this
+      // name, so the subtree goes with it.
+      await mustDeny(
+        `create hosts/{hostId}/formSubmissions/fs-seed/nested as ${uid}`,
+        setDoc(
+          doc(authed(uid), 'hosts', HOST, 'formSubmissions', 'fs-seed', 'nested', 'n1'),
+          { formName: 'contact' },
+        ),
+      )
+    }
+    // The inbox reader, unchanged. If either of these goes red the exclusion
+    // was widened past what AGL-1668 asked for.
+    await mustAllow(
+      'editor marks a submission read',
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'formSubmissions', 'fs-seed'),
+        { read: true },
+      ),
+    )
+    await mustAllow(
+      'editor deletes a submission from the inbox',
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'formSubmissions', 'fs-seed')),
+    )
+    // And the only legitimate writer still writes. /api/forms/submit runs
+    // under the Admin SDK, which these rules never see.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'formSubmissions', 'fs-route'),
+        { formName: 'contact', fields: { email: 'real@b.test' }, read: false },
+      )
+    })
+    await mustAllow(
+      'editor reads the submission the route wrote',
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'formSubmissions', 'fs-route')),
+    )
+  })
+
+  /**
    * AGL-679. Component versions live under a collection whose NAME is in
    * the catch-all's create-exclusion list, and `{document=**}` matches
    * nested paths — so without a dedicated block, creating
