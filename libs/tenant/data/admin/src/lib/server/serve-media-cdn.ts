@@ -15,9 +15,17 @@
  * limitations under the License.
  */
 
-import { isOrgWideScope, visibleToHost } from '@aglyn/aglyn/server'
+import {
+  isLockdownActive,
+  isOrgWideScope,
+  type LockdownState,
+  normalizeHostLockdown,
+  normalizeOrgLockdown,
+  visibleToHost,
+} from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
+import { getPlatformLockdown } from './lockdown'
 import { verifyMediaAccess } from './media-signing'
 
 /** Variant widths generated at upload (AGL-175). */
@@ -274,6 +282,191 @@ export function mediaCdnAllows(
 }
 
 /**
+ * Lockdown on the delivery path (AGL-1520).
+ *
+ * A security-locked org's SITE stops within seconds (the tenant middleware
+ * 503s, AGL-1501) — but until this gate existed its public media kept
+ * serving worldwide: to hot-links, to third-party embeds, and to the
+ * infected asset's own URL, which for an "infected host" security lock is
+ * the exact thing the lock was pressed to stop.
+ *
+ * **Which reasons stop delivery — decided per reason, not blanket:**
+ *
+ * - `security` — REFUSE. The point of the lock: the org's content, media
+ *   included, must stop serving.
+ * - `manual` — REFUSE. A staff suspension with no reason code (every
+ *   pre-lockdown `suspendedAt` normalizes to `manual`) is "we turned this
+ *   org off"; content continuing to serve would make the kill partial.
+ * - `maintenance` — SERVE. The maintenance notice surface may itself
+ *   reference org assets (a logo on the notice page), the window is
+ *   temporary and non-adversarial, and blanking every image buys no safety.
+ * - `billing` — SERVE. The AGL-1506 principle: billing-locked orgs keep the
+ *   surfaces that let them come back (members can still reach billing to
+ *   pay). The site already 503s, so whether a hot-linked image serves is
+ *   nearly moot — and refusing would punish e.g. an email-signature logo
+ *   for a payment lapse. Serving is the cheap, reversible answer.
+ *
+ * Scopes are checked INDIVIDUALLY against that matrix rather than through
+ * `resolveLockdown`, on purpose: the resolver answers "which notice does a
+ * visitor see" and returns the WIDEST active scope — so a platform
+ * `maintenance` window would mask a concurrent org `security` lock and the
+ * infected asset would keep serving. Delivery has no notice to pick; the
+ * question is only "does ANY active lockdown demand these bytes stop".
+ */
+export function lockdownStopsMediaDelivery(
+  state: LockdownState | null | undefined,
+  nowMs: number,
+): boolean {
+  if (!state || !isLockdownActive(state, nowMs)) return false
+  return state.reason === 'security' || state.reason === 'manual'
+}
+
+/**
+ * **Read cost (AGL-1302):** the verdict inputs are TTL-cached in-process
+ * per CDN scope — one org-doc read (host scope: host doc + hostIndex + the
+ * owning org doc, since an org lock never stamps host docs) per scope per
+ * {@link MEDIA_CDN_LOCK_TTL_MS}, not per asset. A DAM grid firing dozens of
+ * requests coalesces into one lookup; the platform doc rides
+ * `getPlatformLockdown`'s existing 15s cache. Same fail-open posture as the
+ * verdict core: an unreachable Firestore is an outage, not a lockdown, and
+ * must not blank every customer image.
+ *
+ * **Staleness bound, stated rather than hidden:** a warm origin refuses
+ * within ≤15s of the org-doc write (the platform panic number). What the
+ * origin cannot reach: browsers hold the stable URL up to 60s
+ * (`max-age=60`); Vercel's edge holds image responses up to `s-maxage=3600`
+ * (+ one stale serve while revalidating) — so an already-edge-cached image
+ * URL can serve up to ~1h into a lock; non-image types are `private`
+ * (AGL-1515) and never edge-held. The immutable content-hashed form is
+ * browser-pinned for a year in clients that already fetched it — there is
+ * no per-asset purge API, so that copy is out of reach by design; NEW
+ * fetchers of the same URL refuse at the next origin miss. Compare the
+ * AGL-1501 drill: host pages flip ≤10s; assets lag minutes-to-an-hour at
+ * the caching tiers, which is the accepted trade for a near-zero read cost
+ * on the hottest unauthenticated path.
+ *
+ * **Out of this control's reach entirely:** free-tier raw
+ * `firebasestorage.googleapis.com` URLs — no code of ours runs there.
+ * Stated on AGL-1520; token rotation on lock is the filed follow-up.
+ */
+const MEDIA_CDN_LOCK_TTL_MS = 15_000
+
+const lockCache = new Map<string, { at: number; blocked: boolean }>()
+const lockPending = new Map<string, Promise<boolean>>()
+
+/**
+ * Drop the per-scope lock cache. Tests need it between cases; production
+ * convergence is the TTL — the lock is written by the console app and served
+ * by the tenant app, different processes an in-process invalidation can
+ * never reach.
+ */
+export function invalidateMediaCdnLockCache(): void {
+  lockCache.clear()
+  lockPending.clear()
+}
+
+/** The `suspended*` field family off a snapshot, for the normalizers. */
+const suspensionCarrier = (snapshot: {
+  get: (field: string) => unknown
+}): {
+  suspendedAt?: unknown
+  suspendedReasonCode?: unknown
+  suspendedUntilMs?: unknown
+} => ({
+  suspendedAt: snapshot.get('suspendedAt'),
+  suspendedReasonCode: snapshot.get('suspendedReasonCode'),
+  suspendedUntilMs: snapshot.get('suspendedUntilMs'),
+})
+
+/** TTL-cached: does any lockdown covering `scope` stop delivery? */
+async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+  const key = `${scope.isOrg ? 'org' : 'host'}:${scope.scopeId}`
+  const cached = lockCache.get(key)
+  if (cached && Date.now() - cached.at < MEDIA_CDN_LOCK_TTL_MS) {
+    return cached.blocked
+  }
+  let pending = lockPending.get(key)
+  if (!pending) {
+    pending = (async () => {
+      let blocked = false
+      try {
+        const nowMs = Date.now()
+        // Platform first: cached, and a platform security lock is the panic
+        // button — asset delivery is part of what it stops.
+        blocked = lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)
+        const firestore = firebaseAdmin.app().firestore()
+        if (!blocked && scope.isOrg) {
+          // Org forms (`org:{orgId}` and `org:{orgId}:{hostId}`): the org
+          // doc governs. The context host's own lock is not consulted — a
+          // suspended HOST's pages 503 already, and which sites may USE an
+          // org asset is `visibleTo`'s question, not the lock's.
+          const org = await firestore
+            .collection('orgs')
+            .doc(scope.scopeId)
+            .get()
+          blocked = lockdownStopsMediaDelivery(
+            normalizeOrgLockdown(suspensionCarrier(org)),
+            nowMs,
+          )
+        } else if (!blocked) {
+          // Host-library form: the host's own lock, and the OWNING org's —
+          // an org lock never stamps host docs (AGL-1506), so a host-only
+          // read would silently miss the very lock this issue is about.
+          const [host, hostIndex] = await Promise.all([
+            firestore.collection('hosts').doc(scope.scopeId).get(),
+            firestore.collection('hostIndex').doc(scope.scopeId).get(),
+          ])
+          blocked = lockdownStopsMediaDelivery(
+            normalizeHostLockdown(suspensionCarrier(host)),
+            nowMs,
+          )
+          const orgId = hostIndex.get('orgId')
+          if (!blocked && typeof orgId === 'string' && orgId) {
+            const org = await firestore.collection('orgs').doc(orgId).get()
+            blocked = lockdownStopsMediaDelivery(
+              normalizeOrgLockdown(suspensionCarrier(org)),
+              nowMs,
+            )
+          }
+        }
+      } catch {
+        // Fail open — the lockdown core's posture (see lockdown.ts): an
+        // unreachable Firestore is an outage, not a lockdown.
+        blocked = false
+      }
+      lockCache.set(key, { at: Date.now(), blocked })
+      return blocked
+    })().finally(() => {
+      lockPending.delete(key)
+    })
+    lockPending.set(key, pending)
+  }
+  return pending
+}
+
+/**
+ * THE delivery-policy seam: "may this asset be served at all?" — one
+ * question, one function, consulted once per request before any caching
+ * exit. Distinct from `mediaCdnAllows` (which site may use it under this
+ * URL) and from the signature check (may the public fetch it): this asks
+ * whether the platform is willing to serve the bytes to ANYONE.
+ *
+ * AGL-1512 (asset quarantine) extends THIS function: a contentHash
+ * quarantine consult slots in beside the scope-lock check and returns its
+ * own refusal kind — the handler's refusal path is already shaped for it.
+ * Do not add a second conditional in the handler.
+ */
+export async function mediaCdnServeBlock(
+  scope: MediaCdnScope,
+  _asset: {
+    /** For the AGL-1512 quarantine consult; unused by the lock check. */
+    contentHash?: string
+  },
+): Promise<'locked' | null> {
+  return (await mediaCdnScopeLocked(scope)) ? 'locked' : null
+}
+
+/**
  * Whether `?download=1` was asked for (AGL-1411). Strictly opt-in: absent,
  * `0`, `false` or junk all keep the historical `inline`, because the default
  * is what every `<img src>` in every published site relies on.
@@ -480,6 +673,38 @@ export async function serveMediaCdn(
     if (!snapshot.exists || snapshot.get('deletedAt')) {
       res.setHeader('Cache-Control', 'public, max-age=60')
       res.status(404).json({ error: 'Not found' })
+      return
+    }
+    // Lockdown gate (AGL-1520) — see mediaCdnServeBlock for the reason
+    // matrix, the read-cost accounting and the staleness bound. Three shape
+    // decisions, argued:
+    //
+    // **Before the ETag/304 exit**, necessarily: a browser revalidating its
+    // 60s copy during a lock must be refused, not handed a 304 that renews
+    // the copy for another minute.
+    //
+    // **410, not 423.** The 423 body is the AGL-1506 discipline for
+    // authenticated API consumers who deserve "suspended: billing"; this
+    // response answers anonymous `<img>` fetches nobody parses, and a 423
+    // would confirm to any prober that a lock exists — which for a security
+    // lock is information. 410 Gone is neutral, indistinguishable in kind
+    // from a deleted asset, and tells well-behaved consumers to drop the
+    // link. (404 would also be neutral, but 410's "permanently gone"
+    // semantics discourage retry loops from embedders.)
+    //
+    // **`no-store`, absolutely** (the AGL-1515 lesson): the refusal is a
+    // function of a TTL'd verdict, not of the URL — a cached refusal would
+    // weld the asset's URL identity to "gone" past the unlock, and edge
+    // entries have no per-asset purge. The 60s negative window the 404s use
+    // is not acceptable here either: an unlock must restore delivery as
+    // fast as the lock stopped it. CSP + nosniff are already on the
+    // response (set first, before any exit).
+    const blockedBy = await mediaCdnServeBlock(scope, {
+      contentHash: currentHash,
+    })
+    if (blockedBy) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(410).json({ error: 'Gone' })
       return
     }
     // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets
