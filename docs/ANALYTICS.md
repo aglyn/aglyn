@@ -17,7 +17,7 @@ plugin gate), AGL-1559 (the property consolidation).
 | --- | --- | --- |
 | **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** Both `app.aglyn.com` and `aglyn.com`, via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
 | Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`** (tagged Prod). Deleting it would sever that link. |
-| aglyn-f375b (284263481) | — | stray, **zero data streams**, so no measurement id and no traffic. No Firebase project of that name exists. Retirement candidate; see AGL-1564. |
+| aglyn-f375b (284263481) | — | stray, **zero data streams**, so no measurement id and no traffic. No Firebase project of that name exists. Retirement candidate; see AGL-1581. |
 
 `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` and any Measurement Protocol secret
 belong to **stream 3230351080 on property 302497406** — secrets are per-stream
