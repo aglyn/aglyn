@@ -941,6 +941,75 @@ describe('expandCollectionEntries (AGL-551)', () => {
   })
 })
 
+describe('expandCollectionEntries search index (AGL-1516)', () => {
+  it('leaves the props of a block without search UNTOUCHED (regression pin)', () => {
+    // Search is opt-in: every already-published block's node must come out
+    // byte-identical — the SAME props object, not an equal copy.
+    const nodes = baseNodes()
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    expect(expanded['list'].props).toBe(nodes['list'].props)
+    expect('searchIndex' in expanded['list'].props).toBe(false)
+  })
+
+  it('stamps a searchIndex aligned with the rendered entries', () => {
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    expect(expanded['list'].nodes).toHaveLength(2)
+    expect(expanded['list'].props.searchIndex).toEqual([
+      { title: 'Hello world', excerpt: 'First post' },
+      { title: 'Second', excerpt: '' },
+    ])
+  })
+
+  it('indexes only the PAGE the block rendered — search is page-scoped', () => {
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: 5 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+        excerpt: `About ${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.perPage = 2
+    nodes['list'].props.page = 2
+    const expanded = expandCollectionEntries(nodes, { blog: many }, 'blog')
+    // The index covers exactly the window the reader can see; the block's
+    // empty state owns saying so.
+    expect(expanded['list'].props.searchIndex).toEqual([
+      { title: 'Post 2', excerpt: 'About 2' },
+      { title: 'Post 3', excerpt: 'About 3' },
+    ])
+  })
+
+  it('indexes the FILTERED set, so search cannot resurface excluded entries', () => {
+    const tagged = {
+      slug: 'blog',
+      entries: [
+        { title: 'A', slug: 'a', category: 'News' },
+        { title: 'B', slug: 'b', category: 'Guides' },
+      ],
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.filterCategory = 'guides'
+    const expanded = expandCollectionEntries(nodes, { blog: tagged }, 'blog')
+    expect(expanded['list'].props.searchIndex).toEqual([
+      { title: 'B', excerpt: '' },
+    ])
+  })
+
+  it('still fails open on an UNKNOWN collection, search or not', () => {
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const untouched = JSON.parse(JSON.stringify(nodes))
+    expect(expandCollectionEntries(nodes, {}, 'blog')).toEqual(untouched)
+  })
+})
+
 describe('selectRelatedEntries (AGL-582)', () => {
   const entries = [
     {

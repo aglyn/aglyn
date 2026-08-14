@@ -827,7 +827,29 @@ export function expandCollectionEntries<
         ),
       )
     })
-    next[containerId] = { ...container, nodes: childIds }
+    // Search (AGL-1516): the block's search box filters CLIENT-SIDE over the
+    // entries this expansion just rendered — the ISR-cached page is the whole
+    // data set, so no query ever goes back to Firestore. The component only
+    // holds cloned markup by render time, so the matchable text is stamped
+    // here, where the entries still exist, index-aligned with the clone
+    // groups. Stamped ONLY when the author enabled it: an untouched block's
+    // node — and its serialized payload — stays byte-identical.
+    const searchEnabled = Boolean((container.props as any)?.search)
+    next[containerId] = searchEnabled
+      ? {
+          ...container,
+          props: {
+            ...(container.props as any),
+            searchIndex: windowed.map(
+              (entry): CollectionEntrySearchItem => ({
+                title: entry.title ?? '',
+                excerpt: entry.excerpt ?? '',
+              }),
+            ),
+          },
+          nodes: childIds,
+        }
+      : { ...container, nodes: childIds }
   }
   return next
 }
@@ -986,6 +1008,17 @@ function reformattableEntryDate(
     authored === ENTRY_DATE_BINDING &&
     dateFormat !== COLLECTION_ENTRY_DATE_FORMAT_DEFAULT
   )
+}
+
+/**
+ * One entry of a Collection Entries search index (AGL-1516): the fields the
+ * block's client-side search box matches against, index-aligned with the
+ * entry clones the block rendered. Stamped by {@link expandCollectionEntries}
+ * only when the block's `search` prop is on; never set by hand.
+ */
+export interface CollectionEntrySearchItem {
+  title: string
+  excerpt: string
 }
 
 /** One related post as stamped onto a Related posts block (AGL-582). */
