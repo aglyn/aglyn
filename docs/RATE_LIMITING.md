@@ -161,6 +161,39 @@ and no rules change**, same property the markers themselves have.
 without a deploy. `-1` makes even a clean probe report degraded: the way to
 prove the alert path end to end without inducing a Firestore outage.
 
+### What a degraded window leaves on the record (AGL-1667)
+
+`POST /api/forms/submit` read `allowed` and `resetMs` and never `degraded`, so
+on the one public, unauthenticated, *billed* endpoint a degraded window left no
+trace at all.
+
+It still fails soft — that is not reversed, and the fallback can only allow
+*more* than 10/min, never fewer, so nothing legitimate is refused by it. What
+it now does is stamp `rateDegraded: true` on the stored submission. The marker
+says the store degraded at 14:02; only the row can say this invoice line
+arrived during it, and `/api/billing/report-usage` prices these rows. The stamp
+rides a write that was already happening — a separate counter would mean an
+extra Firestore write per submission, issued exactly while Firestore is the
+thing failing. It is never sent to the caller: "the global limiter is currently
+a per-instance one" is the sentence an abuser would spend the window on.
+
+The other call sites — unlock, passkeys, password reset, email verification,
+org create, `/api/v1` — deliberately do **not** get an equivalent. None of them
+writes a durable row a stamp could ride, so recording per-request degradation
+there means an extra write during the outage, on the collection that is
+failing. For those the marker plus the health endpoint above is the record.
+
+Note the distinction from a fail-*open* default, the pattern the pre-release
+audit flagged as systemic. The canonical example was the CSRF middleware's
+`CSRF_SECRET = process.env.CSRF_SECRET || ''`, which signed with an empty key
+when unset — making tokens forgeable while still reporting success. AGL-795
+made it fail closed; AGL-919 then deleted the module outright, because an
+audit found it had **no callers at all**: the fail-closed guard protected a
+path nothing executed, and its presence in the env implied a protection that
+did not exist. Degrading is only defensible here because the fallback still
+enforces *something*, and because this limiter is actually wired to live
+routes — which is the first thing to check before trusting any control.
+
 ## Operational: enable the TTL policy
 
 Each call writes `rateLimits/{hash}_{windowStart}` with an `expiresAt`

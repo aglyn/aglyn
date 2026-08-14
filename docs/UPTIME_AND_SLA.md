@@ -187,7 +187,9 @@ Notes that keep these honest:
   **trailing 30 minutes**. **When it fires:** the limiters were wider than
   advertised for a window, in the direction of allowing MORE — check Firestore
   health and GCP status first, then `docs/RATE_LIMITING.md` for what the
-  fallback still enforced.
+  fallback still enforced. Form submissions accepted during the window carry
+  `rateDegraded: true` on the stored row (AGL-1667), which is how a billing
+  spike gets correlated rather than guessed at.
 - **The 30-minute window is the design, not a default.** Markers carry a
   30-day `expiresAt`, so a check that asked "does a marker exist" would sit red
   for a month after a thirty-second blip, and a permanently red check gets

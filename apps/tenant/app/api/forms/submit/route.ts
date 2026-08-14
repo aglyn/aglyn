@@ -166,6 +166,10 @@ export async function POST(request: Request): Promise<Response> {
     windowMs: RATE_WINDOW_MS,
   })
   if (!rate.allowed) {
+    // Note this is NOT told to the caller, degraded or not. The body and the
+    // status are identical either way: "the global limiter is currently a
+    // per-instance one" is exactly the sentence an abuser would spend the
+    // window on, and this endpoint is public and unauthenticated.
     return Response.json(
       { error: 'Too many submissions' },
       {
@@ -273,6 +277,28 @@ export async function POST(request: Request): Promise<Response> {
       fields: sanitizedFields,
       read: false,
       createdAt: FieldValue.serverTimestamp(),
+      // Accepted while the durable limiter was degraded (AGL-1667).
+      //
+      // The limiter fails soft by design (AGL-794, reaffirmed in AGL-1679) and
+      // that is not reversed here: a Firestore blip must not stop a customer's
+      // site collecting leads, and the fallback can only ever allow MORE than
+      // 10/min, never fewer, so nothing legitimate is refused by it. What was
+      // wrong is that the route read `allowed` and `resetMs` and never
+      // `degraded`, so the window left no trace on THIS endpoint at all.
+      //
+      // The AGL-1679 marker records that the store degraded; it cannot say
+      // which submissions came in under the wider cap, and that is the
+      // correlation the incident actually needs — these rows are billed
+      // (`/api/billing/report-usage` prices `counters/formSubmissions`) and a
+      // customer disputing a spike is owed a per-row answer, not "the limiter
+      // was unwell around then".
+      //
+      // Stamped rather than counted because it rides a write that is already
+      // happening: a separate counter would mean an EXTRA Firestore write per
+      // submission, issued precisely while Firestore is the thing that is
+      // failing. Written only when true — an absent field is the healthy case
+      // and costs nothing on the millions of rows that are fine.
+      ...(rate.degraded ? { rateDegraded: true } : {}),
     })
     // Contacts ingestion (AGL-197): forms don't guarantee an email field —
     // best-effort extraction; never blocks the submission.
