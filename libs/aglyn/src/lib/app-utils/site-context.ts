@@ -81,9 +81,29 @@ export const PREVIEW_WRITE_BLOCKED_EVENT = 'aglyn:preview-write-blocked'
  */
 export const PREVIEW_REFUSED_STATUS = 423
 
-/** Was this response Preview declining to write, rather than a failure? */
-export function isPreviewRefusal(response: { status?: number } | null | undefined): boolean {
-  return response?.status === PREVIEW_REFUSED_STATUS
+/**
+ * Was this response Preview declining to write, rather than a failure?
+ *
+ * The status alone stopped being sufficient with AGL-1511: a read-only
+ * lockdown refuses a live site's writes with the SAME 423, so a block that
+ * keys on the status only would tell a paying visitor "Preview does not
+ * change real data" about a real checkout. Pass the parsed body and the
+ * `preview: true` marker decides; a caller with no body in hand keeps the
+ * old status-only behaviour, which is still right in the surface Preview
+ * actually renders (its refusal never reaches the network, so a lockdown 423
+ * cannot arrive there).
+ */
+export function isPreviewRefusal(
+  response: { status?: number } | null | undefined,
+  body?: unknown,
+): boolean {
+  if (response?.status !== PREVIEW_REFUSED_STATUS) return false
+  if (body === undefined) return true
+  return (
+    Boolean(body) &&
+    typeof body === 'object' &&
+    (body as { preview?: unknown }).preview === true
+  )
 }
 
 /** Methods that cannot change server state, so Preview lets them through. */

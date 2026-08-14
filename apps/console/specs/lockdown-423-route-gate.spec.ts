@@ -146,6 +146,11 @@ describe('AGL-1506 · the 423 idiom gates a wired route (domains/detach)', () =>
     })
     await post()
     expect(mockLockdownRefusal).toHaveBeenCalledWith({
+      // The request itself, so read-only mode can discriminate on the METHOD
+      // (AGL-1511). Asserted as an object rather than matched loosely: a
+      // route that stops passing it starts refusing its own reads during a
+      // migration, silently, and nothing else would catch that.
+      request: expect.any(Request),
       // Off the verified token — a header or body could never say this.
       staff: true,
       uid: 'u-member',
@@ -153,6 +158,9 @@ describe('AGL-1506 · the 423 idiom gates a wired route (domains/detach)', () =>
       org: ORG_DOC,
       host: HOST_DATA,
     })
+    expect(
+      (mockLockdownRefusal.mock.calls[0][0].request as Request).method,
+    ).toBe('POST')
   })
 
   it('a null verdict changes nothing — the mutation proceeds', async () => {

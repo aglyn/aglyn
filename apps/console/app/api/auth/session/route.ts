@@ -339,6 +339,13 @@ async function handler(request: Request): Promise<Response> {
         // token, and staff are never refused — during a platform lockdown the
         // people lifting it still need to sign in.
         const lockdown = await getLockdownVerdict({
+          // READ-ONLY passes the door (AGL-1511). Signing in is how a
+          // customer reaches the sites and data a read-only lock is
+          // deliberately keeping readable; refusing the cookie would make
+          // "reads keep working" mean nothing in the console, and the
+          // mutations behind the door are refused at their own chokepoints
+          // anyway. A FULL lock still refuses here, unchanged.
+          intent: 'read',
           staff: decoded['staff'] === true,
           uid: decoded.uid,
         })
@@ -554,6 +561,9 @@ async function handler(request: Request): Promise<Response> {
         // locked-out client should be left holding. Staff bypass (un-panic
         // invariant): the claim is read off the VERIFIED session cookie.
         const lockdown = await getLockdownVerdict({
+          // Same call as the mint above (AGL-1511): read-only keeps the
+          // session alive across subdomains, full still clears it.
+          intent: 'read',
           staff: decoded['staff'] === true,
           uid: decoded.uid,
         })

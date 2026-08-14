@@ -116,6 +116,7 @@ async function handler(request: Request): Promise<Response> {
     // fetched only when the projection trips, so the happy path adds no
     // org read. Staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org:

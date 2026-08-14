@@ -123,17 +123,31 @@ const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
  * loader's own lockdown branch is the defence in depth behind this.
  */
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
-const lockdownVerdicts = new Map<string, { at: number; locked: boolean }>()
+const lockdownVerdicts = new Map<string, { at: number; blocked: boolean }>()
 
+/**
+ * Should this request be replaced by the 503 notice? (AGL-1511)
+ *
+ * A READ-ONLY lock answers false: the entire point of that mode is that the
+ * customer's site keeps serving and earning while writes are frozen, so the
+ * one thing this function must never do for it is take the pages away. The
+ * site's WRITE endpoints refuse separately (`visitorWriteRefusal`), which is
+ * where they have to be anyway — `/api` is not in this middleware's matcher.
+ *
+ * An unrecognised or absent `mode` blocks, matching the pure default: a
+ * strictness this build cannot read is treated as `full`, so an older
+ * verdict route meeting a newer middleware fails toward the shipped
+ * behaviour rather than toward serving a locked site.
+ */
 async function hostLockdownVerdict(
   origin: string,
   tenantHost: string,
 ): Promise<boolean> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
-    return cached.locked
+    return cached.blocked
   }
-  let locked = false
+  let blocked = false
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -142,14 +156,15 @@ async function hostLockdownVerdict(
     if (response.ok) {
       const data = (await response.json().catch(() => null)) as {
         locked?: boolean
+        mode?: string
       } | null
-      locked = data?.locked === true
+      blocked = data?.locked === true && data?.mode !== 'read-only'
     }
   } catch {
     // Fail open.
   }
-  lockdownVerdicts.set(tenantHost, { at: Date.now(), locked })
-  return locked
+  lockdownVerdicts.set(tenantHost, { at: Date.now(), blocked })
+  return blocked
 }
 
 export const middleware: NextMiddleware = async (req, event) => {

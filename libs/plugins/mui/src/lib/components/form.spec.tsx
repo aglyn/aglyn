@@ -747,3 +747,92 @@ describe('form survey fields (AGL-544)', () => {
     })
   })
 })
+
+/**
+ * A refused submit says the RIGHT no (AGL-1511).
+ *
+ * Two deliberate 423s can now reach this block — Preview declining a write
+ * client-side, and a read-only lockdown refusing a real visitor's write on a
+ * live site — and until this issue the component keyed on the status alone.
+ * That would have told a paying customer's visitor "this form works on your
+ * published site" while they stood on the published site.
+ */
+describe('AGL-1511 · a refused submit', () => {
+  let fetchMock: jest.Mock
+
+  beforeEach(() => {
+    fetchMock = jest.fn()
+    global.fetch = fetchMock as unknown as typeof fetch
+  })
+
+  const submitAnd = async (response: {
+    ok: boolean
+    status: number
+    body: unknown
+  }) => {
+    fetchMock.mockResolvedValue({
+      ok: response.ok,
+      status: response.status,
+      json: async () => response.body,
+    })
+    const { container } = render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
+        <Form formName="Contact">
+          <FormField fieldName="email" fieldType="text" />
+        </Form>
+      </Aglyn.SiteContext.Provider>,
+    )
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    return container
+  }
+
+  it('renders the lockdown pause inline, in the server’s own words', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 423,
+      body: {
+        error: 'locked',
+        mode: 'read-only',
+        title: 'Temporarily paused',
+        message:
+          'This form is not accepting submissions for a few minutes. ' +
+          'Nothing you typed has been lost — please try again shortly.',
+      },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('Nothing you typed'),
+    )
+    // NOT the generic failure, and NOT the Preview sentence.
+    expect(container.textContent).not.toContain('Something went wrong')
+    expect(container.textContent).not.toContain('published site')
+    // `info`, not `error`: nothing failed and nothing was lost. Matched on
+    // the severity token inside the class list rather than one exact MUI
+    // class, which moves between variants and major versions.
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.className).toContain('Info')
+    expect(alert?.className).not.toContain('Error')
+  })
+
+  it('still shows the Preview notice for Preview’s own 423', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 423,
+      body: { error: 'Preview does not change real data.', preview: true },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('published site'),
+    )
+  })
+
+  it('leaves a real failure saying so', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 500,
+      body: { error: 'Submission failed' },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('Something went wrong'),
+    )
+  })
+})

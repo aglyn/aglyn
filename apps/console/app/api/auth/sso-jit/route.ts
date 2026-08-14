@@ -119,6 +119,7 @@ async function handler(request: Request): Promise<Response> {
     // AGL-1501) would refuse the same caller anyway. Org doc already in
     // hand; staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: orgData,

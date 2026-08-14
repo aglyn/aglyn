@@ -24,6 +24,7 @@ import {
   notifyHostManagers,
   orgDataCollectionForHost,
   upsertHostContact,
+  visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -102,6 +103,21 @@ export async function POST(request: Request): Promise<Response> {
     if (!hostSnapshot.exists) {
       return json({ error: 'Unknown site' }, 404)
     }
+
+    // Lockdown (AGL-1511). Placed after the host exists and BEFORE the quota
+    // read and every write: a paused submission must not consume the
+    // customer's monthly allowance, and it must not be half-recorded.
+    // Refused with the visitor pause copy — the site around this form is
+    // still serving, so an outage page here would be both a lie and a lost
+    // lead. The `/api` surface is outside the middleware matcher, so this is
+    // the only lockdown enforcement a form POST ever meets, full or
+    // read-only.
+    const paused = await visitorWriteRefusal({
+      hostId,
+      request,
+      surface: 'form',
+    })
+    if (paused) return paused
 
     // Monthly quota by the owning org's plan (dark-launch: orgs
     // without a plan are uncapped, matching every other gate).

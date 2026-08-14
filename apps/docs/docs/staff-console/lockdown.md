@@ -49,6 +49,49 @@ the audit note, not here**). `billing` notices point at billing settings;
 `security`/`manual` notices point at support@aglyn.com; `maintenance` shows the
 window when one is set.
 
+## Modes: full, or read-only {#read-only-mode}
+
+Every lock is armed in one of two **modes**. The dropdown sits beside the reason
+on the platform card and the workspace/site card.
+
+| | **Full** (the default) | **Read-only** |
+| --- | --- | --- |
+| Customer sites | 503 notice, cached pages evicted | **keep serving normally** |
+| Visitor forms, cart, checkout | refused | refused, with an inline "temporarily paused" |
+| Console reads (sign-in, viewing) | refused | **work** |
+| Console/API writes | refused | refused with 423 |
+| Member sessions | revoked (`security`/`manual`) | **never revoked** |
+| Staff | bypass everything | bypass everything |
+
+**Reach for read-only whenever the reason is our own maintenance** — a schema
+migration, a data repair, a suspected-corruption investigation. Those need the
+writes frozen so nothing races the repair; they do not need the customer's shop
+taken off the air, and taking it off the air costs them real money for our
+convenience. Full lockdown is for takedowns: abuse, compromise, a workspace that
+must stop existing publicly right now.
+
+Read-only is available on the **platform**, **workspace (org)** and **site
+(host)** scopes. It is **refused** on the `user` and `feature` scopes, because
+neither has a milder setting to offer — a user lock's teeth are the Firebase
+account disable and token revoke, and every feature key already names a single
+write. The route answers 400 rather than silently arming a full lock.
+
+Staff writes bypass read-only exactly as they bypass everything else, which is
+the whole point: you perform the migration while the world keeps reading.
+
+To arm one from a terminal, add `mode` to the usual body:
+
+```bash
+curl -X POST https://app.aglyn.com/api/admin/lockdown \
+  -H "Authorization: Bearer $ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"lock","scope":"org","targetId":"ORG_ID",
+       "mode":"read-only","reason":"maintenance",
+       "untilMs":1786695133044}'
+```
+
+`mode` is optional and defaults to `full`, so every existing runbook command and
+saved script keeps doing exactly what it did before.
+
 ## Maintenance windows and expiry
 
 A lock may carry an **until** time. When it passes, the lockdown simply stops —

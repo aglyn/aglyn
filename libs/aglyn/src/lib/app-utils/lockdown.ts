@@ -126,6 +126,94 @@ export const LOCKDOWN_FEATURE_STAFF_BYPASS: Record<LockdownFeatureKey, boolean> 
     'ai-assist': true,
   }
 
+/**
+ * HOW HARD the lock bites (AGL-1511).
+ *
+ * - `full` — the shipped AGL-1501 behaviour: nothing serves. Sites 503,
+ *   sessions refuse, every API call gets the 423.
+ * - `read-only` — reads keep serving, WRITES refuse. The right shape for the
+ *   most common maintenance need (a schema migration, a data repair, a
+ *   suspected-corruption investigation): the customer's site stays up and
+ *   earning, visitors browse normally, and nothing races the repair.
+ *
+ * ABSENT MEANS `full`. Every lockdown written before this field existed is a
+ * full lock, and a lock whose strictness cannot be read must be treated as
+ * the stricter one — so `full` is both the default and the fail-safe. The
+ * writer stores `mode` only for read-only locks, which keeps every existing
+ * carrier document byte-identical and needs no migration.
+ */
+export type LockdownMode = 'full' | 'read-only'
+
+const LOCKDOWN_MODE_KEYS: Record<LockdownMode, true> = {
+  full: true,
+  'read-only': true,
+}
+export const LOCKDOWN_MODES = Object.keys(LOCKDOWN_MODE_KEYS) as LockdownMode[]
+
+export function isLockdownMode(value: unknown): value is LockdownMode {
+  return typeof value === 'string' && value in LOCKDOWN_MODE_KEYS
+}
+
+/** The mode of a state, with the absent-means-`full` default applied. */
+export function lockdownMode(
+  state: { mode?: LockdownMode } | null | undefined,
+): LockdownMode {
+  return state?.mode === 'read-only' ? 'read-only' : 'full'
+}
+
+export function isReadOnlyLockdown(
+  state: { mode?: LockdownMode } | null | undefined,
+): boolean {
+  return lockdownMode(state) === 'read-only'
+}
+
+/**
+ * What a request is trying to DO, which is the only thing a read-only lock
+ * discriminates on.
+ *
+ * `write` is the default everywhere it is not stated, and that direction is
+ * deliberate: an enforcement point that forgot to declare its intent refuses
+ * during a migration rather than letting an unaudited write through. The
+ * cost of the safe default is an over-refused read; the cost of the unsafe
+ * one is the corruption the whole mode exists to prevent.
+ */
+export type LockdownIntent = 'read' | 'write'
+
+/**
+ * HTTP method → intent. The safe-method set from RFC 9110 minus TRACE (which
+ * nothing here serves): a method not on this list mutates until proven
+ * otherwise.
+ *
+ * A route whose POST is really a query (`where-used`, `plugin-impact`,
+ * validators) states `intent: 'read'` explicitly rather than being guessed at
+ * from a path.
+ */
+export function lockdownIntentForMethod(
+  method: string | null | undefined,
+): LockdownIntent {
+  const normalized = typeof method === 'string' ? method.toUpperCase() : ''
+  return normalized === 'GET' || normalized === 'HEAD' || normalized === 'OPTIONS'
+    ? 'read'
+    : 'write'
+}
+
+/**
+ * Does this state refuse a request of this intent? The ONE predicate every
+ * chokepoint's discrimination reduces to — a full lock refuses everything, a
+ * read-only lock refuses writes only.
+ *
+ * Note what is NOT here: the staff bypass. That lives above every read in the
+ * server verdict helper and must not acquire a second, mode-shaped copy
+ * — "staff bypass unless…" is how an un-panic invariant stops being one.
+ */
+export function lockdownBlocks(
+  state: { mode?: LockdownMode } | null | undefined,
+  intent: LockdownIntent,
+): boolean {
+  if (!state) return false
+  return lockdownMode(state) === 'full' || intent === 'write'
+}
+
 export type LockdownReasonCode =
   | 'security'
   | 'billing'
@@ -155,6 +243,8 @@ export interface LockdownState {
   scope: LockdownScope
   /** Set only when `scope === 'feature'` — which capability is locked. */
   feature?: LockdownFeatureKey
+  /** Absent = `full` (AGL-1511). Read through `lockdownMode`, never bare. */
+  mode?: LockdownMode
   reason: LockdownReasonCode
   /**
    * Visitor/user-facing notice text (bounded at write time). Anything staff
@@ -191,6 +281,8 @@ export interface LockdownDoc {
   scope: LockdownScope
   /** Present on `feature--{key}` docs only. */
   feature?: LockdownFeatureKey
+  /** Written only for read-only locks; absent = `full`. */
+  mode?: LockdownMode
   reason: LockdownReasonCode
   message?: string
   atMs?: number
@@ -256,6 +348,14 @@ export function isLockdownActive(
  * Precedence: platform > org > host > user. The widest active scope wins so
  * the notice a visitor sees names the real cause (a platform maintenance
  * window should not read as "this account is suspended").
+ *
+ * STRICTNESS OUTRANKS WIDTH (AGL-1511). Once locks have a mode, "widest
+ * wins" alone is a security hole: a platform-wide read-only maintenance
+ * window would outrank — and therefore SOFTEN — a full security takedown on
+ * one org, quietly readmitting every visitor to the site staff just took
+ * down. So an active `full` lock is chosen first (in scope order among the
+ * full ones), and the widest read-only lock only wins when no full lock is
+ * active at all. A lock can never be relaxed by a wider, gentler one.
  */
 export function resolveLockdown(
   states: {
@@ -266,10 +366,10 @@ export function resolveLockdown(
   },
   nowMs: number,
 ): LockdownState | null {
-  for (const state of [states.platform, states.org, states.host, states.user]) {
-    if (state && isLockdownActive(state, nowMs)) return state
-  }
-  return null
+  const active = [states.platform, states.org, states.host, states.user].filter(
+    (state): state is LockdownState => Boolean(state) && isLockdownActive(state, nowMs),
+  )
+  return active.find((state) => lockdownMode(state) === 'full') ?? active[0] ?? null
 }
 
 /**
@@ -285,6 +385,7 @@ export function normalizeOrgLockdown(
         suspendedReasonCode?: unknown
         suspendedMessage?: unknown
         suspendedUntilMs?: unknown
+        suspendedMode?: unknown
       }
     | null
     | undefined,
@@ -292,6 +393,10 @@ export function normalizeOrgLockdown(
   if (!org || org.suspendedAt == null) return null
   return {
     scope: 'org',
+    // An unrecognised value normalizes to `full`, matching the absent case:
+    // a strictness this build cannot interpret must not read as the softer
+    // one (an older deploy meeting a mode it has never heard of).
+    ...(org.suspendedMode === 'read-only' ? { mode: 'read-only' as const } : {}),
     reason: isLockdownReasonCode(org.suspendedReasonCode)
       ? org.suspendedReasonCode
       : 'manual',
@@ -320,6 +425,7 @@ export function normalizeHostLockdown(
         suspendedReasonCode?: unknown
         suspendedMessage?: unknown
         suspendedUntilMs?: unknown
+        suspendedMode?: unknown
       }
     | null
     | undefined,
@@ -327,6 +433,7 @@ export function normalizeHostLockdown(
   if (!host || host.suspendedAt == null) return null
   return {
     scope: 'host',
+    ...(host.suspendedMode === 'read-only' ? { mode: 'read-only' as const } : {}),
     reason: isLockdownReasonCode(host.suspendedReasonCode)
       ? host.suspendedReasonCode
       : 'manual',
@@ -359,6 +466,9 @@ export function normalizeLockdownDoc(
     ...(scope === 'feature' && isLockdownFeatureKey(doc.feature)
       ? { feature: doc.feature }
       : {}),
+    // Same posture as the org/host carriers: only the exact string relaxes
+    // the lock. A malformed or unknown `mode` leaves it full.
+    ...(doc.mode === 'read-only' ? { mode: 'read-only' as const } : {}),
     reason: doc.reason,
     message:
       typeof doc.message === 'string' && doc.message
@@ -410,6 +520,12 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
   if (state.scope === 'feature' && state.feature) {
     return featureLockdownNotice(state.feature, custom, state.untilMs)
   }
+  // A read-only lock refused a WRITE, and the full-lock copy would lie about
+  // it: "Access is temporarily disabled" is false on a site the reader is
+  // currently looking at (AGL-1511).
+  if (isReadOnlyLockdown(state)) {
+    return readOnlyLockdownNotice(state, custom)
+  }
   switch (state.reason) {
     case 'maintenance': {
       const until =
@@ -450,6 +566,130 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
         title: 'Temporarily unavailable',
         body: custom ?? 'Access to this account is currently disabled.',
         contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+  }
+}
+
+/**
+ * READ-ONLY copy (AGL-1511), for the account holder whose save just refused.
+ *
+ * The whole point of this mode is that the reader is still looking at their
+ * work while being told they cannot change it, so every sentence has to hold
+ * both halves at once: nothing is down, nothing is lost, one verb is paused.
+ * The full-lock titles ("Temporarily unavailable", "Account on hold") are
+ * flatly untrue here and would send someone to support over a fifteen-minute
+ * migration.
+ *
+ * The `until` sentence is built with the SAME `lockdownUntilSuffix` helper
+ * the feature copy uses, so `parseLockdownRefusal` strips and re-renders it
+ * in the reader's local time here too rather than showing a UTC stamp.
+ */
+function readOnlyLockdownNotice(
+  state: LockdownState,
+  custom: string | undefined,
+): LockdownNotice {
+  const window =
+    typeof state.untilMs === 'number'
+      ? ` ${lockdownUntilSuffix(state.untilMs)}`
+      : ''
+  const title = 'Changes are temporarily paused'
+  switch (state.reason) {
+    case 'maintenance':
+      return {
+        title,
+        body:
+          custom ??
+          `Saving changes is paused while we complete scheduled maintenance. ` +
+            `Your sites keep serving and nothing you have created is ` +
+            `affected — changes will save again shortly.${window}`,
+      }
+    case 'billing':
+      return {
+        title,
+        body:
+          custom ??
+          `Saving changes is paused over an unresolved billing issue. Your ` +
+            `sites keep serving and nothing has been deleted — updating the ` +
+            `payment method in workspace billing settings restores ` +
+            `editing.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+    case 'security':
+    case 'manual':
+    default:
+      return {
+        title,
+        body:
+          custom ??
+          `Saving changes is paused while we work on something. Your sites ` +
+            `keep serving and nothing you have created is affected — ` +
+            `changes will save again shortly.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+  }
+}
+
+/**
+ * The surfaces on a customer's LIVE SITE that a read-only lock refuses
+ * (AGL-1511). These are the ones whose reader is a visitor, not our
+ * customer — someone who has never heard of a workspace, a lockdown or a
+ * maintenance window and is simply trying to buy something or send a
+ * message.
+ */
+export type LockdownPausedSurface = 'form' | 'checkout' | 'cart' | 'generic'
+
+/**
+ * VISITOR copy for a read-only refusal on a tenant site (AGL-1511).
+ *
+ * The issue's central product call: a customer's site staying up and earning
+ * is the entire reason this mode exists instead of full lockdown, so a
+ * visitor-facing write gets a polite inline pause, never a page-level 503.
+ * That decision only pays off if the words match it — a visitor shown
+ * "Temporarily unavailable" on a page that plainly loaded concludes the shop
+ * is broken and leaves, which costs the customer the sale the mode was
+ * protecting.
+ *
+ * So: no mention of maintenance windows, workspaces or accounts (none of
+ * which are the visitor's), no support address (support is the SITE
+ * owner's, not ours, and pointing a stranger at aglyn.com is worse than
+ * silent), an explicit "nothing you typed is lost", and — for checkout — the
+ * same hard rule the feature copy carries: this must never read as a
+ * declined card. A staff-typed `message` is deliberately NOT honoured here;
+ * it is written for the account holder and would land in front of strangers.
+ */
+export function lockdownPausedNotice(
+  surface: LockdownPausedSurface,
+): LockdownNotice {
+  switch (surface) {
+    case 'form':
+      return {
+        title: 'Temporarily paused',
+        body:
+          'This form is not accepting submissions for a few minutes. ' +
+          'Nothing you typed has been lost — please try again shortly.',
+      }
+    case 'checkout':
+      return {
+        title: 'Checkout is temporarily paused',
+        body:
+          'Checkout is paused for a few minutes — this is not a payment ' +
+          'problem and you have not been charged. Your basket is safe; ' +
+          'please try again shortly.',
+      }
+    case 'cart':
+      return {
+        title: 'Temporarily paused',
+        body:
+          'Basket changes are paused for a few minutes. Browsing works as ' +
+          'normal — please try again shortly.',
+      }
+    case 'generic':
+    default:
+      return {
+        title: 'Temporarily paused',
+        body:
+          'This action is paused for a few minutes. Browsing works as ' +
+          'normal — please try again shortly.',
       }
   }
 }
@@ -525,6 +765,7 @@ export interface LockdownRefusalBody {
   error?: unknown
   scope?: unknown
   feature?: unknown
+  mode?: unknown
   reason?: unknown
   title?: unknown
   message?: unknown
@@ -539,6 +780,12 @@ export interface LockdownRefusalNotice {
   contact?: string
   scope?: LockdownScope
   feature?: LockdownFeatureKey
+  /**
+   * `read-only` when the server refused a WRITE but is still serving reads
+   * (AGL-1511). Absent on every refusal from a full lock, and on any older
+   * deploy — a client must treat absence as "no claim", never as "full".
+   */
+  mode?: LockdownMode
   untilMs?: number
   /**
    * The expiry as a human, LOCAL-time line — `undefined` when the lock has
@@ -657,6 +904,7 @@ export function parseLockdownRefusal(
       ? { scope: payload.scope as LockdownScope }
       : {}),
     ...(feature ? { feature } : {}),
+    ...(isLockdownMode(payload.mode) ? { mode: payload.mode } : {}),
     ...(typeof untilMs === 'number' ? { untilMs } : {}),
     ...(until ? { until } : {}),
   }
@@ -674,6 +922,32 @@ export function lockdownRefusalText(notice: LockdownRefusalNotice): string {
   const led = lower.startsWith(notice.title.toLowerCase())
   const head = led ? notice.message : `${notice.title} — ${notice.message}`
   return notice.until ? `${head} ${notice.until}` : head
+}
+
+/**
+ * Which VISITOR surface a tenant plugin-API path belongs to, for read-only
+ * pause copy (AGL-1511).
+ *
+ * The tenant dispatcher refuses every mutating method under a read-only lock
+ * regardless of path — this only chooses the WORDS, and it exists because
+ * the checkout sentence has a requirement no generic copy can carry: it must
+ * never read as a declined card. Anything unrecognised gets the neutral
+ * generic pause rather than a guess; being vague at a stranger is cheap,
+ * being wrong about their money is not.
+ */
+export function lockdownPausedSurfaceForPluginApiPath(
+  path: string,
+): LockdownPausedSurface {
+  if (
+    path === 'commerce/checkout' ||
+    path === 'commerce/cart-checkout' ||
+    path === 'commerce/pos-order' ||
+    path === 'commerce/draft-order'
+  ) {
+    return 'checkout'
+  }
+  if (path === 'commerce/cart' || path.startsWith('commerce/cart/')) return 'cart'
+  return 'generic'
 }
 
 /**

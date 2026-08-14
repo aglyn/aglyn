@@ -257,7 +257,12 @@ const loadPageDataCached = cache(
       },
       Date.now(),
     )
-    if (lockdownState) {
+    // READ-ONLY (AGL-1511) renders the page normally. A read-only lock is a
+    // WRITE freeze; replacing the page with the maintenance fallback here
+    // would undo the middleware's decision one layer down and take the site
+    // off the air anyway — the exact outcome the mode exists to avoid. The
+    // site's write endpoints refuse on their own path.
+    if (lockdownState && !Aglyn.isReadOnlyLockdown(lockdownState)) {
       const notice = Aglyn.lockdownNotice(lockdownState)
       return {
         props: JSON.parse(

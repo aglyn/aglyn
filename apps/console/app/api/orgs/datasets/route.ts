@@ -93,6 +93,7 @@ async function handler(request: Request): Promise<Response> {
     // above anyway, so the full verdict (platform/org/user scopes, staff
     // bypass, distinct 423 body) costs no extra org read here.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org,

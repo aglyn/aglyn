@@ -88,6 +88,7 @@ async function handler(request: Request): Promise<Response> {
     // un-panic invariant. One check ahead of the method branches covers
     // POST, PATCH, and DELETE alike.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org,

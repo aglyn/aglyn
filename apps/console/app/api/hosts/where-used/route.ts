@@ -127,6 +127,11 @@ async function handler(request: Request): Promise<Response> {
     // verdict would silently miss it. Staff bypass is the un-panic
     // invariant.
     const locked = await lockdownRefusal({
+      request,
+      // POST-shaped READ (AGL-1511): this is a dependency query with a body,
+      // not a mutation, so a read-only lock must not refuse it — the method
+      // would say otherwise.
+      intent: 'read',
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgForHost(hostId))?.org,

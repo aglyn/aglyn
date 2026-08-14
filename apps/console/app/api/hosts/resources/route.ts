@@ -350,6 +350,7 @@ async function handler(request: Request): Promise<Response> {
     const ownerOrg = await getOrgForHost(hostId)
     const org = (ownerOrg?.org ?? {}) as any
     const lockdown = await getLockdownVerdict({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org,

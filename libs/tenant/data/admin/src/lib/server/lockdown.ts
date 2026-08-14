@@ -40,7 +40,11 @@ import {
   LOCKDOWN_FEATURE_STAFF_BYPASS,
   type LockdownFeatureKey,
   LOCKDOWNS_COLLECTION,
+  lockdownBlocks,
   type LockdownDoc,
+  type LockdownIntent,
+  lockdownIntentForMethod,
+  type LockdownNotice,
   lockdownNotice,
   lockdownRetryAfterSeconds,
   type LockdownState,
@@ -320,12 +324,48 @@ export interface LockdownVerdictOptions {
   org?: Parameters<typeof normalizeOrgLockdown>[0]
   /** Already-loaded host doc; same contract as `org`. */
   host?: Parameters<typeof normalizeHostLockdown>[0]
+  /**
+   * READ-ONLY discrimination (AGL-1511). A `read-only` lock refuses writes
+   * and passes reads; a `full` lock refuses both, so this changes nothing
+   * for every lock written before the mode existed.
+   *
+   * The request the chokepoint is answering — its METHOD decides. Passing
+   * the route's own `request` is the wiring, because a single console
+   * handler is usually exported as both GET and POST and the verdict runs
+   * before the method branch: derive the intent, never restate it.
+   */
+  request?: { method?: string } | null
+  /**
+   * Explicit intent, overriding `request`. For the routes whose method lies
+   * about what they do — a POST that is really a query (`where-used`,
+   * `plugin-impact`), or a GET that mutates.
+   *
+   * Neither given = `write`, the fail-safe: a chokepoint that never declared
+   * its intent refuses during a migration rather than letting an
+   * unconsidered write race the repair.
+   */
+  intent?: LockdownIntent
   nowMs?: number
 }
 
+/** The declared or derived intent of a verdict request; `write` by default. */
+function verdictIntent(options: LockdownVerdictOptions): LockdownIntent {
+  if (options.intent) return options.intent
+  if (options.request) return lockdownIntentForMethod(options.request.method)
+  return 'write'
+}
+
 /**
- * The one verdict: the widest active lockdown covering this caller, or null.
- * Precedence platform > org > host > user (from `resolveLockdown`).
+ * The one verdict: the lockdown that REFUSES this caller's request, or null.
+ * Precedence platform > org > host > user, strictness before width (from
+ * `resolveLockdown`).
+ *
+ * "Refuses this request" rather than "covers this caller" since AGL-1511: a
+ * read-only lock is active but does not refuse a read, and returning it
+ * anyway would make every wired chokepoint 423 a GET — a read-only mode that
+ * behaves exactly like a full one. The active state is still what
+ * `resolveLockdown` chose, so the staff probe and the notice copy see the
+ * real lock; only the ANSWER is intent-aware.
  */
 export async function getLockdownVerdict(
   options: LockdownVerdictOptions,
@@ -334,6 +374,11 @@ export async function getLockdownVerdict(
   // — they are the only ones who can lift a lockdown. Keep this line first:
   // everything below it may read Firestore, and a staff verdict must not
   // depend on any read succeeding.
+  //
+  // This line is also the whole of AGL-1511's "staff writes bypass
+  // read-only": staff bypass every scope AND every mode, unconditionally,
+  // and read-only exists precisely so staff can work while the world reads.
+  // A mode-aware staff rule below would be a second bypass to keep correct.
   if (options.staff === true) return null
 
   const nowMs = options.nowMs ?? Date.now()
@@ -341,7 +386,7 @@ export async function getLockdownVerdict(
     getPlatformLockdown(),
     options.uid ? getUserLockdown(options.uid) : Promise.resolve(null),
   ])
-  return resolveLockdown(
+  const state = resolveLockdown(
     {
       platform,
       org: normalizeOrgLockdown(options.org),
@@ -350,6 +395,7 @@ export async function getLockdownVerdict(
     },
     nowMs,
   )
+  return lockdownBlocks(state, verdictIntent(options)) ? state : null
 }
 
 /**
@@ -372,19 +418,38 @@ export async function getLockdownVerdict(
  * cookies on refusal) keep calling the two halves directly.
  */
 export async function lockdownRefusal(
-  options: LockdownVerdictOptions,
+  options: LockdownVerdictOptions & {
+    /** Visitor-facing copy override; see `lockdownJsonResponse`. */
+    notice?: LockdownNotice
+  },
 ): Promise<Response | null> {
   const state = await getLockdownVerdict(options)
-  return state ? lockdownJsonResponse(state) : null
+  return state ? lockdownJsonResponse(state, { notice: options.notice }) : null
 }
 
-export function lockdownJsonResponse(state: LockdownState): Response {
-  const notice = lockdownNotice(state)
+export function lockdownJsonResponse(
+  state: LockdownState,
+  options?: {
+    /**
+     * Substitute copy for a surface whose reader is not the account holder
+     * — the tenant runtime's visitor-facing pause (AGL-1511). ONE wire
+     * shape and ONE writer either way: only the words change, so
+     * `parseLockdownRefusal` reads a paused checkout exactly as it reads a
+     * locked console.
+     */
+    notice?: LockdownNotice
+  },
+): Response {
+  const notice = options?.notice ?? lockdownNotice(state)
   const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
   return Response.json(
     {
       error: 'locked',
       scope: state.scope,
+      // The strictness, on the wire (AGL-1511): a client that can tell
+      // "paused" from "down" renders the difference; one that cannot still
+      // has the title and message, which already say it in words.
+      ...(state.mode ? { mode: state.mode } : {}),
       // Distinct per-feature body (AGL-1510): an API consumer sees WHICH
       // capability is off ("uploads"), not a generic locked platform.
       ...(state.feature ? { feature: state.feature } : {}),

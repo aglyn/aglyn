@@ -483,3 +483,140 @@ describe('lockdownJsonResponse — the distinct API refusal', () => {
     expect(retryAfter).toBeLessThanOrEqual(600)
   })
 })
+
+/**
+ * READ-ONLY mode at the verdict (AGL-1511). Two properties matter more than
+ * the rest and both are asserted directly rather than inferred from a green
+ * suite: a WRITE is still refused, and STAFF are still never refused.
+ */
+describe('AGL-1511 · read-only discrimination', () => {
+  const readOnlyOrg = {
+    suspendedAt: { seconds: 1 },
+    suspendedReasonCode: 'maintenance',
+    suspendedMode: 'read-only',
+  }
+
+  it('refuses a write and passes a read on the same org', async () => {
+    expect(
+      await getLockdownVerdict({
+        uid: 'u1',
+        org: readOnlyOrg,
+        intent: 'write',
+        nowMs: NOW,
+      }),
+    ).not.toBeNull()
+    expect(
+      await getLockdownVerdict({
+        uid: 'u1',
+        org: readOnlyOrg,
+        intent: 'read',
+        nowMs: NOW,
+      }),
+    ).toBeNull()
+  })
+
+  it('derives the intent from the request method when given one', async () => {
+    for (const method of ['GET', 'HEAD', 'OPTIONS']) {
+      expect(
+        await getLockdownVerdict({
+          uid: 'u1',
+          org: readOnlyOrg,
+          request: { method },
+          nowMs: NOW,
+        }),
+      ).toBeNull()
+    }
+    for (const method of ['POST', 'PATCH', 'DELETE']) {
+      expect(
+        await getLockdownVerdict({
+          uid: 'u1',
+          org: readOnlyOrg,
+          request: { method },
+          nowMs: NOW,
+        }),
+      ).not.toBeNull()
+    }
+  })
+
+  it('refuses when NEITHER request nor intent was declared — the fail-safe', async () => {
+    // A chokepoint that forgot to say what it was doing must refuse during a
+    // migration, not wave the write through. This assertion is the whole
+    // reason the default is `write` and not `read`.
+    expect(
+      await getLockdownVerdict({ uid: 'u1', org: readOnlyOrg, nowMs: NOW }),
+    ).not.toBeNull()
+  })
+
+  it('a FULL lock still refuses reads — read-only changed nothing for it', async () => {
+    expect(
+      await getLockdownVerdict({
+        uid: 'u1',
+        org: { suspendedAt: { seconds: 1 } },
+        intent: 'read',
+        nowMs: NOW,
+      }),
+    ).not.toBeNull()
+  })
+
+  it('STAFF WRITES BYPASS READ-ONLY, with zero Firestore reads', async () => {
+    // The un-panic invariant's read-only half, and the entire point of the
+    // mode: staff perform the maintenance while the world reads. Asserted
+    // with the read counter because a bypass that depended on a read
+    // succeeding would not be one.
+    lockPlatform({ mode: 'read-only', reason: 'maintenance' })
+    const before = reads
+    expect(
+      await getLockdownVerdict({
+        staff: true,
+        uid: 'u1',
+        org: readOnlyOrg,
+        intent: 'write',
+        nowMs: NOW,
+      }),
+    ).toBeNull()
+    expect(reads).toBe(before)
+  })
+
+  it('a wider read-only platform lock never softens a full org lock', async () => {
+    lockPlatform({ mode: 'read-only', reason: 'maintenance' })
+    const state = await getLockdownVerdict({
+      uid: 'u1',
+      org: { suspendedAt: { seconds: 1 }, suspendedReasonCode: 'security' },
+      intent: 'read',
+      nowMs: NOW,
+    })
+    // The org's FULL security takedown is what answers, so the read is
+    // refused — the platform's gentler window does not readmit anyone.
+    expect(state?.scope).toBe('org')
+    expect(state?.reason).toBe('security')
+  })
+
+  it('puts the mode on the wire and lets a caller substitute visitor copy', async () => {
+    const state = await getLockdownVerdict({
+      org: readOnlyOrg,
+      intent: 'write',
+      nowMs: NOW,
+    })
+    const body = await lockdownJsonResponse(state as never).json()
+    expect(body.mode).toBe('read-only')
+    expect(body.title).toBe('Changes are temporarily paused')
+    // Same wire shape, other words — the tenant's visitor pause.
+    const visitor = await lockdownJsonResponse(state as never, {
+      notice: { title: 'Temporarily paused', body: 'Try again shortly.' },
+    }).json()
+    expect(visitor.error).toBe('locked')
+    expect(visitor.mode).toBe('read-only')
+    expect(visitor.title).toBe('Temporarily paused')
+    expect(visitor.message).toBe('Try again shortly.')
+  })
+
+  it('omits `mode` entirely from a full lock’s body', async () => {
+    const state = await getLockdownVerdict({
+      org: { suspendedAt: { seconds: 1 } },
+      intent: 'write',
+      nowMs: NOW,
+    })
+    const body = await lockdownJsonResponse(state as never).json()
+    expect('mode' in body).toBe(false)
+  })
+})

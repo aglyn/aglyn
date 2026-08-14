@@ -131,6 +131,7 @@ async function dispatch(
     }
   }
   const locked = await lockdownRefusal({
+    request,
     staff,
     uid,
     org: lockdownOrg,

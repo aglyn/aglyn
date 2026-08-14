@@ -60,6 +60,13 @@ export interface LockdownWriteOptions {
   /** Customer/visitor-facing notice body; already validated/bounded. */
   message?: string
   untilMs?: number
+  /**
+   * How hard the lock bites (AGL-1511). Written to `suspendedMode` ONLY for
+   * `read-only`; a full lock deletes the key, so the carrier of a full lock
+   * is identical to one written before this field existed and every reader
+   * that has never heard of it stays correct.
+   */
+  mode?: 'full' | 'read-only'
 }
 
 /**
@@ -158,6 +165,9 @@ export async function applyOrgLockdown(options: {
         ...(typeof options.lock?.untilMs === 'number'
           ? { suspendedUntilMs: options.lock.untilMs }
           : { suspendedUntilMs: FieldValue.delete() }),
+        ...(options.lock?.mode === 'read-only'
+          ? { suspendedMode: 'read-only' }
+          : { suspendedMode: FieldValue.delete() }),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -170,6 +180,7 @@ export async function applyOrgLockdown(options: {
         suspendedReasonCode: FieldValue.delete(),
         suspendedMessage: FieldValue.delete(),
         suspendedUntilMs: FieldValue.delete(),
+        suspendedMode: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -259,6 +270,9 @@ export async function applyHostLockdown(options: {
         ...(typeof options.lock?.untilMs === 'number'
           ? { suspendedUntilMs: options.lock.untilMs }
           : { suspendedUntilMs: FieldValue.delete() }),
+        ...(options.lock?.mode === 'read-only'
+          ? { suspendedMode: 'read-only' }
+          : { suspendedMode: FieldValue.delete() }),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -270,6 +284,7 @@ export async function applyHostLockdown(options: {
         suspendedReasonCode: FieldValue.delete(),
         suspendedMessage: FieldValue.delete(),
         suspendedUntilMs: FieldValue.delete(),
+        suspendedMode: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },

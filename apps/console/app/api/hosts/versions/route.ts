@@ -168,6 +168,7 @@ async function handler(request: Request): Promise<Response> {
     // 423 body an API consumer can tell apart from a role 403. Staff bypass
     // is the un-panic invariant.
     const lockdown = await getLockdownVerdict({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org,

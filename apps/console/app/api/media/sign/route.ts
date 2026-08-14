@@ -95,6 +95,11 @@ async function handler(request: Request): Promise<Response> {
       // inactive while the projection still says locked, the
       // pre-AGL-1506 refusal stands — a disagreement never loosens.
       const locked = await lockdownRefusal({
+        request,
+        // POST-shaped READ (AGL-1511): this mints a short-lived URL for
+        // VIEWING a private asset. Refusing it under a read-only lock would
+        // blank every private image on a site that is still serving.
+        intent: 'read',
         org:
           member.orgSuspended === true
             ? ((await getOrgDoc(orgId)) ?? {})

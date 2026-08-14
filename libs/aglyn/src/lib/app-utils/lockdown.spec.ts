@@ -23,8 +23,16 @@ import {
   LOCKDOWN_FEATURE_LABELS,
   LOCKDOWN_FEATURE_STAFF_BYPASS,
   LOCKDOWN_MESSAGE_MAX,
+  isLockdownMode,
+  isReadOnlyLockdown,
+  LOCKDOWN_MODES,
+  lockdownBlocks,
   lockdownFeaturesForPluginApiPath,
+  lockdownIntentForMethod,
+  lockdownMode,
   lockdownNotice,
+  lockdownPausedNotice,
+  lockdownPausedSurfaceForPluginApiPath,
   lockdownRefusalText,
   lockdownRetryAfterSeconds,
   parseLockdownRefusal,
@@ -561,5 +569,206 @@ describe('parseLockdownRefusal — the client 423 reader (AGL-1532)', () => {
     expect(lockdownRefusalText(installs as never)).toContain(
       'Marketplace installs are paused — ',
     )
+  })
+})
+
+/**
+ * READ-ONLY mode (AGL-1511). The pure half: what `mode` means when it is
+ * absent, which lock wins when two are active with different strictness,
+ * and which requests a read-only lock actually refuses.
+ */
+describe('AGL-1511 · read-only mode', () => {
+  it('treats an absent, unknown or malformed mode as full', () => {
+    // Every lock written before this field existed, and any value a future
+    // deploy invents. A strictness this build cannot read must never relax.
+    expect(lockdownMode(undefined)).toBe('full')
+    expect(lockdownMode(null)).toBe('full')
+    expect(lockdownMode(state())).toBe('full')
+    expect(lockdownMode({ mode: 'READ-ONLY' } as never)).toBe('full')
+    expect(lockdownMode({ mode: 'readonly' } as never)).toBe('full')
+    expect(lockdownMode({ mode: 'read-only' })).toBe('read-only')
+    expect(isReadOnlyLockdown(state({ mode: 'read-only' }))).toBe(true)
+    expect(isReadOnlyLockdown(state())).toBe(false)
+    expect(LOCKDOWN_MODES).toEqual(['full', 'read-only'])
+    expect(isLockdownMode('read-only')).toBe(true)
+    expect(isLockdownMode('nope')).toBe(false)
+  })
+
+  it('carries the mode off the org and host carriers, exact string only', () => {
+    expect(
+      normalizeOrgLockdown({ suspendedAt: NOW, suspendedMode: 'read-only' })
+        ?.mode,
+    ).toBe('read-only')
+    expect(normalizeOrgLockdown({ suspendedAt: NOW })?.mode).toBeUndefined()
+    // A carrier holding junk normalizes to full, not to "unknown".
+    expect(
+      lockdownMode(
+        normalizeOrgLockdown({ suspendedAt: NOW, suspendedMode: 'partial' }),
+      ),
+    ).toBe('full')
+    expect(
+      normalizeHostLockdown({ suspendedAt: NOW, suspendedMode: 'read-only' })
+        ?.mode,
+    ).toBe('read-only')
+    expect(
+      normalizeLockdownDoc(
+        { scope: 'platform', reason: 'maintenance', mode: 'read-only' },
+        'platform',
+      )?.mode,
+    ).toBe('read-only')
+    expect(
+      lockdownMode(
+        normalizeLockdownDoc(
+          { scope: 'platform', reason: 'maintenance', mode: 'nonsense' as never },
+          'platform',
+        ),
+      ),
+    ).toBe('full')
+  })
+
+  it('refuses writes and passes reads — full refuses both', () => {
+    const readOnly = state({ mode: 'read-only' })
+    expect(lockdownBlocks(readOnly, 'write')).toBe(true)
+    expect(lockdownBlocks(readOnly, 'read')).toBe(false)
+    const full = state()
+    expect(lockdownBlocks(full, 'write')).toBe(true)
+    expect(lockdownBlocks(full, 'read')).toBe(true)
+    // No lock refuses nothing.
+    expect(lockdownBlocks(null, 'write')).toBe(false)
+  })
+
+  it('maps only the safe methods to a read intent', () => {
+    for (const method of ['GET', 'get', 'HEAD', 'OPTIONS']) {
+      expect(lockdownIntentForMethod(method)).toBe('read')
+    }
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'post', '', null]) {
+      expect(lockdownIntentForMethod(method)).toBe('write')
+    }
+    // An absent method is a write: the fail-safe direction.
+    expect(lockdownIntentForMethod(undefined)).toBe('write')
+  })
+
+  it('never lets a wider READ-ONLY lock soften a narrower FULL one', () => {
+    // THE hole this precedence rule closes: a platform-wide read-only
+    // maintenance window while one org is under a full security takedown.
+    // Width-only precedence would return the platform state and readmit
+    // every visitor to the site staff just took down.
+    const resolved = resolveLockdown(
+      {
+        platform: state({ scope: 'platform', reason: 'maintenance', mode: 'read-only' }),
+        org: state({ scope: 'org', reason: 'security' }),
+      },
+      NOW,
+    )
+    expect(resolved?.scope).toBe('org')
+    expect(lockdownMode(resolved)).toBe('full')
+  })
+
+  it('still prefers the widest scope among equally strict locks', () => {
+    const bothFull = resolveLockdown(
+      {
+        platform: state({ scope: 'platform', reason: 'maintenance' }),
+        org: state({ scope: 'org', reason: 'security' }),
+      },
+      NOW,
+    )
+    expect(bothFull?.scope).toBe('platform')
+    const bothReadOnly = resolveLockdown(
+      {
+        platform: state({ scope: 'platform', reason: 'maintenance', mode: 'read-only' }),
+        org: state({ scope: 'org', reason: 'manual', mode: 'read-only' }),
+      },
+      NOW,
+    )
+    expect(bothReadOnly?.scope).toBe('platform')
+  })
+
+  it('ignores an EXPIRED full lock when choosing the strictest', () => {
+    // Strictness is chosen among the ACTIVE locks only — an expired full
+    // lock must not outrank a live read-only one and re-close the platform.
+    const resolved = resolveLockdown(
+      {
+        platform: state({ scope: 'platform', reason: 'maintenance', mode: 'read-only' }),
+        org: state({ scope: 'org', reason: 'security', untilMs: NOW - 1 }),
+      },
+      NOW,
+    )
+    expect(resolved?.scope).toBe('platform')
+    expect(lockdownMode(resolved)).toBe('read-only')
+  })
+
+  it('tells the account holder that reads still work, not that they are down', () => {
+    const notice = lockdownNotice(
+      state({ scope: 'org', reason: 'maintenance', mode: 'read-only' }),
+    )
+    expect(notice.title).toBe('Changes are temporarily paused')
+    // The two claims the full-lock copy cannot make, and the ones that stop
+    // a fifteen-minute migration turning into a support ticket.
+    expect(notice.body).toContain('keep serving')
+    expect(notice.body).toContain('nothing you have created is affected')
+    expect(notice.body).not.toContain('Access is temporarily disabled')
+    // A staff-typed message still replaces the body only.
+    expect(
+      lockdownNotice(
+        state({ reason: 'maintenance', mode: 'read-only', message: 'Counter repair.' }),
+      ).body,
+    ).toBe('Counter repair.')
+  })
+
+  it('round-trips the read-only expiry into the reader’s local time', () => {
+    // The suffix the notice builder appends must be the exact one the
+    // parser strips, or the visitor sees the UTC stamp AND the local one.
+    const untilMs = NOW + 900_000
+    const notice = lockdownNotice(
+      state({ reason: 'maintenance', mode: 'read-only', untilMs }),
+    )
+    const parsed = parseLockdownRefusal(423, {
+      error: 'locked',
+      mode: 'read-only',
+      title: notice.title,
+      message: notice.body,
+      untilMs,
+    })
+    expect(parsed?.mode).toBe('read-only')
+    expect(parsed?.message).not.toContain('Expected back by')
+    expect(parsed?.until).toContain('Expected back around')
+  })
+
+  it('says nothing to a visitor about workspaces, support or maintenance', () => {
+    // Visitor copy is for a stranger on the customer's site. Anything that
+    // reads as OUR outage or points at OUR support desk is a leak of the
+    // wrong thing at the wrong person.
+    for (const surface of ['form', 'checkout', 'cart', 'generic'] as const) {
+      const notice = lockdownPausedNotice(surface)
+      expect(notice.contact).toBeUndefined()
+      expect(notice.body.toLowerCase()).not.toContain('workspace')
+      expect(notice.body.toLowerCase()).not.toContain('maintenance')
+      expect(notice.body.toLowerCase()).not.toContain('aglyn')
+      expect(notice.body).toMatch(/shortly|try again/)
+    }
+    // The checkout sentence's non-negotiable promise.
+    const checkout = lockdownPausedNotice('checkout')
+    expect(checkout.body).toContain('not a payment')
+    expect(checkout.body).toContain('have not been charged')
+    // And the form's, which is what stops someone retyping everything.
+    expect(lockdownPausedNotice('form').body).toContain('Nothing you typed')
+  })
+
+  it('routes the checkout paths to checkout copy and guesses nothing else', () => {
+    expect(lockdownPausedSurfaceForPluginApiPath('commerce/cart-checkout')).toBe(
+      'checkout',
+    )
+    expect(lockdownPausedSurfaceForPluginApiPath('commerce/checkout')).toBe(
+      'checkout',
+    )
+    expect(lockdownPausedSurfaceForPluginApiPath('commerce/cart')).toBe('cart')
+    expect(lockdownPausedSurfaceForPluginApiPath('commerce/cart/add')).toBe(
+      'cart',
+    )
+    // Unrecognised paths get the neutral pause, never a money claim.
+    expect(lockdownPausedSurfaceForPluginApiPath('bookings/create')).toBe(
+      'generic',
+    )
+    expect(lockdownPausedSurfaceForPluginApiPath('')).toBe('generic')
   })
 })

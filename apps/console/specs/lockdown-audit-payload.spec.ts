@@ -222,6 +222,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'security',
       message: NOTICE,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
     // The carrier really did get the expiry too — otherwise this spec would
     // happily pin a trail that describes a lock nobody armed.
@@ -252,6 +254,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'security',
       message: NOTICE,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
     expect(row.after).toEqual({ locked: false, feature: 'uploads' })
   })
@@ -276,12 +280,16 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'maintenance',
       message: NOTICE,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
     expect(row.before).toEqual({
       locked: false,
       reason: null,
       message: null,
       untilMs: null,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
   })
 
@@ -303,6 +311,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'security',
       message: null,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
     expect(mockStore[`${LOCKDOWNS_COLLECTION}/${userLockdownDocId('uid-9')}`]).toBeDefined()
   })
@@ -326,6 +336,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       message: NOTICE,
       untilMs: until,
       tokensRevoked: 1,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
 
     // The org scope keeps its lock on the org doc's `suspended*` family, not
@@ -345,6 +357,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'security',
       message: NOTICE,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
   })
 
@@ -366,6 +380,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'manual',
       message: null,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
 
     mockAuditRows = []
@@ -381,6 +397,8 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       reason: 'manual',
       message: null,
       untilMs: until,
+      // AGL-1511: full vs read-only is on every row, both sides.
+      mode: 'full',
     })
   })
 
@@ -400,6 +418,9 @@ describe('AGL-1572 · adminAudit remembers the expiry, the notice and the scope'
       'feature',
       'locked',
       'message',
+      // AGL-1511 joins the same rule: absence is impossible, so `full` is
+      // stated rather than inferred from a missing key.
+      'mode',
       'reason',
       'untilMs',
     ])

@@ -49,6 +49,8 @@ const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
 interface LockdownRecord {
   id: string
   scope?: string
+  /** Absent = `full` (AGL-1511) — every record written before the field. */
+  mode?: string
   reason?: string
   message?: string
   atMs?: number
@@ -67,6 +69,7 @@ interface LockState {
   targetId: string
   exists: boolean
   locked: boolean
+  mode: string
   reason: string | null
   message: string | null
   untilMs: number | null
@@ -144,6 +147,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [log, setLog] = useState<ActionLogEntry[]>([])
 
   // Platform form.
+  // `full` by default (AGL-1511): the wider, shipped behaviour is what the
+  // existing muscle memory expects from this button.
+  const [platformMode, setPlatformMode] = useState('full')
   const [platformReason, setPlatformReason] = useState('maintenance')
   const [platformMessage, setPlatformMessage] = useState('')
   const [platformUntil, setPlatformUntil] = useState('')
@@ -158,6 +164,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   // Scoped form.
   const [scope, setScope] = useState('org')
   const [targetId, setTargetId] = useState('')
+  const [mode, setMode] = useState('full')
   const [reason, setReason] = useState('manual')
   const [message, setMessage] = useState('')
   const [until, setUntil] = useState('')
@@ -335,6 +342,35 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
     return Number.isNaN(parsed) ? undefined : parsed
   }
 
+  /**
+   * How hard the lock bites (AGL-1511). Two options, and the labels do the
+   * teaching rather than a paragraph above them: an operator reaching for
+   * this control during an incident reads the dropdown, not the card.
+   *
+   * Defaults to `full` everywhere, so the button an operator has used before
+   * still does what it did before — a control whose default changed under a
+   * panic button would be its own incident.
+   */
+  const modeField = (value: string, onChange: (next: string) => void) => (
+    <TextField
+      select
+      size="small"
+      label="Mode"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{ minWidth: 210 }}
+      slotProps={{ select: { native: true } }}
+      helperText={
+        value === 'read-only'
+          ? 'Sites keep serving; writes refuse'
+          : 'Everything refuses'
+      }
+    >
+      <option value="full">{'Full — take it down'}</option>
+      <option value="read-only">{'Read-only — freeze writes'}</option>
+    </TextField>
+  )
+
   const reasonField = (
     value: string,
     onChange: (next: string) => void,
@@ -371,9 +407,23 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
           <Stack spacing={2}>
-            <Alert severity={platformRecord ? 'error' : 'info'}>
+            {/* The banner names the MODE first when it is read-only
+                (AGL-1511): "PLATFORM LOCKDOWN IS ACTIVE" in front of an
+                operator whose customers' sites are all still serving would
+                send them hunting an outage that is not happening. */}
+            <Alert
+              severity={
+                platformRecord
+                  ? platformRecord.mode === 'read-only'
+                    ? 'warning'
+                    : 'error'
+                  : 'info'
+              }
+            >
               {platformRecord
-                ? `PLATFORM LOCKDOWN IS ACTIVE (${platformRecord.reason ?? 'manual'}) — every non-staff user is refused. Staff sessions (yours included) bypass every scope.`
+                ? platformRecord.mode === 'read-only'
+                  ? `PLATFORM IS READ-ONLY (${platformRecord.reason ?? 'manual'}) — sites keep serving and everyone can read; every write is refused. Staff writes bypass it, which is the point.`
+                  : `PLATFORM LOCKDOWN IS ACTIVE (${platformRecord.reason ?? 'manual'}) — every non-staff user is refused. Staff sessions (yours included) bypass every scope.`
                 : 'The panic button. Locks are enforced server-side (sessions, sites, APIs), log the affected users out, and show them a per-reason notice. Staff are never locked out. Locking requires the super role; every action is audited.'}
             </Alert>
 
@@ -422,6 +472,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     spacing={1}
                     sx={{ flexWrap: 'wrap', rowGap: 1 }}
                   >
+                    {modeField(platformMode, setPlatformMode)}
                     {reasonField(platformReason, setPlatformReason)}
                     <TextField
                       size="small"
@@ -456,6 +507,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           {
                             action: 'lock',
                             scope: 'platform',
+                            mode: platformMode,
                             reason: platformReason,
                             message: platformMessage || undefined,
                             untilMs: untilMsOf(platformUntil),
@@ -643,6 +695,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     }}
                     sx={{ minWidth: 240 }}
                   />
+                  {/* Read-only is refused server-side on the user scope
+                      (AGL-1511) — a user lock's teeth are the Auth disable
+                      and token revoke, which have no milder setting — so the
+                      control is hidden there rather than offering a choice
+                      the route will reject. */}
+                  {scope !== 'user' ? modeField(mode, setMode) : null}
                   {reasonField(reason, setReason)}
                   <TextField
                     size="small"
@@ -671,6 +729,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           action: 'lock',
                           scope,
                           targetId: targetId.trim(),
+                          mode: scope === 'user' ? 'full' : mode,
                           reason,
                           message: message || undefined,
                           untilMs: untilMsOf(until),

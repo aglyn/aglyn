@@ -184,6 +184,7 @@ async function handler(request: Request): Promise<Response> {
       // and rare, so the per-call read is proportionate. A projection/doc
       // disagreement keeps the old refusal — never loosened.
       const locked = await lockdownRefusal({
+        request,
         uid: decoded.uid,
         org:
           member.orgSuspended === true
@@ -248,6 +249,7 @@ async function handler(request: Request): Promise<Response> {
         ? await firestore.collection('orgs').doc(orgId).get()
         : undefined
       const locked = await lockdownRefusal({
+        request,
         uid: decoded.uid,
         org: orgSnapshot?.data(),
         host: hostSnapshot.data(),
