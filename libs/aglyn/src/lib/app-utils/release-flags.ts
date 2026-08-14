@@ -273,9 +273,22 @@ export function releaseFlagBucket(flagKey: string, subjectId: string): number {
 }
 
 /**
- * The gating verdict for one subject. `subjectId` should be the orgId
- * when available (whole workspaces get features together) and fall back to
- * the uid; an empty subject only passes fully-enabled flags.
+ * The gating verdict for one subject.
+ *
+ * `subjectId` is the ORG ID, or nothing. A rollout is a cohort of
+ * workspaces, so a whole workspace has to land on one side of the
+ * percentage: every surface that asks about an org must ask with the same
+ * string, or they answer differently about the same customer.
+ *
+ * This docstring used to sanction falling back to the uid, and the server
+ * gates fell back to a hostId. Since a hostId, a uid and an orgId hash to
+ * three different buckets, a mid-rollout flag could be on in the console
+ * and off on the published site for one workspace — stable per subject, so
+ * it never flickered, it just stayed wrong (AGL-1656).
+ *
+ * An empty subject only passes fully-enabled flags. That is the deliberate
+ * cost: a request with no resolvable org never joins a partial rollout,
+ * which is the conservative answer rather than a confidently wrong one.
  */
 export function isReleaseFlagOn(
   flagKey: ReleaseFlagKey,
