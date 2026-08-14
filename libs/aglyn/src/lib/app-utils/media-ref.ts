@@ -254,6 +254,105 @@ export function isMediaCdnUrl(url: string | undefined | null): boolean {
 }
 
 /**
+ * Hosts that serve OUR OWN media, for {@link isFirstPartyMediaSrc}.
+ *
+ * `firebasestorage.googleapis.com` is here because it is where the DAM
+ * actually stores bytes: `mediaSrc` falls back to the raw download URL for a
+ * free-tier org, which has no `mediaCdn` entitlement and therefore no
+ * `cdnPath`. Excluding it would mean "upload it to the library" was advice a
+ * free-tier publisher could not follow.
+ *
+ * `storage.googleapis.com` is deliberately NOT here — see AGL-1702 #3. Its
+ * only producer in source is a signed WRITE url, and allowlisting it
+ * pre-emptively is how a host nobody has proved we need becomes permanent.
+ */
+const FIRST_PARTY_MEDIA_HOSTS = ['firebasestorage.googleapis.com']
+
+/**
+ * Apexes whose subdomains are ours. `localhost` covers dev and e2e.
+ *
+ * `aglyn.com` and `aglyn.io` are both in `security-origins.js`'s
+ * `PRODUCTION_DOMAINS`; `aglyn.app` is `TENANT_APEX`; `aglyn.dev` is carried
+ * because `tools/lint-rules/no-remote-image-service.mjs` already treats it as
+ * first-party and a disagreement between the two lists is the kind of thing
+ * that gets discovered as a broken image.
+ */
+const FIRST_PARTY_APEXES = [
+  'aglyn.com',
+  'aglyn.app',
+  'aglyn.io',
+  'aglyn.dev',
+  'localhost',
+]
+
+function isFirstPartyHost(host: string): boolean {
+  const lower = host.toLowerCase()
+  if (FIRST_PARTY_MEDIA_HOSTS.includes(lower)) return true
+  return FIRST_PARTY_APEXES.some(
+    (apex) => lower === apex || lower.endsWith(`.${apex}`),
+  )
+}
+
+/**
+ * Whether a stored image `src` names media WE serve (AGL-1701).
+ *
+ * The predicate an authoring surface validates against when the person
+ * supplying the value is not the person who will render it. A marketplace
+ * publisher types a listing logo; every OTHER org's users load it. An `<img>`
+ * on a host the publisher controls is a beacon — it discloses each viewer's
+ * IP, user-agent and a `Referer` naming the console and the org, on every
+ * render, to a recipient who appears on no subprocessor register. That is a
+ * disclosure question, and the answer is not to name the host in a policy;
+ * it is to stop accepting the host.
+ *
+ * Three accepted forms, in descending order of how much we like them:
+ *
+ * 1. a `media:` reference — names the asset, survives a move or a replace;
+ * 2. a root-relative path under {@link MEDIA_CDN_ROUTE} — same-origin, so
+ *    `img-src 'self'` covers it with no allowlist entry at all;
+ * 3. an absolute `https:` URL on a first-party host. Two sub-cases, and both
+ *    are what the DAM picker actually emits today: `mediaSrc` prefixes
+ *    `window.location.origin` onto `cdnPath` because a listing renders
+ *    somewhere other than the console, and it falls back to the raw storage
+ *    download URL when the org has no CDN entitlement.
+ *
+ * `http:` is refused in every form, and so is protocol-relative `//host` —
+ * which `new URL` would resolve against a base we do not have here, and which
+ * on a page is simply the same egress with the scheme borrowed.
+ *
+ * KNOWN GAP, stated rather than papered over: an org with a white-label
+ * `customConsoleDomain` would have `mediaSrc` emit that domain, which this
+ * refuses. Inert today — AGL-743 leaves the claim `pending` and nothing
+ * routes on it — and the fix when it does route is to resolve the claim here,
+ * not to widen the apex list.
+ */
+export function isFirstPartyMediaSrc(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  // `startsWith` rather than `isMediaRef`: that one is a `value is string`
+  // predicate, so narrowing a value ALREADY known to be a string leaves the
+  // else branch as `never` and every later `.startsWith` fails to compile
+  // under the console's stricter config (and, silently, not under this
+  // library's — which is how it would have shipped).
+  if (trimmed.startsWith(MEDIA_REF_PREFIX)) {
+    return parseMediaRef(trimmed) !== null
+  }
+  // Root-relative only. `//host/…` is protocol-relative, not a path.
+  if (trimmed.startsWith('/')) {
+    if (trimmed.startsWith('//')) return false
+    return trimmed.startsWith(`${MEDIA_CDN_ROUTE}/`)
+  }
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== 'https:') return false
+    return isFirstPartyHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Reads a reference back out of a CDN path — how the picker mints one from
  * the `cdnPath` the server already wrote on the media doc, so nothing new
  * has to be plumbed through the media APIs.

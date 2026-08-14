@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
@@ -103,12 +104,23 @@ export const previewImageHandler: PluginApiHandler = async (req, res) => {
     // DAM-hosted asset (AGL-863): the publisher picked an existing asset from
     // the media library instead of uploading raw bytes. It already lives in
     // our storage/CDN, so point `previewImageUrl` at it directly — no re-upload
-    // and no duplicate blob. Parity with the logo/screenshot URL fields, which
-    // already accept any https URL through validateListingContent.
+    // and no duplicate blob.
+    //
+    // The comment here used to claim parity with logo/screenshot, "which
+    // already accept any https URL". That was true and was the bug (AGL-1701):
+    // the preview image is the picture on the cross-org BROWSE grid and the
+    // `og:image` an unauthenticated unfurler fetches, so "any https URL" made
+    // a publisher-controlled host the recipient of every browser's IP. Parity
+    // is restored in the other direction — this field now takes what the
+    // sentence always implied it took, an asset that lives in our library.
     const providedUrl = String(req.body?.url ?? '').trim()
     if (providedUrl) {
-      if (!/^https:\/\/[^\s]+$/.test(providedUrl) || providedUrl.length > 2000) {
-        return res.status(400).json({ error: 'Invalid image URL' })
+      if (providedUrl.length > 2000 || !isFirstPartyMediaSrc(providedUrl)) {
+        return res.status(400).json({
+          error:
+            'Preview image must come from your media library — pick one with ' +
+            'Browse, or upload the file here',
+        })
       }
       await listingRef.set(
         {

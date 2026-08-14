@@ -1254,7 +1254,31 @@ service cloud.firestore {
                      // `deletedAt` alone — so denying these costs nothing.
                      'publisherOrgId', 'sourceComponentId', 'sourceHostId',
                      'versionHistory', 'screenCount', 'previewImageUrl',
-                     'createdAt', 'updatedAt']));
+                     'createdAt', 'updatedAt',
+                     // Listing ARTWORK (AGL-1701). `previewImageUrl` was
+                     // denied on the pass above and its two siblings were
+                     // not, though all three end up in an `<img src>` that
+                     // OTHER orgs' users load — `logoUrl` and every entry of
+                     // `screenshots` are handed straight to `src` by
+                     // listing-content.component.tsx, and `logoUrl` is also
+                     // an `og:image` an UNAUTHENTICATED unfurler fetches.
+                     //
+                     // `validateListingContent` now holds these to
+                     // first-party media, which is the actual fix; this line
+                     // is what makes that fix load-bearing rather than
+                     // advisory. `marketplaceListings` is `allow read: if
+                     // true` and a listingManager is any org owner/admin, so
+                     // while these keys were writable here the API was one
+                     // way to set them, not the way — a publisher could put
+                     // an arbitrary beacon host in either field with a direct
+                     // client write and never touch the route that validates.
+                     //
+                     // Costs nothing for the same reason the block above
+                     // does: the listing editor saves through
+                     // `/api/marketplace/publish-plugin` (`update-listing`),
+                     // and the only client write to a listing in the repo is
+                     // the unpublish toggle, which writes `deletedAt` alone.
+                     'logoUrl', 'screenshots']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

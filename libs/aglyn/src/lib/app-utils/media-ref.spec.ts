@@ -19,6 +19,7 @@ import {
   absoluteMediaSrc,
   formatMediaRef,
   hostQualifiedScope,
+  isFirstPartyMediaSrc,
   isMediaCdnUrl,
   isMediaRef,
   mediaNodeSrc,
@@ -266,6 +267,73 @@ describe('media references (AGL-1215)', () => {
       expect(isMediaCdnUrl('/api/media/cdn/org:acme/med123')).toBe(true)
       expect(isMediaCdnUrl(RAW_URL)).toBe(false)
       expect(isMediaCdnUrl(undefined)).toBe(false)
+    })
+  })
+
+  describe('isFirstPartyMediaSrc — the third-party image gate (AGL-1701)', () => {
+    it('accepts the three forms the DAM picker actually produces', () => {
+      // A reference, the same-origin CDN path, and — for a free-tier org with
+      // no `mediaCdn` entitlement and therefore no `cdnPath` — the raw
+      // storage download URL `mediaSrc` falls back to.
+      expect(isFirstPartyMediaSrc('media:org:acme/med123')).toBe(true)
+      expect(isFirstPartyMediaSrc('/api/media/cdn/org:acme/med123')).toBe(true)
+      expect(isFirstPartyMediaSrc(RAW_URL)).toBe(true)
+    })
+
+    it('accepts the absolute CDN URL the browser-side picker emits', () => {
+      // `mediaSrc` prefixes `window.location.origin` onto `cdnPath`, so the
+      // stored value is absolute on whichever console host was open.
+      expect(
+        isFirstPartyMediaSrc(
+          'https://console.aglyn.com/api/media/cdn/org:acme/med123',
+        ),
+      ).toBe(true)
+      expect(
+        isFirstPartyMediaSrc(
+          'http://localhost:4200/api/media/cdn/org:acme/med123',
+        ),
+      ).toBe(false)
+    })
+
+    it('refuses a host the publisher controls, which is the whole point', () => {
+      // The beacon shape: an `<img>` another org's browser fetches from a
+      // server the publisher runs, disclosing the viewer's IP on every render.
+      expect(isFirstPartyMediaSrc('https://cdn.publisher.example/logo.png')).toBe(
+        false,
+      )
+      // A first-party LABEL inside a third-party domain must not pass.
+      expect(isFirstPartyMediaSrc('https://aglyn.com.evil.example/a.png')).toBe(
+        false,
+      )
+      expect(isFirstPartyMediaSrc('https://notaglyn.com/a.png')).toBe(false)
+    })
+
+    it('refuses http and protocol-relative in every form', () => {
+      expect(isFirstPartyMediaSrc('http://cdn.publisher.example/a.png')).toBe(
+        false,
+      )
+      // `//host/…` is a host, not a path — it must not fall through the
+      // leading-slash branch and be read as same-origin.
+      expect(
+        isFirstPartyMediaSrc('//cdn.publisher.example/api/media/cdn/x/y'),
+      ).toBe(false)
+    })
+
+    it('refuses a same-origin path that is not the media route', () => {
+      // `'self'` would let this render, so the gate is what stops a listing
+      // pointing at an arbitrary console route.
+      expect(isFirstPartyMediaSrc('/api/orgs/settings')).toBe(false)
+      expect(isFirstPartyMediaSrc('/images/hero.png')).toBe(false)
+    })
+
+    it('refuses malformed references, junk and non-strings', () => {
+      expect(isFirstPartyMediaSrc('media:junk')).toBe(false)
+      expect(isFirstPartyMediaSrc('')).toBe(false)
+      expect(isFirstPartyMediaSrc('   ')).toBe(false)
+      expect(isFirstPartyMediaSrc('javascript:alert(1)')).toBe(false)
+      expect(isFirstPartyMediaSrc(undefined)).toBe(false)
+      expect(isFirstPartyMediaSrc(null)).toBe(false)
+      expect(isFirstPartyMediaSrc(42)).toBe(false)
     })
   })
 })

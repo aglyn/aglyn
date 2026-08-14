@@ -310,6 +310,17 @@ describe('sanitizeMarketplaceDefinition', () => {
       expect(publishProps({ href: 'data:text/html,<script>' })).toEqual({})
     })
 
+    it('drops an http src while keeping an http href (AGL-1701)', () => {
+      // Asymmetric on purpose. An `http:` href is a link a reader chooses to
+      // follow and the browser warns about; an `http:` image is fetched
+      // automatically and is mixed content, which browsers block outright —
+      // so storing it published a node whose image could never render.
+      expect(publishProps({ src: 'http://cdn.example/a.png' })).toEqual({})
+      expect(publishProps({ href: 'http://example.com/docs' })).toEqual({
+        href: 'http://example.com/docs',
+      })
+    })
+
     it('leaves nested objects alone — they are consumed, not spread', () => {
       expect(publishProps({ icon: { path: 'M0 0', onClick: 'x' } })).toEqual({
         icon: { path: 'M0 0', onClick: 'x' },
@@ -324,8 +335,8 @@ describe('validateListingContent (AGL-430)', () => {
 
   it('accepts a full, valid content payload', () => {
     const verdict = validateListingContent({
-      logoUrl: 'https://cdn.example.com/logo.png',
-      screenshots: ['https://cdn.example.com/a.png'],
+      logoUrl: 'media:org:acme/logo1',
+      screenshots: ['/api/media/cdn/org:acme/shot1'],
       readme: '# Hi',
       homepageUrl: 'https://example.com',
       repositoryUrl: 'https://github.com/x/y',
@@ -349,9 +360,62 @@ describe('validateListingContent (AGL-430)', () => {
     expect(validateListingContent({ categories: ['not-real'] }).ok).toBe(false)
     expect(
       validateListingContent({
-        screenshots: Array(7).fill('https://x.com/s.png'),
+        screenshots: Array(7).fill('media:org:acme/shot1'),
       }).ok,
     ).toBe(false)
+  })
+
+  describe('listing ARTWORK is held to first-party media (AGL-1701)', () => {
+    // Listing images are supplied by a PUBLISHER and rendered to every other
+    // org's users, so an arbitrary host is a beacon disclosing each viewer's
+    // IP. Nothing gates it upstream: review is a statement about a version's
+    // bytes, the staff review route never projects these fields, and
+    // `update-listing` rewrites them without touching `reviewStatus` — so a
+    // listing can pass review with benign artwork and swap it while still
+    // reading `verified`.
+    it('refuses a publisher-controlled host for logoUrl', () => {
+      const verdict = validateListingContent({
+        logoUrl: 'https://cdn.publisher.example/logo.png',
+      })
+      expect(verdict.ok).toBe(false)
+      expect(verdict.error).toContain('media library')
+    })
+
+    it('refuses a publisher-controlled host in ANY screenshot', () => {
+      // One bad entry among good ones must fail the whole array — a partial
+      // accept would store the beacon and report success.
+      const verdict = validateListingContent({
+        screenshots: [
+          'media:org:acme/shot1',
+          'https://cdn.publisher.example/shot2.png',
+        ],
+      })
+      expect(verdict.ok).toBe(false)
+      expect(verdict.content).toBeUndefined()
+    })
+
+    it('accepts every form the DAM picker emits', () => {
+      for (const value of [
+        'media:org:acme/logo1',
+        '/api/media/cdn/org:acme/logo1',
+        'https://console.aglyn.com/api/media/cdn/org:acme/logo1',
+        'https://firebasestorage.googleapis.com/v0/b/x/o/y?alt=media&token=t',
+      ]) {
+        expect(validateListingContent({ logoUrl: value }).ok).toBe(true)
+      }
+    })
+
+    it('leaves the LINK fields on any-https, which images are not', () => {
+      // A homepage on the publisher's own domain is the entire point of the
+      // field: an anchor is followed by choice, an `<img>` is fetched without
+      // one. Narrowing these too would be a different, wrong change.
+      const verdict = validateListingContent({
+        homepageUrl: 'https://publisher.example',
+        repositoryUrl: 'https://code.publisher.example/x/y',
+      })
+      expect(verdict.ok).toBe(true)
+      expect(verdict.content?.homepageUrl).toBe('https://publisher.example')
+    })
   })
 
   it('treats absent fields as no-ops', () => {
