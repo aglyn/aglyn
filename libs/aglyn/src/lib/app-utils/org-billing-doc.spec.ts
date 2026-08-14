@@ -35,6 +35,7 @@ import {
 import {
   ORG_BILLING_MOVED_KEYS,
   hasInlineOrgBilling,
+  isOrgSubscriptionLive,
   orgBillingStatusFrom,
   pickOrgBillingFields,
 } from './org-billing-doc'
@@ -155,6 +156,43 @@ describe('org billing document (AGL-1028)', () => {
       ).toBe(false)
       // A staff override writes `plan` and no subscription anywhere.
       expect(isBillingSubscription({ plan: 'pro' } as never)).toBe(false)
+    })
+  })
+
+  describe('live subscription predicate (AGL-1714)', () => {
+    it('treats active, trialing and past_due as live', () => {
+      // `past_due` is live on purpose: a second subscription does not settle
+      // the first one's unpaid invoice, it adds a charge beside it.
+      for (const status of ['active', 'trialing', 'past_due']) {
+        expect(`${status} → ${isOrgSubscriptionLive({ subscription: { status } } as never)}`)
+          .toBe(`${status} → true`)
+      }
+    })
+
+    it('a CANCELED org is not live, record and customer id notwithstanding', () => {
+      // The whole reason this is a status test. Both fields survive
+      // cancellation, so a "has a subscription record" test would lock every
+      // churned workspace out of ever paying us again.
+      expect(
+        isOrgSubscriptionLive({
+          stripeCustomerId: 'cus_1',
+          subscription: { status: 'canceled' },
+        } as never),
+      ).toBe(false)
+    })
+
+    it('incomplete and unpaid are not live — a new checkout is the way forward', () => {
+      for (const status of ['incomplete', 'incomplete_expired', 'unpaid']) {
+        expect(`${status} → ${isOrgSubscriptionLive({ subscription: { status } } as never)}`)
+          .toBe(`${status} → false`)
+      }
+    })
+
+    it('an org that has never billed is not live', () => {
+      expect(isOrgSubscriptionLive(null)).toBe(false)
+      expect(isOrgSubscriptionLive({})).toBe(false)
+      expect(isOrgSubscriptionLive({ subscription: null })).toBe(false)
+      expect(isOrgSubscriptionLive({ stripeCustomerId: 'cus_1' })).toBe(false)
     })
   })
 
