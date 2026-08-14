@@ -1,3 +1,15 @@
+---
+description: "STALE 2026-08-04 handoff — canvas-scripting note corrected (production IS scriptable via window.Aglyn). AGL-1256 and AGL-677 are still open. Use /handoff."
+---
+
+> ⚠️ **CORRECTED 2026-08-14 (AGL-1704).** A dated 2026-08-04 session handoff. For
+> the current promotion flow and working agreements read
+> `.claude/commands/handoff.md`; where it disagrees, it wins. Fixed below: the
+> claim that the production console is not scriptable is wrong — only the
+> `AglynModule` *alias* is dev-gated, while `window.Aglyn` is assigned in every
+> environment, and neither has a `canvas` property. Thread 1 is **not** spent:
+> **AGL-1256** (local drafts) and **AGL-677** (co-editing) are both still open.
+
 Two threads. **Thread 1 is what Zach asked for and it is the one that pays
 for itself** — it is a crash net for work that is currently held only in
 memory, and this session lost a 71-node page proving it. Thread 2 is the
@@ -192,5 +204,11 @@ objects, so counting CSS rules undercounts elements — compare like for like.
   the page — roughly half were denied this session, non-deterministically. A
   retry usually clears it. If it denies repeatedly, stop and ask rather than
   routing around it through the UI.
-- `window.AglynModule` is dev-only (`NODE_ENV !== 'production'`), so the
-  production console on 4700 is **not** scriptable.
+- ~~`window.AglynModule` is dev-only (`NODE_ENV !== 'production'`), so the
+  production console on 4700 is **not** scriptable.~~ **Corrected 2026-08-14
+  (AGL-1704): only the *alias* is dev-only.** `apps/console/constants/app-setup.tsx`
+  assigns `globalThis.Aglyn` in **every** environment and mirrors it to
+  `window.AglynModule` only when `!IS_PRODUCTION` — so the production console
+  **is** scriptable, via `window.Aglyn`. Both names point at the same
+  `IBesignerAppController`, which has **no `canvas` property**; reach the canvas
+  with `window.Aglyn.getBesignerController()`.

@@ -1,6 +1,30 @@
 ---
-description: Build the marketplace override layer (AGL-1019) — own the patch, never the copy. Plus 9 unpromoted commits waiting on one batched production read, and a concurrent session sharing main.
+description: "SUPERSEDED 2026-08-14 — AGL-1019 and the whole artifact-lifecycle project shipped. A dated 2026-08-04 session handoff kept for its method notes. Use /handoff."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-04, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place (AGL-1704):
+>
+> - **The work in section 1 is DONE — do not build it.** Verified in Linear
+>   2026-08-14: **AGL-1019 is Done**, and so is everything it was said to block —
+>   AGL-1020, AGL-1021, AGL-1022, AGL-1023 — plus AGL-1027, AGL-1031 and AGL-1049.
+>   The override layer exists. This file's own rule applies to itself: *"Verify the
+>   premise. AGL-1184 was already done."*
+> - **The promotion notes in "Do not promote unless asked" are spent.** The nine
+>   commits listed landed long ago. The standing agreement is unchanged in spirit
+>   and stricter in form: **promotion needs Zach's word before it starts**, gate in
+>   a pinned worktree, PR `main` → `production`, real merge commit, no
+>   intermediate branch.
+> - **A promotion costs 4 deployment records, not 2 build slots** (AGL-1187,
+>   AGL-1633). `aglyn-plugins` creates a record on every promote and then cancels
+>   it; only `www` has genuinely stopped.
+> - Treat "Needs Zach" and "Loose ends" as history and re-derive from Linear —
+>   AGL-1239 and AGL-937's mitigation are among the items that have since moved.
+>
+> Still worth reading: **section 2, "Method that this session paid for"** — the
+> vacuous-control and bundle-attribution lessons are still load-bearing.
 
 Pick up from `/promote-and-enforce` on 2026-08-04. **Read "The other session"
 first — it is the thing most likely to cost you time or damage.**

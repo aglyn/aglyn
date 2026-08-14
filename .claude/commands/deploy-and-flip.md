@@ -1,12 +1,36 @@
 ---
-description: Deploy the stranded AGL-1226 fix first, then flip CSP to enforcing (AGL-523) — the canvas click-test passed and strict-dynamic is ruled out; AGL-1161 and AGL-1217 still need production verification
+description: "SUPERSEDED 2026-08-14 — a dated 2026-08-03/04 session handoff kept for its CSP measurements and lessons. Use /handoff for the current promotion flow and queue."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-03/04, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place (AGL-1704):
+>
+> - **Promotion is NOT pre-authorised.** The "standing permission" granted below
+>   applied to the 2026-08-03 session only. **Promotion needs Zach's word before
+>   it starts**, and you never open a production PR unasked.
+> - **The flow changed.** Push to `main` immediately, let a batch accumulate on
+>   `main`, gate `main`'s tip in a **pinned worktree**, then PR `main` →
+>   `production` and merge as a **real merge commit** — never squash, never
+>   rebase, never a `promote/*` or other intermediate branch.
+> - **Sections 1b and 2 are spent.** The stranded `d4b968094` (AGL-1226) reached
+>   production long ago — verified 2026-08-14, it is an ancestor of
+>   `origin/production`. Do not "land the stranded fix"; there is nothing
+>   stranded. AGL-523 closed Done 2026-08-04.
+> - Treat the whole queue and the "Needs Zach" list as history and re-derive both
+>   from Linear.
+>
+> Still worth reading: the **CSP measurements in section 2** (`strict-dynamic` is
+> ruled out and why) and **"Lessons this session paid for"** at the bottom.
+> Everything else is a snapshot of one day.
 
 Pick up from `/promote-and-enforce` on 2026-08-03.
 
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
-AGL-### on `main`. Standing permission to promote is granted.
+AGL-### on `main`. ~~Standing permission to promote is granted.~~ **Corrected
+2026-08-14: promotion needs Zach's word before it starts.**
 
 ## 1. The promotion LANDED — read this first
 

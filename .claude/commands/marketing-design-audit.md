@@ -1,6 +1,22 @@
 ---
-description: Diff every built marketing surface against its Figma frame (AGL-1241) — the pages were built by cloning, not from the design, and five sections were materially wrong before anyone opened Figma
+description: "SUPERSEDED 2026-08-14 — AGL-1241 is Done. A dated 2026-08-08 audit handoff kept for its Figma-vs-built diffing method. Use /handoff for the current queue."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14, AGL-1704).** **AGL-1241 is Done** and so is the
+> AGL-1240 fix listed below as "queued for the next promotion" — verified in Linear
+> and in git 2026-08-14. Treat the audit findings as history and re-derive from
+> Linear. Two corrections that matter if you read on:
+>
+> - **"Batch promotions — one promotion per session unless he asks"** understates
+>   it. **Promotion needs Zach's word before it starts; never open a production PR
+>   unasked.** Gate the pinned SHA in a worktree, PR `main` → `production`, real
+>   merge commit, no `promote/*` or other intermediate branch.
+> - **There is no `window.AglynModule.canvas`.** `AglynModule` is a dev-only alias
+>   of `window.Aglyn`, an `IBesignerAppController` with no `canvas` property. Reach
+>   the canvas via `window.Aglyn.getBesignerController()`.
+>
+> Still worth reading: the **method** — diffing a built surface against its frame
+> rather than trusting that it was built from the design.
 
 > ⚠️ **CHARTER OVERRIDE (Zach, 2026-08-08) — supersedes anything below that
 > says otherwise.** The marketing site is built by CLICKING in the besigner, in

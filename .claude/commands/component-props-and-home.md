@@ -1,3 +1,21 @@
+---
+description: "STALE 2026-08-04 session handoff — its canvas-scripting recipes are wrong (no AglynModule.canvas) and its 'done this session' list has moved. AGL-1247 is still open. Use /handoff."
+---
+
+> ⚠️ **CORRECTED 2026-08-14 (AGL-1704).** This is a point-in-time session handoff
+> written 2026-08-04. For the current promotion flow and working agreements, read
+> `.claude/commands/handoff.md`. Two corrections:
+>
+> - **There is no `window.AglynModule.canvas`.** `apps/console/constants/app-setup.tsx`
+>   sets `window.Aglyn` to an `IBesignerAppController` and aliases `AglynModule` to
+>   that **same object** in non-production only. That interface has **no `canvas`
+>   property**, so the transfer recipe below cannot work as written. Use
+>   `const c = window.Aglyn.getBesignerController()`.
+> - **The "Done this session" list has moved.** Verified 2026-08-14: AGL-1243 and
+>   AGL-1235 are Done; AGL-1246 and AGL-1245 are In Review. **AGL-1247**
+>   (parameterised reusable components — Thread 1) is **still open**, so Thread 1's
+>   argument still holds; re-read the issue rather than this file.
+
 Two threads, in this order. **Thread 1 is the one Zach asked for and it is
 the more valuable of the two** — it removes the reason Thread 2 is expensive.
 
@@ -107,9 +125,11 @@ against a component version and lifts the differences into props.
   how AGL-1227 stripped every heading's `component`. Assign onto the observable
   (`node.props.children = …`) instead.
 - `canvas.deleteNode` deletes the whole **subtree**, and saves history itself.
-- The besigner is only scriptable in dev (`window.AglynModule` is gated on
-  `NODE_ENV !== 'production'`); `canvas.nodes` is a MobX `ObservableMap`, and a
-  `for...in` over props misses nested observables — use `node.toJSON()`.
+- `window.AglynModule` is a **dev-only alias** (gated on `!IS_PRODUCTION`) of
+  `window.Aglyn`, which is set in every environment. Neither has a `canvas` —
+  reach it with `window.Aglyn.getBesignerController()`. `canvas.nodes` is a MobX
+  `ObservableMap`, and a `for...in` over props misses nested observables — use
+  `node.toJSON()`.
 
 Related: AGL-1218, AGL-1235 (needs an inline-text container — `muiTypography`
 is `textEditable`, therefore a leaf, so no span fits inside it).
@@ -163,7 +183,8 @@ Transfer whole subtrees between screens without pulling JSON through context:
 
 ```js
 // on the SOURCE screen's besigner
-const c = window.AglynModule.canvas
+// CORRECTED 2026-08-14: was `window.AglynModule.canvas`, which does not exist.
+const c = window.Aglyn.getBesignerController()
 localStorage.setItem('__xfer', JSON.stringify(
   JSON.parse(JSON.stringify(c.makeNested(c.getNode(SECTION_ID))))))
 // then navigate to the TARGET screen's besigner

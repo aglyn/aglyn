@@ -1,3 +1,15 @@
+---
+description: "STALE 2026-08-08 handoff — canvas-scripting notes corrected (production IS scriptable via window.Aglyn). AGL-1245 still open. Use /handoff for the current queue."
+---
+
+> ⚠️ **CORRECTED 2026-08-14 (AGL-1704).** A dated 2026-08-08 session handoff. For
+> the current promotion flow and working agreements read
+> `.claude/commands/handoff.md`; where it disagrees, it wins. Fixed in "Standing
+> hazards": there is **no `window.AglynModule.canvas`**, and the claim that the
+> production console is not scriptable is wrong — `window.Aglyn` is assigned in
+> every environment. Master issue **AGL-1245 is still open** (In Review); AGL-1250
+> is Done.
+
 > ⚠️ **CHARTER OVERRIDE (Zach, 2026-08-08) — supersedes anything below that
 > says otherwise.** The marketing site is built by CLICKING in the besigner, in
 > Zach's authenticated browser, exactly as a no-code subscriber would: screens,
@@ -222,9 +234,10 @@ counting CSS rules undercounts elements — compare like for like.
 - **The canvas has no `leaf:` attribute and lives in shadow roots.**
   `nodeElementSelector` / `[data-aglyn="leaf:<id>"]` is the *site renderer's*.
   `document.querySelectorAll` returns 0 and `document.body.innerText` misses
-  canvas text **while the canvas is rendering perfectly**. Trust
-  `window.AglynModule.canvas.toJSON()` for state and a screenshot for what
-  painted.
+  canvas text **while the canvas is rendering perfectly**. Trust the canvas
+  controller's `toJSON()` for state and a screenshot for what painted —
+  **corrected 2026-08-14 (AGL-1704): `window.AglynModule.canvas` does not exist**;
+  use `window.Aglyn.getBesignerController()`.
 - **`updateNodeProps` REPLACES the props object.** Assign onto the observable
   instead (`node.props.children = …`, `node.sx.borderRadius = '8px'`), then
   confirm the canvas re-rendered — a write to a detached copy still reads back
@@ -236,8 +249,11 @@ counting CSS rules undercounts elements — compare like for like.
   page — roughly half were denied in one session, non-deterministically. A
   retry usually clears it. If it denies repeatedly, stop and ask rather than
   routing around it through the UI.
-- `window.AglynModule` is dev-only (`NODE_ENV !== 'production'`), so the
-  production console is **not** scriptable.
+- ~~`window.AglynModule` is dev-only (`NODE_ENV !== 'production'`), so the
+  production console is **not** scriptable.~~ **Corrected 2026-08-14 (AGL-1704):
+  only the *alias* is dev-only.** `globalThis.Aglyn` is assigned in **every**
+  environment; `window.AglynModule` merely mirrors it when `!IS_PRODUCTION`. The
+  production console **is** scriptable via `window.Aglyn`.
 - **Turbopack cache runaway** hard-404s deep editor routes and fakes an
   org-switcher bug. If a known-good screen 404s, `rm -rf apps/console/.next/dev`
   and restart — check the lock owner is dead first, and never delete another

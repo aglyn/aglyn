@@ -1,3 +1,28 @@
+---
+description: "SUPERSEDED 2026-08-14 — AGL-1285 shipped; do not rebuild it. A dated 2026-08-06 session handoff kept for its page-weight and besigner mechanics. Use /handoff."
+---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-06, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place (AGL-1704):
+>
+> - **Job 1 is DONE — do not build it.** Verified in Linear 2026-08-14,
+>   **AGL-1285 is Done**. The claim below that "nothing calls it" is stale; the
+>   deferral was wired. This file's own warning applies to itself: *"This project
+>   has burned four sessions on already-shipped backlog items; check git and the
+>   live page first."*
+> - **Job 2 has moved too.** **AGL-1280 is Done** — the metered-billing framing is
+>   decided, not awaiting Zach. AGL-1282, AGL-1284 and AGL-1286 are In Review;
+>   re-read each before acting.
+> - **The canvas-scripting recipes are stale** — see "Besigner mechanics". There is
+>   no `window.AglynModule.canvas`: `AglynModule` is a dev-only alias of
+>   `window.Aglyn`, which is an `IBesignerAppController` with **no `canvas`
+>   property**. Reach the canvas through `window.Aglyn.getBesignerController()`.
+>
+> Still worth reading: **"Measuring page weight"** (measure gzipped; the flight
+> payload does not block first paint) and the **besigner save/verification traps**.
+
 Finish the **lazy-panel node deferral** (AGL-1285) — the pure half is committed and
 tested, nothing calls it, and wiring it needs a working tenant dev server. Then
 work the `/pricing` follow-ups.
@@ -189,12 +214,17 @@ a price in code to match a frame.
 
 # Standing
 
-Promote when work lands: build console locally first (`npx nx build console
---skip-nx-cache` — a green PR proves nothing), open `main` → `production`,
-**merge, never squash**, then confirm the new sha reaches **READY** via the
-Vercel MCP (`gh api` cannot poll it). Plugin changes under `libs/plugins/**`
-build the **tenant** too — a CANCELED tenant build there is wrong, not normal.
-**Never open a production PR unasked.**
+**Promotion needs Zach's word before it starts — never open a production PR
+unasked.** (Corrected 2026-08-14, AGL-1704: this section used to open "Promote
+when work lands", which contradicted its own last line.) When he gives the word:
+gate the pinned SHA in a **worktree, never the live checkout** — build + test +
+lint, every exit code read bare, never through a pipe; a green PR proves nothing.
+Then open `main` → `production`, **merge, never squash, never rebase**, and
+confirm the new sha reaches **READY** via the Vercel MCP (`gh api` cannot poll
+it) — a merged PR is not a deployment. Do not create a `promote/*` or any other
+intermediate branch; push to `main` immediately and batch there. Plugin changes
+under `libs/plugins/**` build the **tenant** too — a CANCELED tenant build there
+is wrong, not normal.
 
 Never claim a mockup is a screenshot. Never invent legal copy. Where there is no
 honest content, say so.
