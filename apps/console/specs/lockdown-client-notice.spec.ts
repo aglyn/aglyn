@@ -150,10 +150,19 @@ describe('AGL-1532 · client surfaces read the 423 feature body', () => {
     (_file, site) => {
       // Both halves. A parsed verdict that never reaches the user is the
       // "computed but not wired" defect, not a fix.
+      //
+      // "Renders" means it reaches the user, not that it reaches them as a
+      // STRING. Billing renders the parsed notice structurally since
+      // AGL-1558 — message, expiry line, and the `mailto:` contact the
+      // one-line flattener drops — so a `<LockdownNotice` render satisfies
+      // this half exactly as `lockdownRefusalText(` does on the surfaces
+      // whose only affordance is a snackbar.
       expect({
         file: site.file,
         parses: site.source.includes('parseLockdownRefusal('),
-        renders: site.source.includes('lockdownRefusalText('),
+        renders:
+          site.source.includes('lockdownRefusalText(') ||
+          site.source.includes('<LockdownNotice'),
       }).toEqual({ file: site.file, parses: true, renders: true })
     },
   )

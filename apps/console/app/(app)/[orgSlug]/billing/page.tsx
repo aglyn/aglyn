@@ -24,7 +24,6 @@ import {
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
-  lockdownRefusalText,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
@@ -34,6 +33,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
   type AglynOrgBilling,
+  type LockdownRefusalNotice,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
@@ -77,6 +77,7 @@ import BillingPlanCardsComponent, {
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
+import LockdownNotice from '../../../../components/lockdown-notice.component'
 import { useReleaseFlag } from '../../../../hooks/use-release-flags'
 import { docsHelp } from '../../../../constants/docs-links'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -122,6 +123,15 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<
     string | null
   >(null)
+  // A checkout feature lockdown, held as the PARSED notice rather than a
+  // flattened string (AGL-1558). This page is the one surface where the toast
+  // was the wrong shape: the customer reading it is mid-upgrade and wondering
+  // whether they were charged, and the two fields a snackbar cannot carry —
+  // the support address and the expected-back line — are exactly the two that
+  // answer that. Rendered inline above the plan cards, so it is still there
+  // when they look back at the button they just pressed.
+  const [checkoutLockdown, setCheckoutLockdown] =
+    useState<LockdownRefusalNotice | null>(null)
   // The plan the visitor picked on the marketing site, if they arrived by a
   // pricing CTA (AGL-1117). Read once off the URL: it preselects the toggle
   // and emphasizes the matching card, and nothing here submits on its own.
@@ -325,6 +335,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const handleUpgrade = useCallback(
     (targetPlan: OrgPlan) => async () => {
       const dequeue = queueLoading()
+      // A fresh attempt clears the last refusal: a stale "checkout is paused"
+      // sitting above the cards after the lock lifted would be its own lie.
+      setCheckoutLockdown(null)
       try {
         // Plan switches on a live subscription go through the proration
         // preview + subscription update, never a second Checkout (AGL-269).
@@ -399,13 +412,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         // The server's body says the opposite in so many words — render it.
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) {
-          return enqueueSnackbar(lockdownRefusalText(locked), {
-            variant: 'warning',
-            // Persist: a deliberate pause is not a blip to be missed, and
-            // the reassurance ("your account and sites are unaffected") is
-            // the half a worried customer needs time to read.
-            persist: true,
-          })
+          // Inline and persistent rather than a toast (AGL-1558): the whole
+          // notice — message, expected-back line, and the `mailto:` support
+          // contact the one-line flattener drops — rendered above the plan
+          // cards and dismissible only by the reader.
+          setCheckoutLockdown(locked)
+          return
         }
         if (response.status === 501) {
           return enqueueSnackbar(
@@ -936,6 +948,20 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 />
               ),
             },
+            // The checkout lockdown notice sits directly above the cards
+            // whose buttons produced it (AGL-1558) — the one place a customer
+            // who just pressed Upgrade is already looking.
+            ...(checkoutLockdown
+              ? [{
+                  size: { xs: 12 },
+                  children: (
+                    <LockdownNotice
+                      notice={checkoutLockdown}
+                      onClose={() => setCheckoutLockdown(null)}
+                    />
+                  ),
+                }]
+              : []),
             {
               size: { xs: 12 },
               children: (
