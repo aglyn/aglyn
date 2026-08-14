@@ -93,9 +93,27 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** Mutable so a spec can choose how the aggregate read resolves. */
 const aggregate: { count: number | null } = { count: SERVER_COUNT }
 
+/**
+ * STABLE references, because the real hooks hand out stable ones and the
+ * aggregate effect keys off them: `useOrgDataScope` memoises its scope tuple
+ * on `[orgId, loaded]` precisely so a query dependency does not change
+ * identity per render (`use-host-org-id.ts`), and `useFirestore` returns the
+ * provider's instance.
+ *
+ * A fresh `{}` and a fresh `['orgs','org-1']` per render — which is what these
+ * doubles used to return — re-fired `useEffect(…, [firestore, dataScope])` on
+ * EVERY render. The aggregate read then happened once per render instead of
+ * once per mount, so "reads the count ONCE" was really measuring how many
+ * renders had landed before the assertion ran: 1 on a fast machine, 2 on a
+ * loaded one. The double read was an artefact of these doubles alone; the
+ * page itself never had it.
+ */
+const FIRESTORE = {}
+const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
-  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
+  useFirestore: () => FIRESTORE,
+  useOrgDataScope: () => DATA_SCOPE,
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: 'success',
