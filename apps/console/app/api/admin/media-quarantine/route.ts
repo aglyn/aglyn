@@ -80,6 +80,20 @@
  * that a key the server derives from the document is a key that matches the
  * document, and the three failure modes above are all transcription.
  *
+ * ## `by: "key"` — the mode the deny-list table uses (AGL-1700)
+ *
+ * The listing renders the index document as a table of KEYS, and a row's
+ * Release names that one key. It is the deliberate opposite of the mode
+ * above: media mode clears every key that could refuse a FILE, because a
+ * half-lift leaves the file dark; key mode clears exactly the entry named,
+ * because a row is an entry and the file it was set from may not exist any
+ * more. Releasing a hash key that also happens to cover a live incident's
+ * asset must not quietly drop that incident's other keys too.
+ *
+ * Release-only. A key typed into a quarantine is the transcription failure
+ * the whole mode above exists to remove; a key typed into a release can, at
+ * worst, match nothing.
+ *
  * `GET` gains the same lookup, unwritten: `?orgId=…&mediaId=…` answers with
  * the asset's keys, which of them are set, and the deny list's size against
  * its cap. Read-only, so it stays open to every staff role — during an
@@ -136,6 +150,30 @@ const CONTENT_HASH = /^[A-Fa-f0-9]{8,64}$/
  * mode exists to stop them getting wrong.
  */
 const SCOPE_ID = /^[A-Za-z0-9_-]{1,64}$/
+/**
+ * A key exactly as `mediaQuarantineHashKey` and `mediaQuarantineAssetKey`
+ * emit one — the shape a deny-list ROW holds (AGL-1700).
+ *
+ * The two original modes CONSTRUCT a key from its parts; `by: "key"` names
+ * one that already exists. The listing needs that, because a row is a key and
+ * nothing else: `asset--{scopeSegment}--{mediaId}` cannot be split back into
+ * its two halves without guessing (both alphabets contain `-`), and the
+ * entries whose parts are least recoverable — set before the origin fields
+ * existed, on a scope segment nobody remembers — are precisely the stale ones
+ * the listing exists to clear. A release that could not name them would leave
+ * the full-list deadlock exactly where AGL-1687 left it.
+ *
+ * Release-only, enforced below. A quarantine must still be derived from a
+ * document, because a hand-built key that matches no file is a takedown that
+ * looks set and refuses nothing — the failure this whole family is built
+ * against. Releasing a key that matches nothing is merely a no-op.
+ *
+ * `.` is outside both alphabets, so a key from here can never be read as a
+ * field path — the same reason `SCOPE_SEGMENT` is validated rather than
+ * trusted.
+ */
+const QUARANTINE_KEY =
+  /^(?:hash--[a-f0-9]{8,64}|asset--[A-Za-z0-9_:-]{1,140}--[A-Za-z0-9_-]{1,64})$/
 
 /**
  * The asset a `by: "media"` request names, read from its own document.
@@ -469,11 +507,32 @@ async function handler(request: Request): Promise<Response> {
      * module header for why the form uses the first one.
      */
     const mediaMode = String(body?.by ?? '') === 'media'
+    /** `by: "key"` — release the literal key a deny-list row holds (AGL-1700). */
+    const keyMode = String(body?.by ?? '') === 'key'
     let asset: ResolvedAsset | null = null
     let key: string
     /** Every key that could refuse this asset. Media mode only. */
     let assetKeys: string[] = []
-    if (mediaMode) {
+    if (keyMode) {
+      if (action !== 'release') {
+        return Response.json(
+          {
+            error:
+              'by: "key" releases an existing entry — a quarantine must be ' +
+              'derived from a file (by: "media"), never from a typed key',
+          },
+          { status: 400 },
+        )
+      }
+      const literal = String(body?.key ?? '').trim()
+      if (!QUARANTINE_KEY.test(literal)) {
+        return Response.json(
+          { error: 'key is missing or is not a quarantine key' },
+          { status: 400 },
+        )
+      }
+      key = literal
+    } else if (mediaMode) {
       const found = await resolveAsset(firestore, body ?? {})
       if (found.error) {
         return Response.json(

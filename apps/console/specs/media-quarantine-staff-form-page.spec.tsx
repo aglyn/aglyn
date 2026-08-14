@@ -112,6 +112,10 @@ let getReply: Record<string, unknown>
 let postReply: Record<string, unknown>
 const posted: Record<string, unknown>[] = []
 const fetched: string[] = []
+/** Just the asset lookups — the page also GETs the whole deny list on mount
+ * (AGL-1700), which would otherwise sit at `fetched[0]` and make every
+ * position-based assertion below about the wrong request. */
+const lookups = () => fetched.filter((url) => url.includes('?'))
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -125,6 +129,18 @@ beforeEach(() => {
     if (init?.method === 'POST') {
       posted.push(JSON.parse(String(init.body)))
       return { ok: true, json: async () => postReply } as any
+    }
+    // The listing GET carries no query; the lookup GET carries the ids.
+    if (!String(input).includes('?')) {
+      return {
+        ok: true,
+        json: async () => ({
+          records: [],
+          count: 0,
+          maxEntries: 2000,
+          readAtMs: 1_700_000_000_000,
+        }),
+      } as any
     }
     return { ok: true, json: async () => getReply } as any
   }) as any
@@ -147,8 +163,8 @@ describe('AGL-1687 · the form names a file, not a key', () => {
   it('looks the asset up with a GET carrying orgId and mediaId', async () => {
     await lookUp()
     expect(posted).toEqual([])
-    expect(fetched[0]).toContain('mediaId=m1')
-    expect(fetched[0]).toContain('orgId=acme')
+    expect(lookups()[0]).toContain('mediaId=m1')
+    expect(lookups()[0]).toContain('orgId=acme')
   })
 
   it('posts by: "media" and no digest at all', async () => {

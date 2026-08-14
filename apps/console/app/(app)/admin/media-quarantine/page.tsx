@@ -50,13 +50,45 @@
  * **Pretend the cap is not there.** `MEDIA_QUARANTINE_MAX_ENTRIES` is a hard
  * refusal at 2000, and the failure mode of a full list is "a takedown
  * silently did not land". The count rides on every answer.
+ *
+ * ## THE WHOLE DENY LIST (AGL-1700)
+ *
+ * Everything above is per-FILE: you name a file and learn what refuses it.
+ * That is the right shape for an incident that starts with a report, and the
+ * wrong shape for the one situation the 2000-entry cap exists for — the list
+ * is full, the next takedown is refused with a 409, and the remedy is
+ * "release stale entries". You cannot release what you cannot enumerate, and
+ * the only route to a stale entry used to be knowing a media id it covers,
+ * which for a hash-keyed entry set months ago is exactly what nobody
+ * remembers.
+ *
+ * So the second half of the page is the index document as a TABLE, over the
+ * `GET` that has returned `records` since AGL-1512 and that nothing had ever
+ * rendered. Three things it is careful about:
+ *
+ * **A row is a KEY, not a file.** Release posts `by: "key"` and clears that
+ * one entry. Media mode's "clear every key that could refuse this file" is
+ * correct there and wrong here: the entry may cover a document that has since
+ * been deleted, and a hash key covers files in workspaces this row knows
+ * nothing about.
+ *
+ * **Oldest first**, because the whole point is finding what has been sitting
+ * there. An entry with no `atMs` at all predates the field and sorts first.
+ *
+ * **Expired-but-unreleased rows are called out.** `isMediaQuarantineActive`
+ * stops enforcing the moment `untilMs` passes, with no write — so those rows
+ * refuse nothing and still consume the cap. They are the safest thing to
+ * clear first, and nothing else on the platform would ever have told you they
+ * were there.
  */
 
 import {
+  isMediaQuarantineActive,
   MEDIA_QUARANTINE_MESSAGE_MAX,
   MEDIA_QUARANTINE_NOTE_MAX,
   MEDIA_QUARANTINE_REASON_LABELS,
   MEDIA_QUARANTINE_REASONS,
+  normalizeMediaQuarantine,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -71,10 +103,15 @@ import {
   MenuItem,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -114,6 +151,81 @@ interface AssetLookup {
   readAtMs: number
 }
 
+/**
+ * One row of the whole deny list — the plain `GET`'s `records` shape, which
+ * is the stored entry with its map key spread on top. Everything but `key` is
+ * optional: entries written before a field existed simply do not carry it,
+ * and those are the oldest rows, which is to say the ones this table is for.
+ */
+interface QuarantineRecord {
+  key: string
+  reason?: string | null
+  message?: string | null
+  /** Staff-only rationale. Rendered here and nowhere a customer can reach. */
+  note?: string | null
+  atMs?: number | null
+  untilMs?: number | null
+  actorUid?: string | null
+  /** The copy an operator was looking at when they set it — often the only
+   * breadcrumb from a hash key back to a file. In the payload since AGL-1512
+   * and unrendered until now. */
+  originScopeSegment?: string | null
+  originMediaId?: string | null
+}
+
+interface DenyListing {
+  records: QuarantineRecord[]
+  count: number
+  maxEntries: number
+  readAtMs: number
+}
+
+/** Enforced now / expired with no write / unenforceable and unexplainable. */
+type RowState = 'active' | 'expired' | 'malformed'
+
+/**
+ * What kind of key a deny-list ROW holds, read from the key alone.
+ *
+ * The lookup card above gets `kind` from the server, which holds the media
+ * document to compare against. A row has no document — the deny list is keys
+ * and nothing else, which is the whole reason enumerating it needed its own
+ * surface. So a digest's LENGTH is the only signal there is: 64 hex
+ * characters is `contentSha256`, 16 is the legacy truncated digest, and
+ * anything else is a digest whose provenance this page will not guess at.
+ */
+function listedKeyKind(key: string): 'sha256' | 'legacy' | 'asset' | 'digest' {
+  if (key.startsWith('asset--')) return 'asset'
+  if (!key.startsWith('hash--')) return 'digest'
+  const digest = key.slice('hash--'.length)
+  if (digest.length === 64) return 'sha256'
+  if (digest.length === 16) return 'legacy'
+  return 'digest'
+}
+
+const LISTED_KIND_LABEL: Record<
+  ReturnType<typeof listedKeyKind>,
+  string
+> = {
+  sha256: 'sha256',
+  legacy: 'legacy digest',
+  asset: 'per-asset',
+  digest: 'digest',
+}
+
+/**
+ * Enforced, expired, or neither — decided against the server's own read time
+ * rather than the browser's clock, so the verdict on screen is the verdict at
+ * the moment the list was read. `normalizeMediaQuarantine` returns `null` for
+ * an entry whose reason nothing recognises, and the readers refuse such an
+ * entry WHOLE — so it enforces nothing while still consuming a slot, and it
+ * is the one row a release cannot be talked out of.
+ */
+function rowState(record: QuarantineRecord, nowMs: number): RowState {
+  const state = normalizeMediaQuarantine(record as any, record.key)
+  if (!state) return 'malformed'
+  return isMediaQuarantineActive(state, nowMs) ? 'active' : 'expired'
+}
+
 /** What a key of each kind actually reaches, in the operator's words. */
 const KEY_REACH: Record<AssetKey['kind'], string> = {
   sha256:
@@ -139,6 +251,7 @@ function AdminMediaQuarantine() {
   const [narrow, setNarrow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [lookup, setLookup] = useState<AssetLookup | null>(null)
+  const [listing, setListing] = useState<DenyListing | null>(null)
   const [log, setLog] = useState<
     { atMs: number; text: string; confirmed: boolean }[]
   >([])
@@ -182,6 +295,103 @@ function AdminMediaQuarantine() {
       setBusy(false)
     }
   }, [idToken, scopeKind, scopeId, mediaId, enqueueSnackbar])
+
+  /**
+   * The whole deny list. One document read, no media reads at all, and it
+   * runs on arrival rather than behind a button: an operator who came here
+   * because a takedown was refused with a 409 already knows the list is full
+   * and should not have to ask a second time to see what is in it.
+   */
+  const loadList = useCallback(async () => {
+    const token = await idToken()
+    if (!token) return
+    try {
+      const response = await fetch('/api/admin/media-quarantine', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Failed (${response.status})`)
+      }
+      setListing({
+        records: Array.isArray(payload.records) ? payload.records : [],
+        count: Number(payload.count ?? 0),
+        maxEntries: Number(payload.maxEntries ?? 0),
+        readAtMs: Number(payload.readAtMs ?? Date.now()),
+      })
+    } catch (error: any) {
+      console.error(error)
+      // Cleared, not kept. A table that silently goes stale is a table an
+      // operator releases from twice and believes once.
+      setListing(null)
+      enqueueSnackbar(error?.message ?? 'Reading the deny list failed', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [idToken, enqueueSnackbar])
+
+  const signedInUid = (user as any)?.uid
+  useEffect(() => {
+    if (!signedInUid) return
+    void loadList()
+    // Keyed on WHO is signed in, not on `loadList`. `useUser` hands back a
+    // fresh object on every render, so `idToken` and therefore `loadList`
+    // change identity every render too — depending on the callback re-reads
+    // the index document on each one, which on this page means a Firestore
+    // read per keystroke typed into the form above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedInUid])
+
+  /**
+   * Release ONE key — the entry this row is, not every key that could refuse
+   * some file. `by: "key"` exists for exactly this: the row may be a hash
+   * entry covering workspaces this page never looked at, or a per-asset entry
+   * whose document was deleted years ago, and clearing anything beyond the
+   * named key would be a takedown lifted by a click that never mentioned it.
+   */
+  const releaseKey = useCallback(
+    async (target: string) => {
+      const token = await idToken()
+      if (!token) return
+      setBusy(true)
+      try {
+        const response = await fetch('/api/admin/media-quarantine', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: 'release', by: 'key', key: target }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(payload.error ?? `Failed (${response.status})`)
+        }
+        const confirmed = payload.confirmed !== false
+        const what = `Released ${target}`
+        setLog((entries) =>
+          [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
+        )
+        enqueueSnackbar(
+          confirmed
+            ? `${what} — verified on the server (audited)`
+            : `${what} was accepted, but re-reading the deny list still shows it SET. Do not walk away.`,
+          { variant: confirmed ? 'success' : 'error', allowDuplicate: true },
+        )
+        await loadList()
+      } catch (error: any) {
+        console.error(error)
+        enqueueSnackbar(error?.message ?? 'The release failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [idToken, enqueueSnackbar, loadList],
+  )
 
   const act = useCallback(
     async (action: 'quarantine' | 'release') => {
@@ -234,6 +444,10 @@ function AdminMediaQuarantine() {
           { variant: confirmed ? 'success' : 'error', allowDuplicate: true },
         )
         await look()
+        // The table below is now wrong by exactly this action. Re-reading it
+        // costs one document and stops the two halves of the page from
+        // disagreeing about the same index.
+        await loadList()
       } catch (error: any) {
         console.error(error)
         enqueueSnackbar(error?.message ?? 'The quarantine action failed', {
@@ -256,6 +470,7 @@ function AdminMediaQuarantine() {
       until,
       enqueueSnackbar,
       look,
+      loadList,
     ],
   )
 
@@ -268,6 +483,27 @@ function AdminMediaQuarantine() {
       : lookup.keys[0]
     : undefined
   const full = lookup ? lookup.count >= lookup.maxEntries : false
+
+  /**
+   * Oldest first — the table's entire job is surfacing what has been sitting
+   * there, and an entry with no `atMs` predates the field, so it sorts ahead
+   * of every dated one rather than behind them.
+   */
+  const rows = useMemo(() => {
+    if (!listing) return []
+    return [...listing.records]
+      .map((record) => ({
+        record,
+        state: rowState(record, listing.readAtMs),
+      }))
+      .sort(
+        (a, b) =>
+          (typeof a.record.atMs === 'number' ? a.record.atMs : 0) -
+          (typeof b.record.atMs === 'number' ? b.record.atMs : 0),
+      )
+  }, [listing])
+  const clearable = rows.filter((row) => row.state !== 'active').length
+  const listFull = listing ? listing.count >= listing.maxEntries : false
 
   return (
     <DashboardLayout
@@ -562,6 +798,194 @@ function AdminMediaQuarantine() {
                 </Stack>
               </CardDisplay>
             ) : null}
+
+            <CardDisplay
+              header={'The whole deny list'}
+              help={docsHelp('lockdown', { anchor: '#quarantine-keys' })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={2}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  <Typography
+                    variant="body2"
+                    color={listFull ? 'error.main' : 'text.secondary'}
+                  >
+                    {listing
+                      ? `${listing.count} of ${listing.maxEntries} entries in use`
+                      : 'Reading the deny list…'}
+                  </Typography>
+                  {listing ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {`read ${new Date(listing.readAtMs).toLocaleString()}`}
+                    </Typography>
+                  ) : null}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={busy}
+                    onClick={() => void loadList()}
+                  >
+                    {'Refresh'}
+                  </Button>
+                </Stack>
+
+                {listFull ? (
+                  <Alert severity="error">
+                    {
+                      'The deny list is FULL. Until an entry is released the next NEW takedown is refused with a 409 — a report you cannot action. Releasing expired entries costs nothing: they already refuse nothing.'
+                    }
+                  </Alert>
+                ) : null}
+
+                {listing && clearable > 0 ? (
+                  <Alert severity="warning">
+                    {`${clearable} of these ${listing.count} entries enforce nothing right now — their expiry has passed, or their reason is one no reader recognises — and every one of them still occupies a slot. Clear these first.`}
+                  </Alert>
+                ) : null}
+
+                {listing && !rows.length ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {
+                      'The deny list is empty. Nothing on the platform is taken down.'
+                    }
+                  </Typography>
+                ) : null}
+
+                {rows.length ? (
+                  <Stack sx={{ overflowX: 'auto' }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>{'Key'}</TableCell>
+                          <TableCell>{'Reason'}</TableCell>
+                          <TableCell>{'Set'}</TableCell>
+                          <TableCell>{'Expires'}</TableCell>
+                          <TableCell>{'Set from'}</TableCell>
+                          <TableCell>{'Note'}</TableCell>
+                          <TableCell>{''}</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {rows.map(({ record, state }) => (
+                          <TableRow key={record.key}>
+                            <TableCell>
+                              <Stack spacing={0.5}>
+                                <Stack
+                                  direction="row"
+                                  spacing={0.5}
+                                  sx={{ alignItems: 'center' }}
+                                >
+                                  <Chip
+                                    size="small"
+                                    label={
+                                      LISTED_KIND_LABEL[
+                                        listedKeyKind(record.key)
+                                      ]
+                                    }
+                                  />
+                                  <Chip
+                                    size="small"
+                                    color={
+                                      state === 'active' ? 'error' : 'default'
+                                    }
+                                    label={
+                                      state === 'active'
+                                        ? 'enforcing'
+                                        : state === 'expired'
+                                          ? 'EXPIRED'
+                                          : 'UNREADABLE'
+                                    }
+                                  />
+                                </Stack>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    wordBreak: 'break-all',
+                                  }}
+                                >
+                                  {record.key}
+                                </Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">
+                                {(record.reason &&
+                                  (MEDIA_QUARANTINE_REASON_LABELS as any)[
+                                    record.reason
+                                  ]) ||
+                                  record.reason ||
+                                  'none recorded'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">
+                                {typeof record.atMs === 'number'
+                                  ? new Date(record.atMs).toLocaleString()
+                                  : 'unknown'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">
+                                {typeof record.untilMs === 'number'
+                                  ? new Date(record.untilMs).toLocaleString()
+                                  : 'no expiry'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography
+                                variant="caption"
+                                sx={{ wordBreak: 'break-all' }}
+                              >
+                                {record.originScopeSegment || record.originMediaId
+                                  ? `${record.originScopeSegment ?? '?'} / ${record.originMediaId ?? '?'}`
+                                  : 'not recorded'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {record.note || '—'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="small"
+                                color="success"
+                                disabled={busy || !canWrite}
+                                onClick={() => void releaseKey(record.key)}
+                              >
+                                {'Release'}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Stack>
+                ) : null}
+
+                <Typography variant="caption" color="text.secondary">
+                  {
+                    'A row is a KEY, not a file, and Release removes only the key it names. A file covered by two keys stays disabled until both rows are gone — look it up above if you need to be sure. The "set from" column records the one copy an operator was looking at when they set the entry; a digest key covers every copy of those bytes in every workspace, so it is a breadcrumb, not the reach.'
+                  }
+                </Typography>
+                {!canWrite ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {
+                      'Releasing requires the super staff role. Reading this list does not.'
+                    }
+                  </Typography>
+                ) : null}
+              </Stack>
+            </CardDisplay>
 
             <CardDisplay
               header={'Actions taken in this session'}
