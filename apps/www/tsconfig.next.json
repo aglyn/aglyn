@@ -23,6 +23,12 @@
       "@aglyn/aglyn/server": [
         "../../libs/aglyn/src/server.ts"
       ],
+      "@aglyn/aglyn-markdown-editor": [
+        "../../libs/aglyn-markdown-editor/src/index.ts"
+      ],
+      "@aglyn/aglyn-markdown-editor/*": [
+        "../../libs/aglyn-markdown-editor/src/lib/*"
+      ],
       "@aglyn/aglyn-node-renderer": [
         "../../libs/aglyn-node-renderer/src/index.ts"
       ],

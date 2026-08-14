@@ -23,6 +23,24 @@
  * strip types; jest uses babel/swc transforms), so this script is the only
  * whole-workspace type gate. Usage: `npm run typecheck` or
  * `node tools/scripts/typecheck.mjs [pathPrefix ...]` to filter.
+ *
+ * ## Why this script verifies the configs it skips (AGL-1723)
+ *
+ * It skips apps/*\/tsconfig.next.json by name (see findConfigs), which is the
+ * right call — but it left those files with no local reader at all. When
+ * AGL-1616 added a `paths` entry to tsconfig.base.json without re-running the
+ * generator, the drift was invisible for a full day: the generated files carry
+ * a do-not-edit header so nobody opens them, `typecheck` skipped them, and the
+ * only thing that could notice was a whole-repo CI step that simply went red
+ * unattended. Meanwhile several agents pointed a compiler at one by hand and
+ * each re-diagnosed the same seven fabricated "Cannot find module" errors.
+ *
+ * So the preflight below runs the generator's own `--check` before any tsc.
+ * This script is what everyone actually runs, it is the one command that
+ * knowingly declines to read these files, and 0.15s buys the difference
+ * between a named cause with its fix command and a wall of phantom TS2307s.
+ * It reports rather than aborts: real type errors are still worth seeing in
+ * the same run, and the drift verdict is repeated in the final summary.
  */
 
 import { execFile } from 'node:child_process'
@@ -86,6 +104,24 @@ if (!existsSync(TSC)) {
   process.exit(1)
 }
 
+/**
+ * Preflight: the generated Next tsconfigs we skip must still match their
+ * source. Runs regardless of `filters` — the drift is workspace-global and
+ * fabricates errors in whichever project you happened to scope to.
+ */
+async function checkGeneratedNextConfigs() {
+  const script = join(root, 'tools', 'scripts', 'sync-next-tsconfigs.mjs')
+  try {
+    await run(process.execPath, [script, '--check'], { cwd: root })
+    return true
+  } catch (err) {
+    console.error(String(err.stderr || err.stdout || err.message).trimEnd())
+    return false
+  }
+}
+
+const generatedConfigsInSync = await checkGeneratedNextConfigs()
+
 const CONCURRENCY = 4
 let failed = 0
 const queue = [...configs]
@@ -107,4 +143,10 @@ async function worker() {
 
 await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 console.log(`\n${configs.length - failed}/${configs.length} configs clean`)
-process.exit(failed ? 1 : 0)
+if (!generatedConfigsInSync) {
+  console.error(
+    'apps/*/tsconfig.next.json are STALE — run `node tools/scripts/sync-next-tsconfigs.mjs`.\n' +
+      'Any "Cannot find module" errors above may be fabricated by the stale alias map.',
+  )
+}
+process.exit(failed || !generatedConfigsInSync ? 1 : 0)
