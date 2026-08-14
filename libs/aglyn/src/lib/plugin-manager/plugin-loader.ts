@@ -189,6 +189,32 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
         warnStuck(targets)
       }
       promise = run()
+      // Stamp React's thenable contract (`status`/`value`/`reason`) onto the
+      // cached promise once it settles (AGL-1541). `use()` can only unwrap a
+      // thenable SYNCHRONOUSLY when it carries a status; a bare native
+      // promise — even a resolved one — suspends every first `use()` per
+      // render. On the server that suspension pushed the ENTIRE page out of
+      // the streamed shell into a late Suspense segment whose reveal and
+      // hydration retry both ride on `requestAnimationFrame`, which never
+      // fires in hidden/occluded/prerendered tabs — pages that never
+      // hydrate, analytics that never fire. With the stamp, any render after
+      // the first settle (every warm request; every client render after the
+      // chunks load) unwraps inline and never enters that path.
+      const tracked = promise as Promise<void> & {
+        status?: 'fulfilled' | 'rejected'
+        value?: void
+        reason?: unknown
+      }
+      tracked.then(
+        () => {
+          tracked.status = 'fulfilled'
+          tracked.value = undefined
+        },
+        (reason) => {
+          tracked.status = 'rejected'
+          tracked.reason = reason
+        },
+      )
       ensures.set(key, promise)
     }
     return promise

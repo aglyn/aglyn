@@ -19,7 +19,6 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
-import { Suspense } from 'react'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
 import type { Props } from './types'
@@ -720,11 +719,20 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
         />
       ))}
       {/* The client suspends until the org-enabled site plugins register
-          (AGL-417) — streaming SSR awaits the dynamic imports, so published
-          screens keep their full HTML. */}
-      <Suspense fallback={null}>
-        <CatchAllClient {...clientProps} />
-      </Suspense>
+          (AGL-417). Deliberately NO Suspense boundary here (AGL-1541): with
+          one, the plugin-gate suspension pushed the ENTIRE page out of the
+          streamed shell into a late `<div hidden id="S:0">` segment whose
+          reveal — and React's hydration retry for the boundary — both ride
+          on `requestAnimationFrame` in the Fizz runtime. rAF is not
+          guaranteed to fire (hidden, occluded, or prerendered tabs), so
+          those visitors got a page that never hydrated: no analytics, no
+          consent surface, dead forms. Without the boundary a cold render
+          blocks the shell for the plugin imports (~100ms, once per server
+          process — ISR caches the result), every render ships the full HTML
+          inline, and client hydration retries ride the normal scheduler,
+          which runs everywhere. The ensure promise is status-stamped
+          (plugin-loader.ts), so warm renders don't suspend at all. */}
+      <CatchAllClient {...clientProps} />
     </>
   )
 }
