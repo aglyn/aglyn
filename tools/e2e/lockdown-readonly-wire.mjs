@@ -797,15 +797,22 @@ await hostRef.set(
     suspendedReasonCode: FieldValue.delete(),
     suspendedMessage: FieldValue.delete(),
     suspendedMode: FieldValue.delete(),
-    // The probe member too: `seed:e2e` is shared with every other local
-    // harness, and an extra editor on the demo site is exactly the kind of
-    // leftover that makes someone else's role assertion pass for the wrong
-    // reason. The auth account is left in place — it is cheap to reuse and
-    // grants nothing without this role.
-    [`memberRoles.${PROBE_UID}`]: FieldValue.delete(),
   },
   { merge: true },
 )
+// The probe member too: `seed:e2e` is shared with every other local harness,
+// and an extra editor on the demo site is exactly the kind of leftover that
+// makes someone else's role assertion pass for the wrong reason. The auth
+// account is left in place — it is cheap to reuse and grants nothing without
+// this role.
+//
+// `update` with a dotted path, NOT `set(..., {merge:true})`: in `set` a
+// dotted key is a LITERAL field name, so the merge form would quietly create
+// a top-level field called `memberRoles.wire-readonly-probe` and leave the
+// real nested role exactly where it was.
+await hostRef
+  .update({ [`memberRoles.${PROBE_UID}`]: FieldValue.delete() })
+  .catch(() => {})
 await orgRef
   .collection('members')
   .doc(PROBE_UID)
