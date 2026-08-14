@@ -10,7 +10,7 @@ control below exists in the product today. The section on what we **do not**
 have is deliberately first, because that is the part a reviewer needs and the
 part a page like this usually buries.
 
-_Last reviewed 2 August 2026._
+_Last reviewed 14 August 2026._
 
 ## What we do not have
 
@@ -36,6 +36,7 @@ does not exist.
 | --- | --- |
 | **Google Cloud / Firebase** | Primary datastore (Firestore), authentication, file storage. US region. |
 | **Google reCAPTCHA** | Bot protection on authentication and data access, via Firebase App Check. |
+| **Google Analytics** | Product and site analytics for `aglyn.com`, the console and these docs — a single GA4 property. Configured for measurement only: Google Signals off, ads personalization disabled in every region, no Google Ads account linked, no user-provided data collection, email redaction on, 14-month retention. |
 | **Vercel** | Application hosting and CDN for the console, published sites and docs. |
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |

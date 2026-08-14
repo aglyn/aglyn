@@ -453,6 +453,34 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    before the docs tag is deployed, since deploying widens an existing
    inaccuracy rather than creating one. Filed as AGL-1594. The scope clause
    itself is fine: it names `docs.aglyn.com` explicitly in every version.
+
+   **Decided (AGL-1594, 2026-08-14).** The replacement wording is approved and
+   drafted on AGL-1594: keep "no advertising technology" and keep the CCPA
+   "we do not sell or share" conclusion, both of which the GA configuration
+   genuinely supports, and replace only the blanket "no third-party analytics"
+   with a named, accurate description of the one analytics provider we run.
+   **Not yet published** — the privacy page and the Cookie Policy are besigner
+   content on the live marketing site, so the correction is a publication step,
+   and the hashed v4 snapshot must be re-captured *after* it, never before: a
+   snapshot is evidence of what a user was shown, so writing one for text that
+   is not live would be its own false record. v4 is still unpromoted, so this
+   folds into the existing v4 snapshot rather than forcing a v5 and a global
+   clickwrap re-acceptance.
+
+   **The Cookie Policy contradicts itself the same way, and worse.** Live at
+   `aglyn.com/legal/cookies`: §2 *Analytics / performance* correctly discloses
+   Google Analytics, while §4 *Your choices* states "we do not set analytics or
+   marketing cookies, so there is no non-essential category to consent to, and
+   we do not show a cookie banner" — with `_ga` and `_ga_YW5PG16YTM` listed in
+   that same document's own cookie table two sections above. §2 also scopes GA
+   to "the console (app.aglyn.com)" alone, which understates it: one stream
+   serves all three domains. The AGL-1594 prediction that the proposed
+   `cookies-corrections.md` text would compound the problem is confirmed — it
+   is published.
+
+   `apps/docs/src/pages/trust.md` now lists Google Analytics in its
+   subprocessor table with the configuration above (2026-08-14); it made no
+   analytics claim before, so it was an omission rather than a contradiction.
 4. **Enhanced measurement's Site search on docs is unverified.** Docusaurus's
    local search navigates to `/search?q=…`, and `q` is one of the query keys
    enhanced measurement watches, so `view_search_results` may already be
