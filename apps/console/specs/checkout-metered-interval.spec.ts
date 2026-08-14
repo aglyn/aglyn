@@ -244,3 +244,7 @@ describe('the metered usage item follows the plan interval (AGL-1340/AGL-1280)',
     expect(warnings).toHaveLength(0)
   })
 })
+
+// Top-level consts collide across spec files unless the file is a module
+// (tsc treats an import-free .ts as a global script; jest does not care).
+export {}

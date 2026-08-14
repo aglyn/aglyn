@@ -213,3 +213,7 @@ describe('AGL-1510 · the checkout feature gate on billing/checkout', () => {
     expect(mockStripeFetch).toHaveBeenCalledTimes(1)
   })
 })
+
+// Top-level consts collide across spec files unless the file is a module
+// (tsc treats an import-free .ts as a global script; jest does not care).
+export {}
