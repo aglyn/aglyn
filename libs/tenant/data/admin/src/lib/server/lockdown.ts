@@ -178,6 +178,26 @@ export async function getLockdownVerdict(
  * not a mystery 403. Carries only the sanitized, user-facing subset — never
  * the actor uid or staff rationale.
  */
+/**
+ * Verdict and refusal in one call — the two-line wiring every org-scoped
+ * API route carries (AGL-1506):
+ *
+ *   const locked = await lockdownRefusal({ staff, uid, org, host })
+ *   if (locked) return locked
+ *
+ * Null means "not locked, proceed". One mechanism: this delegates to
+ * `getLockdownVerdict` (so the un-panic invariant and fail-open posture are
+ * inherited, never re-implemented) and to `lockdownJsonResponse` for the
+ * distinct 423 body. Routes with a richer flow (the session mint clears
+ * cookies on refusal) keep calling the two halves directly.
+ */
+export async function lockdownRefusal(
+  options: LockdownVerdictOptions,
+): Promise<Response | null> {
+  const state = await getLockdownVerdict(options)
+  return state ? lockdownJsonResponse(state) : null
+}
+
 export function lockdownJsonResponse(state: LockdownState): Response {
   const notice = lockdownNotice(state)
   const retryAfter = lockdownRetryAfterSeconds(state, Date.now())

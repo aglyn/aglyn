@@ -39,7 +39,13 @@ import {
   type BillingInterval,
 } from '../../../../utils/server/billing-addons'
 
+// lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
+// sessions alive PRECISELY so members can reach billing and pay; a 423
+// here would break the page they need. Security/manual locks revoke
+// tokens at lock time, which closes this surface within the token hour.
+
 /** Kinds without a per-plan hard max get sane purchase ceilings. */
+
 const EXTRA_HOSTS_MAX = 100
 const POS_REGISTERS_MAX = 50
 

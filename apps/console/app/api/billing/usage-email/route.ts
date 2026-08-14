@@ -29,7 +29,10 @@ import {
   meterOrgEmail,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller.
+
 /** Previous calendar month as YYYY-MM (the default summary target). */
+
 function previousMonth(): string {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))

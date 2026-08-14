@@ -18,6 +18,11 @@
 import { runLegacyHandler } from '@aglyn/aglyn/server'
 import { serveMediaCdn } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — anonymous public delivery (images to visitors); no caller identity
+// to verdict. A takedown evicts via revalidation, signed URLs expire
+// in minutes, and per-request org reads here are the AGL-1302 budget
+// this cache exists to avoid.
+
 export const dynamic = 'force-dynamic'
 
 /**

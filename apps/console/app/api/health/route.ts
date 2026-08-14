@@ -59,7 +59,10 @@ import {
   type HealthCheck,
 } from '@aglyn/aglyn/server'
 
+// lockdown-423: exempt — infrastructure liveness probe; unauthenticated by design.
+
 /** Never prerender, never revalidate — property 1 above. */
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 

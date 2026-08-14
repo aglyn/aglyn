@@ -37,6 +37,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import {
   EXPORT_COLLECTION_LIMITS,
@@ -569,6 +570,19 @@ async function handler(request: Request): Promise<Response> {
     // datasets and media restore into the org, not the host (AGL-1046).
     const owningOrg = await getOrgForHost(hostId)
     const orgId = owningOrg?.orgId
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes with the
+    // docs already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant. Before the cap checks as well as the writes — a
+    // locked workspace gets the 423, not a quota refusal.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: owningOrg?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
+
     if (!checkEntitlement(owningOrg?.org as any, 'siteExport')) {
       return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
     }

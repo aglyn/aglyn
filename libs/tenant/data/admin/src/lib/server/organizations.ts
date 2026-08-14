@@ -361,15 +361,28 @@ export async function getOrgForHost(hostId: string): Promise<{
 }
 
 /**
+ * The raw host doc, `React.cache`-deduped per request like
+ * {@link resolveOrgIdForHost}. Null when missing. Added for AGL-1506 so a
+ * dispatcher that already pays this read for the plugin deny-list can also
+ * feed the host's `suspendedAt` family to the lockdown verdict without a
+ * second get. Same read-only contract as {@link getOrgDoc}.
+ */
+export const getHostDocAdmin = cache(
+  async (hostId: string): Promise<Record<string, unknown> | null> => {
+    const snapshot = await firestore().collection('hosts').doc(hostId).get()
+    return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
+  },
+)
+
+/**
  * The host's per-site plugin deny-list (AGL-1014), for API dispatch and any
- * other server consumer of `resolveHostEnabledPlugins`. `React.cache`-deduped
- * per request like {@link resolveOrgIdForHost}. Fail-open to [] — an absent
+ * other server consumer of `resolveHostEnabledPlugins`. Rides
+ * {@link getHostDocAdmin}'s request-cached read. Fail-open to [] — an absent
  * host doc or field means "nothing disabled here", never a lockout.
  */
 export const getHostDisabledPlugins = cache(
   async (hostId: string): Promise<string[]> => {
-    const snapshot = await firestore().collection('hosts').doc(hostId).get()
-    const disabled = snapshot.data()?.['disabledPlugins']
+    const disabled = (await getHostDocAdmin(hostId))?.['disabledPlugins']
     return Array.isArray(disabled) ? disabled.map(String) : []
   },
 )

@@ -36,6 +36,9 @@ import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
 
+// lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
+// its way out (AGL-1501 keeps those sessions for exactly this).
+
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,

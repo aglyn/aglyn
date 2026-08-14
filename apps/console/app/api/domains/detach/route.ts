@@ -19,7 +19,9 @@ import { pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -77,6 +79,19 @@ async function handler(request: Request): Promise<Response> {
     if (memberRole !== 'admin') {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): host doc in hand; the owning org's doc
+    // is fetched for the org scope (an org lock never stamps host docs, so
+    // host-only would miss it) — a domain detach is a rare admin mutation,
+    // and the read is request-cache-deduped. Staff bypass is the un-panic
+    // invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
 
     // Only this host's own domain may be released — never a domain read off
     // the request body, which would let an admin detach someone else's.

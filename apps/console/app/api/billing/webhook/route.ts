@@ -35,7 +35,11 @@ import {
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
 
+// lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
+// org PAYS through; a 423 here would block the recovery it needs.
+
 /** Verifies a `Stripe-Signature` header against the signing secret. */
+
 function verifyStripeSignature(
   payload: Buffer,
   header: string,

@@ -29,6 +29,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
   meterOrgEmail,
   OrgSlugTakenError,
 } from '@aglyn/tenant-data-admin'
@@ -76,6 +77,14 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
+    // Lockdown verdict (AGL-1506): the org scope has no carrier before the
+    // org exists — platform and user locks still refuse creation; distinct
+    // 423 body; staff bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+    })
+    if (locked) return locked
     const orgId = await createOrganization({
       name,
       slug,

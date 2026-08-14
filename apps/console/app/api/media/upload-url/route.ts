@@ -107,13 +107,17 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    const { scope, error } = await resolveMediaScope(
-      body,
-      query,
-      decoded.uid,
-    )
+    // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
+    // resolver runs the verdict on the org/host docs it already reads and
+    // hands the 423 refusal back as `error.response`.
+    const { scope, error } = await resolveMediaScope(body, query, decoded.uid, {
+      staff: decoded['staff'] === true,
+    })
     if (!scope) {
-      return Response.json({ error: error?.message ?? 'Bad request' }, { status: error?.status ?? 400 })
+      return (
+        error?.response ??
+        Response.json({ error: error?.message ?? 'Bad request' }, { status: error?.status ?? 400 })
+      )
     }
     const bucket = firebaseAdmin
       .app()

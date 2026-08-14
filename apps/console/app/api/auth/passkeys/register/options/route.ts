@@ -22,6 +22,9 @@ import {
 } from '../../../../_lib/passkeys'
 import { requirePasskeyEligibleUser } from '../../_lib/passkey-auth'
 
+// lockdown-423: exempt — sign-in machinery, pre-session; the session mint (AGL-1501) is the
+// lockdown chokepoint for every authentication flow.
+
 export const dynamic = 'force-dynamic'
 
 /**

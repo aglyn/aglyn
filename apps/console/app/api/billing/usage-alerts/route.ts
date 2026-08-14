@@ -35,6 +35,9 @@ import {
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 
+// lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
+// the billing auto-lock sweep; gating the locker on the lock is circular.
+
 /**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
  * quota banner only helps people who are looking — this cron pushes a

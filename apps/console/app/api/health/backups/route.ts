@@ -55,7 +55,10 @@ import {
   type BackupsCheck,
 } from '@aglyn/aglyn/server'
 
+// lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
+
 /** Never prerender, never revalidate. */
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 

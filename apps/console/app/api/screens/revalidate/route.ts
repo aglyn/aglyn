@@ -40,7 +40,9 @@ import { pluginRequestFromWeb, screenRoutePathToUrl } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
@@ -291,6 +293,20 @@ export async function POST(request: Request): Promise<Response> {
       // learn that it exists.
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
+
+    // Lockdown verdict (AGL-1506): host doc in hand; the owning org's doc
+    // is fetched for the org scope (an org lock never stamps host docs, so
+    // host-only would miss it). The LOCKDOWN flow's own cache eviction
+    // goes through the tenant's /api/revalidate with the service secret,
+    // never through here, so this cannot 423 the eviction that makes a
+    // lock stick. Staff bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
 
     const subdomain = String(hostSnapshot.get('subdomain') ?? '')
     if (!subdomain) {

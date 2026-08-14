@@ -23,8 +23,11 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   filterEnabledPluginsByReleaseFlags,
+  firebaseAdmin,
   getHostDisabledPlugins,
+  getHostDocAdmin,
   getOrgForHost,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
@@ -56,6 +59,8 @@ async function dispatch(
   // is only the fallback for paths registered outside the loader.
   const pluginId =
     pluginIdForRegisteredApiPath(path) ?? loader.pluginIdForApiPath(path)
+  let lockdownOrg: Record<string, unknown> | undefined
+  let lockdownHost: Record<string, unknown> | undefined
   if (pluginId) {
     const url = new URL(request.url)
     let hostId = url.searchParams.get('hostId') ?? ''
@@ -70,11 +75,15 @@ async function dispatch(
     if (hostId) {
       // Per-site enablement (AGL-1014): the org set minus the host's
       // deny-list — a plugin disabled for THIS site has no API surface for
-      // it, exactly like an org-disabled one.
-      const [resolved, disabledPlugins] = await Promise.all([
+      // it, exactly like an org-disabled one. The host doc ride-along is
+      // request-cached with the deny-list read (one get, AGL-1506).
+      const [resolved, disabledPlugins, hostDoc] = await Promise.all([
         getOrgForHost(hostId),
         getHostDisabledPlugins(hostId),
+        getHostDocAdmin(hostId),
       ])
+      lockdownOrg = resolved?.org as Record<string, unknown> | undefined
+      lockdownHost = hostDoc ?? undefined
       if (
         resolved &&
         !resolveHostEnabledPlugins(resolved.org, { disabledPlugins }).includes(
@@ -97,6 +106,35 @@ async function dispatch(
       }
     }
   }
+
+  // Lockdown verdict (AGL-1506) for the whole plugin API surface, with
+  // whatever scope the dispatch resolved: org+host docs when the request
+  // named a hostId (already read above — no extra get), platform always
+  // (TTL-cached). Staff bypass mirrors the release-flag filter's bearer
+  // decode; anonymous callers (tenant form posts) carry no uid, so the
+  // per-call user-lockdown read is only paid by signed-in console callers.
+  let staff = false
+  let uid: string | null = null
+  const authorization = request.headers.get('authorization') ?? ''
+  if (authorization.startsWith('Bearer ')) {
+    try {
+      const decoded = await firebaseAdmin
+        .app()
+        .auth()
+        .verifyIdToken(authorization.slice('Bearer '.length))
+      staff = decoded['staff'] === true
+      uid = decoded.uid
+    } catch {
+      // Not a Firebase token (plugin key / anonymous) — no bypass, no uid.
+    }
+  }
+  const locked = await lockdownRefusal({
+    staff,
+    uid,
+    org: lockdownOrg,
+    host: lockdownHost,
+  })
+  if (locked) return locked
 
   const route = resolvePluginApiRoute(path)
   if (!route) return Response.json({ error: 'Not found' }, { status: 404 })

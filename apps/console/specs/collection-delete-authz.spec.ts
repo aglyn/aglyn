@@ -105,6 +105,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   eraseSubtree: (...args: unknown[]) => mockEraseSubtree(...args),
   isImpersonationSession: () => false,
+  // AGL-1506: inert verdict — the 423 wiring has its own specs; these
+  // suites test other properties and must not depend on lockdown reads.
+  lockdownRefusal: async () => null,
   resolveOrgMembership: async () => null,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),

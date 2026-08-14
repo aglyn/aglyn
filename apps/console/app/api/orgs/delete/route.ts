@@ -20,6 +20,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
   logOrgActivity,
 } from '@aglyn/tenant-data-admin'
 
@@ -72,6 +73,16 @@ async function handler(request: Request): Promise<Response> {
         error: 'Only the organization owner can delete it',
       }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/user scopes with the org
+    // doc already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: orgSnapshot.data(),
+    })
+    if (locked) return locked
 
     const requesting = action === 'request'
     await orgRef.set(

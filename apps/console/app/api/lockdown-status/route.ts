@@ -31,6 +31,9 @@
 import { lockdownNotice, lockdownRetryAfterSeconds } from '@aglyn/aglyn/server'
 import { getPlatformLockdown } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — THE notice surface — what a locked-out client calls to learn WHY.
+// Gating it on the lock would blank the notice it exists to serve.
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(): Promise<Response> {

@@ -41,6 +41,9 @@ import {
   type AddonKind,
 } from '../../../../utils/server/billing-addons'
 
+// lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
+// billing lock; part of the surface AGL-1501 keeps sessions alive for.
+
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,

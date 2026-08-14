@@ -25,8 +25,11 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
+  getLockdownVerdict,
   getOrgDoc,
   getOrgForHost,
+  lockdownJsonResponse,
+  type LockdownVerdictOptions,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
@@ -69,6 +72,31 @@ export function scopeAllows(
 export interface MediaScopeError {
   status: number
   message: string
+  /**
+   * Prebuilt refusal, when the error is richer than `{status, message}` —
+   * today the 423 lockdown body (AGL-1506). Callers return it as-is:
+   * `error.response ?? Response.json({error: message}, {status})`.
+   */
+  response?: Response
+}
+
+/**
+ * Lockdown verdict as a `MediaScopeError` (AGL-1506). Lives here because
+ * this resolver is the one chokepoint every media mutation route passes
+ * through, and it already holds the docs the verdict wants — the org doc
+ * (`billing`) either way, the host doc on the host branch — so the org and
+ * host scopes cost no extra read. Null = not locked.
+ */
+async function lockdownScopeError(
+  options: LockdownVerdictOptions,
+): Promise<MediaScopeError | null> {
+  const state = await getLockdownVerdict(options)
+  if (!state) return null
+  return {
+    status: 423,
+    message: `Locked: ${state.reason}`,
+    response: lockdownJsonResponse(state),
+  }
 }
 
 /**
@@ -82,6 +110,10 @@ export async function resolveMediaScope(
   body: Record<string, unknown> | undefined,
   query: Partial<Record<string, string | string[]>>,
   uid: string,
+  options?: {
+    /** Verified `staff` claim of the caller — the lockdown un-panic bypass. */
+    staff?: boolean
+  },
 ): Promise<{ scope?: MediaScope; error?: MediaScopeError }> {
   const firestore = firebaseAdmin.app().firestore()
   const orgId = String(body?.['orgId'] ?? query['orgId'] ?? '') || null
@@ -99,6 +131,12 @@ export async function resolveMediaScope(
       }
     }
     const org = (await getOrgDoc(orgId)) ?? {}
+    const locked = await lockdownScopeError({
+      staff: options?.staff,
+      uid,
+      org,
+    })
+    if (locked) return { error: locked }
     return {
       scope: {
         base: `orgs/${orgId}`,
@@ -131,6 +169,13 @@ export async function resolveMediaScope(
     return { error: { status: 403, message: 'Not a site admin' } }
   }
   const billing = (await getOrgForHost(hostId))?.org ?? {}
+  const locked = await lockdownScopeError({
+    staff: options?.staff,
+    uid,
+    org: billing,
+    host: hostSnapshot.data(),
+  })
+  if (locked) return { error: locked }
   return {
     scope: {
       base: `hosts/${hostId}`,

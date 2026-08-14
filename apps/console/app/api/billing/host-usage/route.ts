@@ -23,6 +23,9 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — read feeding the self-serve billing page; kept whole under a billing
+// lock so members can see and fix what they owe (see billing/checkout).
+
 /**
  * This month's page views for ONE site (AGL-41 follow-up — the bandwidth row
  * previously showed "not yet metered"). The console sums this across the

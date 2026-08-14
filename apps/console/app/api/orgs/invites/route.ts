@@ -38,7 +38,9 @@ import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
+  lockdownRefusal,
   logOrgActivity,
   meterOrgEmail,
   notifyOrgAdmins,
@@ -119,6 +121,17 @@ async function handler(request: Request): Promise<Response> {
       .collection('invites')
 
     const actorManages = isStaff || canManageOrg(actor?.member.role)
+
+    // Lockdown verdict (AGL-1506): platform/org/user scopes — the action
+    // branches below read the org doc lazily, so the org scope rides on the
+    // request-deduped `getOrgDoc` read; distinct 423 body; staff bypass is
+    // the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org: (await getOrgDoc(orgId)) ?? undefined,
+    })
+    if (locked) return locked
 
     /**
      * The org's slug, for the deep link on admin notifications (AGL-1116).

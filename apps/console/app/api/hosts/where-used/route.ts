@@ -24,7 +24,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import {
   scanComponentUsage,
@@ -118,6 +120,19 @@ async function handler(request: Request): Promise<Response> {
     if (!memberRole) {
       return Response.json({ error: 'Not a site admin' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct
+    // 423 body — API consumers see it on reads too. The org doc is fetched
+    // deliberately — an org lock never stamps host docs, so a host-only
+    // verdict would silently miss it. Staff bypass is the un-panic
+    // invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
 
     const dependents: WhereUsedDependent[] = []
 

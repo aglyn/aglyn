@@ -19,7 +19,9 @@ import { memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
+  lockdownRefusal,
   mediaSignatureQuery,
   mintMediaSignature,
   resolveOrgMembership,
@@ -68,6 +70,40 @@ async function handler(request: Request): Promise<Response> {
     }
     const isStaff = decoded['staff'] === true
 
+    // One 404 for every refusal below — missing, deleted, out of scope, or
+    // not private. A caller who cannot have the asset must not be able to
+    // tell those apart, or this route becomes an oracle for which ids and
+    // scopes exist.
+    const refuse = () =>
+      Response.json({ error: 'Not found' }, { status: 404 })
+
+    let member: any
+    if (!isStaff) {
+      const membership = await resolveOrgMembership(decoded.uid, orgId)
+      member = membership?.member as any
+      if (!member) return refuse()
+      // lockdown-423, projection kept (AGL-1506): this route signs every
+      // private-asset preview, so the cheap `orgSuspended` member
+      // projection stays its per-request org signal — the happy path adds
+      // NO reads (the platform scope is TTL-cached in-process, and the
+      // user scope is deliberately omitted: a user lock disables the
+      // account and revokes tokens at lock time, so the token this route
+      // verifies dies on its own). Only when the projection trips is the
+      // org doc read — locked callers are rare — to build the distinct
+      // 423 body. Runs BEFORE the asset read so a locked member's 423
+      // reveals nothing about which asset ids exist. If the doc lock is
+      // inactive while the projection still says locked, the
+      // pre-AGL-1506 refusal stands — a disagreement never loosens.
+      const locked = await lockdownRefusal({
+        org:
+          member.orgSuspended === true
+            ? ((await getOrgDoc(orgId)) ?? {})
+            : undefined,
+      })
+      if (locked) return locked
+      if (member.orgSuspended === true) return refuse()
+    }
+
     const snapshot = await firebaseAdmin
       .app()
       .firestore()
@@ -77,19 +113,10 @@ async function handler(request: Request): Promise<Response> {
       .doc(mediaId)
       .get()
 
-    // One 404 for every refusal below — missing, deleted, out of scope, or
-    // not private. A caller who cannot have the asset must not be able to
-    // tell those apart, or this route becomes an oracle for which ids and
-    // scopes exist.
-    const refuse = () =>
-      Response.json({ error: 'Not found' }, { status: 404 })
     if (!snapshot.exists || snapshot.get('deletedAt')) return refuse()
 
-    if (!isStaff) {
-      const membership = await resolveOrgMembership(decoded.uid, orgId)
-      const member = membership?.member as any
-      if (!member || member.orgSuspended === true) return refuse()
-      if (!memberCanSee(member, snapshot.get('visibleTo'))) return refuse()
+    if (!isStaff && !memberCanSee(member, snapshot.get('visibleTo'))) {
+      return refuse()
     }
 
     if (snapshot.get('private') !== true) return refuse()

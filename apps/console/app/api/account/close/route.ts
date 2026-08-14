@@ -37,6 +37,10 @@ import { FieldValue } from 'firebase-admin/firestore'
  * caller cannot be turned into a way to delete someone else.
  */
 
+// lockdown-423: exempt — not org-scoped: closes the CALLER's account (erasure right). A
+// user-locked account cannot reach it anyway — the lock disables the
+// account and revokes tokens — and org standing must not gate erasure.
+
 /**
  * How fresh the sign-in behind the token has to be.
  *

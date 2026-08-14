@@ -50,9 +50,84 @@ const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
  *
  * The immutable content-hashed form is untouched: its URL changes with its
  * bytes, so it can and should be pinned in the browser for a year.
+ *
+ * Since AGL-1515 this policy applies to IMAGE responses only — see
+ * {@link mediaCdnEdgeCacheable}.
  */
 export const MEDIA_CDN_STABLE_CACHE_CONTROL =
   'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
+
+/**
+ * The stable URL's policy for types the edge must never hold (AGL-1515):
+ * the same 60-second browser window and the same ETag/304 contract, with
+ * `private` in place of `public, s-maxage` so no shared cache stores a
+ * full body.
+ *
+ * Why the edge must never hold one: Vercel's edge, holding a cached
+ * full-body 200, answers a `Range` request FROM that entry as a
+ * spec-violating hybrid — status 200, a `Content-Range` header, and only
+ * the requested slice as the body (`x-vercel-cache: HIT`; reproduced twice
+ * on production, 2026-08-13). A video player seeking into such an asset
+ * adopts a 100-byte slice as the complete file: silent playback corruption.
+ *
+ * The S4 shape below this constant was built on Vercel's documented
+ * cacheable-response criteria ("Request doesn't contain Range header"),
+ * read as "ranged requests bypass the edge". Production falsified that
+ * reading: the criteria govern what the edge STORES, not what it SERVES. A
+ * ranged request is still matched against the URL-keyed entry a previous
+ * plain GET left behind, and the edge's slicing layer rewrites the body
+ * and adds `Content-Range` without rewriting the stored 200 status.
+ *
+ * `private` is the lever because it is in the same documented criteria
+ * list as an absolute storage preventer ("Response doesn't contain the
+ * `private` … directives"), where `Vary: Range` is undocumented on
+ * Vercel, discouraged by RFC 9110, and untestable anywhere but a
+ * production deploy. What it costs: edge caching for non-image assets
+ * under Vercel's 10 MB cacheable-size cap. Real video mostly sits ABOVE
+ * the cap and was never edge-cached — the mangling reproduced on a 186 KB
+ * asset precisely because small ones are the ones that get cached.
+ */
+export const MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL =
+  'private, max-age=60'
+
+/** The immutable content-hashed URL's policy for edge-cacheable (image) types. */
+export const MEDIA_CDN_IMMUTABLE_CACHE_CONTROL =
+  'public, max-age=31536000, immutable'
+
+/**
+ * The immutable URL's policy for edge-bypassing types (AGL-1515): the
+ * browser keeps its year — the URL still changes with the bytes — while
+ * the edge holds nothing it could mangle.
+ */
+export const MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL =
+  'private, max-age=31536000, immutable'
+
+/**
+ * Whether a response of this content type may be edge-cached (AGL-1515).
+ *
+ * The split is "types no realistic client ranges into": browsers fetch
+ * images with plain GETs (`<img>`, `srcSet`, save-as — all of them), while
+ * every consumer that seeks or resumes — `<video>`/`<audio>` players, PDF
+ * viewers, download managers — operates on the non-image types. Images stay
+ * on the shared edge policy because they are the DAM grid's hot path (4.3 KB
+ * WebP tiles at volume), and pushing them to origin to fix video would trade
+ * a real regression for a theoretical one.
+ *
+ * Accepted residual, recorded here on purpose: a hand-built `Range` request
+ * against an edge-cached IMAGE can still be answered with the hybrid (that
+ * is exactly the AGL-1515 favicon repro). No browser or player issues one,
+ * and the alternative — `private` on images too — costs the hot path an
+ * edge hit rate it measurably has.
+ *
+ * Unknown or absent types return false: correctness over cache.
+ */
+export function mediaCdnEdgeCacheable(contentType: unknown): boolean {
+  return String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase()
+    .startsWith('image/')
+}
 
 /**
  * The CDN's OWN Content-Security-Policy (AGL-1474).
@@ -487,8 +562,20 @@ export async function serveMediaCdn(
     const etag = currentHash
       ? `"${currentHash}${useVariant ? `-w${width}` : ''}${download ? '-dl' : ''}"`
       : null
+    // AGL-1515: which cache tier may hold this response is a function of the
+    // served type — see mediaCdnEdgeCacheable. Decided here from the DOC's
+    // type (a variant serve is always `image/webp`) because the 304 exit
+    // below runs before the Storage metadata read; re-derived from the
+    // authoritative served type once metadata is in hand.
+    const stableCacheControlFor = (type: unknown) =>
+      mediaCdnEdgeCacheable(type)
+        ? MEDIA_CDN_STABLE_CACHE_CONTROL
+        : MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL
+    const docServedType = useVariant
+      ? 'image/webp'
+      : snapshot.get('contentType')
     if (!hashed) {
-      setCacheControl(MEDIA_CDN_STABLE_CACHE_CONTROL)
+      setCacheControl(stableCacheControlFor(docServedType))
       if (etag) res.setHeader('ETag', etag)
       if (etag && req.headers['if-none-match'] === etag) {
         res.status(304).end()
@@ -539,17 +626,25 @@ export async function serveMediaCdn(
     // PDF viewer or a download manager not to ask for something we would
     // happily serve, and the header is not part of any cache key.
     //
-    // Caching shape, established from Vercel's documented criteria rather
-    // than assumed: a request carrying `Range` fails the CDN's
-    // cacheable-response criteria ("Request doesn't contain Range header"),
-    // and 206 is not in its cacheable status list — so every ranged request
-    // reaches this function and its 206 is never stored at the edge. The
-    // edge keeps caching only the full 200s (as today), which means a cached
-    // full body and a function-served partial can never cross. The 206
-    // therefore keeps the URL class's own Cache-Control: at the edge it is
-    // moot, and in the browser a 206 under a STRONG validator is exactly
-    // what lets a player reuse the segments it already fetched.
+    // Caching shape (AGL-1515): S4 read Vercel's cacheable-response
+    // criteria ("Request doesn't contain Range header") as "a cached full
+    // body and a function-served partial can never cross". Production
+    // falsified that: the criteria govern what the edge STORES, not what it
+    // SERVES, and the edge answers a ranged request from an existing cached
+    // full-body 200 as a 200 + Content-Range + sliced-body hybrid. The fix
+    // is upstream of this line — every type a ranged consumer actually uses
+    // is served `private` (see mediaCdnEdgeCacheable), so the entry the
+    // edge would mangle never exists and every ranged request reaches this
+    // function for a real 206. In the browser the 206 rides the same
+    // Cache-Control as its URL class: a 206 under a STRONG validator is
+    // exactly what lets a player reuse the segments it already fetched.
     res.setHeader('Accept-Ranges', 'bytes')
+    // The authoritative tier decision, now that the served type is known
+    // from Storage metadata rather than inferred from the doc. Overwrites
+    // the header set before the 304 exit iff the two disagree — and the
+    // BODY-serving response is the one the edge could store, so this one
+    // must win.
+    if (!hashed) setCacheControl(stableCacheControlFor(servedType))
     const size = Number(metadata.size ?? NaN)
     // Range applies to GET only (RFC 9110 §14.2); a HEAD answers the full
     // representation's metadata. And with no known size there is no honest
@@ -602,9 +697,15 @@ export async function serveMediaCdn(
     // `immutable` for a year is the strongest possible caching, and on a
     // private asset it would be a permanent public copy of a file whose
     // whole point is that it expires (AGL-1051) — `setCacheControl` holds
-    // that line.
+    // that line. The year stays browser-only for non-image types
+    // (AGL-1515): the URL still changes with the bytes, but the edge must
+    // hold no full body it could slice.
     if (hashed) {
-      setCacheControl('public, max-age=31536000, immutable')
+      setCacheControl(
+        mediaCdnEdgeCacheable(servedType)
+          ? MEDIA_CDN_IMMUTABLE_CACHE_CONTROL
+          : MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL,
+      )
     }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82

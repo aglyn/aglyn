@@ -24,6 +24,9 @@ import {
   LEGAL_DOCUMENTS,
 } from '../../../../constants/legal-documents'
 
+// lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org.
+// The session mint carries the lockdown gate for this flow.
+
 /**
  * Records a clickwrap acceptance for the signed-in account (AGL-1497).
  *

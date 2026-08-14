@@ -17,6 +17,9 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — advisory slug availability probe, pre-org; orgs/create carries the
+// gate.
+
 export const dynamic = 'force-dynamic'
 
 /**

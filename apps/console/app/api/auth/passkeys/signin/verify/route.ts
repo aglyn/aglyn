@@ -18,6 +18,9 @@
 import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { PasskeyError, verifyAssertion } from '../../../../_lib/passkeys'
 
+// lockdown-423: exempt — sign-in machinery, pre-session; the session mint (AGL-1501) is the
+// lockdown chokepoint for every authentication flow.
+
 export const dynamic = 'force-dynamic'
 
 /**

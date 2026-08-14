@@ -18,6 +18,9 @@
 import { runLegacyHandler } from '@aglyn/aglyn/server'
 import { servePluginFetch } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — marketplace catalog/bundle fetch; no org scope at this surface —
+// plugin EXECUTION is gated by the dispatcher and org enablement.
+
 export const dynamic = 'force-dynamic'
 
 /**

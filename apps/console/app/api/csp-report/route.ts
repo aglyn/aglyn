@@ -49,6 +49,8 @@ import {
   violationKey,
 } from '../../../utils/server/csp-report'
 
+// lockdown-423: exempt — anonymous browser beacon; no caller identity, no org context.
+
 export const dynamic = 'force-dynamic'
 
 /**

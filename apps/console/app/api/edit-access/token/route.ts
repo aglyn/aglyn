@@ -19,8 +19,10 @@ import { isReleaseFlagOn, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   getServerReleaseFlagValues,
   isImpersonationSession,
+  lockdownRefusal,
   mintEditAccessToken,
 } from '@aglyn/tenant-data-admin'
 
@@ -107,6 +109,22 @@ async function handler(request: Request): Promise<Response> {
     if (!canEdit) {
       return Response.json({ error: 'No edit access' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): a locked org/host mints no edit
+    // capability. Host doc already in hand; the org scope rides the member
+    // doc's `orgSuspended` projection (also already read) — the org doc is
+    // fetched only when the projection trips, so the happy path adds no
+    // org read. Staff bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org:
+        membership.get('orgSuspended') === true
+          ? ((await getOrgDoc(orgId)) ?? {})
+          : undefined,
+      host: host.data(),
+    })
+    if (locked) return locked
 
     const { token, expiresAtMs } = mintEditAccessToken(hostId, decoded.uid)
 

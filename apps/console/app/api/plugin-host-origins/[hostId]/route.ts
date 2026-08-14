@@ -30,6 +30,9 @@
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// lockdown-423: exempt — public origin-allowlist read for the plugin sandbox boundary; no
+// caller identity, and the plugin API dispatcher carries the gate.
+
 const HOST_ID = /^[A-Za-z0-9_-]{1,64}$/
 // A bare hostname — no scheme, path, port, or whitespace.
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i

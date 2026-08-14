@@ -18,8 +18,10 @@
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   getRealmPluginInstalls,
   isImpersonationSession,
+  lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
@@ -50,6 +52,16 @@ export async function GET(request: Request): Promise<Response> {
     if (decoded['staff'] !== true && !membership) {
       return Response.json({ error: 'Not an org member' }, { status: 403 })
     }
+    // Lockdown verdict (AGL-1506): platform/org/user scopes — this route
+    // has no org read of its own, so the org scope rides on the
+    // request-deduped `getOrgDoc` read; distinct 423 body; staff bypass
+    // is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgDoc(orgId)) ?? undefined,
+    })
+    if (locked) return locked
     const installs = await getRealmPluginInstalls({ orgId })
     return Response.json({ installs }, { status: 200 })
   } catch (error) {
