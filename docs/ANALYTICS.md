@@ -53,8 +53,8 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `sign_up` | Reserved | Console | `method` | Acquisition — signups |
 | `login` | Reserved | Console | `method` | engagement / returning users |
 | `generate_lead` | Reserved | Marketing | `form_name`, `form_location` | Acquisition — cost/lead, demo bookings |
-| `select_content` | Reserved | Marketing | `content_type`, `content_id` | Acquisition — CTA funnel *(deferred, AGL-1562)* |
-| `click` | Reserved | Marketing | `link_domain`, `link_id` | Acquisition — outbound to docs/GitHub *(deferred, AGL-1562)* |
+| `select_content` | Reserved | Marketing | `content_type`, `content_id`, `surface` | Acquisition — CTA funnel |
+| `click` | Reserved | Marketing | `link_domain`, `link_id`, `surface` | Acquisition — outbound to docs/GitHub |
 | `org_created` | Custom | Console | `plan?` | Activation |
 | `host_created` | Custom | Console | — | Activation |
 | **`site_published`** | Custom | Console | `first_publish?` | **Activation — "% who publish a site"** |
@@ -74,7 +74,9 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 | Event | Call site |
 | --- | --- |
 | `sign_up` | `apps/console/app/(auth)/signup/page.tsx` (password + Google popup + the `?consent=required` bounce); `apps/console/hooks/use-google-redirect-result.tsx` (mobile redirect) |
-| `login` | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect) |
+| `login` | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect); `apps/console/app/(auth)/sso/page.tsx` (`method: 'sso'`, both the desktop popup and the mobile redirect return — AGL-1562) |
+| `select_content` | `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`, installed by `apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx` (AGL-1562) |
+| `click` | the same listener |
 | `generate_lead` | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe) |
 | `org_created` | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page |
 | `host_created` | `apps/console/components/create-host-dialog.component.tsx` |
@@ -85,7 +87,7 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 
 ---
 
-## Three decisions worth knowing
+## Five decisions worth knowing
 
 ### 1. `purchase` is sent from the server, everything else from the browser
 
@@ -157,6 +159,75 @@ Every payload passes `sanitizeEventParams` before reaching a transport:
 is allowed to hold. `form_name` is author-written site content, never a
 submitted field value.
 
+### 4. CTA and outbound clicks come from one delegated listener (AGL-1562)
+
+`select_content` and `click` have no call sites, and cannot have any: the
+marketing pages are authored Firestore content built by clicking, so there is
+no file to add a handler to. `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`
+classifies clicks from the DOM instead, from a single capture-phase listener
+on `document`.
+
+Why a listener rather than a prop on `AppLink`, which every authored Button,
+Screen Link and Image link already funnels through: rich-text anchors inside
+`AglynTypography` and anything in a Custom HTML element are written with
+`dangerouslySetInnerHTML` and are plain DOM anchors with no React handler at
+all. Those are precisely the links an author drops into body copy — a docs
+link, a GitHub link — which is the population `click` exists to count.
+
+The rules, in order:
+
+- a link **built to look like a button** (`.MuiButton-root`, `.MuiFab-root`,
+  `role="button"`, or an explicit `data-analytics-cta`) → `select_content`
+  with `content_type: 'cta'`;
+- any other link to **a different hostname** → `click` with `link_domain`;
+- a same-host text link → **nothing**, because its own pageview already counts
+  it and an event per internal navigation just spends GA's per-session budget.
+
+CTA wins over outbound where they overlap, which is the case that matters:
+`aglyn.com`'s signup CTA points at `app.aglyn.com`, so it is both. Reported as
+an outbound click it would lose the section that produced it — the whole
+metric. The accepted cost is that an outbound link styled as a button (a "View
+on GitHub" hero button) counts as a CTA and not as an exit.
+
+`content_id` is `section:label`, where the section is an author-set
+`data-analytics-section` if there is one, else the landmark the link sits in
+(`footer`, `header`, `nav`), else nothing. **Without `data-analytics-section`
+on the marketing sections, `content_id` is usually just the CTA's label** —
+enough to tell "Start free" from "Choose Pro", not enough to tell two
+identically-labelled buttons apart unless they are in different landmarks. GA
+already knows which page it happened on, so only the within-page position is
+at stake.
+
+Nothing here re-checks consent, and that is the gate working rather than
+missing: `trackEvent` reaches `window.gtag`, which on a tenant site only
+exists once consent has loaded it. An ungranted visitor's clicks are
+classified and then dropped.
+
+`surface` is the one caller-supplied value — `site` from the tenant, `docs`
+from the documentation app (AGL-1579), which reuses this module rather than
+growing a second one. Hostname already separates the domains in GA; `surface`
+separates surfaces that could share one.
+
+### 5. A scheduled publish is not an activation, and cannot be
+
+`applyDuePublishSchedule` runs from a cron beat and from ISR revalidation with
+no browser present, so client-side GA cannot see it — the obvious fix is to
+send `site_published` over the Measurement Protocol like `purchase`. It is not
+sent, because it would not be true.
+
+A due publish writes the version pointer and the schedule status and **never
+touches `hosts/{hostId}.screens`**, the routing map that decides which paths
+exist. So a scheduled publish can only ever swap which saved version an
+already-live route serves — a content update — and `site_published` counts a
+route GOING LIVE, not a republish. Sending it would let one activated org look
+like many.
+
+The gap AGL-1562 worried about (a first publish that is scheduled rather than
+clicked, going uncounted) cannot occur for the same reason: nothing in that
+path makes an unpublished screen reachable. `apply-publish-schedule.spec.ts`
+pins it, so if the executor ever learns to register a route, the case goes red
+and the analytics decision gets made again with it.
+
 ---
 
 ## GA UI configuration
@@ -176,12 +247,37 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 
 ### Still outstanding
 
+0. **Register five more custom dimensions** (AGL-1562), all **event-scoped**,
+   before the events are worth reporting on. Every parameter the two link
+   events carry is new, and an unregistered param is collected but never
+   appears as a breakdown — which reads exactly like the event not carrying
+   it:
+
+   | Dimension name | Event parameter | Why |
+   | --- | --- | --- |
+   | Content type | `content_type` | Always `cta` today; the axis that keeps `select_content` separable if anything else is ever selected |
+   | Content id | `content_id` | `section:label` — **the CTA metric**, "which part of the page sells" |
+   | Link domain | `link_domain` | Outbound destination — the GitHub/docs leading indicator |
+   | Link id | `link_id` | Which outbound link, by label |
+   | Surface | `surface` | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one |
+
+   `login` needs nothing new — `method` is already registered, and `sso` is a
+   new VALUE of it, not a new dimension.
+
 1. **Mark the remaining key events.** Admin → Events → *Mark as key event*.
    `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
    an event be marked **until it has been seen at least once**, so
    `generate_lead`, `site_published`, `begin_checkout` and `stripe_connected`
    have to wait for their first hit. Until marked they are ordinary events and
    appear as conversions nowhere.
+
+   The AGL-1562 additions join that queue. `select_content` and `click` have
+   never been seen by the property — they had no call sites until now — so
+   neither can be marked until the first real click on a published tenant
+   page; `select_content` is the one worth marking (it is the top-of-funnel
+   micro-conversion), `click` is engagement and is better left ordinary.
+   `login` is not new to GA, but `method: 'sso'` is a new VALUE and only
+   appears in the `method` breakdown after the first enterprise sign-in.
 2. **Create `GA4_API_SECRET`** — Admin → Data streams → the stream → *Measurement
    Protocol API secrets* → Create. Then set it, plus `GA4_MEASUREMENT_ID`
    (`G-YW5PG16YTM`), in the Vercel production environment (marked sensitive).

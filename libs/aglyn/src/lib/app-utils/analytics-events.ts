@@ -164,8 +164,18 @@ export interface AnalyticsEventParams {
    * which is site content and not personal data.
    */
   generate_lead: { form_name: string; form_location?: string }
-  /** GA4 recommended. A CTA click, with the section that produced it. */
-  select_content: { content_type: string; content_id: string }
+  /**
+   * GA4 recommended. A CTA click, with the section that produced it.
+   *
+   * Fired by `analytics-link-clicks.ts` (AGL-1562) from a delegated listener,
+   * not per call site: an authored page has no code to add a handler to.
+   */
+  select_content: {
+    content_type: string
+    content_id: string
+    /** Which product surface — see `click.surface`. */
+    surface?: string
+  }
 
   // --- Activation (GTM §6: % publish a site, % connect Stripe) -------------
   /** Custom: no GA4 equivalent. A new organization exists. */
@@ -204,8 +214,22 @@ export interface AnalyticsEventParams {
   }
 
   // --- Engagement ---------------------------------------------------------
-  /** GA4 recommended-ish. Outbound click to docs, GitHub, etc. */
-  click: { link_domain: string; link_id?: string }
+  /**
+   * GA4 recommended-ish. Outbound click to docs, GitHub, etc. Fired by
+   * `analytics-link-clicks.ts` (AGL-1562) rather than at a call site.
+   */
+  click: {
+    link_domain: string
+    link_id?: string
+    /**
+     * Which product surface produced the click — `site` for a tenant
+     * published site, `docs` for the documentation app (AGL-1579). GA's
+     * built-in Hostname dimension already separates the DOMAINS; this
+     * separates surfaces that could share one, and keeps the shared click
+     * listener from having to know anything about either.
+     */
+    surface?: string
+  }
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventParams

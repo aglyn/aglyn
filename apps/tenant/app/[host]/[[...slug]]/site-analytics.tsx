@@ -18,6 +18,7 @@
 'use client'
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
+import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import {
   hostConsentRequired,
   isAnalyticsAllowed,
@@ -169,6 +170,19 @@ export default function SiteAnalytics({
   // even on a wedged page.
   sendPageviewBeacon(hostId, screenId)
   primeVisitorConsent(hostId, host, consentRequired)
+  // CTA and outbound link clicks (AGL-1562). Installed here, during render,
+  // for the same reason as the two calls above — and installed at all here
+  // rather than in the marketing runtime because that runtime lives BELOW the
+  // plugin gate, which is the coupling this component exists to end. A
+  // delegated listener is what reaches the links React never sees: rich-text
+  // and Custom HTML anchors are written as raw DOM.
+  //
+  // NOT consent-gated here, and that is the gate working rather than missing:
+  // `trackEvent` reaches `window.gtag`, and without a granting consent state
+  // the scripts above never render, so gtag does not exist and every
+  // classified click is dropped. `surface` labels this as a tenant published
+  // site; the docs app (AGL-1579) installs the same listener with its own.
+  installLinkClickTracking({ surface: 'site' })
 
   const consent = useVisitorConsent(hostId, host, consentRequired)
   const analyticsAllowed = consentRequired
