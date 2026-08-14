@@ -18,7 +18,10 @@ settings. Everything you build lives under a site, and you can own several.
 3. Give it a name. Aglyn generates a working subdomain immediately so the site is live
    from the first moment — you can attach a [custom domain](../building-sites/custom-domains/overview.md)
    later.
-4. You're dropped into the new site's dashboard.
+4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
+   Basic details, SEO, Theme, Custom Domain, Emails, and Activity. To start building
+   rather than configuring, use the **Screens** tab in the site navigation — see
+   [Publish your first screen](publish-your-first-screen.md).
 
 :::tip Name collisions
 Site names must be unique enough to generate a valid subdomain. If a name is taken,
