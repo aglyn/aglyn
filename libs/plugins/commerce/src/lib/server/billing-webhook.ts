@@ -1013,26 +1013,82 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const firestore = firebaseAdmin.app().firestore()
         const hostRef = firestore.collection('hosts').doc(String(hostId))
         const orderRef = hostRef.collection('orders').doc(String(orderId))
-        const orderSnapshot = await orderRef.get()
-        const order = CommerceModel.liftLegacyOrder(
-          (orderSnapshot.data() as any) ?? {},
-        )
-        if (orderSnapshot.exists && order.status === 'pending') {
-          await orderRef.set(
+        // Redelivery guard (AGL-1748), the AGL-1732/AGL-498 shape. The
+        // `pending` -> `paid` transition was always the guard, but it used to
+        // be a read-then-write with every side effect below hanging off it, so
+        // two concurrent deliveries could both observe `pending` and both run
+        // them — a doubled manager notification, a doubled inventory decrement
+        // and, now that this branch feeds contacts, a doubled
+        // `FieldValue.increment` on the buyer's lifetime value.
+        //
+        // Keyed on the STATUS rather than on the document existing, which is
+        // where this differs from AGL-1732: there, a sibling event wrote the
+        // same path, so an existence check would have discarded the sale
+        // record. Here the console (or the POS card path) pre-creates the order
+        // before the session exists, so existence is guaranteed and says
+        // nothing; only the transition distinguishes the first delivery.
+        let paidOrder: CommerceModel.HostOrder | null = null
+        const flipped = await firestore.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(orderRef)
+          if (!snapshot.exists) return false
+          const lifted = CommerceModel.liftLegacyOrder(
+            (snapshot.data() as any) ?? {},
+          )
+          if (lifted.status !== 'pending') return false
+          paidOrder = lifted
+          transaction.set(
+            orderRef,
             {
               status: 'paid',
               paymentIntentId: String(object?.payment_intent ?? '') || null,
               customerEmail:
-                object?.customer_details?.email ?? order.customerEmail ?? null,
-              timeline: CommerceModel.appendOrderEvent(order, 'paid'),
+                object?.customer_details?.email ?? lifted.customerEmail ?? null,
+              timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
             },
             { merge: true },
           )
+          return true
+        })
+        if (flipped) {
+          const order = paidOrder as unknown as CommerceModel.HostOrder
           void notifyHostManagers(String(hostId), {
             type: 'content.order',
             title: `Draft order paid — ${CommerceModel.formatOrderNumber(order, String(orderId))}`,
             link: `/${hostId}/products`,
           })
+          // Contacts ingestion (AGL-1748): this branch flipped the order,
+          // notified managers and decremented stock, but never reached
+          // `upsertHostContact` — so a buyer who paid a merchant-sent payment
+          // link never became a contact AT ALL, and neither did a POS card
+          // customer, because `pos-order.ts` completes its QR sale through this
+          // same `commerce-draft` branch rather than through its own handler.
+          //
+          // The amount is what Stripe charged (`amount_total`), for the
+          // AGL-1698/AGL-1711 reason — the stored `totals.totalCents` is the
+          // figure the draft was priced at, and the two agree by construction,
+          // but only one of them is the money that moved. Stored totals remain
+          // the fallback for a session shape that reports no total.
+          const draftEmail =
+            object?.customer_details?.email ?? order.customerEmail ?? null
+          if (draftEmail) {
+            const chargedCents =
+              Number(object?.amount_total ?? 0) ||
+              Number(order.totals?.totalCents ?? 0)
+            void upsertHostContact({
+              hostId: String(hostId),
+              email: draftEmail,
+              name: object?.customer_details?.name ?? undefined,
+              source: 'order',
+              ...(chargedCents > 0 ? { purchaseCents: chargedCents } : {}),
+              interaction: {
+                refId: String(orderId),
+                summary: `Paid ${CommerceModel.formatOrderNumber(
+                  order,
+                  String(orderId),
+                )} ($${(chargedCents / 100).toFixed(2)})`,
+              },
+            })
+          }
           if (productId) {
             const productRef = hostRef
               .collection('products')
