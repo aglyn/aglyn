@@ -54,6 +54,18 @@ jest.mock('next/navigation', () => {
   }
 })
 
+// The jump page asks the account whether it is carrying a plan intent across
+// the verification wall (AGL-1535); this spec is about the AGL-1523 notice,
+// so the read answers "nothing remembered" and gets out of the way.
+jest.mock('firebase/firestore', () => ({
+  doc: (_firestore: unknown, ...path: string[]) => ({ path: path.join('/') }),
+  getDoc: async () => ({ data: () => ({}) }),
+  setDoc: async () => undefined,
+}))
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestore: () => ({}),
+  useUser: () => ({ data: { uid: 'u-1' } }),
+}))
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgScope: () => ({ orgs: [], loading: false, confirmed: true }),
   useOrgSlug: () => '',

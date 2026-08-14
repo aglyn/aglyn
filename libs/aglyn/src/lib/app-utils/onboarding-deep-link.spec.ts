@@ -17,6 +17,7 @@
 
 import {
   onboardingDestination,
+  onboardingPlanQuery,
   parseOnboardingPlanIntent,
 } from './onboarding-deep-link'
 
@@ -27,6 +28,7 @@ describe('parseOnboardingPlanIntent', () => {
     expect(parseOnboardingPlanIntent(query('plan=pro&interval=year'))).toEqual({
       plan: 'pro',
       interval: 'year',
+      intervalStated: true,
       contactSales: false,
     })
   })
@@ -50,6 +52,7 @@ describe('parseOnboardingPlanIntent', () => {
     expect(parseOnboardingPlanIntent(query('plan=enterprise'))).toEqual({
       plan: 'enterprise',
       interval: 'month',
+      intervalStated: false,
       contactSales: true,
     })
   })
@@ -98,6 +101,7 @@ describe('onboardingDestination', () => {
       onboardingDestination('acme', {
         plan: 'business',
         interval: 'year',
+        intervalStated: true,
         contactSales: false,
       }),
     ).toBe('/acme/billing?plan=business&interval=year')
@@ -107,6 +111,7 @@ describe('onboardingDestination', () => {
     const destination = onboardingDestination('acme', {
       plan: 'enterprise',
       interval: 'month',
+      intervalStated: false,
       contactSales: true,
     })
     expect(destination).toContain('/acme/support')
@@ -116,8 +121,48 @@ describe('onboardingDestination', () => {
   it('falls back to the workspace picker without a slug', () => {
     // Org creation can fail after the account exists; the user is signed in
     // and must land somewhere real rather than on `/undefined`.
-    expect(onboardingDestination('', { plan: 'pro', interval: 'month', contactSales: false })).toBe(
-      '/',
+    expect(
+      onboardingDestination('', {
+        plan: 'pro',
+        interval: 'month',
+        intervalStated: true,
+        contactSales: false,
+      }),
+    ).toBe('/')
+  })
+})
+
+describe('an interval the link never stated (AGL-1535)', () => {
+  it('marks a defaulted interval as NOT stated', () => {
+    // The value is still 'month' — the safe reading for checkout — but the
+    // reader has to be able to tell the default from a statement.
+    for (const search of ['plan=pro', 'plan=pro&interval=', 'plan=pro&interval=decade']) {
+      const intent = parseOnboardingPlanIntent(query(search))
+      expect(intent?.interval).toBe('month')
+      expect(intent?.intervalStated).toBe(false)
+    }
+  })
+
+  it('marks a stated interval as stated, including the "annual" synonym', () => {
+    for (const search of ['plan=pro&interval=month', 'plan=pro&interval=year', 'plan=pro&interval=annual']) {
+      expect(parseOnboardingPlanIntent(query(search))?.intervalStated).toBe(true)
+    }
+  })
+
+  it('does not re-serialize an unstated interval as a stated one', () => {
+    // This is the whole bug: `?plan=scale` became `…&interval=month` at the
+    // first hop, and the billing page — which deliberately only lets a stated
+    // interval move its toggle — could no longer tell that nobody had said.
+    const intent = parseOnboardingPlanIntent(query('plan=scale'))
+    expect(onboardingPlanQuery(intent)).toBe('plan=scale')
+    expect(onboardingDestination('acme', intent)).toBe('/acme/billing?plan=scale')
+  })
+
+  it('round-trips a stated interval unchanged', () => {
+    const intent = parseOnboardingPlanIntent(query('plan=scale&interval=annual'))
+    expect(onboardingPlanQuery(intent)).toBe('plan=scale&interval=year')
+    expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent)))).toEqual(
+      intent,
     )
   })
 })

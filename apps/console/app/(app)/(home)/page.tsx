@@ -39,7 +39,8 @@ import {
   Typography,
 } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import CreateHostDialog from '../../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../../components/create-org-dialog.component'
 import EmptyState from '../../../components/empty-state.component'
@@ -53,6 +54,7 @@ import {
   consumeSignUpOrgFailure,
   type SignUpOrgFailure,
 } from '../../../utils/signup-org-failure'
+import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -80,6 +82,46 @@ function OrgJump() {
     typeof window === 'undefined' ? null : consumeSignUpOrgFailure(),
   )
 
+  // The plan intent that survived the email-verification wall (AGL-1535).
+  //
+  // `/verify-email` sends a freshly verified account here with a bare `/` —
+  // no plan on the URL, and (when the link was opened on a phone) no browser
+  // storage from the signup tab either. So the account's own record is asked.
+  // One document read, started in parallel with the org list this page is
+  // already waiting on, so it costs no perceptible time.
+  //
+  // `undefined` means "not answered yet" and the jump below HOLDS on it: a
+  // redirect is not a render you can correct a beat later, and firing the
+  // ordinary jump first would drop the intent for good.
+  const firestore = useFirestore()
+  const { data: user } = useUser()
+  const uid = user?.uid
+  // Memoized: this is an effect dependency, and a fresh object every render
+  // would re-run the consume — which CLEARS what it reads — in a loop.
+  const urlIntent = useMemo(
+    () => parseOnboardingPlanIntent(searchParams),
+    [searchParams],
+  )
+  const [storedIntent, setStoredIntent] = useState<
+    ReturnType<typeof parseOnboardingPlanIntent> | undefined
+  >(undefined)
+  // Consuming DESTROYS what it reads, so it must happen at most once per
+  // account — never on a re-render that merely changed an effect dependency's
+  // identity.
+  const consumedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    // An intent on the URL already answers the question, and it outranks a
+    // remembered one — it is what this visit says, not what a past one did.
+    if (urlIntent) return void setStoredIntent(null)
+    if (!uid || consumedForRef.current === uid) return void 0
+    consumedForRef.current = uid
+    let active = true
+    void consumeOnboardingPlanIntent(firestore, uid).then((intent) => {
+      if (active) setStoredIntent(intent)
+    })
+    return () => void (active = false)
+  }, [firestore, uid, urlIntent])
+
   // Single-org members never see a picker — go straight to their sites.
   //
   // Gated on `confirmed`, not merely `loading` (AGL-1149). The console runs a
@@ -95,6 +137,9 @@ function OrgJump() {
   // undo — and the chooser they wanted is exactly what it navigates away from.
   useEffect(() => {
     if (loading || !confirmed || orgs.length !== 1) return
+    // The remembered intent has not been answered yet (AGL-1535) — hold. The
+    // ordinary jump below is the one that drops it.
+    if (storedIntent === undefined) return
     const slug = orgs[0]?.slug
     if (!slug) return
     // An already-signed-in visitor who clicked a plan CTA on the marketing
@@ -102,10 +147,14 @@ function OrgJump() {
     // them to their sites would silently drop the plan they just picked, so
     // the upgrade path lands on billing with it preselected instead. A
     // malformed param parses to null and falls through to the normal jump.
-    const intent = parseOnboardingPlanIntent(searchParams)
+    //
+    // Failing that, the intent the ACCOUNT remembers from signup: this is the
+    // landing the email-verification bounce discards, and it arrives here as a
+    // bare `/` with nothing to read off the URL (AGL-1535).
+    const intent = urlIntent ?? storedIntent
     if (intent) return void router.replace(onboardingDestination(slug, intent))
     router.replace(buildRoute(Route.HOST_LIST, { orgSlug: slug }))
-  }, [loading, confirmed, orgs, router, searchParams])
+  }, [loading, confirmed, orgs, router, storedIntent, urlIntent])
 
   return (
     <DashboardLayout

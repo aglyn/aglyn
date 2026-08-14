@@ -40,10 +40,11 @@
  * were trying to leave.
  */
 
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import React from 'react'
 
 const mockReplace = jest.fn()
+const mockFirestore = {}
 
 jest.mock('next/navigation', () => {
   // Stable identity: the redirect effect depends on `router`, so a fresh
@@ -81,6 +82,20 @@ jest.mock('../hooks/use-pending-invites', () => ({
   usePendingInvites: () => ({ invites: [], loading: false }),
 }))
 
+// The jump also asks the account whether it is carrying a plan intent across
+// the email-verification wall (AGL-1535), and HOLDS the redirect until that
+// answers. Here it answers "nothing remembered", which is the state every case
+// below is about — `flush()` is what lets the held redirect through.
+jest.mock('firebase/firestore', () => ({
+  doc: (_firestore: unknown, ...path: string[]) => ({ path: path.join('/') }),
+  getDoc: async () => ({ data: () => ({}) }),
+  setDoc: async () => undefined,
+}))
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useFirestore: () => mockFirestore,
+  useUser: () => ({ data: { uid: 'u-1' } }),
+}))
+
 // Chrome and dialogs are irrelevant to the redirect decision and drag in
 // Firebase providers if left real.
 jest.mock('../components/layouts/dashboard.layout', () => ({
@@ -109,39 +124,53 @@ const TWO_ORGS = [
   { $id: 'org-2', slug: 'second-org', orgName: 'Second Org' },
 ]
 
+/** Let the held plan-intent read settle so the redirect decision can run. */
+const flush = async () => {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('org jump auto-redirect (AGL-1149)', () => {
   beforeEach(() => mockReplace.mockClear())
 
-  it('does NOT redirect on an unconfirmed one-org list — the reported bug', () => {
+  it('does NOT redirect on an unconfirmed one-org list — the reported bug', async () => {
     // The exact reported state: the cache says one org, the server has not
     // answered yet, and the server answer is going to say two.
     mockScope = { orgs: ONE_ORG, loading: false, confirmed: false }
     render(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
-  it('redirects once the one-org list is server-confirmed', () => {
+  it('redirects once the one-org list is server-confirmed', async () => {
     mockScope = { orgs: ONE_ORG, loading: false, confirmed: true }
     render(<OrgJump />)
+    await flush()
     expect(mockReplace).toHaveBeenCalledTimes(1)
     expect(String(mockReplace.mock.calls[0][0])).toContain('first-org')
   })
 
-  it('never redirects a multi-org member', () => {
+  it('never redirects a multi-org member', async () => {
     mockScope = { orgs: TWO_ORGS, loading: false, confirmed: true }
     render(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
-  it('does not redirect while still loading', () => {
+  it('does not redirect while still loading', async () => {
     mockScope = { orgs: ONE_ORG, loading: true, confirmed: false }
     render(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
-  it('does not redirect a member with no orgs', () => {
+  it('does not redirect a member with no orgs', async () => {
     mockScope = { orgs: [], loading: false, confirmed: true }
     render(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
@@ -153,13 +182,15 @@ describe('org jump auto-redirect (AGL-1149)', () => {
    * The two states are asserted together because the bug was only visible as a
    * sequence — each state on its own looks defensible.
    */
-  it('stays put across cached-one-org → confirmed-two-orgs', () => {
+  it('stays put across cached-one-org → confirmed-two-orgs', async () => {
     mockScope = { orgs: ONE_ORG, loading: false, confirmed: false }
     const view = render(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
 
     mockScope = { orgs: TWO_ORGS, loading: false, confirmed: true }
     view.rerender(<OrgJump />)
+    await flush()
     expect(mockReplace).not.toHaveBeenCalled()
   })
 })

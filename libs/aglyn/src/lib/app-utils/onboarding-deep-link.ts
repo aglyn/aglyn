@@ -35,6 +35,20 @@ export interface OnboardingPlanIntent {
   plan: OrgPlan
   interval: OnboardingInterval
   /**
+   * Whether the link ACTUALLY said an interval, as opposed to `interval`
+   * being the safe default below (AGL-1535).
+   *
+   * Some CTAs carry a plan and deliberately no interval — the /pricing scale
+   * strip quotes monthly and annual side by side and commits to neither. The
+   * billing page honours that (it only lets a *stated* interval move the
+   * toggle, so an annual org is not silently flipped to monthly on arrival),
+   * but every hop between the CTA and that page used to re-serialize the
+   * intent with `&interval=month` appended — which made the omission
+   * unrecoverable one redirect after it was made. Carrying the distinction is
+   * what keeps "no interval stated" a thing the last reader can still see.
+   */
+  intervalStated: boolean
+  /**
    * Enterprise is quoted, not bought. The CTA still carries `plan=enterprise`
    * because that is what the visitor clicked, and the console has to route
    * them to contact-sales rather than to a checkout that cannot price it
@@ -81,18 +95,44 @@ export function parseOnboardingPlanIntent(
   const plan = read('plan')
   if (!plan) return null
   if (isCustomPricedPlan(plan as OrgPlan)) {
-    return { plan: plan as OrgPlan, interval: 'month', contactSales: true }
+    return {
+      plan: plan as OrgPlan,
+      interval: 'month',
+      intervalStated: false,
+      contactSales: true,
+    }
   }
   if (!SELF_SERVE_PLANS.includes(plan as OrgPlan)) return null
   const interval = read('interval')
+  const known = interval === 'year' || interval === 'annual' || interval === 'month'
   return {
     plan: plan as OrgPlan,
     // Anything unrecognized falls to monthly, never to yearly: guessing the
     // longer commitment from a malformed link is the expensive direction to
     // be wrong in.
     interval: interval === 'year' || interval === 'annual' ? 'year' : 'month',
+    // A junk interval is not a stated one: `?interval=decade` means the link
+    // is broken, and the reader should fall back to what it knows about the
+    // org rather than be told "monthly" with a straight face.
+    intervalStated: known,
     contactSales: false,
   }
+}
+
+/**
+ * The intent as query params — the one place the wire form is written
+ * (AGL-1535).
+ *
+ * Every hop that re-serializes an intent (the signup landing, the auth-bounce
+ * `continue`, the home jump) used to build this string by hand and append
+ * `&interval=` unconditionally, which turned the parser's monthly DEFAULT into
+ * a statement the next reader could not tell from the real thing.
+ */
+export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
+  return (
+    `plan=${encodeURIComponent(intent.plan)}` +
+    (intent.intervalStated ? `&interval=${intent.interval}` : '')
+  )
 }
 
 /**
@@ -110,8 +150,5 @@ export function onboardingDestination(
   if (!intent) return `/${orgSlug}`
   // Enterprise is a conversation, not a checkout (AGL-1110).
   if (intent.contactSales) return `/${orgSlug}/support?topic=enterprise`
-  return (
-    `/${orgSlug}/billing?plan=${encodeURIComponent(intent.plan)}` +
-    `&interval=${intent.interval}`
-  )
+  return `/${orgSlug}/billing?${onboardingPlanQuery(intent)}`
 }

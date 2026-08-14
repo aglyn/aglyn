@@ -18,7 +18,10 @@
 
 import { BackgroundImageComponent, type BackgroundImageComponentProps } from '@aglyn/shared-ui-jsx/components/background-image.component'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { parseOnboardingPlanIntent } from '@aglyn/aglyn'
+import {
+  onboardingPlanQuery,
+  parseOnboardingPlanIntent,
+} from '@aglyn/aglyn'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -124,12 +127,13 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     // already signed in — or signing in to upgrade — hits /signup?plan=pro and
     // would otherwise land on their sites with the plan silently dropped. The
     // home jump reads it back off the URL and routes to billing instead.
+    //
+    // Serialized through the shared writer (AGL-1535): appending `&interval=`
+    // by hand here turned "the CTA stated no interval" into "the CTA said
+    // monthly" one redirect after the fact, and the billing page's toggle —
+    // which deliberately only obeys a STATED interval — could no longer tell.
     const intent = parseOnboardingPlanIntent(searchParams)
-    return void pushContinued(
-      intent
-        ? `/?plan=${encodeURIComponent(intent.plan)}&interval=${intent.interval}`
-        : '/',
-    )
+    return void pushContinued(intent ? `/?${onboardingPlanQuery(intent)}` : '/')
   }, [
     auth,
     authLoading,
