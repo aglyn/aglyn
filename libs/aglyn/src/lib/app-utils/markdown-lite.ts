@@ -75,7 +75,11 @@ export type MarkdownBlock =
 const INLINE_PATTERN =
   /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(\[([^\]]+)\]\(([^)\s]+)\))/g
 
-/** Only http(s) links/images survive; anything else renders as text. */
+/**
+ * Only absolute http(s) survives; anything else renders as text. The `http:`
+ * half reaches LINKS only — {@link safeImageUrl} refuses it before it gets
+ * here (AGL-1713).
+ */
 function safeUrl(url: string): string | null {
   return /^https?:\/\//i.test(url) ? url : null
 }
@@ -137,9 +141,22 @@ function safeLinkUrl(url: string): string | null {
  * keeps the promise `resolveMediaSrc` makes on the other side.
  *
  * Protocol-relative stays refused here exactly as it is for links.
+ *
+ * It takes one thing LESS than a link, though: `http:` (AGL-1713). An image is
+ * fetched the moment the page renders; a link is followed by the reader's
+ * choice, past an interstitial the browser puts up. So an `http:` image on our
+ * TLS pages is mixed content that every current browser blocks outright — the
+ * permissive form never rendered a picture, it only moved the failure from
+ * authoring time to the viewer, and stored a src that is a CSP violation
+ * waiting for AGL-1702 to enforce. Refusing it here reports at authoring time
+ * through `isSupportedImageSrc`, which the editor and the besigner picker both
+ * validate against. This is the same asymmetry AGL-1701 struck between
+ * `SAFE_SRC` and `SAFE_HREF` on the published marketplace node, and the same
+ * reason it left `homepageUrl`/`repositoryUrl` as any-https.
  */
 function safeImageUrl(url: string): string | null {
   if (isMediaRef(url)) return parseMediaRef(url) ? url : null
+  if (/^http:\/\//i.test(url)) return null
   return safeLinkUrl(url)
 }
 

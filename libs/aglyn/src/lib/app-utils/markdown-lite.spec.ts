@@ -165,6 +165,39 @@ describe('markdown-lite', () => {
     expect(isSupportedLinkHref('//evil.example')).toBe(false)
   })
 
+  /**
+   * The second of the two `http:`-accepting paths AGL-1701 found; the first
+   * was `SAFE_SRC` on the published marketplace node. An `http:` image on a
+   * TLS page is mixed content the browser blocks, so accepting it never
+   * rendered a picture — it deferred the failure to the viewer and stored a
+   * src that AGL-1702's enforcing `img-src` will report. Links are deliberately
+   * NOT narrowed: a reader chooses to follow one, past a browser warning.
+   */
+  it('refuses an http: image src while links still take one (AGL-1713)', () => {
+    expect(isSupportedImageSrc('http://x.example/a.png')).toBe(false)
+    expect(parseMarkdownLite('![a](http://x.example/a.png)')).toEqual([])
+    // Case-insensitive, and not defeated by an uppercase scheme.
+    expect(isSupportedImageSrc('HTTP://x.example/a.png')).toBe(false)
+    // The https, site-relative and reference forms are untouched.
+    for (const url of [
+      'https://x.example/a.png',
+      '/api/media/cdn/org:acme/med1',
+      'media:org:acme/med1',
+    ]) {
+      expect(isSupportedImageSrc(url)).toBe(true)
+    }
+    // The asymmetry: the same URL is still a valid LINK target.
+    expect(isSupportedLinkHref('http://x.example/a.png')).toBe(true)
+    expect(parseMarkdownLite('[a](http://x.example/a.png)')).toEqual([
+      {
+        type: 'paragraph',
+        inlines: [
+          { type: 'link', href: 'http://x.example/a.png', text: 'a' },
+        ],
+      },
+    ])
+  })
+
   it('round-trips a media reference through the serializer (AGL-1686)', () => {
     // The reference has to survive parse→serialize→parse unchanged, or the
     // visual editor would rewrite every document it opens.
