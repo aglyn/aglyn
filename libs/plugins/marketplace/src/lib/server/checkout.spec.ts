@@ -230,6 +230,45 @@ describe('marketplace checkout take rate + sale-time gates (AGL-1543)', () => {
     expect(res.statusCode).toBe(200)
   })
 
+  it('collects tax on the platform side — the marketplace-provider position (AGL-1544)', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const { params } = stripeCalls[0]
+    expect(params.get('automatic_tax[enabled]')).toBe('true')
+    // Tax is added ON TOP of the listing price, never carved out of the
+    // seller's share.
+    expect(params.get('line_items[0][price_data][tax_behavior]')).toBe(
+      'exclusive',
+    )
+    // Tax needs a situs; 'auto' can settle for less than a full address.
+    expect(params.get('billing_address_collection')).toBe('required')
+    // No on_behalf_of: Aglyn stays merchant of record, which IS the
+    // marketplace-provider posture registered with the Texas Comptroller.
+    expect(params.get('payment_intent_data[on_behalf_of]')).toBeNull()
+  })
+
+  it('transfers the seller exactly their pre-tax share — tax stays on the platform (AGL-1544)', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    const { params } = stripeCalls[0]
+    // application_fee_amount would make Stripe transfer amount_total − fee,
+    // and amount_total INCLUDES the tax — handing Aglyn's remittance
+    // liability to the seller. A fixed transfer amount is immune to what
+    // automatic tax adds on top.
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBeNull()
+    expect(params.get('payment_intent_data[transfer_data][destination]')).toBe(
+      'acct_seller',
+    )
+    expect(params.get('payment_intent_data[transfer_data][amount]')).toBe(
+      '8000',
+    )
+    expect(params.get('metadata[transferCents]')).toBe('8000')
+    expect(params.get('metadata[feeCents]')).toBe('2000')
+  })
+
   it('409s when the publisher has not finished Stripe onboarding', async () => {
     seed()
     publisherMock.__publisher = {

@@ -37,7 +37,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       object?.payment_status === 'paid'
     ) {
       // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
-      const { listingId, buyerUid, sellerOrgId, feeCents } =
+      const { listingId, buyerUid, sellerOrgId, feeCents, transferCents } =
         object.metadata ?? {}
       if (listingId && buyerUid && sellerOrgId) {
         await firebaseAdmin
@@ -49,8 +49,19 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             listingId,
             buyerUid,
             sellerOrgId,
+            // The remittance-correct split (AGL-1544): amount_total includes
+            // the tax automatic_tax added on top; taxCents is what the
+            // PLATFORM owes the state, transferCents is what the seller
+            // received (their share of the pre-tax price). Gross − tax −
+            // transfer = the platform fee, which feeCents also records.
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
+            taxCents: Number(object?.total_details?.amount_tax ?? 0),
+            transferCents: Number(transferCents ?? 0),
+            // The refund trail (AGL-1546): `charge.refunded` carries the
+            // payment intent, not the session — without this id a refund
+            // could never find the purchase it revokes.
+            paymentIntentId: String(object?.payment_intent ?? ''),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
       }
