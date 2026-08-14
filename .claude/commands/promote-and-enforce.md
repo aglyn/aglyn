@@ -1,21 +1,51 @@
 ---
-description: Promote the 19-commit backlog once Vercel's window clears, verify CSP + cold-start in production, then work the queue — CSP enforcing (AGL-523), component revalidation (AGL-1161), sitemap caching (AGL-1160)
+description: "SUPERSEDED 2026-08-14 — a dated 2026-08-03 session handoff kept for its lessons. Use /handoff for the current promotion flow and queue."
 ---
+
+> ⚠️ **SUPERSEDED (2026-08-14) — this is a point-in-time session handoff written
+> 2026-08-03, not a live runbook. For the current promotion flow, working
+> agreements and queue, read `.claude/commands/handoff.md` and `.claude/HANDOFF.md`;
+> where they disagree with anything below, they win.** Corrected in place:
+>
+> - **`aglyn-plugins` DOES deploy** (AGL-1633). It builds whenever a push range
+>   touches `tools/plugin-loader/origin`, and it serves `plugins.aglyn.com` — the
+>   plugin-bundle origin baked into the live tenant client bundle as
+>   `loadRealmPlugins(…, {artifactsBase: "https://plugins.aglyn.com"})` (AGL-1610).
+>   A promotion therefore costs **4** deployment records, not 3. Only
+>   `www-aglyn-io` has genuinely stopped: measured 2026-08-14, its newest
+>   production record is **12 days** old, while `aglyn-plugins` produced one an
+>   hour earlier.
+> - **Promotion is NOT pre-authorised.** The "standing permission" granted below
+>   applied to the 2026-08-03 session only. The current agreement is that
+>   **promotion needs Zach's word before it starts.**
+> - **Never create an intermediate branch.** Push to `main` immediately, let a
+>   batch accumulate on `main`, gate `main`'s tip, then PR `main` → `production`
+>   and merge it as a **real merge commit** — never squash, never rebase, never a
+>   `promote/*` branch.
+> - **Sections 2 and 3 are spent.** AGL-523 closed Done on 2026-08-04, the day
+>   after this file was written. Treat the whole queue and the "Needs Zach" list
+>   as history and re-derive both from Linear.
+>
+> Still worth reading: **"Lessons this session paid for"** at the bottom.
+> Everything above it is a snapshot of one day.
 
 Pick up from `/self-serve-sso` on 2026-08-03. **Start with the promotion — it
 gates two verifications that have been waiting all day.**
 
 Work issues in Linear: **In Progress** when you start, **In Review** when it
 lands, **Done** once verified in production. One conventional commit per
-AGL-### on `main`. Standing permission to promote is granted.
+AGL-### on `main`. ~~Standing permission to promote is granted.~~ **Corrected
+2026-08-14: promotion needs Zach's word before it starts.**
 
 ## Read this before promoting
 
 **Batching means WAITING.** I broke this yesterday: four promotions in 86
 minutes exhausted the Vercel 24h limit and left a finished CSP fix merged to
-`production` but never deployed. A promotion costs **3 deployment records**
-(tenant, docs, console — `www` and `aglyn-plugins` no longer deploy) against a
-~100/day cap. **Default to one promotion this session.** If a question needs a
+`production` but never deployed. A promotion costs **4 deployment records**
+(tenant, docs, console and `aglyn-plugins`) against a ~100/day cap. Only `www`
+no longer deploys; `aglyn-plugins` still **creates** a record on every promote
+and then cancels it unless the push touched `tools/plugin-loader/origin`
+(AGL-1633). **Default to one promotion this session.** If a question needs a
 production round trip, ship the diagnostic *and* the likely fix together rather
 than taking two trips.
 
