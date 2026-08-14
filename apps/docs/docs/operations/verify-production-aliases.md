@@ -30,9 +30,14 @@ node tools/deploy/verify-production-aliases.mjs --json   # machine-readable outp
 | Project | Domain(s) checked |
 | --- | --- |
 | `aglyn-console` (console) | `app.aglyn.com` |
-| `aglyn-tenant` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe) |
+| `aglyn-tenant` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe), `aglyn.com` (the marketing apex) |
 | `aglyn-docs` (docs) | `docs.aglyn.com` |
-| `www-aglyn-io` (marketing) | `aglyn.app` (the apex serves the marketing site, not the tenant wildcard) |
+
+`aglyn.com` is checked under `aglyn-tenant` because the marketing site runs on the tenant runtime —
+the apex is host `aglyn-marketing` with `cname: aglyn.com`, resolved by the `default:` custom-domain
+branch of the tenant middleware. It was probed against the retired `www-aglyn-io` project until
+AGL-1607, which also made it structurally impossible to fail (see below). `aglyn.io` and `aglyn.app`
+redirect to the apex, so probing those would test the redirect rather than the alias.
 
 For each project it finds the newest **Ready** production deployment
 (`vercel ls <project> --prod`, confirmed via `vercel inspect` — scanning past
@@ -65,6 +70,29 @@ The script therefore never uses directory links at all:
 
 The same rule applies when running `vercel` by hand: **always pass the project
 name or a full deployment URL**; never trust the directory link in this repo.
+
+## A check that could not fail (AGL-1607)
+
+Until 2026-08-14 the apex was probed against `www-aglyn-io` with
+`alwaysBuilds: false`. That combination disabled **both** guards on the one
+domain carrying the whole public marketing site and every legal page:
+
+- **The commit guard** was suppressed outright — `alwaysBuilds: false` means
+  "report the SHA, never fail on it".
+- **The alias guard was tautological.** When a project had no Ready deployment
+  to use as a baseline (all of `www-aglyn-io`'s are Canceled), the script fell
+  back to *whatever that project's own first domain was currently serving* —
+  and then compared the domain against that same value. `NEWEST READY` and
+  `SERVING` were the same lookup, so the rows always matched.
+
+Measured A/B on the same deliberately-stale alias: the old script printed
+`current` and exited `0`; the fixed script prints `STALE` and exits `1`.
+
+The lesson generalises past this one entry: **`alwaysBuilds: false` must only
+ever relax the commit check.** If it is ever reintroduced, it must not be able
+to supply a baseline derived from the domain being checked. A verification that
+returns green whether or not the thing it checks is broken is worse than no
+verification, because it is trusted.
 
 ## Reading the output
 

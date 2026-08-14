@@ -27,9 +27,11 @@
 // alias points at it — "current" by the alias check, yet missing the merge.
 // This guard compares the newest deployment's `githubCommitSha` (Vercel API)
 // against `git ls-remote <remote> production` and flags a build that lags HEAD.
-// The `www` project runs a per-path ignore-build-step (it only rebuilds when
-// `apps/www` changes), so its commit legitimately trails HEAD — it's reported
-// but never fails (`alwaysBuilds: false`).
+// A project may opt out of that commit assertion with `alwaysBuilds: false`
+// (its commit then trails HEAD by design and is reported, never failed). No
+// project sets it today; the flag suppresses ONLY the commit check and must
+// never be allowed to weaken the alias check — see AGL-1607, where the retired
+// `www-aglyn-io` entry made the aglyn.com apex structurally unfailable.
 //
 // Why this exists: after promoting to production, the tenant wildcard domain
 // (*.aglyn.app) has repeatedly stayed aliased to a STALE deployment. Directory
@@ -89,21 +91,19 @@ const PROJECTS = [
     name: 'aglyn-tenant',
     legacyNames: ['tenant-aglyn-app'],
     label: 'tenant',
-    // northwind-coffee.aglyn.app probes the *.aglyn.app wildcard alias.
-    domains: ['https://northwind-coffee.aglyn.app'],
+    // Two distinct aliases on one project, both worth asserting (AGL-1607):
+    //   northwind-coffee.aglyn.app — the *.aglyn.app wildcard alias
+    //   aglyn.com                  — the marketing apex
+    // The apex is an ordinary tenant site: host `aglyn-marketing`
+    // (`cname: aglyn.com`), resolved by the `default:` custom-domain branch of
+    // `apps/tenant/middleware.ts`, which has no `aglyn.com` case at all. It was
+    // probed against the retired `www-aglyn-io` project until AGL-1607;
+    // measured 2026-08-14, `vercel inspect https://aglyn.com` reports project
+    // `aglyn-tenant`, and `vercel project ls` lists aglyn.com as this project's
+    // latest production URL. Do not probe aglyn.io/aglyn.app here — they
+    // redirect to the apex, so they would test the redirect, not the alias.
+    domains: ['https://northwind-coffee.aglyn.app', 'https://aglyn.com'],
     alwaysBuilds: true,
-  },
-  {
-    name: 'www-aglyn-io',
-    label: 'www',
-    // The aglyn.com apex serves the marketing site (AGL-718). aglyn.io and
-    // aglyn.app are redirects to it, so probing those would test the redirect
-    // rather than the deployment actually serving.
-    domains: ['https://aglyn.com'],
-    // This project is frozen (`commandForIgnoringBuildStep = "exit 0"`) pending
-    // the Aglyn-built marketing site (AGL-724), so its commit trails HEAD by
-    // design — report the SHA, never fail on it.
-    alwaysBuilds: false,
   },
   {
     name: 'aglyn-docs',
@@ -123,9 +123,10 @@ const JSON_OUT = args.includes('--json')
 if (args.includes('--help') || args.includes('-h')) {
   console.log(
     'Usage: node tools/deploy/verify-production-aliases.mjs [--fix] [--json]\n\n' +
-      'Verifies app.aglyn.com, *.aglyn.app (via northwind-coffee.aglyn.app) and\n' +
-      'aglyn.app against the newest READY production deployment of their Vercel\n' +
-      'projects. --fix promotes the newest deployment when a domain is stale.\n' +
+      'Verifies app.aglyn.com, *.aglyn.app (via northwind-coffee.aglyn.app),\n' +
+      'aglyn.com and docs.aglyn.com against the newest READY production\n' +
+      'deployment of their Vercel projects. --fix promotes the newest\n' +
+      'deployment when a domain is stale.\n' +
       'Exit codes: 0 current, 1 stale, 2 operational error.',
   )
   process.exit(0)
@@ -367,22 +368,18 @@ async function checkDomain(project, domain, newestReady) {
 }
 
 async function verifyProject(project, { token, head }) {
-  let newestReady = await findNewestReady(project)
-  // A non-always-build project (www) cancels most pushes via its ignore-build-
-  // step, so its recent deployments are all Canceled and the real Ready build
-  // is buried past the scan window. Don't fail — fall back to whatever the
-  // apex domain currently serves (an older, legitimately-Ready build).
-  if (newestReady.error && project.alwaysBuilds === false) {
-    const served = await inspect(project.domains[0])
-    if (!served.error && /^ready$/i.test(served.status ?? '')) {
-      newestReady = { url: served.url, id: served.id, viaDomain: true }
-    }
-  }
+  const newestReady = await findNewestReady(project)
+  // There used to be a fallback here for `alwaysBuilds: false` projects: when
+  // no Ready deployment could be found, it set the baseline to whatever the
+  // project's own first domain was currently serving. That made the alias
+  // comparison TAUTOLOGICAL — `checkDomain` compares the domain's serving
+  // deployment against that same baseline, so `serving.id === newestReady.id`
+  // was true by construction and the domain could never be reported stale, no
+  // matter how old the deployment behind it was (AGL-1607). A check that
+  // cannot fail is worse than no check. A project with no Ready production
+  // deployment is now an error (exit 2), which is the honest answer.
   if (newestReady.error) return { project: project.name, error: newestReady.error }
-  log(
-    `[${project.label}] ${newestReady.viaDomain ? 'serving' : 'newest READY'} production ` +
-      `deployment: ${hostOf(newestReady.url)}${newestReady.viaDomain ? ' (ignore-build-step; no recent rebuild)' : ''}`,
-  )
+  log(`[${project.label}] newest READY production deployment: ${hostOf(newestReady.url)}`)
 
   // Commit guard (AGL-566): is the newest deployment built from HEAD?
   let commit = null
