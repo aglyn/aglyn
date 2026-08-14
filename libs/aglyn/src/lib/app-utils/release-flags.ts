@@ -121,7 +121,13 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     label: 'Marketplace',
     description: 'Marketplace browsing, publishing and plugin installs.',
     defaultEnabled: true,
-    navTabId: 'nav-tab-marketplace',
+    // AGL-1654: was 'nav-tab-marketplace', which matched no nav item, so
+    // `gateNavTabItems` never hid the tab. The org Marketplace tab is a
+    // console constant rather than a plugin nav item, and the page behind
+    // it carries no `<FeatureGate>` — so flipping the flag off subtracted
+    // the marketplace plugin from the loader and both API dispatchers while
+    // leaving a live tab into a page whose backend had gone.
+    navTabId: 'nav-tab-org-marketplace',
   },
   // AGL-422: every first-party plugin is release-flagged — the flag now
   // feeds the plugin LOADER (console, published sites, API dispatch), not
