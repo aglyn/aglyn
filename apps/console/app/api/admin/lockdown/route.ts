@@ -311,19 +311,52 @@ async function evaluateVerdict(
   ])
 
   const subjectStaff = found?.record.customClaims?.['staff'] === true
-  const state = await getLockdownVerdict({
+  const subjectScopes = {
     staff: subjectStaff,
     uid: uid || null,
     org: orgSnapshot?.exists ? (orgSnapshot.data() as never) : undefined,
     host: hostSnapshot?.exists ? (hostSnapshot.data() as never) : undefined,
-  })
-
-  // Build the ACTUAL refusal and read it back, rather than re-describing it.
-  let refusal: { status: number; body: unknown } | null = null
-  if (state) {
-    const response = lockdownJsonResponse(state)
-    refusal = { status: response.status, body: await response.json() }
   }
+
+  /**
+   * Build the ACTUAL refusal and read it back, rather than re-describing it.
+   * `getLockdownVerdict` answers per INTENT since AGL-1511, so an answer for
+   * one intent is not an answer for the other.
+   */
+  const evaluateIntent = async (intent: 'read' | 'write') => {
+    const state = await getLockdownVerdict({ ...subjectScopes, intent })
+    if (!state) return { locked: false, verdict: null, refusal: null }
+    const response = lockdownJsonResponse(state)
+    return {
+      locked: true,
+      verdict: state,
+      refusal: { status: response.status, body: await response.json() },
+    }
+  }
+
+  /**
+   * BOTH INTENTS, ALWAYS (AGL-1628). The probe used to evaluate without an
+   * intent, which meant `write` — true for a write and false for the read the
+   * same caller is making right now. Under a read-only lock that reported a
+   * flat "locked" with a 423 body, and the one question read-only mode
+   * creates ("their site is up but they cannot save — is that us?") could not
+   * be answered from this panel at all.
+   *
+   * Evaluated rather than toggled: an incident is the wrong moment to make an
+   * operator pick the right radio button, and the second evaluation costs no
+   * extra Firestore read (the platform and user reads are memoized, and the
+   * org/host docs are already in hand).
+   */
+  const [reads, writes] = await Promise.all([
+    evaluateIntent('read'),
+    evaluateIntent('write'),
+  ])
+
+  // The pre-AGL-1628 keys keep meaning the WRITE case, so anything already
+  // reading this response — the staff page, a runbook, a saved curl — keeps
+  // reading exactly what it read before.
+  const state = writes.verdict
+  const refusal = writes.refusal
 
   // A feature lock refuses a capability without touching the scope verdict,
   // so "what is this customer seeing" is incomplete without it — a caller
@@ -371,6 +404,19 @@ async function evaluateVerdict(
       locked: state != null,
       verdict: state,
       refusal,
+      /**
+       * The same verdict asked BOTH ways (AGL-1628). Under a read-only lock
+       * these disagree, and that disagreement IS the answer: reads pass,
+       * writes refuse. Under a full lock both refuse; under no lock both
+       * pass; for staff both pass, because they bypass every scope.
+       *
+       * `writes` duplicates the `locked`/`refusal` pair above on purpose —
+       * those keys have always meant the write case and keep meaning it, so
+       * a saved script reading them is unaffected, while a reader who wants
+       * the distinction does not have to know that history.
+       */
+      reads: { locked: reads.locked, refusal: reads.refusal },
+      writes: { locked: writes.locked, refusal: writes.refusal },
       features,
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },

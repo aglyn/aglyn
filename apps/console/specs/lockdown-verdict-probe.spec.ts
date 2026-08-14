@@ -179,6 +179,7 @@ describe('AGL-1573 · the staff verdict probe', () => {
       uid: 'u-1',
       org: ORG_DOC,
       host: HOST_DOC,
+      intent: 'write',
     })
   })
 
@@ -249,6 +250,83 @@ describe('AGL-1573 · the staff verdict probe', () => {
     expect(mockFeatureLockdownRefusal).toHaveBeenCalledWith({
       feature: 'uploads',
       staff: false,
+    })
+  })
+
+  /**
+   * AGL-1628. The probe used to ask the verdict once, with no intent — which
+   * `getLockdownVerdict` reads as `write`. Under a read-only lock that made
+   * the panel report a flat "locked" with a 423 body: true for the write, and
+   * false for the read the very same caller is making. The operator could not
+   * see the one thing read-only mode exists to produce.
+   */
+  describe('AGL-1628 · both intents', () => {
+    /** A read-only lock, as the core answers it: reads pass, writes refuse. */
+    const readOnlyVerdict = (
+      options: { staff?: boolean; intent?: string } = {},
+    ) => (options.staff === true || options.intent === 'read' ? null : VERDICT)
+
+    it('asks the verdict BOTH ways, not once', async () => {
+      await probe('verdict=1&orgId=org-1')
+      expect(mockGetLockdownVerdict).toHaveBeenCalledWith(
+        expect.objectContaining({ intent: 'read' }),
+      )
+      expect(mockGetLockdownVerdict).toHaveBeenCalledWith(
+        expect.objectContaining({ intent: 'write' }),
+      )
+    })
+
+    it('shows a read-only lock as reads passing while writes refuse', async () => {
+      mockGetLockdownVerdict.mockImplementation(async (options) =>
+        readOnlyVerdict(options),
+      )
+      const payload = await (await probe('verdict=1&orgId=org-1')).json()
+
+      expect(payload.reads).toEqual({ locked: false, refusal: null })
+      expect(payload.writes.locked).toBe(true)
+      expect(payload.writes.refusal).toEqual({
+        status: 423,
+        body: { error: 'locked', scope: 'org', reason: 'billing' },
+      })
+
+      // The pre-AGL-1628 keys still mean the WRITE case, so a saved curl or
+      // a runbook that reads `locked`/`refusal` sees what it always saw.
+      expect(payload.locked).toBe(true)
+      expect(payload.refusal).toEqual(payload.writes.refusal)
+      expect(payload.verdict).toEqual(VERDICT)
+      // And it is still labelled derived, never observed.
+      expect(payload.kind).toBe('computed-verdict')
+    })
+
+    it('agrees with itself under a FULL lock and under no lock', async () => {
+      // Full lock: the core refuses both intents, so both halves say so and
+      // the panel has nothing surprising to report.
+      const full = await (await probe('verdict=1&orgId=org-1')).json()
+      expect(full.reads.locked).toBe(true)
+      expect(full.writes.locked).toBe(true)
+
+      mockGetLockdownVerdict.mockResolvedValue(null)
+      const clear = await (await probe('verdict=1&orgId=org-1')).json()
+      expect(clear.reads.locked).toBe(false)
+      expect(clear.writes.locked).toBe(false)
+      expect(clear.locked).toBe(false)
+    })
+
+    it('reports a staff subject as passing BOTH intents', async () => {
+      mockFindUser.mockResolvedValue({
+        record: { customClaims: { staff: true } },
+        tenantId: null,
+      })
+      mockGetLockdownVerdict.mockImplementation(async (options) =>
+        readOnlyVerdict(options),
+      )
+      const payload = await (await probe('verdict=1&uid=staff-2&orgId=org-1')).json()
+      // The un-panic invariant is intent-blind by design: staff bypass before
+      // any read, so a probe of a staff subject must not imply read-only bites
+      // them for writes.
+      expect(payload.staffBypass).toBe(true)
+      expect(payload.reads.locked).toBe(false)
+      expect(payload.writes.locked).toBe(false)
     })
   })
 
