@@ -315,9 +315,52 @@ deleted, and the support address. The internal `note` is never part of that
 payload. Before this, a disabled file looked exactly like a broken one, which is
 the state most support conversations about it started from.
 
-Setting and lifting is still operated through
-`POST /api/admin/media-quarantine` with a staff bearer token — there is no
-staff form for it yet, and no page listing the whole deny list:
+### Operating it from the console {#disabled-files-page}
+
+**Staff → Disabled files** is the form. Reach for it first — it removes every
+transcription step the curl below still has.
+
+1. Pick **Workspace (org)** or **Site (host)**, paste the id, paste the **media
+   id**. Both halves are in the file's CDN URL: the scope segment, then the id
+   after `/media/`. **Look it up.**
+2. The panel shows every key that could refuse this file, which of them are
+   set, the reason and internal note behind each, and the deny list's size
+   against its 2000-entry cap.
+3. Pick the reason, an optional customer-facing message, an optional internal
+   note and an optional end time, then **Disable this file**.
+
+Two things it does that the curl cannot, and they are the reason to prefer it:
+
+- **It never asks you for a digest.** You name the file; the server reads the
+  document and picks the strongest key it has — `contentSha256`, then the
+  legacy `contentHash`, then the per-asset key. The [Which digest to
+  send](#which-digest) decision is made for you and cannot be made wrong. The
+  scope segment is derived the same way, so a per-asset key always matches the
+  one the CDN actually looks up.
+- **Release clears everything that is biting**, not just the preferred key. An
+  asset can be covered by two entries at once — a legacy-keyed one set before a
+  replace stamped a strong digest onto it, plus a per-asset one — and a lift
+  that dropped only one would leave the red badge up and look exactly like a
+  lift that failed. The page reports `NOT CONFIRMED` unless *no* key can still
+  refuse the file, and logs every action that reached the server.
+
+**Disable only this copy** is the same deliberate narrowing as `by: "asset"`:
+use it when the same bytes are legitimate elsewhere and only this workspace's
+copy is the subject of the report. The key that is about to be written, and
+what it reaches, is on screen before the button.
+
+Setting and lifting needs the **super** staff role, on the page and in the
+route. Looking a file up does not — during an incident "is this already
+disabled?" is usually a support question.
+
+There is still **no page listing the whole deny list**, so releasing a stale
+entry means looking up a file it covers, or reading the listing from the
+terminal.
+
+### From a terminal {#quarantine-curl}
+
+The page cannot do anything this cannot; it just makes the two mistakes above
+unavailable. `POST /api/admin/media-quarantine` with a staff bearer token:
 
 ```bash
 # Disable one file. The value is the media document's `contentSha256` —

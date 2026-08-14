@@ -442,9 +442,7 @@ function AdminMediaQuarantine() {
             {lookup ? (
               <CardDisplay
                 header={'Disable or release'}
-                help={docsHelp('lockdown', {
-                  anchor: '#asset-quarantine--one-file-not-the-site-that-serves-it',
-                })}
+                help={docsHelp('lockdown', { anchor: '#disabled-files-page' })}
                 contentGutterX
                 contentGutterY
               >
