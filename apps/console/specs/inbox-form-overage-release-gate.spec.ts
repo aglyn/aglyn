@@ -21,30 +21,32 @@
  */
 
 /**
- * Audience-band overage is withheld while the Contacts PAGE is dark
- * (AGL-1604).
+ * Form-submission overage is withheld while the Inbox PAGE is dark
+ * (AGL-1688) — the Contacts remedy (AGL-1604), applied to the flag next door.
  *
- * `release_contacts` gates one surface — the console Contacts page and its nav
- * tab. Ingestion (`upsertHostContact`, called from forms, memberships, orders,
- * newsletters, POS and bookings) and `GET /v1/contacts` both keep running, so
- * records accrue and the band is crossed while the org has no console way to
- * see, tag or export the records it would be invoiced for. This suite is the
- * proof that it is not invoiced for them.
+ * `release_inbox` gates one surface: the console Inbox page and its nav tab.
+ * `/api/forms/submit` keeps writing `hosts/{id}/formSubmissions` and
+ * `GET /v1/sites/{id}/form-submissions` keeps serving them, so submissions
+ * accrue past the plan's band and bill at cost x 1.3 for a lead list the
+ * customer has no console way to read, mark read, or export.
  *
- * TWO claims, and the second is the one that decays silently:
+ * AGL-1688 recorded "no billing path" for Inbox and treated that as the one
+ * way it was milder than Contacts. It is not: `hostUsage` reads
+ * `counters/formSubmissions` into the snapshot `estimateMonthlyUsageCost`
+ * prices. This suite exists mostly to keep that fact from being re-forgotten —
+ * the ON case asserts a real dollar figure, so a future change that stops
+ * pricing submissions fails here rather than passing quietly.
  *
- * 1. Flag OFF → the overage never reaches `billedCents`, and no Stripe meter
- *    event is sent. Flag ON → it does, at the real rate.
- * 2. The suppression is CONDITIONAL, not a removal. A hardcoded zero would
- *    pass claim 1 forever and under-bill from the day Contacts ships, which is
- *    a defect nobody would go looking for. So the flag is flipped with
- *    everything else held fixed, and the ON case is asserted at a real dollar
- *    figure.
+ * The suppression is CONDITIONAL, never a removal. A hardcoded zero would
+ * satisfy the OFF case forever and under-bill from the day Inbox ships, which
+ * is the defect nobody goes looking for. So every case flips only the flag,
+ * with the plan, the counters and the month held fixed.
  *
- * WHEN, not HOW. `checkContactQuota` is also an entitlement input, and the
- * recorded `contactsCount` feeds the COGS rollup — a defaulted or reshaped
- * count there renders a paying org as Free. Both are therefore asserted to be
- * identical either way; only the billed figure moves.
+ * WHAT REACHES THE INVOICE, not what is counted. The recorded `formSubmissions`
+ * total feeds `orgMonthlyCogsUsd`, and the same counter is what the AGL-1655
+ * abuse ceiling and the plan quota are evaluated against — a suppression that
+ * reshaped the count would move an anti-abuse verdict as a side effect of a
+ * billing decision. It is asserted identical either way.
  *
  * NO STRIPE PATH IS EXERCISED. `fetch` is mocked and the captured request body
  * is the assertion surface — localhost carries the LIVE key.
@@ -56,17 +58,16 @@ const CRON_SECRET = 'test-cron-secret'
 import { RELEASE_FLAGS, type ReleaseFlagValue } from '@aglyn/aglyn/server'
 
 /**
- * EVERY flag, at its registry default, before `release_contacts` is set
- * (AGL-1688).
+ * EVERY flag, at its registry default, before the one under test is set.
  *
- * This fixture used to name `release_contacts` alone, which worked only while
- * the cron consulted exactly one flag. AGL-1688 added a second gate to the
- * same loop, and a map missing that key threw inside `isReleaseFlagOn` —
- * swallowed by the per-org catch and surfacing as a 207 that says nothing
- * about flags. `getServerReleaseFlagValues` fills the whole map from
- * `registryDefaults()` even with Remote Config unreachable, so a partial
- * fixture was never a smaller production; it was a shape production cannot
- * produce.
+ * `getServerReleaseFlagValues` fills the whole map from `registryDefaults()`
+ * even when Remote Config is unreachable, so a partial fixture is not a
+ * smaller version of production — it is a shape production never produces.
+ * `isReleaseFlagOn` reads `value.enabled` off whatever it is handed, so a
+ * missing key throws inside the org loop, is swallowed by the per-org catch,
+ * and turns the whole sweep into a 207 whose body never mentions flags. That
+ * cost a debugging round here; seeding from the registry means the next flag
+ * gate added to this cron does not cost another.
  */
 const flagDefaults = (): Record<string, ReleaseFlagValue> =>
   Object.fromEntries(
@@ -76,9 +77,9 @@ const flagDefaults = (): Record<string, ReleaseFlagValue> =>
     ]),
   )
 
-/** Contact head-count per org id, as the aggregate `count()` answers it. */
-let mockContactCounts: Record<string, number>
-/** `hosts/{id}/counters/media.bytes` per host id. */
+/** `hosts/{id}/counters/formSubmissions.<month>` per counter path. */
+let mockHostFormSubmissions: Record<string, number>
+/** `hosts/{id}/counters/media.bytes` per counter path. */
 let mockHostMediaBytes: Record<string, number>
 /** Host id → org id. */
 let mockHosts: Array<{ id: string; orgId: string }>
@@ -107,10 +108,18 @@ function counterDocRef(scopePath: string, name: string) {
     path,
     get: async () => ({
       exists: false,
-      get: (field: string) =>
-        path.endsWith('/counters/media') && field === 'bytes'
-          ? (mockHostMediaBytes[path] ?? 0)
-          : undefined,
+      get: (field: string) => {
+        if (path.endsWith('/counters/media') && field === 'bytes') {
+          return mockHostMediaBytes[path] ?? 0
+        }
+        // The rollup asks this document for the MONTH key, which is also how
+        // /api/forms/submit writes it — a differently-keyed fixture here would
+        // read zero submissions on exactly the sites under test.
+        if (path.endsWith('/counters/formSubmissions') && field === MONTH) {
+          return mockHostFormSubmissions[path] ?? 0
+        }
+        return undefined
+      },
     }),
   }
 }
@@ -163,17 +172,6 @@ function fakeOrgRef(orgId: string) {
       if (name === 'counters') {
         return { doc: (counter: string) => counterDocRef(path, counter) }
       }
-      // The aggregate the rollup meters against (AGL-890). Records exist
-      // whatever the flag says — that is the whole premise of AGL-1604.
-      if (name === 'contacts') {
-        return {
-          count: () => ({
-            get: async () => ({
-              data: () => ({ count: mockContactCounts[orgId] ?? 0 }),
-            }),
-          }),
-        }
-      }
       if (name === 'usage') {
         return {
           doc: (id: string) => ({
@@ -199,7 +197,11 @@ const fakeFirestore = {
           docs: mockHosts.map((host) => ({
             id: host.id,
             get: (field: string) =>
-              field === 'orgId' ? host.orgId : field === 'screens' ? {} : undefined,
+              field === 'orgId'
+                ? host.orgId
+                : field === 'screens'
+                  ? {}
+                  : undefined,
             ref: fakeHostRef(host.id),
           })),
           size: mockHosts.length,
@@ -234,9 +236,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  // The REAL plan rules and the REAL flag verdict. A stubbed rate would make
-  // the ON case unfalsifiable, and a stubbed `isReleaseFlagOn` would let a
-  // gate that ignores the rollout percentage pass.
+  // The REAL plan bands, the REAL unit rate and the REAL flag verdict. A
+  // stubbed rate would make the ON case unfalsifiable, and a stubbed
+  // `isReleaseFlagOnForOrg` would let a gate that ignores the rollout
+  // percentage or the per-org override pass.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/measure-node-map'),
@@ -258,13 +261,18 @@ jest.mock('../utils/screen-cap-reconciliation', () => ({
 
 import { POST } from '../app/api/billing/report-usage/route'
 
-/** Starter: 1,000 contacts included, $1.00 per 1,000 over. 3,500 → $2.50. */
-const CONTACTS = 3_500
-const OVERAGE_USD = 2.5
-const OVERAGE_CENTS = 250
+/**
+ * Starter includes `hostLimit (1) x formSubmissionsPerMonth (200)` = 200.
+ * 10,200 submissions leaves 10,000 billable at $0.00005 = $0.50 at cost, which
+ * is 65c after the 1.3 markup. Chosen to land on a whole cent so the assertion
+ * is exact rather than a rounding tolerance.
+ */
+const SUBMISSIONS = 10_200
+const WITHHELD_USD = 0.5
+const BILLED_CENTS = 65
 
 function seed(options: {
-  contacts?: number
+  submissions?: number
   plan?: string
   hostMediaBytes?: number
   flag?: ReleaseFlagValue
@@ -276,13 +284,15 @@ function seed(options: {
   mockHostMediaBytes = {
     'hosts/site-a/counters/media': options.hostMediaBytes ?? 0,
   }
-  mockContactCounts = { 'org-1': options.contacts ?? CONTACTS }
+  mockHostFormSubmissions = {
+    'hosts/site-a/counters/formSubmissions': options.submissions ?? SUBMISSIONS,
+  }
   mockOrgPlans = { 'org-1': options.plan ?? 'starter' }
   mockUsageWrites = {}
   mockMeterEvents = []
   mockFlagValues = {
     ...flagDefaults(),
-    release_contacts: options.flag ?? { enabled: false },
+    release_inbox: options.flag ?? { enabled: false },
   }
 }
 
@@ -323,119 +333,104 @@ afterEach(() => {
   delete process.env.STRIPE_SECRET_KEY
 })
 
-describe('the audience band is not invoiced while the Contacts page is dark', () => {
+describe('form overage is not invoiced while the Inbox page is dark', () => {
   it('withholds the overage, and sends Stripe nothing at all', async () => {
     seed({ flag: { enabled: false } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsOverageUsd).toBe(0)
-    expect(write.contactsOverageBilled).toBe(false)
+    expect(write.formSubmissionsBilled).toBe(false)
+    expect(write.billableCostUsd).toBe(0)
     expect(write.billedCents).toBe(0)
-    // Nothing was reported: `billedCents` is zero, so the meter event the cron
-    // would otherwise POST is never attempted.
+    // `billedCents` is zero, so the meter event the cron would otherwise POST
+    // is never attempted.
     expect(mockMeterEvents).toEqual([])
   })
 
-  it('still COUNTS the contacts, and records what was forgone', async () => {
-    // The count is an entitlement input and a COGS input. Suppressing the
-    // charge must not make the org look like it holds no contacts — that is
-    // the failure shape where a gated field silently re-plans a paying org.
+  it('still COUNTS the submissions, and records what was forgone', async () => {
+    // The count is a COGS input and the subject of the AGL-1655 abuse ceiling.
+    // Suppressing the charge must not make the site look quiet.
     seed({ flag: { enabled: false } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsCount).toBe(CONTACTS)
-    expect(write.contactsOverageWithheldUsd).toBeCloseTo(OVERAGE_USD, 6)
+    expect(write.formSubmissions).toBe(SUBMISSIONS)
+    expect(write.formSubmissionsOverageWithheldUsd).toBeCloseTo(WITHHELD_USD, 6)
   })
 })
 
-describe('the suppression reverses itself when Contacts ships', () => {
+describe('the suppression reverses itself when Inbox ships', () => {
   it('bills the overage, and reports it, once the flag is on', async () => {
     seed({ flag: { enabled: true } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsOverageUsd).toBeCloseTo(OVERAGE_USD, 6)
-    expect(write.contactsOverageBilled).toBe(true)
-    expect(write.contactsOverageWithheldUsd).toBe(0)
-    expect(write.billedCents).toBe(OVERAGE_CENTS)
+    expect(write.formSubmissionsBilled).toBe(true)
+    expect(write.formSubmissionsOverageWithheldUsd).toBe(0)
+    expect(write.billableCostUsd).toBeCloseTo(WITHHELD_USD, 6)
+    expect(write.billedCents).toBe(BILLED_CENTS)
     expect(mockMeterEvents).toHaveLength(1)
-    expect(mockMeterEvents[0]).toContain(
-      `payload%5Bvalue%5D=${OVERAGE_CENTS}`,
-    )
+    expect(mockMeterEvents[0]).toContain(`payload%5Bvalue%5D=${BILLED_CENTS}`)
   })
 
   it('honours a partial rollout — an org that CAN reach the page is billed', async () => {
-    // Not an on/off boolean but the real verdict, so an org inside a staged
-    // rollout is charged like any other org that can open the page.
     seed({ flag: { enabled: false, rolloutPercent: 100 } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsOverageBilled).toBe(true)
-    expect(write.billedCents).toBe(OVERAGE_CENTS)
+    expect(write.formSubmissionsBilled).toBe(true)
+    expect(write.billedCents).toBe(BILLED_CENTS)
   })
 
-  it('bills an org that staff granted Contacts early (AGL-1635 override)', async () => {
+  it('bills an org that staff granted Inbox early (AGL-1635 override)', async () => {
     // The override is what makes the page reachable for this one customer, so
-    // it has to make the invoice reachable too. A gate reading only the Remote
-    // Config value would under-bill exactly the orgs that CAN open Contacts.
-    seed({
-      flag: { enabled: false },
-      overrides: { release_contacts: true },
-    })
+    // it has to make the invoice reachable too.
+    seed({ flag: { enabled: false }, overrides: { release_inbox: true } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsOverageBilled).toBe(true)
-    expect(write.billedCents).toBe(OVERAGE_CENTS)
+    expect(write.formSubmissionsBilled).toBe(true)
+    expect(write.billedCents).toBe(BILLED_CENTS)
   })
 
   it('honours a per-org kill switch even once the flag ships', async () => {
-    // The override runs both ways. An org forced OFF cannot open the page, so
+    // The override runs both ways: an org forced OFF cannot open the page, so
     // it must not be invoiced, flag or no flag.
-    seed({
-      flag: { enabled: true },
-      overrides: { release_contacts: false },
-    })
+    seed({ flag: { enabled: true }, overrides: { release_inbox: false } })
     const write = (await rollUp())['org-1']
-    expect(write.contactsOverageBilled).toBe(false)
-    expect(write.contactsOverageWithheldUsd).toBeCloseTo(OVERAGE_USD, 6)
+    expect(write.formSubmissionsBilled).toBe(false)
+    expect(write.formSubmissionsOverageWithheldUsd).toBeCloseTo(WITHHELD_USD, 6)
     expect(write.billedCents).toBe(0)
     expect(mockMeterEvents).toEqual([])
   })
 })
 
-describe('nothing else about the usage cron moves', () => {
-  it('changes only the contacts fields and the bill they feed', async () => {
+describe('the suppression is scoped to form submissions', () => {
+  it('still bills storage while the Inbox page is dark', async () => {
     const GB = 1024 * 1024 * 1024
-    // 3 GB against Starter's 2 GB band, so the rollup has a non-zero storage
-    // bill of its own to be indifferent about.
+    // 3 GB against Starter's 2 GB band, so there is a storage bill for the
+    // gate to be indifferent about. A suppression that zeroed the whole
+    // invoice rather than one meter would fail here.
+    seed({ flag: { enabled: false }, hostMediaBytes: 3 * GB })
+    const write = (await rollUp())['org-1']
+    expect(write.formSubmissionsBilled).toBe(false)
+    expect(Number(write.billedCents)).toBeGreaterThan(0)
+    // The storage half only: 1 GB over at $0.026 x 1.3 = 3.38c → 3c.
+    expect(write.billedCents).toBe(3)
+  })
+
+  it('changes only the form fields and the bill they feed', async () => {
+    const GB = 1024 * 1024 * 1024
     seed({ flag: { enabled: false }, hostMediaBytes: 3 * GB })
     const off = { ...(await rollUp())['org-1'] }
     seed({ flag: { enabled: true }, hostMediaBytes: 3 * GB })
     const on = { ...(await rollUp())['org-1'] }
 
-    const contactsFields = [
-      'contactsOverageUsd',
-      'contactsOverageBilled',
-      'contactsOverageWithheldUsd',
+    // `costUsd` and the recorded `formSubmissions` are in NEITHER list, so
+    // they are compared — the COGS figure and the count must be byte-identical
+    // whichever way the flag sits.
+    const formFields = [
+      'formSubmissionsBilled',
+      'formSubmissionsOverageWithheldUsd',
+      'billableCostUsd',
       'billedCents',
     ]
-    const withoutContacts = (write: Record<string, unknown>) =>
+    const withoutForms = (write: Record<string, unknown>) =>
       Object.fromEntries(
-        Object.entries(write).filter(([key]) => !contactsFields.includes(key)),
+        Object.entries(write).filter(([key]) => !formFields.includes(key)),
       )
-    expect(withoutContacts(on)).toEqual(withoutContacts(off))
-    // …and the storage half of the bill is billed either way, so the
-    // suppression is scoped to the audience band rather than to the invoice.
-    // 1 GB past the band × $0.026 × 1.30 = 3.38¢.
-    expect(off.billedCents).toBe(3)
-    expect(on.billedCents).toBe(3 + OVERAGE_CENTS)
-  })
-
-  it('leaves free — which hard-bands and has no rate — untouched', async () => {
-    // Free has no `extraContactsUsdPer1k`, so there was never an overage to
-    // withhold. The gate must not invent one, in either direction.
-    seed({ flag: { enabled: false }, plan: 'free', contacts: 5_000 })
-    const off = (await rollUp())['org-1']
-    expect(off.contactsCount).toBe(5_000)
-    expect(off.contactsOverageUsd).toBe(0)
-    expect(off.contactsOverageWithheldUsd).toBe(0)
-    seed({ flag: { enabled: true }, plan: 'free', contacts: 5_000 })
-    const on = (await rollUp())['org-1']
-    expect(on.contactsOverageUsd).toBe(0)
-    expect(on.billedCents).toBe(off.billedCents)
+    expect(withoutForms(on)).toEqual(withoutForms(off))
+    expect(on.costUsd).toEqual(off.costUsd)
+    expect(on.formSubmissions).toEqual(SUBMISSIONS)
   })
 })
