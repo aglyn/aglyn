@@ -22,8 +22,9 @@ import {
   checkContactQuota,
   checkDataStorageQuota,
   decodeStoredNodes,
-  isReleaseFlagOn,
+  isReleaseFlagOnForOrg,
   nodeMapBytes,
+  parseOrgReleaseFlagOverrides,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -531,10 +532,19 @@ async function handler(request: Request): Promise<Response> {
       //
       // Bucketed by `orgId`, matching every other release-flag verdict — an org
       // inside a partial rollout CAN reach the page, so it is billed.
-      const contactsOverageBilled = isReleaseFlagOn(
+      //
+      // Per-org overrides included (AGL-1635). An org that staff granted
+      // Contacts early has the page, so it must have the invoice too; a gate
+      // that read only the Remote Config value would ignore the grant and
+      // under-bill exactly the customers who CAN reach the feature. Resolved
+      // off `orgData` — the org doc is already in hand from the batch above, so
+      // this costs no extra read, unlike `isServerReleaseFlagOnForOrg`, which
+      // would re-fetch the same document once per org.
+      const contactsOverageBilled = isReleaseFlagOnForOrg(
         'release_contacts',
         releaseFlagValues['release_contacts'],
         orgId,
+        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
       )
       const contactsOverageUsd = contactsOverageBilled
         ? contactQuota.overageMonthlyUsd

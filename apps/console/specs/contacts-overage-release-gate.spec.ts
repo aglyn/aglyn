@@ -67,6 +67,8 @@ let mockUsageWrites: Record<string, Record<string, unknown>>
 let mockOrgPlans: Record<string, string>
 /** The Remote Config verdicts the route reads. */
 let mockFlagValues: Record<string, ReleaseFlagValue>
+/** Per-org release-flag overrides on `orgs/{id}` (AGL-1635). */
+let mockOrgOverrides: Record<string, Record<string, boolean>>
 /** Stripe meter-event request bodies, captured at the `fetch` boundary. */
 let mockMeterEvents: string[]
 
@@ -130,7 +132,12 @@ function fakeOrgRef(orgId: string) {
     id: orgId,
     path,
     get: async () =>
-      snapshotOf(orgId, { plan: mockOrgPlans[orgId] ?? 'starter' }),
+      snapshotOf(orgId, {
+        plan: mockOrgPlans[orgId] ?? 'starter',
+        ...(mockOrgOverrides[orgId] && {
+          releaseFlags: mockOrgOverrides[orgId],
+        }),
+      }),
     collection: (name: string) => {
       if (name === 'counters') {
         return { doc: (counter: string) => counterDocRef(path, counter) }
@@ -240,7 +247,10 @@ function seed(options: {
   plan?: string
   hostMediaBytes?: number
   flag?: ReleaseFlagValue
+  /** `orgs/org-1.releaseFlags`, the per-org override map (AGL-1635). */
+  overrides?: Record<string, boolean>
 }) {
+  mockOrgOverrides = options.overrides ? { 'org-1': options.overrides } : {}
   mockHosts = [{ id: 'site-a', orgId: 'org-1' }]
   mockHostMediaBytes = {
     'hosts/site-a/counters/media': options.hostMediaBytes ?? 0,
@@ -335,6 +345,33 @@ describe('the suppression reverses itself when Contacts ships', () => {
     const write = (await rollUp())['org-1']
     expect(write.contactsOverageBilled).toBe(true)
     expect(write.billedCents).toBe(OVERAGE_CENTS)
+  })
+
+  it('bills an org that staff granted Contacts early (AGL-1635 override)', async () => {
+    // The override is what makes the page reachable for this one customer, so
+    // it has to make the invoice reachable too. A gate reading only the Remote
+    // Config value would under-bill exactly the orgs that CAN open Contacts.
+    seed({
+      flag: { enabled: false },
+      overrides: { release_contacts: true },
+    })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(true)
+    expect(write.billedCents).toBe(OVERAGE_CENTS)
+  })
+
+  it('honours a per-org kill switch even once the flag ships', async () => {
+    // The override runs both ways. An org forced OFF cannot open the page, so
+    // it must not be invoiced, flag or no flag.
+    seed({
+      flag: { enabled: true },
+      overrides: { release_contacts: false },
+    })
+    const write = (await rollUp())['org-1']
+    expect(write.contactsOverageBilled).toBe(false)
+    expect(write.contactsOverageWithheldUsd).toBeCloseTo(OVERAGE_USD, 6)
+    expect(write.billedCents).toBe(0)
+    expect(mockMeterEvents).toEqual([])
   })
 })
 

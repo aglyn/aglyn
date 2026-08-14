@@ -206,7 +206,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/measure-node-map'),
-  isReleaseFlagOn: () => false,
+  isReleaseFlagOnForOrg: () => false,
+  parseOrgReleaseFlagOverrides: () => ({}),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
