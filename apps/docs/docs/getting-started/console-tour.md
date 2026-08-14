@@ -36,8 +36,9 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   gear to [Manage Account](../workspace-and-billing/manage-account.md); below that are
   **Manage Team**, **Billing**, **Support**, **Staff console** (Aglyn staff only), and a
   **Documentation** link that opens this docs site in a new tab. It also holds the
-  **theme toggle** (light / system / dark), an **Upgrade plan** button unless you're
-  already on Advanced, **Sign out**, and a footer naming your current workspace and plan.
+  **theme toggle** (light / system / dark), an **Upgrade plan** button — shown only when
+  your workspace has a higher plan to move to, and only to members who can open Billing —
+  **Sign out**, and a footer naming your current workspace and plan.
 
 ## In-context help
 
@@ -49,18 +50,38 @@ matching section of these docs in a new tab.
 
 ## Primary navigation
 
+The tabs across the top of a site are its **sections**. Some are always present; the rest
+are contributed by the plugins your workspace has enabled — so two sites, or the same site
+before and after you enable a plugin, can show different tabs. Don't be surprised by a
+tab strip that doesn't match a screenshot exactly.
+
+These four are where a new site's work happens:
+
 | Section | What's there |
 | --- | --- |
-| **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. |
-| **Components** | Reusable components shared across screens. |
-| **Data** | Organization datasets — shared by every site. |
-| **Products** | Commerce products and orders. |
-| **Logic** | Variables and functions screens bind to. |
-| **Workflows** | Workflows, automations, and webhooks. |
+| **Dashboard** | The site at a glance — analytics and recent-signup summaries, and the ten most recent activity entries. |
+| **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. This is where you build; start at [Publish your first screen](publish-your-first-screen.md). |
 | **Media** | The media library — folders, images, video, and files. |
-| **Content** | Collections, blog entries, and the inbox. |
-| **Setup** | Theme editor, custom domain, SEO, and the full activity log. Each section is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
-| **Billing** | Plan cards and usage meters. |
+| **Setup** | Basic details, SEO, theme, custom domain, emails, and the full activity log. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
+
+Alongside them, and always present: **Layouts** and **Components** (the shared frames and
+reusable pieces screens are assembled from — see
+[Screens & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
+(saved starting points), **Content** (collections and blog entries), **Users** (the people
+who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
+appears only if you're an owner or admin of the site; it holds per-site plugin settings and
+the danger zone.
+
+:::note Sections that come and go
+Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Contacts**,
+**Bookings**, **Events**, **Redirects**, **Marketing** and **Marketplace** are contributed
+by plugins and appear only where that plugin is enabled for your workspace (they're
+inserted after **Analytics**). If a section these docs describe isn't in your tab strip,
+that's usually why — enable the plugin under **Organization → Marketplace → Installed**.
+:::
+
+**Billing is not a site section.** Plan cards and usage meters are workspace-wide and live
+in your account menu under **Billing** — one bill covers every site in the workspace.
 
 ## Editing vs. managing
 
