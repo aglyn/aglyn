@@ -33,6 +33,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useReleaseFlag } from '../../hooks/use-release-flags'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
 import { orgBandwidthGb } from '../../utils/usage-metering'
 
@@ -415,6 +416,30 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // Contacts meter past the band on a paid plan is billing, not blocking
   // (AGL-890) — the caption under the meter says so with the estimate.
   const contactQuota = checkContactQuota(org, contactsCount ?? 0)
+  // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
+  // usage cron putting `contactsOverageUsd` into `billedCents` while
+  // `release_contacts` is off for the org, and this caption kept quoting the
+  // dollar figure — the same defect with the sign reversed, on the page a
+  // customer reads before deciding to stay.
+  //
+  // THE SAME VERDICT, not an approximation of it. `released` is
+  // `isReleaseFlagOnForOrg` over the Remote Config value, bucketed by the org
+  // id, with `parseOrgReleaseFlagOverrides` applied — the identical expression
+  // and the identical inputs `report-usage` resolves from `orgData`. So an org
+  // staff granted Contacts early (AGL-1635) IS billed and is told so, and an
+  // org forced off is not billed and is not told it owes anything.
+  //
+  // `released`, deliberately NOT `visible`: `visible` adds the staff bypass,
+  // and staff seeing a page does not put a line on the customer's invoice.
+  // Billing text must follow what is billed, not who is looking.
+  //
+  // Gated on `ready` — before Remote Config activation every flag reads its
+  // registry default (`release_contacts` is default-off), so an unguarded
+  // caption would assert "not billed" for one paint on an org that IS billed.
+  // A billing claim is not made until the verdict that decides it has settled;
+  // the head-count meter above renders throughout.
+  const { released: contactsBilled, ready: releaseFlagsReady } =
+    useReleaseFlag('release_contacts')
   return (
     <>
       <UsageMeter
@@ -444,15 +469,29 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.contactsPerHost}
       />
       {contactQuota.overageContacts > 0 &&
-      contactQuota.overageRateUsd != null ? (
+      contactQuota.overageRateUsd != null &&
+      releaseFlagsReady ? (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {`Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
-            `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
-            `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} this month.`}
+          {contactsBilled
+            ? `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+              `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
+              `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} this month.`
+            : // Worded to `billing-and-plans/overview.md` (AGL-1601/1603),
+              // which tells the same customer that the Contacts page isn't
+              // available yet, that paid audience overage is not billed while
+              // it is unavailable, and that the published rates are what will
+              // apply once it opens. The count stays — it is real, it is what
+              // ingestion has captured, and it is why the band matters — while
+              // the monthly dollar total goes, because that total is the part
+              // no invoice will carry.
+              `Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+              `over the included band — not billed while the Contacts page is ` +
+              `unavailable. The $${contactQuota.overageRateUsd}/1,000 rate ` +
+              `applies once Contacts opens.`}
         </Typography>
       ) : null}
       {entitlements.apiRequestsPerMonth > 0 ? (
