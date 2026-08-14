@@ -18,6 +18,8 @@
 import {
   collectMarkdownHeadings,
   isInternalMarkdownHref,
+  isSupportedImageSrc,
+  isSupportedLinkHref,
   markdownInlinesToText,
   parseMarkdownInlines,
   parseMarkdownLite,
@@ -77,12 +79,99 @@ describe('markdown-lite', () => {
     expect(parseMarkdownInlines('[x](//evil.example)')).toEqual([
       { type: 'text', text: 'x' },
     ])
-    // Site-relative IMAGES stay unsupported; media URLs are absolute.
+    // Site-relative IMAGES are supported too (AGL-1686). They were not, on
+    // the premise that "media URLs are absolute" — which stopped being true
+    // when the media library started handing back `/api/media/cdn/…`, and
+    // the parser dropping the block was how that showed up.
+    expect(parseMarkdownLite('![x](/img.png)')).toEqual([
+      { type: 'image', src: '/img.png', alt: 'x' },
+    ])
+    // Protocol-relative is refused for images on the same terms as links.
     expect(
-      parseMarkdownLite('![x](/img.png)').every(
+      parseMarkdownLite('![x](//evil.example/a.png)').every(
         (block) => block.type !== 'image',
       ),
     ).toBe(true)
+  })
+
+  /**
+   * AGL-1686. A document records WHICH ASSET, and the renderer builds the
+   * URL — so the reference has to survive the parser to reach a renderer at
+   * all. Before this it did not: the image rule was absolute-`http(s)`-only,
+   * so `![](media:…)` emitted NO BLOCK. The failure was not the broken `<img>`
+   * the issue described; the picture was simply absent, with nothing logged.
+   */
+  it('keeps a well-formed media reference as an image src (AGL-1686)', () => {
+    expect(parseMarkdownLite('![Logo](media:org:acme/med123)')).toEqual([
+      { type: 'image', src: 'media:org:acme/med123', alt: 'Logo' },
+    ])
+    // Host-qualified org scope and a bare host scope both parse.
+    expect(parseMarkdownLite('![a](media:org:acme:site1/med1)')).toEqual([
+      { type: 'image', src: 'media:org:acme:site1/med1', alt: 'a' },
+    ])
+    expect(parseMarkdownLite('![a](media:site1/med1)')).toEqual([
+      { type: 'image', src: 'media:site1/med1', alt: 'a' },
+    ])
+  })
+
+  it('refuses a malformed media reference rather than emitting it (AGL-1686)', () => {
+    // No media id, an id the CDN grammar rejects, and a bare scheme. Each
+    // would reach an `<img src="media:…">` if the parser waved it through,
+    // which is the failure the reference scheme was chosen to make loud.
+    for (const source of [
+      '![a](media:org:acme)',
+      '![a](media:org:acme/)',
+      '![a](media:/med1)',
+      '![a](media:org:acme/med.1)',
+      '![a](media:)',
+    ]) {
+      expect(
+        parseMarkdownLite(source).every((block) => block.type !== 'image'),
+      ).toBe(true)
+    }
+  })
+
+  /**
+   * The editor and the parser used to hold separate copies of these rules and
+   * AGL-1645 widened only one of them, so the visual editor accepted a
+   * site-relative media path that the next parse deleted. The editor now
+   * delegates to these predicates; this pins them to what the parser does.
+   */
+  it('exposes the parser rules the editor validates against (AGL-1686)', () => {
+    for (const url of [
+      'https://x.example/a.png',
+      '/api/media/cdn/org:acme/med1',
+      'media:org:acme/med1',
+    ]) {
+      expect(isSupportedImageSrc(url)).toBe(true)
+      expect(
+        parseMarkdownLite(`![a](${url})`).some(
+          (block) => block.type === 'image',
+        ),
+      ).toBe(true)
+    }
+    for (const url of ['//evil.example/a.png', 'javascript:alert(1)', 'media:x']) {
+      expect(isSupportedImageSrc(url)).toBe(false)
+      expect(
+        parseMarkdownLite(`![a](${url})`).every(
+          (block) => block.type !== 'image',
+        ),
+      ).toBe(true)
+    }
+    // Links never took a media reference and still do not — an asset is not
+    // a destination.
+    expect(isSupportedLinkHref('/about')).toBe(true)
+    expect(isSupportedLinkHref('media:org:acme/med1')).toBe(false)
+    expect(isSupportedLinkHref('//evil.example')).toBe(false)
+  })
+
+  it('round-trips a media reference through the serializer (AGL-1686)', () => {
+    // The reference has to survive parse→serialize→parse unchanged, or the
+    // visual editor would rewrite every document it opens.
+    const source = '![Logo](media:org:acme/med123)'
+    const blocks = parseMarkdownLite(source)
+    expect(serializeMarkdownLite(blocks)).toBe(source)
+    expect(parseMarkdownLite(serializeMarkdownLite(blocks))).toEqual(blocks)
   })
 
   it('parses a fenced code block verbatim, blank lines and all (AGL-974)', () => {

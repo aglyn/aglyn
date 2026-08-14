@@ -77,7 +77,13 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
               <Box
                 key={index}
                 component="img"
-                src={block.src}
+                // Resolved (AGL-1686), so the console preview shows the same
+                // picture the published page will. No `hostId`: this renders
+                // in the console, which has no site context — the scope the
+                // picker baked in is what resolves. The console serves
+                // `/api/media/cdn/…` itself, so the relative URL this
+                // produces is fetchable from here.
+                src={Aglyn.resolveMediaSrc(block.src)}
                 alt={block.alt}
                 loading="lazy"
                 sx={{

@@ -514,6 +514,7 @@ describe('in-place markdown commit semantics (AGL-1624)', () => {
       act(() => {
         pick('media:org:acme/med123')
       })
+      // Shown resolved, stored as the reference (AGL-1686).
       const img = document.querySelector(
         '[data-row-kind="image"] img',
       ) as HTMLImageElement | null
@@ -524,7 +525,7 @@ describe('in-place markdown commit semantics (AGL-1624)', () => {
         jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS)
       })
       expect(lastCommittedContent()).toBe(
-        'Before.\n\n![A signed contract](/api/media/cdn/org:acme/med123)',
+        'Before.\n\n![A signed contract](media:org:acme/med123)',
       )
     })
 
@@ -560,7 +561,7 @@ describe('in-place markdown commit semantics (AGL-1624)', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Done' }))
       })
       expect(String(lastCommittedContent())).toContain(
-        '![Kept open](/api/media/cdn/org:acme/med123)\n\nAfter the image.',
+        '![Kept open](media:org:acme/med123)\n\nAfter the image.',
       )
     })
 

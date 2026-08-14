@@ -471,7 +471,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={index}
-                    src={block.src}
+                    // Resolved on the same terms as the cover above
+                    // (AGL-1686): body images are the same assets, and this
+                    // fallback renderer has the same `host.$id` in hand.
+                    src={Aglyn.resolveMediaSrc(block.src, {
+                      hostId: host?.$id,
+                    })}
                     alt={block.alt}
                     style={{ maxWidth: '100%', borderRadius: 8 }}
                   />

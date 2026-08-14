@@ -46,3 +46,33 @@ describe('ListingReadme (markdown-lite parity)', () => {
     expect(container.textContent).toBe('Install:Run npm iRegister it')
   })
 })
+
+/**
+ * AGL-1686. A README image is picked from the publisher's own media library,
+ * and the listing image beside it (`ListingImage`) has resolved a reference
+ * all along — the README was the half that dropped the block entirely.
+ *
+ * No `hostId`: a listing belongs to a publishing ORG rather than to a site, so
+ * there is no rendering host to re-point the scope at.
+ */
+describe('ListingReadme images (AGL-1686)', () => {
+  it('resolves a media reference to the CDN url', () => {
+    const { container } = render(
+      <ListingReadme readme={'![Screenshot](media:org:acme/med1)'} />,
+    )
+    const image = container.querySelector('img')
+    expect(image?.getAttribute('src')).toBe('/api/media/cdn/org:acme/med1')
+    expect(image?.getAttribute('alt')).toBe('Screenshot')
+  })
+
+  it('passes a plain URL through and renders nothing for a bad reference', () => {
+    const { container } = render(
+      <ListingReadme readme={'![a](https://x.example/a.png)'} />,
+    )
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'https://x.example/a.png',
+    )
+    const bad = render(<ListingReadme readme={'![a](media:junk)'} />)
+    expect(bad.container.querySelector('img')).toBeNull()
+  })
+})

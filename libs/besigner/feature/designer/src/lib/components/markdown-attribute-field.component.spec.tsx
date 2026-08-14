@@ -235,7 +235,9 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
         pick('media:org:acme/med123')
       })
 
-      // The editor really holds the image, not just the string.
+      // The editor really holds the image, not just the string — and it shows
+      // the RESOLVED url, so the author is not editing next to a broken-image
+      // icon while the published page renders fine (AGL-1686).
       const img = document.querySelector(
         '[data-row-kind="image"] img',
       ) as HTMLImageElement | null
@@ -244,15 +246,21 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
 
       unmount()
       expect(lastCommittedContent()).toBe(
-        'Before.\n\n![A signed contract](/api/media/cdn/org:acme/med123)',
+        'Before.\n\n![A signed contract](media:org:acme/med123)',
       )
     })
 
-    // The trap that makes this more than plumbing. `onPickMedia` returns what
-    // an ATTRIBUTE should store — a `media:` reference (AGL-1215) — and no
-    // markdown-lite renderer resolves one, so a reference written straight into
-    // `![](…)` is a permanently broken image on the published page.
-    it('never lets a raw media: reference reach the document', () => {
+    /**
+     * The half AGL-1645 got backwards, corrected by AGL-1686.
+     *
+     * It resolved the picked reference to a CDN path at insert time, because
+     * no markdown-lite renderer resolved one. All five now do, so the document
+     * stores the REFERENCE like every other media-bearing attribute — the
+     * route shape stays an app concern, and one reference in a shared layout
+     * resolves per rendering site instead of naming the picker's best guess
+     * forever.
+     */
+    it('stores the media: reference, not the route it resolves to', () => {
       const { unmount, pick } = renderWithPicker('')
       openPickerWithAlt('')
       act(() => {
@@ -260,10 +268,33 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
       })
       unmount()
       const committed = String(lastCommittedContent())
-      // Non-vacuous: the image is really in the document — it is the FORM the
-      // assertion below is about.
-      expect(committed).toContain('![](/api/media/cdn/org:acme/med123)')
-      expect(committed).not.toContain('media:')
+      expect(committed).toBe('![](media:org:acme/med123)')
+      expect(committed).not.toContain('/api/media/cdn')
+    })
+
+    /**
+     * The insert has to survive a PARSE, which is the step that made AGL-1645
+     * a silent no-op: the document round-trips through `parseMarkdownLite`
+     * every time the editor mounts, and a src the parser refuses drops the
+     * whole block with nothing logged. Re-rendering the committed content is
+     * the only assertion that catches that.
+     */
+    it('survives the round-trip back through the parser', () => {
+      const { unmount, pick } = renderWithPicker('')
+      openPickerWithAlt('Contract')
+      act(() => {
+        pick('media:org:acme/med123')
+      })
+      unmount()
+      const committed = String(lastCommittedContent())
+
+      const reopened = render(<ElementPropsForm {...formProps(committed)} />)
+      const img = document.querySelector(
+        '[data-row-kind="image"] img',
+      ) as HTMLImageElement | null
+      expect(img?.getAttribute('alt')).toBe('Contract')
+      expect(img?.getAttribute('src')).toBe('/api/media/cdn/org:acme/med123')
+      reopened.unmount()
     })
 
     // A raw URL — a free-tier org or a legacy upload, where the picker has no

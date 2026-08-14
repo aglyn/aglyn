@@ -618,8 +618,13 @@ const BlockRowView = memo(function BlockRowView({
       }}
     >
       {row.kind === 'image' ? (
+        // Resolved for DISPLAY only (AGL-1686); `row.src` keeps the stored
+        // form, so serializing back writes the reference rather than the URL
+        // it happens to resolve to right now. Without this the author would
+        // be editing next to a broken-image icon while the published page
+        // rendered correctly.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={row.src} alt={row.alt} />
+        <img src={Aglyn.resolveMediaSrc(row.src)} alt={row.alt} />
       ) : row.kind === 'code' ? (
         <Box
           sx={{
@@ -948,23 +953,24 @@ const cloneRows = (rows: EditorRow[]): EditorRow[] =>
 
 const HISTORY_LIMIT = 100
 
-/** True when only https?:// or a site-relative (not protocol-relative) path. */
-const isValidLinkUrl = (url: string): boolean =>
-  /^https?:\/\//i.test(url) || /^\/(?!\/)/.test(url)
 /**
- * Images accept the same two forms links always have (AGL-1645).
+ * What the editor accepts is exactly what the PARSER keeps (AGL-1686).
  *
- * Absolute-only was never right and it silently DROPPED the insert rather than
- * reporting it: `insertImageRow` returns early on a rejected URL, so a media
- * pick that resolved to our own `/api/media/cdn/{scope}/{id}` — the form the
- * library hands back for every asset with a CDN path — put nothing in the
- * document and said nothing about it. A site-relative image is also what an
- * author writing `/images/hero.png` by hand means, which the link dialog has
- * accepted from the start.
+ * These were hand-rolled copies of the parser's rules, and the copy is what
+ * broke: AGL-1645 widened the image rule here to accept the site-relative
+ * `/api/media/cdn/{scope}/{id}` the media library hands back, while
+ * `markdown-lite`'s image rule stayed absolute-`http(s)`-only. The insert
+ * worked, serialized, saved — and the parser then dropped the block on the way
+ * back out, so the image was gone from the document, the preview and the
+ * published page with nothing logged anywhere.
  *
- * Protocol-relative is still refused, exactly as for links.
+ * Delegating means the two can no longer disagree. Both still refuse
+ * protocol-relative `//host`, which would silently leave the site; images
+ * additionally accept a well-formed `media:` reference (AGL-1215), which is
+ * now what the media picker inserts.
  */
-const isValidImageUrl = (url: string): boolean => isValidLinkUrl(url)
+const isValidLinkUrl = (url: string): boolean => Aglyn.isSupportedLinkHref(url)
+const isValidImageUrl = (url: string): boolean => Aglyn.isSupportedImageSrc(url)
 
 interface UrlDialogState {
   kind: 'link' | 'image'

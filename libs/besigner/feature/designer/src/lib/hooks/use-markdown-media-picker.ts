@@ -44,32 +44,32 @@ export interface MarkdownMediaPicker {
  * Attributes panel's Browse button and AGL-1304's instance `src` edit already
  * use; nothing new is invented here.
  *
- * ## Why the picked value is RESOLVED rather than stored verbatim
+ * ## The picked value is stored VERBATIM
  *
- * This is the one place a besigner surface must NOT write the picker's value
- * through untouched, which is what everything else does.
+ * Which is what every other besigner surface does, and it took AGL-1686 to get
+ * back to it.
  *
- * `onPickMedia` hands back what an *attribute* should store: a
- * `media:{scope}/{mediaId}` reference for library assets (AGL-1215), resolved
- * at render time by whichever component reads it. A markdown document has no
- * such reader. Its `![alt](src)` goes to five renderers and not one of them
- * calls `resolveMediaSrc` — `libs/plugins/mui/src/lib/components/markdown.tsx`
- * passes `block.src` straight to an `<img>` — so a reference dropped into a
- * document is a permanently broken image on the published page. The console's
- * blog editor reached the same conclusion from the other side and keeps the raw
- * URL for body images while the cover takes a reference.
+ * `onPickMedia` hands back what an attribute should store: a
+ * `media:{scope}/{mediaId}` reference for library assets (AGL-1215). The first
+ * pass resolved that to a `/api/media/cdn/…` path HERE, at insert time,
+ * because no markdown-lite renderer called `resolveMediaSrc` and a reference in
+ * a document would have rendered nothing. All five now resolve, so the reason
+ * is gone — and keeping the workaround anyway would not be belt-and-braces, it
+ * would be a downgrade:
  *
- * So the reference is resolved HERE, at insert time, to the CDN path it names.
- * That is strictly better than the raw storage URL the blog editor stores: the
- * CDN path is keyed by media id, so it survives the folder move that made
- * AGL-1215 a permanent 404, and it survives a replace. What it does not survive
- * is re-routing `/api/media/cdn/…`, which is the cost of markdown renderers
- * resolving nothing — a renderer-side fix, filed separately, and deliberately
- * not made here where it would touch all five.
+ * * **It bakes the route into the content.** A CDN path in a document couples
+ *   every screen, layout, component and template on every host to a delivery
+ *   detail that has already changed once (AGL-829). That coupling is the whole
+ *   thing the reference exists to remove.
+ * * **It is lossy in a way the renderer cannot undo.** Resolving early freezes
+ *   the picker's best-guess host qualification. `hostQualifiedScope` re-points
+ *   a reference at whichever site is actually rendering, which is what lets ONE
+ *   image in a reusable component or a shared layout work on every site that
+ *   uses it. A resolved path can only ever name one of them.
  *
- * No `hostId` is passed, for the same reason `resolveMediaSrc` documents: the
- * besigner canvas has no site context, and the picker has already baked its
- * best guess into the reference's scope.
+ * The reference reaches the document unchanged, and `parseMarkdownLite` now
+ * accepts it — the other half of AGL-1686, without which the editor would
+ * insert a row that the next parse silently deleted.
  *
  * ## Focus
  *
@@ -94,12 +94,13 @@ export function useMarkdownMediaPicker(): MarkdownMediaPicker {
     if (!onPickMedia) return undefined
     return (alt: string) => {
       onPickMedia((stored) => {
-        const src = Aglyn.resolveMediaSrc(stored)
-        // A reference that does not parse resolves to undefined rather than
-        // reaching an `<img src>`; inserting nothing is better than inserting
-        // a row the author then has to find and delete.
-        if (!src) return
-        handleRef.current?.insertImage(alt, src)
+        // Gated on what the PARSER keeps, not on what resolves: a value the
+        // editor accepts and the parser drops is an image that disappears on
+        // the next load with nothing logged, which is exactly how AGL-1645
+        // shipped broken. `insertImage` re-checks with the same predicate, so
+        // this is the early, reportable refusal rather than the guard.
+        if (!stored || !Aglyn.isSupportedImageSrc(stored)) return
+        handleRef.current?.insertImage(alt, stored)
       })
     }
   }, [onPickMedia])
