@@ -39,6 +39,7 @@ import {
   mediaQuarantineAssetKey,
   mediaQuarantineHashKey,
   mediaQuarantineKey,
+  mediaQuarantineKeys,
   mediaQuarantineNotice,
   normalizeMediaQuarantine,
 } from './media-quarantine'
@@ -86,6 +87,67 @@ describe('AGL-1512 · quarantine keys', () => {
     expect(mediaQuarantineAssetKey('org:acme', 'm1')).not.toBe(
       mediaQuarantineAssetKey('h1', 'm1'),
     )
+  })
+})
+
+/**
+ * AGL-1614 introduced a SECOND, stronger digest beside the truncated
+ * `contentHash`. The whole risk of doing that is a takedown that quietly
+ * stops biting because the document it covers grew a better field, so these
+ * are the properties that make it safe rather than the ones that make it
+ * nice.
+ */
+describe('AGL-1614 · the strong digest never strands a live takedown', () => {
+  const SHA = 'a'.repeat(64)
+  const LEGACY = '0123456789abcdef'
+
+  it('an entry keyed on the LEGACY hash still matches an asset that gained a sha256', () => {
+    // The failure this prevents: staff quarantine a file today (legacy key),
+    // the owner replaces it with the same bytes tomorrow, the new write adds
+    // `contentSha256`, and a preference-only lookup would serve the file
+    // again. A takedown lifting itself is the worst outcome this lever has.
+    expect(
+      mediaQuarantineKeys({
+        contentSha256: SHA,
+        contentHash: LEGACY,
+        scopeSegment: 'org:acme',
+        mediaId: 'm1',
+      }),
+    ).toEqual([`hash--${SHA}`, `hash--${LEGACY}`, 'asset--org:acme--m1'])
+  })
+
+  it('prefers the strong digest but never at the cost of the others', () => {
+    expect(
+      mediaQuarantineKey({ contentSha256: SHA, contentHash: LEGACY }),
+    ).toBe(`hash--${SHA}`)
+    expect(mediaQuarantineKeys({ contentSha256: SHA })).toEqual([
+      `hash--${SHA}`,
+    ])
+  })
+
+  it('is a no-op for the documents that have no strong digest', () => {
+    // Every asset written before this change, plus every non-SVG landed
+    // through the signed-upload route, which never holds the bytes.
+    expect(
+      mediaQuarantineKeys({
+        contentHash: LEGACY,
+        scopeSegment: 'h1',
+        mediaId: 'm1',
+      }),
+    ).toEqual([`hash--${LEGACY}`, 'asset--h1--m1'])
+    expect(mediaQuarantineKeys({ scopeSegment: 'h1', mediaId: 'm1' })).toEqual([
+      'asset--h1--m1',
+    ])
+    expect(mediaQuarantineKeys({})).toEqual([])
+  })
+
+  it('never emits the same key twice when both digests agree', () => {
+    // Not hypothetical: a legacy document whose `contentHash` was already a
+    // sha256 prefix can be handed the same string in both fields by an
+    // import that copies whatever it was given.
+    expect(
+      mediaQuarantineKeys({ contentSha256: SHA, contentHash: SHA }),
+    ).toEqual([`hash--${SHA}`])
   })
 })
 

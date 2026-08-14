@@ -348,6 +348,11 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     'width',
     'height',
     'contentHash',
+    // The strong quarantine digest (AGL-1614). Carried for the same reason
+    // `contentHash` is: an import re-creates the media document, and an
+    // asset that arrives without its digest arrives without the key a
+    // takedown was written under.
+    'contentSha256',
     'variants',
     'cdnPath',
     'customMetadata',

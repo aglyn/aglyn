@@ -686,6 +686,10 @@ const SEEDS: Array<{
       width: 1600,
       height: 900,
       contentHash: 'sha256-abc',
+      // The AGL-1614 strong digest. Carried across a round trip because it
+      // is the key an asset quarantine may have been written under, and an
+      // imported copy that lost it would be a copy a takedown stops covering.
+      contentSha256: `${'a'.repeat(64)}`,
       variants: [{ width: 800, url: 'https://cdn/hero-800.webp' }],
       cdnPath: '/api/media/cdn/media-1',
       customMetadata: { campaign: 'launch' },

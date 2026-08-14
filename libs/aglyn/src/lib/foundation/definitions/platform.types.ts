@@ -420,6 +420,29 @@ export interface AglynHostMedia {
    */
   cdnPath?: string
   contentHash?: string
+  /**
+   * The FULL 64-hex sha256 of the served bytes (AGL-1614), written only by
+   * the routes that hash the bytes server-side. Additive beside
+   * {@link contentHash}, which is unchanged and stays the ETag and the
+   * immutable-URL segment.
+   *
+   * The distinction is load-bearing rather than tidy. `contentHash` is a
+   * 16-hex (64-bit) TRUNCATION of one of TWO digests — sha256 on
+   * `/api/media/upload` and `/api/media/replace`, GCS's md5 on
+   * `/api/media/upload-url` — which is fine for a cache validator (opaque,
+   * per-URL, self-consistent) and weak for anything that has to be a
+   * SECURITY key. Two md5 files with the same digest are hours of laptop
+   * compute to construct, and a truncation to 64 bits inherits that
+   * immediately; a quarantine keyed on such a value can be made to refuse an
+   * innocent asset. `contentSha256` has neither property.
+   *
+   * Absent, not null, when the server never held the bytes: the signed-upload
+   * route streams client → bucket and only downloads them back for an SVG
+   * sanitization pass, so that is the one case there where it is written.
+   * Absent means "no strong key for these bytes", and every consumer already
+   * degrades to `contentHash` and then to the per-asset key.
+   */
+  contentSha256?: string
   variants?: number[]
   /**
    * User-defined key/value metadata (AGL-822), mirrored onto the Storage

@@ -475,6 +475,13 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
 export async function mediaCdnServeBlock(
   scope: MediaCdnScope,
   asset: {
+    /**
+     * The strong full-width digest (AGL-1614) when the document has one.
+     * Preferred over `contentHash` as a quarantine key — it is one
+     * algorithm at full width, where `contentHash` is a 64-bit truncation
+     * of either sha256 or md5 depending on the ingesting route.
+     */
+    contentSha256?: string
     contentHash?: string
     /**
      * The raw URL scope segment and media id — the fallback quarantine key
@@ -488,6 +495,7 @@ export async function mediaCdnServeBlock(
 ): Promise<'locked' | 'quarantined' | null> {
   if (await mediaCdnScopeLocked(scope)) return 'locked'
   const quarantined = await getMediaQuarantine({
+    contentSha256: asset.contentSha256,
     contentHash: asset.contentHash,
     scopeSegment: asset.scopeSegment,
     mediaId: asset.mediaId,
@@ -742,6 +750,12 @@ export async function serveMediaCdn(
     // there is no saving to weigh against it. CSP + nosniff are already on
     // the response (set first, before any exit).
     const blockedBy = await mediaCdnServeBlock(scope, {
+      // The strong digest is read for the quarantine key ONLY. It is
+      // deliberately not the ETag and not the immutable URL segment
+      // (AGL-1614): changing either of those would change live URLs and
+      // cache validators for every existing asset, and this change must be
+      // additive to the point of being invisible on the wire.
+      contentSha256: String(snapshot.get('contentSha256') ?? ''),
       contentHash: currentHash,
       scopeSegment,
       mediaId,

@@ -341,6 +341,34 @@ describe('AGL-1512 · the key follows the bytes, not the document', () => {
     expectRefused(await serve(['h1', 'hashless']))
   })
 
+  it('a LEGACY hash entry keeps refusing a document that gained a sha256 (AGL-1614)', async () => {
+    // The migration hazard, driven end-to-end rather than argued: AGL-1614
+    // adds a stronger digest beside the truncated one, and a replace stamps
+    // it onto documents a quarantine already covers. If the lookup preferred
+    // the new field instead of checking both, this takedown would silently
+    // lift the moment the owner re-uploaded the same bytes.
+    mockState.media['orgs/acme/media/upgraded'] = {
+      ...mediaDoc(INFECTED_HASH),
+      contentSha256: 'b'.repeat(64),
+    }
+    mockState.quarantine = denyList({
+      [`hash--${INFECTED_HASH}`]: quarantined(),
+    })
+    expectRefused(await serve(['org:acme', 'upgraded']))
+  })
+
+  it('an entry keyed on the sha256 refuses too (AGL-1614)', async () => {
+    const strong = 'c'.repeat(64)
+    mockState.media['orgs/acme/media/strong'] = {
+      ...mediaDoc(CLEAN_HASH),
+      contentSha256: strong,
+    }
+    mockState.quarantine = denyList({ [`hash--${strong}`]: quarantined() })
+    expectRefused(await serve(['org:acme', 'strong']))
+    // …and its neighbour, which shares neither digest, keeps serving.
+    expect(served(await serve(['org:acme', 'neighbour']))).toBe(true)
+  })
+
   it('a per-asset entry is scope-qualified — it does not leak across libraries', async () => {
     mockState.quarantine = denyList({
       'asset--org:acme--hashless': quarantined(),

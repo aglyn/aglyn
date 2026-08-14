@@ -47,7 +47,7 @@ import {
   MEDIA_QUARANTINES_COLLECTION,
   type MediaQuarantineEntry,
   type MediaQuarantineState,
-  mediaQuarantineKey,
+  mediaQuarantineKeys,
   normalizeMediaQuarantine,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
@@ -116,23 +116,22 @@ async function readQuarantineIndex(): Promise<QuarantineIndex> {
  * wants to explain itself can (the console does); the CDN deliberately
  * only uses the boolean, because its refusal must stay neutral.
  *
- * BOTH keys are checked, and either one refusing is enough. An asset that
- * has a `contentHash` is normally matched on it, but a per-asset entry set
- * before the hash existed — or set while the hash was absent and kept after
- * a replace gave the document one — must keep biting. Checking both costs
- * nothing: the deny list is already in memory.
+ * EVERY key is checked, and any one refusing is enough — see
+ * {@link mediaQuarantineKeys} for why none of them may be dropped. In
+ * short: the strong AGL-1614 `contentSha256`, the legacy truncated
+ * `contentHash`, and the per-asset fallback are all keys a quarantine in
+ * force may have been written under, and a takedown that stops biting
+ * because the document gained a better field would be the worst outcome
+ * this lever can produce. Checking all of them costs nothing: the deny list
+ * is already in memory.
  */
 export async function getMediaQuarantine(asset: {
+  contentSha256?: string | null
   contentHash?: string | null
   scopeSegment?: string | null
   mediaId?: string | null
 }): Promise<MediaQuarantineState | null> {
-  const hashKey = mediaQuarantineKey({ contentHash: asset.contentHash })
-  const assetKey = mediaQuarantineKey({
-    scopeSegment: asset.scopeSegment,
-    mediaId: asset.mediaId,
-  })
-  const keys = [hashKey, assetKey].filter((key): key is string => Boolean(key))
+  const keys = mediaQuarantineKeys(asset)
   if (!keys.length) return null
   const entries = await readQuarantineIndex()
   const nowMs = Date.now()
