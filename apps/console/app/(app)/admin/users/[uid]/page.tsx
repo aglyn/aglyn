@@ -66,6 +66,20 @@ interface UserDetail {
     providers: string[]
     createdAt: string | null
     lastSignInAt: string | null
+    /**
+     * The phone the profile holds, and whether we are allowed to use it
+     * (AGL-1569). `phoneContact` is null when there is no number on file.
+     */
+    phoneNumber: string | null
+    phoneNumberErasedAt: string | null
+    phoneContact: {
+      suppressed: boolean
+      channels: string[]
+      source: string | null
+      erasePhoneOnFile: boolean
+      revokedAt: string | null
+      lookupFailed: boolean
+    } | null
   }
   memberships: Array<{
     orgId: string
@@ -319,6 +333,58 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           detail.user.lastSignInAt ?? '—'
                         }`}
                       </Typography>
+                      {/* Phone + do-not-contact (AGL-1569). The number is
+                          collected under Privacy Policy v4 §11 for upsell and
+                          dunning outreach, so it never appears without the
+                          answer to "may we contact them?" — a dialable number
+                          shown next to nothing is how a suppressed person gets
+                          called. Read-only: recording or clearing an opt-out
+                          is the audited /admin/contact-suppressions form. */}
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          {`Phone: ${
+                            detail.user.phoneNumber ??
+                            (detail.user.phoneNumberErasedAt
+                              ? `— erased at their request (${detail.user.phoneNumberErasedAt})`
+                              : '—')
+                          }`}
+                        </Typography>
+                        {detail.user.phoneContact?.lookupFailed ? (
+                          <Chip
+                            size="small"
+                            color="warning"
+                            label="Do-not-contact list unreadable — treat as opted out"
+                          />
+                        ) : detail.user.phoneContact?.suppressed ? (
+                          <Chip
+                            size="small"
+                            color="error"
+                            label={`Do not contact: ${
+                              detail.user.phoneContact.channels.join(', ') ||
+                              'calls, texts'
+                            }`}
+                          />
+                        ) : detail.user.phoneContact ? (
+                          <Chip size="small" label="No opt-out recorded" />
+                        ) : null}
+                      </Stack>
+                      {detail.user.phoneContact &&
+                      !detail.user.phoneContact.suppressed ? (
+                        // No opt-out is not consent. TCPA needs prior express
+                        // written consent before a marketing call or text, and
+                        // nothing in the product captures it yet (AGL-1564), so
+                        // an empty suppression record must not read as a green
+                        // light.
+                        <Typography variant="caption" color="text.secondary">
+                          {
+                            'No recorded opt-out is not consent to market — check before calling or texting.'
+                          }
+                        </Typography>
+                      ) : null}
                       {!detail.user.staff ? (
                         <Button
                           size="small"
