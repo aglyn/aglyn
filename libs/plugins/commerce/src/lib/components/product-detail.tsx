@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as CommerceModel from '../model'
 import { mdiTagOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -156,8 +157,10 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           const product = payload?.product as Detail | undefined
           setDetail(product ?? 'missing')
           if (product) {
-            // GA4 ecommerce mirror (AGL-327) through the site's gtag.
-            ;(window as any).gtag?.('event', 'view_item', {
+            // GA4 ecommerce mirror (AGL-327), through the shared taxonomy
+            // since AGL-1591 rather than raw gtag — same consent gate, same
+            // sanitizer, and the name is now checked by the compiler.
+            trackEvent('view_item', {
               items: [{ item_id: product.id, item_name: product.name }],
             })
             const first =
@@ -209,7 +212,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }).catch(() => null)
       if (response?.ok) {
         setAdded(true)
-        ;(window as any).gtag?.('event', 'add_to_cart', {
+        trackEvent('add_to_cart', {
           items: [{ item_id: resolved.id, item_name: resolved.name }],
         })
         window.dispatchEvent(new Event(CART_UPDATED_EVENT))

@@ -34,6 +34,12 @@
  * and `trackEvent` is generic over it: a misspelled event name or a missing
  * required param is a compile error.
  *
+ * That sweep missed five (AGL-1591, closed): the commerce plugin's
+ * `view_item` / `add_to_cart` / `begin_checkout` and the marketing runtime's
+ * `aglyn_overlay` / `aglyn_experiment`. `window.gtag` is now called in exactly
+ * two places in the repo — {@link deliver} below, and `readGaClientId` above,
+ * which reads rather than sends.
+ *
  * ## Reserved names
  *
  * Where GA4 has a recommended event we use its exact name and its exact param
@@ -80,6 +86,18 @@
  * {@link trackAuthoredEvent} is the escape hatch — and it is deliberately the
  * only one, so that untrusted input still passes {@link sanitizeEventParams}
  * rather than reaching `window.gtag` raw.
+ *
+ * The test for which door an event uses is WHO NAMED IT, not whether GA4
+ * recommends the name. `aglyn_overlay` and `aglyn_experiment` are outside GA4's
+ * recommended set and were candidates for the hatch (AGL-1591); they are in the
+ * union instead, because a developer wrote their names and their keys, so they
+ * can have compile-time checking — and because the hatch guarantees the
+ * opposite of what they need. {@link resolveAuthoredEventName} refuses any name
+ * in the union precisely so that "not in {@link ANALYTICS_EVENT_NAMES}" means
+ * "authored"; put our own events through the hatch and that stops being true,
+ * authored hits stop being separable from ours in reports, and an authored
+ * `aglyn_experiment` step starts voting in the experiment that decides which
+ * variant ships.
  */
 
 /**
@@ -222,7 +240,46 @@ export interface AnalyticsEventParams {
     billing_interval?: string
   }
 
+  // --- Commerce (tenant storefronts, AGL-1591) -----------------------------
+  /**
+   * GA4 recommended. A product detail page was viewed on a tenant storefront.
+   *
+   * Only `items`, and only `item_id`/`item_name` within it: those are the two
+   * fields the storefront actually has at this point, and an unpopulated
+   * `price`/`item_category` would be a column of nulls in the merchant's
+   * reports. The item id is the PRODUCT id — the same id `add_to_cart` and
+   * `begin_checkout` use — which is what lets GA join the three into one
+   * per-product funnel.
+   */
+  view_item: { items: AnalyticsItem[] }
+  /** GA4 recommended. A storefront product was added to the cart. */
+  add_to_cart: { items: AnalyticsItem[] }
+
   // --- Engagement ---------------------------------------------------------
+  /**
+   * Custom: no GA4 equivalent. An announcement bar or popup was shown,
+   * dismissed or clicked on a tenant site (AGL-200/271).
+   *
+   * In the taxonomy rather than {@link trackAuthoredEvent} even though it is
+   * not a GA4 recommended name: the name and every key here are written by US,
+   * which is exactly what the closed union is for. See the note on
+   * {@link trackAuthoredEvent} for why the two must not be mixed.
+   */
+  aglyn_overlay: { overlay_action: string; overlay_id?: string }
+  /**
+   * Custom: no GA4 equivalent. An experiment exposure or conversion
+   * (AGL-253). `experiment_action` is `exposure` | `conversion`.
+   *
+   * Being in the union also makes the name RESERVED against authored events,
+   * which matters more here than anywhere else in this file: these are the
+   * counts that decide which variant wins, and a hand-authored
+   * `aglyn_experiment` step would silently vote in that election.
+   */
+  aglyn_experiment: {
+    experiment_id: string
+    variant_id: string
+    experiment_action: string
+  }
   /**
    * GA4 recommended-ish. Outbound click to docs, GitHub, etc. Fired by
    * `analytics-link-clicks.ts` (AGL-1562) rather than at a call site.
@@ -396,6 +453,59 @@ export function trackEvent<K extends AnalyticsEventName>(
 }
 
 /**
+ * Build the ONE `begin_checkout` payload, for every surface that starts a
+ * checkout (AGL-1591).
+ *
+ * ## Why a constructor and not just the type
+ *
+ * Two surfaces fire this name: the console, when a plan checkout starts, and a
+ * tenant storefront, when a cart checks out. Until AGL-1591 the storefront
+ * fired it raw and carried `value`/`currency` only, so ONE event name arrived
+ * in two shapes — and a `begin_checkout` breakdown showed two populations that
+ * could not be compared, with the storefront half missing the `items` the GA4
+ * ecommerce funnel is built on. Routing both through {@link trackEvent} makes
+ * the compiler settle the KEYS.
+ *
+ * It does not settle the NUMBER, which is the other way two call sites of one
+ * event diverge, and the more dangerous one because nothing about it looks
+ * wrong: the console's annual plans are priced per-month-billed-yearly, so its
+ * `value` is twelve of them, and that only stayed right because a comment said
+ * so. Here `value` DERIVES from the items unless a caller states a different
+ * one — a cart states its subtotal, which is authoritative after discounts —
+ * so "what the customer is about to be charged" has one definition rather than
+ * one per surface.
+ *
+ * Server-safe: pure, no DOM, so the Measurement Protocol sender can compose
+ * the matching `purchase` items from the same shapes.
+ */
+export function buildBeginCheckoutParams(input: {
+  items: AnalyticsItem[]
+  /**
+   * The amount actually being charged. Defaults to the sum of the items'
+   * `price * quantity`, which is right whenever nothing has adjusted it.
+   */
+  value?: number
+  /** ISO 4217. Defaults to `USD`, the only currency either surface bills in. */
+  currency?: string
+  /** `monthly` | `annual`. Subscriptions only — a storefront cart has none. */
+  billingInterval?: string
+}): AnalyticsEventParams['begin_checkout'] {
+  const items = input.items ?? []
+  const summed = items.reduce(
+    (total, item) => total + (item.price ?? 0) * (item.quantity ?? 1),
+    0,
+  )
+  return {
+    currency: input.currency ?? 'USD',
+    // Money, so two decimals: a float sum of cents-derived prices produces
+    // `59.99999999999999`, and GA would report that verbatim.
+    value: Math.round((input.value ?? summed) * 100) / 100,
+    items,
+    ...(input.billingInterval ? { billing_interval: input.billingInterval } : {}),
+  }
+}
+
+/**
  * The one delivery path, shared by {@link trackEvent} and
  * {@link trackAuthoredEvent}. Takes an ALREADY-sanitized payload — every
  * caller sanitizes first, which is what keeps "a new call site cannot forget"
@@ -442,6 +552,10 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   stripe_connected: true,
   begin_checkout: true,
   purchase: true,
+  view_item: true,
+  add_to_cart: true,
+  aglyn_overlay: true,
+  aglyn_experiment: true,
   click: true,
 }
 

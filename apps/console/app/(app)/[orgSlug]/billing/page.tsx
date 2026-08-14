@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  buildBeginCheckoutParams,
   readGaClientId,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
@@ -432,20 +433,25 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             interval === 'year'
               ? (pricing?.basePriceAnnualMonthlyUsd ?? 0) * 12
               : (pricing?.basePriceMonthlyUsd ?? 0)
-          trackEvent('begin_checkout', {
-            currency: 'USD',
-            value,
-            billing_interval: interval === 'year' ? 'annual' : 'monthly',
-            items: [
-              {
-                item_id: targetPlan,
-                item_name: PLAN_LABELS[targetPlan] ?? targetPlan,
-                item_category: 'subscription',
-                price: value,
-                quantity: 1,
-              },
-            ],
-          })
+          // Through the shared constructor since AGL-1591, so this payload and
+          // the tenant storefront's cart checkout cannot drift into two shapes
+          // under one event name. `value` is derived from the item rather than
+          // restated here — same number, one definition.
+          trackEvent(
+            'begin_checkout',
+            buildBeginCheckoutParams({
+              billingInterval: interval === 'year' ? 'annual' : 'monthly',
+              items: [
+                {
+                  item_id: targetPlan,
+                  item_name: PLAN_LABELS[targetPlan] ?? targetPlan,
+                  item_category: 'subscription',
+                  price: value,
+                  quantity: 1,
+                },
+              ],
+            }),
+          )
         }
         if (payload?.clientSecret) {
           setCheckoutClientSecret(String(payload.clientSecret))

@@ -19,6 +19,7 @@
 
 import {
   ANALYTICS_EVENT_NAMES,
+  buildBeginCheckoutParams,
   configureAnalyticsTransport,
   resetAnalyticsTransport,
   resetAuthoredEventWarnings,
@@ -116,6 +117,202 @@ describe('analytics-events (AGL-1561)', () => {
       })
 
       expect(() => trackEvent('host_created', {})).not.toThrow()
+    })
+  })
+
+  describe('one begin_checkout shape across both surfaces (AGL-1591)', () => {
+    // The bug: the console fired `begin_checkout` through `trackEvent` with
+    // `currency`/`value`/`items`/`billing_interval`, and the tenant storefront
+    // fired the SAME NAME raw with `value`/`currency` only. A breakdown on the
+    // event therefore showed two populations that could not be compared, and
+    // the storefront half was missing `items` — the field the GA4 ecommerce
+    // funnel is built on. These assert the PAYLOAD each call site now delivers,
+    // not that a function was reached.
+
+    /** Exactly what `apps/console/.../billing/page.tsx` passes: one plan, and
+     *  an annual price that is twelve months billed at once. */
+    const consoleParams = () =>
+      buildBeginCheckoutParams({
+        billingInterval: 'annual',
+        items: [
+          {
+            item_id: 'business',
+            item_name: 'Business',
+            item_category: 'subscription',
+            price: 33 * 12,
+            quantity: 1,
+          },
+        ],
+      })
+
+    /** Exactly what `libs/plugins/commerce/.../cart.tsx` passes: the cart's
+     *  authoritative subtotal, and one item per cart line. */
+    const cartParams = () =>
+      buildBeginCheckoutParams({
+        value: 5998 / 100,
+        items: [
+          {
+            item_id: 'prod_mug',
+            item_name: 'Enamel mug',
+            price: 1999 / 100,
+            quantity: 2,
+          },
+          {
+            item_id: 'prod_tee',
+            item_name: 'Logo tee',
+            price: 2000 / 100,
+            quantity: 1,
+          },
+        ],
+      })
+
+    it('delivers the same param set from the console and from a storefront cart', () => {
+      const calls = installGtag()
+
+      trackEvent('begin_checkout', consoleParams())
+      trackEvent('begin_checkout', cartParams())
+
+      const [consoleCall, cartCall] = calls
+      expect(consoleCall[1]).toBe('begin_checkout')
+      expect(cartCall[1]).toBe('begin_checkout')
+
+      // The three params GA4's checkout funnel needs are present on BOTH, and
+      // this is the assertion the issue is about: `items` used to be absent
+      // from the storefront half entirely.
+      for (const params of [consoleCall[2], cartCall[2]]) {
+        expect(Object.keys(params)).toEqual(
+          expect.arrayContaining(['currency', 'value', 'items']),
+        )
+        expect(typeof params['currency']).toBe('string')
+        expect(typeof params['value']).toBe('number')
+        expect(Array.isArray(params['items'])).toBe(true)
+        for (const item of params['items'] as Record<string, unknown>[]) {
+          expect(typeof item['item_id']).toBe('string')
+          expect(typeof item['item_name']).toBe('string')
+        }
+      }
+
+      // `billing_interval` is the ONE difference, and it is a real one rather
+      // than drift: a storefront cart is not a subscription, so the param is
+      // absent instead of carrying an invented value. It is optional in the
+      // taxonomy precisely so that absence is expressible.
+      expect(consoleCall[2]['billing_interval']).toBe('annual')
+      expect(cartCall[2]).not.toHaveProperty('billing_interval')
+    })
+
+    it('states the full annual charge, not the per-month rate it is quoted at', () => {
+      // The console's annual plans are priced "$33/mo billed yearly". The
+      // checkout charges 396, and that is what the funnel must carry — this
+      // used to be held together by a comment at the call site.
+      expect(consoleParams()).toEqual({
+        currency: 'USD',
+        value: 396,
+        billing_interval: 'annual',
+        items: [
+          {
+            item_id: 'business',
+            item_name: 'Business',
+            item_category: 'subscription',
+            price: 396,
+            quantity: 1,
+          },
+        ],
+      })
+    })
+
+    it('lets a cart state a subtotal that its line prices do not sum to', () => {
+      // 19.99 x2 + 20.00 = 59.98, which the cart also states. But a coupon or
+      // gift card moves the subtotal without moving the line prices, and the
+      // subtotal is what the customer is charged.
+      expect(cartParams().value).toBe(59.98)
+      expect(
+        buildBeginCheckoutParams({
+          value: 49.98,
+          items: cartParams().items,
+        }).value,
+      ).toBe(49.98)
+    })
+
+    it('derives value from the items when no caller states one', () => {
+      expect(
+        buildBeginCheckoutParams({
+          items: [
+            { item_id: 'a', item_name: 'A', price: 12.5, quantity: 2 },
+            { item_id: 'b', item_name: 'B', price: 5, quantity: 1 },
+          ],
+        }).value,
+      ).toBe(30)
+    })
+
+    it('rounds to two decimals rather than reporting a float artefact', () => {
+      // 0.1 + 0.2 territory: three cents-derived prices whose float sum is
+      // 59.99999999999999, which GA would report verbatim as a dimension.
+      expect(
+        buildBeginCheckoutParams({
+          items: [
+            { item_id: 'a', item_name: 'A', price: 19.99, quantity: 1 },
+            { item_id: 'b', item_name: 'B', price: 20.01, quantity: 1 },
+            { item_id: 'c', item_name: 'C', price: 19.99, quantity: 1 },
+          ],
+        }).value,
+      ).toBe(59.99)
+    })
+
+    it('defaults an unstated currency rather than sending the event without one', () => {
+      expect(buildBeginCheckoutParams({ items: [] }).currency).toBe('USD')
+    })
+  })
+
+  describe('the four converted mirrors (AGL-1591)', () => {
+    it('sends the commerce and site-runtime events through the sanitizer', () => {
+      const calls = installGtag()
+
+      trackEvent('view_item', {
+        items: [{ item_id: 'prod_mug', item_name: 'Enamel mug' }],
+      })
+      trackEvent('add_to_cart', {
+        items: [{ item_id: 'prod_mug', item_name: 'Enamel mug' }],
+      })
+      trackEvent('aglyn_overlay', {
+        overlay_action: 'dismiss',
+        overlay_id: 'bar_spring',
+      })
+      trackEvent('aglyn_experiment', {
+        experiment_id: 'exp_hero',
+        variant_id: 'b',
+        experiment_action: 'exposure',
+      })
+
+      expect(calls.map((call) => call[1])).toEqual([
+        'view_item',
+        'add_to_cart',
+        'aglyn_overlay',
+        'aglyn_experiment',
+      ])
+      expect(calls[3][2]).toEqual({
+        experiment_id: 'exp_hero',
+        variant_id: 'b',
+        experiment_action: 'exposure',
+      })
+    })
+
+    it('reserves all four names against authored steps', () => {
+      // The point of putting them in the union rather than through
+      // `trackAuthoredEvent`: an authored `aglyn_experiment` would otherwise
+      // add hits to the counts that decide which variant ships, and an
+      // authored `add_to_cart` would land in a merchant's real funnel.
+      for (const name of [
+        'view_item',
+        'add_to_cart',
+        'aglyn_overlay',
+        'aglyn_experiment',
+      ]) {
+        expect(ANALYTICS_EVENT_NAMES).toContain(name)
+        expect(resolveAuthoredEventName(name)).toEqual({
+          name: null,
+          reason: 'reserved',
+        })
+      }
     })
   })
 

@@ -16,6 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  buildBeginCheckoutParams,
+  trackEvent,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Badge from '@mui/material/Badge'
@@ -102,10 +106,30 @@ function CartLines(props: {
       })
       const payload = await response.json().catch(() => ({}))
       if (response.ok && payload?.url) {
-        ;(window as any).gtag?.('event', 'begin_checkout', {
-          value: (cart?.subtotalCents ?? 0) / 100,
-          currency: 'USD',
-        })
+        // GA4 checkout funnel (AGL-1561, converted by AGL-1591). This used to
+        // call `window.gtag` raw with `value`/`currency` only, so the same
+        // event name arrived from this surface and from the console's plan
+        // checkout in two different shapes — and this half carried no `items`,
+        // which is the field GA4's ecommerce funnel is actually built on.
+        //
+        // The item ids are the PRODUCT ids `view_item` and `add_to_cart`
+        // already send, so the three now join into one per-product funnel.
+        // `value` is stated rather than derived because the cart subtotal is
+        // authoritative after a coupon or gift card, which the line prices
+        // below are not. No `billing_interval`: a storefront cart is not a
+        // subscription.
+        trackEvent(
+          'begin_checkout',
+          buildBeginCheckoutParams({
+            value: (cart?.subtotalCents ?? 0) / 100,
+            items: (cart?.lines ?? []).map((line) => ({
+              item_id: line.productId,
+              item_name: line.name,
+              price: line.unitAmountCents / 100,
+              quantity: line.quantity,
+            })),
+          }),
+        )
         window.location.assign(payload.url)
         return
       }
@@ -114,7 +138,13 @@ function CartLines(props: {
     } catch {
       setStatus('error')
     }
-  }, [hostId, coupon, email, optIn, giftCard, status, siteFetch])
+    // `cart` is a dependency because the payload above reads it: without it
+    // the handler closes over whichever cart was current when it was created,
+    // and a checkout started after a quantity change would report the OLD
+    // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
+    // in the `value` alone, where a wrong number is indistinguishable from a
+    // right one.
+  }, [hostId, cart, coupon, email, optIn, giftCard, status, siteFetch])
 
   if (!cart || cart.lines.length === 0) {
     return (

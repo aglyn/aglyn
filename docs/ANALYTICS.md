@@ -77,15 +77,60 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `host_created` | Custom | Console | — | Activation |
 | **`site_published`** | Custom | Console + **Server** (tenant) | `first_publish?` | **Activation — "% who publish a site"** |
 | `stripe_connected` | Custom | Console | — | **Activation — "% who connect Stripe"** |
-| `begin_checkout` | Reserved | Console | `currency`, `value`, `items`, `billing_interval` | Revenue — checkout funnel |
+| `begin_checkout` | Reserved | Console + Tenant | `currency`, `value`, `items`, `billing_interval?` | Revenue — checkout funnel |
 | `purchase` | Reserved | **Server** | `transaction_id`, `currency`, `value`, `items`, `billing_interval` | Revenue — paid conversions, ARPA, annual mix |
+| `view_item` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
+| `add_to_cart` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
+| `aglyn_overlay` | Custom | Tenant (marketing) | `overlay_action`, `overlay_id?` | Engagement — announcement bars and popups |
+| `aglyn_experiment` | Custom | Tenant (marketing) | `experiment_id`, `variant_id`, `experiment_action` | Engagement — experiment exposures/conversions |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
 (the AGL-1497 door where "Sign in with Google" created the account and bounced
 the person to `/signup`), plus `passkey` and `sso` for `login`.
 
 `item_category` separates the two revenue lines: `subscription` and
-`marketplace`.
+`marketplace`. Storefront items carry none — in a MERCHANT's property a
+constant category is a column with one value in it, and their real product
+categories are not on the payloads the storefront builds.
+
+`experiment_action` is `exposure` | `conversion`; `overlay_action` is the
+overlay kind the beacon already reports.
+
+### The last five raw `window.gtag` calls (AGL-1591)
+
+Five call sites survived the AGL-1561 sweep and were converted afterwards: the
+four bottom rows above, plus the tenant half of `begin_checkout`. That last one
+was the one that mattered. `begin_checkout` is a taxonomy event fired from TWO
+surfaces, and the storefront's raw call carried `value`/`currency` only — so a
+breakdown on the event showed two populations that could not be compared, and
+the storefront half was missing the `items` that GA4's ecommerce funnel is
+built on. The tenant call site is the one that changed: the taxonomy already
+declared `items` required and the console already satisfied it, so conforming
+the console instead would have meant weakening the type to match the defect.
+
+Both surfaces now build the payload with `buildBeginCheckoutParams`, which also
+DERIVES `value` from the items unless a caller states a different one. Keys were
+already settled by the type; the number was not, and it is the quieter way two
+call sites of one event diverge — a wrong amount looks exactly like a right one.
+A cart states its subtotal, because a coupon or gift card moves it without
+moving the line prices.
+
+**Why `aglyn_overlay` and `aglyn_experiment` are in the taxonomy** rather than
+going through `trackAuthoredEvent`, despite not being GA4 recommended names: the
+test is who NAMED the event, not whether GA recognizes it. A developer wrote
+both names and every key on them, so they can have compile-time checking, and
+the union already holds four custom names for the same reason. The escape hatch
+also guarantees the opposite of what they need —
+`resolveAuthoredEventName` refuses every name in the union precisely so that
+"not in the taxonomy" means "authored", which is what keeps authored hits
+separable in reports. Putting ours through it would break that, and would leave
+`aglyn_experiment` unreserved: a hand-authored step of that name would add hits
+to the counts that decide which variant ships.
+
+**These are the merchant's numbers, not ours.** On a tenant site `gtag` is
+loaded with whatever measurement id the HOST configured, so the four events
+above land in the customer's property — except on `aglyn.com` itself, which is
+a tenant site pointed at our own property.
 
 ### Where each one fires
 
@@ -100,7 +145,11 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 | `host_created` | `apps/console/components/create-host-dialog.component.tsx` |
 | `site_published` | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589) |
 | `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx` |
-| `begin_checkout` | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` |
+| `begin_checkout` | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout — AGL-1591) |
+| `view_item` | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves |
+| `add_to_cart` | the same file, on a successful add |
+| `aglyn_overlay` | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`) |
+| `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon |
 | `purchase` | `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler |
 
 ---
@@ -409,6 +458,30 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 
    `login` needs nothing new — `method` is already registered, and `sso` is a
    new VALUE of it, not a new dimension.
+
+0b. **Register three more for the site-runtime events** (AGL-1591), all
+   **event-scoped**:
+
+   | Dimension name | Event parameter | Why |
+   | --- | --- | --- |
+   | Experiment id | `experiment_id` | Which experiment — without it every exposure is one undifferentiated count |
+   | Variant id | `variant_id` | **The axis the whole event exists for**: exposures and conversions are only meaningful split by variant |
+   | Experiment action | `experiment_action` | `exposure` vs `conversion` — the numerator and the denominator |
+
+   `overlay_action` and `overlay_id` are deliberately NOT on that list. Overlay
+   stats are already reported by the first-party collector
+   (`/api/analytics/collect`, which increments each overlay's own counters), so
+   the GA copy is a courtesy mirror for hosts running their own property; two
+   registered dimensions on ours would buy a breakdown nobody reads against a
+   quota of 50. Register them if the mirror ever becomes the source.
+
+   **The commerce events need nothing.** `view_item`, `add_to_cart` and the
+   storefront `begin_checkout` carry only `items`, and `item_id` / `item_name` /
+   `price` / `quantity` are GA4 BUILT-IN ecommerce dimensions — they report
+   without registration, which is a large part of why these use GA's reserved
+   names and its exact `items` spelling. They also land in the merchant's
+   property rather than ours (see the event map), so the registration decision
+   there is the merchant's to make, not one we can make for them.
 
 1. **Mark the remaining key events.** Admin → Events → *Mark as key event*.
    `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
