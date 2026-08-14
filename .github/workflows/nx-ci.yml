@@ -73,6 +73,20 @@ jobs:
       # besigner lib.
       - run: npm run generate:docs-help:check
 
+      # Third of the same shape (AGL-1728), and the one that was completely
+      # unguarded: the four apps/*/plugins.*.generated.ts manifests come from
+      # plugins.config.json, and until now the generator had no --check, no
+      # npm script, and exactly one caller in the repo — the create-plugin
+      # scaffolder, which runs it once at creation time. Hand-edit the config
+      # afterwards and nothing re-runs it and nothing notices. Unlike the
+      # tsconfigs above these ARE compiled by the typecheck, which is what
+      # makes them worse: a stale manifest type-checks perfectly, because a
+      # plugin missing from it is not a type error — it is a plugin the
+      # runtime loader silently never activates. Not affected-scoped, same
+      # reason as the two above: the input is a root-level plugins.config.json
+      # that is no app's source, and the outputs land in two apps at once.
+      - run: npm run generate:plugin-manifests:check
+
       # Revenue-truth guard (AGL-1070): org.plan is NOT revenue — a staff
       # override sets `plan` and writes no `subscription`, and three of four
       # production orgs are in that state, so summing PLAN_PRICING[org.plan]

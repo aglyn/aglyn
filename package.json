@@ -76,6 +76,8 @@
     "check:rules-drift": "node tools/scripts/check-rules-drift.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
+    "generate:plugin-manifests": "node tools/scripts/generate-plugin-manifests.mjs",
+    "generate:plugin-manifests:check": "node tools/scripts/generate-plugin-manifests.mjs --check",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",
     "sync:next-tsconfigs:check": "node tools/scripts/sync-next-tsconfigs.mjs --check",
     "check:app-router-graph": "node tools/scripts/check-app-router-graph.mjs",
