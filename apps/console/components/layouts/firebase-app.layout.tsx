@@ -38,6 +38,7 @@ import { useEffect } from 'react'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
 import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
+import { buildConsolePageViewParams } from '../../utils/page-view-params'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 import {
   getSessionHealth,
@@ -188,8 +189,37 @@ function AnalyticsGlobalEvents({ children }) {
   // Page-view analytics (AGL-118). The Pages Router `router.events` API has
   // no App Router equivalent, so fire on `usePathname` changes instead; route
   // errors are now surfaced by error.tsx boundaries rather than an event.
+  //
+  // `page_location` is a full URL and no longer the bare pathname (AGL-1643);
+  // `buildConsolePageViewParams` holds the why and is spec'd against it.
+  //
+  // Read off `window.location` rather than rebuilt from `pathname`, because
+  // only the browser knows the host, and the App Router has already committed
+  // the new URL to `history` by the time this effect runs. `pathname` stays as
+  // the DEPENDENCY — it is what changes on a client-side navigation.
+  //
+  // This effect is now the console's ONLY `page_view`. The Firebase SDK's own
+  // startup one is suppressed with `send_page_view: false` where Analytics is
+  // initialized, because that hit fires once per document load while this one
+  // fires on mount AND on every route change — so this is the superset, and
+  // suppressing it instead would have halved console pageviews silently.
+  //
+  // Deliberately NOT re-fired on a query-string-only navigation: `usePathname`
+  // does not change for one, so a paginated or filtered view does not report
+  // again. That is a choice, not an oversight — an event per filter change
+  // would burn the per-session event budget for a breakdown nobody reads.
+  //
+  // Still `logEvent` rather than `trackEvent`: `page_view` is deliberately
+  // outside the `AnalyticsEventParams` union — no call site writes it, so
+  // there are no keys for the compiler to settle, and adding it would put a
+  // name in the taxonomy that the taxonomy does not govern.
   useEffect(() => {
-    logEvent(analytics, 'page_view', { page_location: pathname })
+    if (typeof window === 'undefined') return
+    logEvent(
+      analytics,
+      'page_view',
+      buildConsolePageViewParams(window.location.href),
+    )
   }, [pathname, analytics])
 
   useEffect(() => {

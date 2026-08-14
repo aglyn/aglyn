@@ -24,7 +24,7 @@ import {
 } from 'firebase/app'
 import {
   type Analytics,
-  getAnalytics as getAnalyticsInstance,
+  initializeAnalytics as initializeAnalyticsInstance,
 } from 'firebase/analytics'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import {
@@ -290,9 +290,38 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
         console.error(error)
       }
     }
+    // `initializeAnalytics`, not `getAnalytics`, for exactly one reason: it is
+    // the only form that can pass `config`, and `send_page_view: false` is the
+    // only way to stop the SDK's own startup `page_view` (AGL-1643).
+    //
+    // Booting Analytics issues `gtag('config', <id>, configProperties)`, and
+    // the vendored SDK's own comment on that line reads "This will trigger a
+    // page_view event unless 'send_page_view' is set to false in
+    // configProperties". `getAnalytics(app)` passes no config at all, so the
+    // key was never there and the hit always fired — on top of the manual
+    // `page_view` the console's layout sends on mount. Two hits, one page.
+    //
+    // The SDK's is the one suppressed rather than the layout's, and the
+    // direction is the whole decision: the SDK fires ONCE per document load,
+    // while the layout fires on mount AND on every `usePathname` change. In a
+    // client-routed app the layout's is a superset — killing it instead would
+    // have left every in-app navigation unreported, halving console pageviews
+    // rather than correcting them, and the reports would have looked fine.
+    //
+    // Nothing else about attribution moves: the surviving hit is sent from the
+    // same document at mount, so `document.referrer` — which gtag resolves for
+    // `page_referrer` itself, and which is what carries marketing traffic
+    // source into the session — is still the external referrer at that moment.
+    //
+    // Safe to re-enter: `initializeAnalytics` returns the existing instance
+    // when the options deep-equal the first call's, and throws only on a
+    // CONFLICTING re-init. This is the sole call site, so the options are
+    // always these.
     let analytics: Analytics
     try {
-      analytics = getAnalyticsInstance(app)
+      analytics = initializeAnalyticsInstance(app, {
+        config: { send_page_view: false },
+      })
     } catch (error) {
       console.error(error)
     }
