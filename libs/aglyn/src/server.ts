@@ -29,4 +29,8 @@ export * from './lib/foundation'
 // exposed ONLY through this `/server` entry — never re-exported by the full
 // `@aglyn/aglyn` barrel (which client code bundles).
 export * from './lib/app-utils/api-adapter'
+// The attempt claim (AGL-1691/1697) imports `node:crypto`, so it rides the
+// same rule: exposed ONLY through this `/server` entry, never the full
+// `@aglyn/aglyn` barrel that client code bundles.
+export * from './lib/app-utils/api-idempotency'
 export * from './lib/plugin-manager/realm-server'

@@ -22,123 +22,24 @@ import {
   getOrgForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
-import { createHash } from 'crypto'
+import {
+  buildRoute,
+  claimAttempt,
+  Route,
+  type AttemptClaim,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 
 /**
- * A claim on one settlement attempt (AGL-1691).
- *
- * `replay` is set when this key has already been settled — the caller must
- * return the recorded response instead of transacting again.
+ * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
+ * (AGL-1697), because it is the answer for every unkeyed money route and not
+ * just this one. Moved whole and unchanged in behaviour — the digest is still
+ * `sha256('pos:{hostId}:{key}')`, so keys minted against the local version
+ * still resolve. The only difference is the claim document: it carries
+ * `scopeId` where this file wrote `hostId`, and no longer writes a
+ * `serverTimestamp` sentinel alongside `createdAtMs`, since the shared version
+ * takes a plain Firestore-shaped store rather than firebase-admin itself.
  */
-interface AttemptClaim {
-  /** Stripe idempotency key for this attempt, or null when the client sent none. */
-  stripeKey: string | null
-  record: (status: number, body: unknown) => Promise<void>
-  release: () => Promise<void>
-}
-
-/**
- * Take an exclusive claim on a settlement attempt, so a retry cannot mint a
- * second order or a second Checkout session (AGL-1691).
- *
- * The key is supplied by the client, once per checkout attempt — deliberately
- * NOT derived from the basket. A cashier ringing the same coffee twice in a
- * minute is a real second sale, and a content hash would silently swallow it;
- * that would be a worse bug than the one this closes. So the client mints a
- * key when a basket first becomes an attempt and retires it when the register
- * resets, which makes the key stable across a retry of THAT attempt and
- * distinct for a legitimately identical next one.
- *
- * Storage reuses the REST API's shape (`apiIdempotency/{sha256(scope:key)}`,
- * AGL-618) rather than inventing a second replay collection, and carries the
- * same `orgId` field, so `eraseOrgIdempotencyKeys` already sweeps these on
- * org erasure (AGL-1448) with no change there.
- *
- * The claim is `create()` — Firestore rejects a create on an existing document,
- * and that rejection is the whole dedupe primitive. A read-then-write would
- * race exactly the double-submit it is meant to stop.
- */
-async function claimAttempt(
-  firestore: FirebaseFirestore.Firestore,
-  scope: { hostId: string; orgId: string; key: string },
-): Promise<{ claim: AttemptClaim } | { replay: { status: number; body: unknown } }> {
-  // No key: transact as before. This endpoint is a plugin API route and an
-  // older cached console bundle must keep selling rather than start failing.
-  if (!scope.key) {
-    return {
-      claim: {
-        stripeKey: null,
-        record: async () => undefined,
-        release: async () => undefined,
-      },
-    }
-  }
-  const digest = createHash('sha256')
-    .update(`pos:${scope.hostId}:${scope.key}`)
-    .digest('hex')
-  const ref = firestore.collection('apiIdempotency').doc(digest)
-  try {
-    await ref.create({
-      orgId: scope.orgId || null,
-      hostId: scope.hostId,
-      kind: 'pos-order',
-      status: 'pending',
-      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      createdAtMs: Date.now(),
-    })
-  } catch {
-    // Already claimed: either the attempt finished and we replay its result,
-    // or it is still in flight.
-    const prior = await ref.get()
-    const priorResponse = prior.get('response')
-    if (priorResponse) {
-      return {
-        replay: {
-          status: Number(prior.get('responseStatus') ?? 200),
-          body: priorResponse,
-        },
-      }
-    }
-    // In flight. Fail CLOSED — the money direction. The alternative (letting
-    // the second caller through) is the duplicate charge itself. A process
-    // killed between the claim and the record leaves a key stuck here; the
-    // cashier starts a fresh sale with a fresh key, which is the correct
-    // failure direction even though it is not a pleasant one.
-    return {
-      replay: {
-        status: 409,
-        body: { error: 'This sale is already being processed' },
-      },
-    }
-  }
-  return {
-    claim: {
-      // Same digest handed to Stripe, so even if our claim is lost after the
-      // Checkout call, Stripe replays its own session rather than opening a
-      // second one. Scoped by host and attempt, so it cannot collide.
-      stripeKey: digest,
-      record: async (status, body) => {
-        await ref
-          .set(
-            {
-              status: 'done',
-              responseStatus: status,
-              response: body,
-              settledAtMs: Date.now(),
-            },
-            { merge: true },
-          )
-          .catch(() => undefined)
-      },
-      // A rejected or failed attempt must not burn the key: the cashier fixes
-      // the cause and presses the same button.
-      release: async () => {
-        await ref.delete().catch(() => undefined)
-      },
-    },
-  }
-}
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a
@@ -297,9 +198,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
 
     // Point of no return: everything past here writes an order or moves money.
     const claimed = await claimAttempt(firestore, {
-      hostId,
+      kind: 'pos',
+      scopeId: hostId,
       orgId: String(ownerOrg?.org?.id ?? ''),
       key: idempotencyKey,
+      busyMessage: 'This sale is already being processed',
     })
     if ('replay' in claimed) {
       return res.status(claimed.replay.status).json(claimed.replay.body)
