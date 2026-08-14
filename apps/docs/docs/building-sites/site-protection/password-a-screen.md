@@ -9,7 +9,7 @@ description: Require a password to view a specific screen.
 Lock a single screen behind a **password** — useful for drafts, client previews, or gated
 content, without setting up full membership.
 
-![The screens list — open a screen from here; the password itself is set on the screen's own page](/img/getting-started/screens-list.png)
+![The Page Access card on a screen's own page: the Visibility menu open on Public, Unlisted, Password protected and Members only — the Page password field appears once Password protected is chosen](/img/seo/page-access-visibility.png)
 
 ## Steps
 

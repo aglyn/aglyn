@@ -21,7 +21,11 @@ import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { Stack } from '@mui/material'
 import { useMemo } from 'react'
 import { useReleaseFlags } from '../hooks/use-release-flags'
-import { useSecondaryNav, useUrlNamesOrg } from '../hooks/use-secondary-nav'
+import {
+  type NavTabItem,
+  useSecondaryNav,
+  useUrlNamesOrg,
+} from '../hooks/use-secondary-nav'
 import HostSwitcherNavComponent from './host-switcher-nav.component'
 import SecondaryAppBarComponent from './secondary-app-bar.component'
 
@@ -31,6 +35,64 @@ const NAV_TAB_RELEASE_FLAGS = new Map(
     (definition) => [definition.navTabId, definition],
   ),
 )
+
+/**
+ * Marks a nav tab that ONLY a staff account can see — a release-flagged-off
+ * surface kept for staff with the ⚑ badge below.
+ *
+ * The app owns this contract because something outside the app depends on
+ * it: the docs screenshot harness signs in as the seeded STAFF account (the
+ * staff-console pages it captures need the claim), so every capture rendered
+ * these tabs and two published images ended up advertising an unlaunched
+ * Contacts CRM to every reader (AGL-1600). `tools/e2e/lib/staff-only-chrome.mjs`
+ * scrubs and then asserts on this attribute, and refuses to capture anything
+ * when it matches nothing where a flagged-off tab is known to exist — a
+ * title-string match would have gone quietly no-op the first time this
+ * wording changed.
+ */
+export const STAFF_ONLY_ATTRIBUTE = 'data-staff-only'
+
+export interface GatedNavTabItem extends NavTabItem {
+  icon?: { path: string }
+  title?: string
+  [STAFF_ONLY_ATTRIBUTE]?: string
+}
+
+/**
+ * Release-flag gating (AGL-229): flagged-off tabs disappear for customers;
+ * staff keep them with a flag badge so unreleased surfaces are recognizably
+ * unlaunched.
+ *
+ * Pure so the marker can be asserted where it is DECLARED — rendering the
+ * bar takes the whole provider stack, and a test that needs that much setup
+ * is a test nobody keeps green.
+ */
+export function gateNavTabItems(
+  navTabItems: NavTabItem[],
+  flags: Partial<Record<ReleaseFlagKey, { released?: boolean }>>,
+  isStaff: boolean,
+): GatedNavTabItem[] {
+  return navTabItems.flatMap((item) => {
+    const definition = item.id ? NAV_TAB_RELEASE_FLAGS.get(item.id) : undefined
+    // Default to the flag's shipped state when the live flag map hasn't
+    // resolved yet, so defaultEnabled surfaces (e.g. Events) don't blink
+    // out on load and a missing entry can't crash the strip (AGL-387).
+    const released =
+      flags[definition?.key as ReleaseFlagKey]?.released ??
+      definition?.defaultEnabled ??
+      false
+    if (!definition || released) return [item]
+    if (!isStaff) return []
+    return [
+      {
+        ...item,
+        icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
+        title: `${definition.label} is hidden from customers by release flag ${definition.key}`,
+        [STAFF_ONLY_ATTRIBUTE]: definition.key,
+      },
+    ]
+  })
+}
 
 const tabBarTitle = (
   <Stack
@@ -65,32 +127,10 @@ export function SecondaryNavBarComponent() {
   const namesOrg = useUrlNamesOrg()
   const { flags, isStaff } = useReleaseFlags()
 
-  // Release-flag gating (AGL-229): flagged-off tabs disappear for
-  // customers; staff keep them with a flag badge so unreleased surfaces
-  // are recognizably unlaunched.
-  const gatedNavTabItems = useMemo(() => {
-    return navTabItems.flatMap((item) => {
-      const definition = item.id
-        ? NAV_TAB_RELEASE_FLAGS.get(item.id)
-        : undefined
-      // Default to the flag's shipped state when the live flag map hasn't
-      // resolved yet, so defaultEnabled surfaces (e.g. Events) don't blink
-      // out on load and a missing entry can't crash the strip (AGL-387).
-      const released =
-        flags[definition?.key as ReleaseFlagKey]?.released ??
-        definition?.defaultEnabled ??
-        false
-      if (!definition || released) return [item]
-      if (!isStaff) return []
-      return [
-        {
-          ...item,
-          icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
-          title: `${definition.label} is hidden from customers by release flag ${definition.key}`,
-        },
-      ]
-    })
-  }, [navTabItems, flags, isStaff])
+  const gatedNavTabItems = useMemo(
+    () => gateNavTabItems(navTabItems, flags, isStaff),
+    [navTabItems, flags, isStaff],
+  )
 
   return (
     <SecondaryAppBarComponent

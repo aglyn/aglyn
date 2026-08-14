@@ -32,6 +32,11 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import {
+  assertNoStaffOnlyChrome,
+  installStaffOnlyChromeStyles,
+  preflightStaffOnlyChrome,
+} from './lib/staff-only-chrome.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -235,24 +240,55 @@ const shots = [
     waitFor: 'Custom domain',
     settleMs: 2500,
     actions: [{ scroll: 'text=Error pages', settleMs: 1000 }],
-    // Clips off the host tab strip. The seed account (`e2e@aglyn.test`) is
-    // STAFF, and staff keep release-flagged-off tabs with a flag badge that a
-    // customer never sees — `release_contacts` is defaultEnabled:false, so the
-    // strip renders "⚑ CONTACTS" here and nowhere in a real customer console
-    // (secondary-nav-bar.component.tsx: `if (!isStaff) return []`). The
-    // AGL-1598 note that org pages render identically for staff covers the
-    // /admin strip only; this is a separate mechanism and it does leak.
-    clip: { x: 0, y: 44, width: 1440, height: 856 },
+    // This used to clip the host tab strip away, because the staff capture
+    // account rendered "⚑ CONTACTS" in it. The strip is back: the harness now
+    // hides staff-only chrome everywhere and refuses to shoot when it can't
+    // (AGL-1600), so the frame no longer has to be cropped around the leak —
+    // and every other shot that was quietly carrying it is fixed too.
   },
   {
     // The ORG marketplace (AGL-975 retired the per-site tab, so `/hosts/…/
     // marketplace` is not the surface any more). The previous shot predated
-    // both AGL-975 and AGL-1011: it was headed "Community components" and its
-    // org strip had no Plugins tab.
+    // both AGL-975 and AGL-1011: it still carried the pre-rename marketplace
+    // heading, and its org strip had no Plugins tab. Quoting that old heading
+    // here is what left the AGL-975 naming spec red — it reads every tracked
+    // file, comments included.
     out: 'guides/marketplace-browse.png',
     path: `/${ORG_SLUG}/marketplace`,
     waitFor: 'Realm demo',
     settleMs: 2500,
+  },
+  {
+    // The Page Access card — the image the SEO overview and the three
+    // site-protection pages needed and never had. Its absence is why they
+    // borrowed a screens-list shot and captioned it as the place visibility
+    // is set (AGL-1599/AGL-1600).
+    //
+    // Menu OPEN: naming the four visibilities is the whole point of the
+    // image, and a closed select shows exactly one of them.
+    out: 'seo/page-access-visibility.png',
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/view`,
+    waitFor: 'Page Access',
+    settleMs: 1200,
+    actions: [
+      {
+        // The MUI label here is a <div>, not a <label>, so a `label:text-is`
+        // scope silently matches nothing and the click lands on whatever
+        // select happens to come first on the page.
+        click:
+          '.MuiFormControl-root:has(> .MuiInputLabel-root:text-is("Visibility")) [role="combobox"]',
+        waitFor: 'Members only',
+        settleMs: 800,
+      },
+    ],
+    // The option list is a portal at the end of <body>, not a child of the
+    // card, so it has to be named or the crop cuts it off.
+    clipTo: {
+      // `:text-is` on the title matches nothing — the header carries a help
+      // link inside it, so its text is not exactly "Page Access".
+      locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("Page Access"))',
+      include: ['[role="listbox"]'],
+    },
   },
   {
     out: 'multilingual/setup-languages.png',
@@ -489,6 +525,13 @@ await context.addInitScript(() => {
   }
 })
 
+// The capture account is STAFF (see the account shape in
+// apps/docs/CONTRIBUTING.md), so the console it renders is not the console a
+// customer has: release-flagged-OFF tabs stay, badged. Hide them from the
+// first paint of every page, and refuse any shot that still shows one
+// (AGL-1600).
+await installStaffOnlyChromeStyles(context)
+
 // Sign in through the real UI once (see console.e2e.mjs for why).
 {
   const page = await context.newPage()
@@ -504,9 +547,30 @@ await context.addInitScript(() => {
 
 // Pre-warm the routes so dev-server compiles don't distort waits — the
 // selected ones only, so a re-capture of a handful of shots doesn't pay for
-// compiling all fifty.
-for (const shot of selected) {
-  await fetch(`${BASE_URL}${shot.path}`).catch(() => undefined)
+// compiling all fifty. The host dashboard is warmed unconditionally: the
+// staff-only guard below opens it, and a cold compile there is a minute of
+// navigation timeout blamed on the guard.
+for (const path of [`/${HOST_BASE}`, ...selected.map((shot) => shot.path)]) {
+  await fetch(`${BASE_URL}${path}`).catch(() => undefined)
+}
+
+// Prove the guard can still see what it is meant to hide before shooting
+// anything — "nothing staff-only is showing" is also what a guard that
+// matches nothing at all reports.
+{
+  const page = await context.newPage()
+  const hidden = await preflightStaffOnlyChrome(page, {
+    url: `${BASE_URL}/${HOST_BASE}`,
+    waitFor: 'Demo Bakery',
+    timeout: TIMEOUT_MS,
+  }).catch((error) => error)
+  await page.close()
+  if (hidden instanceof Error) {
+    console.error(String(hidden.message))
+    await browser.close()
+    process.exit(1)
+  }
+  console.log(`GUARD staff-only chrome hidden: ${hidden.join(', ')}`)
 }
 
 /** Draw a numbered badge + outline over each located element. */
@@ -585,6 +649,44 @@ async function stripChrome(page) {
   })
 }
 
+/**
+ * The clip box for a `clipTo` shot: the union of the located elements, padded.
+ *
+ * A component-level crop written as static pixels is a crop that silently
+ * starts cutting the card in half the next time the surface above it grows a
+ * row. `include` is for the parts that live outside the element in the DOM —
+ * a MUI select's option list is a portal at the end of <body>, not a child of
+ * the card it belongs to.
+ */
+async function resolveClipTo(page, clipTo) {
+  const { locator, include = [], padding = 12 } = clipTo
+  const boxes = []
+  for (const selector of [locator, ...include]) {
+    const box = await page
+      .locator(selector)
+      .first()
+      .boundingBox()
+      .catch(() => null)
+    // A missed `include` is a quietly cropped-off popover, and a missed
+    // `locator` is a shot of whatever else happened to be in the union — both
+    // fail the shot rather than producing a plausible wrong image.
+    if (!box) throw new Error(`clipTo matched nothing: ${selector}`)
+    boxes.push(box)
+  }
+  const viewport = page.viewportSize() ?? { width: 1440, height: 900 }
+  const left = Math.max(0, Math.min(...boxes.map((b) => b.x)) - padding)
+  const top = Math.max(0, Math.min(...boxes.map((b) => b.y)) - padding)
+  const right = Math.min(
+    viewport.width,
+    Math.max(...boxes.map((b) => b.x + b.width)) + padding,
+  )
+  const bottom = Math.min(
+    viewport.height,
+    Math.max(...boxes.map((b) => b.y + b.height)) + padding,
+  )
+  return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
 for (const shot of selected) {
   const page = await context.newPage()
   try {
@@ -624,10 +726,15 @@ for (const shot of selected) {
     await page.waitForTimeout(shot.settleMs ?? 1500)
     // The notification modal can drift back in during the settle above.
     await stripChrome(page)
+    // Last gate before the shutter: nothing only staff can see (AGL-1600).
+    await assertNoStaffOnlyChrome(page, shot.out)
     if (shot.annotate) await annotate(page, shot.annotate)
+    const clip = shot.clipTo
+      ? await resolveClipTo(page, shot.clipTo)
+      : shot.clip
     const outPath = join(IMG_ROOT, shot.out)
     mkdirSync(dirname(outPath), { recursive: true })
-    await page.screenshot({ path: outPath, ...(shot.clip ? { clip: shot.clip } : {}) })
+    await page.screenshot({ path: outPath, ...(clip ? { clip } : {}) })
     console.log(`SHOT  ${shot.out}`)
   } catch (error) {
     failures += 1

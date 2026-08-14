@@ -120,11 +120,58 @@ Follow the runbook below so they're consistent.
    emulator stack (see `docs/E2E_LOCAL.md`) — it signs in, waits for seeded content,
    strips dev chrome, and writes every shot (including the annotated ones) in one pass.
    For surfaces it doesn't cover yet, add a shot spec there rather than capturing by hand.
+   The `guides/` walkthrough images come from its sibling
+   `tools/e2e/capture-docs-shots.mjs`, which also needs the tenant server
+   (`npm run serve:tenant:emulated`, with `AGLYN_DISABLE_BOOT_WARMUP=1` —
+   AGL-1504 emulator artifact). `--only=<substring>[,…]` re-shoots a handful.
 2. Use a **1440×900** window, the **light** color scheme, and hide personal data.
-3. Capture the specific surface (crop tightly to the relevant panel).
+3. Capture the specific surface (crop tightly to the relevant panel): a static
+   `clip` box, or `clipTo: { locator, include, padding }` to crop to whatever the
+   element actually measures at capture time.
 4. Save as `static/img/<area>/<page>-<step>.png`, optimize (e.g. `pngquant`), and keep files
-   under ~300 KB.
+   under ~300 KB — the captures land around 60–130 KB unlaboured.
 5. Add the image with descriptive alt text right where the step is described.
+
+##### The account the harness signs in as
+
+Both harnesses sign in as the **seeded staff account** `e2e@aglyn.test`
+(`staff: true`, `staffRole: super`, from `tools/scripts/seed-e2e.mjs`). The
+`staff-console/` images need the claim, and no other seeded account is a
+substitute: the two non-staff owners own orgs with **no sites at all**, and the
+only non-staff account inside the sited org is an `editor` teammate, which the
+org-level shots (Billing, Team, Settings) are not written for.
+
+**Staff do not see the customer console.** A nav tab whose release flag is OFF
+stays visible for staff, badged with a ⚑, and a customer never sees it — so a
+capture taken as staff advertises unlaunched features. `⚑ CONTACTS`, an
+unreleased CRM, was in 33 of the 69 published full-window images before
+AGL-1600. The staff console's own tab strip is gated separately, on the
+`/admin` URL section (`use-secondary-nav.ts`), which is why org- and
+site-section pages looked identical for staff and did not raise the question.
+
+The harnesses now defend this themselves, and you should not have to think
+about it:
+
+- the app marks staff-only chrome `data-staff-only="<release flag key>"`
+  (`apps/console/components/secondary-nav-bar.component.tsx`);
+- `tools/e2e/lib/staff-only-chrome.mjs` hides it from first paint, and **fails
+  any shot** where such an element is still on screen;
+- a **preflight** refuses to start a run unless it finds one to hide — a guard
+  that matched nothing would otherwise pass on every page for the rest of time.
+
+So: if a run stops with `staff-only chrome guard found no [data-staff-only]`,
+do not work around it. Either the marker moved, or every host tab has now
+shipped and the canary needs re-pointing —
+`apps/console/specs/nav-staff-only-marker.spec.ts` fails alongside it and says
+which.
+
+If you ever capture by hand, capture what a **customer** sees: no ⚑ badges, no
+`/admin` chrome, no impersonation banner.
+
+> **Never re-capture `billing-and-plans/billing-page.png`.** That page fetches
+> invoices from Stripe on mount and localhost carries the **live** key. Leave
+> the image alone; if the billing UI changes, stage the capture somewhere that
+> cannot reach live Stripe.
 
 > Diagrams and SVG mockups render without a running app, so prefer them for evergreen
 > concepts. Reserve real screenshots for UI that's hard to convey otherwise, and re-capture

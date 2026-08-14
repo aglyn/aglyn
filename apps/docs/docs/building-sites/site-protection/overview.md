@@ -24,7 +24,7 @@ list:
 | **Error screens** for 404 / 401 / 403 / 503 | The **Error pages** card in **Setup** |
 | **Maintenance mode** | The same **Error pages** card in **Setup** |
 
-![The screens list — open a screen from here to reach its Page Access card](/img/getting-started/screens-list.png)
+![The Page Access card on a screen's own page, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 
 ## Per-screen passwords
 
