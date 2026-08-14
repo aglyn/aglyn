@@ -43,8 +43,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { collection, doc, getCountFromServer, limit, query, setDoc, updateDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -143,6 +143,42 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     .sort((a: any, b: any) =>
       String(a.name ?? '').localeCompare(String(b.name ?? '')),
     )
+  /**
+   * The function HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1716, the AGL-1706 shape) — the same fix as the
+   * variables card beside it, for the same reason.
+   *
+   * The listener is `limit(100)` and `functions.length` fed
+   * `checkQuota(org, 'functionsPerHost', …)`, whose bands are 1 / 10 / 50 /
+   * 250 / 500 / 1,000. Everything from Business up sits above the window, so
+   * on those plans the gate compared 100 against hundreds and could never
+   * refuse, while `api/hosts/resources` counted the collection and did.
+   *
+   * UNFILTERED, matching that route's plain `collection('functions').count()`
+   * — soft-deleted functions have always counted server-side, so this is the
+   * card catching up with the verdict it exists to predict. Only a create
+   * moves the number, so that is where it is re-read.
+   */
+  const [functionCountEpoch, setFunctionCountEpoch] = useState(0)
+  const [serverFunctionCount, setServerFunctionCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'functions'))
+      .then((snapshot) => {
+        if (active) setServerFunctionCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the loaded rows — a LOWER bound and the prior
+        // behaviour, never 0, which `checkQuota` would answer as "no usage"
+        // on a site that is over its band.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, functionCountEpoch])
+  const functionCount = serverFunctionCount ?? functions.length
 
   const [draft, setDraft] = useState<FunctionDraft | null>(null)
 
@@ -229,6 +265,9 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       } else {
         // New function rides the quota-enforcing resources API (AGL-473).
         await createHostResource({ hostId, resource: 'function', data: fields })
+        // A create moves the count; the one-shot aggregate below does not
+        // refresh itself the way the listener refreshes the rows.
+        setFunctionCountEpoch((epoch) => epoch + 1)
       }
       setDraft(null)
       setTestResult(null)
@@ -476,11 +515,8 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
             // Plan cap (AGL-99): dark-launch — plan-less workspaces uncapped.
-            const quota = checkQuota(
-              org,
-              'functionsPerHost',
-              functions.length,
-            )
+            // The site's functions, not this page of them (AGL-1716).
+            const quota = checkQuota(org, 'functionsPerHost', functionCount)
             if (!quota.allowed) {
               return void enqueueSnackbar(
                 `Function limit reached (${quota.limit}) — upgrade in Billing`,
