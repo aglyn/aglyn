@@ -347,22 +347,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
-          const totals = CommerceModel.computeOrderTotals(lineItems, {
-            feeCents: Number(feeCents ?? 0),
-            taxCents: Number(object?.total_details?.amount_tax ?? 0),
-            discountCents: Number(
-              object?.total_details?.amount_discount ?? 0,
-            ),
-          })
+          // AGL-1698: reads all THREE of `total_details` — the shipping used
+          // to be dropped here, storing `shippingCents: 0` on every online
+          // order while the shopper's shipping sat inside `amount_total`.
+          const totals = CommerceModel.computeCheckoutSessionTotals(
+            lineItems,
+            object,
+            { feeCents: Number(feeCents ?? 0) },
+          )
           transaction.set(orderRef, {
             number,
             status: 'paid',
             channel: 'online',
             lineItems,
-            totals: {
-              ...totals,
-              totalCents: Number(object?.amount_total ?? totals.totalCents),
-            },
+            totals,
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),

@@ -172,6 +172,63 @@ export function computeOrderTotals(
   }
 }
 
+/**
+ * The completed Checkout Session fields an online order's totals are built
+ * from. Typed structurally rather than against Stripe's SDK: the plugin talks
+ * to Stripe over raw `fetch` and never installs the package.
+ */
+export interface CheckoutSessionTotalsSource {
+  amount_total?: unknown
+  total_details?: {
+    amount_tax?: unknown
+    amount_shipping?: unknown
+    amount_discount?: unknown
+  } | null
+}
+
+/**
+ * Stored `OrderTotals` for an `online` order, from the completed session.
+ *
+ * AGL-1698: the webhook used to read `amount_tax` and `amount_discount` and
+ * silently skip their third sibling, so `computeOrderTotals` defaulted
+ * `shippingCents` to 0 on every online order while the shipping the shopper
+ * paid sat inside `amount_total`. The stored parts then did not sum to the
+ * stored total, and every merchant reconciling their own books against these
+ * records understated shipping by exactly the amount charged. `amount_shipping`
+ * is the figure to read — `shipping_cost.amount_total` carries the same number
+ * but is null unless a rate was chosen, whereas `total_details.amount_shipping`
+ * is always present and sits beside the two fields already read.
+ *
+ * `totalCents` still comes from Stripe's `amount_total` verbatim rather than
+ * from our arithmetic: `itemsCents` is priced from the host's product docs, so
+ * a price edit between session creation and webhook delivery would otherwise
+ * make our sum, not Stripe's charge, the stored truth. With shipping passed the
+ * two agree by construction — which is now an invariant a fixture can pin
+ * rather than a discrepancy that papers over a missing part.
+ *
+ * Note this also unclamps the discount correctly: `computeOrderTotals` caps
+ * `discountCents` at `itemsCents + shippingCents`, so a discount that reached
+ * into shipping was previously clamped down as well.
+ */
+export function computeCheckoutSessionTotals(
+  lineItems: OrderLineItem[],
+  session: CheckoutSessionTotalsSource | null | undefined,
+  parts?: Pick<OrderTotals, 'feeCents'> | { feeCents?: number },
+): OrderTotals {
+  const details = session?.total_details ?? {}
+  const totals = computeOrderTotals(lineItems, {
+    feeCents: Number(parts?.feeCents ?? 0),
+    taxCents: Number(details?.amount_tax ?? 0),
+    shippingCents: Number(details?.amount_shipping ?? 0),
+    discountCents: Number(details?.amount_discount ?? 0),
+  })
+  const amountTotal = Number(session?.amount_total ?? NaN)
+  return {
+    ...totals,
+    totalCents: Number.isFinite(amountTotal) ? amountTotal : totals.totalCents,
+  }
+}
+
 /** Display form: `#1042`; falls back to a doc-id stub for legacy rows. */
 export function formatOrderNumber(order: Pick<HostOrder, 'number'>, docId?: string): string {
   if (order.number != null) return `#${order.number}`

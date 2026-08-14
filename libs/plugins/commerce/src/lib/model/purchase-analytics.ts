@@ -85,20 +85,28 @@ function toAmount(cents: number): number {
  * reconciles with Stripe by construction: it is Stripe's own number, verbatim.
  * `taxCents` is likewise `total_details.amount_tax`, Stripe's own.
  *
- * The parts do NOT reconcile, and this is load-bearing rather than pedantic.
- * `computeOrderTotals` is called with `feeCents`, `taxCents` and
+ * The parts used NOT to reconcile, and that is why this derivation exists.
+ * `computeOrderTotals` was called with `feeCents`, `taxCents` and
  * `discountCents` but **never `shippingCents`**, so a stored `OrderTotals`
- * records `shippingCents: 0` on every online order — while the shipping the
- * shopper actually chose at Stripe Checkout is inside `amount_total`. Building
- * `value` from `itemsCents + shippingCents - discountCents` would therefore
- * have silently dropped all shipping revenue, understating orders that carry
- * it and leaving orders that do not looking correct. Same failure shape as the
+ * recorded `shippingCents: 0` on every online order while the shipping the
+ * shopper paid sat inside `amount_total`. Building `value` from
+ * `itemsCents + shippingCents - discountCents` would therefore have silently
+ * dropped all shipping revenue, understating orders that carried it and
+ * leaving orders that did not looking correct. Same failure shape as the
  * AGL-1639 overstatement, opposite sign.
  *
- * That stored zero is also why NO GA4 `shipping` param is sent: the only
- * shipping figure we hold is structurally 0, and sending it would assert free
- * shipping on every order rather than say nothing. Filed separately — the
- * event is right without it because `totalCents` already contains it.
+ * AGL-1698 fixed the storage — `computeCheckoutSessionTotals` passes
+ * `total_details.amount_shipping`, and the parts now sum to the total. The
+ * derivation stays on `totalCents` anyway, for a reason that outlives the bug:
+ * `totalCents` is Stripe's `amount_total` verbatim, whereas `itemsCents` is
+ * priced from the host's product docs, so a price edit between session
+ * creation and webhook delivery would make our sum disagree with the charge.
+ *
+ * Still NO GA4 `shipping` param, and still for a factual reason rather than a
+ * stylistic one: no Checkout Session we create declares `shipping_options`, so
+ * Stripe never offers a shipping choice and `amount_shipping` is 0 on every
+ * live session. Sending it would assert free shipping on every order rather
+ * than say nothing. It becomes worth sending once shipping is charged.
  *
  * ## Worked example — the spec fixture
  *
@@ -107,7 +115,7 @@ function toAmount(cents: number): number {
  *
  *   itemsCents            10000   line snapshot
  *   - discountCents         500   Stripe `total_details.amount_discount`
- *   + shipping             1000   chosen at Stripe, NOT in `shippingCents`
+ *   + shippingCents        1000   Stripe `total_details.amount_shipping`
  *   + taxCents              908   Stripe `total_details.amount_tax`
  *   = totalCents          11408   Stripe `amount_total`, verbatim
  *   - taxCents            - 908   held for the state, not revenue
@@ -118,8 +126,10 @@ function toAmount(cents: number): number {
  *                                 OUR property by the subscription/marketplace
  *                                 `purchase`, not by this one.
  *
- * Note the stored parts sum to 10408, not 11408. The 1000 gap is the shipping,
- * and it is exactly what a parts-based `value` would have lost.
+ * Before AGL-1698 the stored parts summed to 10408, not 11408: the 1000 gap was
+ * the shipping, and it is exactly what a parts-based `value` would have lost.
+ * They reconcile now, which `commerce-orders.spec.ts` pins; the guard below
+ * survives as a guard, since the derivation must not drift back to the parts.
  *
  * Returns `null` when there is nothing truthful to send — no transaction id,
  * or a non-positive value. A dropped event is a gap in the merchant's report;

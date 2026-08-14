@@ -91,7 +91,9 @@ describe('buildStorefrontPurchaseParams', () => {
    * way, and it fails on any parts-based implementation.
    */
   it('keeps shipping that the stored parts do not record', () => {
-    // Reproduces the webhook's call exactly: shippingCents is NOT passed.
+    // The PRE-AGL-1698 webhook call: shippingCents was not passed. Kept as the
+    // shape this derivation must never be rebuilt on, and as the shape every
+    // order written before that fix still carries.
     const stored = computeOrderTotals([LINE], {
       feeCents: FEE_CENTS,
       taxCents: TAX_CENTS,

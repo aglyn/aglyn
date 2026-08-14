@@ -327,14 +327,27 @@ construction; `taxCents` is Stripe's `total_details.amount_tax`, excluded
 because the merchant is seller of record and tax collected is held for the
 state. As in AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
 
-No `shipping` param either, and that one is a live defect rather than a
-preference: `computeOrderTotals` is never called with `shippingCents`, so every
-online order stores `shippingCents: 0` while the shipping the shopper chose at
-Stripe Checkout sits inside `amount_total`. Sending it would assert free
-shipping on every order. Deriving `value` from the stored parts would have
-**dropped that shipping revenue entirely** — the same failure shape as the
-AGL-1639 overstatement with the opposite sign — which is why `value` comes off
-`totalCents` and why `purchase-analytics.spec.ts` pins the decomposition.
+**No `shipping` param either**, and the reason changed under AGL-1698 without
+changing the answer. It used to be a live defect: the webhook read two of
+`total_details`' three siblings and skipped `amount_shipping`, so every online
+order stored `shippingCents: 0` while the shipping the shopper paid sat inside
+`amount_total`. That is fixed — `computeCheckoutSessionTotals` now passes it,
+and the stored parts sum to the stored total. What it is **not** yet is a number
+worth reporting, because no Checkout Session we create declares
+`shipping_options`, so Stripe never offers a shipping choice and
+`amount_shipping` is 0 on every live session today. Sending it would still
+assert free shipping on every order. It becomes worth sending when shipping is
+actually charged, not before.
+
+`value` still comes off `totalCents`, and deliberately so. Deriving it from the
+stored parts would have **dropped that shipping revenue entirely** — the same
+failure shape as the AGL-1639 overstatement with the opposite sign. AGL-1698
+makes the parts complete, so the two now agree; the reason to keep `totalCents`
+is no longer that the parts are short but that `totalCents` is Stripe's own
+number verbatim and reconciles by construction, while `itemsCents` is priced
+from the host's product docs and a price edit mid-session would diverge.
+`purchase-analytics.spec.ts` still pins the decomposition, and
+`commerce-orders.spec.ts` now pins the reconciliation.
 
 ### 2. Consent-blocked means the event is gone, not queued
 
