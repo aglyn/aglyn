@@ -68,8 +68,23 @@ const formatDate = (value?: { seconds: number } | null) =>
  * quote-breaking impossible. A bare relative `cover.png` stays rejected
  * exactly as before — there is no page for it to resolve against at compose
  * time.
+ *
+ * `http:` was dropped for AGL-1725. AGL-1701 found two paths accepting it;
+ * markdown-lite is AGL-1713 and this was the second, separate one. It is the
+ * only scheme change here, and it is not a host restriction: an author
+ * hotlinking their own https cover keeps working, because on a published
+ * site the author IS the site owner and the audience is their own visitors.
+ * `http:` alone has no defensible use — the request is mixed passive content
+ * that current browsers already block or auto-upgrade, so the author gains
+ * nothing from it, while the plaintext fetch discloses which article a
+ * visitor is reading to every observer on the network path.
+ *
+ * The consequence of the drop is the SILENT DROP this whole comment is about,
+ * for `http:` covers only: no cover node is emitted. That is the correct
+ * trade here and the browser was very likely refusing the image anyway, but
+ * it is the reason the change is one scheme and not a host list.
  */
-const RENDERABLE_COVER_URL = /^(?:https?:\/\/|\/)/i
+const RENDERABLE_COVER_URL = /^(?:https:\/\/|\/)/i
 
 /**
  * A URL made safe to sit inside `url("…")`, WITHOUT re-encoding it.
