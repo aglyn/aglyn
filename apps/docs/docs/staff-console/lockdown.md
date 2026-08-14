@@ -166,19 +166,10 @@ It is **reversible**, and that is the whole reason it exists instead of
 deletion: a false-positive scan or a successful counter-notice is undone by
 lifting the quarantine, with no re-upload and no lost URL.
 
-**Keyed by the file's content hash, not by the document.** One quarantine
+**Keyed by the file's content digest, not by the document.** One quarantine
 covers every media document that shares the bytes — a template duplicated into
-forty workspaces is forty documents and one hash — and it keeps biting if the
-same file is uploaded again. Two limits worth knowing:
-
-- The same bytes ingested through *different* upload routes do not currently
-  share a hash, so "re-upload stays quarantined" holds within an upload path.
-- Some documents carry no hash at all (older uploads, and very large files
-  stored as composite objects). For those, quarantine by **asset** instead —
-  it takes the scope segment and media id from the CDN URL.
-
-Use `by: "asset"` deliberately when the same bytes are legitimate elsewhere and
-only *this* workspace's copy is the subject of a report.
+forty workspaces is forty documents and one digest — and it keeps biting if the
+same file is uploaded again.
 
 | | |
 |---|---|
@@ -187,6 +178,73 @@ only *this* workspace's copy is the subject of a report.
 | **Reasons** | `malware`, `abuse`, `dmca`, `legal`, `manual` |
 | **Audited** | Every set *and* lift, with reason, actor, expiry, and the message the customer sees |
 | **Expiry** | Optional, same semantics as a lockdown — when it passes, delivery restores with no action and no write |
+
+### Which digest to send {#which-digest}
+
+A media document may carry **two** digest fields, and they are not
+interchangeable. Send the strong one.
+
+| Field on the media document | What it is | When to send it |
+|---|---|---|
+| `contentSha256` | The full 64-hex sha256 of the bytes, written by the routes that actually held them | **Whenever the document has one** |
+| `contentHash` | A **16-hex (64-bit) truncation** of *one of two* algorithms — sha256 on the direct upload/replace routes, GCS's md5 on the signed-upload route | Only as a fallback, when there is no `contentSha256` |
+
+Documents with no `contentSha256` are every asset uploaded before the field
+existed, plus everything except SVG that came in through the signed-upload
+route (that route never holds the bytes, so it cannot hash them).
+
+The **request** field is called `contentHash` for both — the route accepts any
+8–64 character hex digest and does not care which document field you copied it
+out of. So paste the value of `contentSha256` into `"contentHash"` and read the
+request field name as "the digest".
+
+**Why the distinction is worth a paragraph.** Two files can be made to share a
+`contentHash`: 64 truncated bits is collision-resistant by accident rather than
+by design, and the md5-derived half is the sharp end — a chosen-prefix md5
+collision is an afternoon of ordinary compute, and two files sharing a full md5
+share its truncation. So an entry keyed on the weak field can be aimed at a
+stranger's file. `contentSha256` is one algorithm at full width and has no such
+property.
+
+**Choosing the weaker key is a missed strengthening, never a missed takedown.**
+The CDN checks **every** key an asset can present — strong digest, legacy hash,
+per-asset — and any single match refuses. That is deliberate: entries in force
+were written under whichever field existed when staff pressed the button, and
+dropping the legacy key would mean a live takedown quietly lifting itself the
+first time a replace stamped a strong digest onto the document it covered. An
+entry written under either field keeps biting.
+
+### What each key covers {#quarantine-keys}
+
+| Key | Set it with | Reach |
+|---|---|---|
+| `hash--{sha256}` | `contentHash: "<the contentSha256 value>"` | Every document sharing those bytes, in every workspace — at delivery **and** at ingestion wherever the server hashed the bytes itself |
+| `hash--{legacy}` | `contentHash: "<the contentHash value>"` | The same reach with the weaker key. For a non-SVG signed upload it is the only digest that exists |
+| `asset--{scopeSegment}--{mediaId}` | `by: "asset"` plus `scopeSegment` and `mediaId` | Exactly one document in one workspace, matched on identity, so it needs no digest at all |
+
+Three limits, each a real hole rather than a caveat:
+
+- **The mint leg of a signed upload is not gated.** `POST /api/media/upload-url`
+  hands out a signed URL before a single byte exists, so there is nothing to
+  look up. The refusal lands at the finalize step instead, which deletes the
+  orphaned object — nothing is registered, counted or billed — but the bytes do
+  briefly reach the bucket.
+- **A takedown bites *within* an ingestion path, not across them.** The
+  signed-upload route's digest is a truncation of GCS's md5; the direct upload
+  and replace routes' is a truncation of sha256. The same file pushed through
+  the other route presents a different digest and therefore a different key.
+  Where a file must be un-re-uploadable through *every* path, lock the scope.
+- **A composite object carries no digest at all.** GCS reports no `md5Hash` for
+  one, so a very large signed upload can reach the DAM with neither field set.
+  Quarantine it `by: "asset"`, and know that it is then covered **at delivery
+  only** — with no digest to compare, the ingestion gate has nothing to match on
+  a fresh upload. (A *replace* aimed at that document is still refused: the
+  replace route checks the target document's per-asset key too.)
+
+Use `by: "asset"` deliberately, as well, when the same bytes are legitimate
+elsewhere and only *this* workspace's copy is the subject of a report.
+
+### What each audience is told {#quarantine-audiences}
 
 **What a fetcher sees:** a neutral `410 Gone`, byte-identical to the lockdown
 refusal. It deliberately says nothing about *why* — that a takedown notice or a
@@ -205,10 +263,10 @@ asset is refused for the same reason: the takedown would keep biting on the new
 bytes, so a "successful" replace would have produced a file that still refuses
 to load.
 
-The ingestion gate inherits the hash limits above: it matches within an upload
-route, not across them, and a very large file with no digest at all is covered
-at delivery by its per-asset key rather than at ingestion. Where the file has to
-be unavailable *and* un-re-uploadable through every path, lock the scope.
+The ingestion gate inherits every limit in [What each key
+covers](#quarantine-keys) — the unmintable signed-URL leg, the within-a-route
+matching, and the digest-less composite object. Delivery is the only place
+that covers all three.
 
 **Billing is untouched, on purpose.** Quarantine does not delete the object,
 does not modify the media document, and does not change the storage counter.
@@ -238,22 +296,36 @@ Setting and lifting is still operated through
 staff form for it yet, and no page listing the whole deny list:
 
 ```bash
-# Disable one file by its content hash (visible on the asset in the DAM).
+# Disable one file. The value is the media document's `contentSha256` —
+# see "Which digest to send" above; fall back to `contentHash` only when
+# the document has no `contentSha256`.
 curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"action":"quarantine","contentHash":"0123456789abcdef",
+  -d '{"action":"quarantine",
+       "contentHash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
        "scopeSegment":"org:acme","mediaId":"m1","reason":"dmca",
        "note":"Notice #4417 — staff eyes only",
        "message":"Disabled pending review of a copyright claim."}' \
   https://app.aglyn.com/api/admin/media-quarantine
 
-# Lift it.
+# Lift it — the SAME digest that was used to set it. A release removes the
+# one key it names, so lifting a legacy-keyed entry means sending the legacy
+# `contentHash`, even if the document has since gained a `contentSha256`.
 curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"action":"release","contentHash":"0123456789abcdef"}' \
+  -d '{"action":"release",
+       "contentHash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}' \
   https://app.aglyn.com/api/admin/media-quarantine
 
-# What is quarantined right now (open to every staff role).
+# An asset with no digest at all (composite object, or a pre-digest upload).
+curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"quarantine","by":"asset",
+       "scopeSegment":"org:acme","mediaId":"m1","reason":"malware"}' \
+  https://app.aglyn.com/api/admin/media-quarantine
+
+# What is quarantined right now (open to every staff role). `count` against
+# `maxEntries` is worth reading — a full list refuses the next takedown.
 curl -H "Authorization: Bearer $STAFF_TOKEN" \
   https://app.aglyn.com/api/admin/media-quarantine
 ```
