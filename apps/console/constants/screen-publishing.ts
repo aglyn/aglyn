@@ -16,6 +16,7 @@
  */
 
 import type { HostUid, ScreenUid } from '@aglyn/aglyn'
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   deleteField,
@@ -52,6 +53,23 @@ export async function publishScreenRoute(
       [`screens.${screenId}`]: path,
     }),
   ])
+  // "% who publish a site" — the GTM plan's headline activation metric
+  // (AGL-1561). Fired HERE, at the routing-map write, rather than at each of
+  // the five publish buttons: registering a path in the host's `screens` map
+  // IS what makes a page reachable on the live site, so every surface that
+  // publishes a route passes through this function and no new publish button
+  // can be added that quietly forgets to be counted.
+  //
+  // Deliberately NOT fired for a version-pointer republish (swapping which
+  // saved version a live route serves). That is a content update to a site
+  // that is already published, and counting it here would let one activated
+  // org look like many, which is the opposite of what an activation rate is
+  // for. Only a route going live counts.
+  //
+  // No ids in the payload: the metric is "did this user ever publish", which
+  // GA answers from the event alone, and a host id would be a resource
+  // identifier bought for nothing.
+  trackEvent('site_published', {})
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   onboardingDestination,
   parseOnboardingPlanIntent,
 } from '@aglyn/aglyn'
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
@@ -47,7 +48,6 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { Alert, Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
-import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -61,7 +61,6 @@ import {
 import { doc, setDoc, type Firestore } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  useAnalytics,
   useAuth,
   useFirestore,
   useSigninCheck,
@@ -217,6 +216,11 @@ async function provisionSignUpOrg(
       })
       return null
     }
+    // Activation (AGL-1561). The workspace auto-provisioned at signup is a
+    // real org creation and is counted like any other — the `response.ok`
+    // guard above means a failed provision falls through to the picker
+    // uncounted, which is what makes "orgs created" match reality.
+    trackEvent('org_created', {})
     return typeof payload?.slug === 'string' ? payload.slug : null
   } catch (error) {
     console.error('sign-up org create failed', error)
@@ -261,7 +265,6 @@ function SignUp() {
   // Google) require affirmative agreement to the Terms and Privacy Policy.
   const [consented, setConsented] = useState(false)
   const [consentError, setConsentError] = useState(false)
-  const analytics = useAnalytics()
   // The plan a visitor picked on the marketing pricing page (AGL-1117):
   // `/signup?plan=pro&interval=year`. Parsed once and defensively — the
   // contract is with a site we cannot deploy in lockstep with, so a bad
@@ -356,8 +359,30 @@ function SignUp() {
             : signInWithPopup(firebaseAuth, googleOAuthProvider)
         })
         .then(async (credential) => {
-          logEvent(analytics, 'sign_up', {
-            method: credential.providerId,
+          // `method` is a LITERAL per door, not `credential.providerId`
+          // (AGL-1561). Firebase derives `providerId` from the Identity
+          // Toolkit response, and the signUp/verifyPassword responses carry
+          // no provider — so the email/password door was reporting
+          // `method: null`, i.e. the one param that makes `sign_up` worth
+          // having was empty for the commonest door.
+          //
+          // Reaching this `.then` at all means desktop: the mobile redirect
+          // unmounts this page before the account exists, and is reported as
+          // `google_redirect` from `useGoogleRedirectResult`.
+          //
+          // A Google sign-up that arrived via `?consent=required` is the
+          // fourth AGL-1497 door — the account was created on /signin, stood
+          // down for want of consent, and bounced here. It is counted HERE,
+          // once, rather than at the bounce: the /signin account is
+          // deliberately unusable until this consent happens, so counting it
+          // there would inflate signups with people who never came back, and
+          // counting it in both places would double every one who did.
+          trackEvent('sign_up', {
+            method: values
+              ? 'password'
+              : searchParams?.get('consent') === 'required'
+                ? 'google_signin'
+                : 'google_popup',
           })
           // Record the acceptance FIRST (AGL-1497). Both branches below can
           // end in `window.location.assign`, which tears this page down — a
@@ -442,7 +467,6 @@ function SignUp() {
         })
     },
     [
-      analytics,
       consented,
       error,
       firebaseAuth,
@@ -450,6 +474,7 @@ function SignUp() {
       loading,
       planIntent,
       queueLoading,
+      searchParams,
       signupsPaused,
     ],
   )

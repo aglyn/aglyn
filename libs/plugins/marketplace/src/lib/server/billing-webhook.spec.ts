@@ -41,9 +41,18 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       get: (field: string) => (store[path] ?? {})[field],
     }),
   })
+  const ga4: Array<Record<string, unknown>> = []
   return {
     __writes: writes,
     __store: store,
+    // AGL-1561: marketplace sales are real revenue and report a GA4
+    // `purchase`. Captured rather than stubbed so the money that reaches
+    // GA can be asserted against the money that reaches the ledger.
+    __ga4: ga4,
+    sendGa4Purchase: async (input: Record<string, unknown>) => {
+      ga4.push(input)
+      return { sent: true, synthesizedClientId: false }
+    },
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
@@ -105,6 +114,7 @@ const completedSession = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   adminMock.__writes.length = 0
+  adminMock.__ga4.length = 0
   for (const key of Object.keys(adminMock.__store)) {
     delete adminMock.__store[key]
   }
@@ -138,6 +148,38 @@ describe('marketplace purchase record (AGL-46/1544)', () => {
       completedSession({ metadata: { type: 'subscription' } }) as any,
     )
     expect(adminMock.__writes).toHaveLength(0)
+  })
+})
+
+describe('GA4 purchase reporting (AGL-1561)', () => {
+  it('reports the sale as revenue, keyed by the same session id as the ledger', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(adminMock.__ga4).toHaveLength(1)
+    const sent = adminMock.__ga4[0]
+    // The session id, so GA de-duplicates a Stripe redelivery exactly as the
+    // ledger's doc id does.
+    expect(sent.transactionId).toBe('cs_test_1')
+    // Whole currency units, gross — the same 10825 cents the ledger records.
+    expect(sent.value).toBe(108.25)
+    expect((sent.items as any[])[0].item_category).toBe('marketplace')
+  })
+
+  it('reports nothing when the purchase was not paid', async () => {
+    // An unpaid session writes no ledger row, so it must not report revenue
+    // either — the two have to agree or GA and Stripe tell different stories.
+    await marketplaceBillingWebhookHandler(
+      completedSession({ payment_status: 'unpaid' }) as any,
+    )
+
+    expect(adminMock.__writes).toHaveLength(0)
+    expect(adminMock.__ga4).toHaveLength(0)
+  })
+
+  it('never carries a seller-authored listing name into a GA dimension', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(JSON.stringify(adminMock.__ga4)).not.toContain('@')
   })
 })
 

@@ -19,6 +19,7 @@ import { buildRoute, Route, runBillingWebhookHandlers } from '@aglyn/aglyn/serve
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
+  sendGa4Purchase,
   notifyOrgAdmins,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
@@ -365,6 +366,51 @@ async function handler(request: Request): Promise<Response> {
         if (orgId) {
           const amount = Number(object?.amount_due ?? object?.amount_paid ?? 0)
           const dollars = (amount / 100).toFixed(2)
+          // GA4 revenue (AGL-1561), sent server-side because this is where the
+          // authoritative money is. `invoice.paid` ONLY — `finalized` is a
+          // bill, not a payment, and `payment_failed` is neither.
+          //
+          // Fired on EVERY paid invoice, renewals included, which is correct
+          // for a subscription business: GA's `purchase` IS revenue, and its
+          // built-in "first time purchasers" metric is what answers the GTM
+          // plan's "paid conversions". Reporting only first payments would
+          // make ARPA and the annual mix unreadable.
+          //
+          // `transaction_id` is the invoice id, so GA de-duplicates: a Stripe
+          // redelivery cannot inflate revenue even if the idempotency claim
+          // above is ever bypassed.
+          //
+          // Fire-and-forget and never allowed to throw — a throw here would
+          // un-claim the Stripe event and cause a redelivery, turning a missed
+          // analytics hit into a repeated billing side effect.
+          if (type === 'invoice.paid') {
+            const paidCents = Number(object?.amount_paid ?? amount)
+            const line = object?.lines?.data?.[0]
+            void sendGa4Purchase({
+              transactionId: String(object?.id ?? ''),
+              value: paidCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              billingInterval:
+                line?.price?.recurring?.interval === 'year'
+                  ? 'annual'
+                  : 'monthly',
+              items: [
+                {
+                  item_id: String(line?.price?.id ?? 'subscription'),
+                  item_name: String(line?.price?.nickname ?? 'Subscription'),
+                  item_category: 'subscription',
+                  price: paidCents / 100,
+                  quantity: 1,
+                },
+              ],
+              // Captured in the browser when checkout started and carried on
+              // the subscription metadata; absent on renewals, where the
+              // sender falls back to a synthetic id and the revenue is
+              // recorded without campaign attribution.
+              clientId: object?.subscription_details?.metadata?.ga_client_id,
+              stripeCustomerId: customerId,
+            }).catch(() => undefined)
+          }
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
           // time, so emit the canonical path; the reader normalizes anything
           // legacy that predates this.

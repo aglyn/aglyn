@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailOutline } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
@@ -60,6 +61,17 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ hostId, email }),
         })
+        // GA4 lead conversion (AGL-1561) — AGL-301's subscribe element is a
+        // form completion in every sense that matters, and it shares nothing
+        // with the generic `Form` element, so it needs its own call. Only on
+        // `response.ok`: a failed subscribe is not a lead. The email is
+        // deliberately absent from the payload.
+        if (response.ok) {
+          trackEvent('generate_lead', {
+            form_name: 'Newsletter',
+            form_location: window.location.pathname,
+          })
+        }
         setState(response.ok ? 'done' : 'error')
       } catch {
         setState('error')

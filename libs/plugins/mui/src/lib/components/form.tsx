@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -226,6 +227,25 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
               detail: { formName: formName || 'Form' },
             }),
           )
+          // GA4 lead conversion (AGL-1561). Inside `response.ok`, so it
+          // measures a SUBMISSION, not a click and not a validation failure —
+          // the distinction that makes a conversion rate mean anything. It
+          // also fires BEFORE the redirect branch below, which tears the page
+          // down and would take the event with it.
+          //
+          // `formName` is author-written site content, never a field VALUE:
+          // no submitted field ever reaches GA from here.
+          //
+          // This runs on every tenant site, not only aglyn.com, and that is
+          // deliberate — gtag is loaded with whatever measurement id the HOST
+          // configured, so a customer's form reports into the customer's own
+          // property and aglyn.com's reports into ours. It is consent-gated
+          // either way: without a grant the script never loaded (AGL-1498)
+          // and `trackEvent` finds no `window.gtag` to call.
+          trackEvent('generate_lead', {
+            form_name: formName || 'Form',
+            form_location: window.location.pathname,
+          })
           if (afterSubmit === 'redirect' && !suppressNavigation) {
             const target = resolveRedirectTarget(
               redirectScreenHref,
