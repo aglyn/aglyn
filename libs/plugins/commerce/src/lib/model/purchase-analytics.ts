@@ -116,7 +116,10 @@ function toAmount(cents: number): number {
  * never offered a shipping choice and `amount_shipping` was 0 on every live
  * session — sending it would have asserted free shipping on every order.
  * AGL-1707 wired the merchant's configured zones and rates into the cart
- * session, so `amount_shipping` is now real there. What remains is unbuilt
+ * session and AGL-1720 into the buy-now one, so `amount_shipping` is now real
+ * on both storefront paths (buy-now for physical one-time sales only — a
+ * download ships nothing, and a subscription session records no order to store
+ * the figure in). What remains is unbuilt
  * plumbing rather than a truthfulness objection: `shippingCents` is stored on
  * the order but is not carried into `StorefrontPurchaseSource` or the wire
  * shape. It is worth sending now; it is tracked separately.

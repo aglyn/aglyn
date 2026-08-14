@@ -28,13 +28,6 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
  * webhook creates one multi-line order and clears the cart.
  */
 
-/**
- * Destinations the storefront cart collects an address for, and therefore the
- * destinations shipping rates are resolved against (AGL-1707). One list, used
- * twice: narrowing it would stop sales that work today, so it is unchanged.
- */
-const CART_SHIPPING_COUNTRIES = ['US', 'CA', 'GB', 'AU', 'DE', 'FR'] as const
-
 export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -291,13 +284,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       'payment_intent_data[transfer_data][destination]',
       String(accountId),
     )
-    // Address collection feeds order shipping + destination tax later.
-    CART_SHIPPING_COUNTRIES.forEach((code, index) => {
-      params.set(
-        `shipping_address_collection[allowed_countries][${index}]`,
-        code,
-      )
-    })
+    // Address collection feeds order shipping + destination tax later. The
+    // country list and the emission are shared with buy-now (AGL-1720).
+    CommerceModel.appendShippingAddressCollectionParams(params)
 
     // Stripe Tax when opted in (manual destination tax lands with the
     // AGL-296 checkout, which knows the address before the session).
@@ -327,16 +316,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       | undefined
     const shippingOptions = CommerceModel.resolveCheckoutShippingOptions(
       shippingSettings,
-      CART_SHIPPING_COUNTRIES,
+      CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
       { subtotalCents: itemsCents, totalGrams },
     )
-    shippingOptions.forEach((option, index) => {
-      const field = `shipping_options[${index}][shipping_rate_data]`
-      params.set(`${field}[type]`, 'fixed_amount')
-      params.set(`${field}[display_name]`, option.name.slice(0, 100))
-      params.set(`${field}[fixed_amount][amount]`, String(option.amountCents))
-      params.set(`${field}[fixed_amount][currency]`, 'usd')
-    })
+    CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
 
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`

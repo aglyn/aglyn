@@ -21,12 +21,13 @@
  * live on `hosts/{hostId}/settings/store` under `shipping`. Pure.
  *
  * `resolveShippingRates` is the per-destination resolver;
- * `resolveCheckoutShippingOptions` is the Stripe Checkout adapter that cart
- * checkout calls (AGL-1707). AGL-288 shipped this model with no production
- * call site at all — the doc comment here claimed the cart estimator, checkout
- * and POS pickup used it, and none of them did, so nothing ever read the
- * settings a merchant saved and no shipping was ever charged. Buy-now, draft
- * orders and POS still do not resolve shipping; only cart checkout does.
+ * `resolveCheckoutShippingOptions` is the Stripe Checkout adapter, and
+ * `appendCheckoutShippingParams` emits it onto a session. AGL-288 shipped this
+ * model with no production call site at all — the doc comment here claimed the
+ * cart estimator, checkout and POS pickup used it, and none of them did, so
+ * nothing ever read the settings a merchant saved and no shipping was ever
+ * charged. Cart checkout calls it (AGL-1707) and buy-now calls it for physical
+ * one-time products (AGL-1720). Draft orders and POS still do not.
  */
 
 export interface ShippingZone {
@@ -144,6 +145,25 @@ export function resolveShippingRates(
 export const MAX_CHECKOUT_SHIPPING_OPTIONS = 5
 
 /**
+ * Destinations a storefront Checkout Session collects an address for, and
+ * therefore the destinations shipping rates are resolved against (AGL-1707).
+ *
+ * NOT narrowed to the zones the merchant configured: narrowing would block
+ * checkouts that complete today, turning a money fix into lost sales. The
+ * wider list only means a shopper outside the merchant's zones is offered some
+ * rate rather than none. Shared by cart checkout and buy-now (AGL-1720) so the
+ * two paths cannot drift into offering different destinations.
+ */
+export const CHECKOUT_SHIPPING_COUNTRIES = [
+  'US',
+  'CA',
+  'GB',
+  'AU',
+  'DE',
+  'FR',
+] as const
+
+/**
  * The rates to declare as `shipping_options` on a Stripe Checkout Session
  * (AGL-1707). Stripe charges shipping ONLY when the session declares them,
  * and the session is created before the shopper has entered an address, so
@@ -193,4 +213,43 @@ export function resolveCheckoutShippingOptions(
       // to lose: a shopper offered the cheap options would have taken one.
       .slice(0, MAX_CHECKOUT_SHIPPING_OPTIONS)
   )
+}
+
+/**
+ * Emit `shipping_address_collection[allowed_countries][n]` onto a session's
+ * form body. Stripe will not apply a `shipping_options` rate without an
+ * address to ship to, so the two always travel together.
+ */
+export function appendShippingAddressCollectionParams(
+  params: URLSearchParams,
+  countries: readonly string[] = CHECKOUT_SHIPPING_COUNTRIES,
+): void {
+  countries.forEach((code, index) => {
+    params.set(`shipping_address_collection[allowed_countries][${index}]`, code)
+  })
+}
+
+/**
+ * Emit resolved rates as `shipping_options` on a Checkout Session's form body.
+ *
+ * THIS IS THE ONLY THING THAT MAKES STRIPE CHARGE SHIPPING. Without these keys
+ * Stripe presents no shipping choice and `total_details.amount_shipping` is 0
+ * however many zones and rates the merchant saved (AGL-1707).
+ *
+ * An empty list emits NOTHING — not an empty array — so a merchant who
+ * configured no shipping keeps a session byte-identical to the one built
+ * before shipping was wired at all. That guarantee lives here rather than in
+ * each caller, so neither checkout path can lose it independently (AGL-1720).
+ */
+export function appendCheckoutShippingParams(
+  params: URLSearchParams,
+  options: readonly ResolvedShippingRate[],
+): void {
+  options.forEach((option, index) => {
+    const field = `shipping_options[${index}][shipping_rate_data]`
+    params.set(`${field}[type]`, 'fixed_amount')
+    params.set(`${field}[display_name]`, option.name.slice(0, 100))
+    params.set(`${field}[fixed_amount][amount]`, String(option.amountCents))
+    params.set(`${field}[fixed_amount][currency]`, 'usd')
+  })
 }

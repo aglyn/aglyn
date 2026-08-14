@@ -45,10 +45,12 @@ export interface ShippingSettingsCardProps {
 /**
  * Shipping settings (AGL-288): zones (countries, '*' = rest of world)
  * and rates (flat / free-over / subtotal or weight tiers), stored on
- * `hosts/{hostId}/settings/store` under `shipping`. Cart checkout reads this
- * document and declares the rates as Stripe `shipping_options`
- * (`resolveCheckoutShippingOptions`, AGL-1707) — until that landed nothing
- * read it, and everything saved here was charged to nobody.
+ * `hosts/{hostId}/settings/store` under `shipping`. Cart checkout (AGL-1707)
+ * and buy-now (AGL-1720) both read this document and declare the rates as
+ * Stripe `shipping_options` (`resolveCheckoutShippingOptions`) — until those
+ * landed nothing read it, and everything saved here was charged to nobody.
+ * Buy-now resolves only for physical one-time sales; draft orders and POS
+ * still resolve no shipping at all.
  */
 export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   const { hostId } = props

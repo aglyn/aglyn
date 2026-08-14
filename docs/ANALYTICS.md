@@ -357,10 +357,18 @@ zones and rates as `shipping_options`, so `amount_shipping` is now a real number
 on any cart session for a merchant who set shipping up. The param is still not
 sent, but the remaining reason is only that plumbing `shippingCents` from the
 stored order out to the wire shape is unbuilt work rather than a truthfulness
-problem — it is tracked separately and is now worth doing. Note the figure is
-still structurally 0 on the buy-now path, which declares neither
-`shipping_address_collection` nor `shipping_options`; only cart checkout
-charges shipping today.
+problem — it is tracked separately and is now worth doing.
+
+AGL-1720 then closed the same gap on buy-now, which had declared neither
+`shipping_address_collection` nor `shipping_options` and so charged nothing
+however many rates the merchant saved — the same merchant and product billing
+two different totals depending on which button the shopper pressed. Buy-now
+resolves through the same AGL-1707 translation, narrowed to physical one-time
+sales: a digital or service product ships nothing, and a subscription session
+is excluded because its webhook branch records no order to store the figure in.
+So `amount_shipping` is now a real number on both storefront paths for a
+merchant who set shipping up, and structurally 0 only for one who did not.
+Draft orders and POS still resolve no shipping.
 
 `value` still comes off `totalCents`, and deliberately so. Deriving it from the
 stored parts would have **dropped that shipping revenue entirely** — the same
