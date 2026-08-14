@@ -285,8 +285,15 @@ const FIRST_PARTY_APEXES = [
   'localhost',
 ]
 
-function isFirstPartyHost(host: string): boolean {
-  const lower = host.toLowerCase()
+// The parameter is `hostname`, not `host`, on purpose (AGL-1718/AGL-1719). In
+// this repo `host` names the `hosts/{hostId}` SITE DOCUMENT, and the AGL-1361
+// write-deny guard scans this whole directory textually for `host.<field>` to
+// build that document's field universe. A string local called `host` therefore
+// reads as a site field: `host.toLowerCase()` was collected as a host field
+// named `toLowerCase` and turned the guard red. `url.hostname` is what the one
+// caller passes, so this is also the more accurate name.
+function isFirstPartyHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase()
   if (FIRST_PARTY_MEDIA_HOSTS.includes(lower)) return true
   return FIRST_PARTY_APEXES.some(
     (apex) => lower === apex || lower.endsWith(`.${apex}`),

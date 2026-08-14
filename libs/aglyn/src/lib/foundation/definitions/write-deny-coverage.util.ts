@@ -393,11 +393,51 @@ export function seedFields(source: string, anchor: RegExp): string[] | null {
 }
 
 /**
+ * Whether the property access ending at `index` is being CALLED (AGL-1719).
+ *
+ * The guard reads `hosts/{hostId}` fields by scanning for `host.<name>` across
+ * a whole directory, which means it matches on the identifier NAME and cannot
+ * see the type. `media-ref.ts` has `isFirstPartyHost(host: string)` whose body
+ * is `host.toLowerCase()` — a hostname string, not the host document — so
+ * `toLowerCase` entered the field universe and the guard demanded that a
+ * `String.prototype` method be classified as server-owned or client-writable.
+ *
+ * Dropping method calls removes that whole class rather than that one name,
+ * and it is sound in the only direction that matters. Firestore document data
+ * is JSON: string, number, boolean, null, array, map, timestamp, geopoint,
+ * reference. **No field of a document can be callable**, so `binding.X(` is
+ * provably never a field read and this can never introduce a false negative —
+ * which is the single failure mode a coverage guard has (AGL-1420).
+ *
+ * A chained read is untouched: in `host.disabledPlugins.includes(x)` the
+ * character after the captured name is `.`, so `disabledPlugins` is still
+ * collected and only `includes` is dropped. Optional calls (`host.foo?.()`)
+ * and generic ones (`host.foo<T>()`) are calls too.
+ *
+ * An exclusion list of known method names was rejected: it would silence the
+ * symptom, need tending forever, and still say nothing about the next method
+ * on the next same-named local.
+ */
+function isMethodCallAt(source: string, index: number): boolean {
+  const rest = source.slice(index)
+  return /^\s*(?:\?\.)?\s*(?:<[^<>()]*>\s*)?\(/.test(rest)
+}
+
+/**
  * Top-level fields of `binding` that the modules in `sources` read.
  *
  * Directory-wide on purpose. A per-file list would be one more thing to keep
  * up to date, and a NEW resolver reading a NEW field is covered the moment it
  * is written — the only way this stays true without anyone tending it.
+ *
+ * The document is identified by IDENTIFIER NAME, not by type — this is a text
+ * scan, and it has no way to know what a local called `host` actually holds.
+ * So an unrelated binding of the same name contributes its property reads too.
+ * That direction is safe (a spurious field fails loudly and gets classified by
+ * a human, and can never HIDE a real one), and it is deliberately left alone,
+ * because the filter that would suppress it is the filter that could suppress
+ * a real read. See {@link isMethodCallAt} for the one case that is not safe to
+ * leave — it produced a name no human could classify.
  */
 export function readFieldsOf(
   sources: Array<string>,
@@ -410,6 +450,8 @@ export function readFieldsOf(
     for (const hit of source.matchAll(
       new RegExp(`\\b${binding}\\s*\\??\\.\\s*([A-Za-z_$][A-Za-z0-9_$]*)`, 'g'),
     )) {
+      // `host.toLowerCase()` is a method INVOCATION, not a field (AGL-1719).
+      if (isMethodCallAt(source, hit.index + hit[0].length)) continue
       // A lone `$` is the head of a `${…}` interpolation, not a field: it
       // comes from token-name construction like `` `{{host.${key}}}` ``.
       // Template literals are left unstripped on purpose — a real read can
