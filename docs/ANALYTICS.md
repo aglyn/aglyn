@@ -16,8 +16,8 @@ plugin gate), AGL-1559 (the property consolidation).
 | Property | Measurement id | Surface |
 | --- | --- | --- |
 | **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** Both `app.aglyn.com` and `aglyn.com`, via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
-| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`** (tagged Prod). Deleting it would sever that link. |
-| aglyn-f375b (284263481) | — | stray, **zero data streams**, so no measurement id and no traffic. No Firebase project of that name exists. Retirement candidate; see AGL-1581. |
+| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`**. Deleting it would sever that link. Its "Prod" tag and its "traffic in past 48 hours" flag both read as more alive than they are: year to date it has **30 views / 6 users**, ~24 of them `/signin` on Vercel *preview* URLs of the console, plus one view of `/` on `aglyn.com`. `aglyn-app` is the retired marketing site's backend — see AGL-1590. |
+| ~~aglyn-f375b (284263481)~~ | — | **trashed 2026-08-14** (AGL-1581). Stray property, zero data streams, no measurement id, no traffic, no Firebase project of that name, unreferenced in the monorepo. Recoverable from the GA Trash Can until **2026-09-18**; permanently gone after that. |
 
 `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` and any Measurement Protocol secret
 belong to **stream 3230351080 on property 302497406** — secrets are per-stream
@@ -87,7 +87,7 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 
 ---
 
-## Five decisions worth knowing
+## Six decisions worth knowing
 
 ### 1. `purchase` is sent from the server, everything else from the browser
 
@@ -227,6 +227,54 @@ clicked, going uncounted) cannot occur for the same reason: nothing in that
 path makes an unpublished screen reachable. `apply-publish-schedule.spec.ts`
 pins it, so if the executor ever learns to register a route, the case goes red
 and the analytics decision gets made again with it.
+
+### 6. Authored events go through the same door, under a different name (AGL-1587)
+
+The `trackGaEvent` action step lets a site author fire an event of their own
+choosing from an interaction. Its name and its params are typed by a **site
+author** in the interaction builder, not by a developer, which makes it the
+least trustworthy analytics input in the repo — and until AGL-1587 it was the
+one call site still writing `window.gtag` directly, with no sanitizer, no
+length cap and no name check.
+
+It cannot use `trackEvent`: the taxonomy is a closed union and an authored name
+is by definition outside it. So `trackAuthoredEvent(name, params)` is the one
+escape hatch, and it is deliberately the only one:
+
+- **params pass `sanitizeEventParams` unchanged** — the same denylist, the same
+  email-shaped-value scan, the same URL reduction and 100-character cap. An
+  author who binds a form field into a param cannot put a customer's address in
+  a GA dimension;
+- **the name is normalized to GA4's rules** — lowercased, non-alphanumerics
+  become underscores, must start with a letter, capped at 40 characters.
+  Forgiving on purpose: `CTA Click!` reports as `cta_click` where GA would have
+  dropped the hit outright, and names already live in published sites were
+  never validated;
+- **collisions are refused, not rewritten.** Any name in the taxonomy, any GA4
+  reserved name, and the `firebase_`/`google_`/`ga_` prefixes. On a tenant site
+  the authored events and ours land in the *same* property — `generate_lead`
+  from the form element, `select_content`/`click` from the link listener — so
+  an authored `purchase` would mix hand-authored hits into a real revenue
+  number.
+
+Refusal is also what keeps the two separable in reports: an event that is not
+one of the eleven taxonomy names is, by construction, authored. Deliberately
+**not** a `site_*` prefix, which would have renamed events already flowing into
+customers' properties and broken every report and key-event conversion built on
+the old name.
+
+**A refused event is not silently dropped where it counts.** The runtime cannot
+tell the author anything — it is executing for a *visitor* of their site, and
+turning an author's config mistake into something a visitor sees would be worse
+than the missing metric — so it drops the event and warns once per name in the
+browser console. The author-facing half is `validateHostAction`, which refuses
+to **save** a name the runtime would refuse to send. A silent drop is therefore
+only possible for a step authored before AGL-1587.
+
+Not done, and why: no cap on the *number* of authored params (GA4 ignores past
+25 and there is no privacy or pollution consequence), and no normalization of
+param *keys* (an invalid key costs that one param, again with no safety
+consequence). Both are formatting nits on a path whose real risk was PII.
 
 ---
 
