@@ -19,14 +19,17 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   buildRoute,
   checkEntitlement,
+  claimAttempt,
   resolveMarketplaceFeePct,
   Route,
+  type AttemptClaim,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
   canActAsPublisher,
   resolvePublisherProfile,
 } from './publisher-profile'
+import { hasLivePurchase } from './purchase-entitlement'
 
 /**
  * Checkout for a paid marketplace listing (AGL-46): one-time destination
@@ -49,6 +52,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   }
   const listingId = String(req.body?.listingId ?? '')
   const hostId = String(req.body?.hostId ?? '')
+  // One purchase attempt, minted by the browser (AGL-1697). Node lowercases
+  // incoming headers, but read both spellings — the plugin API request type
+  // makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  )
+    .trim()
+    .slice(0, 200)
   if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
 
   const authorization = String(req.headers.authorization ?? '')
@@ -57,6 +68,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
+  let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
@@ -85,6 +97,32 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const sellerOrgId = String(listing.profileId ?? '')
     if (await canActAsPublisher(firestore, decoded.uid, sellerOrgId)) {
       return res.status(400).json({ error: 'Your organization published this listing' })
+    }
+    // You cannot buy the same component twice (AGL-1697).
+    //
+    // This route validated review status, self-purchase and the seller's
+    // entitlements, and then never asked the one question the buyer cares
+    // about: do they already own it. A marketplace listing is a buy-once good —
+    // a second purchase buys nothing, since `requirePurchase` is satisfied by
+    // the first — so a buyer who clicked Buy again from a stale tab, or came
+    // back through a bookmarked checkout, was simply charged twice for it.
+    //
+    // Deliberately the SAME predicate the seven install routes gate on
+    // (AGL-1546/1699) rather than a second query beside it: "has this buyer
+    // paid for this listing" must have one answer, or the marketplace can take
+    // money for something it will not install, or refuse to sell something it
+    // will not install either. That predicate reads a fully REFUNDED purchase
+    // as absent, which is exactly right here too — a refunded buyer must be
+    // able to buy again, and a refunded row sitting beside a live one does not
+    // veto it.
+    //
+    // 409 rather than 400: nothing about the request is malformed, the buyer
+    // is just asking for a state that already holds.
+    if (await hasLivePurchase({ firestore, buyerUid: decoded.uid, listingId })) {
+      return res.status(409).json({
+        error: 'You already own this listing — install it from your library.',
+        code: 'already_purchased',
+      })
     }
     const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
     const accountId = publisher?.stripeAccountId
@@ -181,6 +219,36 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         : {}),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
+    // Point of no return (AGL-1697). The purchase check above closes the
+    // SEQUENTIAL duplicate — a second buy after the webhook has written the
+    // first purchase — and cannot close the concurrent one, because between two
+    // clicks a second apart there is no purchase record yet to find. The claim
+    // is what covers that window: `create()` on a document Firestore refuses to
+    // create twice.
+    //
+    // Scoped to the listing AND the buyer, so two people buying the same
+    // component at the same moment never contend, and one person's two tabs
+    // always do.
+    //
+    // The claim is taken here rather than at the top so that every deterministic
+    // refusal above it — unknown listing, free listing, self-purchase, already
+    // owned, publisher not paid out, seller cannot sell — answers without
+    // burning the key. Those are all states a buyer or publisher fixes and then
+    // presses the same button again.
+    const claimed = await claimAttempt(firestore, {
+      kind: 'marketplace-checkout',
+      scopeId: `${listingId}:${decoded.uid}`,
+      // The BUYER's org, so `eraseOrgIdempotencyKeys` sweeps this with the
+      // buyer's data (AGL-1448) — the seller keeps the sale.
+      orgId: buyerOrgId ?? '',
+      key: idempotencyKey,
+      busyMessage: 'This purchase is already being processed',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -188,6 +256,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // The half that costs real money. Stripe replays the existing
+          // session for a repeated key instead of opening a second one, which
+          // covers the window where our own claim is written but the response
+          // never arrives — the failure this route was most exposed to, since
+          // it writes nothing of its own to reconcile against.
+          ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
         },
         body: params.toString(),
       },
@@ -195,11 +269,21 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const session = (await response.json()) as { url?: string; error?: any }
     if (!response.ok || !session.url) {
       console.error('Stripe checkout error', session.error)
+      // The purchase did not start — let the same key be tried again rather
+      // than locking this buyer out of this listing over one flaky moment.
+      await claim.release()
       return res.status(502).json({ error: 'Stripe checkout failed' })
     }
-    return res.status(200).json({ url: session.url })
+    const payload = { url: session.url }
+    // A repeat of this attempt now replays the SAME session url. Better than
+    // refusing it: the buyer lands back on the checkout they already had open.
+    await claim.record(200, payload)
+    return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // and lock the buyer out of this listing until they reload.
+    await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }
 }

@@ -20,7 +20,7 @@ import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { readGaClientId } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   type InstallPlanStep,
@@ -99,6 +99,21 @@ export function useMarketplaceActions(hostId: string) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
+
+  /**
+   * One purchase attempt per listing, minted lazily (AGL-1697).
+   *
+   * Per-listing rather than per-click: minting inside `buy` would defeat the
+   * whole point, because two clicks would mint two keys and the server would
+   * see two purchases. Held in a ref rather than state so a re-render cannot
+   * rotate a key mid-flight.
+   *
+   * It retires when the page does. That is the honest boundary for a redirect
+   * flow — the buyer leaves for Stripe and comes back to a fresh mount — and it
+   * means this key covers the double-click and the retry, while the server's
+   * already-purchased check covers the buyer who returns tomorrow.
+   */
+  const purchaseAttempts = useRef(new Map<string, string>())
 
   // `scope` is only meaningful for artifact types that HAVE an org-scoped
   // pin — see INSTALL_TARGETS. Passing it for a template would be ignored
@@ -333,11 +348,20 @@ export function useMarketplaceActions(hostId: string) {
       const dequeue = queueLoading()
       try {
         const idToken = await (user as any)?.getIdToken?.()
+        const listingId = String(listing.$id)
+        const attemptKey =
+          purchaseAttempts.current.get(listingId) ??
+          `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+        purchaseAttempts.current.set(listingId, attemptKey)
         const response = await fetch('/api/marketplace/checkout', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            // Stable across a retry of THIS attempt (AGL-1697), so a
+            // double-click or a re-submit after a timeout cannot open a second
+            // Stripe session on a live account.
+            'Idempotency-Key': attemptKey,
           },
           // The browser's GA client id rides along so the SERVER-side
           // `purchase` the Stripe webhook sends can be attributed to the

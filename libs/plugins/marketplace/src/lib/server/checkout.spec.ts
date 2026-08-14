@@ -48,6 +48,12 @@ jest.mock('@aglyn/aglyn/server', () => {
     Route: { ORG_MARKETPLACE: '/manage/marketplace' },
     checkEntitlement: entitlements.checkEntitlement,
     resolveMarketplaceFeePct: entitlements.resolveMarketplaceFeePct,
+    // The REAL claim (AGL-1697). None of the requests below carry an
+    // `Idempotency-Key`, so every one of them takes the no-key branch — which
+    // is exactly the compatibility this file should keep pinning: an older
+    // cached bundle must still be able to buy.
+    claimAttempt: jest.requireActual('@aglyn/aglyn/app-utils/api-idempotency')
+      .claimAttempt,
   }
 })
 
@@ -60,6 +66,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       get: (field: string) => (store[path] ?? {})[field],
     }),
   })
+  // The already-purchased gate (AGL-1697) runs `hasLivePurchase`, an equality
+  // QUERY rather than a doc read. Nothing in this file seeds a purchase, so it
+  // always answers empty here — the duplicate-purchase behaviour has its own
+  // spec — but the shape has to exist or every case below 500s.
+  const emptyQuery: any = {
+    where: () => emptyQuery,
+    limit: () => ({ get: async () => ({ docs: [] as unknown[] }) }),
+  }
   return {
     __store: store,
     firebaseAdmin: {
@@ -73,6 +87,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         firestore: () => ({
           collection: (name: string) => ({
             doc: (id: string) => docFor(`${name}/${id}`),
+            where: emptyQuery.where,
           }),
         }),
       }),
