@@ -33,6 +33,16 @@ from **Marketplace → Profile**. Only an owner or admin can accept it,
 because only they can bind the organization, and we record who accepted
 it and when.
 
+:::info The agreement is not published yet
+
+The agreement text has no page yet, so there is nothing for you to read —
+and we will not ask you to accept a document we have not shown you. The
+accept control is switched off until it is published, which means
+marketplace publishing is paused for everyone. Nothing is required of you
+in the meantime; the panel says the same thing when you open it.
+
+:::
+
 It is a different thing from the
 [pre-publish checklist](#before-you-publish), and they are not
 interchangeable:

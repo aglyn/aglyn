@@ -19,6 +19,7 @@
 
 import {
   PUBLISHER_AGREEMENT_VERSION,
+  publisherAgreementIsPublished,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { requiredAttestationIds } from '@aglyn/aglyn/app-utils/publisher-attestation'
@@ -206,7 +207,12 @@ describe('publish-plugin publisher-agreement gate (AGL-1077)', () => {
     const result = await publish()
     expect(result.status).not.toBe(428)
     expect(result.body.missingAttestations).toBeUndefined()
-    expect(String(result.body.error)).toMatch(/Publisher Profile/)
+    // Where it sends them depends on whether the agreement has a page yet
+    // (AGL-1660): while it does not, "accept it in Marketplace → Publisher
+    // Profile" is a dead end, because the accept control is gated off.
+    expect(String(result.body.error)).toMatch(
+      publisherAgreementIsPublished() ? /Publisher Profile/ : /not published yet/,
+    )
   })
 
   it('publishes once the current version is accepted', async () => {
