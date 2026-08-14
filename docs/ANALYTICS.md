@@ -323,9 +323,25 @@ merchant a revenue figure a few percent of their real one.
 
 **The number itself** is `totalCents - taxCents`. `totalCents` is Stripe's
 `amount_total` written verbatim by the webhook, so it reconciles with Stripe by
-construction; `taxCents` is Stripe's `total_details.amount_tax`, excluded
-because the merchant is seller of record and tax collected is held for the
-state. As in AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
+construction; `taxCents` is the tax the webhook stored, excluded because the
+merchant is seller of record and tax collected is held for the state. As in
+AGL-1639, **no GA4 `tax` param** is sent beside an ex-tax `value`.
+
+`taxCents` was described here as simply `total_details.amount_tax`, and on the
+cart path it is. On the **buy-now** path it was not, and the difference was a
+live AGL-1639-shaped overstatement (AGL-1711). `checkout.ts` sends manual
+destination tax to Stripe as an ordinary `line_items[1]` product line, so
+`amount_tax` is 0 while the tax sits inside `amount_total`; the webhook then
+stored `taxCents: 0`, and this `value` — `totalCents - 0` — reported
+**tax-inclusive gross** into the merchant's own GA4 property on every taxed
+buy-now sale. The same commit fixed the two other components the event reads:
+`items[].quantity` was hardcoded to 1 regardless of how many units were bought,
+and `items[].price` was the whole session total rather than the unit price, so
+a 3 × $100 purchase reported as one $300 unit. `computeBuyNowOrder` now
+composes `taxCents` from `amount_tax` plus the line-item tax carried in the
+session metadata, and the quantity and unit price from the metadata too — so
+`value`, `price` and `quantity` are all right without this event changing at
+all. It reads stored fields; the fix belonged under it.
 
 **No `shipping` param either**, and the reason has now changed twice. It began
 as a live defect: the webhook read two of `total_details`' three siblings and

@@ -142,7 +142,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'This site has not enabled payments yet' })
     }
 
-    let amountCents = Math.round(priceUsd * 100) * quantity
+    // The list price per unit, before any coupon (AGL-1711). This is what the
+    // order's line-item snapshot records, and it is carried in the session
+    // metadata so the webhook never has to re-price from the product doc.
+    const listUnitAmountCents = Math.round(priceUsd * 100)
+    let amountCents = listUnitAmountCents * quantity
     // Coupons (AGL-96): host-defined percent-off codes; invalid codes are
     // a visible 400, never a silent full-price charge.
     let appliedCoupon = ''
@@ -206,6 +210,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    // The unit price Stripe actually charges — the coupon is priced INTO it
+    // rather than sent as a Stripe discount, which is why `amount_discount` is
+    // 0 on every buy-now session and the discount has to ride the metadata
+    // (AGL-1711). Hoisted so the Stripe param and the metadata cannot drift.
+    const chargedUnitAmountCents = Math.round(amountCents / quantity)
+    const discountCents = Math.max(
+      0,
+      listUnitAmountCents * quantity - chargedUnitAmountCents * quantity,
+    )
+
     // Subscriptions (AGL-303): recurring prices bill on the platform with
     // a destination transfer + percent fee; the webhook records the sub.
     // `isSubscription` resolved above (AGL-545).
@@ -213,9 +227,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       mode: isSubscription ? 'subscription' : 'payment',
       'line_items[0][quantity]': String(quantity),
       'line_items[0][price_data][currency]': 'usd',
-      'line_items[0][price_data][unit_amount]': String(
-        Math.round(amountCents / quantity),
-      ),
+      'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
       'line_items[0][price_data][product_data][name]': String(
         product.name ?? 'Product',
       ).slice(0, 120),
@@ -278,6 +290,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[quantity]': String(quantity),
       'metadata[feeCents]': String(feeCents),
+      // The order's decomposition, snapshotted as we compute it (AGL-1711).
+      // Two of these three are invisible to Stripe's own `total_details` BY
+      // OUR OWN CONSTRUCTION — the manual tax goes over as an ordinary
+      // `line_items[1]` product line, and the coupon is priced into
+      // `line_items[0]`'s unit amount — so the webhook cannot recover them
+      // from the session. Frozen here rather than re-derived from the product
+      // doc at webhook time, which a price edit in between would falsify.
+      'metadata[unitAmountCents]': String(listUnitAmountCents),
+      'metadata[taxCents]': String(taxCents),
+      'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
     })
     const response = await fetch(

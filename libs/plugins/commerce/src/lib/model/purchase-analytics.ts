@@ -83,7 +83,16 @@ function toAmount(cents: number): number {
  * `totalCents` is overwritten with Stripe's `amount_total` when the webhook
  * writes the order (`billing-webhook.ts`), so it is the one field that
  * reconciles with Stripe by construction: it is Stripe's own number, verbatim.
- * `taxCents` is likewise `total_details.amount_tax`, Stripe's own.
+ *
+ * `taxCents` was described here as likewise `total_details.amount_tax`, Stripe's
+ * own. On the cart path it is. On the BUY-NOW path it was 0 on every order,
+ * because `checkout.ts` sends manual destination tax as an ordinary
+ * `line_items[1]` product line that Stripe never classifies as tax — so this
+ * `value` reported tax-inclusive gross into the merchant's property, the
+ * AGL-1639 overstatement, live. AGL-1711 composes the stored `taxCents` from
+ * `amount_tax` plus that line-item tax, and fixes `quantity` and
+ * `unitAmountCents` (hardcoded to 1 and to the whole charge) in the same place.
+ * Nothing here changed: the three fields this reads are simply true now.
  *
  * The parts used NOT to reconcile, and that is why this derivation exists.
  * `computeOrderTotals` was called with `feeCents`, `taxCents` and

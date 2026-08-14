@@ -760,6 +760,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const snapshotName = String(
           productForSnapshot.get('name') ?? 'Product',
         )
+        // AGL-1711: the line item and totals used to be fabricated from
+        // `amount_total` alone — one unit, priced at the whole charge, with tax
+        // and discount recorded as 0. `computeBuyNowOrder` rebuilds the real
+        // decomposition from Stripe's `total_details` plus the two components
+        // our own session shape hides from it (the manual tax line item and the
+        // coupon priced into the unit amount), both carried in the metadata.
+        const liftedForSnapshot = CommerceModel.liftLegacyProduct(
+          (productForSnapshot.data() as any) ?? { name: snapshotName },
+        )
+        const soldVariant = object.metadata?.variantId
+          ? liftedForSnapshot.variants.find(
+              (item) => item.id === String(object.metadata.variantId),
+            )
+          : liftedForSnapshot.variants[0]
+        const variantOptions = Object.values(soldVariant?.options ?? {})
+        const { lineItems: buyNowLineItems, totals: buyNowTotals } =
+          CommerceModel.computeBuyNowOrder(object, {
+            name: snapshotName,
+            ...(variantOptions.length
+              ? { variantLabel: variantOptions.join(' / ') }
+              : {}),
+            ...(soldVariant?.sku ? { sku: soldVariant.sku } : {}),
+            ...(liftedForSnapshot.type
+              ? { productType: liftedForSnapshot.type }
+              : {}),
+            ...(liftedForSnapshot.supplierId
+              ? { supplierId: liftedForSnapshot.supplierId }
+              : {}),
+          })
+        const soldQuantity = buyNowLineItems[0]?.quantity ?? 1
         const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
@@ -772,28 +802,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             number,
             status: 'paid',
             channel: 'online',
-            lineItems: [
-              {
-                productId: String(productId),
-                ...(object.metadata?.variantId
-                  ? { variantId: String(object.metadata.variantId) }
-                  : {}),
-                name: snapshotName,
-                quantity: 1,
-                unitAmountCents: amountCents,
-              },
-            ],
-            totals: CommerceModel.computeOrderTotals(
-              [
-                {
-                  productId: String(productId),
-                  name: snapshotName,
-                  quantity: 1,
-                  unitAmountCents: amountCents,
-                },
-              ],
-              { feeCents: Number(feeCents ?? 0) },
-            ),
+            lineItems: buyNowLineItems,
+            totals: buyNowTotals,
             timeline: [{ atMs: Date.now(), event: 'paid' }],
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
@@ -871,7 +881,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               orderId: String(object.id),
               productId: String(productId),
               productName: String(routedProduct.get('name') ?? 'Product'),
-              quantity: 1,
+              // AGL-1711: the supplier was told to ship one unit however many
+              // the buyer paid for.
+              quantity: soldQuantity,
               customerEmail: object?.customer_details?.email ?? null,
               shippingName: object?.customer_details?.name ?? null,
               updateUrl:
@@ -946,10 +958,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 variant.id === soldVariantId && variant.inventory != null,
             )
           ) {
+            // AGL-1711: `-1` regardless of how many units were bought, so a
+            // 3-unit buy-now sale decremented stock by one and the difference
+            // was silently oversellable. `canPurchase` already gated the full
+            // quantity at checkout, so this is the only place it was dropped.
             const variants = CommerceModel.adjustVariantInventory(
               lifted,
               soldVariantId,
-              -1,
+              -soldQuantity,
             )
             const updated = { ...lifted, variants }
             await productRef
@@ -966,7 +982,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               .add({
                 productId: String(productId),
                 variantId: soldVariantId,
-                delta: -1,
+                delta: -soldQuantity,
                 reason: 'sale',
                 orderId: String(object.id),
                 atMs: Date.now(),
