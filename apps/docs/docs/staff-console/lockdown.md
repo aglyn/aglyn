@@ -79,6 +79,30 @@ write. The route answers 400 rather than silently arming a full lock.
 Staff writes bypass read-only exactly as they bypass everything else, which is
 the whole point: you perform the migration while the world keeps reading.
 
+### What "reads keep working" does and does not cover
+
+A request is classified by what it DOES, not by how it looks. Most reads are
+`GET` and pass automatically. A handful of console operations are queries that
+send their arguments in a `POST` body — where an asset or component is used, a
+plugin's impact, signing a media URL, minting a presence token, signing in —
+and each of those is declared a read individually, in the route, with the
+reason written next to it.
+
+Anything not declared **refuses**, deliberately: a chokepoint nobody has
+audited is treated as a write, because an over-refused read costs a customer
+some friction and an under-refused write costs the data the freeze exists to
+protect. Two consequences worth knowing before a customer reports them:
+
+- the **tenant edit bar** stops appearing on published sites for the locked
+  workspace. That is intended — the bar leads to an editor whose saves the
+  freeze denies anyway;
+- the folder-sharing **preview** in the media library refuses along with the
+  cascade it previews.
+
+Both are recorded decisions rather than oversights. If you find another
+operation that only reads and still 423s during a window, it is worth filing —
+that is how the declared list grows.
+
 To arm one from a terminal, add `mode` to the usual body:
 
 ```bash
@@ -384,9 +408,14 @@ that a staff operator has no way to stand in.
 caller — a user uid, a workspace id, a site id, or any combination — and the
 server runs the same verdict every API route runs and shows you:
 
-- whether that caller is refused, and under which scope and reason;
+- whether that caller is refused **for reads, for writes, or for both**, in one
+  line — under a read-only lock it says *"reads pass, writes refuse"*, which is
+  the answer to the question read-only mode creates: *their site is up but they
+  cannot save — is that us?*;
+- under which scope and reason the refusal falls;
 - the **exact response body** they receive, built by the same code that builds
-  the real 423 — not a summary of it;
+  the real 423 — not a summary of it. Under a read-only lock this is what their
+  **write** receives; their reads get the real data;
 - which capabilities (signups, uploads, checkout, marketplace installs, AI
   assist) are refused for them, since a feature lock bites without touching any
   scope;

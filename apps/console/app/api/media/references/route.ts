@@ -70,6 +70,18 @@ async function handler(request: Request): Promise<Response> {
     // hands the 423 refusal back as `error.response`.
     const { scope, error } = await resolveMediaScope(body, query, decoded.uid, {
       staff: decoded['staff'] === true,
+      // POST-shaped READ (AGL-1625): a usage scan writes nothing — it reads
+      // the asset, the org's hosts, and their documents, and answers with a
+      // list. It is POST only because the query is a body, exactly like
+      // `hosts/where-used`, which was declared for the same reason.
+      //
+      // It is also the WORST route to refuse during a read-only window: this
+      // scan is what an author consults before deleting or restricting an
+      // asset, so refusing it turns "you cannot save right now" into "you
+      // cannot find out what this is used by" — and an author who cannot see
+      // the answer is the one likeliest to delete something on a guess once
+      // the window lifts.
+      intent: 'read',
     })
     if (!scope) {
       return (

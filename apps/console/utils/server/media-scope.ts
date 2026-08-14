@@ -139,6 +139,22 @@ export async function resolveMediaScope(
      * `'uploads'`; read/organize routes omit it.
      */
     feature?: LockdownFeatureKey
+    /**
+     * READ-ONLY discrimination (AGL-1625). This resolver takes no `request`
+     * — every caller is POST-shaped and the method would say `write` for all
+     * of them anyway — so a POST-shaped READ has to declare itself here.
+     *
+     * ABSENT MEANS `write`, unchanged: seven of the eight media routes
+     * mutate, and the one that does not is named at its own call site rather
+     * than inferred from a path. A route added later inherits the refusing
+     * default until someone decides otherwise, which is the direction
+     * AGL-1511 chose and this parameter must not quietly reverse.
+     *
+     * Note this is deliberately NOT the same axis as `feature`: an uploads
+     * lock stops new bytes arriving, a read-only lock stops the library
+     * being reorganized. A route can be subject to both.
+     */
+    intent?: LockdownVerdictOptions['intent']
   },
 ): Promise<{ scope?: MediaScope; error?: MediaScopeError }> {
   const firestore = firebaseAdmin.app().firestore()
@@ -162,6 +178,7 @@ export async function resolveMediaScope(
         staff: options?.staff,
         uid,
         org,
+        intent: options?.intent,
       },
       options?.feature,
     )
@@ -204,6 +221,7 @@ export async function resolveMediaScope(
       uid,
       org: billing,
       host: hostSnapshot.data(),
+      intent: options?.intent,
     },
     options?.feature,
   )
