@@ -53,6 +53,25 @@ const PRICE_ENV: Record<string, string | undefined> = {
   agency: process.env.STRIPE_PRICE_AGENCY,
 }
 
+/**
+ * Subscription statuses that mean "this workspace is already subscribed"
+ * (AGL-1697).
+ *
+ * The same triple the Billing page and `/api/billing/subscription` treat as
+ * live. Deliberately a STATUS test rather than a "has a subscription record"
+ * test: the record — and the customer id beside it — survives cancellation, so
+ * the naive form would lock every churned workspace out of ever paying us
+ * again. `incomplete` and `unpaid` are out for the same reason from the other
+ * side: there is no live subscription to protect and a new session is the
+ * buyer's only way forward.
+ *
+ * Third copy of this list in the repo, which is one too many — the other two
+ * are `billing/page.tsx` and `billing/subscription/route.ts`, and converging
+ * all three on one exported predicate is filed rather than done here, because
+ * both of those files are under concurrent edit.
+ */
+const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']
+
 /** Annual prices (AGL-269); absent envs make the toggle degrade to 501. */
 const YEARLY_PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER_YEARLY,
@@ -145,6 +164,49 @@ async function handler(request: Request): Promise<Response> {
     ) {
       return Response.json({ error: 'billing.manage required' }, { status: 403 })
     }
+
+    // The org's commercial record, read ONCE and used for two decisions
+    // (AGL-941, AGL-1697): whether it may open a checkout at all, and which
+    // customer that checkout attaches to. Read here rather than inside the
+    // params so a Firestore hiccup cannot silently fall back to
+    // `customer_email` and mint a duplicate — an absent id is a first
+    // subscribe, and only that.
+    const billing = await readOrgBilling(orgId)
+    const existingCustomerId = billing.stripeCustomerId as string | undefined
+
+    // One workspace, one subscription (AGL-1697). This route opens a
+    // `mode: subscription` session and never asked whether the org already
+    // had one, so two completed sessions subscribed the same org twice on the
+    // same customer — two recurring charges, which the webhook cannot undo
+    // because its job is to mirror whatever Stripe reports and it will mirror
+    // the second one straight over the first.
+    //
+    // A guard existed, but only in a React callback: the Billing page sends a
+    // plan change through the proration preview + subscription update, "never
+    // a second Checkout (AGL-269)". That branch does not survive a stale tab,
+    // a second window, a back-button re-submit, or a direct POST — none of
+    // which are exotic on a page whose whole purpose is spending money.
+    //
+    // 409 rather than a silent redirect into the customer portal: the caller
+    // asked for something that is not true of this org, and the Billing page
+    // can say so. `code` is machine-readable so the client can distinguish
+    // this from the payment failures that share the status.
+    const subscriptionStatus = String(
+      (billing.subscription as { status?: unknown } | null | undefined)
+        ?.status ?? '',
+    )
+    if (LIVE_SUBSCRIPTION_STATUSES.includes(subscriptionStatus)) {
+      return Response.json(
+        {
+          error:
+            'This workspace already has a subscription — change plans from ' +
+            'Billing instead of starting a new checkout.',
+          code: 'subscription_exists',
+        },
+        { status: 409 },
+      )
+    }
+
     const origin = headers.origin ?? `https://${headers.host}`
     // Stripe sends the browser back to these, so they have to be real console
     // paths. Billing moved under the org slug (AGL-621), leaving `/org/billing`
@@ -159,14 +221,6 @@ async function handler(request: Request): Promise<Response> {
     const billingPath = orgSlug
       ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
       : '/'
-
-    // The customer this org already has, if any (AGL-941). Read here rather
-    // than inside the params so a Firestore hiccup cannot silently fall back
-    // to `customer_email` and mint a duplicate — an absent id is a first
-    // subscribe, and only that.
-    const existingCustomerId = (await readOrgBilling(orgId)).stripeCustomerId as
-      | string
-      | undefined
 
     // In-page checkout (AGL-1132), behind `release_native_checkout` and OFF by
     // default. Embedded mode was chosen for the console over the Payment

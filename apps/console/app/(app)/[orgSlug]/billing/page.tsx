@@ -469,6 +469,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           setCheckoutClientSecret(String(payload.clientSecret))
           return
         }
+        // The server refused because this workspace is already subscribed
+        // (AGL-1697) — the state the `subscriptionActive` branch above exists
+        // to keep us out of, reached anyway by a stale tab or a second window.
+        // Named rather than thrown: the catch-all below says "Could not start
+        // checkout", which reads as a payment failure and is the opposite of
+        // what happened. Nothing was charged; there is simply already a
+        // subscription, and the page reloads onto it.
+        if (response.status === 409 && payload?.code === 'subscription_exists') {
+          return void enqueueSnackbar(
+            payload.error ?? 'This workspace already has a subscription.',
+            { variant: 'warning', persist: false },
+          )
+        }
         if (!response.ok || !payload?.url) {
           throw new Error(payload?.error ?? 'Checkout failed')
         }
