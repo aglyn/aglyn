@@ -37,6 +37,8 @@ import {
   resolveInstalledDatasetSchema,
 } from '../model/marketplace'
 import { recordInstallProvenance } from './provenance'
+import { canActAsPublisher } from './publisher-profile'
+import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
 
 /**
@@ -173,6 +175,33 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
+    // Taking a NEW version of a paid listing is buying content, and this
+    // route never asked whether the caller still owned it (AGL-1699). The
+    // install routes gate; this one only checked the org ROLE, so a buyer
+    // who was refunded — and even in `copy` mode, which installs the new
+    // version fresh — kept pulling every future paid release through here.
+    //
+    // Deliberately not a regression for anyone legitimate: a live purchase,
+    // a free listing, or the publisher's own listing all pass, and nobody
+    // without one of those could have had an installed copy to update.
+    // The `priceUsd > 0` test is out here rather than left to the helper so
+    // a free listing — most of them — does not pay for a publisher lookup.
+    const priceUsd = Number(listing.priceUsd ?? 0)
+    if (priceUsd > 0) {
+      const unpaid = await requirePurchase({
+        firestore,
+        buyerUid: decoded.uid,
+        listingId,
+        priceUsd,
+        ownsListing: await canActAsPublisher(
+          firestore,
+          decoded.uid,
+          listing.profileId,
+        ),
+      })
+      if (unpaid) return res.status(402).json(unpaid)
+    }
+
     const artifactType = listingArtifactType(listing)
     if (artifactType === 'plugin') {
       // Plugins are pinned, not copied: an update moves a pointer at immutable

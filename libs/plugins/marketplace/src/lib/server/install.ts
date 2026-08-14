@@ -21,6 +21,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
+import { requirePurchase } from './purchase-entitlement'
 import { recordVersionMove } from './version-stats'
 
 /**
@@ -86,29 +87,17 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       decoded.uid,
       listing.profileId,
     )
-    if (priceUsd > 0 && !ownsListing) {
-      // A FULLY refunded purchase no longer entitles (AGL-1546) — the
-      // webhook stamps `refundedAt` on `charge.refunded`. Fetch a few and
-      // require one live record rather than filtering in the query: a
-      // "refundedAt == null" predicate cannot match docs missing the
-      // field, and every pre-AGL-1546 purchase is missing it. A re-buy
-      // after a refund writes a fresh session-keyed doc, so a legitimate
-      // second purchase still installs.
-      const purchases = await firestore
-        .collection('marketplacePurchases')
-        .where('buyerUid', '==', decoded.uid)
-        .where('listingId', '==', listingId)
-        .limit(10)
-        .get()
-      const hasLivePurchase = purchases.docs.some(
-        (purchase) => !purchase.get('refundedAt'),
-      )
-      if (!hasLivePurchase) {
-        return res
-          .status(402)
-          .json({ error: 'Purchase required', priceUsd })
-      }
-    }
+    // A FULLY refunded purchase no longer entitles (AGL-1546). The gate this
+    // route once inlined is now shared (AGL-1699): it was the only one of
+    // eight paid-content paths that had learned the refund rule.
+    const unpaid = await requirePurchase({
+      firestore,
+      buyerUid: decoded.uid,
+      listingId,
+      priceUsd,
+      ownsListing,
+    })
+    if (unpaid) return res.status(402).json(unpaid)
 
     const versionSnapshot = await listingRef
       .collection('versions')
