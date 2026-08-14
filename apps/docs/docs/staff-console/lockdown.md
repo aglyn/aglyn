@@ -103,6 +103,91 @@ Both are recorded decisions rather than oversights. If you find another
 operation that only reads and still 423s during a window, it is worth filing —
 that is how the declared list grows.
 
+### How fast read-only takes hold {#read-only-timing}
+
+The two halves converge at very different speeds, and the difference is the
+opposite of what most people assume. Measured against the emulator and a real
+production-mode tenant (AGL-1626 — the numbers below are observed responses,
+not derived):
+
+| | Observed |
+| --- | --- |
+| First visitor **write** after arming | **423 on the very first request** — 32–86 ms across four runs |
+| `/api/lockdown-verdict` and the staff probe | **up to ~60 s** (32 s against a cold cache, 60 s against a warm one) |
+| Customer pages | unchanged — 10 samples over 100 s, all `200` with content |
+
+**The freeze is immediate; the view of the freeze lags.** Visitor write
+chokepoints read the workspace and site records live on every request, so a
+migration may start as soon as the lock is armed — there is no window in which
+the console says "locked" and writes are still landing. What lags is the
+verdict route the staff panel and the tenant middleware read, which is cached
+for about a minute. So during the first minute the panel may still say a
+workspace is unlocked while its customers' forms are already being refused.
+That is the safe direction, but it will confuse you if you are watching the
+panel to decide when to begin.
+
+The same minute applies to a **full** lock's 503, plus one more effect worth
+knowing: a page rendered while a full lock was in force is the 503 notice, and
+it is cached like any other page. Lifting through the staff surface or
+`/api/admin/lockdown` clears those pages as part of the lift. Editing the
+workspace record directly in Firestore does not — the site keeps answering 503
+from cache until the pages regenerate on their own.
+
+### What read-only has been proved against {#read-only-evidence}
+
+Read-only shipped with unit coverage at every layer and nothing observed on the
+wire, which is a weak proof for this particular mode: a cached page still
+serving is indistinguishable from a lock that never engaged. AGL-1626 closed
+that with `npm run e2e:lockdown:readonly` — the emulator, a `next build` /
+`next start` tenant, and a real refusal captured for each branch:
+
+- **the site keeps serving** — `/home` returned `200` with its content on every
+  sample across 100 seconds of an armed read-only workspace lock, with no
+  rewrite to the maintenance notice;
+- **a visitor form** answered `423` with `"Temporarily paused"` and *"Nothing
+  you typed has been lost"*, carrying **no** support address — support belongs
+  to the site owner, not to us — and **spent nothing**: no submission stored,
+  no change to the month's counter;
+- **the note you type stays behind the door.** The same lock's staff message
+  ("Scheduled data migration") appeared in the *console* refusal and in none of
+  the visitor ones, which carried only the pause copy. Whatever you write in
+  that box is for the account holder; a stranger on their site never sees it;
+- **the basket** answered `423` with *"Basket changes are paused… Browsing
+  works as normal"*;
+- **checkout** answered `423` with its own title and the promise no generic
+  copy can make — *"this is not a payment problem and you have not been
+  charged"* — refused **before** the handler, so no payment session is created;
+- **strictness outranks width** (below) was forced rather than reasoned about;
+- **expiry** restored writes with no staff action: refused while the window was
+  open, accepted once it passed.
+
+In the console, with the same lock armed:
+
+- a **customer's edit** answered `423`, while the same customer's **usage scan**
+  ("what is this asset used by") went through — the read that would otherwise
+  push someone to delete on a guess;
+- a **staff** account performed the identical edit successfully, which is the
+  whole point of the mode;
+- under a **platform** read-only lock a customer could still **sign in** (the
+  mint is a read) and their first edit afterwards answered `423` naming the
+  platform scope.
+
+Re-run it after any change to the chokepoints. It needs the emulators, the e2e
+seed, and **port 4500 free** — the tenant only recognizes `localhost:4500`
+locally.
+
+### A gentler lock never softens a stricter one
+
+This is the highest-consequence rule in the feature, so it is worth stating on
+its own: if a platform-wide read-only maintenance window is running and one
+workspace is under a **full** security takedown, the takedown wins. The wider,
+gentler lock does not readmit that workspace's visitors.
+
+Forced on the wire (AGL-1626) with both armed at once: the verdict reported
+`"mode":"full","reason":"security"` — the workspace's lock, not the platform's
+— and the site answered `503` with `Retry-After`. Arming a maintenance window
+across the platform can never quietly reopen a site staff has taken down.
+
 To arm one from a terminal, add `mode` to the usual body:
 
 ```bash
