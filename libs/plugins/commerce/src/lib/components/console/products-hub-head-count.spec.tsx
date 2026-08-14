@@ -55,6 +55,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+
 import type { ReactNode } from 'react'
 
 /**
@@ -147,6 +148,17 @@ jest.mock(
 )
 
 import ProductsHubCard from './products-hub-card.component'
+
+/**
+ * These fixtures are large ON PURPOSE — the contract is about what a
+ * SATURATED listener does, so the listener has to actually be saturated,
+ * and 500 MUI table rows take real time to render in jsdom. Comfortably
+ * under the default 5s alone; over it when the suite runs alongside the
+ * rest of the project's workers. The fixture size is the contract, so the
+ * budget moves rather than the fixture.
+ */
+jest.setTimeout(30_000)
+
 
 beforeEach(() => {
   jest.clearAllMocks()
