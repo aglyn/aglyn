@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 
+import { MediaPickerContext } from '../contexts/media-picker-context'
 import ElementPropsForm, {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
 } from './element-props-form.component'
@@ -189,5 +190,107 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
     expect(lastCommittedContent()).toBe(
       source.replace('We Collect\n', 'We Collect Today\n'),
     )
+  })
+
+  // AGL-1645: the toolbar's image action reached the editor's own "paste a
+  // URL" prompt, because neither besigner surface passed the callback that
+  // opens the host's media library. Driven end to end — toolbar, dialog,
+  // picker, insert, commit — because every one of those steps is a place the
+  // handoff can break while the button still looks wired.
+  describe('the image button reaches the media library (AGL-1645)', () => {
+    /** Renders the panel under a host picker, capturing its pending callback. */
+    const renderWithPicker = (content: string) => {
+      let pending: ((value: string) => void) | null = null
+      const onPickMedia = jest.fn((onPick: (value: string) => void) => {
+        pending = onPick
+      })
+      const view = render(
+        <MediaPickerContext.Provider value={{ onPickMedia }}>
+          <ElementPropsForm {...formProps(content)} />
+        </MediaPickerContext.Provider>,
+      )
+      return { ...view, onPickMedia, pick: (value: string) => pending?.(value) }
+    }
+
+    /** Toolbar image button → alt text → "Choose from media". */
+    const openPickerWithAlt = (alt: string) => {
+      act(() => {
+        fireEvent.click(screen.getByLabelText('Image'))
+      })
+      const altField = screen.getByLabelText('Alt text') as HTMLInputElement
+      act(() => {
+        fireEvent.change(altField, { target: { value: alt } })
+      })
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: 'Choose from media' }))
+      })
+    }
+
+    it('inserts the picked asset and commits it as markdown-lite', () => {
+      const { unmount, onPickMedia, pick } = renderWithPicker('Before.')
+      openPickerWithAlt('A signed contract')
+      expect(onPickMedia).toHaveBeenCalledTimes(1)
+
+      act(() => {
+        pick('media:org:acme/med123')
+      })
+
+      // The editor really holds the image, not just the string.
+      const img = document.querySelector(
+        '[data-row-kind="image"] img',
+      ) as HTMLImageElement | null
+      expect(img?.getAttribute('src')).toBe('/api/media/cdn/org:acme/med123')
+      expect(img?.getAttribute('alt')).toBe('A signed contract')
+
+      unmount()
+      expect(lastCommittedContent()).toBe(
+        'Before.\n\n![A signed contract](/api/media/cdn/org:acme/med123)',
+      )
+    })
+
+    // The trap that makes this more than plumbing. `onPickMedia` returns what
+    // an ATTRIBUTE should store — a `media:` reference (AGL-1215) — and no
+    // markdown-lite renderer resolves one, so a reference written straight into
+    // `![](…)` is a permanently broken image on the published page.
+    it('never lets a raw media: reference reach the document', () => {
+      const { unmount, pick } = renderWithPicker('')
+      openPickerWithAlt('')
+      act(() => {
+        pick('media:org:acme/med123')
+      })
+      unmount()
+      const committed = String(lastCommittedContent())
+      // Non-vacuous: the image is really in the document — it is the FORM the
+      // assertion below is about.
+      expect(committed).toContain('![](/api/media/cdn/org:acme/med123)')
+      expect(committed).not.toContain('media:')
+    })
+
+    // A raw URL — a free-tier org or a legacy upload, where the picker has no
+    // cdnPath to mint a reference from — must pass through untouched.
+    it('passes a raw URL through unchanged', () => {
+      const url = 'https://firebasestorage.googleapis.com/v0/b/x/o/y.png'
+      const { unmount, pick } = renderWithPicker('')
+      openPickerWithAlt('Legacy upload')
+      act(() => {
+        pick(url)
+      })
+      unmount()
+      expect(lastCommittedContent()).toBe(`![Legacy upload](${url})`)
+    })
+
+    // With no host picker the editor must keep its own URL prompt rather than
+    // offer a button that does nothing — the email besigner mounts no provider.
+    it('offers no media button when the host supplies no picker', () => {
+      const { unmount } = render(<ElementPropsForm {...formProps('')} />)
+      act(() => {
+        fireEvent.click(screen.getByLabelText('Image'))
+      })
+      expect(screen.getByLabelText('Alt text')).toBeTruthy()
+      expect(
+        screen.queryByRole('button', { name: 'Choose from media' }),
+      ).toBeNull()
+      unmount()
+    })
   })
 })

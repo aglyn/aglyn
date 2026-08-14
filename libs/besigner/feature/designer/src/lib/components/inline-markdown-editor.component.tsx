@@ -30,6 +30,7 @@ import {
   useState,
 } from 'react'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
+import { useMarkdownMediaPicker } from '../hooks/use-markdown-media-picker'
 import {
   inlineMarkdownEdit,
   type InlineMarkdownEditRect,
@@ -81,6 +82,11 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
   const [value, setValue] = useState(initialValue)
   const latestRef = useRef(initialValue)
   const committedRef = useRef(initialValue)
+  // The toolbar's image action opens the host's media library rather than a
+  // "paste a URL" prompt (AGL-1645). The picker is a modal that takes focus,
+  // which is exactly what a blur-committed editor cannot survive — and the
+  // reason this one commits on a debounce instead is written out above.
+  const { editorRef, onPickImageFromMedia } = useMarkdownMediaPicker()
 
   const commit = useCallback(() => {
     const current = inlineMarkdownEdit.node ?? node
@@ -178,6 +184,8 @@ const InlineMarkdownEditorSurface = observer(function InlineMarkdownEditorSurfac
           )}
           value={value}
           onChange={handleChange}
+          editorRef={editorRef}
+          onPickImageFromMedia={onPickImageFromMedia}
           minHeight={Math.min(Math.max(rect.height, 200), 520)}
         />
       </Paper>

@@ -20,6 +20,7 @@ import { MarkdownField } from '@aglyn/aglyn-markdown-editor'
 import { useFieldApi } from '@aglyn/shared-ui-jsx-forms'
 import { Stack, Typography } from '@mui/material'
 import { useCallback } from 'react'
+import { useMarkdownMediaPicker } from '../hooks/use-markdown-media-picker'
 
 /** Mapper key for the attributes form (editor-internal, never persisted). */
 export const MARKDOWN_ATTRIBUTE_FIELD_COMPONENT =
@@ -51,9 +52,16 @@ export const MARKDOWN_ATTRIBUTE_FIELD_COMPONENT =
  *   whenever the incoming `value` differs from what it last emitted, which
  *   resets the undo history and the caret; handing back anything but the
  *   editor's own string would do that mid-sentence.
+ *
+ * The toolbar's image action reaches the host's media library through
+ * `useMarkdownMediaPicker` (AGL-1645) — the same `MediaPickerContext` this
+ * panel's own Browse button uses one field away. Opening it is a modal that
+ * takes focus, which is safe here for the reason above and no other: the value
+ * is already in the form before the dialog opens.
  */
 export function MarkdownAttributeField(props: Record<string, unknown>) {
   const { input, label, description, isDisabled } = useFieldApi(props as never)
+  const { editorRef, onPickImageFromMedia } = useMarkdownMediaPicker()
 
   const value = typeof input.value === 'string' ? input.value : ''
 
@@ -70,6 +78,8 @@ export function MarkdownAttributeField(props: Record<string, unknown>) {
         label={String(label ?? 'Content')}
         value={value}
         onChange={handleChange}
+        editorRef={editorRef}
+        onPickImageFromMedia={onPickImageFromMedia}
         minHeight={220}
       />
       {description ? (

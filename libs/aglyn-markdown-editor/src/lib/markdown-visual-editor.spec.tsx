@@ -478,6 +478,37 @@ describe('MarkdownVisualEditor', () => {
     )
   })
 
+  // An image URL accepts the same two forms a link always has (AGL-1645).
+  // Absolute-only silently DROPPED the insert — `insertImageRow` returns early
+  // — so a media pick that resolved to our own `/api/media/cdn/…` put nothing
+  // in the document and reported nothing. Every asset in the library with a
+  // CDN path resolves to exactly that form.
+  it('insertImage accepts a site-relative path, not only https://', () => {
+    const { handleChange, ref } = renderEditor('Hello')
+    act(() => ref.current?.insertImage('Shot', '/api/media/cdn/org:acme/m1'))
+    expect(lastEmitted(handleChange)).toBe(
+      'Hello\n\n![Shot](/api/media/cdn/org:acme/m1)',
+    )
+  })
+
+  // Protocol-relative stays refused, exactly as it is for links: it is not a
+  // site path, and the scheme it would inherit is not ours to guess.
+  it('insertImage still refuses a protocol-relative URL', () => {
+    const { handleChange, ref } = renderEditor('Hello')
+    act(() => ref.current?.insertImage('Shot', '//evil.example.com/s.png'))
+    expect(lastEmitted(handleChange)).toBeUndefined()
+  })
+
+  it('the image dialog enables Insert for a site-relative path', async () => {
+    const { handleChange, ref } = renderEditor('Hello')
+    selectIn(rowEls()[0] as HTMLElement, 5)
+    act(() => ref.current?.exec('image'))
+    const url = await screen.findByLabelText('URL')
+    fireEvent.change(url, { target: { value: '/images/hero.png' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }))
+    expect(lastEmitted(handleChange)).toBe('Hello\n\n![](/images/hero.png)')
+  })
+
   it('Cmd/Ctrl+Z undoes through the model snapshot stack', () => {
     const { handleChange } = renderEditor('Hello')
     const row = rowEls()[0] as HTMLElement

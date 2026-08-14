@@ -111,8 +111,14 @@ export interface MarkdownVisualEditorProps {
    * When set, the Insert image dialog offers a "Choose from media" button
    * that closes the dialog and invokes this callback — the host page opens
    * its media picker and inserts via the imperative handle (AGL-596).
+   *
+   * Receives the alt text typed in the dialog before the handoff (AGL-1645).
+   * Handing the picker an image is the only chance to describe it: an image
+   * row is `contentEditable={false}`, so an alt left empty here can never be
+   * filled in afterwards without deleting and re-inserting the image. Callers
+   * that mint their own alt from the asset are free to ignore it.
    */
-  onPickImageFromMedia?: () => void
+  onPickImageFromMedia?: (alt: string) => void
   /** Fires when the caret's formatting context changes (AGL-984). */
   onContextChange?: (context: MarkdownEditorContext) => void
   minHeight?: number | string
@@ -945,7 +951,20 @@ const HISTORY_LIMIT = 100
 /** True when only https?:// or a site-relative (not protocol-relative) path. */
 const isValidLinkUrl = (url: string): boolean =>
   /^https?:\/\//i.test(url) || /^\/(?!\/)/.test(url)
-const isValidImageUrl = (url: string): boolean => /^https?:\/\//i.test(url)
+/**
+ * Images accept the same two forms links always have (AGL-1645).
+ *
+ * Absolute-only was never right and it silently DROPPED the insert rather than
+ * reporting it: `insertImageRow` returns early on a rejected URL, so a media
+ * pick that resolved to our own `/api/media/cdn/{scope}/{id}` — the form the
+ * library hands back for every asset with a CDN path — put nothing in the
+ * document and said nothing about it. A site-relative image is also what an
+ * author writing `/images/hero.png` by hand means, which the link dialog has
+ * accepted from the start.
+ *
+ * Protocol-relative is still refused, exactly as for links.
+ */
+const isValidImageUrl = (url: string): boolean => isValidLinkUrl(url)
 
 interface UrlDialogState {
   kind: 'link' | 'image'
@@ -2026,7 +2045,7 @@ const MarkdownVisualEditor = forwardRef<
             sx={{ mt: 1 }}
             helperText={
               urlDialog?.kind === 'image'
-                ? 'https:// image URL'
+                ? 'https:// or a site path like /images/hero.png'
                 : 'https:// or a site path like /pricing'
             }
           />
@@ -2061,8 +2080,12 @@ const MarkdownVisualEditor = forwardRef<
               color="primary"
               sx={{ mr: 'auto' }}
               onClick={() => {
+                // Read the alt BEFORE clearing the dialog (AGL-1645) — the
+                // author has already typed it, and the picked image has no
+                // other way to acquire one.
+                const alt = urlDialog.text.trim()
                 setUrlDialog(null)
-                onPickImageFromMedia()
+                onPickImageFromMedia(alt)
               }}
             >
               {'Choose from media'}
