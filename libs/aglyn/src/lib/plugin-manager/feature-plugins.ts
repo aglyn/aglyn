@@ -149,6 +149,33 @@ export interface ConsolePluginPageProps {
    * console-app session/permission hooks.
    */
   permissions?: Partial<OrgPermissions>
+  /**
+   * The verdict for the release flag that governs this surface (AGL-1662),
+   * resolved by the shell from the nav item's `navTabId` — the same flag
+   * `FeatureGate` applies around the page body.
+   *
+   * `FeatureGate` admits staff with the flag OFF, so a plugin page can be
+   * looking at an org that does not have the feature and is not being
+   * billed for it. Anything the page says about MONEY has to follow the
+   * flag rather than the viewer, and this is how a plugin page gets that
+   * answer without reaching for the console-app release-flag hooks (which
+   * live in `scope:app` and are off-limits to a `scope:lib` plugin).
+   */
+  releaseFlag?: {
+    /**
+     * The rollout verdict for this ORG — staff bypass deliberately NOT
+     * applied. `visible` is what decides who sees a page; this is what
+     * decides what the invoice carries, and staff opening a page must not
+     * put a line on a customer's bill.
+     */
+    released: boolean
+    /**
+     * True once the flag verdict has settled. Release flags are default-off
+     * before Remote Config activation, so an ungated claim asserts the
+     * withheld case for one paint on an org that may well be billed.
+     */
+    ready: boolean
+  }
 }
 
 export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>

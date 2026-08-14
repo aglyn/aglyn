@@ -38,6 +38,7 @@ import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
+import { useReleaseFlags } from '../../../../../../hooks/use-release-flags'
 
 /**
  * Generic host route for plugin-contributed pages (AGL-394). Any feature
@@ -79,6 +80,28 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     return RELEASE_FLAGS.find((flag) => flag.navTabId === navTabId)?.key
   }, [resolved])
 
+  // The same flag's verdict, handed DOWN to the plugin page (AGL-1662).
+  //
+  // `FeatureGate` below gates on `visible` (`released || isStaff`), so a
+  // staff member reaches this page for an org whose flag is off — an org the
+  // usage cron is deliberately not billing (AGL-1604). A plugin page that
+  // quotes a dollar figure has to follow the flag rather than the viewer, and
+  // it cannot ask for itself: the release-flag hooks are `scope:app` and a
+  // `scope:lib` plugin may not import them.
+  //
+  // `released`, deliberately NOT `visible` — the staff bypass must not move a
+  // billing claim. Paired with `ready` so a page can withhold the claim
+  // entirely until the verdict settles rather than assert the default-off
+  // answer for one paint.
+  const { flags, ready: releaseFlagsReady } = useReleaseFlags()
+  const releaseFlagVerdict = useMemo(
+    () =>
+      releaseFlag
+        ? { released: flags[releaseFlag].released, ready: releaseFlagsReady }
+        : undefined,
+    [releaseFlag, flags, releaseFlagsReady],
+  )
+
   const entitled = resolved?.extension.featureFlag
     ? checkEntitlement(org, resolved.extension.featureFlag)
     : true
@@ -117,6 +140,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           entitled={entitled}
           org={org}
           permissions={permissions}
+          releaseFlag={releaseFlagVerdict}
         />
       </ConsoleMediaPickerProvider>
     </Suspense>

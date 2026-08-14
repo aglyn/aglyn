@@ -94,7 +94,27 @@ const csvEscape = (value: unknown) => {
  * `contactsPerHost` quota check.
  */
 export function ContactsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, org } = props
+  const { hostId, org, releaseFlag } = props
+  // Whether the audience overage on this page is actually INVOICED
+  // (AGL-1662), and whether that question has been answered yet.
+  //
+  // AGL-1604 stopped the usage cron putting `contactsOverageUsd` into
+  // `billedCents` while `release_contacts` is off for the org; `db5ecdf2b`
+  // taught the console billing page's caption the same thing. This page's own
+  // alert still quoted the dollar figure with no flag check — and this is the
+  // surface a staff member reaches with the flag OFF, because the shell's
+  // `FeatureGate` admits them on `visible` (`released || isStaff`). Support
+  // then reads that number back to a customer whose invoice will not carry it.
+  //
+  // The shell resolves this from `released`, never `visible`: staff opening a
+  // page does not put a line on the customer's bill.
+  //
+  // Both default to the WITHHELD answer when the prop is absent, which only
+  // happens in a direct mount — the shell always supplies it for a surface
+  // with a nav-tab flag. A caller that has not resolved the verdict has not
+  // earned the right to quote a charge.
+  const contactsBilled = releaseFlag?.released ?? false
+  const releaseFlagsReady = releaseFlag?.ready ?? false
   // Org-shared data root (AGL-237). Null until the org lookup settles
   // (AGL-1061), and for a host with no owning org — the pre-migration host
   // path this used to fall back to is gone (AGL-1050), so the CRM lists
@@ -502,13 +522,36 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                   : '') +
                 '. Upgrade in Billing to keep collecting.'}
             </Alert>
-          ) : quota.overageContacts > 0 && quota.overageRateUsd != null ? (
+          ) : quota.overageContacts > 0 &&
+            quota.overageRateUsd != null &&
+            // No claim about money until the verdict that decides it has
+            // settled (AGL-1662). `release_contacts` is default-off before
+            // Remote Config activation, so an ungated alert would assert the
+            // withheld wording for one paint on an org that IS billed.
+            releaseFlagsReady ? (
             <Alert severity="info">
-              {`${quota.overageContacts.toLocaleString()} contacts over ` +
-                `your plan's included ${quota.included.toLocaleString()} — ` +
-                `metered at $${quota.overageRateUsd}/1,000 per month ` +
-                `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
-                'Upgrade in Billing for a larger included audience.'}
+              {contactsBilled
+                ? `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `your plan's included ${quota.included.toLocaleString()} — ` +
+                  `metered at $${quota.overageRateUsd}/1,000 per month ` +
+                  `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
+                  'Upgrade in Billing for a larger included audience.'
+                : // The wording `db5ecdf2b` put on the billing page, which is
+                  // itself the wording `1a2aed5cb` published to
+                  // `billing-and-plans/overview.md` (AGL-1601/1603). Staff and
+                  // customer must not read different sentences about the same
+                  // org's money.
+                  //
+                  // THE COUNT STAYS, THE TOTAL GOES: the head-count is real —
+                  // ingestion captured those records — and is not a claim
+                  // about money. The upgrade nudge goes with the total, since
+                  // it prompts a purchase premised on a charge that is not
+                  // happening.
+                  `${quota.overageContacts.toLocaleString()} contacts over ` +
+                  `your plan's included ${quota.included.toLocaleString()} — ` +
+                  'not billed while the Contacts page is unavailable. ' +
+                  `The $${quota.overageRateUsd}/1,000 rate applies once ` +
+                  'Contacts opens.'}
             </Alert>
           ) : droppedTotal > 0 ? (
             <Alert severity="info">
