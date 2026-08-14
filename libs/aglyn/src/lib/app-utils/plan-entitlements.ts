@@ -2091,3 +2091,72 @@ export function checkFormSubmissionQuota(
     metered,
   }
 }
+
+/**
+ * How far past a plan's own included band the abuse ceiling sits (AGL-1655).
+ * Ten times what the customer bought is not growth — a site that legitimately
+ * outgrows its band by an order of magnitude has an upgrade conversation
+ * waiting, not a silent invoice.
+ */
+export const FORM_ABUSE_CEILING_MULTIPLE = 10
+
+/**
+ * Absolute floor for the abuse ceiling, so the small plans get real headroom
+ * rather than a second, tighter plan limit wearing a different name. Starter
+ * includes 200/month; 10× would be 2,000, which a genuinely busy site could
+ * reach. 5,000 is ~167 submissions a day on ONE site — no legitimate site on
+ * a small plan reaches that, and no small customer can be billed past
+ * 5,000 × $0.000065 ≈ $0.33 of abuse.
+ */
+export const FORM_ABUSE_CEILING_FLOOR = 5_000
+
+/**
+ * Ceiling for plans whose included count is UNLIMITED (Agency, Enterprise),
+ * where a multiple has nothing to multiply. Kept at or above the ceiling of
+ * every finite plan below it (Advanced includes 100,000 → 1,000,000) so the
+ * ladder never inverts and a bigger plan never gets the smaller ceiling.
+ */
+export const FORM_ABUSE_CEILING_UNLIMITED = 1_000_000
+
+export interface FormAbuseCeilingResult {
+  /** True once this month's count for the SITE has reached the ceiling. */
+  exceeded: boolean
+  /** The ceiling this site's plan resolves to. Always finite. */
+  ceiling: number
+  used: number
+}
+
+/**
+ * Per-site monthly abuse ceiling for form submissions (AGL-1655).
+ *
+ * Deliberately NOT part of `checkFormSubmissionQuota`. That function answers
+ * a plan question — "did the customer buy this?" — and AGL-1280 correctly
+ * made its answer on a metered plan always yes, because usage past the band
+ * bills rather than blocks. This one answers a different question: "is this
+ * still a customer's traffic at all?" Conflating them is how the plan gate
+ * ended up as the anti-abuse control it was never designed to be, and how
+ * `allowed: metered ? true : …` came to mean an unbounded bill.
+ *
+ * So the ceiling is containment, not capacity. It is far above anything a
+ * legitimate site reaches, it is the same shape on every plan, and crossing
+ * it is an INCIDENT: the caller is expected to refuse the write, leave the
+ * billable counter alone, and make the trip visible to the site's managers
+ * and to staff. A ceiling that silently absorbed submissions would only move
+ * the free plan's lost-lead failure up to a bigger number.
+ *
+ * Evaluated against the same month counter the plan gate reads — which is
+ * Admin-SDK-only (`counters` is excluded from every client write in
+ * `cloud/firebase-firestore.rules`), so the count behind the ceiling cannot
+ * be lowered to launder past it.
+ */
+export function checkFormSubmissionAbuseCeiling(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedThisMonth: number,
+): FormAbuseCeilingResult {
+  const included = resolveOrgEntitlements(org).formSubmissionsPerMonth
+  const ceiling = Number.isFinite(included)
+    ? Math.max(FORM_ABUSE_CEILING_FLOOR, included * FORM_ABUSE_CEILING_MULTIPLE)
+    : FORM_ABUSE_CEILING_UNLIMITED
+  const used = Math.max(0, usedThisMonth)
+  return { exceeded: used >= ceiling, ceiling, used }
+}
