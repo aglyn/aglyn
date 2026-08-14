@@ -439,6 +439,116 @@ export function clearAnalyticsCookies(
 }
 
 /**
+ * The `window` flag `gtag.js` consults before every hit: with
+ * `window['ga-disable-G-XXXX'] === true` the tag for that property sends
+ * nothing and writes nothing. Google's own documented opt-out mechanism, and
+ * the reason this needs no consent-mode DEFAULT (AGL-1608).
+ */
+export const GA_DISABLE_FLAG_PREFIX = 'ga-disable-'
+
+/**
+ * The measurement ids whose tag is actually RESIDENT in this page.
+ *
+ * Discovered from the page rather than taken from the host document on
+ * purpose: what has to be silenced is whatever gtag.js is currently loaded and
+ * configured for, which is not always what the host record configures — a tag
+ * can arrive through GTM, and a stale `<script>` from earlier in the pageview
+ * is exactly the thing this function exists to find.
+ *
+ * Ids are format-checked before they are used, because each one becomes a
+ * `window` property name.
+ */
+export function residentGaMeasurementIds(): string[] {
+  if (typeof document === 'undefined') return []
+  const ids = new Set<string>()
+  try {
+    const loaded = document.querySelectorAll(
+      'script[src*="googletagmanager.com/gtag/js"]',
+    )
+    for (const element of Array.from(loaded)) {
+      const src = String((element as HTMLScriptElement).src ?? '')
+      const match = /[?&]id=([^&]*)/.exec(src)
+      const id = match ? decodeURIComponent(match[1]) : ''
+      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
+    }
+  } catch {
+    // A hostile or absent DOM: the dataLayer pass below still applies.
+  }
+  try {
+    const layer = (window as unknown as Record<string, unknown>)?.dataLayer
+    for (const entry of Array.from((layer ?? []) as ArrayLike<unknown>)) {
+      // `arguments` objects, not arrays — gtag pushes its own call sites.
+      const args = Array.from((entry ?? []) as ArrayLike<unknown>)
+      if (args[0] !== 'config') continue
+      const id = String(args[1] ?? '')
+      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
+    }
+  } catch {
+    // No dataLayer, or one that is not iterable: the script pass stands.
+  }
+  return [...ids]
+}
+
+/**
+ * Make every resident GA tag agree with the consent state, and return the ids
+ * it acted on.
+ *
+ * ## Why deleting the cookies is not enough (AGL-1608)
+ *
+ * The AGL-1498 gate stops the script from LOADING, which is the right
+ * enforcement for a fresh pageview and the wrong tool for a visitor who
+ * withdraws mid-pageview: `gtag.js` has already executed, and React unmounting
+ * the `<script>` element does not unload it. `window.gtag` stays live, GA4
+ * enhanced measurement fires on its own (scroll depth, outbound click, file
+ * download), and the tag re-writes `_ga_<id>` AFTER
+ * {@link clearAnalyticsCookies} has deleted it. Reproduced on aglyn.com: an
+ * opt-out, a hand-run sweep to zero cookies, then one scroll to the footer
+ * brought `_ga_YW5PG16YTM` back.
+ *
+ * Two signals, because they fail differently and neither is guaranteed:
+ * the `ga-disable-<id>` window flag silences a tag that never received a
+ * consent-mode default, and the `consent`/`update` call reaches a tag that
+ * arrived through GTM with its own id this function never saw.
+ *
+ * ## What this deliberately does NOT do
+ *
+ * It never declares a consent-mode DEFAULT and never touches the gate. Both
+ * signals act only on a tag that is already resident — which, by construction,
+ * only exists after a grant. "The script never LOADS, rather than
+ * load-then-suppress" is a stated property of AGL-1498 and changing it is a
+ * product decision, not a cleanup.
+ *
+ * Symmetric on purpose: a visitor who opts out and changes their mind in the
+ * same pageview would otherwise stay silently unmeasured until they navigated,
+ * because the re-rendered `<Script>` cannot re-execute an already-loaded tag.
+ * The re-grant restores ANALYTICS only — the tool never asked about
+ * advertising, so the ad signals stay denied in both directions.
+ */
+export function setResidentAnalyticsTags(granted: boolean): string[] {
+  if (typeof window === 'undefined') return []
+  const ids = residentGaMeasurementIds()
+  const scope = window as unknown as Record<string, unknown>
+  for (const id of ids) {
+    scope[`${GA_DISABLE_FLAG_PREFIX}${id}`] = !granted
+  }
+  try {
+    const send = scope.gtag
+    if (typeof send === 'function') {
+      ;(send as (...args: unknown[]) => void)('consent', 'update', {
+        analytics_storage: granted ? 'granted' : 'denied',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+      })
+    }
+  } catch {
+    // A tag that throws on its own consent call is one we cannot silence;
+    // the flag above and the cookie sweep still stand.
+  }
+  return ids
+}
+
+/**
  * The stored record, or null when there is none (never resolved, storage
  * unavailable, or an unrecognized shape — treated alike: not yet decided).
  */
@@ -482,7 +592,9 @@ export function readStoredVisitorConsent(
  * non-granting state also REMOVES the identifiers the grant allowed —
  * the persistent `aglyn:visitor` id AND the GA cookies
  * ({@link clearAnalyticsCookies}): opting out cleans up, it does not merely
- * stop adding (AGL-1606). Listeners hear about it via
+ * stop adding (AGL-1606) — and SILENCES the tag that is already running
+ * ({@link setResidentAnalyticsTags}), without which the cleanup un-does itself
+ * within the same pageview (AGL-1608). Listeners hear about it via
  * {@link VISITOR_CONSENT_CHANGED_EVENT} so the GA gate and the runtime react
  * without a reload.
  *
@@ -514,6 +626,12 @@ export function storeVisitorConsent(
       // Private mode: the state holds for this page via the event below,
       // and is re-derived next visit — the safe failure.
     }
+    // Silence the RESIDENT tag before sweeping, never after (AGL-1608): the
+    // gate only keeps the script from LOADING, so a mid-pageview withdrawal
+    // leaves gtag.js live and it re-writes `_ga_<id>` on its next enhanced
+    // measurement event. Sweeping first would delete three cookies and
+    // immediately get one back.
+    setResidentAnalyticsTags(stored.analytics)
     if (!stored.analytics) {
       clearAnalyticsCookies()
     }

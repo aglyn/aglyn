@@ -204,7 +204,14 @@ export default function SiteAnalytics({
           is UI over this condition, not the condition. This deliberately
           also silences the `window.gtag?.()` mirrors in the marketing
           runtime (overlay/experiment events) until consent: no gtag, no
-          events, which is the honest behavior. */}
+          events, which is the honest behavior.
+
+          What the gate CANNOT do is unload a tag (AGL-1608). Dropping these
+          elements on a mid-pageview withdrawal does not unload `gtag.js`, so
+          `storeVisitorConsent` silences the resident tag as well as sweeping
+          the cookies — otherwise GA4 enhanced measurement re-creates `_ga`
+          for the rest of the pageview. That runs on the tag that is ALREADY
+          loaded; the render condition here is unchanged. */}
       {gaMeasurementId && analyticsAllowed ? (
         <>
           <Script
