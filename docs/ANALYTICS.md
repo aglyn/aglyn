@@ -310,9 +310,11 @@ rather than ignored:
   the webhook wrote. The Stripe session id is the bearer credential: it is
   unguessable, it is handed only to the buyer, and the lookup is scoped to the
   host that owns the order.
-* *"it would re-fire on a refresh"* — `transaction_id` is that same session id,
-  and GA4 de-duplicates purchases on it. A `sessionStorage` guard is the cheap
-  second layer, not the guarantee.
+* *"it would re-fire on a refresh"* — `transaction_id` is a deterministic id
+  for the money that moved (that same session id for a one-time order; the
+  opening **invoice** id for a subscription, see below), and GA4 de-duplicates
+  purchases on it. A `sessionStorage` guard is the cheap second layer, not the
+  guarantee.
 
 **Whose revenue the number is.** The merchant's. This is the inverse of the
 marketplace call (AGL-1639): there the property is ours and `value` is platform
@@ -385,6 +387,63 @@ number verbatim and reconciles by construction, while `itemsCents` is priced
 from the host's product docs and a price edit mid-session would diverge.
 `purchase-analytics.spec.ts` still pins the decomposition, and
 `commerce-orders.spec.ts` now pins the reconciliation.
+
+#### A storefront SUBSCRIPTION sale reports its first payment, once (AGL-1746)
+
+A subscription writes no order document — deliberately, on the evidence
+gathered in AGL-1732 — so `/api/commerce/order-analytics` looked up an order
+that would never exist and 404'd forever. The merchant's property therefore
+showed traffic and `begin_checkout` on the subscription product and then no
+`purchase` at all, which does not read as an unmeasured path: it reads as a
+**100% checkout abandonment rate**, authoritatively.
+
+The route now falls back from the missing order to the subscription that
+session created (`subscriptions` where `checkoutSessionId ==` the session id)
+and answers from that subscription's **opening invoice** — the
+`subscription_create` one AGL-1743 records beneath it. Both reads are
+single-field equality queries with `limit(1)`, served by Firestore's automatic
+single-field indexes; there is no composite index here to create.
+
+**The invoice, not the subscription document, because of the id.** The invoice
+id is Stripe's own id for the money that moved, it is unique per cycle, and it
+is stable — the same sale resolves to the same invoice on every poll, so a
+shopper who refreshes the return page cannot produce a second `purchase` under
+a different id. Its `lineItems` and `totals` were built by
+`computeSubscriptionInvoiceOrder`, which is the helper that knows **an invoice
+is not a Checkout Session**: AGL-1743 found invoices carry no `total_details`
+at all, that tax is `tax` or `total_taxes` by API version, discount is
+`total_discount_amounts[]`, and the fee is a real `application_fee_amount`.
+Reading the stored figures inherits all of that rather than re-deriving it
+against the wrong shape.
+
+`value` needs no special case: it flows through the same
+`toStorefrontPurchaseSource` / `buildStorefrontPurchaseParams` pair, so the
+storefront rule above applies unchanged — the merchant is the seller, Aglyn's
+fee is **not** subtracted, tax is excluded, and no GA4 `tax` param is sent.
+
+**A trial answers 409, not a $0 purchase.** Nothing was charged, so there is no
+revenue to report, and the refusal is terminal rather than retryable because it
+will never become true for that invoice.
+
+**Renewals send nothing, and could not.** On the merits, `purchase` is what
+GA4's acquisition and ROAS reporting is terminated by, so firing one per cycle
+would credit a single acquisition to its campaign once a month and inflate
+return on ad spend by the subscriber's whole lifetime. But it does not come
+down to the merits: this sender is the shopper's browser, and a renewal months
+later has no browser in it. Reaching the merchant's property server-side would
+need a per-host Measurement Protocol API secret this product does not collect
+and has nowhere to store — the same conclusion decision 1 reached from the
+other direction. `ga4-measurement-protocol.ts` is not that channel: its single
+`GA4_MEASUREMENT_ID`/`GA4_API_SECRET` pair is **ours**, reporting our revenue.
+Row 1 of the decision table above still holds and is about that property, not
+this one. So the storefront reports the first payment and stops — mirroring
+AGL-1743's own refusal to re-count the opening invoice where the checkout
+session had already counted it.
+
+`order-analytics.spec.ts` pins each of these: the transaction id is the invoice
+id and not the session id, a renewal invoice is never what answers, the two
+webhook races stay retryable, and the projection still withholds the
+subscriber's email, name and our fee.
 
 ### 2. Consent-blocked means the event is gone, not queued
 
