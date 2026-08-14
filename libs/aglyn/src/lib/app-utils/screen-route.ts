@@ -19,18 +19,29 @@ import type { ScreenUid } from '../foundation'
 
 /**
  * Route path of a host's root screen. The tenant matcher joins the catch-all
- * segments (`(params.slug || ['/']).join('/')`), so the root is `'/'` and
- * every other path is slash-joined segments WITHOUT a leading slash
- * (`about`, later `company/about`).
+ * segments and collapses an empty one to this value (`load-page-data.ts`:
+ * `slugSegments.length ? slugSegments.join('/') : SCREEN_ROOT_PATH`), so the
+ * root is `'/'` and every other path is slash-joined segments WITHOUT a
+ * leading slash (`about`, later `company/about`).
  */
 export const SCREEN_ROOT_PATH = '/'
 
 /**
  * Normalizes user slug input into the routing-map path format described on
- * {@link SCREEN_ROOT_PATH}. Empty input and `/` normalize to the root path;
- * anything else becomes a single lowercase url-safe segment. Returns
- * `undefined` when nothing survives sanitization (e.g. `'###'`), which
- * callers should treat as invalid rather than silently publishing.
+ * {@link SCREEN_ROOT_PATH}. `'/'` normalizes to the root path; anything else
+ * becomes a single lowercase url-safe segment.
+ *
+ * Returns `undefined` for EMPTY input and for anything that sanitizes away
+ * (`'###'`) — the two cases are deliberately the same answer, and the caller
+ * decides what it means. In the Screens page's slug field an empty string
+ * means "no address typed"; in a starter template it meant "home". Two
+ * meanings for one value is what made AGL-1575 possible, so this function
+ * refuses to pick one: a caller that wants the root must say `'/'`.
+ *
+ * This docstring used to claim empty input normalized to the root, which the
+ * code has never done (see the spec, which asserts the `undefined`). A fix
+ * written against the docstring instead of the behaviour would have shipped
+ * broken; if you are here to make the code match the comment, do not.
  */
 export function normalizeScreenSlug(
   input: string | null | undefined,
