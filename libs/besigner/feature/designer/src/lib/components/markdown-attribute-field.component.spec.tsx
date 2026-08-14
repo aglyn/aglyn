@@ -56,6 +56,12 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
       nodes: [],
     }) as any
 
+  // ElementPropsFormProps inherits schema/componentMapper from
+  // FormRendererProps, but the component supplies both internally —
+  // passing them from a test would shadow the real ones via {...rest}.
+  // Same reason (and same shape) as insert-token-menu.component.spec.tsx.
+  const formProps = (content: string) => ({ node: node(content) }) as any
+
   /** Every contentEditable row the editor rendered, in document order. */
   const rowEls = (): HTMLElement[] =>
     Array.from(document.querySelectorAll<HTMLElement>('[data-row-kind]'))
@@ -75,7 +81,7 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
 
   it('renders the WYSIWYG for a MARKDOWN attribute, not a textarea', () => {
     const { unmount } = render(
-      <ElementPropsForm node={node('## Title\n\nBody **text**.')} />,
+      <ElementPropsForm {...formProps('## Title\n\nBody **text**.')} />,
     )
     expect(screen.getByTestId('markdown-attribute-field')).toBeTruthy()
     const rows = rowEls()
@@ -94,7 +100,9 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
   // canvas still looks correct. Typing then leaving WITHOUT ever blurring the
   // field is the case that proves the edit was live the whole time.
   it('commits an edit that never blurred, on unmount (node switch)', () => {
-    const { unmount } = render(<ElementPropsForm node={node('Hello world')} />)
+    const { unmount } = render(
+      <ElementPropsForm {...formProps('Hello world')} />,
+    )
     const row = rowEls()[0] as HTMLElement
     row.textContent = 'Hello brave world'
     act(() => {
@@ -110,7 +118,9 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
   })
 
   it('commits on the debounce without any focus event at all', () => {
-    const { unmount } = render(<ElementPropsForm node={node('Hello world')} />)
+    const { unmount } = render(
+      <ElementPropsForm {...formProps('Hello world')} />,
+    )
     const row = rowEls()[0] as HTMLElement
     row.textContent = 'Hello calm world'
     act(() => {
@@ -128,7 +138,9 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
   // <form>. The keystrokes before the click must already be in the form, and
   // the ones after it must still commit.
   it('keeps typing that straddles a focus-stealing toolbar click', () => {
-    const { unmount } = render(<ElementPropsForm node={node('Hello world')} />)
+    const { unmount } = render(
+      <ElementPropsForm {...formProps('Hello world')} />,
+    )
     const row = rowEls()[0] as HTMLElement
     row.textContent = 'Hello wide world'
     act(() => {
@@ -164,7 +176,7 @@ describe('MarkdownAttributeField (AGL-1616)', () => {
       '```ts\nconst a = 1\n```\n\n' +
       '| Prop | Default |\n| --- | --: |\n| size | 8 |\n\n' +
       'See the [Cookie Policy](/legal/cookies).'
-    const { unmount } = render(<ElementPropsForm node={node(source)} />)
+    const { unmount } = render(<ElementPropsForm {...formProps(source)} />)
     // One stray keystroke in the FIRST row — the heading renders as rich
     // text, so its DOM reads "1. Information We Collect" without the `## `.
     // Everything after it must survive verbatim.
