@@ -116,6 +116,13 @@ jest.mock('firebase/firestore', () => ({
   query: (name: string) => name,
   limit: () => undefined,
   doc: () => ({}),
+  // The audience head-count is a server aggregate now (AGL-1706). Answering
+  // it with the fixture's own length keeps this spec's arithmetic (60 − 10 =
+  // 50 over, at $1/1,000 = $0.05) true on both the pending fallback and the
+  // resolved read, so nothing here depends on which one paints.
+  getCountFromServer: jest.fn(async () => ({
+    data: () => ({ count: contactDocs.length }),
+  })),
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),

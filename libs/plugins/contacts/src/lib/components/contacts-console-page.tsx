@@ -55,11 +55,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  getCountFromServer,
   limit,
   query,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
   form: 'Form',
@@ -156,9 +157,60 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
       ),
     [contactDocs],
   )
+  /**
+   * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
+   *
+   * The listener above is `limit(1000)` and always will be — nobody needs
+   * 40,000 rows streamed into a table. What it must not do is answer "how
+   * many contacts does this org have", and it did: `contacts.length`
+   * saturated at 1,000, which is *exactly* the smallest paid included band
+   * (`starter`). So `overageContacts = max(0, used − included)` was 0 on
+   * every stock plan and the alert below could not render at all.
+   *
+   * Worse than the dead alert, the same capped number fed the readout in the
+   * toolbar. An org with 40,000 contacts on Pro read "1,000 contacts ·
+   * 10,000 included" — a page whose job is telling a customer where they sit
+   * in their band, telling them they have room they do not have. The console
+   * billing page read the truth from `getCountFromServer` on this very
+   * collection, so the two surfaces disagreed about the same org's audience.
+   *
+   * THE LIST AND THE COUNT ARE DIFFERENT QUESTIONS and now have different
+   * answers: one aggregate read per mount, the same call
+   * `billing-usage.component.tsx` already makes against the same path.
+   *
+   * The counting RULE is untouched — `checkContactQuota` is an entitlement
+   * input and the usage cron is what bills from it. Only this page's input
+   * stopped being a saturated one.
+   */
+  const [serverContactCount, setServerContactCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    if (!dataScope) return
+    let active = true
+    void getCountFromServer(
+      collection(firestore, dataScope[0], dataScope[1], 'contacts'),
+    )
+      .then((snapshot) => {
+        if (active) setServerContactCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the listener length below — a LOWER bound, and the
+        // behaviour this page had before. Deliberately not 0: `checkContactQuota`
+        // answers a question from whatever it is handed, and a defaulted 0
+        // would clear the free plan's hard-band alert on an org that is over it.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, dataScope])
+  // Pending or denied, the listener length stands in. It can only UNDERSTATE
+  // (it is the same collection, capped), never overstate, so no alert this
+  // number gates can fire on a count larger than the truth.
+  const contactCount = serverContactCount ?? contacts.length
   // Audience bands (AGL-890): paid plans meter past the included count
   // instead of blocking; only free hard-bands (quota.allowed = false).
-  const quota = checkContactQuota(org, contacts.length)
+  const quota = checkContactQuota(org, contactCount)
   // Signups whose CRM record was dropped at the free band (AGL-891) —
   // written by upsert-contact, host-scoped.
   const { data: droppedCounter } = useFirestoreDoc<any>(
@@ -423,7 +475,10 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               sx={{ minWidth: 220 }}
             />
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-              {`${contacts.length.toLocaleString()} contacts · ${
+              {/* The org's audience, not the page's row count (AGL-1706) —
+                  these two stopped being the same number the moment the
+                  listener grew a `limit(1000)`. */}
+              {`${contactCount.toLocaleString()} contacts · ${
                 Number.isFinite(quota.included)
                   ? `${quota.included.toLocaleString()} included`
                   : '∞'
