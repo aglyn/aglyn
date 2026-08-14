@@ -226,8 +226,16 @@ an urgent takedown, quarantine stops the bleeding at the origin immediately but
 is not a purge; if the file must be unreachable everywhere *now*, quarantine it
 and then lock the scope as well.
 
-There is no staff UI yet — quarantine is operated through
-`POST /api/admin/media-quarantine` with a staff bearer token:
+**Where it shows up.** A quarantined asset carries a red **Disabled** badge in
+the DAM grid, for staff and for the workspace that owns it, and the badge
+carries the customer notice — the reason, the reassurance that the file was not
+deleted, and the support address. The internal `note` is never part of that
+payload. Before this, a disabled file looked exactly like a broken one, which is
+the state most support conversations about it started from.
+
+Setting and lifting is still operated through
+`POST /api/admin/media-quarantine` with a staff bearer token — there is no
+staff form for it yet, and no page listing the whole deny list:
 
 ```bash
 # Disable one file by its content hash (visible on the asset in the DAM).

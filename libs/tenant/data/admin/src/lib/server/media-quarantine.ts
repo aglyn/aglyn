@@ -145,6 +145,26 @@ export async function getMediaQuarantine(asset: {
 }
 
 /**
+ * Is ANYTHING quarantined right now? (AGL-1612.)
+ *
+ * The cheap pre-check that makes an owner-facing surface affordable. A
+ * console surface asking "are any of these fifty assets disabled?" cannot
+ * take the client's word for the digests — that would turn the staff-only
+ * deny list into an oracle anyone could probe by guessing hashes — so it has
+ * to derive the keys from the media documents server-side, which is a read
+ * per asset.
+ *
+ * That cost is only ever worth paying when the deny list has something in
+ * it, and on this platform it is empty essentially always. So the caller
+ * asks this first: one already-cached read, `false`, and zero media reads on
+ * the overwhelmingly common path.
+ */
+export async function hasMediaQuarantines(): Promise<boolean> {
+  const entries = await readQuarantineIndex()
+  return Object.keys(entries).length > 0
+}
+
+/**
  * INGESTION refusal (AGL-1613) — the half AGL-1512 did not land.
  *
  * AGL-1512 keys quarantine by content digest precisely so that re-uploading
