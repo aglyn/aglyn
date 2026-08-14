@@ -23,6 +23,122 @@ import {
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { createHash } from 'crypto'
+
+/**
+ * A claim on one settlement attempt (AGL-1691).
+ *
+ * `replay` is set when this key has already been settled — the caller must
+ * return the recorded response instead of transacting again.
+ */
+interface AttemptClaim {
+  /** Stripe idempotency key for this attempt, or null when the client sent none. */
+  stripeKey: string | null
+  record: (status: number, body: unknown) => Promise<void>
+  release: () => Promise<void>
+}
+
+/**
+ * Take an exclusive claim on a settlement attempt, so a retry cannot mint a
+ * second order or a second Checkout session (AGL-1691).
+ *
+ * The key is supplied by the client, once per checkout attempt — deliberately
+ * NOT derived from the basket. A cashier ringing the same coffee twice in a
+ * minute is a real second sale, and a content hash would silently swallow it;
+ * that would be a worse bug than the one this closes. So the client mints a
+ * key when a basket first becomes an attempt and retires it when the register
+ * resets, which makes the key stable across a retry of THAT attempt and
+ * distinct for a legitimately identical next one.
+ *
+ * Storage reuses the REST API's shape (`apiIdempotency/{sha256(scope:key)}`,
+ * AGL-618) rather than inventing a second replay collection, and carries the
+ * same `orgId` field, so `eraseOrgIdempotencyKeys` already sweeps these on
+ * org erasure (AGL-1448) with no change there.
+ *
+ * The claim is `create()` — Firestore rejects a create on an existing document,
+ * and that rejection is the whole dedupe primitive. A read-then-write would
+ * race exactly the double-submit it is meant to stop.
+ */
+async function claimAttempt(
+  firestore: FirebaseFirestore.Firestore,
+  scope: { hostId: string; orgId: string; key: string },
+): Promise<{ claim: AttemptClaim } | { replay: { status: number; body: unknown } }> {
+  // No key: transact as before. This endpoint is a plugin API route and an
+  // older cached console bundle must keep selling rather than start failing.
+  if (!scope.key) {
+    return {
+      claim: {
+        stripeKey: null,
+        record: async () => undefined,
+        release: async () => undefined,
+      },
+    }
+  }
+  const digest = createHash('sha256')
+    .update(`pos:${scope.hostId}:${scope.key}`)
+    .digest('hex')
+  const ref = firestore.collection('apiIdempotency').doc(digest)
+  try {
+    await ref.create({
+      orgId: scope.orgId || null,
+      hostId: scope.hostId,
+      kind: 'pos-order',
+      status: 'pending',
+      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      createdAtMs: Date.now(),
+    })
+  } catch {
+    // Already claimed: either the attempt finished and we replay its result,
+    // or it is still in flight.
+    const prior = await ref.get()
+    const priorResponse = prior.get('response')
+    if (priorResponse) {
+      return {
+        replay: {
+          status: Number(prior.get('responseStatus') ?? 200),
+          body: priorResponse,
+        },
+      }
+    }
+    // In flight. Fail CLOSED — the money direction. The alternative (letting
+    // the second caller through) is the duplicate charge itself. A process
+    // killed between the claim and the record leaves a key stuck here; the
+    // cashier starts a fresh sale with a fresh key, which is the correct
+    // failure direction even though it is not a pleasant one.
+    return {
+      replay: {
+        status: 409,
+        body: { error: 'This sale is already being processed' },
+      },
+    }
+  }
+  return {
+    claim: {
+      // Same digest handed to Stripe, so even if our claim is lost after the
+      // Checkout call, Stripe replays its own session rather than opening a
+      // second one. Scoped by host and attempt, so it cannot collide.
+      stripeKey: digest,
+      record: async (status, body) => {
+        await ref
+          .set(
+            {
+              status: 'done',
+              responseStatus: status,
+              response: body,
+              settledAtMs: Date.now(),
+            },
+            { merge: true },
+          )
+          .catch(() => undefined)
+      },
+      // A rejected or failed attempt must not burn the key: the cashier fixes
+      // the cause and presses the same button.
+      release: async () => {
+        await ref.delete().catch(() => undefined)
+      },
+    },
+  }
+}
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a
@@ -52,10 +168,17 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const locationId = String(body.locationId ?? '')
   const discountPct = Math.min(100, Math.max(0, Number(body.discountPct ?? 0)))
   const rawLines = Array.isArray(body.lines) ? body.lines : []
+  // One settlement attempt, minted by the register (AGL-1691). Node lowercases
+  // incoming headers, but read both spellings — the plugin API request type
+  // makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
   if (!hostId || rawLines.length === 0) {
     return res.status(400).json({ error: 'Missing hostId or lines' })
   }
 
+  let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
@@ -160,6 +283,29 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       taxCents,
     })
 
+    // Deterministic tender rejections run BEFORE the claim is taken, so they
+    // never burn the key (AGL-1691): "cash received is short" is a 400 the
+    // cashier fixes by taking more cash and pressing the same button, and a
+    // claimed key would replay the rejection forever. Hoisted above the card
+    // branch so one claim site covers every tender; both are no-ops for `link`.
+    if (payment === 'cash' && cashReceivedCents < totals.totalCents) {
+      return res.status(400).json({ error: 'Cash received is short' })
+    }
+    if (payment === 'folio' && !reservationId) {
+      return res.status(400).json({ error: 'Pick a reservation' })
+    }
+
+    // Point of no return: everything past here writes an order or moves money.
+    const claimed = await claimAttempt(firestore, {
+      hostId,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+
     if (payment === 'link') {
       // QR payment link on the merchant account, completed by webhook.
       const ownerProfile = await firestore
@@ -228,6 +374,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           headers: {
             Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
             'Content-Type': 'application/x-www-form-urlencoded',
+            // The half that costs real money (AGL-1691). Stripe replays the
+            // existing session for a repeated key instead of opening a second
+            // one on the merchant's live account, which covers the window
+            // where our own claim is written but the response never arrives.
+            ...(claim.stripeKey
+              ? { 'Idempotency-Key': claim.stripeKey }
+              : {}),
           },
           body: params.toString(),
         },
@@ -235,20 +388,18 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       const session = (await response.json()) as { url?: string; error?: any }
       if (!response.ok || !session.url) {
         await orderRef.delete().catch(() => undefined)
+        // The sale did not happen — let the same key be tried again rather
+        // than locking this basket out over one flaky moment.
+        await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
-      return res
-        .status(200)
-        .json({ orderId: orderRef.id, url: session.url, totals })
+      const cardPayload = { orderId: orderRef.id, url: session.url, totals }
+      await claim.record(200, cardPayload)
+      return res.status(200).json(cardPayload)
     }
 
-    // Cash (or folio) sale: paid immediately.
-    if (payment === 'cash' && cashReceivedCents < totals.totalCents) {
-      return res.status(400).json({ error: 'Cash received is short' })
-    }
-    if (payment === 'folio' && !reservationId) {
-      return res.status(400).json({ error: 'Pick a reservation' })
-    }
+    // Cash (or folio) sale: paid immediately. Tender validation for both ran
+    // above, before the claim.
     const orderRef = hostRef.collection('orders').doc()
     const counterRef = hostRef.collection('counters').doc('orders')
     await firestore.runTransaction(async (transaction) => {
@@ -350,14 +501,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         },
       })
     }
-    return res.status(200).json({
+    const cashPayload = {
       orderId: orderRef.id,
       totals,
       changeCents:
         payment === 'cash' ? cashReceivedCents - totals.totalCents : 0,
-    })
+    }
+    await claim.record(200, cashPayload)
+    return res.status(200).json(cashPayload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691). The order write itself may or may not have landed; the
+    // cashier reconciles from the orders list, which is the same position
+    // they were in before this endpoint had a claim at all.
+    await claim?.release()
     return res.status(500).json({ error: 'Sale failed' })
   }
 }

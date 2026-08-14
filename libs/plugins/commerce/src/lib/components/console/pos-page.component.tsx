@@ -144,11 +144,32 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   // is for RENDERING (it disables the settle buttons); a second tap arriving
   // before React has re-rendered would read the pre-click `false` out of the
   // handler's closure exactly the way `paying` was read above. The ref is
-  // written and read synchronously, so it holds whatever the scheduler does —
-  // and it has to hold: /api/commerce/pos-order carries no idempotency key, so
-  // one extra call is one extra `orders` doc and one extra Stripe Checkout
-  // session.
+  // written and read synchronously, so it holds whatever the scheduler does.
+  // It is no longer the last line of defence — the server dedupes on the
+  // attempt key below (AGL-1691) — but it is still the cheap one, and it stops
+  // the redundant round trip rather than merely making it harmless.
   const inFlight = useRef(false)
+  /**
+   * Idempotency key for ONE settlement attempt (AGL-1691).
+   *
+   * The guards above are all client-side and none of them survives a reload, a
+   * lost response, or a retry. `/api/commerce/pos-order` now dedupes on this
+   * key, but only if the key is right, and the key is the whole design:
+   *
+   * - Minted lazily on the first settle of a basket, NOT per `settle()` call.
+   *   Per-call would defeat the point — two taps would mint two keys and the
+   *   server would see two distinct sales.
+   * - Retired whenever the register's contents change (the effect below),
+   *   which covers the sale completing and clearing the lines. So a cashier
+   *   ringing the same coffee twice gets a NEW key and a real second order —
+   *   de-duplicating that would be a worse bug than the one being fixed.
+   */
+  const attemptKey = useRef('')
+  useEffect(() => {
+    // A different basket is a different attempt. Also fires when `settle`
+    // clears the lines, which is what retires a spent key.
+    attemptKey.current = ''
+  }, [lines, discountPct])
   const [lastReceipt, setLastReceipt] = useState<{
     lines: RegisterLine[]
     totalCents: number
@@ -250,12 +271,21 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     }
     inFlight.current = true
     setBusy(true)
+    // Reuse the key across retries of this basket; mint one if this is the
+    // first attempt (AGL-1691). `randomUUID` needs a secure context, which the
+    // console always is, but fall back rather than throw on a settle.
+    if (!attemptKey.current) {
+      attemptKey.current =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
     try {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/commerce/pos-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': attemptKey.current,
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
