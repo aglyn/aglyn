@@ -26,6 +26,7 @@ import {
   firebaseAdmin,
   generateMediaVariants,
   isImpersonationSession,
+  quarantinedUploadRefusal,
 } from '@aglyn/tenant-data-admin'
 import {
   mediaObjectPath,
@@ -140,6 +141,44 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 413 })
     }
 
+    // Same pair as the upload route, same reasoning (AGL-1614): the
+    // truncated `contentHash` stays the ETag and the immutable URL segment,
+    // and the full-width `contentSha256` is the quarantine key. Computed
+    // before the Storage write (AGL-1613) because it is a gate now.
+    const contentSha256 = createHash('sha256')
+      .update(new Uint8Array(buffer))
+      .digest('hex')
+    const contentHash = contentSha256.slice(0, 16)
+    // Asset quarantine at INGESTION (AGL-1613), and this route needs BOTH
+    // questions asked.
+    //
+    // 1. Are the INCOMING bytes quarantined? Replace is the second door onto
+    //    the same collection, and a takedown that only the upload route
+    //    honoured would be trivially walked around by uploading anything and
+    //    then replacing its bytes with the disabled file.
+    // 2. Is the TARGET asset quarantined? Its per-asset fallback key and its
+    //    existing digests both keep biting at the CDN after a replace, so
+    //    allowing the swap would produce a "successful" replace whose result
+    //    still 410s — the precise confusing outcome AGL-1613 exists to end.
+    //    Refusing says so instead.
+    //
+    // Two calls because they are two different key sets; the second is free —
+    // the deny list is one already-cached document. Both run before the
+    // previous variants are deleted, before `file.save`, and before the
+    // counter delta, so a refused replace leaves the existing asset and the
+    // billing input exactly as they were.
+    {
+      const refusal =
+        (await quarantinedUploadRefusal({ contentSha256, contentHash })) ??
+        (await quarantinedUploadRefusal({
+          contentSha256: mediaSnapshot.get('contentSha256'),
+          contentHash: mediaSnapshot.get('contentHash'),
+          scopeSegment: scope.cdnScope,
+          mediaId,
+        }))
+      if (refusal) return refusal
+    }
+
     const previousBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
     // Quota rides the owning org's doc (AGL-238).
     const org = scope.billing
@@ -198,13 +237,6 @@ async function handler(request: Request): Promise<Response> {
       `?alt=media&token=${token}`
 
     const dimensions = readImageDimensions(new Uint8Array(buffer))
-    // Same pair as the upload route, same reasoning (AGL-1614): the
-    // truncated `contentHash` stays the ETag and the immutable URL segment,
-    // and the full-width `contentSha256` is the quarantine key.
-    const contentSha256 = createHash('sha256')
-      .update(new Uint8Array(buffer))
-      .digest('hex')
-    const contentHash = contentSha256.slice(0, 16)
     // Replacing the bytes of a PRIVATE asset must not hand it a `cdnPath`
     // (AGL-1051) — that would quietly publish it, and the `: delete()`
     // branch below means the field is actively removed if one lingers.

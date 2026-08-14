@@ -31,6 +31,7 @@ import {
   firebaseAdmin,
   generateMediaVariants,
   isImpersonationSession,
+  quarantinedUploadRefusal,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import {
@@ -185,6 +186,44 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 413 })
     }
 
+    // Hashed ONCE, stored twice (AGL-1614). `contentHash` keeps its historic
+    // 16-hex truncation because it is the ETag and the immutable URL's path
+    // segment — widening it would change live cache validators and 404 every
+    // pre-AGL-829 3-segment embed. `contentSha256` is the same digest at full
+    // width, and it is what asset quarantine keys on: 64 truncated bits from
+    // one of two algorithms is a fine cache validator and a poor security
+    // key.
+    //
+    // Computed HERE rather than after the object is saved (AGL-1613) because
+    // the digest is now a gate and not only a field. Over the sanitized
+    // buffer, so the key matches the bytes that would actually be served.
+    const contentSha256 = createHash('sha256')
+      .update(new Uint8Array(buffer))
+      .digest('hex')
+    const contentHash = contentSha256.slice(0, 16)
+    // Asset quarantine, at INGESTION (AGL-1613). AGL-1512 keys the deny list
+    // by digest so that re-uploading the same bytes stays quarantined, and
+    // enforced it at delivery only — so a customer whose file was taken down
+    // could re-upload it, be billed for it, and watch it 410 with nothing to
+    // explain why. Refused before the Storage write, before the media
+    // document, and before `counters/media` moves.
+    //
+    // Digests only: this route is about to MINT a media id, so the per-asset
+    // fallback key cannot match anything and passing it would only widen the
+    // lookup for no reason.
+    //
+    // Ordered ahead of the entitlement and quota gates deliberately. "These
+    // bytes are not accepted here" does not depend on the plan or on how much
+    // room is left, and refusing first also means a refused upload never
+    // reads `counters/media` at all.
+    {
+      const refusal = await quarantinedUploadRefusal({
+        contentSha256,
+        contentHash,
+      })
+      if (refusal) return refusal
+    }
+
     // Server-side quota: counter bytes + this file against the plan limit
     // (no enforcement until the org has an explicit plan — AGL-38 gate).
     const counterSnapshot = await scopeRef
@@ -250,17 +289,8 @@ async function handler(request: Request): Promise<Response> {
     // variants for images. Variant bytes are deliberately EXCLUDED from
     // the storage counter — they're derived artifacts the platform can
     // regenerate, so hosts aren't billed for them.
-    // Hashed ONCE, stored twice (AGL-1614). `contentHash` keeps its historic
-    // 16-hex truncation because it is the ETag and the immutable URL's path
-    // segment — widening it would change live cache validators and 404 every
-    // pre-AGL-829 3-segment embed. `contentSha256` is the same digest at full
-    // width, and it is what asset quarantine keys on: 64 truncated bits from
-    // one of two algorithms is a fine cache validator and a poor security
-    // key.
-    const contentSha256 = createHash('sha256')
-      .update(new Uint8Array(buffer))
-      .digest('hex')
-    const contentHash = contentSha256.slice(0, 16)
+    // `contentHash` / `contentSha256` are computed above, before the
+    // quarantine gate (AGL-1613) — the digest is a gate now, not just a field.
     // Paid gate (AGL-175 pricing): free workspaces serve raw storage URLs.
     // A plan-less org resolves as `free` (no CDN); overrides can still grant
     // it. `mediaCdn` is a Starter+ entitlement.

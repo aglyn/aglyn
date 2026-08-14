@@ -44,10 +44,12 @@ import {
   isMediaQuarantineActive,
   MEDIA_QUARANTINE_ENTRIES_FIELD,
   MEDIA_QUARANTINE_INDEX_DOC_ID,
+  MEDIA_QUARANTINE_UPLOAD_STATUS,
   MEDIA_QUARANTINES_COLLECTION,
   type MediaQuarantineEntry,
   type MediaQuarantineState,
   mediaQuarantineKeys,
+  mediaQuarantineRefusalBody,
   normalizeMediaQuarantine,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
@@ -140,4 +142,47 @@ export async function getMediaQuarantine(asset: {
     if (isMediaQuarantineActive(state, nowMs)) return state
   }
   return null
+}
+
+/**
+ * INGESTION refusal (AGL-1613) — the half AGL-1512 did not land.
+ *
+ * AGL-1512 keys quarantine by content digest precisely so that re-uploading
+ * the same bytes stays quarantined, and then kept that promise at DELIVERY
+ * only: `serveMediaCdn` refused the re-uploaded copy while the upload itself
+ * succeeded. The practical outcome for a customer whose malicious PDF was
+ * disabled was that they could re-upload it, it landed in their DAM, it was
+ * BILLED to their storage quota, and it 410'd for every visitor with nothing
+ * anywhere to say why. The control technically held and the product lied
+ * about it.
+ *
+ * So the chokepoints consult the same deny list before the write. It is the
+ * same one-document, TTL-cached read as the CDN's — a warm process pays
+ * nothing for this, and even a cold one pays one Firestore read on a path
+ * that is already doing several.
+ *
+ * **Returns a refusal, and leaves the cleanup to the caller.** A `Response`
+ * cannot delete an orphaned Storage object, and exactly one of the three
+ * chokepoints has one to delete (signed-upload finalize, where the bytes are
+ * in the bucket before anything of ours can look at them). Every caller must
+ * return this BEFORE it saves bytes, writes the media document, or moves
+ * `counters/media` — that counter is a billing input, and a refused upload
+ * that still incremented it would bill a customer for a file the platform
+ * refuses to keep.
+ */
+export async function quarantinedUploadRefusal(asset: {
+  contentSha256?: string | null
+  contentHash?: string | null
+  scopeSegment?: string | null
+  mediaId?: string | null
+}): Promise<Response | null> {
+  const state = await getMediaQuarantine(asset)
+  if (!state) return null
+  return Response.json(mediaQuarantineRefusalBody(state), {
+    status: MEDIA_QUARANTINE_UPLOAD_STATUS,
+    // A takedown is reversible and a refusal is per-request; nothing between
+    // here and the browser should be able to answer the next attempt from a
+    // cached copy of this one. Same reasoning as the CDN's `no-store`.
+    headers: { 'cache-control': 'no-store' },
+  })
 }

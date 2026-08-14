@@ -194,6 +194,22 @@ malware finding exists on a specific file is not something an anonymous fetcher
 has standing to learn. The owning workspace is told the reason in the console;
 the internet is told the file is gone.
 
+**What the owner sees if they upload it again:** a `403` that *does* explain
+itself. Quarantine is enforced at ingestion as well as at delivery — the upload,
+replace and large-file-finalize routes all consult the deny list before they
+write anything — so a re-upload of quarantined bytes is refused outright rather
+than accepted and then served as a 410. Nothing is stored, nothing is billed,
+and the customer gets the same "this file was disabled … it has not been
+deleted" notice with the support address. Replacing the bytes of a quarantined
+asset is refused for the same reason: the takedown would keep biting on the new
+bytes, so a "successful" replace would have produced a file that still refuses
+to load.
+
+The ingestion gate inherits the hash limits above: it matches within an upload
+route, not across them, and a very large file with no digest at all is covered
+at delivery by its per-asset key rather than at ingestion. Where the file has to
+be unavailable *and* un-re-uploadable through every path, lock the scope.
+
 **Billing is untouched, on purpose.** Quarantine does not delete the object,
 does not modify the media document, and does not change the storage counter.
 The file still exists and still belongs to the workspace — it is *suppressed*,
