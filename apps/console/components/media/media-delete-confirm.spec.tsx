@@ -25,16 +25,37 @@
  * it must not do is hold the dialog closed, because a button that does
  * nothing for a second reads as broken and gets clicked again.
  *
- * So this is measured, not asserted by feel. Both shapes are built here over
- * the REAL `ConfirmationProviderComponent`, with the same simulated scan
- * duration, and the elapsed time from click to a visible dialog is compared:
+ * So this is asserted, not taken on feel. Both shapes are built here over the
+ * REAL `ConfirmationProviderComponent`, with the same simulated scan:
  *
  *   old — `await scanReferences(...)` then `confirm({ description: string })`
  *   new — `confirm({ description: <MediaDeleteConfirmDescription scan={…}/> })`
  *
- * The new shape must open in a small constant time regardless of the scan,
- * and must then FILL IN the reference warning when it lands — showing the
- * dialog early is only an improvement if the warning still arrives.
+ * The new shape must open regardless of the scan, and must then FILL IN the
+ * reference warning when it lands — showing the dialog early is only an
+ * improvement if the warning still arrives.
+ *
+ * ## Asserted as ORDERING, not as duration (AGL-1740)
+ *
+ * These two tests used to time the click-to-dialog gap with `performance.now()`
+ * and assert it came in under a fraction of the simulated scan. That made the
+ * result a fact about the machine as much as about the code: the margin held
+ * on an idle box and went red on a worker starved by 262 sibling suites, where
+ * it was read as a regression more than once before being recognised as the
+ * threshold giving way.
+ *
+ * The claim underneath was never about milliseconds. It is an ORDERING — the
+ * dialog is on screen while the scan is still outstanding. Under fake timers
+ * that is exact rather than probable: the scan is a `setTimeout` nobody has
+ * advanced, so "before the scan resolves" is a state the test HOLDS instead of
+ * a deadline it hopes to beat, and a starved worker cannot change the answer.
+ *
+ * The two tests are each other's control. The same query runs at the same
+ * point on the timeline over both shapes and gives opposite answers: a dialog
+ * for the new one, none for the old. That is what makes the assertion
+ * non-vacuous — a change that made the new shape await the scan would move it
+ * onto the old shape's answer and turn the first test red, which is the job
+ * the timing assertion was there to do.
  */
 
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -56,8 +77,10 @@ import type { MediaScanCoverage } from './media-usage-copy'
  * ~38 sequential round trips costs nothing there and costs real latency
  * against production Firestore, on top of the client's own request.
  *
- * The assertions are about the RELATIONSHIP between this and the
- * time-to-dialog, so the exact value only has to be well clear of a render.
+ * Nothing is timed against it any more (AGL-1740) — it is now the delay on a
+ * fake timer, and the assertions turn on whether that timer has been advanced
+ * rather than on how long anything took. The real figure is kept because it is
+ * what makes the scenario a realistic one to hold pending.
  */
 const SCAN_MS = 750
 
@@ -66,15 +89,19 @@ type Scan = { coverage: MediaScanCoverage; names: string[] } | null
 const slowScan = (result: Scan): Promise<Scan> =>
   new Promise((resolve) => setTimeout(() => resolve(result), SCAN_MS))
 
-/** The click-to-dialog measurement, in milliseconds. */
-async function timeToDialog(open: () => void): Promise<number> {
-  const started = performance.now()
-  act(() => open())
-  await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy(), {
-    timeout: 5000,
-    interval: 5,
+/**
+ * Let React flush the work the click queued WITHOUT letting the scan's timer
+ * fire, so the assertion that follows is made with the scan still outstanding.
+ *
+ * `waitFor` cannot be used for this: under fake timers RTL advances them
+ * itself, which would resolve the very scan the test needs held pending and
+ * quietly turn the ordering assertion back into a timing one.
+ */
+async function settleWithScanPending(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
   })
-  return performance.now() - started
 }
 
 function Harness(props: { onReady: (open: () => void) => void }) {
@@ -110,18 +137,22 @@ function LegacyHarness(props: { onReady: (open: () => void) => void }) {
   return null
 }
 
-describe('delete confirmation latency (AGL-1461)', () => {
-  it('opens the dialog without waiting for the usage scan', async () => {
+describe('delete confirmation ordering (AGL-1461/AGL-1740)', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('opens the dialog while the usage scan is still outstanding', async () => {
     let open = () => undefined as void
     render(
       <ConfirmationProviderComponent>
         <Harness onReady={(fn) => (open = fn)} />
       </ConfirmationProviderComponent>,
     )
-    const elapsed = await timeToDialog(open)
-    // A render, not a round trip. Generous against a starved CI worker and
-    // still an order of magnitude under the scan it used to wait on.
-    expect({ elapsed: elapsed < SCAN_MS / 4 }).toEqual({ elapsed: true })
+    act(() => open())
+    await settleWithScanPending()
+    // The scan's timer has NOT been advanced, so this dialog cannot be on the
+    // far side of it.
+    expect(screen.queryByRole('dialog')).not.toBeNull()
   })
 
   it('is the scan, and only the scan, that the old shape waited on', async () => {
@@ -131,8 +162,19 @@ describe('delete confirmation latency (AGL-1461)', () => {
         <LegacyHarness onReady={(fn) => (open = fn)} />
       </ConfirmationProviderComponent>,
     )
-    const elapsed = await timeToDialog(open)
-    expect({ elapsed: elapsed >= SCAN_MS }).toEqual({ elapsed: true })
+    act(() => open())
+    await settleWithScanPending()
+    // The same query at the same point on the timeline as the test above, and
+    // the opposite answer. This is what proves that assertion discriminates.
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // And it was the scan in the way, nothing else: advance exactly it.
+    await act(async () => {
+      jest.advanceTimersByTime(SCAN_MS)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(screen.queryByRole('dialog')).not.toBeNull()
   })
 })
 
