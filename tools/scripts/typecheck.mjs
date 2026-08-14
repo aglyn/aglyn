@@ -49,6 +49,17 @@
  * from a manifest is not a type error. Both cases end in the same place: a
  * green typecheck read as proof that a generated file matches its source,
  * when the compiler never had any way to tell.
+ *
+ * ## A per-project `tsc -p .../tsconfig.lib.json` is NOT this gate (AGL-1725)
+ *
+ * Every lib's tsconfig.lib.json carries `"exclude": ["**\/*.spec.ts", ...]`.
+ * So `tsc -p libs/<x>/tsconfig.lib.json --noEmit` can exit 0 while the spec
+ * file you just wrote does not compile — only tsconfig.spec.json reads it, and
+ * CI runs this script, which runs both. AGL-1725 shipped a type error in
+ * libs/aglyn/src/lib/app-utils/author-css.spec.ts behind exactly that: real
+ * verification, pointed at a config that excluded the file it was verifying.
+ * Verify with `npm run typecheck` (optionally `node tools/scripts/typecheck.mjs
+ * libs/aglyn` to filter by path prefix) and read the exit code bare.
  */
 
 import { execFile } from 'node:child_process'

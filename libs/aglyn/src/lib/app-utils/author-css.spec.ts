@@ -171,7 +171,13 @@ describe('sanitizeAuthorSx (AGL-1725)', () => {
 
   it('passes non-string leaves through untouched', () => {
     const fn = () => ({ color: 'red' })
-    const sx = { p: 3, m: null, fn }
+    // `m` needs the annotation: strictNullChecks is off repo-wide, so a bare
+    // `null` literal in an object would infer as an implicit `any` (TS7018).
+    const sx: { p: number; m: string | null; fn: () => { color: string } } = {
+      p: 3,
+      m: null,
+      fn,
+    }
     const out = sanitizeAuthorSx(sx) as any
     expect(out).toBe(sx)
     expect(out.fn).toBe(fn)
