@@ -123,6 +123,17 @@ real error.
 4. Lift it from the same page. Lifting also evicts stale notice pages, restores
    member write access, and is audited like the lock was.
 
+### What the audit row records
+
+Every lock and lift writes an `adminAudit` row carrying the actor, the `scope`,
+the target path, and — in `before` and `after` — the `reason`, the
+customer-facing `message`, and the end time as `untilMs`. Recording the end
+time is the point: it is the only thing that distinguishes a deliberate
+time-boxed lock from an indefinite one nobody came back to, and on a lift it
+says whether a time-boxed lock was released early or a forgotten one was
+cleaned up. A `null` in any of those three means the lock genuinely carried no
+reason, no message, or no expiry.
+
 Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the
 `AUTO_LOCK_BILLING_FROM` environment variable to a start month (`YYYY-MM`) — a

@@ -77,10 +77,45 @@ const SCOPES = new Set(['platform', 'org', 'host', 'user', 'feature'])
  */
 const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
 
+/**
+ * The lock's shape as the audit trail has to remember it (AGL-1572).
+ *
+ * A row that says `locked: true` and nothing else cannot tell "staff armed
+ * a 15-minute dead-man lock" from "staff armed an indefinite one and walked
+ * away" — the single distinction that decides, weeks later, whether a lock
+ * that outlived its incident was procedure or an accident. The same applies
+ * in reverse on a lift: `before.untilMs` is what says whether the operator
+ * released a time-boxed lock early or cleaned up a forgotten one.
+ *
+ * `message` rides along because it is the only record of what the affected
+ * customers were actually told.
+ *
+ * `null` rather than `undefined` throughout: Firestore rejects undefined
+ * values by default, and an ABSENT key reads as "this trail never captured
+ * expiry at all" — exactly the ambiguity this function exists to end.
+ */
+function auditLockShape(lock: {
+  reason?: unknown
+  message?: unknown
+  untilMs?: unknown
+}): { reason: string | null; message: string | null; untilMs: number | null } {
+  return {
+    reason: typeof lock.reason === 'string' ? lock.reason : null,
+    message: typeof lock.message === 'string' ? lock.message : null,
+    untilMs: typeof lock.untilMs === 'number' ? lock.untilMs : null,
+  }
+}
+
 async function audit(options: {
   actorUid: string
   actorEmail?: string | null
   action: string
+  /**
+   * Stored top-level so the audit log filters by scope on an equality
+   * match. It is derivable from `target`, but only by prefix-matching a
+   * path — and `lockdowns/` alone covers three different scopes.
+   */
+  scope: string
   target: string
   before: Record<string, unknown>
   after: Record<string, unknown>
@@ -89,6 +124,7 @@ async function audit(options: {
     actorUid: options.actorUid,
     actorEmail: options.actorEmail ?? null,
     action: options.action,
+    scope: options.scope,
     target: options.target,
     before: options.before,
     after: options.after,
@@ -220,11 +256,12 @@ async function handler(request: Request): Promise<Response> {
       await audit({
         ...actor,
         action: `lockdown.${action}`,
+        scope: 'platform',
         target: `lockdowns/${PLATFORM_LOCKDOWN_DOC_ID}`,
-        before: { locked: before != null, reason: before?.['reason'] ?? null },
+        before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
-          ...(action === 'lock' ? { reason: lock.reason } : {}),
+          ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
       return Response.json({ ok: true, scope, action }, { status: 200 })
@@ -271,12 +308,13 @@ async function handler(request: Request): Promise<Response> {
       await audit({
         ...actor,
         action: `lockdown.${action}`,
+        scope: 'feature',
         target: `lockdowns/${featureLockdownDocId(targetId)}`,
-        before: { locked: before != null, reason: before?.['reason'] ?? null },
+        before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
           feature: targetId,
-          ...(action === 'lock' ? { reason: lock.reason } : {}),
+          ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
       return Response.json(
@@ -342,11 +380,12 @@ async function handler(request: Request): Promise<Response> {
       await audit({
         ...actor,
         action: `lockdown.${action}`,
+        scope: 'user',
         target: `users/${targetId}`,
-        before: { locked: before != null, reason: before?.['reason'] ?? null },
+        before: { locked: before != null, ...auditLockShape(before ?? {}) },
         after: {
           locked: action === 'lock',
-          ...(action === 'lock' ? { reason: lock.reason } : {}),
+          ...(action === 'lock' ? auditLockShape(lock) : {}),
         },
       })
       return Response.json({ ok: true, scope, action }, { status: 200 })
@@ -374,11 +413,21 @@ async function handler(request: Request): Promise<Response> {
       await audit({
         ...actor,
         action: `lockdown.${action}`,
+        scope: 'org',
         target: `orgs/${targetId}`,
-        before: { locked: orgSnapshot.get('suspendedAt') != null },
+        before: {
+          locked: orgSnapshot.get('suspendedAt') != null,
+          // The org scope carries the lock on the org doc's `suspended*`
+          // family, not in `lockdowns/*` — same three facts, other names.
+          ...auditLockShape({
+            reason: orgSnapshot.get('suspendedReasonCode'),
+            message: orgSnapshot.get('suspendedMessage'),
+            untilMs: orgSnapshot.get('suspendedUntilMs'),
+          }),
+        },
         after: {
           locked: action === 'lock',
-          ...(action === 'lock' ? { reason: lock.reason } : {}),
+          ...(action === 'lock' ? auditLockShape(lock) : {}),
           tokensRevoked: result.tokensRevoked,
         },
       })
@@ -401,11 +450,19 @@ async function handler(request: Request): Promise<Response> {
     await audit({
       ...actor,
       action: `lockdown.${action}`,
+      scope: 'host',
       target: `hosts/${targetId}`,
-      before: { locked: hostSnapshot.get('suspendedAt') != null },
+      before: {
+        locked: hostSnapshot.get('suspendedAt') != null,
+        ...auditLockShape({
+          reason: hostSnapshot.get('suspendedReasonCode'),
+          message: hostSnapshot.get('suspendedMessage'),
+          untilMs: hostSnapshot.get('suspendedUntilMs'),
+        }),
+      },
       after: {
         locked: action === 'lock',
-        ...(action === 'lock' ? { reason: lock.reason } : {}),
+        ...(action === 'lock' ? auditLockShape(lock) : {}),
       },
     })
     return Response.json({ ok: true, scope, action, ...result }, { status: 200 })
