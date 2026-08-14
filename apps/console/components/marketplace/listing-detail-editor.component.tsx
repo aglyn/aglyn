@@ -32,9 +32,10 @@ import {
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
-import MarkdownField, {
+import {
+  MarkdownField,
   type MarkdownFieldHandle,
-} from '../markdown-field.component'
+} from '@aglyn/aglyn-markdown-editor'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import mediaSrc from '../../utils/media-src'
 

@@ -74,6 +74,39 @@ interface LockState {
   readAtMs: number
 }
 
+/**
+ * The answer to "what would this caller be told right now", mirroring the
+ * verdict probe in /api/admin/lockdown (AGL-1573). `kind` is deliberately
+ * on the wire and rendered: this is a COMPUTED verdict, never a wire
+ * observation, and the difference is the whole reason the panel exists.
+ */
+interface VerdictProbe {
+  kind: string
+  note: string
+  computedAtMs: number
+  subject: {
+    uid: string | null
+    orgId: string | null
+    hostId: string | null
+    uidExists: boolean | null
+    orgExists: boolean | null
+    hostExists: boolean | null
+    staff: boolean | null
+  }
+  evaluated: string[]
+  staffBypass: boolean
+  locked: boolean
+  verdict: {
+    scope: string
+    reason: string
+    message?: string
+    atMs?: number
+    untilMs?: number
+  } | null
+  refusal: { status: number; body: unknown } | null
+  features: { feature: string; locked: boolean; body: unknown }[]
+}
+
 interface ActionLogEntry {
   atMs: number
   text: string
@@ -143,6 +176,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const scopedStateIsCurrent =
     scopedState?.scope === scope && scopedState?.targetId === targetId.trim()
 
+  // Verdict probe form (AGL-1573).
+  const [verdictUid, setVerdictUid] = useState('')
+  const [verdictOrgId, setVerdictOrgId] = useState('')
+  const [verdictHostId, setVerdictHostId] = useState('')
+  const [verdict, setVerdict] = useState<VerdictProbe | null>(null)
+
   const platformRecord = records.find((record) => record.id === 'platform')
 
   const refresh = useCallback(async () => {
@@ -193,6 +232,43 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       setBusy(false)
     }
   }, [user, scope, targetId, enqueueSnackbar])
+
+  /**
+   * Ask the server what a DESCRIBED caller would be told (AGL-1573). Staff
+   * cannot be that caller — the un-panic invariant makes their own verdict
+   * null on every scope — so the only way to see a customer's refusal from
+   * this page is to have the server evaluate it for them.
+   */
+  const evaluateVerdict = useCallback(async () => {
+    const idToken = await (user as any)?.getIdToken?.()
+    if (!idToken) return
+    const params = new URLSearchParams({ verdict: '1' })
+    if (verdictUid.trim()) params.set('uid', verdictUid.trim())
+    if (verdictOrgId.trim()) params.set('orgId', verdictOrgId.trim())
+    if (verdictHostId.trim()) params.set('hostId', verdictHostId.trim())
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/admin/lockdown?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Failed (${response.status})`)
+      }
+      setVerdict(payload as VerdictProbe)
+    } catch (error: any) {
+      console.error(error)
+      // Clear rather than keep: a verdict about a previous subject, shown
+      // beside a new one, is the stale-panel bug wearing a new face.
+      setVerdict(null)
+      enqueueSnackbar(error?.message ?? 'Evaluating the verdict failed', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [user, verdictUid, verdictOrgId, verdictHostId, enqueueSnackbar])
 
   useEffect(() => {
     if (isStaff) void refresh()
@@ -696,6 +772,185 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     }
                   </Typography>
                 )}
+              </Stack>
+            </CardDisplay>
+
+            <CardDisplay
+              header={'What would this caller be told?'}
+              help={docsHelp('lockdown', { anchor: '#what-a-caller-is-told' })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  {
+                    'You cannot be the refused caller: staff bypass every scope, and dropping your credential gets you a 401 before the verdict runs. So describe the caller instead — a uid, a workspace, a site — and the server runs the same verdict every API route runs, and shows you the exact 423 it would return. Use it during an incident to answer "what is this customer actually seeing right now".'
+                  }
+                </Typography>
+                <Alert severity="info">
+                  {
+                    'This is a COMPUTED verdict, not a wire observation. It is what this server derives from state it reads now — it does not prove any route returned it, and other server processes can be up to 15 seconds behind.'
+                  }
+                </Alert>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  <TextField
+                    size="small"
+                    label="User uid (optional)"
+                    value={verdictUid}
+                    onChange={(event) => {
+                      setVerdictUid(event.target.value)
+                      setVerdict(null)
+                    }}
+                    sx={{ minWidth: 240 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Org id (optional)"
+                    value={verdictOrgId}
+                    onChange={(event) => {
+                      setVerdictOrgId(event.target.value)
+                      setVerdict(null)
+                    }}
+                    sx={{ minWidth: 240 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Host id (optional)"
+                    value={verdictHostId}
+                    onChange={(event) => {
+                      setVerdictHostId(event.target.value)
+                      setVerdict(null)
+                    }}
+                    sx={{ minWidth: 240 }}
+                  />
+                  <Button
+                    variant="contained"
+                    disabled={
+                      busy ||
+                      (!verdictUid.trim() &&
+                        !verdictOrgId.trim() &&
+                        !verdictHostId.trim())
+                    }
+                    onClick={() => void evaluateVerdict()}
+                  >
+                    {'Evaluate'}
+                  </Button>
+                </Stack>
+
+                {verdict ? (
+                  <Stack spacing={1}>
+                    <Alert
+                      severity={
+                        verdict.staffBypass
+                          ? 'warning'
+                          : verdict.locked
+                            ? 'error'
+                            : 'success'
+                      }
+                    >
+                      <Stack spacing={0.5}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                        >
+                          <Chip
+                            label={
+                              verdict.staffBypass
+                                ? 'STAFF — BYPASSES EVERY SCOPE'
+                                : verdict.locked
+                                  ? `REFUSED ${verdict.refusal?.status ?? 423}`
+                                  : 'NOT REFUSED'
+                            }
+                            color={
+                              verdict.staffBypass
+                                ? 'warning'
+                                : verdict.locked
+                                  ? 'error'
+                                  : 'success'
+                            }
+                            size="small"
+                          />
+                          {verdict.verdict ? (
+                            <Typography variant="body2">
+                              {`${verdict.verdict.scope} — ${verdict.verdict.reason}${
+                                verdict.verdict.untilMs
+                                  ? ` — until ${new Date(verdict.verdict.untilMs).toLocaleString()}`
+                                  : ''
+                              }`}
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                        {verdict.staffBypass ? (
+                          <Typography variant="body2">
+                            {
+                              'That account carries the staff claim, so it is never refused by any lockdown — this answer says nothing about whether a lock is engaged.'
+                            }
+                          </Typography>
+                        ) : null}
+                        <Typography variant="caption" color="text.secondary">
+                          {`Scopes evaluated: ${verdict.evaluated.join(', ')}. Anything you left blank was NOT evaluated — a "not refused" here is not a claim about a scope nobody asked about.`}
+                        </Typography>
+                      </Stack>
+                    </Alert>
+
+                    {verdict.subject.uid && verdict.subject.uidExists === false ? (
+                      <Alert severity="warning">
+                        {'No account with that uid — check the id.'}
+                      </Alert>
+                    ) : null}
+                    {verdict.subject.orgId && !verdict.subject.orgExists ? (
+                      <Alert severity="warning">
+                        {'No workspace with that org id — the org scope was skipped, not cleared.'}
+                      </Alert>
+                    ) : null}
+                    {verdict.subject.hostId && !verdict.subject.hostExists ? (
+                      <Alert severity="warning">
+                        {'No site with that host id — the host scope was skipped, not cleared.'}
+                      </Alert>
+                    ) : null}
+
+                    {verdict.refusal ? (
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2">
+                          {`The exact response that caller receives (HTTP ${verdict.refusal.status}):`}
+                        </Typography>
+                        <Typography
+                          component="pre"
+                          variant="caption"
+                          sx={{
+                            fontFamily: 'monospace',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            bgcolor: 'action.hover',
+                            borderRadius: 1,
+                            p: 1,
+                            m: 0,
+                          }}
+                        >
+                          {JSON.stringify(verdict.refusal.body, null, 2)}
+                        </Typography>
+                      </Stack>
+                    ) : null}
+
+                    <Typography variant="body2">
+                      {verdict.features.some((entry) => entry.locked)
+                        ? `Capabilities refused for this caller: ${verdict.features
+                            .filter((entry) => entry.locked)
+                            .map((entry) => entry.feature)
+                            .join(', ')}.`
+                        : 'No capability is refused for this caller.'}
+                    </Typography>
+
+                    <Typography variant="caption" color="text.secondary">
+                      {`Computed at ${timeOf(verdict.computedAtMs)}. ${verdict.note}`}
+                    </Typography>
+                  </Stack>
+                ) : null}
               </Stack>
             </CardDisplay>
 

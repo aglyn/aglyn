@@ -234,9 +234,17 @@ export function toEpochMs(value: unknown): number | undefined {
   return undefined
 }
 
-/** Active now? Expiry passing deactivates without any write. */
+/**
+ * Active now? Expiry passing deactivates without any write.
+ *
+ * Typed on the only field it reads rather than on `LockdownState`, so the
+ * sibling levers built on the same field family — asset quarantine
+ * (AGL-1512) — share this definition of "expired" instead of restating it.
+ * A second copy is how two panic levers end up disagreeing about whether a
+ * window that closed one millisecond ago is still in force.
+ */
 export function isLockdownActive(
-  state: LockdownState | null | undefined,
+  state: { untilMs?: number } | null | undefined,
   nowMs: number,
 ): boolean {
   if (!state) return false

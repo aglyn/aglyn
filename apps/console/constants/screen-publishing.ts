@@ -16,11 +16,15 @@
  */
 
 import type { HostUid, ScreenUid } from '@aglyn/aglyn'
-import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  isFirstPublishedRoute,
+  trackEvent,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   deleteField,
   doc,
+  getDoc,
   setDoc,
   updateDoc,
   type Firestore,
@@ -41,6 +45,25 @@ export async function publishScreenRoute(
   path: string = slug,
 ): Promise<void> {
   const { hostId, screenId } = ids
+  // Read the routing map BEFORE writing to it (AGL-1588). `first_publish`
+  // asks what the map looked like a moment ago, and a moment later it can
+  // never be empty. One extra document read on a rare, deliberate, already
+  // multi-write action; the alternative was threading the map through six
+  // call sites as an optional argument, where a surface that forgot it would
+  // simply report nothing and look identical to one that answered `false`.
+  //
+  // Left `undefined` when the read fails: the param is optional, the
+  // sanitizer drops undefined, and one hit with no breakdown value is better
+  // than one asserting a `false` nobody checked.
+  let firstPublish: boolean | undefined
+  try {
+    const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
+    firstPublish = isFirstPublishedRoute(
+      hostSnapshot.get('screens') as Record<string, unknown> | undefined,
+    )
+  } catch {
+    firstPublish = undefined
+  }
   await Promise.all([
     // `publishedAt` records when the route went live; it rides the same merge
     // as the slug so publishing stamps it in one write (cleared on unpublish).
@@ -69,7 +92,14 @@ export async function publishScreenRoute(
   // No ids in the payload: the metric is "did this user ever publish", which
   // GA answers from the event alone, and a host id would be a resource
   // identifier bought for nothing.
-  trackEvent('site_published', {})
+  //
+  // `first_publish` (AGL-1588) is the one param worth the space, and it is
+  // registered as a custom dimension. It separates "the site came alive" from
+  // "a page was added to a live site" — which is the difference between the
+  // GTM §6 activation metric and a publish count, and is not back-fillable:
+  // a publish that already happened cannot be re-reported as a first one.
+  // See `isFirstPublishedRoute` for what all three publish paths mean by it.
+  trackEvent('site_published', { first_publish: firstPublish })
 }
 
 /**

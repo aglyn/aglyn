@@ -37,9 +37,19 @@ path yet are prompted to set one in Properties first.
 ## 3. Preview and publish
 
 1. Use the artboard **light/dark toggle** to check both color schemes.
-2. Save a **version** — you can name it and even schedule it to go live later.
+2. **Save** the canvas. Saving writes your working version — it isn't publishing.
 3. **Publish**. The screen's slug is registered in the routing map and the page goes live
    on your site's domain.
+
+:::info Keeping more than one version is a Pro feature
+Every screen is created with one working version, and **Save** updates that version on
+every plan — the core loop above needs nothing extra. Keeping *more* than one — named
+snapshots you can reopen, publish to roll back to, or schedule — requires **Pro or
+above**, and scheduling a version requires **Business or above**. On Free and Starter the
+editor answers *"Versioning requires a Pro plan — see Billing to upgrade"* instead of
+opening the name dialog. See
+[Versions & scheduled publishing](../building-sites/screens-and-layouts/overview.md#versions--scheduled-publishing).
+:::
 
 :::tip The Live button
 The **Live** button is environment-aware — in production it reflects your published

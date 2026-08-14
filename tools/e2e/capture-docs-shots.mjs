@@ -50,6 +50,11 @@ import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
+import {
+  assertNoStaffOnlyChrome,
+  installStaffOnlyChromeStyles,
+  preflightStaffOnlyChrome,
+} from './lib/staff-only-chrome.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -804,6 +809,12 @@ await context.addInitScript(() => {
   }
 })
 
+// The capture account is STAFF (see the account shape in
+// apps/docs/CONTRIBUTING.md), so its console keeps release-flagged-OFF tabs,
+// badged with a ⚑ no customer ever sees. Hide them from the first paint and
+// refuse any shot that still shows one (AGL-1600).
+await installStaffOnlyChromeStyles(context)
+
 // Sign in to the console through the real UI once (a synthetic
 // localStorage session races connectAuthEmulator — see console.e2e.mjs).
 {
@@ -816,6 +827,27 @@ await context.addInitScript(() => {
     timeout: TIMEOUT_MS,
   })
   await page.close()
+}
+
+// Prove the guard still sees what it hides, before shooting anything: a
+// guard that matches nothing reports exactly what a clean page does.
+{
+  // Warmed first — a cold compile of this route is a minute of navigation
+  // timeout that reads as the guard failing.
+  await fetch(`${CONSOLE_BASE}/${HOST_BASE}`).catch(() => undefined)
+  const page = await context.newPage()
+  const hidden = await preflightStaffOnlyChrome(page, {
+    url: `${CONSOLE_BASE}/${HOST_BASE}`,
+    waitFor: 'Demo Bakery',
+    timeout: TIMEOUT_MS,
+  }).catch((error) => error)
+  await page.close()
+  if (hidden instanceof Error) {
+    console.error(String(hidden.message))
+    await browser.close()
+    process.exit(1)
+  }
+  console.log(`GUARD staff-only chrome hidden: ${hidden.join(', ')}`)
 }
 
 const stripDevChrome = (page) =>
@@ -876,6 +908,9 @@ async function shot({ out, base, path, waitFor, actions = [], settleMs, clip }) 
     }
     await page.waitForTimeout(settleMs ?? 1500)
     await stripDevChrome(page)
+    // Last gate before the shutter: nothing only staff can see (AGL-1600).
+    // A no-op on the tenant shots, which have no console chrome at all.
+    await assertNoStaffOnlyChrome(page, out)
     const outPath = join(IMG_ROOT, out)
     mkdirSync(dirname(outPath), { recursive: true })
     await page.screenshot({ path: outPath, ...(clip ? { clip } : {}) })

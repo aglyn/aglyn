@@ -26,6 +26,7 @@ import {
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
+import { getMediaQuarantine } from './media-quarantine'
 import { verifyMediaAccess } from './media-signing'
 
 /** Variant widths generated at upload (AGL-175). */
@@ -451,19 +452,47 @@ async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
  * URL) and from the signature check (may the public fetch it): this asks
  * whether the platform is willing to serve the bytes to ANYONE.
  *
- * AGL-1512 (asset quarantine) extends THIS function: a contentHash
- * quarantine consult slots in beside the scope-lock check and returns its
- * own refusal kind — the handler's refusal path is already shaped for it.
- * Do not add a second conditional in the handler.
+ * Two independent reasons to refuse, both answered here so the handler
+ * keeps ONE refusal path:
+ *
+ * - `'locked'` — a lockdown covering this SCOPE (AGL-1520): the whole org
+ *   or host is off.
+ * - `'quarantined'` — this ASSET is on the deny list (AGL-1512): one
+ *   infected, abusive or DMCA-noticed file is off while everything else in
+ *   the same workspace keeps serving. That proportionality is the point —
+ *   a single bad object should not cost a customer their whole site.
+ *
+ * Order is scope-then-asset because the scope verdict is the cheaper cached
+ * one and the wider fact; the caller does not distinguish them on the wire
+ * (both are the same neutral 410), so the order is a cost decision only.
+ *
+ * Read cost, since this sits on the hottest unauthenticated path: the scope
+ * verdict is one read per SCOPE per 15s, and the quarantine deny list is
+ * one read per PROCESS per 15s for every asset in existence — it is a
+ * single document. Fifty DAM tiles pay two reads between them, not a
+ * hundred.
  */
 export async function mediaCdnServeBlock(
   scope: MediaCdnScope,
-  _asset: {
-    /** For the AGL-1512 quarantine consult; unused by the lock check. */
+  asset: {
     contentHash?: string
+    /**
+     * The raw URL scope segment and media id — the fallback quarantine key
+     * for the assets that carry no `contentHash` at all (legacy uploads,
+     * and composite objects GCS gives no md5 for). Without it the largest
+     * files in the product would be the ones a takedown could not touch.
+     */
+    scopeSegment?: string
+    mediaId?: string
   },
-): Promise<'locked' | null> {
-  return (await mediaCdnScopeLocked(scope)) ? 'locked' : null
+): Promise<'locked' | 'quarantined' | null> {
+  if (await mediaCdnScopeLocked(scope)) return 'locked'
+  const quarantined = await getMediaQuarantine({
+    contentHash: asset.contentHash,
+    scopeSegment: asset.scopeSegment,
+    mediaId: asset.mediaId,
+  })
+  return quarantined ? 'quarantined' : null
 }
 
 /**
@@ -675,32 +704,47 @@ export async function serveMediaCdn(
       res.status(404).json({ error: 'Not found' })
       return
     }
-    // Lockdown gate (AGL-1520) — see mediaCdnServeBlock for the reason
-    // matrix, the read-cost accounting and the staleness bound. Three shape
-    // decisions, argued:
+    // Delivery gate — scope lockdown (AGL-1520) and asset quarantine
+    // (AGL-1512). See mediaCdnServeBlock for the reason matrix, the
+    // read-cost accounting and the staleness bound. Three shape decisions,
+    // argued, and all three apply to BOTH refusal kinds:
     //
     // **Before the ETag/304 exit**, necessarily: a browser revalidating its
-    // 60s copy during a lock must be refused, not handed a 304 that renews
-    // the copy for another minute.
+    // 60s copy during a lock or a quarantine must be refused, not handed a
+    // 304 that renews the copy for another minute.
     //
-    // **410, not 423.** The 423 body is the AGL-1506 discipline for
-    // authenticated API consumers who deserve "suspended: billing"; this
-    // response answers anonymous `<img>` fetches nobody parses, and a 423
-    // would confirm to any prober that a lock exists — which for a security
-    // lock is information. 410 Gone is neutral, indistinguishable in kind
-    // from a deleted asset, and tells well-behaved consumers to drop the
-    // link. (404 would also be neutral, but 410's "permanently gone"
+    // **410, not 423, and identical for both kinds.** The 423 body is the
+    // AGL-1506 discipline for authenticated API consumers who deserve
+    // "suspended: billing"; this response answers anonymous `<img>` fetches
+    // nobody parses, and a 423 would confirm to any prober that a lock
+    // exists — which for a security lock is information. It is information
+    // for a quarantine too, and of a worse kind: the existence of a DMCA
+    // notice or a malware finding on a specific file is not something an
+    // anonymous fetcher has standing to learn, and telling quarantine apart
+    // from lockdown on the wire would leak which one it was. So the owning
+    // org learns the reason in the console (`mediaQuarantineNotice`), and
+    // the CDN says only `410 Gone` — neutral, indistinguishable in kind
+    // from a deleted asset, and a hint to well-behaved consumers to drop
+    // the link. (404 would also be neutral, but 410's "permanently gone"
     // semantics discourage retry loops from embedders.)
     //
     // **`no-store`, absolutely** (the AGL-1515 lesson): the refusal is a
     // function of a TTL'd verdict, not of the URL — a cached refusal would
     // weld the asset's URL identity to "gone" past the unlock, and edge
     // entries have no per-asset purge. The 60s negative window the 404s use
-    // is not acceptable here either: an unlock must restore delivery as
-    // fast as the lock stopped it. CSP + nosniff are already on the
-    // response (set first, before any exit).
+    // is not acceptable here either. For quarantine that argument is
+    // strictly stronger than for lockdown: REVERSIBILITY is the whole
+    // reason quarantine exists instead of deletion, so a cached 410 that
+    // outlived the lift would defeat the feature's only advantage over the
+    // irreversible option. The refusal is also nearly free to re-serve —
+    // the verdict is one Firestore read per process per 15s for the entire
+    // deny list, and the body is a few bytes with no Storage read — so
+    // there is no saving to weigh against it. CSP + nosniff are already on
+    // the response (set first, before any exit).
     const blockedBy = await mediaCdnServeBlock(scope, {
       contentHash: currentHash,
+      scopeSegment,
+      mediaId,
     })
     if (blockedBy) {
       res.setHeader('Cache-Control', 'no-store')

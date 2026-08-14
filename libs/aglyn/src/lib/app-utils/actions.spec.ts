@@ -144,6 +144,46 @@ describe('nav-menu interactions surface (AGL-562)', () => {
     }
   })
 
+  it('refuses an analytics event name the runtime would have to drop (AGL-1587)', () => {
+    // The runtime cannot tell the author anything — it is executing for a
+    // visitor — so a name that would be refused there must be refused here,
+    // where the person who can rename it is looking.
+    for (const eventName of ['purchase', 'sign_up', 'Purchase', 'session_start', 'firebase_x']) {
+      expect(
+        validateHostAction({
+          ...base,
+          steps: [{ type: 'trackGaEvent', eventName }],
+        }),
+      ).toMatch(/reserved/)
+    }
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'trackGaEvent', eventName: '123' }],
+      }),
+    ).toMatch(/start with a letter/)
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'trackGaEvent', eventName: ' ' }],
+      }),
+    ).toMatch(/name the analytics event/)
+    // A normal authored name, and one that merely needs tidying, both pass —
+    // the runtime normalizes the second rather than dropping it.
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'trackGaEvent', eventName: 'quote_requested' }],
+      }),
+    ).toBeNull()
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'trackGaEvent', eventName: 'CTA Click!' }],
+      }),
+    ).toBeNull()
+  })
+
   it('accepts menu commands with and without an explicit target (AGL-568)', () => {
     for (const type of ['openMenu', 'closeMenu', 'toggleMenu'] as const) {
       expect(validateHostAction({ ...base, steps: [{ type }] })).toBeNull()

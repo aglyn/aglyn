@@ -1,0 +1,373 @@
+Last updated: August 14, 2026
+Effective date: August 5, 2026
+These Terms of Service ("
+Terms
+") are a binding legal agreement between
+Aglyn LLC
+, a Texas limited liability company (Texas Secretary of State File No. 803926393) with its registered office c/o Northwest Registered Agent, LLC., 5900 Balcones Drive STE 100, Austin, TX 78731 ("
+Aglyn
+," "
+we
+," "
+us
+," or "
+our
+"), and the person or entity that registers for, accesses, or uses the Services ("
+you
+," "
+your
+," "
+Customer
+," or "
+User
+"). By creating an account, clicking "I agree" (or similar), or accessing or using any part of the Services, you agree to be bound by these Terms. If you are entering into these Terms on behalf of an organization, you represent that you have authority to bind that organization, and "you" refers to that organization.
+If you do not agree to these Terms, do not access or use the Services.
+1. IMPORTANT NOTICES — PLEASE READ FIRST
+1.1 Early-Access Notice.
+The Services are under active development and have not reached a 1.0 release. You should expect that: (a) you may encounter bugs, errors, and interruptions; (b) features may change, be redesigned, or be discontinued at any time; and (c) features may move between plans and tiers — including from a lower-priced plan to a higher-priced plan or a paid add-on — as further described in Sections 4.7, 5.5, and 6.5 (no grandfathering; no vested rights). The Services are provided on an "AS IS" and "AS AVAILABLE" basis as set out in Section 14 (Disclaimers), and liability is limited as set out in Section 15 (Limitation of Liability). This notice sets expectations about the maturity of the Services; whether the reduced cap in Section 15.3 applies to you depends only on whether your use is paid or unpaid, not on this notice or any "beta" label.
+1.2 Changes to Pricing, Plans, and Features.
+We may add, change, remove, suspend, re-tier, meter, limit, or discontinue any plan, price, fee, feature, functionality, quota, or entitlement
+at any time, with or without notice
+, in our sole discretion. See Sections 4 (Plans, Fees & Billing) and 5 (Changes).
+1.3 Arbitration & Class-Action Waiver.
+Section 18 requires most disputes to be resolved by
+binding individual arbitration
+and
+waives your right to a jury trial and to participate in class actions
+. Please read it carefully.
+1.4 Limitation of Liability.
+Section 15 limits our liability to you. Please read it carefully.
+2. Definitions
+"
+Services
+" means the Aglyn platform and all related websites, applications, tools, APIs, plugins, and documentation, including the marketing site (
+aglyn.com
+), the management console (
+app.aglyn.com
+), the site builder (the "
+Besigner
+"), tenant-site hosting (*
+.aglyn.app
+and connected custom domains), the documentation site (
+docs.aglyn.com
+), the developer/customer REST API, the community marketplace, and all first-party plugins and features.
+"
+Account
+" means your registration and credentials for the Services.
+"
+Organization
+" (or "
+Org
+") means the workspace entity that subscribes to Aglyn and may own one or more
+Hosts
+(websites) and include one or more members with assigned roles.
+"
+Host
+" means an individual website, storefront, or application created and managed through the Services.
+"
+Customer Content
+" means all content, data, code, media, text, products, datasets, forms, records, designs, and other materials that you or your Authorized Users upload to, create in, publish through, or transmit via the Services.
+"
+Authorized User
+" means an individual you permit to access the Services under your Account or Organization (e.g., team members, seats).
+"
+End User
+" means a visitor to, customer of, subscriber to, or other end user of a Host that you operate through the Services (i.e., your website's or storefront's users), as distinct from your Account with Aglyn.
+"
+Third-Party Services
+" means services, products, integrations, or content not provided by Aglyn, including those described in Section 11.
+3. Eligibility & Accounts
+3.1 Eligibility.
+You must be at least 18 years old (or the age of majority in your jurisdiction) and able to form a binding contract. The Services are not directed to children under 13, and you may not use the Services if you are barred from doing so under applicable law.
+3.2 Registration.
+You agree to provide accurate, current, and complete information and to keep it updated. Authentication is provided through our identity provider (currently Google Firebase Authentication), which may support email/password and third-party sign-in (e.g., Google).
+3.3 Account Security.
+You are responsible for safeguarding your credentials, API keys, and access, and for all activity that occurs under your Account or Organization, whether or not authorized by you. Notify us promptly at
+security@aglyn.com
+of any suspected unauthorized use. We are not liable for losses arising from unauthorized use of your Account.
+3.4 Authorized Users & Seats.
+You are responsible for your Authorized Users' compliance with these Terms and for all acts and omissions of your Authorized Users. Certain plans meter the number of seats, members, or managers; additional seats may incur additional fees.
+3.5 Availability & Geographic Scope.
+The Services are operated from the United States and made available to users in many locations worldwide.
+We make no representation that the Services are appropriate, lawful, or available for use in any particular location
+, and you access them on your own initiative and are responsible for compliance with all laws applicable to you, including local laws. We may, in our sole discretion,
+restrict, limit, condition, or refuse the Services to any person, region, or country, and may add, reduce, or change geographic availability, at any time, with or without notice.
+3.6 Sanctions & Export Control.
+You may
+not
+access or use the Services if you are: (a) located in, ordinarily resident in, or organized under the laws of any country or region subject to comprehensive U.S. embargo or sanctions (including, without limitation,
+Cuba, Iran, North Korea, Syria, and the Crimea, Donetsk, and Luhansk regions of Ukraine
+); (b) identified on any U.S. government restricted- or denied-party list, including the U.S. Treasury Department's Office of Foreign Assets Control (
+OFAC
+) list of Specially Designated Nationals and Blocked Persons; or (c) otherwise prohibited from receiving the Services under applicable
+export-control or sanctions laws
+. You represent and warrant that none of the foregoing applies to you and that you will not use, export, re-export, or make the Services available in violation of any such laws. We may block, suspend, or terminate access to comply with sanctions and export-control obligations, without liability. This Section supplements Section 19.9.
+4. Plans, Fees & Billing
+4.1 Plans.
+The Services are offered under multiple subscription plans (currently including
+Free
+,
+Starter
+,
+Pro
+,
+Business
+, and
+Advanced
+), each with its own price, quotas, entitlements, and features. Plan details are presented on our pricing page and within the console at the time of purchase.
+Plan names, prices, contents, quotas, and availability may change at any time as described in Section 5.
+4.2 Fees.
+You agree to pay all fees applicable to your plan and usage, which may include: (a) recurring subscription fees (billed monthly or annually); (b) per-seat, per-Host, per-dataset, and other add-on fees; (c) usage-based and overage fees, including API request overages, storage overages, bandwidth, email sends, and metered infrastructure pass-through charges (which may be billed at a markup over our cost); (d) add-on module fees (for example, point-of-sale registers and event-calendar modules); and (e) applicable taxes. All fees are stated and payable in U.S. dollars unless otherwise specified.
+4.3 Platform Transaction Fees (Commerce).
+If you sell goods or services through the Services, we may charge a
+platform transaction fee
+(an application fee) on your sales, calculated as a percentage that varies by plan and by product type (e.g., physical vs. digital/service).
+This platform fee is separate from, and in addition to, the payment-processing fees charged by our payment processor (Stripe).
+Platform fee percentages may change as described in Section 5. You are solely responsible for your own sales, pricing, taxes, fulfillment, refunds, and chargebacks. See Section 10 (Commerce).
+4.4 Payment & Authorization.
+Payments are processed by our third-party payment processor (currently
+Stripe
+). By providing a payment method, you authorize us and our payment processor to charge that method for all applicable fees on a recurring basis until you cancel. You represent that you are authorized to use the payment method provided.
+4.5 Taxes.
+Fees are exclusive of taxes. You are responsible for all sales, use, VAT, GST, and similar taxes associated with your purchase and your own sales, except for taxes based on our net income.
+4.6 Auto-Renewal.
+Subscriptions automatically renew for successive periods (monthly or annual, as selected) at the then-current rates unless canceled before the renewal date.
+You authorize recurring charges until you cancel.
+4.7 Price Changes; No Grandfathering.
+We may change, add, restructure, or remove any fee, price, discount, or billing method at any time, in our sole discretion.
+No price, discount, or fee is guaranteed to continue, and you have no vested right to any current or prior price — including as an existing or renewing subscriber.
+For an existing subscription, a change generally takes effect at your next renewal term; where advance notice before a change takes effect on a renewing subscription is required by applicable law, we will provide the minimum notice legally required, and otherwise changes may take effect
+with or without notice
+to the maximum extent permitted by law.
+Your continued use of the Services, or your failure to cancel before a change takes effect, constitutes acceptance of the new fees.
+We do not offer price grandfathering or legacy pricing; any instance in which we do not immediately apply a change is a matter of our discretion that we may discontinue at any time, including upon any plan change, renewal, non-payment, or lapse.
+While the Services remain pre-1.0, all pricing is provisional and subject to change without notice except as required by law.
+4.8 No Refunds.
+Except where required by applicable law or expressly stated in writing by us,
+all fees are non-refundable
+, including for partial periods, unused quotas, downgrades, suspensions, or terminations.
+4.9 Late Payment, Dunning & Downgrade.
+If a charge fails or an account becomes past due, we may retry charges, restrict or suspend features, downgrade your plan (including to the Free plan), and/or terminate paid features. You remain responsible for amounts owed. We may charge reasonable costs of collection.
+4.10 Free Plan & Trials.
+Free plans and trials are provided without warranty and may be modified, limited, suspended, or discontinued at any time for any or no reason.
+5. Changes to the Services, Plans, Pricing & Features
+5.1 Right to Change.
+You acknowledge and agree that the Services are evolving.
+We may, at any time and in our sole discretion, with or without notice: (a) add, modify, remove, or discontinue any feature, functionality, plugin, module, integration, quota, limit, or entitlement; (b) move any feature between plans or tiers, or make a previously available feature paid, restricted, or unavailable; (c) change, introduce, restructure, or discontinue any plan, price, fee, or billing method; (d) impose or change usage limits, rate limits, or quotas; and (e) suspend, throttle, or discontinue any part or all of the Services.
+5.2 No Guarantee of Availability.
+No feature, plan, price, roadmap item, beta capability, or preview is guaranteed to be released, to remain available, to remain at a given price, or to remain on a given plan. Statements about future functionality are not commitments and are not part of these Terms.
+5.3 Changes to Terms.
+We may modify these Terms at any time by posting the updated Terms and updating the "Last updated" date, or by other reasonable notice. Material changes will be effective as stated in the notice or, absent a stated date, upon posting.
+Your continued use of the Services after changes take effect constitutes acceptance.
+If you do not agree, you must stop using the Services.
+5.4 Discontinuation.
+We may discontinue the Services, in whole or in part, at any time. Where reasonably practicable and where you are on a paid plan in good standing, we will use commercially reasonable efforts to provide notice and an opportunity to export Customer Content, but we are not obligated to do so, and we are not liable for any discontinuation.
+5.5 No Grandfathering; No Vested Rights.
+You acknowledge that plans are evolving and that
+the specific features, functionality, quotas, entitlements, and inclusions that make up any plan or tier may change at any time
+— including by being reduced, removed, gated behind a higher tier, converted into a paid add-on, or made unavailable —
+whether or not you are an existing subscriber and whether or not you continue to pay the same price
+.
+No feature, inclusion, quota, price, discount, or tier composition is grandfathered, vested, or guaranteed to remain available to you
+, and access to any feature at any time is not a promise that it will remain on your plan, in your tier, or at your price. This applies with particular force while the Services remain pre-1.0, when plan contents, tier assignments, and pricing are provisional. Your continued use of the Services after any such change constitutes acceptance.
+6. Early-Access Nature of the Services
+6.1 Early-Access Status.
+The Services are under active development. Features (whether or not labeled "beta," "preview," "early access," or similar) may be incomplete, may not operate as described, may change or be removed, and may produce unexpected results, downtime, or data loss. The Services are provided "AS IS" and "AS AVAILABLE," without any warranty of any kind, as set out in Section 14. This Section sets expectations about maturity; it does not make paid Services "free, trial, or unpaid" use for the purposes of Section 15.3.
+6.2 No Reliance.
+You should not rely on the Services for business-critical, time-sensitive, high-risk, or mission-critical operations, and you are solely responsible for maintaining independent backups of Customer Content and for your own business continuity.
+6.3 Feedback.
+If you provide suggestions, ideas, or feedback ("
+Feedback
+"), you grant us a perpetual, irrevocable, worldwide, royalty-free, fully sublicensable license to use and exploit the Feedback for any purpose without restriction or compensation to you.
+6.4 Data Loss.
+You acknowledge a risk of interruption, corruption, or loss of Customer Content, and you accept that risk.
+We are not liable for any loss, corruption, or unavailability of Customer Content.
+See Section 15.
+6.5 Provisional Pricing & Features.
+While the Services remain pre-1.0, all prices, plans, tiers, quotas, and included features — and the assignment of any feature to any tier — are
+provisional, may change frequently, and are not commitments
+. Nothing about the current pricing or feature set creates any expectation or entitlement that it will continue, remain at its current price, or remain included in your plan. See Sections 4.7 and 5.5.
+7. License to Use the Services
+Subject to your compliance with these Terms and payment of applicable fees, Aglyn grants you a limited, non-exclusive, non-transferable, non-sublicensable, revocable license to access and use the Services during your subscription term, solely for your internal business or personal purposes and in accordance with the documentation and any plan limits. Certain downloadable or client-side components may be governed by the separate
+End User License Agreement (EULA)
+in this folder, which is incorporated by reference.
+8. Customer Content
+8.1 Ownership.
+As between you and Aglyn, you retain all rights in and to your Customer Content. We do not claim ownership of your Customer Content.
+8.2 License to Aglyn.
+You grant Aglyn a worldwide, non-exclusive, royalty-free license to host, store, copy, cache, transmit, reproduce, display, perform, modify (for technical purposes such as formatting and optimization), create derivative works of (for technical purposes), and distribute Customer Content
+solely as necessary to provide, maintain, secure, and improve the Services, to comply with law, and to enforce these Terms
+. This license continues for as long as needed to provide the Services and for a reasonable period thereafter for backups, legal, and operational purposes.
+8.3 Your Responsibility.
+You are solely responsible for your Customer Content, including its legality, accuracy, and the rights to use and publish it. You represent and warrant that you own or have all necessary rights to your Customer Content and that it does not violate these Terms, the Acceptable Use Policy, or any law or third-party right.
+8.4 Backups.
+You are responsible for maintaining your own backups. While we may keep backups,
+we do not guarantee that any Customer Content will be retained, recoverable, or available
+.
+8.5 Removal.
+We may remove, disable, or restrict access to any Customer Content that we believe, in our sole discretion, violates these Terms, the Acceptable Use Policy, the DMCA/Copyright Policy, or any law, or that may expose us to liability — at any time, with or without notice.
+9. Acceptable Use
+Your use of the Services is subject to the
+Acceptable Use Policy
+, incorporated by reference. You agree not to misuse the Services, including by violating law, infringing rights, transmitting malware, sending spam, engaging in fraud, overloading or probing the Services, circumventing usage limits or security, or facilitating any of the foregoing. We may investigate and take any action we deem appropriate, including suspension or termination, for suspected violations.
+10. Commerce, Payments & Merchant Obligations
+10.1 You Are the Merchant.
+If you use commerce, point-of-sale, subscription, paywall, gift-card, digital-goods, marketplace, or similar features,
+you — not Aglyn — are the merchant of record
+for your sales to your End Users. You transact through your own connected payment-processor account (currently via
+Stripe Connect
+). Aglyn is
+not
+a party to, and assumes no responsibility for, transactions between you and your End Users.
+10.2 Aglyn Is Not a Payment Processor.
+Aglyn does not process, hold, or disburse your sales proceeds; those are handled by the payment processor under its own agreement with you. Your use of the payment processor is governed by that processor's terms, and you are responsible for complying with them (including any identity-verification, PCI-DSS, and payout requirements).
+10.3 Your Responsibilities.
+You are solely responsible for your products and services; your pricing, descriptions, and disclosures; order fulfillment and delivery; digital-goods license terms and delivery; inventory; customer service; returns, refunds, and chargebacks; your own terms, privacy, and consumer-protection compliance toward your End Users; and the collection and remittance of all applicable taxes.
+10.4 Platform Fees.
+Aglyn's platform transaction fees (Section 4.3) apply to eligible sales. You authorize the deduction or collection of these fees.
+10.5 No Liability for Transactions.
+Aglyn is not liable for any dispute, loss, damage, chargeback, fraud, tax, regulatory violation, or claim arising from your sales, your products or services, or your relationship with your End Users, payment processors, suppliers, or shippers.
+You will indemnify Aglyn against such claims (Section 16).
+11. Third-Party Services
+The Services rely on and integrate with Third-Party Services (including, without limitation, Google Firebase, Google Cloud, Vercel, Stripe, Resend, Google reCAPTCHA, and AI providers such as Anthropic). Your use of Third-Party Services is subject to their terms and privacy policies.
+We do not control and are not responsible for Third-Party Services, their availability, security, or their acts or omissions.
+Third-Party Services may change, degrade, or be discontinued, which may affect the Services. A list of data subprocessors is maintained in Subprocessors list.
+12. Intellectual Property
+12.1 Aglyn IP.
+The Services, including all software, the Besigner, templates, designs, user interfaces, documentation, trademarks (including "Aglyn" and "Besigner"), logos, and all related intellectual property, are owned by Aglyn or its licensors and are protected by law. Except for the limited license in Section 7, no rights are granted to you.
+12.2 Restrictions.
+You will not (and will not permit others to): copy, modify, translate, or create derivative works of the Services except as expressly permitted; reverse engineer, decompile, or disassemble the Services except to the extent applicable law prohibits this restriction; resell, sublicense, rent, lease, or provide the Services to third parties except as expressly permitted (e.g., operating Hosts for your own End Users); remove proprietary notices; or use the Services to build a competing product or to benchmark without our prior written consent.
+12.3 Marketplace & Templates.
+Content offered through the community marketplace may be subject to additional listing terms. You are responsible for having all rights necessary to list, sell, or use marketplace content, and for compliance with those terms.
+12.4 Feedback.
+See Section 6.3.
+13. Suspension & Termination
+13.1 By You.
+You may stop using the Services and cancel your subscription at any time through the console or by contacting us. Cancellation stops future renewals; it does not entitle you to a refund of prepaid fees (Section 4.8).
+13.2 By Us.
+We may suspend, restrict, downgrade, or terminate your Account, Organization, Hosts, or access to the Services, in whole or in part,
+at any time, with or without notice
+, including if: (a) you breach these Terms or any policy; (b) your payment fails or is past due; (c) we reasonably believe your use poses a security, legal, reputational, or operational risk; (d) required by law or a Third-Party Service; or (e) we discontinue the Services or your plan.
+13.3 Effect of Termination.
+Upon termination, your license to use the Services ends and your Hosts may be taken offline. We may delete Customer Content after termination without liability, subject to any retention required by law.
+You are responsible for exporting Customer Content before termination.
+Sections that by their nature should survive (including 4, 6.3, 8.2, 12, 14, 15, 16, 17, 18, and 19) survive termination.
+14. Disclaimers
+14.1 "AS IS."
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SERVICES ARE PROVIDED "
+AS IS
+" AND "
+AS AVAILABLE
+," WITH ALL FAULTS AND WITHOUT WARRANTY OF ANY KIND. AGLYN AND ITS SUPPLIERS, LICENSORS, AND SUBPROCESSORS
+DISCLAIM ALL WARRANTIES
+, EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, QUIET ENJOYMENT, ACCURACY, AND NON-INFRINGEMENT, AND ANY WARRANTIES ARISING FROM COURSE OF DEALING OR USAGE OF TRADE.
+14.2 No Guarantees.
+WE DO NOT WARRANT THAT THE SERVICES WILL BE UNINTERRUPTED, TIMELY, SECURE, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS; THAT DEFECTS WILL BE CORRECTED; THAT ANY DATA WILL BE ACCURATE, PRESERVED, OR RECOVERABLE; OR THAT THE SERVICES WILL MEET YOUR REQUIREMENTS OR ACHIEVE ANY RESULT. NO ADVICE OR INFORMATION, WHETHER ORAL OR WRITTEN, CREATES ANY WARRANTY.
+14.3 Early Access.
+THE EARLY-ACCESS NATURE OF THE SERVICES IS ACKNOWLEDGED IN SECTION 6 AND THE DISCLAIMERS IN THIS SECTION APPLY WITH PARTICULAR FORCE.
+14.4 Third Parties, Content, Commerce.
+WE DISCLAIM ALL LIABILITY FOR THIRD-PARTY SERVICES, CUSTOMER CONTENT, END-USER CONTENT, AND YOUR COMMERCE ACTIVITIES.
+14.5 AI Features.
+Any AI-assisted features may produce inaccurate, incomplete, or inappropriate output. Output is provided without warranty; you are responsible for reviewing and verifying it before use.
+Some jurisdictions do not allow the exclusion of certain warranties, so some of the above exclusions may not apply to you; in that case such warranties are limited to the minimum extent permitted by law.
+15. Limitation of Liability
+15.1 Exclusion of Damages.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL AGLYN OR ITS AFFILIATES, OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, SUPPLIERS, LICENSORS, OR SUBPROCESSORS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, GOODWILL, BUSINESS, DATA, OR CONTENT, OR FOR BUSINESS INTERRUPTION OR COST OF SUBSTITUTE SERVICES, ARISING OUT OF OR RELATING TO THE SERVICES OR THESE TERMS, WHETHER BASED IN CONTRACT, TORT (INCLUDING NEGLIGENCE), STRICT LIABILITY, OR ANY OTHER THEORY, AND WHETHER OR NOT AGLYN HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+15.2 Liability Cap.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, AGLYN'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THE SERVICES OR THESE TERMS WILL NOT EXCEED THE GREATER OF (A) THE TOTAL FEES YOU ACTUALLY PAID TO AGLYN FOR THE SERVICES IN THE
+THREE (3) MONTHS
+IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO THE LIABILITY, OR (B)
+ONE HUNDRED U.S. DOLLARS ($100)
+.
+15.3 Unpaid Use.
+FOR SERVICES OR FEATURES PROVIDED TO YOU WITHOUT CHARGE — INCLUDING FREE-TIER ACCOUNTS, FREE TRIALS, AND PREVIEW OR EARLY-ACCESS FEATURES FOR WHICH YOU DO NOT PAY — AGLYN'S TOTAL AGGREGATE LIABILITY WILL NOT EXCEED
+FIFTY U.S. DOLLARS ($50)
+. THIS SECTION DOES NOT APPLY TO CLAIMS ARISING FROM SERVICES YOU PAY FOR: THOSE ARE SUBJECT TO SECTION 15.2, REGARDLESS OF ANY "BETA," "PREVIEW," OR "EARLY ACCESS" LABEL ON THE SERVICES OR ANY FEATURE.
+15.4 Essential Basis.
+THESE LIMITATIONS ARE AN ESSENTIAL BASIS OF THE BARGAIN AND APPLY EVEN IF ANY REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
+15.5 Jurisdictional Limits.
+Some jurisdictions do not allow certain limitations, so some of the above may not apply to you; in that case our liability is limited to the maximum extent permitted by law. Nothing in these Terms excludes or limits Aglyn's liability for death or personal injury caused by our negligence, for fraud or fraudulent misrepresentation, for gross negligence or willful misconduct, or for any other liability that cannot lawfully be excluded or limited — including any right or remedy under consumer protection law that you cannot waive.
+16. Indemnification
+You will defend, indemnify, and hold harmless Aglyn and its affiliates, officers, directors, employees, agents, suppliers, and licensors from and against any and all claims, demands, actions, liabilities, damages, losses, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to: (a) your Customer Content; (b) your or your Authorized Users' use of the Services; (c) your Hosts, products, services, and commerce activities, and your relationship with your End Users, suppliers, and payment processors; (d) your violation of these Terms, any policy, or any law or third-party right; and (e) any dispute between you and an End User or third party. We may assume the exclusive defense and control of any matter subject to indemnification, and you will cooperate with us.
+17. Confidentiality; Data Protection
+17.1 Data Protection.
+Our handling of personal data is described in the
+Privacy Policy
+. Where we process personal data on your behalf as a processor/service provider, the
+Data Processing Addendum
+applies and is incorporated by reference.
+17.2 Security.
+We implement reasonable technical and organizational measures, but
+no method of transmission or storage is fully secure
+, and we do not guarantee absolute security. You are responsible for configuring your Hosts, access controls, and integrations securely.
+18. Dispute Resolution; Arbitration; Class-Action Waiver
+PLEASE READ THIS SECTION CAREFULLY. IT AFFECTS YOUR LEGAL RIGHTS.
+18.1 Informal Resolution.
+Before filing a claim, you agree to try to resolve the dispute informally by contacting us at
+legal@aglyn.com
+and allowing
+60 days
+to resolve it.
+18.2 Binding Arbitration.
+Except as provided below, any dispute, claim, or controversy arising out of or relating to these Terms or the Services will be resolved by
+binding individual arbitration
+administered by the
+American Arbitration Association (AAA)
+, rather than in court, except that either party may bring an individual claim in small-claims court. The AAA's then-current
+Consumer Arbitration Rules
+, including its consumer fee schedule, will apply where you are an individual who uses the Services primarily for personal, family, or household purposes; in every other case the AAA's then-current
+Commercial Arbitration Rules
+will apply. The arbitration will take place in
+Williamson County, Texas
+, or by remote means — except that where the Consumer Arbitration Rules apply, any in-person hearing will be held in the county or equivalent locality in which you reside, or at another location the parties agree on. Judgment on the award may be entered in any court of competent jurisdiction. The Federal Arbitration Act and, to the extent not preempted, the Texas Arbitration Act (Tex. Civ. Prac. & Rem. Code ch. 171) govern this arbitration provision.
+18.3 Class-Action Waiver.
+YOU AND AGLYN AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER ONLY IN AN INDIVIDUAL CAPACITY, AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS, COLLECTIVE, OR REPRESENTATIVE PROCEEDING. The arbitrator may not consolidate claims or preside over any class or representative proceeding.
+18.4 Exceptions.
+Either party may seek injunctive or equitable relief in court to protect intellectual property or confidential information.
+18.5 Opt-Out.
+You may opt out of arbitration by sending written notice to
+legal@aglyn.com
+within
+30 days
+of first accepting these Terms.
+18.6 Governing Law.
+These Terms are governed by the laws of the
+State of Texas
+, without regard to conflict-of-laws rules, and, for the arbitration provision, the Federal Arbitration Act. Where arbitration does not apply, the state and federal courts located in
+Williamson County, Texas
+(and the U.S. District Court for the Western District of Texas) have exclusive jurisdiction, and you consent to that venue and personal jurisdiction, waiving any objection based on inconvenient forum.
+18.7 Time Limit.
+Any claim must be brought within
+one (1) year
+after it arises, or it is permanently barred, to the extent permitted by law.
+19. General
+19.1 Entire Agreement.
+These Terms, together with the policies incorporated by reference (Privacy Policy, EULA, Acceptable Use Policy, Cookie Policy, DPA, DMCA/Copyright Policy, and any order or plan terms), constitute the entire agreement between you and Aglyn and supersede all prior agreements on the subject.
+19.2 Order of Precedence.
+In case of conflict, a signed written agreement (if any) controls, then these Terms, then the referenced policies, unless a policy expressly states otherwise.
+19.3 Assignment.
+You may not assign these Terms without our prior written consent. We may assign these Terms freely, including in connection with a merger, acquisition, or sale of assets.
+19.4 No Waiver.
+Our failure to enforce any provision is not a waiver.
+19.5 Severability.
+If any provision is held unenforceable, the remaining provisions remain in effect, and the unenforceable provision will be modified to the minimum extent necessary.
+19.6 Force Majeure.
+We are not liable for any delay or failure due to causes beyond our reasonable control, including acts of God, outages, third-party service failures, labor disputes, or governmental actions.
+19.7 Relationship.
+The parties are independent contractors. These Terms create no partnership, joint venture, agency, or employment relationship.
+19.8 Notices.
+We may provide notices via the console, email, or by posting. You consent to receive communications electronically. Legal notices to Aglyn must be sent to
+legal@aglyn.com
+and, if required, to
+Aglyn LLC, Attn: Legal, c/o Northwest Registered Agent, LLC., 5900 Balcones Drive STE 100, Austin, TX 78731
+.
+19.9 Export & Sanctions.
+You represent that you are not located in, and will not use the Services in violation of, any applicable export-control or sanctions laws, and that you are not on any restricted-party list.
+19.10 U.S. Government.
+The Services are "commercial items"; U.S. Government users receive only the rights granted to all other users.
+19.11 Contact.
+Questions about these Terms:
+legal@aglyn.com
+. Mailing address: Aglyn LLC, c/o Northwest Registered Agent, LLC., 5900 Balcones Drive STE 100, Austin, TX 78731.
+19.12 Texas Provisions.
+Aglyn LLC is a Texas limited liability company governed by the Texas Business Organizations Code. These Terms and your relationship with Aglyn are governed by Texas law as set out in Section 18.6. These Terms do not ask you to waive, and do not waive, any right or protection under the Texas Deceptive Trade Practices-Consumer Protection Act (Tex. Bus. & Com. Code §17.41 et seq.) or any other consumer protection statute.

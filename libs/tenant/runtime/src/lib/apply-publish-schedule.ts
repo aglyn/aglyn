@@ -16,14 +16,100 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn/server'
-import { checkEntitlement } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import {
+  checkEntitlement,
+  composeScreenRoutePath,
+  findScreenIdByRoutePath,
+  SCREEN_KIND_EMAIL,
+} from '@aglyn/aglyn/server'
+// Deep import, like the Measurement Protocol sender's: `analytics-events.ts`
+// is deliberately DOM-free so both sides of the publish path can share the
+// one definition of `first_publish` (AGL-1588).
+import { isFirstPublishedRoute } from '@aglyn/aglyn/app-utils/analytics-events'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  sendGa4SitePublished,
+} from '@aglyn/tenant-data-admin'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+
+/** Parent chains deeper than `composeScreenRoutePath` accepts are invalid. */
+const MAX_ANCESTOR_READS = 32
+
+/**
+ * Why a due publish declined to make the screen reachable. Recorded on the
+ * schedule as `skipped-unroutable` — see {@link resolveScheduledRoutePath}.
+ */
+type RouteRefusal = 'not-a-page' | 'no-path' | 'path-taken'
+
+/**
+ * The routing-map path a due publish should register for a screen that has
+ * no entry yet, or the reason it must not get one (AGL-1589).
+ *
+ * Reads the screen and walks its ancestor chain (one doc per level, bounded)
+ * because the composed path is `parent segments + own slug` and the executor
+ * is handed only the version pointer and the schedule. Runs at most once per
+ * schedule that actually comes due, and never for the common case — a screen
+ * whose route is already live is answered from the host document alone.
+ *
+ * The three refusals are all "this cannot become an address", and all three
+ * are silent no-ops if left unrecorded, which is the bug this issue is about:
+ *
+ * - `not-a-page` — an email document (AGL-1383). It has no URL, the serve
+ *   path refuses to render it, and a routing entry would make it BILLABLE
+ *   against `screensPerHost` without making it reachable. `kind: 'template'`
+ *   is deliberately NOT refused: a collection entry template is routed on
+ *   purpose, which is how the compose pipeline picks it up (AGL-1400).
+ * - `no-path` — the screen or an ancestor has no slug, so there is no address
+ *   to publish at.
+ * - `path-taken` — another screen already holds the address. The interactive
+ *   path refuses this with a message ("Another screen is already published at
+ *   …"); registering it anyway would put two screens at one path and could
+ *   take a LIVE page off the site, which is a worse bug than the one being
+ *   fixed here.
+ */
+async function resolveScheduledRoutePath(options: {
+  hostRef: FirebaseFirestore.DocumentReference
+  screenId: string
+  routing: Record<string, string>
+}): Promise<{ path: string } | { refused: RouteRefusal }> {
+  const { hostRef, screenId, routing } = options
+  const screens = hostRef.collection('screens')
+  const screensById: Record<string, Aglyn.ScreenRouteNode | undefined> = {}
+
+  let currentId: string | undefined = screenId
+  for (let depth = 0; currentId && depth < MAX_ANCESTOR_READS; depth += 1) {
+    if (screensById[currentId]) break // cycle — composeScreenRoutePath refuses
+    const snapshot = await screens.doc(currentId).get()
+    if (!snapshot.exists) break
+    if (currentId === screenId) {
+      if (
+        snapshot.get('deletedAt') != null ||
+        snapshot.get('kind') === SCREEN_KIND_EMAIL
+      ) {
+        return { refused: 'not-a-page' }
+      }
+    }
+    screensById[currentId] = {
+      slug: snapshot.get('slug'),
+      parentId: snapshot.get('parentId'),
+    }
+    currentId = snapshot.get('parentId')
+  }
+
+  const path = composeScreenRoutePath(screenId, screensById)
+  if (!path) return { refused: 'no-path' }
+  const owner = findScreenIdByRoutePath(routing, path)
+  if (owner && owner !== screenId) return { refused: 'path-taken' }
+  return { path }
+}
 
 /**
  * Lazy scheduled-publishing executor (AGL-61): if the doc carries a pending
- * `publishSchedule` whose time has passed, flip the `versionId` pointer and
- * mark the schedule applied. Runs during ISR revalidation, so a schedule
+ * `publishSchedule` whose time has passed, flip the `versionId` pointer,
+ * register the screen's routing entry when the route is not live yet
+ * (AGL-1589), and mark the schedule applied. Runs during ISR revalidation,
+ * so a schedule
  * takes effect on the first regeneration after its time (within the
  * revalidate window) — no dedicated cron needed. Returns the effective
  * versionId; fail-open on write errors (the pointer flips next revalidate).
@@ -110,35 +196,112 @@ export async function applyDuePublishSchedule(options: {
 
   if (!schedule.versionId) return parent.versionId
 
-  // No activation event here, on purpose (AGL-1562).
+  // Register the routing entry, not just the version pointer (AGL-1589).
   //
-  // This runs with no browser, so `site_published` would have to go out over
-  // the Measurement Protocol like the server-side `purchase`. It is not sent
-  // because it would not be TRUE: the write below moves a version pointer and
-  // never touches `hosts/{hostId}.screens`, the routing map that decides which
-  // paths exist. A scheduled publish therefore only ever swaps which saved
-  // version an already-live route serves — a content update — and AGL-1561
-  // counts a route GOING LIVE, not a republish. Sending it would let one
-  // activated org look like many, which is the opposite of what an activation
-  // rate is for.
+  // Until this, a due publish wrote `versionId` + `status: 'applied'` and
+  // nothing else — never `hosts/{hostId}.screens.{screenId}`, the map the
+  // tenant matches request paths against. A REPUBLISH was therefore correct
+  // (the entry already existed, and only the version needed swapping) and a
+  // FIRST publish silently was not: the schedule reported success, the
+  // activity log said published, and the URL kept 404ing. Scheduled
+  // publishing is a Business feature, so that was a paying customer's page.
   //
-  // The gap the issue worried about (a first publish that is scheduled rather
-  // than clicked, going uncounted) cannot happen for the same reason: nothing
-  // in this path can make an unpublished screen reachable. If that ever
-  // changes, `apply-publish-schedule.spec.ts` goes red and the analytics
-  // decision has to be made again with it.
+  // Mirrors `publishScreenRoute` (constants/screen-publishing.ts): the
+  // composed path into the host's map, `publishedAt` stamped on the screen.
+  // The stored `slug` is not rewritten — the path was composed FROM it, so
+  // there is nothing to change.
+  //
+  // Screens only. A layout has no address of its own, exactly as the
+  // unpublish branch above is screens-only.
+  //
+  // In practice the CRON BEAT is the only caller that reaches a first publish:
+  // the lazy ISR path resolves a request path through the routing map before
+  // it ever loads a screen, so an unrouted screen 404s without its schedule
+  // being read. That is the same map this now writes — which is why the bug
+  // could not heal itself on the next visit.
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  const docRef = hostRef.collection(collectionName).doc(docId)
+
+  let routePath: string | undefined
+  // Decided from the routing map as read below — BEFORE the batch registers
+  // this entry (AGL-1588). Left undefined outside the screens branch, where
+  // no route is going live and no `site_published` is sent at all.
+  let firstPublish: boolean | undefined
+  if (collectionName === 'screens') {
+    try {
+      const routing = ((await hostRef.get()).get('screens') ?? {}) as Record<
+        string,
+        string
+      >
+      // An existing entry is the republish case: the route is already live,
+      // this only swaps which version it serves, and there is nothing to
+      // register and no activation to report.
+      if (!routing[docId]) {
+        // The same predicate the console's three publish surfaces use, so a
+        // `first_publish` breakdown means one thing across all four senders.
+        firstPublish = isFirstPublishedRoute(routing)
+        const resolved = await resolveScheduledRoutePath({
+          hostRef,
+          screenId: docId,
+          routing,
+        })
+        if ('refused' in resolved) {
+          // Record the refusal rather than publishing a pointer at a page
+          // nobody can reach — the AGL-1185 posture, for the same reason: an
+          // unrecorded decline is indistinguishable from success, and leaving
+          // it `pending` would re-attempt it on every beat forever. Terminal:
+          // fixing the address is a deliberate act in the console, and
+          // rescheduling is part of it.
+          try {
+            await docRef.update({
+              'publishSchedule.status': 'skipped-unroutable',
+            })
+          } catch (error) {
+            console.error(error)
+          }
+          return parent.versionId
+        }
+        routePath = resolved.path
+      }
+    } catch (error) {
+      // Fail-open like every other write here: leave the schedule pending and
+      // let the next beat (or revalidate) retry. Publishing the pointer while
+      // the routing question is unanswered is the failure being fixed.
+      console.error(error)
+      return parent.versionId
+    }
+  }
+
   try {
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hosts')
-      .doc(hostId)
-      .collection(collectionName)
-      .doc(docId)
-      .update({
-        versionId: schedule.versionId,
-        'publishSchedule.status': 'applied',
-      })
+    const applied = {
+      versionId: schedule.versionId,
+      'publishSchedule.status': 'applied',
+    }
+    if (routePath) {
+      // ONE atomic commit, and the order matters more than the write count:
+      // a status of `applied` with no routing entry is permanent (nothing
+      // retries a terminal status), so the entry and the status must land
+      // together or not at all. A failed commit leaves the schedule pending
+      // and the next beat runs it again.
+      const batch = firestore.batch()
+      batch.update(hostRef, { [`screens.${docId}`]: routePath })
+      batch.update(docRef, { ...applied, publishedAt: Timestamp.now() })
+      await batch.commit()
+
+      // A route just went live with no browser anywhere near it, which is
+      // precisely what the client-side `site_published` in
+      // `publishScreenRoute` cannot see (AGL-1562, AGL-1589). Awaited, not
+      // floated: this render/beat is the only thing keeping the process
+      // alive. It never throws, and it returns immediately when the
+      // Measurement Protocol is not configured — which is the tenant app's
+      // current state: GA4_MEASUREMENT_ID / GA4_API_SECRET are not set on the
+      // aglyn-tenant Vercel project (checked 2026-08-14), so this is a clean
+      // no-op until they are added. See docs/ANALYTICS.md.
+      await sendGa4SitePublished({ hostId, firstPublish })
+    } else {
+      await docRef.update(applied)
+    }
   } catch (error) {
     console.error(error)
   }

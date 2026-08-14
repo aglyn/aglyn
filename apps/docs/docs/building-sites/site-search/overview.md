@@ -13,7 +13,7 @@ built-in search page — there's nothing to configure, enable, or index.
 Included on **every plan**, free tiers too.
 :::
 
-![The Search component in the elements drawer](/img/besigner/elements-drawer.png)
+![The elements drawer, open on its first category, Sections & Blocks. The Search Box is further down, under Forms](/img/besigner/elements-drawer.png)
 
 ## How it works
 

@@ -110,7 +110,7 @@ Use the page's own **Visibility**, in **Page Access** on the screen's detail pag
 **Members only** pages are all kept out of search results and out of the sitemap, while
 staying reachable to whoever has the link or the credentials.
 
-<!-- screenshot: seo/page-access-visibility.png per SCREENSHOT_PLAN.md -->
+![The Page Access card on a screen's page, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 
 Use the site-wide switch while nothing is ready, and per-screen **Unlisted** once you're
 launching page by page — the switch also covers pages you haven't created yet, which

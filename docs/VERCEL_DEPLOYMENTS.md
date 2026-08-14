@@ -1,18 +1,28 @@
 # Vercel deployments
 
-Four Vercel projects on the `aglyn` (Hobby) team deploy from this repo, all connected to
-`aglyn/aglyn`:
+Vercel projects on the `aglyn` (Hobby) team deploy from this repo, all connected to `aglyn/aglyn`.
+Production domains measured against Vercel 2026-08-14 (`vercel project ls`, `vercel inspect <domain>`):
 
-| Project | Root directory | App |
-| --- | --- | --- |
-| `aglyn-console` | `.` (repo root) | `apps/console` |
-| `aglyn-tenant` | `.` (repo root) | `apps/tenant` |
-| `www-aglyn-io` | `.` (repo root) | `apps/www` |
-| `aglyn-docs` | `apps/docs` | `apps/docs` |
+| Project | Root directory | App | Production domains |
+| --- | --- | --- | --- |
+| `aglyn-console` | `.` (repo root) | `apps/console` | `app.aglyn.com` |
+| `aglyn-tenant` | `.` (repo root) | `apps/tenant` | `*.aglyn.app`, **`aglyn.com`**, `www.aglyn.com`, `aglyn.io`, `aglyn.app`, customer custom domains |
+| `aglyn-docs` | `apps/docs` | `apps/docs` | `docs.aglyn.com` |
+| `aglyn-plugins` | `tools/plugin-loader/origin` | plugin bundle origin | `aglyn-plugins-aglyn.vercel.app` (no custom domain) |
+| `www-aglyn-io` | — | *(retired)* | **none** |
 
 Projects are named after the app they deploy, never after the domain they serve — domains move
-between projects, names should not (AGL-730). `www-aglyn-io` keeps its old name because it is being
-retired once the marketing site is rebuilt in Aglyn itself (AGL-724).
+between projects, names should not (AGL-730).
+
+**`aglyn.com` is served by `aglyn-tenant`, not by `www-aglyn-io`** (AGL-1607). The marketing site
+moved onto the tenant runtime and the apex is now an ordinary tenant site — host `aglyn-marketing`
+with `cname: aglyn.com`. `apps/tenant/middleware.ts` has no `aglyn.com` case at all: the apex falls
+through to the `default:` branch and resolves by `host.cname`, exactly like a customer domain. See
+`docs/design/agl-1311-primary-domain-model.md` for the measured domain model.
+
+`www-aglyn-io` still exists as a Vercel project but serves **no domain**, and none of its 25 newest
+production deployments is Ready — every one is Canceled, the oldest 12 days old. `apps/www` is
+likewise deprecated — build nothing there — though the directory has not been deleted from the repo.
 
 ## Only the `production` branch deploys (AGL-522)
 
@@ -20,7 +30,7 @@ Deployments are created **only for pushes to `production`**. Every other branch 
 creates no Vercel deployment at all.
 
 This is enforced with `git.deploymentEnabled` in `vercel.json` (root `/vercel.json` for
-console/tenant/www, `apps/docs/vercel.json` for docs). The rules use minimatch patterns; a branch
+console/tenant, `apps/docs/vercel.json` for docs). The rules use minimatch patterns; a branch
 matching any `true` rule deploys:
 
 ```json
@@ -48,7 +58,7 @@ Notes:
   (and cancel) deployments until they rebase onto a main that has it. The dashboard Ignored Build
   Step is kept as a backstop for those.
 - To deploy: merge `main` → `production` (only when explicitly releasing). A push to `production`
-  builds all four projects as production deployments.
+  builds every live project (console, tenant, docs, plugins) as a production deployment.
 - One-off deploys without a push: create a deployment from a Git reference in the Vercel dashboard
   (Deployments → Create Deployment), or `vercel deploy` from the CLI.
 

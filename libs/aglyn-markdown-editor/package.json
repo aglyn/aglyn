@@ -1,0 +1,14 @@
+{
+  "name": "@aglyn/aglyn-markdown-editor",
+  "version": "0.0.1",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/aglyn-markdown-editor"
+  },
+  "dependencies": {
+    "@swc/helpers": "~0.3.3"
+  },
+  "devDependencies": {}
+}

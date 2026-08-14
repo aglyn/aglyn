@@ -60,12 +60,15 @@ import {
 import {
   authForPool,
   emailUnverifiedResponse,
+  featureLockdownRefusal,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  getLockdownVerdict,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
   invalidateUserLockdownCache,
   isImpersonationSession,
+  lockdownJsonResponse,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -233,6 +236,127 @@ async function readLockState(
 }
 
 /**
+ * THE VERDICT PROBE (AGL-1573): what would a given caller be told right now?
+ *
+ * The bind this answers: the identity authorised to engage a lockdown is
+ * `staffRole === 'super'`, and `getLockdownVerdict` returns null for
+ * `staff === true` on its FIRST line — so the operator who presses the
+ * button is, by construction, the one identity that can never see its
+ * effect. Dropping the credential does not help either: auth runs before
+ * the verdict, so an anonymous caller gets 401 and never reaches it. The
+ * 423 therefore sits in a band between 401 and staff-bypass that a solo
+ * staff operator cannot occupy.
+ *
+ * This does not escape that bind — it sidesteps the need to. Instead of
+ * BEING the refused caller, staff describe one: a uid, an org, a host, and
+ * the same `getLockdownVerdict` every chokepoint calls answers for that
+ * subject. The refusal body is produced by calling the real
+ * `lockdownJsonResponse` and reading it back, so this can never drift into
+ * a second, prettier rendering of the truth — if the 423 changes, this
+ * changes with it.
+ *
+ * WHAT IT IS NOT: a wire observation. It reports what THIS process computes
+ * from state it reads now; it does not prove any route returned it, and a
+ * warm process elsewhere can still be up to PLATFORM_TTL_MS behind. The
+ * response says so in `kind` and the staff page repeats it, because a
+ * computed verdict mistaken for a measured one is exactly the class of
+ * belief the AGL-1571 read-back exists to end.
+ *
+ * The subject's OWN staff claim is looked up and passed through rather than
+ * assumed false: evaluating a staff uid truthfully answers "not locked —
+ * they bypass every scope", and silently reporting that as an unlocked
+ * platform would be a lie of the most reassuring kind.
+ */
+async function evaluateVerdict(
+  firestore: AdminFirestore,
+  subject: { uid: string; orgId: string; hostId: string },
+): Promise<Response> {
+  const { uid, orgId, hostId } = subject
+  if (!uid && !orgId && !hostId) {
+    return Response.json(
+      { error: 'Give at least one of uid, orgId or hostId to evaluate' },
+      { status: 400 },
+    )
+  }
+
+  // An ABSENT scope is not an unlocked one: `getLockdownVerdict` simply does
+  // not evaluate a scope it was handed nothing for. The operator is told
+  // which scopes this answer actually covers, so a "not locked" for a uid
+  // alone is never read as "this customer's workspace is fine".
+  const [orgSnapshot, hostSnapshot, found] = await Promise.all([
+    orgId ? firestore.collection('orgs').doc(orgId).get() : null,
+    hostId ? firestore.collection('hosts').doc(hostId).get() : null,
+    uid ? findUserByUidAcrossPools(uid).catch(() => null) : null,
+  ])
+
+  const subjectStaff = found?.record.customClaims?.['staff'] === true
+  const state = await getLockdownVerdict({
+    staff: subjectStaff,
+    uid: uid || null,
+    org: orgSnapshot?.exists ? (orgSnapshot.data() as never) : undefined,
+    host: hostSnapshot?.exists ? (hostSnapshot.data() as never) : undefined,
+  })
+
+  // Build the ACTUAL refusal and read it back, rather than re-describing it.
+  let refusal: { status: number; body: unknown } | null = null
+  if (state) {
+    const response = lockdownJsonResponse(state)
+    refusal = { status: response.status, body: await response.json() }
+  }
+
+  // A feature lock refuses a capability without touching the scope verdict,
+  // so "what is this customer seeing" is incomplete without it — a caller
+  // whose org is fine may still be unable to upload or check out.
+  const features = await Promise.all(
+    LOCKDOWN_FEATURE_KEYS.map(async (feature) => {
+      const response = await featureLockdownRefusal({
+        feature,
+        staff: subjectStaff,
+      })
+      return {
+        feature,
+        locked: response != null,
+        body: response ? await response.json() : null,
+      }
+    }),
+  )
+
+  return Response.json(
+    {
+      kind: 'computed-verdict',
+      note:
+        'COMPUTED, not observed. This is the verdict this server process ' +
+        'derives for the described caller right now — not proof that any ' +
+        'route returned it, and other processes may be up to 15s behind.',
+      computedAtMs: Date.now(),
+      subject: {
+        uid: uid || null,
+        orgId: orgId || null,
+        hostId: hostId || null,
+        /** Null where the scope was not asked about at all. */
+        uidExists: uid ? found != null : null,
+        orgExists: orgId ? orgSnapshot?.exists === true : null,
+        hostExists: hostId ? hostSnapshot?.exists === true : null,
+        staff: uid ? subjectStaff : null,
+      },
+      /** The scopes this answer actually covers; the rest were not asked. */
+      evaluated: [
+        'platform',
+        ...(orgSnapshot?.exists ? ['org'] : []),
+        ...(hostSnapshot?.exists ? ['host'] : []),
+        ...(uid ? ['user'] : []),
+      ],
+      staffBypass: subjectStaff,
+      locked: state != null,
+      verdict: state,
+      refusal,
+      features,
+    },
+    { status: 200, headers: { 'Cache-Control': 'no-store' } },
+  )
+}
+
+/**
  * What a write answers with: not "your request succeeded" but "here is the
  * target, read back after the write". `confirmed` compares that read against
  * what was asked for — a `false` means the write returned and the state
@@ -287,6 +411,19 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
 
     if (method === 'GET') {
+      // The verdict probe (AGL-1573): "what would THIS caller be told".
+      // Read-only and open to every staff role, like the state probe below
+      // — during a live incident the person who needs to answer "what is
+      // this customer actually seeing right now" is usually support, not
+      // the super-role operator who armed the lock.
+      if (query?.['verdict'] !== undefined) {
+        return evaluateVerdict(firestore, {
+          uid: String(query?.['uid'] ?? '').trim(),
+          orgId: String(query?.['orgId'] ?? '').trim(),
+          hostId: String(query?.['hostId'] ?? '').trim(),
+        })
+      }
+
       // A scoped probe: "what is the state of THIS target, right now".
       // Read-only and open to every staff role, like the list below — the
       // super gate exists to stop writes, and an operator who cannot check

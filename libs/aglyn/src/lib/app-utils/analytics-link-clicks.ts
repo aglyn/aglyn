@@ -59,6 +59,16 @@
  * (AGL-1498, enforcement at the source). So an ungranted visitor's clicks are
  * classified into an object that is then dropped on the floor. Adding a second
  * consent test here would be a copy of the gate that could drift from it.
+ *
+ * That reasoning had a hole, and it was observed rather than argued
+ * (AGL-1608): "never loaded" is not "not running". A visitor who withdraws
+ * MID-PAGEVIEW leaves a resident gtag behind — the gate stops the next load,
+ * not the tag already in memory — so their clicks kept reaching GA. Measured
+ * on aglyn.com: after an opt-out, one CTA click sent `select_content` and
+ * re-created `_ga_YW5PG16YTM`. The fix is still not a second consent test
+ * here; `storeVisitorConsent` now SILENCES the resident tag
+ * (`setResidentAnalyticsTags`), so the gtag this file reaches is inert for the
+ * rest of the pageview and the single gate stays single.
  */
 
 import { trackEvent } from './analytics-events'

@@ -9,11 +9,22 @@ description: Password-protect screens, design custom error pages, and put your s
 Control who can see your pages and what visitors see when something's not available.
 
 :::info Plan availability
-**Free** for custom error screens; per-screen passwords and maintenance mode may be gated
-by tier.
+Included on **every plan**. Per-screen visibility, page passwords, custom error screens and
+maintenance mode are not tier-gated.
 :::
 
-![The screens list, where each screen's visibility is managed](/img/getting-started/screens-list.png)
+## Where these controls live
+
+The three features on this page are set in two different places, and neither is the screens
+list:
+
+| What you want | Where it is |
+| --- | --- |
+| A screen's **visibility** (public, unlisted, password, members-only) and its **page password** | The **Page Access** card on that screen's own page |
+| **Error screens** for 404 / 401 / 403 / 503 | The **Error pages** card in **Setup** |
+| **Maintenance mode** | The same **Error pages** card in **Setup** |
+
+![The Page Access card on a screen's own page, with the Visibility menu open on Public, Unlisted, Password protected and Members only](/img/seo/page-access-visibility.png)
 
 ## Per-screen passwords
 

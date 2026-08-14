@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  trackAuthoredEvent,
+  trackEvent,
+} from '@aglyn/aglyn/app-utils/analytics-events'
 import DOMPurify from 'dompurify'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
@@ -49,14 +53,14 @@ function sendOverlayBeacon(
   }
   // GA mirror (wave v8): sites with Analytics configured see overlay
   // engagement in their own property; no-op without gtag.
-  try {
-    ;(window as any).gtag?.('event', 'aglyn_overlay', {
-      overlay_action: overlay,
-      ...(overlayId ? { overlay_id: overlayId } : {}),
-    })
-  } catch {
-    // GA is best-effort too.
-  }
+  //
+  // Through the taxonomy since AGL-1591 rather than raw gtag. `trackEvent`
+  // already swallows everything and never throws, so the try/catch this used
+  // to need is gone rather than kept as decoration.
+  trackEvent('aglyn_overlay', {
+    overlay_action: overlay,
+    ...(overlayId ? { overlay_id: overlayId } : {}),
+  })
 }
 
 /**
@@ -145,16 +149,15 @@ function ExperimentsRunner(props: {
         keepalive: true,
       }).catch(() => undefined)
       // GA mirror (wave v8): exposure/conversion events land in the
-      // site's own Analytics property when configured.
-      try {
-        ;(window as any).gtag?.('event', 'aglyn_experiment', {
-          experiment_id: experiment.id,
-          variant_id: variant.id,
-          experiment_action: kind,
-        })
-      } catch {
-        // GA is best-effort.
-      }
+      // site's own Analytics property when configured. Through the taxonomy
+      // since AGL-1591 — which also reserves the name against an authored
+      // `trackGaEvent` step, so nothing hand-written can add itself to the
+      // counts that decide which variant wins.
+      trackEvent('aglyn_experiment', {
+        experiment_id: experiment.id,
+        variant_id: variant.id,
+        experiment_action: kind,
+      })
     }
     // Finished experiments serve the winner without counting stats.
     if (experiment.status !== 'running') return undefined
@@ -385,7 +388,12 @@ function AutomationsEngine(props: {
               { hover: automation.event === 'elementHoverEnter' },
             )
           } else if (step.type === 'trackGaEvent') {
-            ;(window as any).gtag?.('event', step.eventName, step.params ?? {})
+            // AGL-1587: the name and the params are AUTHORED, which makes
+            // this the least trustworthy analytics input in the repo — a
+            // param could carry a form field's value. It goes through the
+            // shared sanitizer and the reserved-name refusal like everything
+            // else, never raw gtag.
+            trackAuthoredEvent(step.eventName, step.params)
           } else if (step.type === 'siteAlert') {
             showToast(
               String(step.message ?? '').slice(0, 300),

@@ -31,10 +31,22 @@
  * throws, exactly as a stalled or 404-ing plugin chunk makes it do after a
  * deploy. What is asserted is the sibling: the beacon fires and the consent
  * region call goes out anyway.
+ *
+ * The boundary these specs render is the REAL one (AGL-1556). It used to be a
+ * three-line `Isolate` class defined right here, annotated "in production this
+ * role is played by the route boundary" — which was not true: `apps/tenant/app`
+ * had no `error.tsx`, no `loading.tsx` and no `global-error.tsx` anywhere, so
+ * the reject cases below passed only because the spec supplied a boundary
+ * production did not have. Measured in the real shape, a rejecting gate threw
+ * straight out of the root and `SiteAnalytics` painted nothing at all. AGL-1556
+ * shipped `PageBodyBoundary` to close that gap, and importing it here is the
+ * point: these specs now exercise what the route actually renders.
  */
 import { act, render, waitFor } from '@testing-library/react'
-import { Component, type ReactNode } from 'react'
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
+import PageBodyBoundary from '../app/[host]/[[...slug]]/page-body-boundary'
 import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
 import { sitePluginLoader } from '../utils/site-plugin-loader'
 
@@ -90,33 +102,17 @@ afterEach(() => {
 })
 
 /**
- * Keeps a thrown plugin failure from taking the whole test root down, so the
- * spec can ask its real question: did the SIBLING still do its job? In
- * production this role is played by the route boundary — the point being
- * proven is that the analytics mounts are no longer inside the subtree that
- * fails, not that nothing fails.
- */
-class Isolate extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-  render() {
-    return this.state.failed ? null : this.props.children
-  }
-}
-
-/**
- * The shape `page.tsx` renders: measurement as a SIBLING of the page body,
- * never a descendant of it.
+ * The shape `page.tsx` renders, component for component: measurement as a
+ * SIBLING of the page body, never a descendant of it, with the page body — and
+ * only the page body — inside `PageBodyBoundary`.
  */
 function renderRoute() {
   return render(
     <>
       <SiteAnalytics host={GA_HOST as any} screenId={SCREEN_ID} />
-      <Isolate>
+      <PageBodyBoundary>
         <CatchAllClient data={{ host: GA_HOST as any }} nodes={{}} />
-      </Isolate>
+      </PageBodyBoundary>
     </>,
   )
 }
@@ -160,12 +156,27 @@ describe('analytics survive a broken plugin gate (AGL-1550)', () => {
   it('a wedged gate still paints NOTHING — which is why the two calls above are made during render, not from an effect', async () => {
     // The limit this design is built around, pinned so nobody "simplifies"
     // `sendPageviewBeacon`/`primeVisitorConsent` back into a `useEffect`.
-    // React will not commit a tree while any part of it is suspended, and the
-    // only boundary that could isolate the page body is the page-wide Suspense
-    // AGL-1541 had to delete (its reveal and hydration retry both rode
-    // requestAnimationFrame). So no DOM appears here — no banner, no gtag tag,
-    // no page — and an effect would never have run. The beacon and the region
-    // call fire anyway because they do not wait to be committed.
+    // React will not commit a tree while any part of it is suspended, and
+    // `PageBodyBoundary` does not change that — an ERROR boundary is
+    // transparent to suspension, which is exactly why it was safe to add. So
+    // no DOM appears here — no banner, no gtag tag, no page — and an effect
+    // would never have run. The beacon and the region call fire anyway
+    // because they do not wait to be committed.
+    //
+    // The only boundary that WOULD isolate a suspended body is the page-wide
+    // Suspense AGL-1541 had to delete (its reveal and its hydration retry both
+    // rode requestAnimationFrame, which never fires in hidden, occluded or
+    // prerendered tabs). AGL-1556 asked whether AGL-1541's status-stamped
+    // `ensure` makes that safe "for warm renders only", and the answer is no:
+    // the stamp lives on a per-module-instance promise cache that every fresh
+    // server instance starts EMPTY (nothing warms it — `instrumentation.ts`
+    // warms Firestore and nothing else), so the first render on each instance
+    // still suspends and would still emit the late-streamed rAF-gated segment.
+    // Emitting the boundary only on warm renders is not available either:
+    // React writes `<!--$-->` markers for every Suspense boundary, so a
+    // server-conditional one is a hydration mismatch. The boundary would be
+    // inert exactly when it is not needed and reproduce AGL-1541 exactly when
+    // it is. That avenue is closed; do not reopen it without new evidence.
     jest
       .spyOn(sitePluginLoader, 'ensure')
       .mockReturnValue(new Promise<void>(() => undefined))
@@ -230,5 +241,67 @@ describe('analytics survive a broken plugin gate (AGL-1550)', () => {
     expect(document.querySelector('[data-testid="ga-src"]')).toBeNull()
     // The cookieless beacon is exempt on its own merits and still fires.
     expect(beacons.length).toBe(1)
+  })
+
+  it('the boundary reports what it catches — isolation must not buy silence (AGL-1556)', async () => {
+    // The failure this issue is about was a SILENT one, so the fix must not
+    // create another. React 19 sends errors an error boundary catches to
+    // `console.error` and only UNCAUGHT ones to `reportError`, which means a
+    // quiet boundary would drop a crashing plugin chunk out of Cloud Error
+    // Reporting entirely. `PageBodyBoundary` re-reports, and `reportError`
+    // dispatches the `window` 'error' event that `installErrorBeacon`
+    // (AGL-1538) listens on.
+    const reported: unknown[] = []
+    ;(window as any).reportError = (error: unknown) => reported.push(error)
+    jest
+      .spyOn(sitePluginLoader, 'ensure')
+      .mockReturnValue(Promise.reject(new Error('chunk load failed')))
+
+    await act(async () => {
+      renderRoute()
+    })
+
+    await waitFor(() => expect(reported.length).toBeGreaterThanOrEqual(1))
+    expect((reported[0] as Error).message).toBe('chunk load failed')
+    delete (window as any).reportError
+  })
+})
+
+/**
+ * The absence of these files is load-bearing and completely invisible at the
+ * call site, which is how it would get undone by someone reaching for the
+ * ordinary Next.js tool for an ordinary Next.js problem.
+ */
+describe('the tenant route has no segment boundary files (AGL-1541/AGL-1556)', () => {
+  function walk(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory()
+        ? walk(join(dir, entry.name))
+        : [join(dir, entry.name)],
+    )
+  }
+
+  it('no loading.tsx and no error.tsx anywhere under app/', () => {
+    const found = walk(join(__dirname, '..', 'app'))
+      .map((file) => file.split('/').pop() as string)
+      .filter((name) =>
+        ['loading.tsx', 'error.tsx', 'global-error.tsx'].includes(name),
+      )
+
+    // `loading.tsx` is the fatal one: it makes Next wrap the segment in a
+    // Suspense boundary, which is AGL-1541 verbatim — the page body leaves the
+    // streamed shell for a late `<div hidden>` segment whose reveal and
+    // hydration retry both ride requestAnimationFrame.
+    //
+    // `error.tsx` at `[[...slug]]` is the subtler one: it wraps that segment's
+    // PAGE, and `page.tsx` is what renders `SiteAnalytics` — so the file that
+    // looks like it isolates the page body would take the measurement and
+    // consent surface down with it, which is the whole failure AGL-1550 and
+    // AGL-1556 exist to prevent. The isolation lives in `PageBodyBoundary`
+    // INSIDE `page.tsx` for exactly that reason. Getting above a segment
+    // `error.tsx` instead would mean hoisting `SiteAnalytics` into
+    // `[host]/layout.tsx`, which cannot see its child segment's slug and so
+    // cannot pass a screen id — losing AGL-151's per-screen attribution.
+    expect(found).toEqual([])
   })
 })

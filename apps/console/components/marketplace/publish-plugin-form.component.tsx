@@ -37,9 +37,10 @@ import {
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
-import MarkdownField, {
+import {
+  MarkdownField,
   type MarkdownFieldHandle,
-} from '../markdown-field.component'
+} from '@aglyn/aglyn-markdown-editor'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import { docsHelp } from '../../constants/docs-links'
 import mediaSrc from '../../utils/media-src'

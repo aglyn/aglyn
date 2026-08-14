@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v3'
+export const LEGAL_DOCUMENT_VERSION = 'v4'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -90,20 +90,112 @@ export interface LegalDocumentManifestEntry {
  * pass but are not snapshotted here — only the two documents the consent
  * control links to are, and the Terms incorporate the rest by reference
  * (§19.1). See `LEGAL_URLS`.
+ *
+ * v4 (2026-08-14, AGL-1564 + AGL-1565): one snapshot cycle for two legal
+ * changes, because every bump re-pins clickwrap and forces re-acceptance.
+ *
+ *   - AGL-1564, Privacy Policy: phone number is now disclosed as collected
+ *     (§1.1, naming both sources — given to us, or asserted by the customer's
+ *     SSO identity provider), the §2 purposes list separates the transactional
+ *     use (billing, dunning, service and security notices) from the
+ *     marketing/sales-outreach use, and §11 gains a call/text opt-out. The
+ *     capability was already live — `users/{uid}.phoneNumber` is written by
+ *     `/api/auth/session` and `/api/auth/sso-jit` — and the policy was silent.
+ *   - AGL-1565, Terms: §19.12's Texas DTPA waiver is REMOVED — §17.42 needs a
+ *     signed writing with the consumer represented by counsel of their own
+ *     selection, which clickwrap structurally cannot be, so the clause bound
+ *     nobody while inviting an unconscionability argument against the clauses
+ *     around it, and 0 of 10 benchmarked peers attempt any consumer-statute
+ *     waiver. It is replaced by a sentence saying no such waiver is asked for.
+ *     §18.2 now applies the AAA's CONSUMER rules, with any in-person hearing
+ *     in the consumer's own locality, where the user is an individual using
+ *     the Services primarily for personal, family, or household purposes, and
+ *     Commercial rules in every other case (Webflow's precedent). §15.5 gains
+ *     the carve-outs the cap had in neither direction: death or personal
+ *     injury, fraud, gross negligence or willful misconduct, and any
+ *     non-waivable consumer right. §15.3's $50 floor was re-read under the
+ *     consumer posture and is still correctly scoped to unpaid use.
+ *
+ * ⚠️ §7's licence for "internal business OR PERSONAL purposes" is DELIBERATE
+ * and MUST NOT BE "FIXED". Consumers — solo founders and pre-entity
+ * individuals starting a business — are an intended ICP (Zach, 2026-08-14),
+ * so §7 correctly describes the market. An earlier pass on the same day
+ * recommended deleting "or personal" and scoping the beta to business use;
+ * that recommendation is REVERSED and must not be quietly re-reversed. It was
+ * never an escape anyway: Texas DTPA §17.45(4) counts businesses under $25M
+ * in assets as consumers, so the entire ICP — agencies included — sits inside
+ * the statute either way. §19.12 and §18.2 were what misdescribed the market;
+ * §7 was not.
+ *
+ * ⚠️ TCPA is NOT solved by any of this. The v4 Privacy Policy discloses
+ * marketing calls and texts; a disclosure is not consent, and consumers being
+ * a real ICP is where the TCPA bites hardest. No outbound calling or texting
+ * programme should start until the consent mechanism is designed. Recorded as
+ * counsel questions in `Platform Docs/Legal/Analysis/` — privacy benchmark
+ * items 9-10, terms benchmark items 1, 2, 2b, 2c, 4.
+ *
+ * §11's opt-out promise now HAS a mechanism (AGL-1592): the do-not-contact
+ * list at `contactSuppressions/{e164}`, its staff intake at
+ * `/admin/contact-suppressions`, a STOP-keyword seam awaiting an SMS pipeline,
+ * and `forgetUserPhoneNumber`, which stops `/api/auth/sso-jit` re-asserting an
+ * erased number from the customer's IdP. That closes the mechanism gap and NOT
+ * the consent gap above — they are separate, and both are prerequisites.
+ *
+ * §11 MATCHES THE IMPLEMENTATION as of the AGL-1592 correction below — the
+ * earlier "narrower than the implementation, fix it in v5" note is GONE, not
+ * merely superseded: the narrower wording was never deliberate. §11 now states
+ * the suppression carve-out outright ("we will delete it from your account and
+ * keep it only on a limited internal do-not-contact list, used for nothing
+ * else"), because a number we cannot recognise is a number we will dial the
+ * next time it reaches us. The carve-out is standard (CCPA §1798.105(d); the
+ * TSR's entity-specific do-not-call duty is unmeetable without a retained
+ * list). Do NOT "fix" this by making the code forget the number: that reads as
+ * compliance and produces the call the person asked to prevent.
+ *
+ * v4 CORRECTIONS published 2026-08-14 (AGL-1594 + AGL-1592), folded into the
+ * SAME v4 snapshot rather than a v5, because v4 was still unpromoted and a bump
+ * would force every user to re-accept for a copy fix:
+ *
+ *   - AGL-1594, Privacy §3: the "Sale"/"sharing" paragraph claimed "no
+ *     advertising technology and no third-party analytics on our websites or
+ *     the console". GA4 (G-YW5PG16YTM) has run on app.aglyn.com since AGL-118
+ *     and on aglyn.com since AGL-1559, so half that sentence was false — and
+ *     §4 of the same document already disclosed analytics, contradicting it.
+ *     The no-adtech half is true and load-bearing, so it stays; the analytics
+ *     half is replaced by the actual configuration (Signals off, ads
+ *     personalization off in every region, no Ads link, 14-month retention)
+ *     plus the conclusion that analytics configured this way is neither a
+ *     "sale" nor a "share". The Cookie Policy carried the same defect and was
+ *     corrected in the same pass — it is besigner-only, has never been
+ *     clickwrapped, and is NOT snapshotted here, so it has no hash to update.
+ *   - AGL-1592, Privacy §11: the do-not-contact carve-out described above.
+ *
+ * Both edits are AUTHORED-SOURCE changes to the besigner markdown block and
+ * were published FIRST, then re-captured. That ordering is not a preference: a
+ * snapshot is evidence of what a user was actually shown, so hand-writing one
+ * for text that is not live would be a false record of the same shape as the
+ * defect being fixed. The live page was confirmed serving the new text (Flight
+ * row 16:T3430, = 13360 bytes, matching the published source byte-for-byte)
+ * before this hash moved. terms.txt is UNCHANGED by this pass.
+ *
+ * Both documents also move their "Last updated" date to August 14, 2026, which
+ * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
+ * Same capture method as v1–v3, proven against the v3 hashes before this set
+ * was taken.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '5438b94d6bae2c9dae80ceba9ec53213990f20fa21b0d5b6f4fbbe3c8d553e73',
-    bytes: 33117,
+      '1ae10b9074cb2e175dd7553180c0bb9a0d77a88c3a263a102a5c6a4c143a1ec2',
+    bytes: 33295,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '0ecdbec1040536870796696cfc862513d1b87cea13ad02cd5818f7714d5fc238',
-    bytes: 10641,
+      '96b24414fb39209be36c804cec72d11341474edfadc279f7b252f1431f1906a9',
+    bytes: 12912,
   },
 ]

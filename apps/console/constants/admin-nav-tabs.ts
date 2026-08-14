@@ -60,6 +60,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_SUPPORT),
     },
     {
+      id: 'nav-tab-admin-contact-suppressions',
+      label: 'Do not contact',
+      href: buildRoute(Route.ADMIN_CONTACT_SUPPRESSIONS),
+    },
+    {
       id: 'nav-tab-admin-emails',
       label: 'Emails',
       href: buildRoute(Route.ADMIN_EMAILS),

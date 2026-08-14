@@ -40,7 +40,7 @@ the real dialog) around every plugin page, so a plugin component just calls
 This is the escape hatch for the dependency cascade a naive promotion would
 hit.
 
-![The Plugins & add-ons hub where your plugin lands](/img/plugins/org-plugins-page.png)
+![The org Plugins section. A published plugin lands in its "Installed from the marketplace" card; the first-party bundles shown here sit under "Built in"](/img/plugins/org-plugins-page.png)
 
 ## The UI half
 

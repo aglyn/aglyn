@@ -294,6 +294,261 @@ export function visitorConsentStorageKey(hostId: string): string {
 }
 
 /**
+ * Cookie-name PREFIXES the analytics grant is answerable for (AGL-1606).
+ *
+ * A prefix sweep rather than a name list, because the names are derived and
+ * configuration-dependent: `_ga` is joined by `_ga_<measurement id without the
+ * `G-`>` per property, by `_gac_<id>` when Google Ads linking is on, and by
+ * `_gid` where the legacy daily id is still issued. Hardcoding the two names a
+ * given site happens to carry today is precisely how a withdrawal leaves an
+ * identifier behind on the next site. `_ga` subsumes `_ga`, `_ga_*` and
+ * `_gac_*`; `_gid` is the only Google analytics cookie that does not start
+ * with it.
+ */
+export const ANALYTICS_COOKIE_PREFIXES: readonly string[] = ['_ga', '_gid']
+
+/**
+ * Multi-label public suffixes: names under which registrations happen, so the
+ * label to their left is the registrable one. A short list rather than the
+ * Public Suffix List — the same trade `console-domains.ts` makes, and the
+ * failure mode is mild in both directions: an unlisted suffix costs one
+ * over-broad `domain=` write that the browser silently refuses (cookies cannot
+ * be set on a public suffix), never a deletion on someone else's domain.
+ */
+const MULTI_LABEL_PUBLIC_SUFFIXES: ReadonlySet<string> = new Set([
+  'co.uk', 'org.uk', 'me.uk', 'ac.uk', 'gov.uk',
+  'com.au', 'net.au', 'org.au',
+  'co.nz', 'co.za',
+  'co.jp', 'ne.jp', 'or.jp',
+  'com.br', 'com.mx', 'com.cn', 'com.tr',
+  'co.in', 'co.kr', 'com.sg', 'com.hk',
+])
+
+function normalizeCookieHostname(hostname: string | null | undefined): string {
+  return String(hostname ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.+$/, '')
+}
+
+/**
+ * The registrable domain of a hostname — the highest name a cookie may be
+ * written at — or `null` when there is none.
+ *
+ * This is the fiddly half of the cleanup. GA's `cookie_domain: 'auto'` walks
+ * UP from the hostname and writes at the highest domain the browser accepts,
+ * which is the registrable domain with a leading dot: a visit to
+ * `www.shop.acme.co.uk` leaves `_ga` on `.acme.co.uk`, not on the exact host.
+ * A deletion aimed at the exact hostname therefore silently no-ops — it writes
+ * a second, host-scoped, already-expired cookie and leaves the real one alone.
+ *
+ * `null` for a single-label host (`localhost`) and for IP literals: those take
+ * host-only cookies, which the undecorated deletion already covers.
+ */
+export function registrableCookieDomain(
+  hostname: string | null | undefined,
+): string | null {
+  // Named `name`, not `host`: `host.foo` inside app-utils is what the
+  // AGL-1361 write-deny sweep reads as a host-document field, and a local
+  // string's `.split`/`.includes` would land in it as phantom fields.
+  const name = normalizeCookieHostname(hostname)
+  if (!name) return null
+  // IPv6 literal (bracketed or bare) and IPv4 literal: host-only cookies.
+  if (name.startsWith('[') || name.includes(':')) return null
+  if (/^\d+(\.\d+){3}$/.test(name)) return null
+  const labels = name.split('.')
+  if (labels.length < 2 || labels.some((label) => !label)) return null
+  const lastTwo = labels.slice(-2).join('.')
+  if (MULTI_LABEL_PUBLIC_SUFFIXES.has(lastTwo)) {
+    // `acme.co.uk` is registrable; `co.uk` on its own is not a domain at all.
+    return labels.length > 2 ? labels.slice(-3).join('.') : null
+  }
+  return lastTwo
+}
+
+/**
+ * Every `domain=` value a cookie deletion has to try, most specific first and
+ * stopping at the registrable domain.
+ *
+ * The whole ladder rather than the registrable domain alone because
+ * `cookie_domain` is configurable: a host that pins it to `shop.acme.com`
+ * leaves the cookie one rung below where `auto` would. Walking the rungs costs
+ * a handful of no-op writes and removes the guess.
+ *
+ * Empty when there is no registrable domain — the host-only deletion that
+ * {@link clearAnalyticsCookies} always performs is the complete answer there.
+ */
+export function analyticsCookieDomains(
+  hostname: string | null | undefined,
+): string[] {
+  const name = normalizeCookieHostname(hostname)
+  const registrable = registrableCookieDomain(name)
+  if (!registrable) return []
+  const domains: string[] = []
+  let current = name
+  for (;;) {
+    domains.push(`.${current}`)
+    if (current === registrable) break
+    const cut = current.indexOf('.')
+    if (cut < 0) break
+    current = current.slice(cut + 1)
+  }
+  return domains
+}
+
+/**
+ * Expire every analytics cookie this browser is carrying, at the host itself
+ * and at every domain up to the registrable one. Returns the names it acted
+ * on, which is what makes the cleanup assertable.
+ *
+ * Best-effort by construction: a cookie written at a path other than `/` is
+ * not reachable this way, and `document.cookie` cannot report which domain a
+ * cookie came from — hence the ladder. Neither limit applies to the cookies GA
+ * actually writes (path `/`, registrable domain).
+ */
+export function clearAnalyticsCookies(
+  hostname?: string | null,
+): string[] {
+  if (typeof document === 'undefined') return []
+  try {
+    const names = new Set<string>()
+    for (const pair of String(document.cookie ?? '').split(';')) {
+      const name = pair.split('=')[0].trim()
+      if (name && ANALYTICS_COOKIE_PREFIXES.some((p) => name.startsWith(p))) {
+        names.add(name)
+      }
+    }
+    if (names.size === 0) return []
+    const domains = analyticsCookieDomains(
+      hostname ??
+        (typeof window !== 'undefined' ? window.location?.hostname : ''),
+    )
+    for (const name of names) {
+      const expired = `${name}=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+      document.cookie = expired
+      for (const domain of domains) {
+        document.cookie = `${expired}; domain=${domain}`
+      }
+    }
+    return [...names]
+  } catch {
+    // Cookies disabled or a hostile `document.cookie`: the gate still keeps
+    // the script out, which is the load-bearing half.
+    return []
+  }
+}
+
+/**
+ * The `window` flag `gtag.js` consults before every hit: with
+ * `window['ga-disable-G-XXXX'] === true` the tag for that property sends
+ * nothing and writes nothing. Google's own documented opt-out mechanism, and
+ * the reason this needs no consent-mode DEFAULT (AGL-1608).
+ */
+export const GA_DISABLE_FLAG_PREFIX = 'ga-disable-'
+
+/**
+ * The measurement ids whose tag is actually RESIDENT in this page.
+ *
+ * Discovered from the page rather than taken from the host document on
+ * purpose: what has to be silenced is whatever gtag.js is currently loaded and
+ * configured for, which is not always what the host record configures — a tag
+ * can arrive through GTM, and a stale `<script>` from earlier in the pageview
+ * is exactly the thing this function exists to find.
+ *
+ * Ids are format-checked before they are used, because each one becomes a
+ * `window` property name.
+ */
+export function residentGaMeasurementIds(): string[] {
+  if (typeof document === 'undefined') return []
+  const ids = new Set<string>()
+  try {
+    const loaded = document.querySelectorAll(
+      'script[src*="googletagmanager.com/gtag/js"]',
+    )
+    for (const element of Array.from(loaded)) {
+      const src = String((element as HTMLScriptElement).src ?? '')
+      const match = /[?&]id=([^&]*)/.exec(src)
+      const id = match ? decodeURIComponent(match[1]) : ''
+      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
+    }
+  } catch {
+    // A hostile or absent DOM: the dataLayer pass below still applies.
+  }
+  try {
+    const layer = (window as unknown as Record<string, unknown>)?.dataLayer
+    for (const entry of Array.from((layer ?? []) as ArrayLike<unknown>)) {
+      // `arguments` objects, not arrays — gtag pushes its own call sites.
+      const args = Array.from((entry ?? []) as ArrayLike<unknown>)
+      if (args[0] !== 'config') continue
+      const id = String(args[1] ?? '')
+      if (GA_MEASUREMENT_ID_PATTERN.test(id)) ids.add(id)
+    }
+  } catch {
+    // No dataLayer, or one that is not iterable: the script pass stands.
+  }
+  return [...ids]
+}
+
+/**
+ * Make every resident GA tag agree with the consent state, and return the ids
+ * it acted on.
+ *
+ * ## Why deleting the cookies is not enough (AGL-1608)
+ *
+ * The AGL-1498 gate stops the script from LOADING, which is the right
+ * enforcement for a fresh pageview and the wrong tool for a visitor who
+ * withdraws mid-pageview: `gtag.js` has already executed, and React unmounting
+ * the `<script>` element does not unload it. `window.gtag` stays live, GA4
+ * enhanced measurement fires on its own (scroll depth, outbound click, file
+ * download), and the tag re-writes `_ga_<id>` AFTER
+ * {@link clearAnalyticsCookies} has deleted it. Reproduced on aglyn.com: an
+ * opt-out, a hand-run sweep to zero cookies, then one scroll to the footer
+ * brought `_ga_YW5PG16YTM` back.
+ *
+ * Two signals, because they fail differently and neither is guaranteed:
+ * the `ga-disable-<id>` window flag silences a tag that never received a
+ * consent-mode default, and the `consent`/`update` call reaches a tag that
+ * arrived through GTM with its own id this function never saw.
+ *
+ * ## What this deliberately does NOT do
+ *
+ * It never declares a consent-mode DEFAULT and never touches the gate. Both
+ * signals act only on a tag that is already resident — which, by construction,
+ * only exists after a grant. "The script never LOADS, rather than
+ * load-then-suppress" is a stated property of AGL-1498 and changing it is a
+ * product decision, not a cleanup.
+ *
+ * Symmetric on purpose: a visitor who opts out and changes their mind in the
+ * same pageview would otherwise stay silently unmeasured until they navigated,
+ * because the re-rendered `<Script>` cannot re-execute an already-loaded tag.
+ * The re-grant restores ANALYTICS only — the tool never asked about
+ * advertising, so the ad signals stay denied in both directions.
+ */
+export function setResidentAnalyticsTags(granted: boolean): string[] {
+  if (typeof window === 'undefined') return []
+  const ids = residentGaMeasurementIds()
+  const scope = window as unknown as Record<string, unknown>
+  for (const id of ids) {
+    scope[`${GA_DISABLE_FLAG_PREFIX}${id}`] = !granted
+  }
+  try {
+    const send = scope.gtag
+    if (typeof send === 'function') {
+      ;(send as (...args: unknown[]) => void)('consent', 'update', {
+        analytics_storage: granted ? 'granted' : 'denied',
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+      })
+    }
+  } catch {
+    // A tag that throws on its own consent call is one we cannot silence;
+    // the flag above and the cookie sweep still stand.
+  }
+  return ids
+}
+
+/**
  * The stored record, or null when there is none (never resolved, storage
  * unavailable, or an unrecognized shape — treated alike: not yet decided).
  */
@@ -334,10 +589,18 @@ export function readStoredVisitorConsent(
  *
  * Storing the record is itself strictly-necessary storage (it is how a "no"
  * is remembered), so it is exempt from the consent it records. Any
- * non-granting state also REMOVES the persistent `aglyn:visitor` id:
- * opting out cleans up, it does not merely stop adding. Listeners hear
- * about it via {@link VISITOR_CONSENT_CHANGED_EVENT} so the GA gate and the
- * runtime react without a reload.
+ * non-granting state also REMOVES the identifiers the grant allowed —
+ * the persistent `aglyn:visitor` id AND the GA cookies
+ * ({@link clearAnalyticsCookies}): opting out cleans up, it does not merely
+ * stop adding (AGL-1606) — and SILENCES the tag that is already running
+ * ({@link setResidentAnalyticsTags}), without which the cleanup un-does itself
+ * within the same pageview (AGL-1608). Listeners hear about it via
+ * {@link VISITOR_CONSENT_CHANGED_EVENT} so the GA gate and the runtime react
+ * without a reload.
+ *
+ * The two cleanups are deliberately in SEPARATE try blocks: private mode
+ * throws on `localStorage` while cookies still work, and a withdrawal must
+ * not lose the cookie sweep to that.
  */
 export function storeVisitorConsent(
   hostId: string,
@@ -362,6 +625,15 @@ export function storeVisitorConsent(
     } catch {
       // Private mode: the state holds for this page via the event below,
       // and is re-derived next visit — the safe failure.
+    }
+    // Silence the RESIDENT tag before sweeping, never after (AGL-1608): the
+    // gate only keeps the script from LOADING, so a mid-pageview withdrawal
+    // leaves gtag.js live and it re-writes `_ga_<id>` on its next enhanced
+    // measurement event. Sweeping first would delete three cookies and
+    // immediately get one back.
+    setResidentAnalyticsTags(stored.analytics)
+    if (!stored.analytics) {
+      clearAnalyticsCookies()
     }
     try {
       window.dispatchEvent(new CustomEvent(VISITOR_CONSENT_CHANGED_EVENT))

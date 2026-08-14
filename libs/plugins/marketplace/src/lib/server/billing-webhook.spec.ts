@@ -41,7 +41,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       get: (field: string) => (store[path] ?? {})[field],
     }),
   })
-  const ga4: Array<Record<string, unknown>> = []
+  const ga4: Ga4PurchaseInput[] = []
   return {
     __writes: writes,
     __store: store,
@@ -49,7 +49,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // `purchase`. Captured rather than stubbed so the money that reaches
     // GA can be asserted against the money that reaches the ledger.
     __ga4: ga4,
-    sendGa4Purchase: async (input: Record<string, unknown>) => {
+    sendGa4Purchase: async (
+      input: Ga4PurchaseInput,
+    ): Promise<Ga4SendResult> => {
       ga4.push(input)
       return { sent: true, synthesizedClientId: false }
     },
@@ -84,11 +86,18 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import type { Ga4PurchaseInput, Ga4SendResult } from '@aglyn/tenant-data-admin'
+
 import { marketplaceBillingWebhookHandler } from './billing-webhook'
 
 const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   __writes: Array<{ path: string; data: Record<string, unknown> }>
   __store: Record<string, Record<string, unknown> | undefined>
+  // Typed as the real `sendGa4Purchase` input rather than a loose record, so
+  // the GA4 assertions below are checked against the shape production sends —
+  // a renamed field on `Ga4PurchaseInput` fails typecheck here instead of
+  // silently making `sent.transactionId` read as `undefined` at runtime.
+  __ga4: Ga4PurchaseInput[]
 }
 
 const completedSession = (over: Record<string, unknown> = {}) => ({
@@ -162,7 +171,7 @@ describe('GA4 purchase reporting (AGL-1561)', () => {
     expect(sent.transactionId).toBe('cs_test_1')
     // Whole currency units, gross — the same 10825 cents the ledger records.
     expect(sent.value).toBe(108.25)
-    expect((sent.items as any[])[0].item_category).toBe('marketplace')
+    expect(sent.items[0].item_category).toBe('marketplace')
   })
 
   it('reports nothing when the purchase was not paid', async () => {

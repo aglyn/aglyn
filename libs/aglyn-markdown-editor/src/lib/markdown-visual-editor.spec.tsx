@@ -22,7 +22,7 @@ import MarkdownVisualEditor, {
   markdownToRows,
   rowsToMarkdown,
   type MarkdownVisualEditorHandle,
-} from '../components/markdown-visual-editor.component'
+} from './markdown-visual-editor.component'
 
 const rowEls = (): HTMLElement[] =>
   Array.from(document.querySelectorAll<HTMLElement>('[data-row-kind]'))

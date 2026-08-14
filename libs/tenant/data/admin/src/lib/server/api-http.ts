@@ -91,6 +91,27 @@ export const ApiErrors = {
     errorResponse(500, 'internal_error', 'Something went wrong', init),
 }
 
+/**
+ * Re-emit `response` with `headers` merged in — the escape hatch for a
+ * refusal built by a shared helper that knows nothing about this request's
+ * rate-limit budget (the lockdown 423, AGL-1596). Status, body and the
+ * response's own headers are preserved; `set` overwrites rather than
+ * appends, so a header named on both sides appears exactly once (the passed
+ * value wins) and no client ever reads a doubled `X-RateLimit-Remaining`.
+ */
+export function withResponseHeaders(
+  response: Response,
+  headers: Record<string, string>,
+): Response {
+  const merged = new Headers(response.headers)
+  for (const [name, value] of Object.entries(headers)) merged.set(name, value)
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: merged,
+  })
+}
+
 /** Success JSON with an optional status + headers (e.g. rate-limit headers). */
 export function apiJson(
   data: unknown,

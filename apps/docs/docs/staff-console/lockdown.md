@@ -112,6 +112,90 @@ end time is restated in the reader's own local time; without one, no return
 time is promised. Genuine failures are untouched — a real error still shows a
 real error.
 
+## Asset quarantine — one file, not the site that serves it
+
+When the problem is **one uploaded file** — malware in a PDF, an abusive image,
+a DMCA-noticed asset — locking the host punishes a customer for one object.
+Quarantine is the proportionate lever: the CDN refuses that file worldwide
+while everything else in the workspace keeps serving.
+
+It is **reversible**, and that is the whole reason it exists instead of
+deletion: a false-positive scan or a successful counter-notice is undone by
+lifting the quarantine, with no re-upload and no lost URL.
+
+**Keyed by the file's content hash, not by the document.** One quarantine
+covers every media document that shares the bytes — a template duplicated into
+forty workspaces is forty documents and one hash — and it keeps biting if the
+same file is uploaded again. Two limits worth knowing:
+
+- The same bytes ingested through *different* upload routes do not currently
+  share a hash, so "re-upload stays quarantined" holds within an upload path.
+- Some documents carry no hash at all (older uploads, and very large files
+  stored as composite objects). For those, quarantine by **asset** instead —
+  it takes the scope segment and media id from the CDN URL.
+
+Use `by: "asset"` deliberately when the same bytes are legitimate elsewhere and
+only *this* workspace's copy is the subject of a report.
+
+| | |
+|---|---|
+| **Where the state lives** | `mediaQuarantines/index` — one document holding the whole deny list |
+| **Who may set or lift** | `super` staff role, same bar as a lockdown |
+| **Reasons** | `malware`, `abuse`, `dmca`, `legal`, `manual` |
+| **Audited** | Every set *and* lift, with reason, actor, expiry, and the message the customer sees |
+| **Expiry** | Optional, same semantics as a lockdown — when it passes, delivery restores with no action and no write |
+
+**What a fetcher sees:** a neutral `410 Gone`, byte-identical to the lockdown
+refusal. It deliberately says nothing about *why* — that a takedown notice or a
+malware finding exists on a specific file is not something an anonymous fetcher
+has standing to learn. The owning workspace is told the reason in the console;
+the internet is told the file is gone.
+
+**Billing is untouched, on purpose.** Quarantine does not delete the object,
+does not modify the media document, and does not change the storage counter.
+The file still exists and still belongs to the workspace — it is *suppressed*,
+not erased — so the customer's storage usage and invoice are unchanged. The
+customer notice says so explicitly, because someone whose file stops loading
+will otherwise assume their data was deleted.
+
+**How fast it bites, and what it cannot reach.** A warm server refuses within
+about 15 seconds of the write, and restores just as fast on a lift — the
+refusal is never cached, precisely so a lift takes effect immediately. What
+quarantine cannot recall is bytes *already* in a cache: a browser may hold an
+image up to 60 seconds, and the CDN edge may hold an image up to an hour. For
+an urgent takedown, quarantine stops the bleeding at the origin immediately but
+is not a purge; if the file must be unreachable everywhere *now*, quarantine it
+and then lock the scope as well.
+
+There is no staff UI yet — quarantine is operated through
+`POST /api/admin/media-quarantine` with a staff bearer token:
+
+```bash
+# Disable one file by its content hash (visible on the asset in the DAM).
+curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"quarantine","contentHash":"0123456789abcdef",
+       "scopeSegment":"org:acme","mediaId":"m1","reason":"dmca",
+       "note":"Notice #4417 — staff eyes only",
+       "message":"Disabled pending review of a copyright claim."}' \
+  https://app.aglyn.com/api/admin/media-quarantine
+
+# Lift it.
+curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"release","contentHash":"0123456789abcdef"}' \
+  https://app.aglyn.com/api/admin/media-quarantine
+
+# What is quarantined right now (open to every staff role).
+curl -H "Authorization: Bearer $STAFF_TOKEN" \
+  https://app.aglyn.com/api/admin/media-quarantine
+```
+
+`message` is **shown to the customer**; `note` is the internal rationale and
+never leaves the audit trail. Like every lockdown write, the response carries
+the server's re-read of what it wrote — if `confirmed` is `false`, the write
+returned and the state still disagrees. Treat that as an unresolved incident.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
@@ -147,6 +231,69 @@ So the page never claims a state it has not read back:
   register — check the state and click again.
 - A write that returns but whose re-read disagrees is reported as
   `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
+
+### What a caller is told
+
+You cannot check a lockdown by trying it yourself. Staff bypass every scope —
+that is the un-panic invariant, and it is deliberate — so your own request
+succeeds no matter what is locked. Signing out does not help either: without a
+credential the request is refused as unauthenticated long before the lockdown
+verdict runs. The customer-visible refusal lives in a band between those two
+that a staff operator has no way to stand in.
+
+**What would this caller be told?** answers it from the other side. Describe the
+caller — a user uid, a workspace id, a site id, or any combination — and the
+server runs the same verdict every API route runs and shows you:
+
+- whether that caller is refused, and under which scope and reason;
+- the **exact response body** they receive, built by the same code that builds
+  the real 423 — not a summary of it;
+- which capabilities (signups, uploads, checkout, marketplace installs, AI
+  assist) are refused for them, since a feature lock bites without touching any
+  scope;
+- whether the account you named is itself **staff**, in which case it bypasses
+  everything and the answer says nothing about whether a lock is engaged.
+
+Two honesty rules the panel follows, and you should read it by:
+
+1. **It is computed, not observed.** It is what this server derives from state
+   it reads at that moment. It does not prove that any route returned it, and
+   other server processes converge within about 15 seconds, so a lock armed
+   seconds ago may not yet be enforced everywhere.
+2. **A scope you leave blank is not evaluated.** "Not refused" for a bare uid
+   says nothing about that person's workspace. The panel lists exactly which
+   scopes the answer covers, and a workspace or site id that matches nothing is
+   reported as such rather than counted as clear.
+
+Reading is open to every staff role — during an incident the person who needs
+to answer "what is this customer actually seeing right now" is usually support,
+not the `super`-role operator who armed the lock.
+
+To confirm the refusal **on the wire** rather than in the abstract, you need a
+caller who is genuinely refused. An org API key is the cheapest one: it carries
+no staff claim and no uid, so `/api/v1` refuses its own holder. See
+[Verifying a lockdown on the wire](#verifying-a-lockdown-on-the-wire).
+
+### Verifying a lockdown on the wire
+
+A read-only API key on a disposable workspace turns the whole 423 sweep into one
+curl, because the customer REST API deliberately evaluates the verdict with
+neither a staff claim nor a uid:
+
+```bash
+# Unlocked: 200 with the service document.
+curl -i -H "Authorization: Bearer $AGLYN_DRILL_KEY" https://app.aglyn.com/api/v1
+
+# With that workspace locked: 423 Locked, Retry-After, and the notice body.
+# {"error":"locked","scope":"org","reason":"billing","title":"Account on hold",
+#  "message":"…","contact":"support@aglyn.com","untilMs":1786695133044}
+```
+
+The same key proves the platform scope (lock the platform, the same call answers
+`"scope":"platform"`). Feature scope needs a caller on a feature chokepoint —
+`signups` grants no staff bypass, so a staff token on
+`POST /api/auth/legal-acceptance` is refused under a signups lock and can be
+checked without any extra credential.
 
 ### What the audit row records
 

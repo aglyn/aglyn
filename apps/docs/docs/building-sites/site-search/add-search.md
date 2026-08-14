@@ -13,7 +13,7 @@ matcher](overview.md) are built in.
 Included on **every plan**.
 :::
 
-![The elements drawer, where the Search component lives](/img/besigner/elements-drawer.png)
+![The elements drawer, open on its first category, Sections & Blocks. Scroll to Forms to find the Search Box](/img/besigner/elements-drawer.png)
 
 ## Steps
 

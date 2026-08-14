@@ -9,16 +9,24 @@ description: Sign in, create your first site, and understand what a site contain
 A **site** is one website you own in Aglyn — its screens, theme, data, domain, and
 settings. Everything you build lives under a site, and you can own several.
 
-![Your sites, with the New site action](/img/getting-started/sites-page.png)
+![The All Sites page with a Create site button, and one site card showing its Aglyn domain, its (unset) custom domain, and Visit and Manage actions](/img/getting-started/sites-page.png)
 
 ## Create your first site
 
 1. Sign in to the console.
 2. Open the **site switcher** in the app bar (top-left) and choose **Create site**.
-3. Give it a name. Aglyn generates a working subdomain immediately so the site is live
-   from the first moment — you can attach a [custom domain](../building-sites/custom-domains/overview.md)
-   later.
-4. You're dropped into the new site's dashboard.
+3. Give it a name. Aglyn generates a working subdomain immediately, so the site has a
+   real address from the first moment — you can attach a
+   [custom domain](../building-sites/custom-domains/overview.md) later. The address
+   resolves right away, but it has nothing to serve until you publish a screen at the
+   site root, so a brand-new site answers its own URL with a not-found page. Starting
+   from a [starter template](../building-sites/site-templates/overview.md) creates and
+   publishes a home page for you; building by hand, that's
+   [your first screen](publish-your-first-screen.md).
+4. You land on the new site's **Setup** page (titled *Host Setup*), with tabs for
+   Basic details, SEO, Theme, Custom Domain, Emails, and Activity. To start building
+   rather than configuring, use the **Screens** tab in the site navigation — see
+   [Publish your first screen](publish-your-first-screen.md).
 
 :::tip Name collisions
 Site names must be unique enough to generate a valid subdomain. If a name is taken,

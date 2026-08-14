@@ -16,7 +16,7 @@
  */
 
 import { render } from '@testing-library/react'
-import { MarkdownLiteView } from '../components/markdown-lite-view.component'
+import { MarkdownLiteView } from './markdown-lite-view.component'
 
 /**
  * Renderer parity for the markdown-lite block set (AGL-1315): the console's

@@ -76,7 +76,7 @@ the build if it ever appears.
 | -- | -- | -- |
 | `https://app.aglyn.com` | **Yes** | The canonical console. Routing is path-based (`app.aglyn.com/{slug}`), so every org's DAM is served from this one origin. |
 | `https://console.aglyn.com` | No | Measured 2026-08-12: `308 → https://app.aglyn.com/`. It never renders the app, so no page there can issue the `PUT`. |
-| `https://aglyn.com`, `https://www.aglyn.com` | No | Marketing site. No DAM. |
+| `https://aglyn.com`, `https://www.aglyn.com` | No | The marketing site. It is served by the **tenant** runtime (host `aglyn-marketing`, `cname: aglyn.com` — AGL-1607), not by a separate marketing app, but the verdict is unchanged: the tenant runtime only *serves* published pages and never issues a signed `PUT`. DAM uploads happen in the console. |
 | `https://<slug>.aglyn.com` (org workspace subdomains) | No | The middleware **rewrites** rather than redirects, so the origin would be preserved and would need its own entry. Measured 2026-08-12: `demo.aglyn.com` and `northwind.aglyn.com` both `404` — no workspace subdomain is attached to the console Vercel project today. See the ceiling note below before the first one is. |
 | Custom console domains (AGL-1099c white-label) | No | Same rewrite, same consequence: a customer console on their own domain is a distinct origin. Same ceiling note. |
 | `*.vercel.app` preview/branch hosts | No, deliberately | `aglyn-console-aglyn.vercel.app` serves a fully working console today, and AGL-1344 exists to **remove** that exposure. Adding it to a bucket allowlist would entrench a host we are deleting. |

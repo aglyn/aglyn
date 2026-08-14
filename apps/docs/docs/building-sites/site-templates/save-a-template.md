@@ -13,7 +13,7 @@ from the marketplace gallery.
 **Free** to use the starter gallery; sharing scales with your tier.
 :::
 
-![The screens list, where you save a site as a template](/img/getting-started/screens-list.png)
+![The screens list, with the Templates button that opens the "Start from a template" picker next to Create New Screen](/img/getting-started/screens-list.png)
 
 ## Start from a template
 
@@ -43,8 +43,23 @@ category.
 
 ## Save your site as a template
 
-1. From the site, choose **save as template**.
-2. Publish it so others can **browse and install** it from the marketplace.
+Saving a *whole site* is not done from the screens list — it lives in **Setup**.
+
+1. Open **Setup** for the site and find the **Site template** card, under the basic details.
+2. Click **Publish as template**.
+3. Fill in **Template name**, **Description**, **Category** (e.g. Portfolio, Restaurant) and
+   **Price (USD, 0 = free)**, then publish.
+
+This captures **every published screen plus the theme**, and publishes it to the
+**marketplace** — so it is a share, not a private snapshot. Re-publishing bumps the
+version. Add a preview image afterwards from **Manage → Marketplace**.
+
+### Saving a single page instead
+
+To reuse one page rather than a whole site, use the **⋮** row menu on the **Screens** list
+and choose **Save as template**. **Layouts** and **Components** have the same row action.
+These save into [your own templates library](./templates-library.md) and are **not**
+published anywhere until you publish them separately.
 
 ## Tips
 

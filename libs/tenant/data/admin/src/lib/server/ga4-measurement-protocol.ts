@@ -19,7 +19,7 @@ import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
 
 /**
  * Server-to-server GA4 delivery via the Measurement Protocol (AGL-1561) —
- * used for `purchase`, and only for `purchase`.
+ * `purchase`, and the one activation event no browser can witness.
  *
  * ## Why revenue is sent from the server and nothing else is
  *
@@ -44,6 +44,22 @@ import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
  *
  * `begin_checkout` stays client-side, because intent genuinely is a browser
  * event and its loss to an ad blocker costs a funnel step, not a dollar.
+ *
+ * ## The second sender: `site_published` from a scheduled publish (AGL-1589)
+ *
+ * Everything above argues for keeping the server-side surface as small as
+ * possible, and {@link sendGa4SitePublished} is the one other event that has
+ * no browser to fire it: a SCHEDULED publish is applied by a cron beat (or by
+ * an ISR regeneration) at a moment when the author is asleep. Until AGL-1589
+ * that path could not make a page reachable at all, so it was not an
+ * activation and nothing was sent; now that it registers the routing entry, a
+ * scheduled FIRST publish is a route going live and `publishScreenRoute`'s
+ * client-side `site_published` — the headline activation metric — would miss
+ * it. It is sent HERE for the same reason revenue is: the alternative is not
+ * a weaker event, it is no event.
+ *
+ * The rest of the activation funnel stays client-side. This is not a general
+ * server-side analytics channel and should not become one.
  *
  * ## The `client_id` problem, stated plainly
  *
@@ -120,20 +136,99 @@ export interface Ga4SendResult {
  * A stable, opaque stand-in for a browser client id.
  *
  * GA expects the `<random>.<timestamp>` shape. Determinism matters more than
- * realism: the same Stripe customer must map to the same synthetic user on
- * every renewal, or one paying customer becomes a crowd of one-purchase
- * strangers and ARPA is nonsense. Derived by a cheap non-cryptographic hash —
- * this is a bucketing key, not a secret, and the Stripe customer id it comes
- * from never leaves this function.
+ * realism: the same `seed` must map to the same synthetic user every time, or
+ * one paying customer becomes a crowd of one-purchase strangers and ARPA is
+ * nonsense. Derived by a cheap non-cryptographic hash — this is a bucketing
+ * key, not a secret, and the seed it comes from never leaves this function.
+ *
+ * The seed is whatever identifies the actor the events belong to on the
+ * surface doing the sending: the Stripe customer for revenue, the host id for
+ * a scheduled publish (AGL-1589). Both are opaque to GA — only the hash is
+ * ever transmitted.
  */
-export function synthesizeClientId(stripeCustomerId: string): string {
+export function synthesizeClientId(seed: string): string {
   let hash = 0
-  for (let i = 0; i < stripeCustomerId.length; i += 1) {
-    hash = (hash * 31 + stripeCustomerId.charCodeAt(i)) >>> 0
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
   }
   // Fixed second component: a real timestamp would make the id move between
   // renewals, which is precisely what determinism is here to prevent.
   return `${hash}.1000000000`
+}
+
+interface Ga4Credentials {
+  measurementId: string
+  apiSecret: string
+}
+
+/**
+ * Absent config is the normal state on self-hosted deployments and in
+ * development — not an error, and not worth a log line per event. It is also
+ * the current state of the TENANT deployment (AGL-1589): neither variable is
+ * set on the aglyn-tenant Vercel project (checked 2026-08-14), so
+ * `sendGa4SitePublished` no-ops there until they are added, exactly as
+ * intended. See docs/ANALYTICS.md.
+ */
+function ga4Credentials(): Ga4Credentials | null {
+  const measurementId = process.env.GA4_MEASUREMENT_ID || ''
+  const apiSecret = process.env.GA4_API_SECRET || ''
+  if (!measurementId || !apiSecret) return null
+  return { measurementId, apiSecret }
+}
+
+/**
+ * POST one already-sanitized event. Never throws — see the module comment on
+ * failure posture; the callers run inside a Stripe webhook claim and inside a
+ * publish executor, and in both a throw would have a side effect far worse
+ * than a missing analytics hit.
+ */
+async function postGa4Event(options: {
+  credentials: Ga4Credentials
+  eventName: string
+  params: Record<string, unknown>
+  clientId: string
+  userId?: string | null
+  /** Structured-log fields for the two failure lines (tag + subject). */
+  log: Record<string, unknown>
+}): Promise<{ sent: boolean; reason?: string }> {
+  const { credentials, eventName, params, clientId, userId, log } = options
+  try {
+    const response = await fetch(
+      `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
+        credentials.measurementId,
+      )}&api_secret=${encodeURIComponent(credentials.apiSecret)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: clientId,
+          // Opaque uid only — it is what stitches this event to the
+          // console's client-side events, which set the same user_id.
+          ...(userId ? { user_id: userId } : {}),
+          // Analytics-only posture (AGL-1538): Google Signals and ads
+          // personalization are OFF on the property, and this asserts the
+          // same thing per hit so a future dashboard change cannot quietly
+          // opt our server-side events into ads personalization.
+          non_personalized_ads: true,
+          events: [{ name: eventName, params }],
+        }),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      },
+    )
+    if (!response.ok) {
+      console.warn(JSON.stringify({ ...log, status: response.status }))
+      return { sent: false, reason: `http-${response.status}` }
+    }
+    return { sent: true }
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        ...log,
+        error: error instanceof Error ? error.message : 'unknown',
+      }),
+    )
+    return { sent: false, reason: 'network' }
+  }
 }
 
 /**
@@ -145,11 +240,8 @@ export function synthesizeClientId(stripeCustomerId: string): string {
 export async function sendGa4Purchase(
   input: Ga4PurchaseInput,
 ): Promise<Ga4SendResult> {
-  const measurementId = process.env.GA4_MEASUREMENT_ID || ''
-  const apiSecret = process.env.GA4_API_SECRET || ''
-  // Absent config is the normal state on self-hosted deployments and in
-  // development — not an error, and not worth a log line per payment.
-  if (!measurementId || !apiSecret) {
+  const credentials = ga4Credentials()
+  if (!credentials) {
     return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
   }
   const clientId =
@@ -173,54 +265,83 @@ export async function sendGa4Purchase(
     items: input.items,
   })
 
-  try {
-    const response = await fetch(
-      `${GA4_ENDPOINT}?measurement_id=${encodeURIComponent(
-        measurementId,
-      )}&api_secret=${encodeURIComponent(apiSecret)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId,
-          // Opaque uid only — it is what stitches this purchase to the
-          // console's client-side events, which set the same user_id.
-          ...(input.userId ? { user_id: input.userId } : {}),
-          // Analytics-only posture (AGL-1538): Google Signals and ads
-          // personalization are OFF on the property, and this asserts the
-          // same thing per hit so a future dashboard change cannot quietly
-          // opt our server-side revenue into ads personalization.
-          non_personalized_ads: true,
-          events: [{ name: 'purchase', params }],
-        }),
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-      },
-    )
-    if (!response.ok) {
-      console.warn(
-        JSON.stringify({
-          tag: 'AGL-1561:ga4-purchase',
-          status: response.status,
-          transactionId: input.transactionId,
-        }),
-      )
-      return {
-        sent: false,
-        synthesizedClientId,
-        reason: `http-${response.status}`,
-      }
-    }
-    return { sent: true, synthesizedClientId }
-  } catch (error) {
-    // Swallowed on purpose — see the module comment: a throw here would
-    // un-claim the Stripe event and cause a redelivery.
-    console.warn(
-      JSON.stringify({
-        tag: 'AGL-1561:ga4-purchase',
-        error: error instanceof Error ? error.message : 'unknown',
-        transactionId: input.transactionId,
-      }),
-    )
-    return { sent: false, synthesizedClientId, reason: 'network' }
+  // Swallows everything — see the module comment: a throw here would un-claim
+  // the Stripe event and cause a redelivery.
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'purchase',
+    params,
+    clientId,
+    userId: input.userId,
+    log: {
+      tag: 'AGL-1561:ga4-purchase',
+      transactionId: input.transactionId,
+    },
+  })
+  return { ...result, synthesizedClientId }
+}
+
+/**
+ * Send one `site_published` for a route that went live with no browser
+ * involved (AGL-1589). Never throws.
+ *
+ * ## Why this is allowed to be a synthetic user
+ *
+ * The client id is derived from the HOST — the site whose route went live —
+ * and not from the author, because the author is not present: a scheduled
+ * publish is applied by the cron beat minutes or hours after anybody clicked
+ * anything, and the browser that wrote the schedule is long gone. There is no
+ * session to join and nothing to attribute.
+ *
+ * Deriving it from the host rather than randomly is what keeps the metric
+ * honest in the one direction it can be dishonest. "% who publish a site"
+ * counts USERS, so a random id per publish would let one site scheduling ten
+ * publishes look like ten activated customers — the same inflation
+ * `publishScreenRoute` avoids by firing only when a route goes live. One host
+ * is one synthetic user, forever, however many of its screens go live on a
+ * timer.
+ *
+ * ## One param, deliberately
+ *
+ * `first_publish` and nothing else, matching the browser event (AGL-1588).
+ * The host id is a resource identifier bought for nothing, and the rest of the
+ * metric is answered by the event alone; the id is used only as the hash seed
+ * and never transmitted.
+ *
+ * The caller decides `first_publish` from the routing map it read before
+ * registering the entry, through the same `isFirstPublishedRoute` the console
+ * uses — a dimension is only worth registering if every sender means the same
+ * thing by it, and this sender is the one nobody can watch happen.
+ */
+export async function sendGa4SitePublished(input: {
+  /** Host uid the route went live on — hashed into a client id, never sent. */
+  hostId: string
+  /**
+   * Whether the host had no live route at all before this one. Omit when it
+   * genuinely cannot be determined — the param is optional and an absent
+   * breakdown value beats an invented one.
+   */
+  firstPublish?: boolean
+}): Promise<Ga4SendResult> {
+  const credentials = ga4Credentials()
+  if (!credentials) {
+    return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
   }
+  if (!input.hostId) {
+    return { sent: false, synthesizedClientId: false, reason: 'no-client-id' }
+  }
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'site_published',
+    // Sanitized like every other payload even though it carries one boolean —
+    // the guarantee should hold because the sanitizer ran, not because the
+    // author of this call happened to pass nothing identifying. It also drops
+    // `first_publish` when it is undefined, which is how "not determined"
+    // stays distinct from `false`.
+    params: sanitizeEventParams({ first_publish: input.firstPublish }),
+    clientId: synthesizeClientId(input.hostId),
+    log: { tag: 'AGL-1589:ga4-site-published' },
+  })
+  // Always synthetic here: there is no browser client id to have missed.
+  return { ...result, synthesizedClientId: true }
 }

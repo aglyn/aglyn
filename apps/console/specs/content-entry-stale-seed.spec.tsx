@@ -146,8 +146,17 @@ jest.mock('../components/layouts/authenticated.layout', () => passthrough)
 jest.mock('../components/layouts/main.layout', () => passthrough)
 jest.mock('../components/host-display-name.component', () => nullCard)
 jest.mock('../components/media/media-picker-dialog.component', () => nullCard)
-jest.mock('../components/markdown-editor-toolbar.component', () => nullCard)
-jest.mock('../components/markdown-visual-editor.component', () => nullCard)
+jest.mock('@aglyn/aglyn-markdown-editor', () => ({
+  __esModule: true,
+  MarkdownEditorToolbar: () => null,
+  MarkdownVisualEditor: () => null,
+  MARKDOWN_SOURCE_HINT: '',
+  applyCommandToSource: (body: string, start: number, end: number) => ({
+    body,
+    start,
+    end,
+  }),
+}))
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
   useHostSubdomain: () => 'shop',

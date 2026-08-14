@@ -27,6 +27,7 @@ import {
   parseLimit,
   type RateLimitState,
   rateLimitHeaders,
+  withResponseHeaders,
 } from './api-http'
 
 describe('api-http', () => {
@@ -95,6 +96,39 @@ describe('api-http', () => {
       const res = apiJson({ ok: true })
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ ok: true })
+    })
+  })
+
+  describe('withResponseHeaders', () => {
+    it('adds headers to a foreign response without disturbing it (AGL-1596)', async () => {
+      const refusal = Response.json(
+        { error: 'locked' },
+        {
+          status: 423,
+          headers: { 'Cache-Control': 'no-store', 'Retry-After': '90' },
+        },
+      )
+      const merged = withResponseHeaders(refusal, {
+        'X-RateLimit-Limit': '120',
+        'X-RateLimit-Remaining': '119',
+      })
+      expect(merged.status).toBe(423)
+      expect(await merged.json()).toEqual({ error: 'locked' })
+      expect(merged.headers.get('Cache-Control')).toBe('no-store')
+      expect(merged.headers.get('Retry-After')).toBe('90')
+      expect(merged.headers.get('X-RateLimit-Limit')).toBe('120')
+    })
+
+    it('overwrites rather than appends, so nothing arrives doubled', () => {
+      const merged = withResponseHeaders(
+        Response.json({}, { headers: { 'X-RateLimit-Remaining': '5' } }),
+        { 'X-RateLimit-Remaining': '119' },
+      )
+      // A `,`-joined value is the tell that the header was appended twice.
+      expect(merged.headers.get('X-RateLimit-Remaining')).toBe('119')
+      expect(
+        [...merged.headers].filter(([n]) => n === 'x-ratelimit-remaining'),
+      ).toHaveLength(1)
     })
   })
 

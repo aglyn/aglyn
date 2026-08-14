@@ -36,8 +36,9 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   gear to [Manage Account](../workspace-and-billing/manage-account.md); below that are
   **Manage Team**, **Billing**, **Support**, **Staff console** (Aglyn staff only), and a
   **Documentation** link that opens this docs site in a new tab. It also holds the
-  **theme toggle** (light / system / dark), an **Upgrade plan** button unless you're
-  already on Advanced, **Sign out**, and a footer naming your current workspace and plan.
+  **theme toggle** (light / system / dark), an **Upgrade plan** button — shown only when
+  your workspace has a higher plan to move to, and only to members who can open Billing —
+  **Sign out**, and a footer naming your current workspace and plan.
 
 ## In-context help
 
@@ -49,18 +50,38 @@ matching section of these docs in a new tab.
 
 ## Primary navigation
 
+The tabs across the top of a site are its **sections**. Some are always present; the rest
+are contributed by the plugins your workspace has enabled — so two sites, or the same site
+before and after you enable a plugin, can show different tabs. Don't be surprised by a
+tab strip that doesn't match a screenshot exactly.
+
+These four are where a new site's work happens:
+
 | Section | What's there |
 | --- | --- |
-| **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. |
-| **Components** | Reusable components shared across screens. |
-| **Data** | Organization datasets — shared by every site. |
-| **Products** | Commerce products and orders. |
-| **Logic** | Variables and functions screens bind to. |
-| **Workflows** | Workflows, automations, and webhooks. |
+| **Dashboard** | The site at a glance — analytics and recent-signup summaries, and the ten most recent activity entries. |
+| **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. This is where you build; start at [Publish your first screen](publish-your-first-screen.md). |
 | **Media** | The media library — folders, images, video, and files. |
-| **Content** | Collections, blog entries, and the inbox. |
-| **Setup** | Theme editor, custom domain, SEO, and the full activity log. Each section is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
-| **Billing** | Plan cards and usage meters. |
+| **Setup** | Basic details, SEO, theme, custom domain, emails, and the full activity log. Each tab is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
+
+Alongside them, and always present: **Layouts** and **Components** (the shared frames and
+reusable pieces screens are assembled from — see
+[Screens & Layouts](../building-sites/screens-and-layouts/overview.md)), **Templates**
+(saved starting points), **Content** (collections and blog entries), **Users** (the people
+who sign in to the site you're building, not your own team), and **Analytics**. **Admin**
+appears only if you're an owner or admin of the site; it holds per-site plugin settings and
+the danger zone.
+
+:::note Sections that come and go
+Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Contacts**,
+**Bookings**, **Events**, **Redirects**, **Marketing** and **Marketplace** are contributed
+by plugins and appear only where that plugin is enabled for your workspace (they're
+inserted after **Analytics**). If a section these docs describe isn't in your tab strip,
+that's usually why — enable the plugin under **Organization → Plugins**.
+:::
+
+**Billing is not a site section.** Plan cards and usage meters are workspace-wide and live
+in your account menu under **Billing** — one bill covers every site in the workspace.
 
 ## Editing vs. managing
 
@@ -70,13 +91,27 @@ without opening the editor. When you want to design it, open the
 
 ## A site's dashboard
 
-Opening a site lands you on its dashboard — the primary navigation tabs across the top,
-account/role management, quick controls for surfaces like the announcement bar and
-promotional popup, and the ten most recent activity entries (the full, paginated log
-lives under **Setup → Activity**). Each entry names the thing that changed — "Saved the
-screen — Home" — and links straight to it.
+Opening a site lands you on its dashboard. It's a place to *glance* at the site, not to
+edit it — every card is a summary with a link to the section that owns the detail:
 
-![The Aglyn console site dashboard, showing the primary navigation tabs (Dashboard, Screens, Layouts, Media, Content, Inbox, Contacts, Bookings, Events, Data, Redirects, Workflows, Marketplace), the Users card with the account owner listed, and Announcement bar / Promotional popup quick-edit cards](/img/getting-started/console-dashboard.png)
+- **Traffic** — pageviews over a window you choose (14 days by default). **View details**
+  opens **Analytics**.
+- **Newest site users** — the five most recent people who signed up *on your site*.
+  **View all** opens **Users**.
+- **Recent Activity** — the ten most recent changes, each naming the thing that changed
+  ("Saved the screen — Home") and linking straight to it. The full, paginated log lives
+  under **Setup → Activity**.
+
+Plugins contribute the rest, so this list is a floor rather than an exact match for your
+own dashboard: **Last campaign** appears once you've sent an email campaign, and
+**Commerce** where the commerce plugin is enabled and the site has products or orders.
+A brand-new site shows the same cards with empty states — "No pageviews recorded yet",
+"No activity yet" — which is what a first visit should look like.
+
+Two things people expect here and won't find: **role management** lives under **Users**,
+and the **announcement bar** and **promotional popup** live under **Marketing**.
+
+![The site dashboard: a Traffic card with its 14-day range picker, a Newest site users card, a Last campaign card counting sends, opens and clicks, and the Recent Activity feed across the bottom](/img/getting-started/console-dashboard.png)
 
 ## Next
 
@@ -85,15 +120,17 @@ screen — Home" — and links straight to it.
 ## Workspace settings & notifications
 
 Organization-wide settings (name, workspace URL) live under
-**Organization → Settings**. Enabling plugins, configuring them, and managing
-marketplace installs live under **Organization → Marketplace → Installed**:
+**Organization → Settings**, which also holds Profile, API keys, Branding,
+Single sign-on, Ownership and Delete. Turning plugins on and off for the
+workspace is its own section, **Organization → Plugins** — **Marketplace** is
+for finding and installing new ones, not for administering what you already run:
 
-![Organization settings](/img/getting-started/org-settings-page.png)
+![The Organization Settings page: a Navigation card listing General, Profile, Plugins, API keys, Branding, Single sign-on, Ownership and Delete, beside the General card with the organization name and workspace URL](/img/getting-started/org-settings-page.png)
 
 Your in-app notification feed — billing, publishing, workflow failures —
 lives under **Notifications**, with per-category mutes:
 
-![The notifications feed](/img/getting-started/notifications-page.png)
+![The Notifications page: a Mark all read action, a row of per-category mute toggles (Billing, Team & access, Forms & bookings, Marketplace, Product & system), the three per-device Alerts switches with Send test alert beside them, and the paginated feed below](/img/getting-started/notifications-page.png)
 
 ### Alerts on this device
 

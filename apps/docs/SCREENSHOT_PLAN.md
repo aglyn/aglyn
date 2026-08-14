@@ -9,7 +9,14 @@ Conventions (per `CONTRIBUTING.md`): 1440×900 window, light scheme, seeded emul
 stack via `tools/e2e/capture-docs-screenshots.mjs` where possible (add shot specs
 there rather than capturing by hand), crop tightly to the named element, save under
 `static/img/<area>/`, optimize to <300 KB. Component-level crops are preferred over
-full pages throughout.
+full pages throughout — a shot spec's `clipTo: { locator, include }` crops to what
+the element measures at capture time, which is what a card whose neighbours keep
+growing needs.
+
+**Read `CONTRIBUTING.md`'s note on the capture account before adding a shot.** The
+harness signs in as STAFF, and staff see release-flagged-off surfaces that no
+customer does; it hides and then asserts on them, so a hand-made capture is the one
+route that can still leak one (AGL-1600).
 
 ---
 
@@ -75,7 +82,12 @@ full pages throughout.
 - **Alt text:** The Search engines card with the discourage switch on and its
   warning that the site is hidden from search.
 
-### 6. `static/img/seo/page-access-visibility.png`
+### 6. `static/img/seo/page-access-visibility.png` — ✅ CAPTURED (AGL-1600)
+
+Shot spec lives in `capture-docs-screenshots.mjs`; embedded in
+`building-sites/seo/overview.md`, and in `site-protection/overview.md` and
+`site-protection/password-a-screen.md`, which were borrowing a screens-list shot
+for want of this one (AGL-1599).
 
 - **Docs page:** `building-sites/seo/overview.md` → `#a-single-page`
 - **Capture:** a screen's detail page → **Page Access** card, with the **Visibility**

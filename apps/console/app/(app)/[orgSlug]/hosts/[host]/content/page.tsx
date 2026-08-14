@@ -81,16 +81,15 @@ import useFirestoreCollection from '../../../../../../hooks/use-firestore-collec
 import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../hooks/use-host-activity-logger'
 import MediaPickerDialog from '../../../../../../components/media/media-picker-dialog.component'
-import MarkdownEditorToolbar from '../../../../../../components/markdown-editor-toolbar.component'
 import {
   applyCommandToSource,
   MARKDOWN_SOURCE_HINT,
-} from '../../../../../../components/markdown-source-command'
-import MarkdownVisualEditor, {
+  MarkdownEditorToolbar,
+  MarkdownVisualEditor,
   type MarkdownEditorCommand,
   type MarkdownEditorContext,
   type MarkdownVisualEditorHandle,
-} from '../../../../../../components/markdown-visual-editor.component'
+} from '@aglyn/aglyn-markdown-editor'
 
 const slugify = (value: string) =>
   value

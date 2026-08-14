@@ -21,6 +21,7 @@ import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
+import PageBodyBoundary from './page-body-boundary'
 import SiteAnalytics from './site-analytics'
 import type { Props } from './types'
 
@@ -747,8 +748,18 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
           process — ISR caches the result), every render ships the full HTML
           inline, and client hydration retries ride the normal scheduler,
           which runs everywhere. The ensure promise is status-stamped
-          (plugin-loader.ts), so warm renders don't suspend at all. */}
-      <CatchAllClient {...clientProps} />
+          (plugin-loader.ts), so warm renders don't suspend at all.
+
+          The ERROR boundary below is not that boundary and does not bring
+          any of it back (AGL-1556): it never intercepts suspension, so the
+          gate still blocks the shell exactly as described above. What it
+          confines is a gate that THROWS — a plugin chunk 404ing under a
+          visitor holding pre-deploy HTML — which without it escapes the
+          whole root and takes `SiteAnalytics` and Next's global error
+          boundary (i.e. the root layout, `ErrorBeacon` included) with it. */}
+      <PageBodyBoundary>
+        <CatchAllClient {...clientProps} />
+      </PageBodyBoundary>
     </>
   )
 }

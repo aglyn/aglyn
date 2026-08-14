@@ -115,6 +115,14 @@ jest.mock('./firebase-admin', () => {
             },
           }
         }
+        if (name === 'mediaQuarantines') {
+          // The AGL-1512 deny list — always empty here, so these cases test
+          // the SCOPE lock in isolation. Answered rather than left to the
+          // `Unexpected collection` throw: that throw would be swallowed by
+          // the quarantine reader's fail-open catch, and every case below
+          // would be quietly exercising an error path instead of a read.
+          return { get: async () => snapshotFor(null) }
+        }
         throw new Error(`Unexpected collection ${name}`)
       },
     }),
