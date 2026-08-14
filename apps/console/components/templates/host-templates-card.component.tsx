@@ -16,7 +16,11 @@
  */
 'use client'
 
-import type { TemplateKind } from '@aglyn/aglyn'
+import {
+  lockdownRefusalText,
+  parseLockdownRefusal,
+  type TemplateKind,
+} from '@aglyn/aglyn'
 import {
   AppLink,
   CardDisplay,
@@ -301,6 +305,14 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // An installs lock is not a broken template (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(payload?.error ?? 'Update failed', {
             variant: response.status === 402 ? 'warning' : 'error',
             allowDuplicate: true,

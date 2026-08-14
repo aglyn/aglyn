@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback } from 'react'
@@ -144,6 +145,17 @@ export function useMarketplaceActions(hostId: string) {
           if (payload?.diverged && options?.onDiverged) {
             return void options.onDiverged()
           }
+          // An installs feature lockdown (AGL-1510/1532): "Install failed"
+          // reads as a broken listing — the very thing an incident response
+          // needs people NOT to conclude while a suspect listing is under
+          // investigation. The server says installs are paused; say that.
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(payload?.error ?? 'Install failed', {
             variant: response.status === 402 ? 'warning' : 'error',
             allowDuplicate: true,
@@ -220,6 +232,13 @@ export function useMarketplaceActions(hostId: string) {
          * would leave the workspace believing it did.
          */
         const abiWarnings = new Set<string>()
+        /**
+         * A feature lockdown refuses every step identically (AGL-1532), so
+         * the fan-out stops at the first one and says "installs are paused"
+         * ONCE. N identical refusals stacked into the error summary would
+         * read as N broken sites — the opposite of what the lock is saying.
+         */
+        let lockedNotice: ReturnType<typeof parseLockdownRefusal> = null
         for (const step of steps) {
           // Org steps still need a host to resolve the org server-side, so
           // fall back to the acting host; host steps target their own site.
@@ -242,7 +261,27 @@ export function useMarketplaceActions(hostId: string) {
             if (payload?.hostAbiWarning) {
               abiWarnings.add(String(payload.hostAbiWarning))
             }
-          } else errors.push(payload?.error ?? 'Install failed')
+          } else {
+            lockedNotice = parseLockdownRefusal(response.status, payload)
+            if (lockedNotice) break
+            errors.push(payload?.error ?? 'Install failed')
+          }
+        }
+        if (lockedNotice) {
+          enqueueSnackbar(lockdownRefusalText(lockedNotice), {
+            variant: 'warning',
+            persist: true,
+          })
+          // Whatever landed before the lock DID land — saying so is the
+          // difference between "nothing happened" and a half-applied plan
+          // the workspace would otherwise discover much later.
+          if (installed) {
+            enqueueSnackbar(
+              `${installed} site(s) were already updated before the pause.`,
+              { variant: 'info', persist: false },
+            )
+          }
+          return
         }
         const orgWide = steps.some((step) => step.scope === 'org')
         const updating = options?.intent === 'update'
@@ -302,6 +341,17 @@ export function useMarketplaceActions(hostId: string) {
           body: JSON.stringify({ listingId: listing.$id, hostId }),
         })
         const payload = await response.json()
+        // The PAID install door refuses under a lock too (AGL-1545): both
+        // `checkout` and `marketplace-installs` gate it. A buyer must not
+        // read either lock as a payment failure — same reason the billing
+        // page carries this branch (AGL-1532).
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          return void enqueueSnackbar(lockdownRefusalText(locked), {
+            variant: 'warning',
+            persist: true,
+          })
+        }
         if (response.status === 501) {
           return void enqueueSnackbar(
             'Purchases are not configured on this deployment',
@@ -363,6 +413,17 @@ export function useMarketplaceActions(hostId: string) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // Uninstall rides the install-plugin route, so an installs lock
+          // refuses it too (AGL-1532) — and "Uninstall failed" during an
+          // incident is exactly the wrong sentence for someone trying to
+          // remove the listing under investigation.
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(payload?.error ?? 'Uninstall failed', {
             variant: 'error',
             allowDuplicate: true,

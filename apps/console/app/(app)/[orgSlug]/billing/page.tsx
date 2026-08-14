@@ -19,8 +19,10 @@
 import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
+  lockdownRefusalText,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  parseLockdownRefusal,
   parseOnboardingPlanIntent,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
@@ -373,6 +375,21 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           body: JSON.stringify({ plan: targetPlan, interval, orgId }),
         })
         const payload = await response.json()
+        // A checkout feature lockdown (AGL-1510/1532). This branch comes
+        // first and it is the one that matters most on this page: "Could
+        // not start checkout" tells a customer their PAYMENT failed, and a
+        // customer who believes that retries, panics, then emails support.
+        // The server's body says the opposite in so many words — render it.
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          return enqueueSnackbar(lockdownRefusalText(locked), {
+            variant: 'warning',
+            // Persist: a deliberate pause is not a blip to be missed, and
+            // the reassurance ("your account and sites are unaffected") is
+            // the half a worried customer needs time to read.
+            persist: true,
+          })
+        }
         if (response.status === 501) {
           return enqueueSnackbar(
             'Billing is not configured yet — Stripe keys are pending.',

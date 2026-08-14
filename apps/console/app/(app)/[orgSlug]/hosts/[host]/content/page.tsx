@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
@@ -525,6 +526,15 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         }),
       })
       const payload = await response.json()
+      // The blog editor's AI door, same pause notice as the designer
+      // drawer (AGL-1532).
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
       if (response.status === 501) {
         return void enqueueSnackbar(
           'AI assist is not configured on this deployment',

@@ -99,6 +99,19 @@ is decided by account age, not claims — there is no bypass to grant.
 **Expiry** works the same as every scope: when the optional end time passes,
 the feature restores itself with no staff action and no write.
 
+**What a customer sees.** Every console surface a feature lock can refuse —
+the billing upgrade buttons, every marketplace install and purchase button,
+the theme and template installers, and both AI-assist doors — renders the
+lock's own notice rather than a generic failure toast. So a checkout lock
+reads *"Checkout is temporarily unavailable — this is not a payment failure,
+and your account, subscription, and sites are unaffected"*, and an installs
+lock reads *"installs are paused; everything already installed keeps
+working"*. This matters for the message you type: it **replaces the body of
+that notice**, so write it for the customer, not for the incident channel. An
+end time is restated in the reader's own local time; without one, no return
+time is promised. Genuine failures are untouched — a real error still shows a
+real error.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —

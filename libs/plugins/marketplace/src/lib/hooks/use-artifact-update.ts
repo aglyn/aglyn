@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback, useState } from 'react'
@@ -84,6 +85,17 @@ export function useArtifactUpdate(hostId: string) {
           action: 'preview',
         })
         if (!response.ok) {
+          // `update-artifact` is an install by another name, so an installs
+          // lock refuses it (AGL-1510/1532) — say "paused", not "could not
+          // read this update", which reads as a corrupt listing.
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+            return null
+          }
           enqueueSnackbar(payload?.error ?? 'Could not read this update', {
             variant: 'error',
             allowDuplicate: true,
@@ -127,6 +139,14 @@ export function useArtifactUpdate(hostId: string) {
           ...options,
         })
         if (!response.ok) {
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+            return false
+          }
           enqueueSnackbar(payload?.error ?? 'Update failed', {
             variant: payload?.needsConfirmation ? 'warning' : 'error',
             allowDuplicate: true,

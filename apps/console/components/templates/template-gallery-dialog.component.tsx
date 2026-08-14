@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // A listing's preview may be a `media:` reference (AGL-1424), which is not a
 // URL. The marketplace lib's own `ListingImage` cannot be imported here —
 // `scope:app` may not depend on `aglyn:addons` — so this resolves directly.
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
@@ -309,6 +310,14 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // An installs lock is not a broken listing (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(
             payload?.error ?? 'Template install failed',
             {

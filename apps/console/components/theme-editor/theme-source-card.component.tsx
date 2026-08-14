@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { docsHelp } from '../../constants/docs-links'
 import { describeTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import type { HostTheme } from '@aglyn/shared-data-types'
@@ -88,6 +89,14 @@ export function ThemeSourceCard(props: {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // Same `install-theme` route, same pause notice (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(payload?.error ?? 'That did not work', {
             variant: 'warning',
             allowDuplicate: true,

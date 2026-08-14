@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { docsHelp } from '../../constants/docs-links'
 import {
   diffOverride,
@@ -193,6 +194,16 @@ export function ThemeOverridesCard(props: {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
+        // Clearing overrides rides `install-theme`, so an installs lock
+        // refuses it (AGL-1532). "That did not work" is a shrug; the lock
+        // has an actual reason and it belongs on screen.
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          return void enqueueSnackbar(lockdownRefusalText(locked), {
+            variant: 'warning',
+            persist: true,
+          })
+        }
         return void enqueueSnackbar(payload?.error ?? 'That did not work', {
           variant: 'warning',
           allowDuplicate: true,

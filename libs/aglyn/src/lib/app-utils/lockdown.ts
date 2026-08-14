@@ -509,6 +509,166 @@ function featureLockdownNotice(
 }
 
 /**
+ * The wire shape of the 423 refusal body (`lockdownJsonResponse`). Declared
+ * here, beside the copy that fills it, so the client parser below and the
+ * server writer agree by construction rather than by comment.
+ */
+export interface LockdownRefusalBody {
+  error?: unknown
+  scope?: unknown
+  feature?: unknown
+  reason?: unknown
+  title?: unknown
+  message?: unknown
+  contact?: unknown
+  untilMs?: unknown
+}
+
+/** A 423 body, parsed into something a client surface can render. */
+export interface LockdownRefusalNotice {
+  title: string
+  message: string
+  contact?: string
+  scope?: LockdownScope
+  feature?: LockdownFeatureKey
+  untilMs?: number
+  /**
+   * The expiry as a human, LOCAL-time line — `undefined` when the lock has
+   * no expiry, which is most of them. Never a raw epoch number.
+   */
+  until?: string
+}
+
+/**
+ * The generic-but-honest fallback: what a client says when the server said
+ * Locked but the body told it nothing else. It must still be TRUE — "this is
+ * paused", never "something went wrong" (the failure this whole affordance
+ * exists to stop), and never the word `undefined`.
+ */
+export const LOCKDOWN_REFUSAL_FALLBACK_TITLE = 'Temporarily unavailable'
+export const LOCKDOWN_REFUSAL_FALLBACK_MESSAGE =
+  'This is temporarily paused while we work on something. Nothing you have ' +
+  'created is affected — please try again shortly.'
+
+/**
+ * The exact sentence the notice builders append to a DEFAULT body when a
+ * lock has an expiry. Built here so the client parser can strip it by exact
+ * match (same `untilMs`, same string) instead of sniffing a regex.
+ */
+function lockdownUntilSuffix(untilMs: number): string {
+  return `Expected back by ${new Date(untilMs).toUTCString()}.`
+}
+
+/**
+ * The expiry as a client-side, LOCAL-time line (AGL-1532). A UTC string is
+ * correct and unreadable; a customer wants to know when to come back on
+ * their own clock.
+ */
+export function formatLockdownUntil(untilMs: number): string | undefined {
+  if (!Number.isFinite(untilMs)) return undefined
+  const when = new Date(untilMs)
+  if (Number.isNaN(when.getTime())) return undefined
+  const stamp = when.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+  return `Expected back around ${stamp}.`
+}
+
+/**
+ * Parse a fetch response's status + parsed JSON body into a renderable
+ * lockdown notice, or `null` when this was not a lockdown refusal
+ * (AGL-1532).
+ *
+ * ONE parser, used by every client call site a feature lock can refuse —
+ * billing checkout, marketplace installs and purchases, the AI-assist
+ * drawer. Three copies of this parsing is the second-implementation shape
+ * that lets one surface drift back to "checkout failed" while the others
+ * stay honest.
+ *
+ * Three rules, each of which a spec pins:
+ *
+ *  1. **Only 423.** A 500 — a real, unexplained failure — returns `null` so
+ *     the caller keeps its generic error toast. Dressing a genuine fault as
+ *     a deliberate pause is a worse lie than the one being fixed.
+ *  2. **A 423 always yields a notice.** The server said Locked; that is the
+ *     honest thing to render even if the body is malformed, truncated by a
+ *     proxy, or from an older deploy. Missing fields degrade to the shared
+ *     per-feature copy when the body names a known feature, and to the
+ *     generic-but-honest fallback otherwise.
+ *  3. **No duplicated expiry.** The default server copy already ends with a
+ *     UTC "Expected back by …" sentence; that exact suffix is stripped and
+ *     restated as `until` in the reader's local time. A staff-typed custom
+ *     message never carries the suffix, so nothing is stripped from it.
+ */
+export function parseLockdownRefusal(
+  status: number,
+  body: unknown,
+): LockdownRefusalNotice | null {
+  if (status !== 423) return null
+  const payload: LockdownRefusalBody =
+    body && typeof body === 'object' ? (body as LockdownRefusalBody) : {}
+  const feature = isLockdownFeatureKey(payload.feature)
+    ? payload.feature
+    : undefined
+  const untilMs =
+    typeof payload.untilMs === 'number' && Number.isFinite(payload.untilMs)
+      ? payload.untilMs
+      : undefined
+  // A body that named a feature but lost its copy still gets the RIGHT
+  // words — the same ones the server would have sent — because that copy
+  // lives here too. Only a body naming nothing falls all the way back.
+  const derived = feature
+    ? featureLockdownNotice(feature, undefined, untilMs)
+    : undefined
+  const title =
+    typeof payload.title === 'string' && payload.title.trim()
+      ? payload.title.trim()
+      : (derived?.title ?? LOCKDOWN_REFUSAL_FALLBACK_TITLE)
+  let message =
+    typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message.trim()
+      : (derived?.body ?? LOCKDOWN_REFUSAL_FALLBACK_MESSAGE)
+  if (typeof untilMs === 'number') {
+    const suffix = lockdownUntilSuffix(untilMs)
+    if (message.endsWith(suffix)) {
+      message = message.slice(0, -suffix.length).trim()
+    }
+  }
+  const contact =
+    typeof payload.contact === 'string' && payload.contact.trim()
+      ? payload.contact.trim()
+      : undefined
+  const until =
+    typeof untilMs === 'number' ? formatLockdownUntil(untilMs) : undefined
+  return {
+    title,
+    message,
+    ...(contact ? { contact } : {}),
+    ...(typeof payload.scope === 'string'
+      ? { scope: payload.scope as LockdownScope }
+      : {}),
+    ...(feature ? { feature } : {}),
+    ...(typeof untilMs === 'number' ? { untilMs } : {}),
+    ...(until ? { until } : {}),
+  }
+}
+
+/**
+ * The notice as ONE line, for surfaces whose only affordance is a snackbar
+ * (AGL-1532). The title is prefixed only when the message does not already
+ * open with it — the checkout copy leads with its own title, and "Checkout
+ * is temporarily unavailable — Checkout is temporarily unavailable — this is
+ * not a payment failure" helps nobody.
+ */
+export function lockdownRefusalText(notice: LockdownRefusalNotice): string {
+  const lower = notice.message.toLowerCase()
+  const led = lower.startsWith(notice.title.toLowerCase())
+  const head = led ? notice.message : `${notice.title} — ${notice.message}`
+  return notice.until ? `${head} ${notice.until}` : head
+}
+
+/**
  * Which feature keys gate a plugin-API dispatcher path (AGL-1510, plural
  * since AGL-1545). Lives here (pure, beside the enum) so the dispatcher's
  * wiring is one call and the mapping is unit-testable without a route
