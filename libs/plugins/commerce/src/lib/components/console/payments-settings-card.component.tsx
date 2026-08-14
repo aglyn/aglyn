@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -102,6 +103,14 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         })
       }
       if (payload.chargesEnabled) {
+        // "% who connect Stripe" — a GTM plan §6 activation metric
+        // (AGL-1561). Gated on the TRANSITION, not the state: this handler
+        // is a re-entrant create-or-resume, so it answers `chargesEnabled:
+        // true` on every subsequent visit to a connected account, and a bare
+        // event here would count one merchant once per click forever.
+        // `chargesEnabled` is the state read from the profile BEFORE this
+        // request, so the event fires only when onboarding actually completed.
+        if (!chargesEnabled) trackEvent('stripe_connected', {})
         return void enqueueSnackbar('Payments are enabled', {
           variant: 'success',
           persist: false,
@@ -117,7 +126,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
     } finally {
       setBusy(false)
     }
-  }, [user, hostId, enqueueSnackbar])
+  }, [user, hostId, chargesEnabled, enqueueSnackbar])
 
   return (
     <CardDisplay header={'Payments'} contentGutterX contentGutterY>

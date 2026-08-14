@@ -16,7 +16,11 @@
  */
 'use client'
 
-import type { TemplateKind } from '@aglyn/aglyn'
+import {
+  lockdownRefusalText,
+  parseLockdownRefusal,
+  type TemplateKind,
+} from '@aglyn/aglyn'
 import {
   AppLink,
   CardDisplay,
@@ -62,7 +66,9 @@ import { useHostSubdomain } from '../host-id-provider'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
-import createPageFromTemplate from './create-page-from-template'
+import createPageFromTemplate, {
+  withBundleRootScreen,
+} from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 
 /**
@@ -301,6 +307,14 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // An installs lock is not a broken template (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(payload?.error ?? 'Update failed', {
             variant: response.status === 402 ? 'warning' : 'error',
             allowDuplicate: true,
@@ -447,7 +461,11 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
           )
         }
         const used = new Set<string>(Object.values(routes))
-        for (const page of pages) {
+        // Same rule the gallery applies (AGL-1575): a bundle where nothing
+        // claims the site root, applied to a host that has no home page,
+        // gives the root to its first page rather than leaving the site 404ing
+        // at its own URL. A host that already has a home keeps it.
+        for (const page of withBundleRootScreen(pages, used)) {
           // Same helper the single-template Use flow calls (AGL-672), so
           // create-screen → write-version → publish-route and its slug
           // de-confliction have one implementation.

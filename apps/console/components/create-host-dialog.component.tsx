@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { generateSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -90,6 +91,10 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           allowDuplicate: true,
         })
       }
+      // Activation (AGL-1561) — the step between signing up and publishing.
+      // After the `payload.hostId` guard, so a rejected subdomain is not
+      // counted as a site.
+      trackEvent('host_created', {})
       enqueueSnackbar(`Created "${name.trim()}"`, {
         variant: 'success',
         persist: false,

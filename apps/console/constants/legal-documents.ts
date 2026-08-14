@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v2'
+export const LEGAL_DOCUMENT_VERSION = 'v3'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -77,20 +77,33 @@ export interface LegalDocumentManifestEntry {
  * beta/$50-cap separation in the Terms (§1.1, §6, §14.3, §15.3), the real
  * retention posture and CCPA flat denial in the Privacy Policy. Captured from
  * the live pages after publication, same method as v1.
+ *
+ * v3 (2026-08-14, AGL-1555): the registered agent exists, so the Terms lose
+ * their three `[Registered agent address — pending]` placeholders — the party
+ * block (registered office), §19.8 Notices, and §19.11 Contact all now name
+ * Northwest Registered Agent in Austin. The Privacy Policy's §3 provider bullet
+ * drops Anthropic, which processes nothing: `ANTHROPIC_API_KEY` is absent from
+ * production and the AI-assist route 501s. Same capture method as v1 and v2,
+ * proven against the v2 hashes before this set was taken.
+ *
+ * The DMCA designated-agent block and the cookie policy changed in the same
+ * pass but are not snapshotted here — only the two documents the consent
+ * control links to are, and the Terms incorporate the rest by reference
+ * (§19.1). See `LEGAL_URLS`.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '063f48bae466d9e29fac9298ab3e5a473dfc94d07959771b0de043594ca587f9',
-    bytes: 32985,
+      '5438b94d6bae2c9dae80ceba9ec53213990f20fa21b0d5b6f4fbbe3c8d553e73',
+    bytes: 33117,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '42db0bb4cde176b5c5fd2e82a4faa9102b9f5e0a763a824f5b4716b1379daa85',
-    bytes: 10631,
+      '0ecdbec1040536870796696cfc862513d1b87cea13ad02cd5818f7714d5fc238',
+    bytes: 10641,
   },
 ]

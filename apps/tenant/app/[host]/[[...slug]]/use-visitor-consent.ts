@@ -17,6 +17,12 @@
 
 'use client'
 
+// The deep module, never the `@aglyn/aglyn` barrel (AGL-1550). This hook is
+// part of the analytics/consent subtree that must stay independent of the
+// site-plugin gate, and the barrel pulls the plugin manager and the canvas in
+// behind it — an import that defeats the whole point of the hoist while
+// looking like a tidier import line. `site-analytics-independence.spec.ts`
+// asserts it.
 import {
   hasGlobalPrivacyControl,
   isExplicitConsentStatus,
@@ -27,7 +33,7 @@ import {
   VISITOR_CONSENT_CHANGED_EVENT,
   type VisitorConsentHost,
   type VisitorConsentPosture,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/visitor-consent'
 import { useEffect, useState } from 'react'
 
 /**
@@ -122,6 +128,91 @@ const INITIAL_STATE: VisitorConsentState = {
   country: null,
 }
 
+/** The resolution itself, with no React in it. */
+export type ResolvedVisitorConsent = Omit<VisitorConsentState, 'ready'>
+
+/**
+ * Resolve the visitor's consent state, per the order in the module comment.
+ *
+ * A plain async function rather than effect-local code (AGL-1550), because it
+ * has two callers that must not drift: the hook below, which needs the answer
+ * to render with, and `primeVisitorConsent`, which needs the `/api/consent/region`
+ * call to GO OUT even when React never commits. Idempotent — it reads and
+ * writes the same storage deterministically, and the region lookup is
+ * session-cached — so running it twice costs one network call and reaches one
+ * answer.
+ */
+export async function decideVisitorConsent(
+  hostId: string,
+  host: VisitorConsentHost | null | undefined,
+): Promise<ResolvedVisitorConsent> {
+  if (hasAskOverride()) {
+    // Simulate a first prior-consent visit; see the module comment.
+    return { stored: null, posture: 'opt-in', country: null }
+  }
+  let stored = readStoredVisitorConsent(hostId)
+  if (
+    hasGlobalPrivacyControl() &&
+    !isExplicitConsentStatus(stored?.status) &&
+    stored?.status !== 'gpc-opt-out'
+  ) {
+    stored = storeVisitorConsent(hostId, {
+      status: 'gpc-opt-out',
+      country: stored?.country ?? null,
+    })
+  }
+  if (stored) {
+    return { stored, posture: null, country: stored.country ?? null }
+  }
+  const country = await resolveVisitorCountry()
+  const posture = resolveConsentPosture(host, country)
+  if (posture === 'opt-out') {
+    // Implied consent, recorded as such — tracking is live from this first
+    // paint, and the persistent "Privacy choices" pill is the opt-out
+    // surface. No banner, no notice: the Squarespace shape.
+    return {
+      stored: storeVisitorConsent(hostId, { status: 'implied', country }),
+      posture,
+      country,
+    }
+  }
+  return { stored: null, posture, country }
+}
+
+/**
+ * One-shot guard for the render-time kick below — a pageview asks the region
+ * endpoint once, not once per render pass.
+ */
+const primed = new Set<string>()
+
+/**
+ * Start the consent resolution WITHOUT waiting for React to commit (AGL-1550).
+ *
+ * The hook's effect is the normal path and does this too. It is not enough on
+ * its own: an effect only runs if React commits, and the whole failure this
+ * issue exists to prevent is a page that renders but never commits because
+ * something above it — the site-plugin gate, in AGL-1541 — stayed suspended.
+ * `ErrorBeacon` (AGL-1538) solves the same problem the same way, installing at
+ * module scope rather than from an effect, so it still reports when the page
+ * is wedged.
+ *
+ * Fire-and-forget: the result lands in storage (and the session region cache),
+ * so whenever the hook does get to run it reads the answer rather than asking
+ * again. Client-only — the server must stay identical for every visitor or ISR
+ * would cache one visitor's region (AGL-1498).
+ */
+export function primeVisitorConsent(
+  hostId: string | undefined,
+  host: VisitorConsentHost | null | undefined,
+  required: boolean,
+): void {
+  if (typeof window === 'undefined' || !required || !hostId) return
+  const key = `${hostId}\x00${window.location.pathname}`
+  if (primed.has(key)) return
+  primed.add(key)
+  void decideVisitorConsent(hostId, host).catch(() => undefined)
+}
+
 export function useVisitorConsent(
   hostId: string | undefined,
   host: VisitorConsentHost | null | undefined,
@@ -140,54 +231,9 @@ export function useVisitorConsent(
         stored: readStoredVisitorConsent(hostId),
       }))
 
-    const decide = async () => {
-      if (hasAskOverride()) {
-        // Simulate a first prior-consent visit; see the module comment.
-        if (active) {
-          setState({ ready: true, stored: null, posture: 'opt-in', country: null })
-        }
-        return
-      }
-      let stored = readStoredVisitorConsent(hostId)
-      if (
-        hasGlobalPrivacyControl() &&
-        !isExplicitConsentStatus(stored?.status) &&
-        stored?.status !== 'gpc-opt-out'
-      ) {
-        stored = storeVisitorConsent(hostId, {
-          status: 'gpc-opt-out',
-          country: stored?.country ?? null,
-        })
-      }
-      if (stored) {
-        if (active) {
-          setState({
-            ready: true,
-            stored,
-            posture: null,
-            country: stored.country ?? null,
-          })
-        }
-        return
-      }
-      const country = await resolveVisitorCountry()
-      if (!active) return
-      const posture = resolveConsentPosture(host, country)
-      if (posture === 'opt-out') {
-        // Implied consent, recorded as such — tracking is live from this
-        // first paint, and the persistent "Privacy choices" pill is the
-        // opt-out surface. No banner, no notice: the Squarespace shape.
-        const implied = storeVisitorConsent(hostId, {
-          status: 'implied',
-          country,
-        })
-        setState({ ready: true, stored: implied, posture, country })
-      } else {
-        setState({ ready: true, stored: null, posture, country })
-      }
-    }
-
-    void decide()
+    void decideVisitorConsent(hostId, host).then((resolved) => {
+      if (active) setState({ ready: true, ...resolved })
+    })
     window.addEventListener(VISITOR_CONSENT_CHANGED_EVENT, sync)
     return () => {
       active = false

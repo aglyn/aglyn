@@ -44,7 +44,7 @@ const MEASURED_TOKEN = {
     sign_in_attributes: {
       firstName: 'Zach',
       lastName: 'Gover',
-      phoneNumber: '+1 (737) 600-6900',
+      phoneNumber: '+1 (512) 222-8232',
       email: 'zach@aglyn.com',
     },
   },
@@ -56,7 +56,7 @@ describe('the measured production SSO token', () => {
   })
 
   it('yields the phone, in the format the directory holds it', () => {
-    expect(resolveIdpPhone(MEASURED_TOKEN)).toBe('+1 (737) 600-6900')
+    expect(resolveIdpPhone(MEASURED_TOKEN)).toBe('+1 (512) 222-8232')
   })
 
   it('yields no photo, because this IdP maps no photo attribute', () => {

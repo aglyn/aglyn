@@ -16,7 +16,7 @@
  */
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, sendGa4Purchase } from '@aglyn/tenant-data-admin'
 
 /**
  * Marketplace-purchase section of the platform Stripe webhook (AGL-46/418):
@@ -64,6 +64,38 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             paymentIntentId: String(object?.payment_intent ?? ''),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+        // Marketplace sales are real revenue and belong in the same GA
+        // `purchase` stream as subscriptions (AGL-1561), separated by
+        // `item_category` so plugin revenue and subscription revenue can be
+        // read apart or together.
+        //
+        // After the ledger write, and fire-and-forget: the ledger is what
+        // grants the install entitlement, and an analytics failure must never
+        // throw here — the route deletes its idempotency claim on any throw,
+        // which would make Stripe redeliver a purchase that already landed.
+        //
+        // `transaction_id` is the checkout session id — the same key the
+        // ledger doc uses — so GA de-duplicates a redelivery exactly as
+        // Firestore does.
+        void sendGa4Purchase({
+          transactionId: String(object.id),
+          value: Number(object?.amount_total ?? 0) / 100,
+          currency: String(object?.currency ?? 'usd'),
+          items: [
+            {
+              item_id: String(listingId),
+              // The listing id, not the display name: a listing's name is
+              // seller-authored free text and is not worth risking in a
+              // dimension when the id already identifies it.
+              item_name: String(listingId),
+              item_category: 'marketplace',
+              price: Number(object?.amount_total ?? 0) / 100,
+              quantity: 1,
+            },
+          ],
+          clientId: object?.metadata?.ga_client_id,
+          stripeCustomerId: String(object?.customer ?? '') || String(buyerUid),
+        }).catch(() => undefined)
       }
     }
 

@@ -17,6 +17,7 @@
 
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { FIELD_SCHEMA_EMAIL } from '@aglyn/shared-data-forms'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
@@ -103,14 +104,25 @@ function SsoSignIn() {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}` },
         })
-        if (!jit.ok && !cancelled) {
-          const payload = await jit.json().catch(() => ({}))
-          setError({
-            code: AuthAppErrorCodes.SSO_NOT_AUTHORIZED,
-            message:
-              payload?.error ??
-              'Signed in, but your account is not authorized for this organization.',
-          })
+        if (!jit.ok) {
+          if (!cancelled) {
+            const payload = await jit.json().catch(() => ({}))
+            setError({
+              code: AuthAppErrorCodes.SSO_NOT_AUTHORIZED,
+              message:
+                payload?.error ??
+                'Signed in, but your account is not authorized for this organization.',
+            })
+          }
+        } else {
+          // The mobile half of the SSO login event (AGL-1562). Fired here and
+          // not on `getRedirectResult` alone: an authenticated user the JIT
+          // mapping refuses is not a session in anyone's workspace, and
+          // counting them would make "logins" and "people who got in"
+          // different numbers with the same name. Not gated on `cancelled` —
+          // that flag is about whether this component may still write state,
+          // and the sign-in happened either way.
+          trackEvent('login', { method: 'sso' })
         }
         window.sessionStorage.removeItem(SSO_PENDING_KEY)
       } catch (err) {
@@ -188,6 +200,19 @@ function SsoSignIn() {
               jitPayload?.error ??
               'Signed in, but your account is not authorized for this organization.',
           })
+        } else {
+          // Enterprise sign-in, counted at last (AGL-1562). `LoginMethod` has
+          // carried an `'sso'` member since AGL-1561 with nothing sending it,
+          // so every SAML sign-in read as no sign-in at all.
+          //
+          // `login` only — deliberately no `sign_up` for a JIT-provisioned
+          // account. JIT creates accounts without passing any of the four
+          // AGL-1497 clickwrap doors, because an enterprise user is covered by
+          // their org's negotiated agreement instead; feeding those into the
+          // same funnel as self-serve signups would make "signup → paid
+          // conversion" meaningless, since an SSO user arrives already sold.
+          // Enterprise seat counts are a billing question, not a funnel one.
+          trackEvent('login', { method: 'sso' })
         }
       } catch (err) {
         console.error(err)

@@ -20,7 +20,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { observer } from 'mobx-react-lite'
-import Script from 'next/script'
 import {
   type CSSProperties,
   use,
@@ -29,12 +28,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { loadSiteRealmPlugins } from '../../../utils/realm-plugins.client'
 import { sitePluginLoader } from '../../../utils/site-plugin-loader'
 import MembershipPage from './membership-page'
 import type { Props } from './types'
-import { useVisitorConsent } from './use-visitor-consent'
 
 /**
  * In-flight and settled requests for a page's full node document (AGL-1285),
@@ -256,48 +253,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
   }, [nodes])
 
-  // Pageview beacon (AGL-82): privacy-friendly counter, no cookies. Exempt
-  // from the consent gate below on its own merits: it sets no cookie and
-  // stores no visitor identifier, so there is nothing to consent to.
-  const beaconHostId = props.data?.host?.$id
-  // Strict format check — the id lands inside an inline script (AGL-138).
-  // The shared resolver applies GA_MEASUREMENT_ID_PATTERN.
-  const gaMeasurementId = Aglyn.resolveGaMeasurementId(props.data?.host)
-  // Visitor consent (AGL-1498). Evaluated CLIENT-SIDE only — these pages are
-  // ISR-cached, so the HTML must never vary by region or consent state; the
-  // server and first client render agree on "nothing yet", and the visitor's
-  // resolved state (explicit choice, GPC, implied default, or a pending
-  // prior-consent ask) attaches after hydration. The gate itself is
-  // posture-independent: only a GRANTING recorded state loads the script.
-  const consentRequired = Aglyn.hostConsentRequired(props.data?.host)
-  const consent = useVisitorConsent(
-    beaconHostId,
-    props.data?.host,
-    consentRequired,
-  )
-  const analyticsAllowed = consentRequired
-    ? consent.ready &&
-      Aglyn.isAnalyticsAllowed(props.data?.host, consent.stored)
-    : true
-  useEffect(() => {
-    if (!beaconHostId || typeof navigator === 'undefined') return
-    try {
-      navigator.sendBeacon(
-        '/api/analytics/collect',
-        JSON.stringify({
-          hostId: beaconHostId,
-          path: window.location.pathname,
-          // Per-screen attribution (AGL-151).
-          screenId: props.data?.screen?.data?.$id || undefined,
-          // External referrer host only; same-site moves are dropped
-          // server-side (AGL-138).
-          referrer: document.referrer || undefined,
-        }),
-      )
-    } catch {
-      // Analytics never breaks the page.
-    }
-  }, [beaconHostId])
+  // The pageview beacon, the GA mounts and the consent machinery used to live
+  // here. They now mount from `page.tsx` as a SIBLING of this component
+  // (`site-analytics.tsx`, AGL-1550): none of them needs a plugin, a canvas
+  // node or an observable, and sitting below the `use(sitePluginLoader
+  // .ensure(...))` gate above meant any stall in plugin loading silenced both
+  // analytics systems and the consent surface at once — which is exactly what
+  // AGL-1541 did, invisibly, to every rAF-starved visitor.
 
   // Id-based screen links resolve against this routing map at render time;
   // ISR keeps it current (slug renames show up on the next revalidate).
@@ -669,35 +631,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           same `isPageIndexable` for robots/noindex (AGL-1263), for the screen,
           content, membership, maintenance, member-gate and protected branches
           alike. JSON-LD renders server-side via `buildJsonLd` (AGL-143). */}
-      {/* Google Analytics (AGL-138/661): tenant-configured measurement id.
-          This used to live inside an inert `next/head` <Head> block — so
-          every site that configured GA collected nothing. `next/script`
-          renders for real, and Next stamps it with the CSP nonce from the
-          request header that middleware sets, so it keeps working when
-          AGL-523 flips the policy from report-only to enforcing.
-
-          THE CONSENT GATE (AGL-1498): `analyticsAllowed` is enforcement at
-          the source — without an explicit stored yes the gtag script never
-          loads, rather than loading and being suppressed. The banner below
-          is UI over this condition, not the condition. This deliberately
-          also silences the `window.gtag?.()` mirrors in the marketing
-          runtime (overlay/experiment events) until consent: no gtag, no
-          events, which is the honest behavior. */}
-      {gaMeasurementId && analyticsAllowed ? (
-        <>
-          <Script
-            id="ga-src"
-            strategy="afterInteractive"
-            src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
-          />
-          <Script id="ga-init" strategy="afterInteractive">
-            {'window.dataLayer=window.dataLayer||[];' +
-              'function gtag(){dataLayer.push(arguments);}' +
-              "gtag('js', new Date());" +
-              `gtag('config', '${gaMeasurementId}');`}
-          </Script>
-        </>
-      ) : null}
+      {/* Google Analytics and the consent surfaces are NOT here (AGL-1550) —
+          they mount from `page.tsx` as a sibling of this component, above the
+          plugin gate. See `site-analytics.tsx`. */}
       {/* Shared hidden class (AGL-562): ships in the SSR HTML so
           elements authors start hidden (interaction show/hide targets)
           paint hidden from the first frame — no flash before the
@@ -717,25 +653,6 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         />
       ))}
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
-      {/* Visitor consent surfaces (AGL-1498): only when the machinery is
-          live — the tool is active AND the site uses a gated feature. A
-          site with no analytics has nothing to ask, so its visitors see
-          nothing at all. What renders depends on the resolved state: the
-          prior-consent banner (opt-in posture, undecided), or the
-          persistent "Privacy choices" pill — which in the implied posture
-          is the ONE opt-out surface, on every page, template-independent.
-          `consent.ready` keeps all of it out of the server HTML (ISR) and
-          the first client render. Published surface only here; the console
-          preview mounts the same component under its region simulator, and
-          the editor canvas renders none of it. */}
-      {consentRequired && consent.ready && beaconHostId ? (
-        <ConsentBannerUi
-          hostId={beaconHostId}
-          stored={consent.stored}
-          posture={consent.posture}
-          country={consent.country}
-        />
-      ) : null}
       {props.showBranding ? (
         // White-label badge (White-Label Phase 2): the "Made with …" credit
         // reads the org's resolved brand — product name, support URL, logo,

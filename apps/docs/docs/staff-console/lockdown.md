@@ -99,6 +99,19 @@ is decided by account age, not claims — there is no bypass to grant.
 **Expiry** works the same as every scope: when the optional end time passes,
 the feature restores itself with no staff action and no write.
 
+**What a customer sees.** Every console surface a feature lock can refuse —
+the billing upgrade buttons, every marketplace install and purchase button,
+the theme and template installers, and both AI-assist doors — renders the
+lock's own notice rather than a generic failure toast. So a checkout lock
+reads *"Checkout is temporarily unavailable — this is not a payment failure,
+and your account, subscription, and sites are unaffected"*, and an installs
+lock reads *"installs are paused; everything already installed keeps
+working"*. This matters for the message you type: it **replaces the body of
+that notice**, so write it for the customer, not for the incident channel. An
+end time is restated in the reader's own local time; without one, no return
+time is promised. Genuine failures are untouched — a real error still shows a
+real error.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
@@ -109,6 +122,42 @@ the feature restores itself with no staff action and no write.
    API, so no script can take the platform down with a one-field request.
 4. Lift it from the same page. Lifting also evicts stale notice pages, restores
    member write access, and is audited like the lock was.
+
+### Never take a lock or a lift on trust
+
+A click is a request. A click that misses — the page settles, a banner
+collapses, the button moves — looks exactly like one that worked, and the
+dangerous half is a *lift* you believe happened: a controlled 60-second action
+becomes an outage nobody is watching.
+
+So the page never claims a state it has not read back:
+
+- Every lock and lift answers with the server's **re-read of the target**, and
+  the workspace/site/account card shows that verdict — `LOCKED` or
+  `NOT LOCKED` — stamped with the time it was read. It is a snapshot, not a
+  live view, which is why the time is on it.
+- **Check state** re-reads one target without touching it. Use it freely; it
+  is available to every staff role, not just `super`.
+- The verdict is discarded the moment you change the scope or the target id —
+  a panel about the previous target is worse than no panel.
+- The target id now **stays** after a submit, so `Unlock` is live immediately
+  after a lock instead of being a disabled control.
+- **Actions taken in this session** lists everything that reached the server,
+  with the time. If you clicked and no new line appeared, the click did not
+  register — check the state and click again.
+- A write that returns but whose re-read disagrees is reported as
+  `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
+
+### What the audit row records
+
+Every lock and lift writes an `adminAudit` row carrying the actor, the `scope`,
+the target path, and — in `before` and `after` — the `reason`, the
+customer-facing `message`, and the end time as `untilMs`. Recording the end
+time is the point: it is the only thing that distinguishes a deliberate
+time-boxed lock from an indefinite one nobody came back to, and on a lift it
+says whether a time-boxed lock was released early or a forgotten one was
+cleaned up. A `null` in any of those three means the lock genuinely carried no
+reason, no message, or no expiry.
 
 Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the

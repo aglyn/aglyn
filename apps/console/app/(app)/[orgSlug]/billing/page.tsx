@@ -17,10 +17,16 @@
 'use client'
 
 import {
+  readGaClientId,
+  trackEvent,
+} from '@aglyn/aglyn/app-utils/analytics-events'
+import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
+  lockdownRefusalText,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
+  parseLockdownRefusal,
   parseOnboardingPlanIntent,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
@@ -370,9 +376,36 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          body: JSON.stringify({ plan: targetPlan, interval, orgId }),
+          // The browser's GA client id rides along so the SERVER-side
+          // `purchase` from the Stripe webhook can be attributed to the
+          // session — and therefore the campaign — that produced it
+          // (AGL-1561). Resolves to null within 500ms when gtag is absent,
+          // so it can never delay a checkout.
+          body: JSON.stringify({
+            plan: targetPlan,
+            interval,
+            orgId,
+            gaClientId: await readGaClientId(
+              process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+            ),
+          }),
         })
         const payload = await response.json()
+        // A checkout feature lockdown (AGL-1510/1532). This branch comes
+        // first and it is the one that matters most on this page: "Could
+        // not start checkout" tells a customer their PAYMENT failed, and a
+        // customer who believes that retries, panics, then emails support.
+        // The server's body says the opposite in so many words — render it.
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          return enqueueSnackbar(lockdownRefusalText(locked), {
+            variant: 'warning',
+            // Persist: a deliberate pause is not a blip to be missed, and
+            // the reassurance ("your account and sites are unaffected") is
+            // the half a worried customer needs time to read.
+            persist: true,
+          })
+        }
         if (response.status === 501) {
           return enqueueSnackbar(
             'Billing is not configured yet — Stripe keys are pending.',
@@ -383,6 +416,37 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         // otherwise the unchanged redirect. The route decides — it only picks
         // embedded when the flag is on AND a publishable key is configured —
         // so the two shapes are mutually exclusive and this never has to guess.
+        // GA4 checkout funnel (AGL-1561). Fired once here, after the
+        // lockdown/501/error branches, so it means "Stripe actually gave us a
+        // checkout to show" rather than "somebody clicked Upgrade" — the two
+        // differ by exactly the refusals above, which are the interesting
+        // failures. Covers both shapes: the embedded client secret and the
+        // hosted redirect.
+        //
+        // Annual is priced per-month-billed-yearly, so the checkout VALUE is
+        // twelve of them; `begin_checkout` should carry what the customer is
+        // about to be charged, not a monthly rate.
+        if (payload?.clientSecret || (response.ok && payload?.url)) {
+          const pricing = PLAN_PRICING[targetPlan]
+          const value =
+            interval === 'year'
+              ? (pricing?.basePriceAnnualMonthlyUsd ?? 0) * 12
+              : (pricing?.basePriceMonthlyUsd ?? 0)
+          trackEvent('begin_checkout', {
+            currency: 'USD',
+            value,
+            billing_interval: interval === 'year' ? 'annual' : 'monthly',
+            items: [
+              {
+                item_id: targetPlan,
+                item_name: PLAN_LABELS[targetPlan] ?? targetPlan,
+                item_category: 'subscription',
+                price: value,
+                quantity: 1,
+              },
+            ],
+          })
+        }
         if (payload?.clientSecret) {
           setCheckoutClientSecret(String(payload.clientSecret))
           return

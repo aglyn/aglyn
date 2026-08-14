@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
@@ -571,6 +572,11 @@ function BesignerPage(props) {
               ),
             )
             .then(() => {
+              // Only when the screen was not already live (AGL-1561): this
+              // same handler re-syncs the routing map when someone merely
+              // RENAMES the path of an already-published screen, and a rename
+              // is not an activation.
+              if (!publishedPath) trackEvent('site_published', {})
               setSlugInput(null)
               enqueueSnackbar(
                 collectionTemplatePublishMessage(
@@ -623,6 +629,7 @@ function BesignerPage(props) {
     screenId,
     enqueueSnackbar,
     isCollectionTemplate,
+    publishedPath,
     routesByScreenId,
   ])
 
@@ -675,6 +682,14 @@ function BesignerPage(props) {
         hostId,
         buildRouteEntries(candidateById),
       )
+      // The one-click publish (AGL-452) reaches the routing map through
+      // `syncScreenRouteEntries` rather than `publishScreenRoute`, so it does
+      // not inherit that function's activation event (AGL-1561) — and it is
+      // the publish button people actually use. Counted here explicitly.
+      // The unpublish branch above returns before this point, and the two
+      // guard clauses bail without writing, so only a route actually going
+      // live is counted.
+      trackEvent('site_published', {})
       enqueueSnackbar(
         collectionTemplatePublishMessage(routesByScreenId.get(screenId), {
           isTemplateScreen: isCollectionTemplate,

@@ -25,6 +25,7 @@ import {
   useAnalytics,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
 import { NoSsr } from '@mui/material'
 import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
@@ -92,6 +93,26 @@ function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
   const pathname = usePathname()
   const user = useUser()
+
+  // Route the shared event taxonomy (AGL-1561) through Firebase rather than
+  // `window.gtag`. Firebase owns this surface's GA state — the `user_id` and
+  // user properties set below live on the Analytics instance, and a hit poked
+  // straight into `window.gtag` would miss them, arriving unattributed to any
+  // user. Registered here because this component already holds the instance
+  // and wraps the whole app, so it runs before any call site can fire.
+  //
+  // The tenant runtime deliberately registers nothing: its events fall
+  // through to `window.gtag`, which only exists once the visitor has granted
+  // consent (AGL-1498), making the gate structural there.
+  useEffect(() => {
+    configureAnalyticsTransport((name, params) => {
+      // `logEvent`'s overloads type each reserved name individually, so the
+      // shared taxonomy's union has to be widened past them here. The typing
+      // that matters already happened at the call site, in `trackEvent`.
+      ;(logEvent as (...args: unknown[]) => void)(analytics, name, params)
+    })
+    return () => configureAnalyticsTransport(null)
+  }, [analytics])
 
   // Page-view analytics (AGL-118). The Pages Router `router.events` API has
   // no App Router equivalent, so fire on `usePathname` changes instead; route

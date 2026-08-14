@@ -151,3 +151,51 @@ describe('a due schedule on an entitled plan', () => {
     }
   })
 })
+
+/**
+ * AGL-1562 asked whether a due schedule should report the `site_published`
+ * activation event over the Measurement Protocol, since this executor runs
+ * with no browser and client-side GA cannot see it.
+ *
+ * The answer is no, and this is the fact the answer rests on: a due PUBLISH
+ * writes the version pointer and the schedule status, and nothing else. The
+ * host's `screens` routing map — the only thing that makes a path reachable —
+ * is never touched. So a scheduled publish can only ever swap which saved
+ * version an ALREADY-LIVE route serves, which AGL-1561 deliberately excludes
+ * from the activation metric ("only a route going live counts"); reporting it
+ * would let one activated org look like many.
+ *
+ * Pinned as a spec rather than a comment because the reasoning expires the
+ * moment the executor learns to register a route: at that point a scheduled
+ * FIRST publish becomes possible, it becomes a genuine uncounted activation,
+ * and this case goes red to say so.
+ */
+describe('a due schedule cannot be an activation (AGL-1562)', () => {
+  it('writes the version pointer only — never a routing-map entry', async () => {
+    await run({ versionId: 'v-live', publishSchedule: schedule() })
+
+    expect(updateMock).toHaveBeenCalled()
+    for (const call of updateMock.mock.calls) {
+      for (const key of Object.keys(call[0] ?? {})) {
+        expect(key.startsWith('screens.')).toBe(false)
+      }
+    }
+  })
+
+  it('publishes nothing at all for a layout, which has no route to go live', async () => {
+    const result = await applyDuePublishSchedule({
+      hostId: 'h1' as never,
+      collectionName: 'layouts',
+      docId: 'layout-1',
+      parent: {
+        versionId: 'v-live',
+        publishSchedule: schedule({ action: 'unpublish' }),
+      } as never,
+    })
+
+    // The unpublish branch is screens-only; a layout keeps serving and the
+    // routing map is not involved either way.
+    expect(result).toBe('v-live')
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+})

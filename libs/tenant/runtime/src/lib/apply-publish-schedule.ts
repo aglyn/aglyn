@@ -110,6 +110,23 @@ export async function applyDuePublishSchedule(options: {
 
   if (!schedule.versionId) return parent.versionId
 
+  // No activation event here, on purpose (AGL-1562).
+  //
+  // This runs with no browser, so `site_published` would have to go out over
+  // the Measurement Protocol like the server-side `purchase`. It is not sent
+  // because it would not be TRUE: the write below moves a version pointer and
+  // never touches `hosts/{hostId}.screens`, the routing map that decides which
+  // paths exist. A scheduled publish therefore only ever swaps which saved
+  // version an already-live route serves — a content update — and AGL-1561
+  // counts a route GOING LIVE, not a republish. Sending it would let one
+  // activated org look like many, which is the opposite of what an activation
+  // rate is for.
+  //
+  // The gap the issue worried about (a first publish that is scheduled rather
+  // than clicked, going uncounted) cannot happen for the same reason: nothing
+  // in this path can make an unpublished screen reachable. If that ever
+  // changes, `apply-publish-schedule.spec.ts` goes red and the analytics
+  // decision has to be made again with it.
   try {
     await firebaseAdmin
       .app()

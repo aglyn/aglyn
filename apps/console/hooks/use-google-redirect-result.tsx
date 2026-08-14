@@ -16,15 +16,15 @@
  */
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
-import { logEvent } from 'firebase/analytics'
 import {
   getRedirectResult,
   GoogleAuthProvider,
   type UserCredential,
 } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
-import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
+import { useAuth } from '@aglyn/tenant-feature-instance'
 
 /**
  * Completes a `signInWithRedirect` round-trip (AGL-462): mobile browsers
@@ -49,7 +49,6 @@ export function useGoogleRedirectResult(
   onCredential?: (credential: UserCredential) => void | Promise<unknown>,
 ): void {
   const auth = useAuth()
-  const analytics = useAnalytics()
   const resolved = useRef(false)
 
   useEffect(() => {
@@ -62,17 +61,35 @@ export function useGoogleRedirectResult(
     void getRedirectResult(auth)
       .then(async (credential) => {
         if (!credential || !active) return
-        // logEvent's overloads type each known event name individually,
-        // so the union has to be narrowed before the call.
-        if (eventName === 'login') {
-          logEvent(analytics, 'login', { method: credential.providerId })
-        } else {
-          logEvent(analytics, 'sign_up', { method: credential.providerId })
+        // `onCredential` is awaited, not fire-and-forget: the callers use it
+        // to record an acceptance and to bounce an unconsented new account,
+        // and both lose races against the redirect that follows a completed
+        // sign-in.
+        //
+        // The ORDER differs per event, and it is not arbitrary (AGL-1561):
+        //
+        // - For a sign-IN the gate has to run first. `rejectUnconsentedNewAccount`
+        //   returns true when the Google account turned out to be brand new
+        //   and was stood down and bounced to /signup — which was never a
+        //   login, and used to be logged as one anyway. The popup path on
+        //   /signin has always been careful about this ("Before the analytics
+        //   event: this was never a login"); mobile was not, so every new
+        //   Google account arriving by redirect inflated `login` and was then
+        //   counted AGAIN as the `sign_up` it became on /signup.
+        //
+        // - For a sign-UP the order reverses, because `onCredential` records
+        //   the legal acceptance and can end in `window.location.assign`. An
+        //   event fired after that navigation is an event that sometimes does
+        //   not happen — and this is the only place a mobile OAuth signup is
+        //   counted at all.
+        if (eventName === 'sign_up') {
+          trackEvent('sign_up', { method: 'google_redirect' })
+          await onCredential?.(credential)
+          return
         }
-        // Awaited, not fire-and-forget: the callers use this to record an
-        // acceptance and to bounce an unconsented new account, and both lose
-        // races against the redirect that follows a completed sign-in.
-        await onCredential?.(credential)
+        const bounced = await onCredential?.(credential)
+        if (bounced === true) return
+        trackEvent('login', { method: 'google_redirect' })
       })
       .catch((error) => {
         console.error(error)
@@ -89,7 +106,7 @@ export function useGoogleRedirectResult(
     // already pins this to one run per mount, and adding a caller's inline
     // arrow would only re-enter the effect to hit that guard.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analytics, auth, eventName, onError, enabled])
+  }, [auth, eventName, onError, enabled])
 }
 
 export default useGoogleRedirectResult

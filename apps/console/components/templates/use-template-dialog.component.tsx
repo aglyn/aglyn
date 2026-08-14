@@ -17,7 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { resolveNamedTokens } from '@aglyn/aglyn'
+import {
+  normalizeScreenSlug,
+  resolveNamedTokens,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -36,9 +40,7 @@ import {
 } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import createPageFromTemplate, {
-  slugifyPageName as slugify,
-} from './create-page-from-template'
+import createPageFromTemplate from './create-page-from-template'
 
 /**
  * Use a template (AGL-670) — the deliberate second step that installing no
@@ -80,7 +82,11 @@ export function UseTemplateDialog({
   useEffect(() => {
     if (!template) return
     setName(template.displayName ?? '')
-    setSlug(template.slug ?? slugify(template.displayName ?? 'page'))
+    setSlug(
+      template.slug ??
+        normalizeScreenSlug(template.displayName) ??
+        'page',
+    )
     setValues(
       Object.fromEntries(
         (Array.isArray(template.placeholders) ? template.placeholders : []).map(
@@ -178,9 +184,9 @@ export function UseTemplateDialog({
       )
       enqueueSnackbar(
         created.slug === created.requestedSlug
-          ? `Created “${name.trim()}” at /${created.slug}`
-          : `Created “${name.trim()}” at /${created.slug} — ` +
-            `/${created.requestedSlug} was taken`,
+          ? `Created “${name.trim()}” at ${screenRoutePathToUrl(created.slug)}`
+          : `Created “${name.trim()}” at ${screenRoutePathToUrl(created.slug)} — ` +
+            `${screenRoutePathToUrl(created.requestedSlug)} was taken`,
         { variant: 'success', persist: false },
       )
       onClose()
@@ -245,7 +251,14 @@ export function UseTemplateDialog({
               value={slug}
               onChange={(event) => setSlug(event.target.value)}
               disabled={busy}
-              helperText={`/${slugify(slug) || 'page'}`}
+              // Mirrors `resolveTemplateSlug`: an address that sanitizes away
+              // falls back to the page name, and `/` IS an address — the site
+              // root — rather than punctuation to be stripped (AGL-1575).
+              helperText={screenRoutePathToUrl(
+                normalizeScreenSlug(slug) ??
+                  normalizeScreenSlug(name) ??
+                  'page',
+              )}
               fullWidth
             />
           ) : null}

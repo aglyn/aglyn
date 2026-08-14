@@ -57,6 +57,33 @@ interface LockdownRecord {
 }
 
 /**
+ * One target's state as the SERVER read it, mirroring `LockState` in
+ * /api/admin/lockdown. `readAtMs` is the load-bearing field: it is rendered
+ * verbatim so the panel is always a claim about a moment, never an implicit
+ * "now" that can quietly go stale.
+ */
+interface LockState {
+  scope: string
+  targetId: string
+  exists: boolean
+  locked: boolean
+  reason: string | null
+  message: string | null
+  untilMs: number | null
+  atMs: number | null
+  readAtMs: number
+}
+
+interface ActionLogEntry {
+  atMs: number
+  text: string
+  /** The server's post-write read-back agreed with what was asked for. */
+  confirmed: boolean
+}
+
+const timeOf = (ms: number) => new Date(ms).toLocaleTimeString()
+
+/**
  * THE PANIC BUTTON (AGL-1501): platform/org/host/user lockdown controls.
  * Reads are open to all staff; locking and lifting require the super role
  * (enforced server-side by /api/admin/lockdown, which is the only writer —
@@ -69,6 +96,19 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
   const [records, setRecords] = useState<LockdownRecord[]>([])
   const [busy, setBusy] = useState(false)
+  /** Server clock at the last successful state load — shown, never assumed. */
+  const [readAtMs, setReadAtMs] = useState<number | null>(null)
+  /**
+   * Every action that actually reached the server, newest first (AGL-1571).
+   *
+   * This exists so that a click which never landed is VISIBLE. During the
+   * drill two clicks hit empty space after the page re-flowed under the
+   * pointer, and nothing on the page distinguished that from success — one
+   * of them a lift, which left a feature locked for another 90 seconds while
+   * the operator believed it was released. A log the operator can look at
+   * turns "no new line appeared" into the answer.
+   */
+  const [log, setLog] = useState<ActionLogEntry[]>([])
 
   // Platform form.
   const [platformReason, setPlatformReason] = useState('maintenance')
@@ -88,6 +128,20 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [reason, setReason] = useState('manual')
   const [message, setMessage] = useState('')
   const [until, setUntil] = useState('')
+  /**
+   * The scoped card's verified state, read back from the server. Org and
+   * host locks live on their own docs, so before this the panic page showed
+   * NOTHING about the two widest scopes — an operator who locked an org had
+   * no way to confirm it, or to notice a lift that never happened, without
+   * leaving the page they were standing on.
+   */
+  const [scopedState, setScopedState] = useState<LockState | null>(null)
+  /**
+   * A panel describing a DIFFERENT target is the same bug wearing a
+   * reassuring face, so it is only trusted while it still matches the form.
+   */
+  const scopedStateIsCurrent =
+    scopedState?.scope === scope && scopedState?.targetId === targetId.trim()
 
   const platformRecord = records.find((record) => record.id === 'platform')
 
@@ -101,18 +155,54 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       if (!response.ok) throw new Error(`Load failed (${response.status})`)
       const payload = await response.json()
       setRecords(payload.records ?? [])
+      setReadAtMs(Date.now())
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Loading lockdown state failed', { variant: 'error' })
     }
   }, [user, enqueueSnackbar])
 
+  /**
+   * Re-read ONE target from the server — the drill's own safety move, which
+   * is the only reason the missed lift was ever noticed, made a button.
+   */
+  const checkScoped = useCallback(async () => {
+    const idToken = await (user as any)?.getIdToken?.()
+    if (!idToken || !targetId.trim()) return
+    setBusy(true)
+    try {
+      const response = await fetch(
+        `/api/admin/lockdown?scope=${encodeURIComponent(scope)}&targetId=${encodeURIComponent(targetId.trim())}`,
+        { headers: { Authorization: `Bearer ${idToken}` } },
+      )
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Failed (${response.status})`)
+      }
+      setScopedState(payload.state ?? null)
+    } catch (error: any) {
+      console.error(error)
+      // Clear rather than keep the old panel: a stale reading presented as
+      // current is exactly the belief this whole issue is about.
+      setScopedState(null)
+      enqueueSnackbar(error?.message ?? 'Reading the target state failed', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }, [user, scope, targetId, enqueueSnackbar])
+
   useEffect(() => {
     if (isStaff) void refresh()
   }, [isStaff, refresh])
 
   const act = useCallback(
-    async (body: Record<string, unknown>, done: () => void) => {
+    async (
+      body: Record<string, unknown>,
+      done: (payload: Record<string, any>) => void,
+    ) => {
       const idToken = await (user as any)?.getIdToken?.()
       if (!idToken) return
       setBusy(true)
@@ -129,11 +219,26 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
         }
-        enqueueSnackbar(
-          `${body['action'] === 'lock' ? 'Locked' : 'Unlocked'} ${body['scope']} (audited)`,
-          { variant: 'success' },
+        // The route answers with a fresh read of what it just wrote. A 200
+        // means the request was accepted; only `confirmed` means the state
+        // actually changed, and the two are not the same claim.
+        const confirmed = payload.confirmed !== false
+        const what = `${body['action'] === 'lock' ? 'Locked' : 'Unlocked'} ${body['scope']}${
+          body['targetId'] ? ` ${body['targetId']}` : ''
+        }`
+        setLog((entries) =>
+          [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
         )
-        done()
+        enqueueSnackbar(
+          confirmed
+            ? `${what} — verified on the server (audited)`
+            : `${what} was accepted, but re-reading the target shows the OPPOSITE state. Do not walk away.`,
+          {
+            variant: confirmed ? 'success' : 'error',
+            allowDuplicate: true,
+          },
+        )
+        done(payload)
         await refresh()
       } catch (error: any) {
         console.error(error)
@@ -432,7 +537,14 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     size="small"
                     label="Scope"
                     value={scope}
-                    onChange={(event) => setScope(event.target.value)}
+                    onChange={(event) => {
+                      setScope(event.target.value)
+                      // The panel below described the OLD target. Keeping it
+                      // visible next to a new one is how an operator ends up
+                      // reading a reassuring "NOT LOCKED" about something
+                      // nobody checked.
+                      setScopedState(null)
+                    }}
                     sx={{ minWidth: 140 }}
                   >
                     <MenuItem value="org">{'Workspace (org)'}</MenuItem>
@@ -449,7 +561,10 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           : 'User uid'
                     }
                     value={targetId}
-                    onChange={(event) => setTargetId(event.target.value)}
+                    onChange={(event) => {
+                      setTargetId(event.target.value)
+                      setScopedState(null)
+                    }}
                     sx={{ minWidth: 240 }}
                   />
                   {reasonField(reason, setReason)}
@@ -484,7 +599,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           message: message || undefined,
                           untilMs: untilMsOf(until),
                         },
-                        () => setTargetId(''),
+                        // The id STAYS. Clearing it used to disable both
+                        // buttons the moment a lock landed, so the obvious
+                        // next click — Unlock — was on a dead control and
+                        // read as "the unlock button doesn't work".
+                        (payload) => setScopedState(payload.verified ?? null),
                       )
                     }
                   >
@@ -497,14 +616,121 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     onClick={() =>
                       void act(
                         { action: 'unlock', scope, targetId: targetId.trim() },
-                        () => setTargetId(''),
+                        (payload) => setScopedState(payload.verified ?? null),
                       )
                     }
                   >
                     {'Unlock'}
                   </Button>
+                  <Button
+                    variant="text"
+                    disabled={busy || !targetId.trim()}
+                    onClick={() => void checkScoped()}
+                  >
+                    {'Check state'}
+                  </Button>
                 </Stack>
+
+                {scopedStateIsCurrent && scopedState ? (
+                  <Alert
+                    severity={
+                      !scopedState.exists
+                        ? 'warning'
+                        : scopedState.locked
+                          ? 'error'
+                          : 'success'
+                    }
+                  >
+                    <Stack spacing={0.5}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Chip
+                          label={
+                            !scopedState.exists
+                              ? 'NO SUCH TARGET'
+                              : scopedState.locked
+                                ? 'LOCKED'
+                                : 'NOT LOCKED'
+                          }
+                          color={
+                            !scopedState.exists
+                              ? 'warning'
+                              : scopedState.locked
+                                ? 'error'
+                                : 'success'
+                          }
+                          size="small"
+                        />
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`${scopedState.scope} ${scopedState.targetId}`}
+                        </Typography>
+                        {scopedState.locked ? (
+                          <Typography variant="body2">
+                            {`${scopedState.reason ?? 'manual'}${
+                              scopedState.untilMs
+                                ? ` — until ${new Date(scopedState.untilMs).toLocaleString()}`
+                                : ' — no expiry set'
+                            }${
+                              scopedState.atMs
+                                ? ` — since ${new Date(scopedState.atMs).toLocaleString()}`
+                                : ''
+                            }`}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {`Read from the server at ${timeOf(scopedState.readAtMs)}. This is a snapshot, not a live view — press "Check state" to re-read it.`}
+                      </Typography>
+                    </Stack>
+                  </Alert>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {
+                      'No verified state for this target. Press "Check state" to read it from the server — never take a lock or a lift on trust, including your own click.'
+                    }
+                  </Typography>
+                )}
               </Stack>
+            </CardDisplay>
+
+            <CardDisplay
+              header={'Actions taken in this session'}
+              contentGutterX
+              contentGutterY
+            >
+              {log.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {
+                    'Nothing yet. Every lock and lift that reaches the server lands here, stamped with the time it landed — so if you clicked and no line appeared, the click did not register.'
+                  }
+                </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {log.map((entry) => (
+                    <Stack
+                      key={`${entry.atMs}-${entry.text}`}
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      <Chip
+                        label={entry.confirmed ? 'verified' : 'NOT CONFIRMED'}
+                        color={entry.confirmed ? 'success' : 'error'}
+                        size="small"
+                      />
+                      <Typography variant="body2">
+                        {`${timeOf(entry.atMs)} — ${entry.text}`}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
             </CardDisplay>
 
             <CardDisplay
@@ -512,10 +738,24 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap', mb: 1 }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {readAtMs
+                    ? `As read at ${timeOf(readAtMs)} — a snapshot, not a live view.`
+                    : 'Not loaded yet.'}
+                </Typography>
+                <Button size="small" disabled={busy} onClick={() => void refresh()}>
+                  {'Refresh'}
+                </Button>
+              </Stack>
               {records.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   {
-                    'None. Workspace and site lockdowns are visible on their org/site staff pages (they live on those documents).'
+                    'None. Workspace and site lockdowns live on their own documents — check one with "Check state" above, or see its org/site staff page.'
                   }
                 </Typography>
               ) : (

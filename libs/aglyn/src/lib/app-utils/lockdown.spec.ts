@@ -25,7 +25,9 @@ import {
   LOCKDOWN_MESSAGE_MAX,
   lockdownFeaturesForPluginApiPath,
   lockdownNotice,
+  lockdownRefusalText,
   lockdownRetryAfterSeconds,
+  parseLockdownRefusal,
   normalizeHostLockdown,
   normalizeLockdownDoc,
   normalizeOrgLockdown,
@@ -417,5 +419,147 @@ describe('lockdownNotice — per-reason visitor copy', () => {
     )
     expect(notice.body).toBe('Custom words.')
     expect(notice.contact).toBe('support@aglyn.com')
+  })
+})
+
+/**
+ * The client half of the feature lockdown (AGL-1532).
+ *
+ * The server has refused honestly since AGL-1510 — every chokepoint returns
+ * `{error:'locked', scope, feature, title, message, untilMs?}`, and the
+ * checkout copy says in so many words that it is NOT a payment failure. But
+ * a body nobody reads is a body nobody reads: the billing, marketplace and
+ * AI-assist call sites funnelled a 423 into "Could not start checkout" /
+ * "Install failed" / "AI request failed". During beta week the lockdown IS
+ * the incident response, and a lock that misreports itself as a broken
+ * product spends the trust it exists to protect — a customer who believes
+ * their card was declined retries, panics, then emails support.
+ *
+ * This parser is the one place that reading happens, so these are the
+ * contracts every surface inherits.
+ */
+describe('parseLockdownRefusal — the client 423 reader (AGL-1532)', () => {
+  const CHECKOUT_423 = {
+    error: 'locked',
+    scope: 'feature',
+    feature: 'checkout',
+    reason: 'manual',
+    title: 'Checkout is temporarily unavailable',
+    message:
+      'Checkout is temporarily unavailable — this is not a payment ' +
+      'failure, and your account, subscription, and sites are unaffected. ' +
+      'Please try again shortly.',
+    contact: 'support@aglyn.com',
+  }
+
+  it('a 423 with a body yields the honest title and message', () => {
+    const notice = parseLockdownRefusal(423, CHECKOUT_423)
+    expect(notice?.title).toBe('Checkout is temporarily unavailable')
+    expect(notice?.message).toContain('not a payment failure')
+    expect(notice?.message).toContain('unaffected')
+    expect(notice?.feature).toBe('checkout')
+    expect(notice?.contact).toBe('support@aglyn.com')
+    // The words that would send a customer to their bank must not appear.
+    const text = lockdownRefusalText(notice as never).toLowerCase()
+    expect(text).not.toContain('declined')
+    expect(text).not.toContain('card')
+    expect(text).not.toContain('failed')
+  })
+
+  it('a real failure is NOT swallowed into a lockdown notice', () => {
+    // The generic toast is the RIGHT answer for a 500 — dressing an
+    // unexplained fault as a deliberate pause is a worse lie than the one
+    // this affordance fixes.
+    expect(parseLockdownRefusal(500, { error: 'boom' })).toBeNull()
+    expect(parseLockdownRefusal(402, { error: 'payment_required' })).toBeNull()
+    expect(parseLockdownRefusal(409, CHECKOUT_423)).toBeNull()
+    expect(parseLockdownRefusal(200, { ok: true })).toBeNull()
+  })
+
+  it('a malformed 423 degrades without crashing and never says undefined', () => {
+    const bodies: unknown[] = [
+      undefined,
+      null,
+      {},
+      'not json at all',
+      42,
+      { error: 'locked' },
+      { title: '   ', message: '' },
+      { feature: 'warp-drive', untilMs: 'soon' },
+    ]
+    for (const body of bodies) {
+      const notice = parseLockdownRefusal(423, body)
+      expect(notice).not.toBeNull()
+      const text = lockdownRefusalText(notice as never)
+      expect(text).not.toContain('undefined')
+      expect(text).not.toContain('null')
+      expect(text.trim().length).toBeGreaterThan(0)
+      // Honest, not vague: a degraded notice still says "paused", never
+      // "something went wrong".
+      expect(text.toLowerCase()).toContain('paused')
+    }
+  })
+
+  it('a body naming a known feature but no copy still gets the RIGHT words', () => {
+    // The per-feature copy lives in this module, so a truncated body or an
+    // older deploy still reads as "installs are paused" rather than the
+    // generic fallback.
+    const notice = parseLockdownRefusal(423, {
+      error: 'locked',
+      scope: 'feature',
+      feature: 'marketplace-installs',
+    })
+    expect(notice?.title).toBe('Marketplace installs are paused')
+    expect(notice?.message).toContain('already installed keeps working')
+  })
+
+  it('untilMs renders as a human local time, never a raw timestamp', () => {
+    const untilMs = NOW + 3 * 60 * 60 * 1000
+    const stamp = new Date(untilMs).toUTCString()
+    const notice = parseLockdownRefusal(423, {
+      ...CHECKOUT_423,
+      untilMs,
+      message: `${CHECKOUT_423.message} Expected back by ${stamp}.`,
+    })
+    expect(notice?.untilMs).toBe(untilMs)
+    const text = lockdownRefusalText(notice as never)
+    expect(text).toContain('Expected back around')
+    expect(text).not.toContain(String(untilMs))
+    // Stated ONCE: the server's UTC sentence is replaced, not doubled.
+    expect(text).not.toContain('Expected back by')
+    expect(text.match(/Expected back/g)).toHaveLength(1)
+  })
+
+  it('most locks have no expiry, and then none is invented', () => {
+    const notice = parseLockdownRefusal(423, CHECKOUT_423)
+    expect(notice?.untilMs).toBeUndefined()
+    expect(notice?.until).toBeUndefined()
+    expect(lockdownRefusalText(notice as never)).not.toContain('Expected back')
+  })
+
+  it('a staff-typed message survives untouched, and still gains the window', () => {
+    const untilMs = NOW + 60_000
+    const notice = parseLockdownRefusal(423, {
+      ...CHECKOUT_423,
+      untilMs,
+      message: 'We are mid-Stripe-incident. Nothing was charged.',
+    })
+    expect(notice?.message).toBe(
+      'We are mid-Stripe-incident. Nothing was charged.',
+    )
+    expect(notice?.until).toContain('Expected back around')
+  })
+
+  it('the one-line form never repeats a title the message opens with', () => {
+    const checkout = parseLockdownRefusal(423, CHECKOUT_423)
+    expect(lockdownRefusalText(checkout as never)).toBe(CHECKOUT_423.message)
+    // …but a title that adds information is kept.
+    const installs = parseLockdownRefusal(423, {
+      error: 'locked',
+      feature: 'marketplace-installs',
+    })
+    expect(lockdownRefusalText(installs as never)).toContain(
+      'Marketplace installs are paused — ',
+    )
   })
 })

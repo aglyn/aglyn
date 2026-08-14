@@ -17,7 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { checkEntitlement } from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  lockdownRefusalText,
+  parseLockdownRefusal,
+} from '@aglyn/aglyn'
 import * as MarketplaceModel from '../model'
 import { AiAssistContext } from '@aglyn/besigner-ui'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -143,6 +147,17 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         body: JSON.stringify({ text, instruction: instruction.trim() }),
       })
       const payload = await response.json()
+      // An ai-assist feature lockdown (AGL-1510/1532) reads as a pause, not
+      // as "AI request failed" — a provider incident or a cost runaway is
+      // something WE turned off, and saying so keeps the user's content out
+      // of the story.
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
       if (response.status === 501) {
         return void enqueueSnackbar(
           'AI assist is not configured on this deployment',
@@ -213,6 +228,14 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         }),
       })
       const payload = await response.json()
+      // Same pause notice on the section-generation door (AGL-1532).
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
       if (response.status === 501) {
         return void enqueueSnackbar(
           'AI assist is not configured on this deployment',

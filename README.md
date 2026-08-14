@@ -231,7 +231,7 @@ Repo-local deep-dives live in [`docs/`](docs), including:
 
 - [Self-hosting](docs/SELF_HOSTING.md) · [Multi-tenant Firestore](docs/MULTI_TENANT_FIRESTORE.md) · [Platform provisioning](docs/PLATFORM_PROVISIONING.md)
 - [Plugin loading](docs/PLUGIN_LOADING.md) · [Plugin platform gaps](docs/PLUGIN_PLATFORM_GAPS.md)
-- [Rate limiting](docs/RATE_LIMITING.md) · [Security content review](docs/SECURITY_CONTENT_REVIEW.md)
+- [Rate limiting](docs/RATE_LIMITING.md) · [Security content review](docs/SECURITY_CONTENT_REVIEW.md) · [Analytics event taxonomy](docs/ANALYTICS.md)
 - [Email setup](docs/EMAIL_SETUP.md) · [Stripe go-live](docs/STRIPE_GO_LIVE.md) · [Commerce token signing](docs/COMMERCE_TOKEN_SIGNING.md)
 - [Vercel deployments](docs/VERCEL_DEPLOYMENTS.md) · [Build performance](docs/BUILD_PERFORMANCE.md) · [TypeScript 7](docs/TYPESCRIPT7.md)
 

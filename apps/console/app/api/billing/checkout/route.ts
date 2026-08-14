@@ -213,6 +213,15 @@ async function handler(request: Request): Promise<Response> {
       client_reference_id: orgId,
       'subscription_data[metadata][orgId]': orgId,
       'subscription_data[metadata][plan]': plan,
+      // The buyer's GA client id, so the server-side `purchase` the webhook
+      // sends can join the browser session that produced it (AGL-1561).
+      // Carried on the SUBSCRIPTION rather than the session so renewals can
+      // find it too. Validated to GA's `<digits>.<digits>` shape and dropped
+      // otherwise: this string is client-supplied and ends up in Stripe
+      // metadata, so it is not accepted on trust.
+      ...(/^\d+\.\d+$/.test(String(body?.gaClientId ?? ''))
+        ? { 'subscription_data[metadata][ga_client_id]': String(body.gaClientId) }
+        : {}),
       // Self-serve promo codes (AGL-1105): show the "Add promotion code" field
       // so a customer can redeem a staff-created code (Coupons page) at
       // checkout. Stripe validates the code and the discount rides the

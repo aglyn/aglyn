@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // A listing's preview may be a `media:` reference (AGL-1424), which is not a
 // URL. The marketplace lib's own `ListingImage` cannot be imported here —
 // `scope:app` may not depend on `aglyn:addons` — so this resolves directly.
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   Box,
@@ -62,7 +63,9 @@ import {
   ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
-import createPageFromTemplate from './create-page-from-template'
+import createPageFromTemplate, {
+  withBundleRootScreen,
+} from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -309,6 +312,14 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
+          // An installs lock is not a broken listing (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            return void enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          }
           return void enqueueSnackbar(
             payload?.error ?? 'Template install failed',
             {
@@ -443,7 +454,11 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           })
         }
         const used = new Set(existingSlugs)
-        for (const screen of template.screens) {
+        // A starter is a whole site, so it has to land ON the site's address:
+        // if nothing in the bundle asks for the root and this host has no home
+        // page yet, the first screen takes it (AGL-1575). Never moves a live
+        // home page.
+        for (const screen of withBundleRootScreen(template.screens, used)) {
           // Same helper the library's Use flow calls (AGL-672) — one
           // implementation of create-screen → write-version → publish-route,
           // including the slug de-confliction that must not overwrite a

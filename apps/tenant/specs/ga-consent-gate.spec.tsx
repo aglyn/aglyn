@@ -20,23 +20,27 @@
  * source. A banner that does not gate is decoration — so these specs assert
  * on the SCRIPT ELEMENTS, not the banner. The planted regions are the red
  * conditions: remove `analyticsAllowed` from the render condition in
- * `catch-all-client.tsx` and the prior-consent cases go red; break the
- * posture resolution (EU or unknown region treated as opt-out) and the
+ * `site-analytics.tsx` and the prior-consent cases go red; break the posture
+ * resolution (EU or unknown region treated as opt-out) and the
  * planted-region cases go red on their own.
+ *
+ * RE-ASSERTED AT THE NEW MOUNT POINT (AGL-1550). The gate used to be
+ * evaluated inside `CatchAllClient`, below the site-plugin gate, and this
+ * file rendered that component — which is why it had to settle
+ * `sitePluginLoader` before it could ask a question about consent. The
+ * mounts moved to `SiteAnalytics`, a sibling above the gate; every case
+ * below is unchanged in substance and still holds, because hoisting moved
+ * WHERE the gate is evaluated and never WHEN. That this file no longer
+ * imports the plugin loader at all is itself the decoupling evidence: the
+ * consent gate and the plugin system now have nothing to say to each other.
  */
 import {
   storeVisitorConsent,
   VISITOR_ID_STORAGE_KEY,
   visitorConsentStorageKey,
 } from '@aglyn/aglyn'
-import { DEFAULT_ENABLED_PLUGINS } from '@aglyn/aglyn'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import CatchAllPage from '../app/[host]/[[...slug]]/catch-all-client'
-import { sitePluginLoader } from '../utils/site-plugin-loader'
-
-// The page `use()`-suspends on the plugin loader; settle it ONCE up front
-// so the first test's render is as synchronous as every later one.
-beforeAll(() => sitePluginLoader.ensure([...DEFAULT_ENABLED_PLUGINS], ['site']))
+import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
 
 // `next/script` is inert in jsdom; a marker element makes "did the GA
 // script render at all" directly observable. The gate under test decides
@@ -71,11 +75,11 @@ function plantRegion(country: string | null) {
 
 async function renderPage(host: Record<string, any>) {
   let result!: ReturnType<typeof render>
-  // Awaited act: the page `use()`-suspends on the plugin loader during its
-  // first render, and the consent hook resolves asynchronously after mount
-  // (region fetch) — both settle inside this scope.
+  // Awaited act: the consent hook resolves asynchronously after mount (the
+  // region fetch), and settles inside this scope. Nothing here suspends any
+  // more — the mount no longer sits behind the plugin gate (AGL-1550).
   await act(async () => {
-    result = render(<CatchAllPage data={{ host: host as any }} nodes={{}} />)
+    result = render(<SiteAnalytics host={host as any} />)
   })
   return result
 }

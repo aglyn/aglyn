@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -178,6 +179,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         })
       }
       if (payload.chargesEnabled) {
+        // Publisher-payout half of the same activation metric (AGL-1561),
+        // gated on the transition for the same reason as the commerce card:
+        // the connect handler is re-entrant and reports `true` on every
+        // revisit. `payoutsEnabled` is the pre-request state.
+        if (!payoutsEnabled) trackEvent('stripe_connected', {})
         return void enqueueSnackbar('Payouts are enabled', {
           variant: 'success',
           persist: false,
@@ -193,7 +199,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     } finally {
       setPayoutsBusy(false)
     }
-  }, [orgId, user, enqueueSnackbar])
+  }, [orgId, user, payoutsEnabled, enqueueSnackbar])
 
   const [handle, setHandle] = useState('')
   const [displayName, setDisplayName] = useState('')

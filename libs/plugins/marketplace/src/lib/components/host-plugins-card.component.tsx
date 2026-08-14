@@ -34,7 +34,11 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { compareArtifactVersions } from '@aglyn/aglyn'
+import {
+  compareArtifactVersions,
+  lockdownRefusalText,
+  parseLockdownRefusal,
+} from '@aglyn/aglyn'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -183,10 +187,19 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
             persist: false,
           })
         } else {
-          enqueueSnackbar(payload?.error ?? 'Upgrade failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
+          // An installs lockdown refuses the upgrade route too (AGL-1532).
+          const locked = parseLockdownRefusal(response.status, payload)
+          if (locked) {
+            enqueueSnackbar(lockdownRefusalText(locked), {
+              variant: 'warning',
+              persist: true,
+            })
+          } else {
+            enqueueSnackbar(payload?.error ?? 'Upgrade failed', {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+          }
         }
       } finally {
         setBusy(null)
@@ -208,6 +221,17 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
+        // Every install-class action in this card funnels through here
+        // (share, org upgrade, uninstall at both scopes) — so does the
+        // pause notice (AGL-1532).
+        const locked = parseLockdownRefusal(response.status, payload)
+        if (locked) {
+          enqueueSnackbar(lockdownRefusalText(locked), {
+            variant: 'warning',
+            persist: true,
+          })
+          return null
+        }
         enqueueSnackbar(payload?.error ?? 'Plugin operation failed', {
           variant: 'error',
           allowDuplicate: true,

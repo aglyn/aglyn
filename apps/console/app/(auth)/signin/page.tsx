@@ -17,6 +17,7 @@
 
 'use client'
 
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
@@ -38,7 +39,6 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
-import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
   GoogleAuthProvider,
@@ -51,7 +51,6 @@ import {
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import {
-  useAnalytics,
   useAuth,
   useSigninCheck,
 } from '@aglyn/tenant-feature-instance'
@@ -90,7 +89,6 @@ function SignIn() {
   const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
-  const analytics = useAnalytics()
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
   const delegation = useDelegateWorkspaceSignIn('signin')
@@ -170,9 +168,12 @@ function SignIn() {
         .then(async (user) => {
           // Before the analytics event: this was never a login (AGL-1497).
           if (await rejectUnconsentedNewAccount(user)) return
-          logEvent(analytics, 'login', {
-            method: user.providerId,
-          })
+          // A literal per door, not `user.providerId` — the Identity Toolkit
+          // password response carries no provider, so this reported
+          // `method: null` for every email/password sign-in (AGL-1561).
+          // Reaching this `.then` means desktop; mobile resolves through
+          // `useGoogleRedirectResult` and reports `google_redirect`.
+          trackEvent('login', { method: values ? 'password' : 'google_popup' })
         })
         .catch((error) => {
           console.error(error)
@@ -187,7 +188,6 @@ function SignIn() {
         })
     },
     [
-      analytics,
       error,
       firebaseAuth,
       loading,
@@ -215,7 +215,7 @@ function SignIn() {
     const dequeueLoading = queueLoading()
     try {
       await signInWithPasskey(firebaseAuth)
-      logEvent(analytics, 'login', { method: 'passkey' })
+      trackEvent('login', { method: 'passkey' })
     } catch (caught) {
       // Every outcome speaks now (AGL-1417). This used to swallow
       // NotAllowedError and AbortError as "the user cancelled" — but WebAuthn
@@ -227,7 +227,7 @@ function SignIn() {
     } finally {
       dequeueLoading()
     }
-  }, [analytics, error, firebaseAuth, loading, queueLoading])
+  }, [error, firebaseAuth, loading, queueLoading])
 
   if (delegation === 'redirecting') {
     // Bouncing to the auth host (AGL-465) — no local form or OAuth here.
