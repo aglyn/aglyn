@@ -25,6 +25,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  isServerReleaseFlagOnForOrg,
   memberHasOrgPermission,
   readOrgBilling,
   resolveOrgMembership,
@@ -162,6 +163,25 @@ async function handler(request: Request): Promise<Response> {
       !(await memberHasOrgPermission(orgId, actor?.member, 'billing.manage'))
     ) {
       return Response.json({ error: 'billing.manage required' }, { status: 403 })
+    }
+    // Release gate (AGL-1653). The Billing page drops the "Plan add-ons"
+    // card on `useReleaseFlag('release_addon_store').visible`, and until
+    // now that was the ONLY gate — with the flag off the card vanished
+    // while this route kept accepting POSTs and kept reaching Stripe. A
+    // flag whose name says "add-on store" has to close the purchase path,
+    // not just the surface that describes it; that is the whole point of
+    // holding it as a kill switch.
+    //
+    // The staff bypass mirrors `visible` (`released || isStaff`) exactly,
+    // so the one audience that still SEES the card is the one that can
+    // still use it. 404 rather than 403: a released-off feature does not
+    // exist, which is what both plugin API dispatchers and the edit-access
+    // token route already answer.
+    if (
+      !isStaff &&
+      !(await isServerReleaseFlagOnForOrg('release_addon_store', orgId))
+    ) {
+      return Response.json({ error: 'Not available' }, { status: 404 })
     }
     const orgSnapshot = await firebaseAdmin
       .app()
