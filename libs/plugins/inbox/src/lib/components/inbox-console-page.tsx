@@ -16,7 +16,11 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import {
+  type ConsolePluginPageProps,
+  formSubmissionsPausedNotice,
+  submissionMonthKey,
+} from '@aglyn/aglyn'
 import { CampaignsCard as HostCampaignsCard } from '@aglyn/plugins-email'
 import { HostOrdersCard } from '@aglyn/plugins-commerce'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -25,8 +29,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
 } from '@aglyn/tenant-feature-instance'
 import {
+  Alert,
+  AlertTitle,
   Button,
   Chip,
   Dialog,
@@ -76,6 +83,27 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   const submissions = [...(submissionDocs ?? [])].sort(
     (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   )
+
+  // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
+  //
+  // Until this, the refusal existed in two places a site owner cannot see: a
+  // counters document only Firestore's console renders, and one in-app
+  // notification that `system.` bucket-muting can suppress at write time —
+  // `notifyUsers` skips the batch entirely, so a muted owner's notification
+  // is never created and cannot be recovered by unmuting. This surface is
+  // the durable one, and it is a plain read of the same document the
+  // dropped-contacts alert uses (AGL-891).
+  const { data: refusedCounter } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'formSubmissionsRefused'),
+    [firestore, hostId],
+  )
+  // Keyed by the month the SERVER wrote, via the shared helper — a key
+  // derived differently here would read zero refusals on exactly the sites
+  // being refused.
+  const pausedNotice = formSubmissionsPausedNotice({
+    refused: Number(refusedCounter?.[submissionMonthKey()] ?? 0),
+    ceiling: Number(refusedCounter?.['ceiling']) || undefined,
+  })
 
   // Site members + leads (AGL-109).
   const { data: memberDocs } = useFirestoreCollection<any>(
@@ -162,6 +190,27 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <>
+      {/* Above the tabs on purpose (AGL-1666). A paused form is not a fact
+          about the Submissions tab — it is why the whole inbox stopped
+          filling — and the notification that brings an owner here links to
+          the page, not to a tab. Inside a tab panel it would be invisible to
+          anyone who last left the page on Orders. */}
+      {pausedNotice ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <AlertTitle>{pausedNotice.title}</AlertTitle>
+          <Typography component="div" variant="body2">
+            {pausedNotice.message}
+          </Typography>
+          <Typography
+            component="div"
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.5 }}
+          >
+            {pausedNotice.until}
+          </Typography>
+        </Alert>
+      ) : null}
       <HubTabs
             tabs={[
               {

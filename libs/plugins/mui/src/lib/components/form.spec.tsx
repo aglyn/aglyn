@@ -836,3 +836,131 @@ describe('AGL-1511 · a refused submit', () => {
     )
   })
 })
+
+/**
+ * The abuse ceiling's visitor (AGL-1666).
+ *
+ * AGL-1655 added `code: 'form-abuse-ceiling'` to the 429 so this component
+ * could tell it apart from the Free plan's monthly wall, which answers the
+ * same status. Nothing consumed it, so a real customer of a customer filled
+ * in a lead form, was told "something went wrong — please try again", and
+ * retried into the identical refusal. The site owner never learned they lost
+ * the lead.
+ *
+ * The status is deliberately NOT what selects this branch. Both 429s reach
+ * here and only the code separates them.
+ */
+describe('AGL-1666 · a form refused by the site’s abuse ceiling', () => {
+  let fetchMock: jest.Mock
+
+  beforeEach(() => {
+    fetchMock = jest.fn()
+    global.fetch = fetchMock as unknown as typeof fetch
+  })
+
+  const submitAnd = async (response: {
+    ok: boolean
+    status: number
+    body: unknown
+  }) => {
+    fetchMock.mockResolvedValue({
+      ok: response.ok,
+      status: response.status,
+      json: async () => response.body,
+    })
+    const { container } = render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
+        <Form formName="Contact">
+          <FormField fieldName="email" fieldType="text" />
+        </Form>
+      </Aglyn.SiteContext.Provider>,
+    )
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    return container
+  }
+
+  it('tells the visitor the message was not sent, without saying why', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 429,
+      body: {
+        error: 'Submissions are paused for this site',
+        code: 'form-abuse-ceiling',
+      },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('was not sent'),
+    )
+    // Not the generic failure it used to be, and not the Preview sentence.
+    expect(container.textContent).not.toContain('Something went wrong')
+    expect(container.textContent).not.toContain('published site')
+    // Nothing about the OWNER's account reaches a stranger standing on their
+    // site — not the volume, not the ceiling, not the word for either.
+    for (const leak of ['limit', 'abuse', 'unusual', 'bot', 'plan', 'spam']) {
+      expect(container.textContent?.toLowerCase()).not.toContain(leak)
+    }
+  })
+
+  it('renders as a warning — not reassurance, not a breakage', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 429,
+      body: { error: 'paused', code: 'form-abuse-ceiling' },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('was not sent'),
+    )
+    // Severity token inside the class list, like the AGL-1511 spec above:
+    // one exact MUI class moves between variants and major versions.
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.className).toContain('Warning')
+    expect(alert?.className).not.toContain('Error')
+    expect(alert?.className).not.toContain('Success')
+  })
+
+  it('offers the site’s own contact address as a mailto link', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 429,
+      body: {
+        error: 'paused',
+        code: 'form-abuse-ceiling',
+        contact: 'help@northwind.example',
+      },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('help@northwind.example'),
+    )
+    const link = container.querySelector('a[href^="mailto:"]')
+    expect(link?.getAttribute('href')).toBe('mailto:help@northwind.example')
+  })
+
+  it('still refuses honestly when the site publishes no contact', async () => {
+    const container = await submitAnd({
+      ok: false,
+      status: 429,
+      body: { error: 'paused', code: 'form-abuse-ceiling' },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('was not sent'),
+    )
+    expect(container.querySelector('a[href^="mailto:"]')).toBeNull()
+    expect(container.textContent).not.toContain('In the meantime')
+  })
+
+  it('leaves the Free plan’s 429 on the generic branch', async () => {
+    // Same status, no code. This one is not fixed by waiting and not fixed
+    // by writing to the site — it is the owner's plan. Claiming the form is
+    // "not accepting right now" would be a different, wrong story.
+    const container = await submitAnd({
+      ok: false,
+      status: 429,
+      body: { error: 'Submission limit reached' },
+    })
+    await waitFor(() =>
+      expect(container.textContent).toContain('Something went wrong'),
+    )
+    expect(container.textContent).not.toContain('was not sent')
+  })
+})

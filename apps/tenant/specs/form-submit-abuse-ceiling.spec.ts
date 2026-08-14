@@ -39,6 +39,7 @@
 
 import {
   checkFormSubmissionQuota,
+  FORM_ABUSE_CEILING_CODE,
   FORM_ABUSE_CEILING_FLOOR,
 } from '@aglyn/aglyn/server'
 
@@ -246,5 +247,58 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
     expect(walled.status).toBe(429)
     expect((await walled.json()).code).toBeUndefined()
     expect(mockStore[refusedPath]).toBeUndefined()
+  })
+})
+
+/**
+ * What the refusal hands the VISITOR (AGL-1666).
+ *
+ * The body is read by a stranger to the site, so it is constrained in both
+ * directions: it must carry enough for the component to say something useful
+ * (the code, and a door that still opens) and nothing about why the site
+ * stopped accepting. The copy itself lives in `@aglyn/aglyn`; what this
+ * pins is which FIELDS cross the wire.
+ */
+describe('AGL-1666 · the refusal body a visitor receives', () => {
+  it('carries the site’s published support address when it has one', async () => {
+    mockStore[`hosts/${HOST_ID}`] = {
+      name: 'Site',
+      business: { supportEmail: '  help@northwind.example  ' },
+    }
+    mockStore[counterPath] = { [MONTH]: FORM_ABUSE_CEILING_FLOOR }
+
+    const body = await (await submit()).json()
+    expect(body.code).toBe(FORM_ABUSE_CEILING_CODE)
+    // Trimmed by the host-token registry, which is also what defines this
+    // field as the address a site publishes TO VISITORS.
+    expect(body.contact).toBe('help@northwind.example')
+  })
+
+  it('omits the contact when the site publishes none', async () => {
+    mockStore[counterPath] = { [MONTH]: FORM_ABUSE_CEILING_FLOOR }
+    const body = await (await submit()).json()
+    expect(body.code).toBe(FORM_ABUSE_CEILING_CODE)
+    expect('contact' in body).toBe(false)
+  })
+
+  it('leaks nothing about the site’s account', async () => {
+    mockStore[`hosts/${HOST_ID}`] = {
+      name: 'Site',
+      business: { supportEmail: 'help@northwind.example' },
+      // Account data that sits on the same document and must not ride along.
+      orgId: 'org-secret',
+      subdomain: 'northwind',
+    }
+    mockStore[counterPath] = { [MONTH]: FORM_ABUSE_CEILING_FLOOR }
+
+    const body = await (await submit()).json()
+    // A closed set. Adding the count or the ceiling here would tell every
+    // bot in the flood exactly how well it was doing, and every human
+    // visitor something the owner never published.
+    expect(Object.keys(body).sort()).toEqual(['code', 'contact', 'error'])
+    expect(JSON.stringify(body)).not.toContain('org-secret')
+    expect(JSON.stringify(body)).not.toContain(
+      String(FORM_ABUSE_CEILING_FLOOR),
+    )
   })
 })

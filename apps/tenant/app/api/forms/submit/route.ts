@@ -52,13 +52,6 @@ const RATE_MAX = 10
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 /**
- * Refusal code for the per-site abuse ceiling (AGL-1655). The plan wall and
- * the ceiling both answer 429 and only this distinguishes them — one means
- * "buy more", the other means "this site is being flooded".
- */
-const FORM_ABUSE_CEILING_CODE = 'form-abuse-ceiling'
-
-/**
  * The ceiling is a per-MONTH count, so the honest retry hint is the month
  * boundary rather than a made-up interval. UTC, matching `monthKey`.
  */
@@ -66,6 +59,23 @@ const secondsUntilNextMonth = (now = new Date()): number => {
   const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
   return Math.max(1, Math.ceil((next - now.getTime()) / 1000))
 }
+
+/**
+ * The one useful thing a refused visitor can be given (AGL-1666): the site's
+ * OWN published support address, so a lost lead has somewhere else to go.
+ *
+ * Read through the host-token registry rather than reaching into the
+ * document, because that registry is what defines this field as the address
+ * a site publishes to visitors — its description is literally "where
+ * visitors should write for help". Anything else on the host document is
+ * account data and must not leave the console.
+ *
+ * Free: the host snapshot is already loaded for the existence check.
+ */
+const publishedContactEmail = (
+  host: Record<string, any> | undefined,
+): string | undefined =>
+  host ? Aglyn.HOST_TOKENS['supportEmail']?.resolve(host) : undefined
 
 /**
  * Make a tripped ceiling OBSERVABLE (AGL-1655) rather than a silent drop.
@@ -196,7 +206,10 @@ export async function POST(request: Request): Promise<Response> {
     // without a plan are uncapped, matching every other gate).
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const orgBilling = (await getOrgForHost(hostId))?.org
-    const monthKey = new Date().toISOString().slice(0, 7)
+    // Shared with the console surface that reads these counters back
+    // (AGL-1666) — a differently-derived key there would read 0 refusals on
+    // exactly the sites being refused.
+    const monthKey = Aglyn.submissionMonthKey()
     const counterRef = hostRef.collection('counters').doc('formSubmissions')
     {
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
@@ -229,12 +242,18 @@ export async function POST(request: Request): Promise<Response> {
       )
       if (ceiling.exceeded) {
         await recordAbuseCeilingTrip(hostRef, hostId, monthKey, ceiling.ceiling)
+        const contact = publishedContactEmail(hostSnapshot.data())
         return Response.json(
           {
             error: 'Submissions are paused for this site',
             // Machine-readable so a client can tell containment apart from
             // the plan wall it shares a status with.
-            code: FORM_ABUSE_CEILING_CODE,
+            code: Aglyn.FORM_ABUSE_CEILING_CODE,
+            // The site's own published support address, when it has one
+            // (AGL-1666). NOT the ceiling, the count or the plan: this body
+            // is read by a stranger to the site, and the reason a site
+            // stopped accepting is the owner's to see, not a caller's.
+            ...(contact ? { contact } : {}),
           },
           {
             status: 429,
