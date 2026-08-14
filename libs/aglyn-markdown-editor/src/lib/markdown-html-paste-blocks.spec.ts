@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { htmlToRows } from '../components/markdown-html-paste'
-import { rowsToMarkdown } from '../components/markdown-visual-editor.component'
+import { htmlToRows } from './markdown-html-paste'
+import { rowsToMarkdown } from './markdown-visual-editor.component'
 
 describe('htmlToRows: code blocks and tables (AGL-981)', () => {
   it('keeps a pre block verbatim and reads its language', () => {

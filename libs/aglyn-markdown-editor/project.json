@@ -1,0 +1,30 @@
+{
+  "name": "aglyn-markdown-editor",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/aglyn-markdown-editor/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/aglyn-markdown-editor",
+        "main": "libs/aglyn-markdown-editor/src/index.ts",
+        "tsConfig": "libs/aglyn-markdown-editor/tsconfig.lib.json",
+        "assets": ["libs/aglyn-markdown-editor/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/aglyn-markdown-editor"],
+      "options": {
+        "jestConfig": "libs/aglyn-markdown-editor/jest.config.ts"
+      }
+    }
+  }
+}
