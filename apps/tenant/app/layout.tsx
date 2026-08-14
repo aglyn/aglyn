@@ -22,6 +22,7 @@ import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-c
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter'
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
+import ErrorBeacon from '../components/error-beacon.component'
 
 /**
  * App Router root layout (migrated from pages/_app + _document). It owns the
@@ -53,6 +54,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <AppRouterCacheProvider options={APP_EMOTION_CACHE_OPTIONS}>
           {children}
+          {/* First-party error beacon (AGL-1538): uncaught browser errors
+              → /api/errors → Cloud Error Reporting. Sits OUTSIDE the page's
+              suspense boundaries so it reports even when a page component
+              stays suspended (the AGL-1285-adjacent hydration stall is
+              exactly the failure mode it must survive). */}
+          <ErrorBeacon />
         </AppRouterCacheProvider>
       </body>
     </html>
