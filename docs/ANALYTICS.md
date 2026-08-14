@@ -365,10 +365,13 @@ however many rates the merchant saved — the same merchant and product billing
 two different totals depending on which button the shopper pressed. Buy-now
 resolves through the same AGL-1707 translation, narrowed to physical one-time
 sales: a digital or service product ships nothing, and a subscription session
-is excluded because renewals are not recorded at all — AGL-1732 gave the
-initial charge a home on the subscription document, `amount_shipping`
-included, but `invoice.payment_succeeded` is still unhandled, so a rate
-re-charged every cycle would land nowhere after the first.
+is excluded on a product question rather than a recording gap. The gap itself
+is closed — AGL-1732 gave the initial charge a home on the subscription
+document, `amount_shipping` included, and AGL-1743 records every paid invoice
+after it, reading `shipping_cost.amount_total` (an invoice has no
+`total_details`). What is unanswered is whether a rate editor written for
+one-time orders should express a rate re-charged every cycle at all, given
+Stripe bills a subscription's one-time line items on the first invoice only.
 So `amount_shipping` is now a real number on both storefront paths for a
 merchant who set shipping up, and structurally 0 only for one who did not.
 Draft orders and POS still resolve no shipping.

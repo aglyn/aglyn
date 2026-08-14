@@ -243,13 +243,17 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //   - ONE-TIME SALES ONLY. Originally because the webhook's
     //     `commerce-subscription` branch never touched `total_details`, so
     //     shipping charged there would have been real money recorded NOWHERE.
-    //     AGL-1732 closed that half — the initial charge now decomposes onto
-    //     the subscription document, `amount_shipping` included — but the
-    //     exclusion stands on the reason that outlived it: RENEWALS are still
-    //     recorded nowhere (`invoice.payment_succeeded` is unhandled), and a
-    //     rate editor written for one-time orders does not ask the merchant
-    //     whether a rate should be re-charged every cycle. Both are product
-    //     decisions, not wiring.
+    //     Both halves of that are now closed: AGL-1732 decomposed the initial
+    //     charge onto the subscription document, `amount_shipping` included,
+    //     and AGL-1743 records every renewal invoice — `shipping_cost` read
+    //     the same way — so a recurring shipping charge would now land.
+    //
+    //     What remains is the PRODUCT question, and only it: a rate editor
+    //     written for one-time orders never asks the merchant whether a rate
+    //     should be re-charged every cycle, and Stripe bills a subscription's
+    //     one-time line items on the FIRST invoice only, so a shipping rate
+    //     added as a session line item would be charged once and then silently
+    //     stop. Answering that is AGL-1720's revisit, not wiring.
     //
     // Weight is per unit TIMES the quantity bought. `weightGrams` alone would
     // quote the lightest tier on a multi-unit order — the same under-collection

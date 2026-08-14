@@ -408,6 +408,207 @@ export function computeBuyNowOrder(
   }
 }
 
+/** One line on a Stripe invoice, structurally typed like the session above. */
+export interface SubscriptionInvoiceLine {
+  /** The line total in cents, after any line-level discount, excluding tax. */
+  amount?: unknown
+  quantity?: unknown
+  description?: unknown
+  /** True on the credit/charge pair a mid-cycle plan switch generates. */
+  proration?: unknown
+  price?: {
+    unit_amount?: unknown
+    recurring?: { interval?: unknown } | null
+  } | null
+}
+
+/**
+ * The paid-invoice fields a renewal's totals are built from (AGL-1743).
+ *
+ * ## An invoice is not a Checkout Session
+ *
+ * This was checked field by field rather than assumed, and the two objects
+ * agree on almost nothing:
+ *
+ * - **There is no `total_details` on an invoice at all.** That object is a
+ *   Checkout Session field. `computeCheckoutSessionTotals` cannot be handed an
+ *   invoice — every part would read 0 and the whole renewal would decompose to
+ *   `amount_total` with nothing in it, which is exactly the AGL-1711 failure
+ *   shape (internally consistent, individually wrong).
+ * - **Tax** is `tax` (a scalar) on the API versions this repo pins, and
+ *   `total_taxes[]` on newer ones, where the scalar was removed. Both are read,
+ *   the scalar preferred, because a webhook endpoint's version is dashboard
+ *   configuration this repo cannot see.
+ * - **Discount** is `total_discount_amounts[]`, an array of per-discount
+ *   amounts, not a single `amount_discount`.
+ * - **Shipping** is `shipping_cost.amount_total` — note AGL-1698 preferred
+ *   `total_details.amount_shipping` over exactly this field ON A SESSION,
+ *   because there it is null unless a rate was chosen. On an invoice it is the
+ *   only form there is.
+ * - **The fee** is a real field here: a subscription carries
+ *   `application_fee_percent`, so every invoice reports the resulting
+ *   `application_fee_amount`. The session path has to read it out of metadata.
+ * - **What was bought** is `lines.data[]` rather than the session's metadata
+ *   snapshot — `checkout.ts` puts only `type`, `hostId` and `productId` on
+ *   `subscription_data[metadata]`, so the quantity and unit price of a renewal
+ *   have to come from the invoice itself.
+ *
+ * The arithmetic is still the shared one: the fields above are mapped onto the
+ * session shape and handed to `computeCheckoutSessionTotals`, so a renewal and
+ * a sale clamp, sum and reconcile identically.
+ */
+export interface SubscriptionInvoiceSource {
+  /** What actually arrived — the figure this records as collected. */
+  amount_paid?: unknown
+  total?: unknown
+  subtotal?: unknown
+  /** Total tax; removed in favor of `total_taxes` on newer API versions. */
+  tax?: unknown
+  total_taxes?: readonly { amount?: unknown }[] | null
+  total_tax_amounts?: readonly { amount?: unknown }[] | null
+  total_discount_amounts?: readonly { amount?: unknown }[] | null
+  shipping_cost?: { amount_total?: unknown } | null
+  application_fee_amount?: unknown
+  lines?: { data?: readonly SubscriptionInvoiceLine[] | null } | null
+}
+
+/** Sum of an `[{ amount }]` list, ignoring anything unreadable. */
+function sumAmounts(list: readonly { amount?: unknown }[] | null | undefined) {
+  return (list ?? []).reduce((sum, entry) => {
+    const amount = Number(entry?.amount ?? 0)
+    return sum + (Number.isFinite(amount) ? amount : 0)
+  }, 0)
+}
+
+/** `price.recurring.interval` when it is one we sell, else undefined. */
+function lineInterval(
+  line: SubscriptionInvoiceLine | null | undefined,
+): 'month' | 'year' | undefined {
+  const interval = line?.price?.recurring?.interval
+  return interval === 'month' || interval === 'year' ? interval : undefined
+}
+
+/**
+ * The line that describes the SUBSCRIPTION being billed.
+ *
+ * `lines.data[0]` is not it, for the AGL-1640 reason: a mid-cycle plan switch
+ * invoices the proration against the OLD price ahead of the new plan, and an
+ * invoice also carries one-off items and credits, any of which can sort first.
+ * Prefer a non-proration line stating a cadence; fall back to a proration one,
+ * since Stripe requires every recurring item on one subscription to share a
+ * cadence; fall back to the first line so a renewal still records a name.
+ */
+export function selectSubscriptionInvoiceLine(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): SubscriptionInvoiceLine | undefined {
+  const lines = invoice?.lines?.data ?? []
+  return (
+    lines.find((line) => !line?.proration && lineInterval(line)) ??
+    lines.find((line) => lineInterval(line)) ??
+    lines[0]
+  )
+}
+
+/**
+ * The cadence a paid invoice was billed on, or undefined when it does not say.
+ *
+ * Never guessed — the same three-state discipline as `billingIntervalFromInvoice`
+ * (AGL-1640). Storing `month` for an invoice that did not state one would make
+ * the merchant's own record of what a subscriber pays wrong in the one way that
+ * cannot be spotted by looking at it.
+ */
+export function subscriptionInvoiceInterval(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): 'month' | 'year' | undefined {
+  return lineInterval(selectSubscriptionInvoiceLine(invoice))
+}
+
+/**
+ * The stored line items and totals for one paid subscription invoice
+ * (AGL-1743) — a renewal, or the opening cycle.
+ *
+ * `snapshot` supplies the product identity, taken from what the sale already
+ * recorded rather than re-derived: an invoice line knows a description and a
+ * price, not a productId, a variant or a SKU. It is applied to the
+ * subscription's own line only; a proration or one-off line on the same invoice
+ * keeps Stripe's description and carries no product identity, because it is not
+ * a sale of that product.
+ *
+ * `totalCents` is Stripe's `amount_paid` verbatim, for the AGL-1698 reason —
+ * our sum is priced from lines we did not authorize and must never become the
+ * stored truth. Where a customer credit balance covers part of an invoice the
+ * parts will therefore exceed the collected total; the collected figure is the
+ * one that matters and the invoice's own `total` is stored beside it.
+ */
+export function computeSubscriptionInvoiceOrder(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+  snapshot: BuyNowProductSnapshot & { productId: string; variantId?: string },
+): { lineItems: OrderLineItem[]; totals: OrderTotals } {
+  const subscriptionLine = selectSubscriptionInvoiceLine(invoice)
+  const lineItems: OrderLineItem[] = []
+  for (const line of invoice?.lines?.data ?? []) {
+    const amount = Math.round(Number(line?.amount ?? 0))
+    // A credit line (negative proration) is not a sale of anything, and
+    // `computeOrderTotals` floors a line at 0 rather than subtracting it.
+    // Stripe's own collected total still carries its effect.
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    const rawQuantity = Math.round(Number(line?.quantity ?? 1))
+    const quantity =
+      Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : 1
+    // The list unit price, except on a proration line, where `unit_amount` is
+    // the full price and `amount` is only the fraction being billed.
+    const listUnit = Math.round(Number(line?.price?.unit_amount ?? 0))
+    const unitAmountCents =
+      !line?.proration && Number.isFinite(listUnit) && listUnit > 0
+        ? listUnit
+        : Math.max(0, Math.round(amount / quantity))
+    const isSubscriptionLine = line === subscriptionLine
+    lineItems.push({
+      productId: isSubscriptionLine ? snapshot.productId : '',
+      ...(isSubscriptionLine && snapshot.variantId
+        ? { variantId: snapshot.variantId }
+        : {}),
+      name: isSubscriptionLine
+        ? snapshot.name
+        : String(line?.description ?? 'Adjustment').slice(0, 200),
+      ...(isSubscriptionLine && snapshot.variantLabel
+        ? { variantLabel: snapshot.variantLabel }
+        : {}),
+      ...(isSubscriptionLine && snapshot.sku ? { sku: snapshot.sku } : {}),
+      ...(isSubscriptionLine && snapshot.productType
+        ? { productType: snapshot.productType }
+        : {}),
+      ...(isSubscriptionLine && snapshot.supplierId
+        ? { supplierId: snapshot.supplierId }
+        : {}),
+      quantity,
+      unitAmountCents,
+    })
+  }
+  const scalarTax = Number(invoice?.tax ?? NaN)
+  const taxCents =
+    Number.isFinite(scalarTax) && scalarTax > 0
+      ? scalarTax
+      : // `total_taxes` replaced `total_tax_amounts`, which replaced the
+        // scalar; they do not coexist, so this cannot double-count.
+        sumAmounts(invoice?.total_taxes ?? invoice?.total_tax_amounts)
+  return {
+    lineItems,
+    totals: computeCheckoutSessionTotals(
+      lineItems,
+      {
+        amount_total: invoice?.amount_paid,
+        total_details: {
+          amount_tax: taxCents,
+          amount_shipping: metadataCents(invoice?.shipping_cost?.amount_total),
+          amount_discount: sumAmounts(invoice?.total_discount_amounts),
+        },
+      },
+      { feeCents: metadataCents(invoice?.application_fee_amount) },
+    ),
+  }
+}
+
 /** Display form: `#1042`; falls back to a doc-id stub for legacy rows. */
 export function formatOrderNumber(order: Pick<HostOrder, 'number'>, docId?: string): string {
   if (order.number != null) return `#${order.number}`

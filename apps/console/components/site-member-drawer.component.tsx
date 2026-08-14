@@ -385,6 +385,22 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                             Number(subscription.currentPeriodEndMs),
                           ).toLocaleDateString()}`
                         : '—'}
+                      {/*
+                       * What this subscriber has actually paid, across every
+                       * cycle (AGL-1743). Renewals used to be invisible to
+                       * Aglyn entirely — `invoice.payment_succeeded` was
+                       * unhandled — so a subscriber in month 12 read exactly
+                       * like one in month 1. Omitted, not shown as 0, for
+                       * subscriptions whose cycles all predate the fix: those
+                       * invoices are recoverable only from Stripe.
+                       */}
+                      {Number(subscription.invoicesCount ?? 0) > 0
+                        ? ` · ${usd(Number(subscription.paidCents) || 0)} paid over ${
+                            Number(subscription.invoicesCount) === 1
+                              ? '1 invoice'
+                              : `${Number(subscription.invoicesCount)} invoices`
+                          }`
+                        : ''}
                     </Typography>
                   </Stack>
                   <Chip

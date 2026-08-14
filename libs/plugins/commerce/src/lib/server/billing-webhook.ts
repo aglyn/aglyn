@@ -283,6 +283,255 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
       }
     }
 
+    // Storefront subscription RENEWALS (AGL-1743).
+    //
+    // `invoice.payment_succeeded` was unhandled repo-wide, so after AGL-1732
+    // gave the INITIAL charge a home, month 2 onward still took the customer's
+    // money and produced no record anywhere — not in orders, not in analytics,
+    // not on the contact's `ltvCents`, not on the subscription document, whose
+    // `totals` stayed frozen at the opening charge however the real one moved.
+    //
+    // ## What a renewal produces, and what it deliberately does not
+    //
+    // It does NOT produce an order. Subscriptions are not orders in this
+    // product — the merchant docs say so, the console keeps Orders and
+    // Subscriptions apart, the tenant account page renders them separately —
+    // and AGL-1732 established that on three independent sources. Whether a
+    // PHYSICAL subscription's renewal should ALSO produce a fulfilment
+    // artifact to pick, pack and label against is a genuine open question
+    // (AGL-1743 §1) that carries a channel decision with it (§2), and guessing
+    // it wrong writes rows into merchant-facing tables and revenue charts that
+    // would then need unpicking.
+    //
+    // What is unambiguous is that the money must be RECOVERABLE: which cycle
+    // was paid, when, by whom, for what, and for how much. So each paid
+    // invoice is recorded as its own document under the subscription — the
+    // ledger this product was missing — and rolled up onto the subscription
+    // itself, which is the record the member drawer already reads.
+    //
+    // ## Both invoice events, one record
+    //
+    // Stripe sends `invoice.paid` AND `invoice.payment_succeeded` for the same
+    // payment, and which of them this endpoint receives is dashboard
+    // configuration no code in this repo can see (the console route handles
+    // `invoice.paid` for PLATFORM billing, which is the only evidence either
+    // is enabled). Handling both means the branch fires whichever is on; the
+    // invoice-id guard means having both on records the cycle once.
+    if (type === 'invoice.payment_succeeded' || type === 'invoice.paid') {
+      // The SUBSCRIPTION's metadata, which is what `checkout.ts` sets
+      // (`subscription_data[metadata]`) — the invoice's own `metadata` is a
+      // different, empty bag. `parent.subscription_details` is where newer API
+      // versions moved it; both are read because the endpoint's version is not
+      // visible from here.
+      const subscriptionMeta =
+        object?.subscription_details?.metadata ??
+        object?.parent?.subscription_details?.metadata ??
+        null
+      const invoiceId = String(object?.id ?? '')
+      const subscriptionId = String(
+        object?.subscription ??
+          object?.parent?.subscription_details?.subscription ??
+          '',
+      )
+      const invoiceHostId = String(subscriptionMeta?.hostId ?? '')
+      // Platform billing — Aglyn charging its own customers — runs through the
+      // same endpoint and the same fan-out, and its invoices carry `orgId`
+      // instead. Self-selection is on the same discriminator every other
+      // section of this file uses.
+      if (
+        subscriptionMeta?.type === 'commerce-subscription' &&
+        invoiceHostId &&
+        subscriptionId &&
+        invoiceId
+      ) {
+        const firestore = firebaseAdmin.app().firestore()
+        const hostRef = firestore.collection('hosts').doc(invoiceHostId)
+        const subscriptionRef = hostRef
+          .collection('subscriptions')
+          .doc(subscriptionId)
+        const invoiceRef = subscriptionRef.collection('invoices').doc(invoiceId)
+        // The product identity comes from what the sale already recorded: an
+        // invoice line knows a description and a price, never a productId, a
+        // variant or a SKU. Subscriptions sold before AGL-1732 have no stored
+        // line items, so those fall back to the product doc — one extra read,
+        // and only for them.
+        const soldSnapshot = await subscriptionRef.get()
+        const soldLine = ((soldSnapshot.get('lineItems') ?? []) as
+          | CommerceModel.OrderLineItem[]
+          | undefined)?.[0]
+        const productId = String(
+          soldLine?.productId ??
+            soldSnapshot.get('productId') ??
+            subscriptionMeta?.productId ??
+            '',
+        )
+        let snapshot: CommerceModel.BuyNowProductSnapshot & {
+          productId: string
+          variantId?: string
+        }
+        if (soldLine) {
+          snapshot = {
+            productId,
+            ...(soldLine.variantId ? { variantId: soldLine.variantId } : {}),
+            name: soldLine.name,
+            ...(soldLine.variantLabel
+              ? { variantLabel: soldLine.variantLabel }
+              : {}),
+            ...(soldLine.sku ? { sku: soldLine.sku } : {}),
+            ...(soldLine.productType
+              ? { productType: soldLine.productType }
+              : {}),
+          }
+        } else {
+          const productSnapshot = await hostRef
+            .collection('products')
+            .doc(productId || '__missing__')
+            .get()
+          const lifted = CommerceModel.liftLegacyProduct(
+            (productSnapshot.data() as any) ?? { name: 'Subscription' },
+          )
+          const variantId = String(soldSnapshot.get('variantId') ?? '')
+          const variant = variantId
+            ? lifted.variants.find((item) => item.id === variantId)
+            : lifted.variants[0]
+          const variantOptions = Object.values(variant?.options ?? {})
+          snapshot = {
+            productId,
+            ...(variantId ? { variantId } : {}),
+            name: String(productSnapshot.get('name') ?? 'Subscription'),
+            ...(variantOptions.length
+              ? { variantLabel: variantOptions.join(' / ') }
+              : {}),
+            ...(variant?.sku ? { sku: variant.sku } : {}),
+            ...(lifted.type ? { productType: lifted.type } : {}),
+          }
+        }
+        const { lineItems: invoiceLineItems, totals: invoiceTotals } =
+          CommerceModel.computeSubscriptionInvoiceOrder(object, snapshot)
+        const paidCents = Math.max(0, Math.round(Number(object?.amount_paid ?? 0)))
+        const billingReason = String(object?.billing_reason ?? '')
+        // The subscription's FIRST invoice is also a paid invoice, and
+        // `checkout.session.completed` has already counted that money into the
+        // contact's lifetime value and already told the managers about it
+        // (AGL-1732). Recording it again would double every subscriber's
+        // opening value. It is still written as an invoice document — that is
+        // the ledger, and it must not have a hole where cycle 1 belongs.
+        const isOpeningInvoice = billingReason === 'subscription_create'
+        const interval = CommerceModel.subscriptionInvoiceInterval(object)
+        const paidAtMs = object?.status_transitions?.paid_at
+          ? Number(object.status_transitions.paid_at) * 1000
+          : Date.now()
+        const periodEndMs = object?.period_end
+          ? Number(object.period_end) * 1000
+          : null
+        // Idempotency, keyed on the INVOICE id (AGL-1743). Existence of the
+        // invoice document IS that key — the doc id is the invoice id — and
+        // unlike the AGL-1732 guard, which could not use existence because
+        // `customer.subscription.created` writes the same subscription path,
+        // nothing but this branch ever writes here. It also absorbs the
+        // `invoice.paid` / `invoice.payment_succeeded` pair for one payment.
+        //
+        // The roll-up accumulates by reading inside the transaction rather
+        // than with `FieldValue.increment`: the read is already happening for
+        // the guard, and a lifetime total that can only be verified by
+        // replaying every event is not a total a merchant can reconcile.
+        const recorded = await firestore.runTransaction(async (transaction) => {
+          const existingInvoice = await transaction.get(invoiceRef)
+          if (existingInvoice.exists) return false
+          const currentSubscription = await transaction.get(subscriptionRef)
+          transaction.set(invoiceRef, {
+            invoiceId,
+            subscriptionId,
+            billingReason,
+            ...(object?.number ? { number: String(object.number) } : {}),
+            currency: String(object?.currency ?? 'usd'),
+            paidCents,
+            /** Stripe's own total, which a credit balance can exceed. */
+            invoiceTotalCents: Math.max(
+              0,
+              Math.round(Number(object?.total ?? paidCents)),
+            ),
+            lineItems: invoiceLineItems,
+            totals: invoiceTotals,
+            ...(interval ? { interval } : {}),
+            paidAtMs,
+            periodStartMs: object?.period_start
+              ? Number(object.period_start) * 1000
+              : null,
+            periodEndMs,
+            customerEmail:
+              object?.customer_email ??
+              currentSubscription.get('customerEmail') ??
+              null,
+            ...(object?.hosted_invoice_url
+              ? { hostedInvoiceUrl: String(object.hosted_invoice_url) }
+              : {}),
+          })
+          transaction.set(
+            subscriptionRef,
+            {
+              lastInvoiceId: invoiceId,
+              lastPaymentCents: paidCents,
+              lastPaymentAtMs: paidAtMs,
+              ...(periodEndMs ? { paidThroughMs: periodEndMs } : {}),
+              paidCents:
+                Math.max(0, Number(currentSubscription.get('paidCents') ?? 0)) +
+                paidCents,
+              invoicesCount:
+                Math.max(
+                  0,
+                  Number(currentSubscription.get('invoicesCount') ?? 0),
+                ) + 1,
+              // What the subscriber pays NOW, replacing the frozen opening
+              // charge — the divergence this issue is about. Never from the
+              // opening invoice, whose richer decomposition the session
+              // already stored, and never from a zero one: a trial's first
+              // invoice is $0 and would wipe the recorded sale to nothing.
+              ...(!isOpeningInvoice && paidCents > 0
+                ? { totals: invoiceTotals, ...(interval ? { interval } : {}) }
+                : {}),
+            },
+            { merge: true },
+          )
+          return true
+        })
+        if (!recorded) return
+        if (!isOpeningInvoice && paidCents > 0) {
+          const renewalEmail =
+            object?.customer_email ?? soldSnapshot.get('customerEmail') ?? null
+          // The console has no Subscriptions tab, so until the order question
+          // is answered this notification is the only place a merchant learns
+          // that the money arrived at all — and, for a physical box, the only
+          // signal that something is due to ship.
+          void notifyHostManagers(invoiceHostId, {
+            type: 'content.order',
+            title: `Subscription renewed — $${(paidCents / 100).toFixed(2)}${
+              interval ? `/${interval}` : ''
+            }`,
+            ...(renewalEmail ? { body: String(renewalEmail) } : {}),
+            link: `/${invoiceHostId}/products`,
+          })
+          // RFM (AGL-328): a subscriber in month 12 has paid twelve times, and
+          // counting only the first charge ranks them as a one-purchase
+          // customer forever. Keyed to the invoice so the guard above is what
+          // stops a redelivery inflating it.
+          void upsertHostContact({
+            hostId: invoiceHostId,
+            email: renewalEmail,
+            ...(soldSnapshot.get('customerName')
+              ? { name: String(soldSnapshot.get('customerName')) }
+              : {}),
+            source: 'order',
+            purchaseCents: paidCents,
+            interaction: {
+              refId: invoiceId,
+              summary: `Subscription renewed ($${(paidCents / 100).toFixed(2)})`,
+            },
+          })
+        }
+      }
+    }
+
     // Reservations (AGL-310): payment confirms the pending hold.
     if (
       type === 'checkout.session.completed' &&
