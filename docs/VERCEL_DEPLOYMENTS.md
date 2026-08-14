@@ -8,7 +8,7 @@ Production domains measured against Vercel 2026-08-14 (`vercel project ls`, `ver
 | `aglyn-console` | `.` (repo root) | `apps/console` | `app.aglyn.com` |
 | `aglyn-tenant` | `.` (repo root) | `apps/tenant` | `*.aglyn.app`, **`aglyn.com`**, `www.aglyn.com`, `aglyn.io`, `aglyn.app`, customer custom domains |
 | `aglyn-docs` | `apps/docs` | `apps/docs` | `docs.aglyn.com` |
-| `aglyn-plugins` | `tools/plugin-loader/origin` | plugin bundle origin | `aglyn-plugins-aglyn.vercel.app` (no custom domain) |
+| `aglyn-plugins` | `tools/plugin-loader/origin` | plugin origin | **`plugins.aglyn.com`** |
 | `www-aglyn-io` | — | *(retired)* | **none** |
 
 Projects are named after the app they deploy, never after the domain they serve — domains move
@@ -19,6 +19,15 @@ moved onto the tenant runtime and the apex is now an ordinary tenant site — ho
 with `cname: aglyn.com`. `apps/tenant/middleware.ts` has no `aglyn.com` case at all: the apex falls
 through to the `default:` branch and resolves by `host.cname`, exactly like a customer domain. See
 `docs/design/agl-1311-primary-domain-model.md` for the measured domain model.
+
+**`aglyn-plugins` serves `plugins.aglyn.com`, not just its canonical `.vercel.app` URL** (AGL-1610).
+`vercel project ls` prints `aglyn-plugins-aglyn.vercel.app` as the "Latest Production URL" and shows
+no custom domain, which is what made this project look domain-less — but `vercel inspect` lists
+`https://plugins.aglyn.com` among the deployment's aliases, and that is the alias production
+actually uses: `NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com` in both console and tenant.
+The canonical `.vercel.app` alias is deployment-protected (it redirects to Vercel SSO and sends
+`x-frame-options: DENY`), so it could not serve the plugin realm iframe even if something asked it
+to. Probe the custom domain, never the canonical one.
 
 `www-aglyn-io` still exists as a Vercel project but serves **no domain**, and none of its 25 newest
 production deployments is Ready — every one is Canceled, the oldest 12 days old. `apps/www` is

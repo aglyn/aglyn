@@ -107,6 +107,6 @@
     }
   },
   "version": {
-    "description": "Release flags seed (AGL-231): one JSON parameter per release-gated console feature; managed in the staff admin Feature Flags page thereafter."
+    "description": "Release flags seed (AGL-231): one JSON parameter per release-gated console feature; managed in the staff admin Feature Flags page thereafter. AGL-1635: a value here is the PLATFORM default and is not the last word — an org doc may carry a per-org override at orgs/{orgId}.releaseFlags, set from the staff Override dialog, which wins over both the value below and its rollout percentage. If one organization sees a feature this file says is off, look there before editing anything here."
   }
 }

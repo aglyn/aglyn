@@ -86,6 +86,7 @@ async function handler(request: Request): Promise<Response> {
     // and the read is request-cache-deduped. Staff bypass is the un-panic
     // invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgForHost(hostId))?.org,

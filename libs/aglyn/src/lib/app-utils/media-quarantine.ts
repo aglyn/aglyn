@@ -27,13 +27,20 @@
  *
  * ## Three design calls, argued
  *
- * **Keyed by `contentHash`, not by media document.** By hash covers every
+ * **Keyed by content digest, not by media document.** By hash covers every
  * document that shares the bytes — a template duplicated into forty
  * workspaces is forty documents and one hash — and it survives a re-upload
  * of the same file, which a per-document key does not. The limits of that
  * promise are stated honestly at {@link mediaQuarantineHashKey}; it is not
  * a content-identity guarantee, and pretending otherwise would be worse
  * than the gap.
+ *
+ * AGL-1614 added the full-width `contentSha256` beside the legacy truncated
+ * `contentHash` and made the lookup check BOTH (see
+ * {@link mediaQuarantineKeys}). The preference is the strong digest; the
+ * non-negotiable is that the legacy key is never dropped, because entries
+ * written under it are live takedowns and a takedown that lifts itself is
+ * the one failure this lever must never have.
  *
  * **A per-asset key exists as a FALLBACK, not an alternative.** Some
  * documents carry no `contentHash` at all: the signed-upload route only
@@ -151,26 +158,34 @@ export const MEDIA_QUARANTINE_MESSAGE_MAX = 500
 export const MEDIA_QUARANTINE_NOTE_MAX = 1000
 
 /**
- * A quarantine key derived from a content hash.
+ * A quarantine key derived from a content digest — either the strong
+ * `contentSha256` or the legacy truncated `contentHash`. One key space on
+ * purpose: an entry set from either field is looked up by
+ * {@link mediaQuarantineKeys}, so widening the digest never stranded a
+ * takedown that was already in force.
  *
- * **What this promises, and what it does not.** `contentHash` is a 16-hex
- * character (64-bit) TRUNCATED digest, and it is produced by two different
- * algorithms depending on which route ingested the bytes: sha256 for the
- * server-side upload and replace routes, GCS's md5 for the signed-upload
- * route. Two consequences, both stated rather than hidden:
+ * **What the LEGACY field promises, and what it does not** (AGL-1614).
+ * `contentHash` is a 16-hex character (64-bit) TRUNCATED digest, and it is
+ * produced by two different algorithms depending on which route ingested the
+ * bytes: sha256 for the server-side upload and replace routes, GCS's md5 for
+ * the signed-upload route. Two consequences, both stated rather than hidden:
  *
  *  1. The same bytes uploaded through DIFFERENT routes do not share a
  *     `contentHash`, so "re-uploading the same file stays quarantined"
- *     holds within an ingestion path, not across all of them.
+ *     holds within an ingestion path, not across all of them. This is NOT
+ *     fixed by `contentSha256` and cannot be: the signed-upload route never
+ *     holds the bytes, and GCS computes only md5 and crc32c.
  *  2. 64 truncated bits is collision-resistant by accident, not by design.
  *     An unrelated asset colliding by chance is negligible at this scale;
- *     an asset colliding by CONSTRUCTION is within reach, and would refuse
- *     an innocent file. That is an availability bug, never a disclosure
- *     one — a collision can only ever cause MORE refusal, never less.
+ *     an asset colliding by CONSTRUCTION is reachable — cheaply so on the
+ *     md5-derived half, where a chosen-prefix collision produces two files
+ *     with the same full digest and therefore the same truncation. The
+ *     consequence is bounded: a collision can only ever cause MORE refusal,
+ *     never less, so it is an availability bug and never a disclosure one.
  *
- * Both are properties of the existing `contentHash` field rather than of
- * this key, and both are filed. The key is normalized to lower case so a
- * hand-entered hash from a staff form cannot miss its own record.
+ * `contentSha256` has neither the truncation nor the md5 property, which is
+ * why {@link mediaQuarantineKeys} prefers it. The key is normalized to lower
+ * case so a hand-entered hash from a staff form cannot miss its own record.
  */
 export function mediaQuarantineHashKey(contentHash: string): string {
   return `hash--${String(contentHash).trim().toLowerCase()}`
@@ -196,16 +211,60 @@ export function mediaQuarantineAssetKey(
  * looking like it matched everything.
  */
 export function mediaQuarantineKey(asset: {
+  contentSha256?: string | null
   contentHash?: string | null
   scopeSegment?: string | null
   mediaId?: string | null
 }): string | null {
+  const strong = String(asset.contentSha256 ?? '').trim()
+  if (strong) return mediaQuarantineHashKey(strong)
   const hash = String(asset.contentHash ?? '').trim()
   if (hash) return mediaQuarantineHashKey(hash)
   const scopeSegment = String(asset.scopeSegment ?? '').trim()
   const mediaId = String(asset.mediaId ?? '').trim()
   if (!scopeSegment || !mediaId) return null
   return mediaQuarantineAssetKey(scopeSegment, mediaId)
+}
+
+/**
+ * EVERY key that may refuse this asset, in preference order and without
+ * duplicates. Any one of them matching an active entry is a refusal.
+ *
+ * The list, rather than {@link mediaQuarantineKey}'s single answer, is what
+ * makes AGL-1614's stronger digest safe to introduce. A media document may
+ * now carry BOTH a `contentSha256` and the legacy truncated `contentHash`,
+ * and quarantine entries in force were keyed on whichever field existed when
+ * staff pressed the button. Checking only the preferred key would mean a
+ * live takedown, keyed on the legacy hash, silently stops biting the moment
+ * an asset gains a strong one — a takedown lifting itself is the single
+ * worst failure this lever can have, so the legacy key is never dropped.
+ *
+ * The per-asset key stays in the list for the same reason it was added in
+ * AGL-1512: an entry set while a document had no hash at all must keep
+ * biting after a replace gives it one. Checking all three costs nothing —
+ * the deny list is one already-in-memory map.
+ */
+export function mediaQuarantineKeys(asset: {
+  contentSha256?: string | null
+  contentHash?: string | null
+  scopeSegment?: string | null
+  mediaId?: string | null
+}): string[] {
+  const keys: string[] = []
+  const push = (key: string | null) => {
+    if (key && !keys.includes(key)) keys.push(key)
+  }
+  const strong = String(asset.contentSha256 ?? '').trim()
+  if (strong) push(mediaQuarantineHashKey(strong))
+  const hash = String(asset.contentHash ?? '').trim()
+  if (hash) push(mediaQuarantineHashKey(hash))
+  push(
+    mediaQuarantineKey({
+      scopeSegment: asset.scopeSegment,
+      mediaId: asset.mediaId,
+    }),
+  )
+  return keys
 }
 
 /**

@@ -85,7 +85,12 @@ function CartLines(props: {
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
   const [giftCard, setGiftCard] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
+  // `paused` is its own state, not an `error` with gentler words (AGL-1511):
+  // the two need different severities, and a shopper told in red that
+  // checkout failed does not read the sentence explaining it did not.
+  const [status, setStatus] = useState<
+    'idle' | 'sending' | 'error' | 'paused'
+  >('idle')
   const [message, setMessage] = useState('')
 
   const handleCheckout = useCallback(async () => {
@@ -131,6 +136,18 @@ function CartLines(props: {
           }),
         )
         window.location.assign(payload.url)
+        return
+      }
+      // A read-only lockdown answers 423 with the visitor pause copy
+      // (AGL-1511). Rendering `payload.error` here would print the wire
+      // token "locked" at a shopper, and the `severity="error"` styling
+      // would tell them their payment failed — the one thing this copy
+      // exists to never say. So the refusal is parsed and shown as a calm
+      // notice instead.
+      const paused = Aglyn.parseLockdownRefusal(response.status, payload)
+      if (paused) {
+        setMessage(Aglyn.lockdownRefusalText(paused))
+        setStatus('paused')
         return
       }
       setMessage(String(payload?.error ?? ''))
@@ -271,6 +288,7 @@ function CartLines(props: {
           />
         </>
       ) : null}
+      {status === 'paused' ? <Alert severity="info">{message}</Alert> : null}
       {status === 'error' ? (
         <Alert severity="error">
           {message || 'Checkout is unavailable right now.'}

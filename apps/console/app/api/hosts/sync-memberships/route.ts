@@ -68,6 +68,7 @@ async function handler(request: Request): Promise<Response> {
     // fetched deliberately — an org lock never stamps host docs, so a
     // host-only verdict would silently miss it.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgForHost(hostId))?.org,

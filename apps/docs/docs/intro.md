@@ -44,7 +44,7 @@ description: What Aglyn is, the core concepts, and how to find your way around t
   </a>
   <a className="home-card" href="/content-and-data">
     <div className="home-card__title">Content &amp; data</div>
-    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the contacts CRM.</p>
+    <p className="home-card__desc">Datasets and dynamic content, the media library, forms, and the contacts CRM (rolling out).</p>
   </a>
   <a className="home-card" href="/marketing-and-automation">
     <div className="home-card__title">Marketing &amp; automation</div>

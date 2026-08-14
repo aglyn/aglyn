@@ -263,6 +263,7 @@ async function handler(request: Request): Promise<Response> {
       // check — same reads, plus platform/host/user scopes and the distinct
       // 423 body. This branch is non-staff only, so no bypass flag needed.
       const lockdown = await getLockdownVerdict({
+        request,
         uid: decoded.uid,
         org: orgData,
         host: hostSnapshot.data(),

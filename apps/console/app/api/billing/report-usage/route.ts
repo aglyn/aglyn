@@ -22,7 +22,9 @@ import {
   checkContactQuota,
   checkDataStorageQuota,
   decodeStoredNodes,
+  isReleaseFlagOnForOrg,
   nodeMapBytes,
+  parseOrgReleaseFlagOverrides,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
@@ -36,6 +38,7 @@ import { orgCounterTotals } from '../../../../utils/org-counter-totals'
 import {
   emailSendsOverage,
   firebaseAdmin,
+  getServerReleaseFlagValues,
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
@@ -374,6 +377,11 @@ async function handler(request: Request): Promise<Response> {
       routingByHost[host.id] = host.get('screens')
     }
 
+    // The release-flag verdicts, once for the whole sweep (AGL-1604). The
+    // template read is cached with its own TTL, so this costs nothing per org,
+    // and every org in one invocation is then priced against the same verdict.
+    const releaseFlagValues = await getServerReleaseFlagValues()
+
     const usageCache = new Map<string, Promise<HostUsageSnapshot>>()
     const usageFor = (hostRef: FirebaseFirestore.DocumentReference) => {
       let pending = usageCache.get(hostRef.path)
@@ -505,6 +513,42 @@ async function handler(request: Request): Promise<Response> {
       const apiQuota = checkApiRequestQuota(orgData, apiRequests)
       const contactsCount = Number(contactsSnap.data().count ?? 0)
       const contactQuota = checkContactQuota(orgData, contactsCount)
+      // Audience-band overage is WITHHELD while `release_contacts` is off
+      // (AGL-1604). The flag gates one surface — the console Contacts page and
+      // its nav tab — while ingestion and `GET /v1/contacts` keep running. So
+      // records accrue, the band is crossed, and the org has no console way to
+      // see, tag or export the very records it is being invoiced for. Nobody
+      // may be charged for what they cannot reach.
+      //
+      // WHEN the quota is applied, not HOW it is counted. `checkContactQuota`
+      // also feeds entitlement resolution, and a defaulted or reshaped count
+      // there renders a paying org as Free; `contactsCount` and the quota call
+      // are therefore byte-for-byte what they were, and only the figure that
+      // reaches `billedCents` moves.
+      //
+      // Conditional on the flag, never a hardcoded zero: the day Contacts
+      // ships, the same expression starts billing again on its own. A removal
+      // here would under-bill silently and forever.
+      //
+      // Bucketed by `orgId`, matching every other release-flag verdict — an org
+      // inside a partial rollout CAN reach the page, so it is billed.
+      //
+      // Per-org overrides included (AGL-1635). An org that staff granted
+      // Contacts early has the page, so it must have the invoice too; a gate
+      // that read only the Remote Config value would ignore the grant and
+      // under-bill exactly the customers who CAN reach the feature. Resolved
+      // off `orgData` — the org doc is already in hand from the batch above, so
+      // this costs no extra read, unlike `isServerReleaseFlagOnForOrg`, which
+      // would re-fetch the same document once per org.
+      const contactsOverageBilled = isReleaseFlagOnForOrg(
+        'release_contacts',
+        releaseFlagValues['release_contacts'],
+        orgId,
+        parseOrgReleaseFlagOverrides(orgData?.['releaseFlags']),
+      )
+      const contactsOverageUsd = contactsOverageBilled
+        ? contactQuota.overageMonthlyUsd
+        : 0
       // Screen-cap reconciliation (AGL-1390). Not priced and not enforced —
       // recorded, so that a site past the plan's screen allowance leaves a
       // dated trace somebody can find. `screensPerHost` is otherwise only ever
@@ -546,7 +590,7 @@ async function handler(request: Request): Promise<Response> {
         billedEstimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
-        Math.round(contactQuota.overageMonthlyUsd * 100)
+        Math.round(contactsOverageUsd * 100)
       const usageRef = orgRef.collection('usage').doc(month)
       const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
@@ -616,8 +660,21 @@ async function handler(request: Request): Promise<Response> {
           dataOverageUsd: dataQuota.overageMonthlyUsd,
           apiRequests,
           apiOverageUsd: apiQuota.overageMonthlyUsd,
+          // COUNTED ALWAYS (AGL-1604) — the records are real and the count is
+          // an entitlement input, so it stays truthful whatever the flag says.
           contactsCount,
-          contactsOverageUsd: contactQuota.overageMonthlyUsd,
+          // What actually entered `billedCents`: zero while the console page
+          // is dark.
+          contactsOverageUsd,
+          // Whether THIS month charged for the audience band, and what was
+          // forgone if it did not — without the second field a withheld month
+          // is indistinguishable from a month with no overage, which is the
+          // question anyone re-reading a beta invoice will ask first. Same
+          // shape as `orgLibraryBilled` above, and for the same reason.
+          contactsOverageBilled,
+          contactsOverageWithheldUsd: contactsOverageBilled
+            ? 0
+            : contactQuota.overageMonthlyUsd,
           // Email sends and workflow/action runs (AGL-1134), summed across
           // the org's hosts. COUNTS for this month — see `orgCounterTotals`
           // for the unit and the double-count argument.

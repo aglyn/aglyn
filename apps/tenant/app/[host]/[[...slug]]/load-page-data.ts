@@ -257,7 +257,12 @@ const loadPageDataCached = cache(
       },
       Date.now(),
     )
-    if (lockdownState) {
+    // READ-ONLY (AGL-1511) renders the page normally. A read-only lock is a
+    // WRITE freeze; replacing the page with the maintenance fallback here
+    // would undo the middleware's decision one layer down and take the site
+    // off the air anyway — the exact outcome the mode exists to avoid. The
+    // site's write endpoints refuse on their own path.
+    if (lockdownState && !Aglyn.isReadOnlyLockdown(lockdownState)) {
       const notice = Aglyn.lockdownNotice(lockdownState)
       return {
         props: JSON.parse(
@@ -397,6 +402,7 @@ const loadPageDataCached = cache(
                 {
                   subjectId:
                     (orgRes.org as { $id?: string })?.$id ?? hostId,
+                  orgId: (orgRes.org as { $id?: string })?.$id ?? null,
                 },
               )
             return {
@@ -524,6 +530,7 @@ const loadPageDataCached = cache(
               ),
               {
                 subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
+                orgId: (orgRes.org as { $id?: string })?.$id ?? null,
               },
             )
           const collectionShowBranding = !Aglyn.resolveOrgEntitlements(
@@ -756,7 +763,10 @@ const loadPageDataCached = cache(
         orgRes.org as never,
         hostRes.host as never,
       ),
-      { subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId },
+      {
+        subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
+        orgId: (orgRes.org as { $id?: string })?.$id ?? null,
+      },
     )
     // The release gate keeps its original failure semantics — a throw still
     // reaches the outer catch and 404s — but it is no longer awaited on the

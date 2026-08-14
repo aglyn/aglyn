@@ -49,10 +49,13 @@
 import {
   featureLockdownDocId,
   isLockdownFeatureKey,
+  isLockdownMode,
   isLockdownReasonCode,
   LOCKDOWN_FEATURE_KEYS,
   LOCKDOWN_MESSAGE_MAX,
+  LOCKDOWN_MODES,
   LOCKDOWNS_COLLECTION,
+  type LockdownMode,
   PLATFORM_LOCKDOWN_DOC_ID,
   pluginRequestFromWeb,
   userLockdownDocId,
@@ -109,11 +112,24 @@ function auditLockShape(lock: {
   reason?: unknown
   message?: unknown
   untilMs?: unknown
-}): { reason: string | null; message: string | null; untilMs: number | null } {
+  mode?: unknown
+}): {
+  reason: string | null
+  message: string | null
+  untilMs: number | null
+  mode: string
+} {
   return {
     reason: typeof lock.reason === 'string' ? lock.reason : null,
     message: typeof lock.message === 'string' ? lock.message : null,
     untilMs: typeof lock.untilMs === 'number' ? lock.untilMs : null,
+    // Recorded on BOTH sides of every row and never null (AGL-1511): "staff
+    // froze writes" and "staff took the workspace down" are different
+    // actions with different blast radii, and a trail that cannot tell them
+    // apart cannot answer the only question anyone asks it afterwards. The
+    // storage default is applied here so a row about a pre-AGL-1511 lock
+    // reads `full` rather than a gap the reader has to interpret.
+    mode: lock.mode === 'read-only' ? 'read-only' : 'full',
   }
 }
 
@@ -160,6 +176,8 @@ export interface LockState {
   reason: string | null
   message: string | null
   untilMs: number | null
+  /** `full` | `read-only`; `full` whenever the carrier says nothing. */
+  mode: LockdownMode
   /** When the lock was engaged, if it is. */
   atMs: number | null
   readAtMs: number
@@ -206,6 +224,8 @@ async function readLockState(
       reason: snapshot.get('suspendedReasonCode') ?? null,
       message: snapshot.get('suspendedMessage') ?? null,
       untilMs: snapshot.get('suspendedUntilMs') ?? null,
+      mode:
+        snapshot.get('suspendedMode') === 'read-only' ? 'read-only' : 'full',
       atMs: toMillis(snapshot.get('suspendedAt')),
     }
   }
@@ -228,6 +248,7 @@ async function readLockState(
     // such thing as a missing target — absent is simply unlocked.
     exists: true,
     locked: data != null,
+    mode: data?.['mode'] === 'read-only' ? 'read-only' : 'full',
     reason: (data?.['reason'] as string) ?? null,
     message: (data?.['message'] as string) ?? null,
     untilMs: (data?.['untilMs'] as number) ?? null,
@@ -517,7 +538,45 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const lock = { reason: String(reason), message, untilMs }
+
+    /*==========================================
+     * MODE (AGL-1511): how hard the lock bites.
+     *=========================================*/
+    // Absent = `full`, so every existing caller — the staff page's other
+    // cards, the billing auto-lock sweep, any runbook curl — keeps its
+    // shipped behaviour without knowing this field exists.
+    const mode: LockdownMode = isLockdownMode(body?.mode) ? body.mode : 'full'
+    if (action === 'lock' && body?.mode !== undefined && !isLockdownMode(body.mode)) {
+      return Response.json(
+        { error: `mode must be one of: ${LOCKDOWN_MODES.join(', ')}` },
+        { status: 400 },
+      )
+    }
+    // Read-only is refused on the two scopes where it would be a LIE rather
+    // than a milder lock, instead of being quietly accepted and downgraded:
+    //
+    //  - `user` — the user lock's teeth are the Firebase Auth `disabled`
+    //    flag and refresh-token revocation. Those are all-or-nothing; a
+    //    "read-only user" would be an ordinary full lockout wearing a label
+    //    that says otherwise, which is the worst of both.
+    //  - `feature` — a feature lock already names a single capability, and
+    //    every one of them (signups, uploads, checkout, installs, ai-assist)
+    //    IS a write. "Read-only checkout" describes nothing.
+    //
+    // An operator who asked for the gentler lock and silently got the harder
+    // one is the failure this refusal exists to prevent.
+    if (action === 'lock' && mode === 'read-only' && (scope === 'user' || scope === 'feature')) {
+      return Response.json(
+        {
+          error:
+            `read-only has no meaning at the ${scope} scope — a ${scope} lock ` +
+            `is all-or-nothing. Use scope platform, org or host, or lock ` +
+            `${scope} in full.`,
+        },
+        { status: 400 },
+      )
+    }
+    const lock = { reason: String(reason), message, untilMs, mode }
     const actor = {
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
@@ -540,6 +599,10 @@ async function handler(request: Request): Promise<Response> {
       if (action === 'lock') {
         await ref.set({
           scope: 'platform',
+          // Stored ONLY for read-only (AGL-1511): a full lock's document is
+          // byte-identical to one written before the field existed, so no
+          // migration and no re-interpretation of history.
+          ...(mode === 'read-only' ? { mode } : {}),
           reason: lock.reason,
           ...(message ? { message } : {}),
           ...(untilMs !== undefined ? { untilMs } : {}),
@@ -709,8 +772,16 @@ async function handler(request: Request): Promise<Response> {
         // Security/manual mean "everyone out NOW". Billing/maintenance keep
         // sessions so members can reach billing settings and fix it — the
         // org's sites and writes are locked server-side either way.
+        //
+        // READ-ONLY NEVER REVOKES (AGL-1511), whatever the reason. Logging
+        // everyone out is a full lockdown's effect; doing it here would
+        // deliver "your sites keep serving and you can keep reading" by
+        // signing every member out of the console. The write freeze is
+        // enforced at the chokepoints, which is where it belongs — the
+        // session is not the mechanism.
         revokeMemberTokens:
-          lock.reason === 'security' || lock.reason === 'manual',
+          mode !== 'read-only' &&
+          (lock.reason === 'security' || lock.reason === 'manual'),
       })
       await audit({
         ...actor,
@@ -725,6 +796,7 @@ async function handler(request: Request): Promise<Response> {
             reason: orgSnapshot.get('suspendedReasonCode'),
             message: orgSnapshot.get('suspendedMessage'),
             untilMs: orgSnapshot.get('suspendedUntilMs'),
+            mode: orgSnapshot.get('suspendedMode'),
           }),
         },
         after: {
@@ -760,6 +832,7 @@ async function handler(request: Request): Promise<Response> {
           reason: hostSnapshot.get('suspendedReasonCode'),
           message: hostSnapshot.get('suspendedMessage'),
           untilMs: hostSnapshot.get('suspendedUntilMs'),
+          mode: hostSnapshot.get('suspendedMode'),
         }),
       },
       after: {

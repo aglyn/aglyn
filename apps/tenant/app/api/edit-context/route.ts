@@ -18,15 +18,14 @@
 import {
   buildRoute,
   findScreenIdByRoutePath,
-  isReleaseFlagOn,
   Route,
   SCREEN_ROOT_PATH,
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
-  getServerReleaseFlagValues,
   hostConverter,
+  isServerReleaseFlagOnForOrg,
   screenConverter,
   verifyEditAccessToken,
 } from '@aglyn/tenant-data-admin'
@@ -88,13 +87,8 @@ export async function POST(request: Request): Promise<Response> {
 
     // Outstanding tokens die the moment the flag flips off — this check is
     // the "trivial revocation" the scheme promises.
-    const flags = await getServerReleaseFlagValues()
     if (
-      !isReleaseFlagOn(
-        'release_edit_bar',
-        flags.release_edit_bar,
-        hostDoc.orgId ?? null,
-      )
+      !(await isServerReleaseFlagOnForOrg('release_edit_bar', hostDoc.orgId))
     ) {
       return Response.json({ error: 'Not available' }, { status: 404 })
     }

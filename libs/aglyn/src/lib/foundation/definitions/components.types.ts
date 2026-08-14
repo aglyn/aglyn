@@ -222,6 +222,16 @@ export enum FieldComponentType {
   DUAL_LIST_SELECT = 'dual-list-select',
   FIELD_ARRAY = 'field-array',
   ICON_PICKER = 'icon-picker',
+  /**
+   * markdown-lite document editor (AGL-1616): the WYSIWYG the console
+   * already ships for blog entries and marketplace listings, rendered as the
+   * attribute's field. The persisted prop is still ONE markdown-lite string,
+   * so every renderer stays untouched — this is an input affordance, not a
+   * shape change. Declared by an attribute whose value is a whole document
+   * rather than a line of text; a plain TEXTAREA meant the Privacy Policy
+   * body was edited as a 13 KB raw paste (AGL-1594).
+   */
+  MARKDOWN = 'markdown',
   INPUT_ADDON_BUTTON_GROUP = 'input-addon-button-group',
   INPUT_ADDON_GROUP = 'input-addon-group',
   PLAIN_TEXT = 'plain-text',

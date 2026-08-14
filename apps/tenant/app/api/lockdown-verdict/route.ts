@@ -37,6 +37,7 @@
  */
 
 import {
+  lockdownMode,
   lockdownNotice,
   lockdownRetryAfterSeconds,
   normalizeHostLockdown,
@@ -73,11 +74,19 @@ export async function GET(request: Request): Promise<Response> {
     if (!state) {
       return Response.json({ locked: false }, { status: 200 })
     }
+    // READ-ONLY (AGL-1511): the site keeps serving. The verdict still says
+    // `locked: true` — it is describing the LOCK, not the middleware's
+    // action — and reports the mode so the caller decides. Answering
+    // `locked: false` instead would have been the shorter change and the
+    // wrong one: this route is also how a staff probe and any future reader
+    // learns a site is in read-only, and a lock that reports itself as
+    // absent is a lock nobody can verify is engaged.
     const notice = lockdownNotice(state)
     const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
     return Response.json(
       {
         locked: true,
+        mode: lockdownMode(state),
         reason: state.reason,
         title: notice.title,
         message: notice.body,

@@ -127,6 +127,10 @@ async function handler(request: Request): Promise<Response> {
       // org doc is fetched deliberately — an org lock never stamps host
       // docs, so a host-only verdict would silently miss it.
       const locked = await lockdownRefusal({
+        request,
+        // POST-shaped READ (AGL-1511): "what would removing this plugin
+        // break" changes nothing; a read-only lock must not refuse it.
+        intent: 'read',
         staff: decoded['staff'] === true,
         uid: decoded.uid,
         org: (await getOrgForHost(hostId))?.org,

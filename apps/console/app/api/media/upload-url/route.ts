@@ -36,7 +36,7 @@ import {
   mediaCdnPathUpdate,
   resolveMediaScope,
 } from '../../../../utils/server/media-scope'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 
 import {
   isImageUploadType,
@@ -247,10 +247,33 @@ async function handler(request: Request): Promise<Response> {
      */
     let actualBytes = declaredBytes
     let contentHash = storageContentHash(metadata.md5Hash)
+    /**
+     * The strong quarantine digest (AGL-1614), written only when the server
+     * actually held the bytes — which on THIS route is the SVG branch below
+     * and nowhere else.
+     *
+     * It stays absent for everything else deliberately rather than being
+     * faked from `md5Hash`: GCS computes md5 and crc32c, not sha256, and
+     * hashing a 200 MB video properly would mean downloading it back into
+     * the function — which is the exact cost this route exists to avoid. A
+     * client-computed sha256 is not an option either: the quarantine key is
+     * a security control, and a value the uploader chooses is one a
+     * re-uploader can choose to miss with. So the cross-route gap in the
+     * strong hash is a stated limit, not an oversight, and quarantine
+     * degrades to `contentHash` and then to the per-asset key exactly as it
+     * did before.
+     */
+    let contentSha256: string | undefined
     let svgRemoved: string[] = []
     if (isSvgUploadType(contentType)) {
       const [raw] = await file.download()
       const sanitized = sanitizeSvgBuffer(raw)
+      // The bytes are in hand either way here, so hash the ones that will
+      // actually be served. An SVG is also the likeliest malware quarantine
+      // target on this route, which is what makes the branch worth it.
+      contentSha256 = createHash('sha256')
+        .update(new Uint8Array(sanitized.changed ? sanitized.buffer : raw))
+        .digest('hex')
       if (sanitized.changed) {
         await file.save(sanitized.buffer, { contentType })
         const [rewritten] = await file.getMetadata()
@@ -400,6 +423,10 @@ async function handler(request: Request): Promise<Response> {
       // Re-read after a sanitizing re-save (AGL-1474), or the ETag and the
       // immutable URL would both pin bytes that are no longer in the bucket.
       ...(contentHash ? { contentHash } : {}),
+      // AGL-1614, and spread for the same reason: absent means "the server
+      // never held these bytes", which every quarantine consumer already
+      // handles by falling back. A null here would read as a hash.
+      ...(contentSha256 ? { contentSha256 } : {}),
       // AGL-1474 — absent on every clean asset. See `/api/media/upload`.
       ...(svgRemoved.length ? { svgSanitized: svgRemoved } : {}),
       // Org-wide by default, same as the direct upload route (AGL-1043) —

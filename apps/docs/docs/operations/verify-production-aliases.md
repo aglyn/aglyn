@@ -32,12 +32,21 @@ node tools/deploy/verify-production-aliases.mjs --json   # machine-readable outp
 | `aglyn-console` (console) | `app.aglyn.com` |
 | `aglyn-tenant` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe), `aglyn.com` (the marketing apex) |
 | `aglyn-docs` (docs) | `docs.aglyn.com` |
+| `aglyn-plugins` (plugins) | `plugins.aglyn.com` |
 
 `aglyn.com` is checked under `aglyn-tenant` because the marketing site runs on the tenant runtime —
 the apex is host `aglyn-marketing` with `cname: aglyn.com`, resolved by the `default:` custom-domain
 branch of the tenant middleware. It was probed against the retired `www-aglyn-io` project until
 AGL-1607, which also made it structurally impossible to fail (see below). `aglyn.io` and `aglyn.app`
 redirect to the apex, so probing those would test the redirect rather than the alias.
+
+`plugins.aglyn.com` is the plugin origin, and it was **not checked at all** until AGL-1610 — the
+project was simply absent from the list, which is the same false-green shape as a check that cannot
+fail, with even less to notice. Probe the custom domain, not the
+`aglyn-plugins-aglyn.vercel.app` URL that `vercel project ls` prints: production points at
+`plugins.aglyn.com` (`NEXT_PUBLIC_PLUGIN_ORIGIN` in both apps), while the canonical `.vercel.app`
+alias is deployment-protected and serves nobody. A stale alias here breaks plugin loading for every
+customer, silently — `PluginFrame` renders a placeholder rather than an error.
 
 For each project it finds the newest **Ready** production deployment
 (`vercel ls <project> --prod`, confirmed via `vercel inspect` — scanning past
@@ -88,19 +97,41 @@ domain carrying the whole public marketing site and every legal page:
 Measured A/B on the same deliberately-stale alias: the old script printed
 `current` and exited `0`; the fixed script prints `STALE` and exits `1`.
 
-The lesson generalises past this one entry: **`alwaysBuilds: false` must only
-ever relax the commit check.** If it is ever reintroduced, it must not be able
-to supply a baseline derived from the domain being checked. A verification that
-returns green whether or not the thing it checks is broken is worse than no
-verification, because it is trusted.
+The lesson generalises past this one entry. A verification that returns green
+whether or not the thing it checks is broken is worse than no verification,
+because it is trusted. `alwaysBuilds: false` — the "report the SHA, never fail
+on it" mode — no longer exists (AGL-1610); a project that needs a looser commit
+assertion now declares a narrower one instead of none.
+
+## Commit-guard modes (AGL-1610)
+
+Every project declares **exactly one** mode. Declaring neither, or both, aborts
+at startup with exit `2` — a silently unguarded entry is the failure this
+runbook exists to prevent.
+
+| Mode | Assertion | Used by |
+| --- | --- | --- |
+| `alwaysBuilds: true` | The deployed commit must **equal** production HEAD. | console, tenant, docs |
+| `buildsOnPaths: [...]` | The deployed commit may trail HEAD, but **no production commit after it may have touched those paths**. | plugins |
+
+`aglyn-plugins` is path-scoped because `tools/scripts/vercel-ignore-build.sh
+plugins` cancels its build unless the push range touched
+`tools/plugin-loader/origin`. Its commit therefore trails HEAD by design —
+`alwaysBuilds: true` would be a permanent false red — but a real loader change
+that never produced a deployment still fails. Keep `buildsOnPaths` in step with
+that script's `plugins` case; they encode the same rule and must not drift.
+
+The commit column reads `path-current` when a path-scoped deployment trails HEAD
+legitimately, and `MISSING` when a change to its own paths went unbuilt.
 
 ## Reading the output
 
 ```text
-PROJECT        DOMAIN                      NEWEST READY            SERVING                 VERDICT
--------------  --------------------------  ----------------------  ----------------------  -------
-aglyn-console  app.aglyn.com                app-aglyn-xxxx…         app-aglyn-xxxx…         current
-aglyn-tenant   northwind-coffee.aglyn.app  tenant-aglyn-new…       tenant-aglyn-old…       STALE
+PROJECT        DOMAIN                      NEWEST READY        SERVING             COMMIT                VERDICT
+-------------  --------------------------  ------------------  ------------------  --------------------  -------
+aglyn-console  app.aglyn.com               app-aglyn-xxxx…     app-aglyn-xxxx…     a95863c=HEAD          current
+aglyn-tenant   northwind-coffee.aglyn.app  tenant-aglyn-new…   tenant-aglyn-old…   a95863c=HEAD          STALE
+aglyn-plugins  plugins.aglyn.com           plugins-aglyn-xxx…  plugins-aglyn-xxx…  f61e72b path-current  current
 ```
 
 A `STALE` row means the domain still serves an older deployment: re-run with

@@ -1,0 +1,346 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import * as Aglyn from '@aglyn/aglyn'
+import * as Besigner from '@aglyn/besigner'
+import { Box } from '@mui/material'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+
+import { ATTRIBUTE_COMMIT_DEBOUNCE_MS } from '../hooks/use-debounced-commit'
+import { inlineMarkdownEdit } from '../utils/inline-markdown-edit.store'
+import DraggableDroppable from './dnd/draggable-droppable'
+import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
+
+/** A node the schema declares a markdown-document attribute for. */
+const markdownNode = (content: string) =>
+  ({
+    $id: 'agl1624-node',
+    type: Aglyn.NodeType.NODE,
+    componentId: 'unregistered-markdown',
+    props: { content, variant: 'body1' },
+    componentSchema: {
+      attributes: [
+        {
+          name: 'content',
+          label: 'Content',
+          component: Aglyn.FieldComponentType.MARKDOWN,
+        },
+      ],
+    },
+    nodes: [],
+  }) as any
+
+/** Every contentEditable row the WYSIWYG rendered, in document order. */
+const rowEls = (): HTMLElement[] =>
+  Array.from(document.querySelectorAll<HTMLElement>('[data-row-kind]'))
+
+/**
+ * The canvas half of AGL-1616: double-clicking a Markdown element opens the
+ * WYSIWYG over it (AGL-1624).
+ *
+ * Two seams, and both of them are places this can go wrong in a way the canvas
+ * still looks right afterwards:
+ *
+ * 1. the double-click itself, which must open the editor WITHOUT letting the
+ *    event reach the canvas' double-click-to-zoom; and
+ * 2. when the typed document reaches `canvas.updateNodeProps` — the trap the
+ *    issue exists to respect, because a besigner attribute that commits on
+ *    blur loses everything typed since the last focus change, silently.
+ */
+describe('canvas double-click on a markdown element (AGL-1624)', () => {
+  afterEach(() => {
+    act(() => inlineMarkdownEdit.close())
+    act(() => Besigner.focus.clearSelection())
+  })
+
+  /**
+   * The leaf inside an ancestor that handles double-click the way
+   * `ZoomablePanningComponent` does. If the node-level handler ever stops
+   * consuming the event, this spy fires and the canvas zooms while the author
+   * is trying to edit text.
+   */
+  const renderLeaf = (node: any) => {
+    const onZoom = jest.fn()
+    render(
+      <div onDoubleClick={onZoom} data-testid="panner">
+        <DraggableDroppable
+          node={node}
+          type={Besigner.DragType.CANVAS}
+          accept={[Besigner.DragType.CANVAS]}
+        >
+          <Box data-testid="leaf">{'rendered document'}</Box>
+        </DraggableDroppable>
+      </div>,
+    )
+    return { onZoom, leaf: screen.getByTestId('leaf') }
+  }
+
+  it('opens the editor on the attribute the SCHEMA declares, not on a component id', () => {
+    const node = markdownNode('## Title\n\nBody.')
+    const { onZoom, leaf } = renderLeaf(node)
+
+    act(() => {
+      fireEvent.dblClick(leaf)
+    })
+
+    expect(inlineMarkdownEdit.node?.$id).toBe('agl1624-node')
+    expect(inlineMarkdownEdit.attributeName).toBe('content')
+    expect(inlineMarkdownEdit.initialValue).toBe('## Title\n\nBody.')
+    // The hazard this issue was split out for: the canvas must not zoom.
+    expect(onZoom).not.toHaveBeenCalled()
+  })
+
+  // A real double-click is mousedown, mousedown, dblclick — and the canvas
+  // mousedown handler TOGGLES selection, so the second one deselects the node
+  // the first one selected. The editor closes when the selection leaves the
+  // node it is editing, so without putting the selection back it would open
+  // and shut in the same tick.
+  it('leaves the node selected after the two mousedowns a real double-click sends', () => {
+    const node = markdownNode('## Title')
+    const { leaf } = renderLeaf(node)
+
+    act(() => {
+      fireEvent.mouseDown(leaf)
+      fireEvent.mouseDown(leaf)
+      fireEvent.dblClick(leaf)
+    })
+
+    expect(Besigner.focus.isNodeSelected(node)).toBe(true)
+    expect(inlineMarkdownEdit.node?.$id).toBe('agl1624-node')
+  })
+
+  // The control that makes the assertion above non-vacuous: on a node with no
+  // markdown attribute the very same double-click DOES reach the panner.
+  it('leaves double-click-to-zoom alone for a node that declares none', () => {
+    const node = {
+      ...markdownNode(''),
+      componentSchema: { attributes: [{ name: 'title', label: 'Title' }] },
+    }
+    const { onZoom, leaf } = renderLeaf(node)
+
+    act(() => {
+      fireEvent.dblClick(leaf)
+    })
+
+    expect(inlineMarkdownEdit.node).toBeUndefined()
+    expect(onZoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a locked node read-only', () => {
+    const node = markdownNode('## Title')
+    node.componentSchema.flags = { dragging: Aglyn.FEATURE_FLAG.DISABLED }
+    const { leaf } = renderLeaf(node)
+
+    act(() => {
+      fireEvent.dblClick(leaf)
+    })
+
+    expect(inlineMarkdownEdit.node).toBeUndefined()
+  })
+})
+
+describe('in-place markdown commit semantics (AGL-1624)', () => {
+  let updateNodeProps: jest.SpyInstance
+
+  /** The `content` value on the LAST commit. */
+  const lastCommittedContent = (): unknown => {
+    const calls = updateNodeProps.mock.calls
+    const call = calls[calls.length - 1] as unknown[]
+    return (call?.[1] as Record<string, unknown>)?.['content']
+  }
+
+  /** Opens the editor the way a canvas double-click does: selection first. */
+  const openOn = (node: any) => {
+    render(<InlineMarkdownEditorComponent />)
+    act(() => {
+      Besigner.focus.setSelectedNode(node)
+      inlineMarkdownEdit.open(
+        node,
+        { left: 40, top: 60, width: 600, height: 300 },
+        'content',
+        node.props.content,
+      )
+    })
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    // Keep commits away from the real canvas store; the node isn't in it.
+    updateNodeProps = jest
+      .spyOn(Aglyn.canvas, 'updateNodeProps')
+      .mockImplementation((() => undefined) as any)
+  })
+  afterEach(() => {
+    act(() => inlineMarkdownEdit.close())
+    act(() => Besigner.focus.clearSelection())
+    updateNodeProps.mockRestore()
+    jest.runOnlyPendingTimers()
+    jest.useRealTimers()
+  })
+
+  it('renders the WYSIWYG over the element, not a raw source box', () => {
+    openOn(markdownNode('## Title\n\nBody **text**.'))
+    expect(screen.getByTestId('inline-markdown-editor')).toBeTruthy()
+    const rows = rowEls()
+    expect(rows.map((el) => el.dataset['rowKind'])).toEqual([
+      'heading2',
+      'paragraph',
+    ])
+    expect(rows[1]?.querySelector('strong')?.textContent).toBe('text')
+  })
+
+  it('commits on the debounce without any focus event at all', () => {
+    openOn(markdownNode('Hello world'))
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello calm world'
+    act(() => {
+      fireEvent.input(row)
+    })
+    expect(updateNodeProps).not.toHaveBeenCalled()
+    act(() => {
+      jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS)
+    })
+    expect(lastCommittedContent()).toBe('Hello calm world')
+  })
+
+  // The trap. On the canvas, clicking away is the natural way to finish, and
+  // an edit that never blurred is the one a blur-committed editor throws away
+  // while the element behind it still shows the right text.
+  it('commits an edit that never blurred when Done closes the editor', () => {
+    openOn(markdownNode('Hello world'))
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello brave world'
+    act(() => {
+      fireEvent.input(row)
+    })
+    expect(updateNodeProps).not.toHaveBeenCalled()
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    })
+    expect(lastCommittedContent()).toBe('Hello brave world')
+  })
+
+  // Selecting another element on the canvas is the same gesture with none of
+  // the intent to save. It must behave identically.
+  it('commits when the canvas selection moves to another node', () => {
+    const node = markdownNode('Hello world')
+    openOn(node)
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello other world'
+    act(() => {
+      fireEvent.input(row)
+    })
+
+    act(() => {
+      Besigner.focus.setSelectedNode({ ...node, $id: 'some-other-node' } as any)
+    })
+    expect(inlineMarkdownEdit.node).toBeUndefined()
+    expect(lastCommittedContent()).toBe('Hello other world')
+  })
+
+  // Escape CLOSES and KEEPS. With a debounced commit the document is already
+  // partly written, so a "cancel" could only discard the last 250 ms of it —
+  // a worse lie than committing and leaving undo to do the undoing.
+  it('keeps the edit when Escape closes the editor', () => {
+    openOn(markdownNode('Hello world'))
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello quiet world'
+    act(() => {
+      fireEvent.input(row)
+    })
+
+    act(() => {
+      fireEvent.keyDown(screen.getByTestId('inline-markdown-editor'), {
+        key: 'Escape',
+      })
+    })
+    expect(inlineMarkdownEdit.node).toBeUndefined()
+    expect(lastCommittedContent()).toBe('Hello quiet world')
+  })
+
+  // The toolbar, the link popover and the URL dialog all take focus, two of
+  // them into a portal. The keystrokes before the click must already be safe,
+  // and the ones after it must still commit.
+  it('keeps typing that straddles a focus-stealing toolbar click', () => {
+    openOn(markdownNode('Hello world'))
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello wide world'
+    act(() => {
+      fireEvent.input(row)
+      fireEvent.blur(row)
+      jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS)
+    })
+    expect(lastCommittedContent()).toBe('Hello wide world')
+
+    const again = rowEls()[0] as HTMLElement
+    again.textContent = 'Hello wider world'
+    act(() => {
+      fireEvent.input(again)
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    })
+    expect(lastCommittedContent()).toBe('Hello wider world')
+  })
+
+  // markdown-lite has five renderers, and this attribute holds published legal
+  // copy. A commit that reformatted the document would rewrite it on the first
+  // stray keystroke.
+  it('commits the markdown-lite dialect a document actually uses', () => {
+    const source =
+      '## 1. Information We Collect\n\n' +
+      '**1.1 Information you provide.**\n\n' +
+      '- **Account & identity:** name, email address.\n' +
+      '- **Billing:** plan selection.\n\n' +
+      '> A pull quote.\n\n' +
+      '```ts\nconst a = 1\n```\n\n' +
+      '| Prop | Default |\n| --- | --: |\n| size | 8 |\n\n' +
+      'See the [Cookie Policy](/legal/cookies).'
+    openOn(markdownNode(source))
+    // One stray keystroke in the FIRST row — the heading renders as rich text,
+    // so its DOM reads "1. Information We Collect" without the `## `.
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = '1. Information We Collect Today'
+    act(() => {
+      fireEvent.input(row)
+    })
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    })
+    expect(lastCommittedContent()).toBe(
+      source.replace('We Collect\n', 'We Collect Today\n'),
+    )
+  })
+
+  // The commit REPLACES the props object, so anything else on the node has to
+  // survive the edit — the same spread every other besigner commit does.
+  it('leaves the node’s other props intact', () => {
+    openOn(markdownNode('Hello world'))
+    const row = rowEls()[0] as HTMLElement
+    row.textContent = 'Hello kept world'
+    act(() => {
+      fireEvent.input(row)
+      jest.advanceTimersByTime(ATTRIBUTE_COMMIT_DEBOUNCE_MS)
+    })
+    const call = updateNodeProps.mock.calls[0] as unknown[]
+    expect(call[1]).toEqual({
+      content: 'Hello kept world',
+      variant: 'body1',
+    })
+  })
+})

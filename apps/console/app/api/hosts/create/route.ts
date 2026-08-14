@@ -132,6 +132,7 @@ async function handler(request: Request): Promise<Response> {
     // doc already in hand (no host exists yet to have a scope); distinct
     // 423 body; staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org,

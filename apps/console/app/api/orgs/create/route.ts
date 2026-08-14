@@ -92,6 +92,7 @@ async function handler(request: Request): Promise<Response> {
     // org exists — platform and user locks still refuse creation; distinct
     // 423 body; staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
     })

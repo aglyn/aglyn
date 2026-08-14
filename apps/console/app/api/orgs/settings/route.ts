@@ -84,6 +84,7 @@ async function handler(request: Request): Promise<Response> {
     // on the request-deduped `getOrgDoc` read; distinct 423 body; staff
     // bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgDoc(orgId)) ?? undefined,

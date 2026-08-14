@@ -442,9 +442,92 @@ export function clearAnalyticsCookies(
  * The `window` flag `gtag.js` consults before every hit: with
  * `window['ga-disable-G-XXXX'] === true` the tag for that property sends
  * nothing and writes nothing. Google's own documented opt-out mechanism, and
- * the reason this needs no consent-mode DEFAULT (AGL-1608).
+ * the one that works on a tag which never received a consent-mode default
+ * (AGL-1608) — a case that still exists after AGL-1622, because a tag arriving
+ * through GTM or a host's own CMP is not one this module declared for.
  */
 export const GA_DISABLE_FLAG_PREFIX = 'ga-disable-'
+
+/** A single consent-mode signal value. */
+export type AnalyticsConsentSignal = 'granted' | 'denied'
+
+/**
+ * The consent-mode signal set this tool is answerable for.
+ *
+ * `ad_storage` and friends are typed as the literal `'denied'`, not as
+ * {@link AnalyticsConsentSignal}: the tool asks a visitor about analytics and
+ * nothing else, so there is no advertising basis on file to grant, in either
+ * direction. Widening them is a change the type has to be edited to allow.
+ */
+export interface AnalyticsConsentSignals {
+  analytics_storage: AnalyticsConsentSignal
+  ad_storage: 'denied'
+  ad_user_data: 'denied'
+  ad_personalization: 'denied'
+}
+
+/**
+ * The consent-mode payload for a given analytics grant — ONE source, so the
+ * `default` declared before the tag loads (AGL-1622) and the `update` sent on a
+ * mid-pageview withdrawal (AGL-1608) can never drift apart. Two hand-written
+ * literals that disagree is how a tag ends up believing a state the visitor
+ * never chose.
+ */
+export function analyticsConsentSignals(
+  granted: boolean,
+): AnalyticsConsentSignals {
+  return {
+    analytics_storage: granted ? 'granted' : 'denied',
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+  }
+}
+
+/**
+ * The consent-mode `default` declaration that goes in front of the tag
+ * (AGL-1622), for injection into the same inline block that creates
+ * `dataLayer` and calls `gtag('config', …)`.
+ *
+ * ## What this is, and — load-bearing — what it is NOT
+ *
+ * It is NOT a licence to load the tag earlier. It is emitted INSIDE the block
+ * that only renders when the AGL-1498 gate has already said yes, so it is
+ * reached only on a pageview where analytics is granted. On every gated
+ * pageview — an EU/UK/EEA visitor with no explicit accept, an unknown region, a
+ * declined or opted-out visitor, a GPC browser — nothing here renders, no
+ * request goes to `googletagmanager.com`, and this constant is never evaluated
+ * into the page. "The script never LOADS, rather than load-then-suppress" is a
+ * stated AGL-1498 property and it is intact everywhere the gate applies;
+ * `consent-mode-default.spec.tsx` fails if that ever stops being true.
+ *
+ * Zach's decision, 2026-08-14: load-then-restrict is approved for the UNITED
+ * STATES, where the implied-consent posture already permits the load and the
+ * restriction signals act on a tag that is legitimately resident. EU and UK
+ * keep the prior-consent gate exactly as it is, because loading an analytics
+ * tag before consent is the specific thing prior-consent law prohibits. So the
+ * consent-mode mechanism is strictly ADDITIVE to the gate, never a replacement
+ * for it.
+ *
+ * What declaring it actually buys, given the tag is granted by the time it is
+ * read:
+ *
+ * - The advertising signals are denied FROM THE FIRST HIT. Without a default,
+ *   a freshly loaded tag runs with `ad_storage` unrestricted and only becomes
+ *   denied if the visitor happens to withdraw and change their mind again
+ *   (AGL-1608's `update`). The load-time state now matches the tool's actual
+ *   scope instead of being wider than it.
+ * - A later `update` is a transition from a declared state rather than a tag's
+ *   first-ever consent signal, which is the shape GA4's consent-mode reporting
+ *   and any third-party CMP alongside ours both expect.
+ *
+ * The value is a literal, built from {@link analyticsConsentSignals} — no
+ * interpolated input reaches it, which matters because it lands inside an
+ * inline script (the AGL-138 concern).
+ */
+export const GA_CONSENT_DEFAULT_SNIPPET = `gtag('consent', 'default', ${JSON.stringify(
+  analyticsConsentSignals(true),
+)});`
 
 /**
  * The measurement ids whose tag is actually RESIDENT in this page.
@@ -512,11 +595,12 @@ export function residentGaMeasurementIds(): string[] {
  *
  * ## What this deliberately does NOT do
  *
- * It never declares a consent-mode DEFAULT and never touches the gate. Both
- * signals act only on a tag that is already resident — which, by construction,
- * only exists after a grant. "The script never LOADS, rather than
- * load-then-suppress" is a stated property of AGL-1498 and changing it is a
- * product decision, not a cleanup.
+ * It never touches the gate. Both signals act only on a tag that is already
+ * resident — which, by construction, only exists after a grant. AGL-1622 later
+ * added a consent-mode DEFAULT ({@link GA_CONSENT_DEFAULT_SNIPPET}), but inside
+ * the gated block and therefore only on a pageview the gate already allowed:
+ * load-then-restrict is additive to "the script never LOADS", not a
+ * replacement for it, and the prior-consent regions are unaffected.
  *
  * Symmetric on purpose: a visitor who opts out and changes their mind in the
  * same pageview would otherwise stay silently unmeasured until they navigated,
@@ -534,12 +618,13 @@ export function setResidentAnalyticsTags(granted: boolean): string[] {
   try {
     const send = scope.gtag
     if (typeof send === 'function') {
-      ;(send as (...args: unknown[]) => void)('consent', 'update', {
-        analytics_storage: granted ? 'granted' : 'denied',
-        ad_storage: 'denied',
-        ad_user_data: 'denied',
-        ad_personalization: 'denied',
-      })
+      // The same payload builder the load-time `default` is made from
+      // (AGL-1622), so the two declarations cannot drift.
+      ;(send as (...args: unknown[]) => void)(
+        'consent',
+        'update',
+        analyticsConsentSignals(granted),
+      )
     }
   } catch {
     // A tag that throws on its own consent call is one we cannot silence;

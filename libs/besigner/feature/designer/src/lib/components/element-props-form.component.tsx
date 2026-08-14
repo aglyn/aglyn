@@ -65,6 +65,10 @@ import {
   TOKEN_TEXT_FIELD_COMPONENT,
 } from './token-text-field.component'
 import {
+  MarkdownAttributeField,
+  MARKDOWN_ATTRIBUTE_FIELD_COMPONENT,
+} from './markdown-attribute-field.component'
+import {
   ScreenLinkField,
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
@@ -204,6 +208,11 @@ export const elementPropsComponentMapper = {
   // Screen picker + external-URL escape hatch for `Link`-typed component
   // props (AGL-1335), which were plain text boxes storing a raw path.
   [SCREEN_LINK_FIELD_COMPONENT]: ScreenLinkField,
+  // The markdown-lite WYSIWYG for document-valued attributes (AGL-1616),
+  // registered under BOTH the schema-declared type and the internal key so a
+  // schema can ask for it directly and the memo below can rewrite to it.
+  [Aglyn.FieldComponentType.MARKDOWN]: MarkdownAttributeField,
+  [MARKDOWN_ATTRIBUTE_FIELD_COMPONENT]: MarkdownAttributeField,
   // A placed plugin's declared settings as real fields (AGL-1049); the
   // attributes memo rewrites the plugin's JSON attribute to it.
   [PLUGIN_SETTINGS_FIELD_COMPONENT]: PluginSettingsField,

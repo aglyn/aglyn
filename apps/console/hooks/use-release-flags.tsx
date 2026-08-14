@@ -17,13 +17,15 @@
 'use client'
 
 import {
-  isReleaseFlagOn,
+  isReleaseFlagOnForOrg,
+  parseOrgReleaseFlagOverrides,
   parseReleaseFlagValue,
   RELEASE_FLAGS,
   type ReleaseFlagKey,
   type ReleaseFlagValue,
 } from '@aglyn/aglyn'
 import { useRemoteConfig, useUser } from '@aglyn/tenant-feature-instance'
+import useCurrentOrg from './use-current-org'
 import { fetchAndActivate, getValue } from 'firebase/remote-config'
 import {
   createContext,
@@ -33,7 +35,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import useOrgPermissions from './use-org-permissions'
 
 export interface ReleaseFlagState {
   value: ReleaseFlagValue
@@ -81,8 +82,31 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
   const { children } = props
   const remoteConfig = useRemoteConfig()
   const { data: user } = useUser()
-  const { orgId } = useOrgPermissions()
+  // The org DOC, not just its id (AGL-1635): it carries the per-org
+  // release-flag overrides staff set from /admin/orgs, and the console has
+  // to apply the same ones the tenant runtime and the API dispatchers do or
+  // a granted feature is visible on one surface and missing on another.
+  //
+  // `orgReady` gates the DOC only. `orgId` comes from the org scope rather
+  // than this listener, so the rollout subject is unaffected and keeps
+  // resolving during the window.
+  //
+  // Until the doc is trustworthy we resolve as though no override were set
+  // (AGL-1047/1061/1064/1380: `org` during the loading window conflates
+  // "none" with "not read yet"). That deliberately matches how this
+  // provider already treats Remote Config before activation — inherit, so a
+  // default-off flag never flashes ON. The residual window is a force-OFF
+  // override on a globally-enabled flag, which can show a nav tab for a
+  // moment before it disappears; it is cosmetic, because every server gate
+  // (tenant runtime, both API dispatchers, the edit-bar routes) applies the
+  // override unconditionally and refuses the work regardless.
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   const subjectId = orgId ?? user?.uid ?? null
+  const releaseFlagOverrides = org?.releaseFlags
+  const overrides = useMemo(
+    () => (orgReady ? parseOrgReleaseFlagOverrides(releaseFlagOverrides) : {}),
+    [orgReady, releaseFlagOverrides],
+  )
 
   const [activated, setActivated] = useState(false)
   const [isStaff, setIsStaff] = useState(false)
@@ -133,7 +157,25 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
   }, [user])
 
   const flags = useMemo(() => {
-    if (!remoteConfig || !activated) return registryDefaults()
+    // Registry defaults are the pre-activation gate, but a per-org override
+    // is a staff DECISION and does not depend on Remote Config having
+    // landed — applying it here too stops a granted feature flashing off on
+    // first paint and then on again a moment later.
+    if (!remoteConfig || !activated) {
+      const defaults = registryDefaults()
+      return Object.fromEntries(
+        RELEASE_FLAGS.map((definition) => {
+          const state = defaults[definition.key]
+          const override = overrides[definition.key]
+          return [
+            definition.key,
+            typeof override === 'boolean'
+              ? { value: state.value, released: override }
+              : state,
+          ]
+        }),
+      ) as Record<ReleaseFlagKey, ReleaseFlagState>
+    }
     return Object.fromEntries(
       RELEASE_FLAGS.map((definition) => {
         const value = parseReleaseFlagValue(
@@ -142,11 +184,19 @@ export function ReleaseFlagsProvider(props: ReleaseFlagsProviderProps) {
         )
         return [
           definition.key,
-          { value, released: isReleaseFlagOn(definition.key, value, subjectId) },
+          {
+            value,
+            released: isReleaseFlagOnForOrg(
+              definition.key,
+              value,
+              subjectId,
+              overrides,
+            ),
+          },
         ]
       }),
     ) as Record<ReleaseFlagKey, ReleaseFlagState>
-  }, [remoteConfig, activated, subjectId])
+  }, [remoteConfig, activated, subjectId, overrides])
 
   const context = useMemo(
     () => ({ ready: activated, isStaff, flags }),

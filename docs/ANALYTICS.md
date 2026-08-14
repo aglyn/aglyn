@@ -42,6 +42,34 @@ so the consolidation would not actually fix attribution. A journey from
 `aglyn.com` to `app.aglyn.com/signup` is now one session with the original
 channel retained, which is what makes "signups per channel" answerable.
 
+**The precondition is verified; the stitching itself is not (AGL-1636).**
+Same-property is the thing that has to be true before any of the above can
+work, because two measurement ids would hand the visitor a fresh `client_id` on
+the domain hop, and it is the thing that silently regressed once already. It
+was checked live on 2026-08-14 rather than assumed: a request to `aglyn.com`
+carries `gaMeasurementId":"G-YW5PG16YTM"` in the served payload — the
+consolidated Platform property, not the archived `G-BQ49X14QCD` — and the
+console's Firebase-injected tag uses the same id. So both ends are one property.
+
+There is deliberately **no `linker` config in our code**, and none is needed:
+`site-analytics.tsx` emits a bare `gtag('config', '<id>')` and the domain list
+is delivered to the tag from the GA UI. Grepping for `linker` and concluding
+cross-domain is unconfigured is the wrong inference.
+
+What is **not** established is that a real session actually stitches, which
+needs GA DebugView or a Realtime check across the hop — Zach's console, and on
+the click-list. Two structural reasons it is best-effort rather than certain,
+both worth knowing before reading the funnel:
+
+- **The `_gl` decoration requires a loaded tag at click time.** On `aglyn.com`
+  gtag is consent-gated and never loads for a visitor who has not granted, so
+  their hop carries no linker parameter. US visitors default to an implied
+  grant, so most do stitch; a declining or EU visitor does not, and cannot.
+- **The tag only starts after hydration.** AGL-1538 recorded a tenant hydration
+  stall of 30s+ on some pages; a CTA clicked before gtag exists is undecorated
+  even for a consenting visitor. That makes hydration performance an
+  *attribution* problem, not only a speed one.
+
 **`docs.aglyn.com` needed no GA admin change, and that was verified rather than
 assumed** (AGL-1579, 2026-08-14). Both halves are substring conditions that a
 subdomain already satisfies: cross-domain linking is `Contains aglyn.com`, and
@@ -230,11 +258,38 @@ deterministically from the Stripe customer. **The money is then right and the
 channel is unknown**, and the fallback is reported in the return value so it can
 be alarmed on if it becomes common.
 
-> 🚨 **`purchase` stays dark until AGL-1551 is fixed.** The live platform
-> webhook currently rejects **every** Stripe delivery with `400 Invalid
-> signature` (100% error rate). The code below it is correct and will start
-> reporting the moment the signing secret is fixed — but no revenue reaches GA
-> before then.
+> 🚨 **`purchase` reaches nothing today, and the reason changed.** AGL-1551 —
+> the platform webhook rejecting every Stripe delivery with `400 Invalid
+> signature` — is **fixed and closed** (2026-08-14), so deliveries now arrive
+> and the `invoice.paid` branch does call the sender. The remaining blocker is
+> entirely the environment: see *The env-var verdict* below. The sender returns
+> `{ sent: false, reason: 'not-configured' }` without logging, so this failure
+> is completely silent from the application side.
+
+#### What `purchase` will report once it is on, and where it disagrees with Stripe
+
+Worth settling before the tap opens, because GA revenue that disagrees with
+Stripe is worse than no GA revenue — it gets quoted. Four known divergences,
+none of them yet observable since nothing has sent:
+
+| # | Behaviour | Effect on the number |
+| --- | --- | --- |
+| 1 | Subscription `value` is `amount_paid / 100` off `invoice.paid`, keyed on the **invoice id** | Correct, and includes **renewals** — GA "revenue" is billings, not new-business MRR. Do not read it as either without splitting on `billing_interval` and first-vs-repeat |
+| 2 | Marketplace `value` is `amount_total / 100` — the **tax-inclusive gross** | Overstates our revenue: the ledger doc written two lines above splits `taxCents` and `transferCents`, and the seller's share is not ours. GA will not match the Stripe balance |
+| 3 | `billing_interval` falls back to `'monthly'` whenever the price interval is absent or unrecognised | An annual plan whose line item does not expose `recurring.interval` reports as monthly, quietly biasing the §6 annual-mix metric toward monthly |
+| 4 | Marketplace `clientId` reads `metadata.ga_client_id`, which **nothing ever writes** | Dead read. Marketplace purchases always fall back to a synthesized client id, so marketplace revenue is permanently unattributable to a session or channel |
+
+(1) is a reporting instruction, not a defect. (2), (3) and (4) are defects and
+are filed separately — see AGL-1637's child issues. (4) in particular is the
+cheap one: the subscription path already captures the id via `readGaClientId`
+and carries it on Stripe metadata, and the marketplace checkout simply never
+learned to.
+
+Also absent entirely: **tenant storefront orders send no `purchase` at all.**
+The commerce plugin fires `begin_checkout` client-side and nothing server-side,
+so a merchant's GA property shows carts entering checkout and never completing.
+That is the merchant's funnel, not ours, which is why it is filed rather than
+fixed here — but it makes their ecommerce reports structurally incomplete.
 
 ### 2. Consent-blocked means the event is gone, not queued
 
@@ -251,6 +306,22 @@ reappear when a later grant loads gtag.
 The console has no such gate: its GA runs unconditionally, as it has since
 AGL-118, and the cookie disclosure shipped in legal v3. **This change does not
 alter that posture.**
+
+> **The console DOES have a real `window.gtag` — correcting a standing piece of
+> lore (AGL-1636).** Grepping `app.aglyn.com`'s HTML for a `googletagmanager`
+> tag returns nothing, and that has repeatedly been read as "the console has no
+> gtag, only the Firebase SDK". The first half is true and the conclusion is
+> false: `getAnalytics()` **injects** the `gtag/js` script at runtime and
+> assigns `window.gtag` / `window.dataLayer` itself, and the console's CSP
+> (`script-src 'self' https:` — not `strict-dynamic`) permits it. So the tag is
+> genuinely resident, on the same `G-YW5PG16YTM` the tenant uses.
+>
+> This matters in two places. `readGaClientId` on the billing page resolves a
+> REAL client id rather than the permanent `null` the old reading predicted —
+> which is what makes subscription revenue attributable at all. And any
+> `trackEvent` that fires before the transport-registering effect commits falls
+> through to `window.gtag` and lands in the right property, merely without
+> `user_id` — an unattributed hit, not a dropped one.
 
 A consequence worth stating: `generate_lead` fires on *every* tenant site, not
 only `aglyn.com`, and reports into whatever measurement id **that host**
@@ -465,6 +536,84 @@ Neither dev nor preview can pollute the property: the plugin returns `null`
 unless `NODE_ENV === 'production'`, and `apps/docs/vercel.json` disables
 non-production git deployments outright, so there are no preview URLs.
 
+### 8. Our own traffic is stamped, not filtered by IP (AGL-1582)
+
+At beta scale a handful of staff sessions is a large fraction of all traffic,
+and **GA4 data filters are not retroactive** — a hit that ships unstamped is
+unstamped forever. So the stamp has to exist before the traffic does, which is
+why the code half landed ahead of the GA-side filter.
+
+`apps/console/components/layouts/firebase-app.layout.tsx` sets
+`traffic_type: 'internal'` through Firebase's **`setDefaultEventParameters`**,
+and the choice of API is the load-bearing part. GA4's internal-traffic filter
+matches per EVENT, and the events that would otherwise leak are precisely the
+ones no call site writes: the manual `page_view`, plus the `session_start`,
+`first_visit` and `user_engagement` the SDK sends on its own. A param threaded
+through `trackEvent` would cover the taxonomy and miss all of those — leaving a
+staff session that reports zero events but still one user and one session.
+`setDefaultEventParameters` is documented to ride "every event logged from the
+SDK, including automatic ones", and is the only mechanism that does.
+
+**The predicate follows the ACTOR, not the subject**, and lives in
+`apps/console/utils/internal-traffic.ts` so it can be pinned by a test:
+
+> `staff === true` **OR** `impersonatedBy` is set.
+
+The second half is not redundancy. Staff impersonation (AGL-246) mints a token
+for the TARGET account, and the endpoint refuses to impersonate a staff account
+at all — so throughout an impersonation session `claims.staff` is **false** and
+the token is, by construction, a customer's. Keying on `staff` alone would have
+flagged none of that traffic, and impersonation is the traffic most worth
+excluding: it is us clicking through a customer's workspace generating exactly
+the `host_created` / `site_published` events the activation metric is read from.
+Getting it backwards is the expensive direction — keying on the subject would
+exclude a real customer while including us — so `internal-traffic-flag.spec.ts`
+pins the impersonation case explicitly.
+
+Cleared explicitly on the negative branch, because the console does not remount
+across a re-auth (AGL-664): a staff session followed by a customer signing in on
+the same document would otherwise keep the stamp and quietly delete a real user
+from every report.
+
+**Known gap, accepted:** the first `page_view` of a cold load races the token
+read and goes out unstamped — the same window in which `user_id` is also still
+unset, so it is an existing condition rather than a new one. Every later hit in
+the session carries the stamp.
+
+**Still needs Zach:** the parameter does nothing until the data filter exists,
+and `traffic_type` should be registered as a dimension to verify it. Create the
+filter in **Testing** mode first — an Active filter permanently and
+irrecoverably discards matching data. Click-list on AGL-1637.
+
+### 9. Crashlytics cannot be integrated, and the equivalent already is
+
+Recorded because it is asked for repeatedly. **Firebase Crashlytics has no web
+SDK** — it ships for Apple, Android, Unity and Flutter only — and this repo has
+no native surface to host one: no `ios/`, no `android/`, no Capacitor, React
+Native, Expo or Flutter dependency anywhere. Every app here is Next.js or
+Docusaurus. So this is not "not wired yet"; there is no runtime that could wire
+it.
+
+The web equivalent was built instead and **is** wired end to end (AGL-1538):
+`error-beacon.ts` catches `window.onerror` / `unhandledrejection`, batches and
+scrubs, and posts to first-party `/api/errors` on both the console and the
+tenant; `client-error-report.ts` re-clamps server-side and writes to Cloud
+Logging with the `ReportedErrorEvent` `@type`, so **Cloud Error Reporting**
+ingests and groups it and a log-match alert can page. That is the same job
+Crashlytics does, with zero new subprocessors.
+
+So the three do not duplicate each other: the beacon is the **capture**, Error
+Reporting is the **grouping and alerting**, and GA4 is product analytics and
+should not be carrying stack traces at all. Adding a fourth vendor (Sentry) is
+a subprocessor-list decision, deliberately deferred.
+
+**Genuinely missing, by contrast:** Firebase **Performance Monitoring** is not
+initialised anywhere (the package is present only because the `firebase`
+umbrella ships every entry point — "in package.json" is not integration), and
+there is **no Web Vitals / RUM of any kind** in any app. Those are real gaps
+rather than impossible ones — filed rather than assumed worthwhile, since each
+has to answer what it tells us that we cannot already see.
+
 ---
 
 ## GA UI configuration
@@ -556,12 +705,33 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 
    **Both projects, not one (AGL-1589).** `purchase` is sent by the console and
    by the marketplace webhook; `site_published` is sent by the TENANT, from the
-   publish-schedule beat. Verified 2026-08-14 with `vercel env ls production`:
-   neither variable is listed on **aglyn-tenant**, and neither is listed on
-   **aglyn-console** either — so unless they are team-level shared variables
-   (which that listing does not show), the server-side `purchase` is also
-   no-opping in production today. Worth checking in the dashboard before
-   assuming any server-side event is arriving.
+   publish-schedule beat.
+
+   #### The env-var verdict (AGL-1636, settled 2026-08-14)
+
+   The shared-variable question the previous pass left open is now **answered**,
+   via the Vercel REST API rather than `vercel env ls` — which is the whole
+   point, because the CLI listing does not show team-level shared variables and
+   would have let either of the facts below pass as "absent".
+
+   | Variable | Actually exists? | Reaches a deployment? |
+   | --- | --- | --- |
+   | `GA4_API_SECRET` | **Yes** — a team-level *shared* variable, created 2026-08-14T06:25:59Z, all three targets | **No.** Its `projectId` array is **empty**, so it is linked to zero projects |
+   | `GA4_MEASUREMENT_ID` | **No** — absent from the shared set and from both projects' own environments | No |
+
+   A shared variable is only injected into the projects it is explicitly linked
+   to, and the contrast is visible in the same API response: `STRIPE_SECRET_KEY`
+   carries `projectId: [<aglyn-tenant>, <aglyn-console>]` and works, while
+   `GA4_API_SECRET` carries `[]` and does not. **This is the failure mode where
+   a variable that plainly exists in the dashboard still reaches nothing** — so
+   "I created the secret" and "the secret is deployed" are two facts, exactly
+   like registration and a producer above.
+
+   Consequence, stated plainly: **every server-side event is dead in production
+   today** — the subscription `purchase`, the marketplace `purchase`, and the
+   scheduled `site_published`. Not degraded: never sent, and silently, because
+   `ga4Credentials()` returns null before any log line. The fix is two console
+   actions, both Zach's, in the click-list on AGL-1637.
 3. 🚨 **The published privacy policy says we run no third-party analytics.**
    `apps/console/constants/legal/v4/privacy.txt`, under *"Sale"/"sharing" under
    U.S. state laws*: "We use no advertising technology and no third-party
@@ -614,10 +784,23 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 
 ### Environment variables
 
-| Var | Where | Purpose |
-| --- | --- | --- |
-| `GA4_MEASUREMENT_ID` | Vercel production (console **and tenant**) | Target property for server-side `purchase` and `site_published` |
-| `GA4_API_SECRET` | Vercel production (console **and tenant**), **sensitive** | Measurement Protocol auth |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set | Console's client-side GA + `client_id` capture |
+| Var | Where | Purpose | State (2026-08-14) |
+| --- | --- | --- | --- |
+| `GA4_MEASUREMENT_ID` | Vercel production (console **and tenant**) | Target property for server-side `purchase` and `site_published`; value is `G-YW5PG16YTM` | ❌ **does not exist** anywhere |
+| `GA4_API_SECRET` | Vercel production (console **and tenant**), **sensitive** | Measurement Protocol auth | ⚠️ **exists as a shared variable, linked to ZERO projects** — reaches nothing |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set | Console's client-side GA + `client_id` capture | ✅ set on both projects, `G-YW5PG16YTM` |
+
+**`vercel env ls` cannot answer this question.** It lists a project's own
+variables and omits team-level shared ones, so `GA4_API_SECRET` reads as absent
+there while existing in the dashboard — and reads as present in the dashboard
+while reaching no deployment. The authoritative check is the REST API, on the
+`projectId` array of each shared variable:
+
+```
+GET https://api.vercel.com/v2/env?teamId=<team>   →  data[].key, data[].projectId
+```
+
+A shared variable with `projectId: []` is linked to nothing. Compare against
+`STRIPE_SECRET_KEY`, which lists both project ids and works.
 
 Documented in `apps/console/.env.development.local.example`.

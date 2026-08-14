@@ -27,7 +27,12 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
 import { NoSsr } from '@mui/material'
-import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
+import {
+  logEvent,
+  setDefaultEventParameters,
+  setUserId,
+  setUserProperties,
+} from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import { OrgScopeProvider } from '../../hooks/use-org-scope'
@@ -40,6 +45,11 @@ import {
   reportSuccessfulRead,
 } from '../../utils/session-health'
 import { watchSessionHeal } from '../../utils/session-heal'
+import {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+  isInternalTrafficSession,
+} from '../../utils/internal-traffic'
 
 /**
  * Let listeners feed the stale-session verdict (AGL-1066).
@@ -113,6 +123,67 @@ function AnalyticsGlobalEvents({ children }) {
     })
     return () => configureAnalyticsTransport(null)
   }, [analytics])
+
+  // Stamp `traffic_type: 'internal'` on our own sessions (AGL-1582), so GA4's
+  // built-in internal-traffic filter can keep staff browsing out of the launch
+  // metrics. At beta scale a handful of our sessions is a large fraction of
+  // total traffic, and GA4 data filters are NOT retroactive — an event that
+  // ships unstamped is unstamped forever.
+  //
+  // `setDefaultEventParameters` rather than a param threaded through
+  // `trackEvent`: the filter matches per EVENT, and the events that would leak
+  // are exactly the ones no call site writes — `page_view` below, plus the
+  // `session_start` / `first_visit` / `user_engagement` that the SDK sends on
+  // its own. This is the one API that rides "every event logged from the SDK,
+  // including automatic ones".
+  //
+  // The predicate follows the ACTOR, not the subject. Impersonation (AGL-246)
+  // mints a token for the TARGET account, and staff accounts cannot be
+  // impersonated — so `claims.staff` is false for the whole session and
+  // `impersonatedBy` is the only thing separating a staff member driving a
+  // customer's workspace from the customer. Keying on `staff` alone would have
+  // flagged none of it, which is the traffic AGL-1582 most wants excluded.
+  //
+  // Cleared explicitly on the negative branch. The console deliberately does
+  // not remount across a re-auth (AGL-664), so a staff session followed by a
+  // customer signing in on the same document would otherwise keep the stamp
+  // and quietly delete a real user from every report.
+  //
+  // Reads the CACHED token — no forced refresh. This is reporting hygiene, not
+  // a security boundary (`useIsStaff` pays for the refresh where the answer
+  // gates UI), so a claim up to an hour stale costs at worst one mis-bucketed
+  // session. Failure is treated as NOT internal for the same asymmetry:
+  // wrongly flagging a real user erases them from the metrics, while missing
+  // one of ours leaves a session the IP rule is the secondary net for.
+  useEffect(() => {
+    const account = user?.data as
+      | {
+          getIdTokenResult?: (
+            forceRefresh?: boolean,
+          ) => Promise<{ claims?: Record<string, unknown> } | undefined>
+        }
+      | undefined
+    if (!account?.getIdTokenResult) {
+      setDefaultEventParameters({ [INTERNAL_TRAFFIC_PARAM]: undefined })
+      return
+    }
+    let active = true
+    void Promise.resolve(account.getIdTokenResult())
+      .then((result) => {
+        if (!active) return
+        setDefaultEventParameters({
+          [INTERNAL_TRAFFIC_PARAM]: isInternalTrafficSession(result?.claims)
+            ? INTERNAL_TRAFFIC_VALUE
+            : undefined,
+        })
+      })
+      .catch(() => {
+        if (active) setDefaultEventParameters({ traffic_type: undefined })
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
 
   // Page-view analytics (AGL-118). The Pages Router `router.events` API has
   // no App Router equivalent, so fire on `usePathname` changes instead; route

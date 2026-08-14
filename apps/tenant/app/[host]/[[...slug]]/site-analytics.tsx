@@ -20,6 +20,7 @@
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import {
+  GA_CONSENT_DEFAULT_SNIPPET,
   hostConsentRequired,
   isAnalyticsAllowed,
   resolveGaMeasurementId,
@@ -211,20 +212,43 @@ export default function SiteAnalytics({
           `storeVisitorConsent` silences the resident tag as well as sweeping
           the cookies — otherwise GA4 enhanced measurement re-creates `_ga`
           for the rest of the pageview. That runs on the tag that is ALREADY
-          loaded; the render condition here is unchanged. */}
+          loaded; the render condition here is unchanged.
+
+          THE CONSENT-MODE DEFAULT (AGL-1622) is declared INSIDE this block,
+          which is the whole of its safety argument. Zach's decision of
+          2026-08-14 approves load-then-restrict for the UNITED STATES, where
+          the implied-consent posture already permits the load; EU and UK are
+          unchanged, because loading an analytics tag before consent is the
+          specific act prior-consent law prohibits. Emitting the default here
+          rather than in the document head keeps that true by construction:
+          `analyticsAllowed` still decides whether ANY of this exists, so a
+          gated visitor gets no default, no config and no request to
+          googletagmanager.com. It is additive to the gate, never a
+          replacement — `consent-mode-default.spec.tsx` goes red if a change
+          ever hoists it out of this condition.
+
+          Order is load-bearing twice over. The inline block precedes the
+          library, and inside it the `default` precedes `config`, so no hit is
+          ever sent before the tag has been told what it may store. Google's
+          canonical snippet shape, and the reason `ga-init` sits first here.
+
+          NOT declared when the host runs their own CMP (`consent.disabled`):
+          their solution owns the default, and a second one racing it would
+          overwrite their visitor's answer with ours. */}
       {gaMeasurementId && analyticsAllowed ? (
         <>
+          <Script id="ga-init" strategy="afterInteractive">
+            {'window.dataLayer=window.dataLayer||[];' +
+              'function gtag(){dataLayer.push(arguments);}' +
+              (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
+              "gtag('js', new Date());" +
+              `gtag('config', '${gaMeasurementId}');`}
+          </Script>
           <Script
             id="ga-src"
             strategy="afterInteractive"
             src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
           />
-          <Script id="ga-init" strategy="afterInteractive">
-            {'window.dataLayer=window.dataLayer||[];' +
-              'function gtag(){dataLayer.push(arguments);}' +
-              "gtag('js', new Date());" +
-              `gtag('config', '${gaMeasurementId}');`}
-          </Script>
         </>
       ) : null}
       {/* Visitor consent surfaces (AGL-1498): only when the machinery is

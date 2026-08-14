@@ -576,6 +576,7 @@ async function handler(request: Request): Promise<Response> {
     // un-panic invariant. Before the cap checks as well as the writes — a
     // locked workspace gets the 423, not a quota refusal.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: owningOrg?.org,

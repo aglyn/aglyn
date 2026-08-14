@@ -161,10 +161,12 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       ? `[data-aglyn="leaf:${revealNodeId}"]`
       : undefined
   const [status, setStatus] = useState<
-    'idle' | 'sending' | 'sent' | 'error' | 'preview'
+    'idle' | 'sending' | 'sent' | 'error' | 'preview' | 'paused'
   >(
     'idle',
   )
+  /** The read-only lockdown's own words (AGL-1511); never a hardcoded line. */
+  const [pausedMessage, setPausedMessage] = useState('')
   const [alerts, setAlerts] = useState<
     Array<{ message: string; severity?: string }>
   >([])
@@ -259,13 +261,29 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         // A refusal is not a failure (AGL-1249). Preview declines writes on
         // purpose, and "something went wrong — please try again" invites the
         // author to retry something that is working exactly as intended.
-        setStatus(
-          response.ok
-            ? 'sent'
-            : Aglyn.isPreviewRefusal(response)
-              ? 'preview'
-              : 'error',
-        )
+        //
+        // Since AGL-1511 there are TWO deliberate 423s a submit can meet, so
+        // the status alone no longer identifies one: Preview's client-side
+        // refusal, and a read-only lockdown refusing a real visitor's write
+        // on a live site. Preview's carries `preview: true` and is settled
+        // first; anything else 423 is the lockdown pause, whose own copy is
+        // rendered rather than the Preview sentence — telling a customer's
+        // visitor "this works on your published site" would be nonsense on
+        // the published site they are standing on.
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          if (Aglyn.isPreviewRefusal(response, body)) {
+            setStatus('preview')
+            return
+          }
+          const paused = Aglyn.parseLockdownRefusal(response.status, body)
+          if (paused) {
+            setPausedMessage(Aglyn.lockdownRefusalText(paused))
+            setStatus('paused')
+            return
+          }
+        }
+        setStatus(response.ok ? 'sent' : 'error')
       } catch {
         setStatus('error')
       }
@@ -324,6 +342,12 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         <Alert severity="error">
           {'Something went wrong — please try again.'}
         </Alert>
+      ) : null}
+      {status === 'paused' ? (
+        // `info`, like the Preview notice and for the same reason: this is a
+        // deliberate, temporary pause on a site that is otherwise working,
+        // and nothing the visitor typed was lost.
+        <Alert severity="info">{pausedMessage}</Alert>
       ) : null}
       {status === 'preview' ? (
         // Deliberately `info`, not `error`, and it does not say "try again":

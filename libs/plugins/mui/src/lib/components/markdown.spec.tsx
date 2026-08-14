@@ -383,11 +383,15 @@ describe('markdown schemas (AGL-1162)', () => {
     expect(tableOfContentsSchema.$id).toBe('tableOfContents')
   })
 
-  it('offers the document as a multiline field and the source as a node pick', () => {
+  it('offers the document as a WYSIWYG field and the source as a node pick', () => {
     const content = markdownSchema.attributes?.find(
       (field) => field.name === 'content',
     )
-    expect(content?.component).toBe(Aglyn.FieldComponentType.TEXTAREA)
+    // The markdown-lite editor, not a raw textarea (AGL-1616): this attribute
+    // holds a whole document — the published Privacy Policy body is one — and
+    // a textarea meant correcting it was a 13 KB paste (AGL-1594). The stored
+    // value is unchanged, which is why the renderers below still pass.
+    expect(content?.component).toBe(Aglyn.FieldComponentType.MARKDOWN)
     const forNodeId = tableOfContentsSchema.attributes?.find(
       (field) => field.name === 'forNodeId',
     )

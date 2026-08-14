@@ -301,6 +301,7 @@ export async function POST(request: Request): Promise<Response> {
     // never through here, so this cannot 423 the eviction that makes a
     // lock stick. Staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgForHost(hostId))?.org,

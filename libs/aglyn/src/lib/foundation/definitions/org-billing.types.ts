@@ -519,6 +519,27 @@ export interface AglynOrgBilling extends AglynDocument {
   /** Per-org entitlement overrides (admin console); win over plan defaults. */
   entitlements?: OrgEntitlements
   /**
+   * Per-org RELEASE-flag overrides (AGL-1635) — a different axis from
+   * `entitlements`, which asks what the org's plan includes. These ask
+   * whether an unreleased feature is switched on for this one customer, and
+   * win over both the Remote Config value and the rollout bucket.
+   *
+   * Staff-only, and deliberately narrower than `entitlements`: super staff
+   * alone may write it, matching the platform-wide flag editor
+   * (`/api/admin/flags` is super-only), because forcing a flag on for an org
+   * is the same class of act as flipping it for everyone — just scoped.
+   * Read through `parseOrgReleaseFlagOverrides`, never directly.
+   *
+   * Typed loosely on purpose. The keys ARE `ReleaseFlagKey`, but that union
+   * lives in `app-utils/release-flags` and foundation cannot import
+   * app-utils (see `platform.types.ts`). Declaring the narrow type here
+   * would also overstate what is on disk: this map outlives registry
+   * renames, so a retired key is a thing that genuinely exists in Firestore.
+   * `parseOrgReleaseFlagOverrides` is what narrows it, dropping unknown keys
+   * and non-booleans.
+   */
+  releaseFlags?: Record<string, boolean>
+  /**
    * White-label brand identity (White-Label Phase 1). Applied only when the
    * org carries the `whiteLabel` entitlement; read exclusively through
    * `resolveBrandingProfile`, never directly, so no surface diverges.

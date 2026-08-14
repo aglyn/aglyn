@@ -198,10 +198,13 @@ async function handler(request: Request): Promise<Response> {
       `?alt=media&token=${token}`
 
     const dimensions = readImageDimensions(new Uint8Array(buffer))
-    const contentHash = createHash('sha256')
+    // Same pair as the upload route, same reasoning (AGL-1614): the
+    // truncated `contentHash` stays the ETag and the immutable URL segment,
+    // and the full-width `contentSha256` is the quarantine key.
+    const contentSha256 = createHash('sha256')
       .update(new Uint8Array(buffer))
       .digest('hex')
-      .slice(0, 16)
+    const contentHash = contentSha256.slice(0, 16)
     // Replacing the bytes of a PRIVATE asset must not hand it a `cdnPath`
     // (AGL-1051) — that would quietly publish it, and the `: delete()`
     // branch below means the field is actively removed if one lingers.
@@ -236,6 +239,7 @@ async function handler(request: Request): Promise<Response> {
         height:
           dimensions?.height ?? firebaseAdmin.firestore.FieldValue.delete(),
         contentHash,
+        contentSha256,
         variants,
         // A merge write, so this has to CLEAR on success rather than simply
         // not be set: an asset whose first upload failed and whose replace

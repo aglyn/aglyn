@@ -100,6 +100,7 @@ async function dispatch(
         [pluginId],
         {
           subjectId: resolved?.orgId ?? hostId,
+          orgId: resolved?.orgId ?? null,
           authorization: request.headers.get('authorization'),
         },
       )
@@ -131,6 +132,7 @@ async function dispatch(
     }
   }
   const locked = await lockdownRefusal({
+    request,
     staff,
     uid,
     org: lockdownOrg,

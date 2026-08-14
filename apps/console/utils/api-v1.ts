@@ -130,7 +130,13 @@ export async function authenticateApiV1(
   // (AGL-1596): the 423 is the response a client is MOST likely to retry on
   // a schedule — it ships a `Retry-After` telling it when — so dropping the
   // budget here is worse than the 401/403 case AGL-900 fixed.
-  const locked = await lockdownRefusal({ org })
+  // READ-ONLY discrimination (AGL-1511) is derived from the METHOD here and
+  // nowhere else in v1: this authenticator is the single door every
+  // resource handler comes through, and the REST verbs are exactly the
+  // signal — a customer's GET keeps working while their POST/PATCH/DELETE
+  // gets the 423 with a `Retry-After`, which is the contract an integration
+  // can actually back off on. A full lock still refuses both.
+  const locked = await lockdownRefusal({ request, org })
   if (locked) return withResponseHeaders(locked, headers)
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })

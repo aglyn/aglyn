@@ -307,6 +307,15 @@ export const SIGNED_UPLOAD_TYPES_MESSAGE = UPLOAD_TYPES_MESSAGE
  * (composite objects have no md5) — an absent hash is the status quo and
  * degrades to "no ETag", where a WRONG one would pin stale bytes under an
  * immutable URL for a year.
+ *
+ * **This value is a cache validator, not a security key** (AGL-1614). It is
+ * md5, truncated to 64 bits, so two files sharing it are hours of ordinary
+ * compute to construct — fine for "did these bytes change", unfit for "is
+ * this the file we took down". Asset quarantine therefore prefers the
+ * full-width `contentSha256` written by the routes that hash the bytes
+ * server-side, and this field remains a fallback key rather than the
+ * primary one. Do not widen or re-derive it: it is the ETag and the
+ * immutable URL's path segment on every media document already written.
  */
 export function storageContentHash(md5Hash: unknown): string | undefined {
   const raw = typeof md5Hash === 'string' ? md5Hash : ''

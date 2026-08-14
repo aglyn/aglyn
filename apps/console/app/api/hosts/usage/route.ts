@@ -113,6 +113,7 @@ async function handler(request: Request): Promise<Response> {
     // host-only verdict would silently miss it. Staff bypass is the
     // un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org: (await getOrgForHost(hostId))?.org,

@@ -250,10 +250,17 @@ async function handler(request: Request): Promise<Response> {
     // variants for images. Variant bytes are deliberately EXCLUDED from
     // the storage counter — they're derived artifacts the platform can
     // regenerate, so hosts aren't billed for them.
-    const contentHash = createHash('sha256')
+    // Hashed ONCE, stored twice (AGL-1614). `contentHash` keeps its historic
+    // 16-hex truncation because it is the ETag and the immutable URL's path
+    // segment — widening it would change live cache validators and 404 every
+    // pre-AGL-829 3-segment embed. `contentSha256` is the same digest at full
+    // width, and it is what asset quarantine keys on: 64 truncated bits from
+    // one of two algorithms is a fine cache validator and a poor security
+    // key.
+    const contentSha256 = createHash('sha256')
       .update(new Uint8Array(buffer))
       .digest('hex')
-      .slice(0, 16)
+    const contentHash = contentSha256.slice(0, 16)
     // Paid gate (AGL-175 pricing): free workspaces serve raw storage URLs.
     // A plan-less org resolves as `free` (no CDN); overrides can still grant
     // it. `mediaCdn` is a Starter+ entitlement.
@@ -295,6 +302,7 @@ async function handler(request: Request): Promise<Response> {
       ...(dimensions ?? {}),
       uploadedBy: decoded.uid,
       contentHash,
+      contentSha256,
       variants,
       // Only when something actually went wrong. An asset with nothing to
       // generate — an SVG, or a source already narrower than 320px — is the

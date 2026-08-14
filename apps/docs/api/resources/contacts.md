@@ -10,6 +10,12 @@ Your organization's [contacts](/content-and-data/contacts/overview) — the unif
 built from form submissions, member sign-ups, orders, and bookings. Contacts are
 **read-only** over the API; they're created by the capture points on your sites.
 
+:::note The API is ahead of the console
+These endpoints are live. The console **Contacts page** is still
+[rolling out](/content-and-data/contacts/overview), so until it opens this API is the
+way to read the contacts your sites have already captured.
+:::
+
 ## The contact object
 
 ```json

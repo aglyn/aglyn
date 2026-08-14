@@ -16,6 +16,7 @@
  */
 
 import {
+  lockdownPausedSurfaceForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
   resolvePluginApiRoute,
@@ -25,6 +26,7 @@ import {
   filterEnabledPluginsByReleaseFlags,
   getHostDisabledPlugins,
   getOrgForHost,
+  visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
@@ -57,9 +59,14 @@ async function dispatch(
   // is only the fallback for paths registered outside the loader.
   const pluginId =
     pluginIdForRegisteredApiPath(path) ?? loader.pluginIdForApiPath(path)
+  // Declared out here so the lockdown gate below reads the SAME resolved
+  // host the enablement gate used, rather than parsing the body a second
+  // time (a request body can only be cloned so many times, and two
+  // resolutions of "which site is this" is one too many).
+  let hostId = ''
   if (pluginId) {
     const url = new URL(request.url)
-    let hostId = url.searchParams.get('hostId') ?? ''
+    hostId = url.searchParams.get('hostId') ?? ''
     if (!hostId && request.method !== 'GET' && request.method !== 'HEAD') {
       try {
         const body = (await request.clone().json()) as { hostId?: unknown }
@@ -90,6 +97,7 @@ async function dispatch(
         [pluginId],
         {
           subjectId: resolved?.orgId ?? hostId,
+          orgId: resolved?.orgId ?? null,
           authorization: request.headers.get('authorization'),
         },
       )
@@ -97,6 +105,31 @@ async function dispatch(
         return Response.json({ error: 'Not found' }, { status: 404 })
       }
     }
+  }
+
+  // Lockdown (AGL-1511). This dispatcher is the umbrella over every
+  // visitor-facing plugin write on a live site — cart, checkout, reserve,
+  // reviews, newsletter, membership registration, bookings — and `/api` sits
+  // OUTSIDE the tenant middleware matcher, so it is the only lockdown
+  // enforcement any of them meet.
+  //
+  // Gated by METHOD rather than by a path list, for the same reason
+  // `useSiteFetch` draws the Preview boundary that way: a per-path list means
+  // thirteen handlers each remembering and the fourteenth silently not. The
+  // read paths this dispatcher also serves leave before any Firestore read.
+  //
+  // `hostId` is the one the enablement gate above already resolved; when a
+  // handler self-gates and none was found, there is no site to evaluate and
+  // the handler's own checks stand — a caller who can hide the target from
+  // this gate can also be refused by nothing else here, and inventing a
+  // guess would be worse than saying so.
+  if (hostId) {
+    const paused = await visitorWriteRefusal({
+      hostId,
+      request,
+      surface: lockdownPausedSurfaceForPluginApiPath(path),
+    })
+    if (paused) return paused
   }
 
   const route = resolvePluginApiRoute(path)

@@ -92,6 +92,11 @@ async function handler(request: Request): Promise<Response> {
     // doc is fetched only when the projection trips, so the happy path
     // adds no org read. Staff bypass is the un-panic invariant.
     const locked = await lockdownRefusal({
+      request,
+      // POST-shaped READ (AGL-1511): a presence token only lets the editor
+      // SEE who else is in the document, and presence lives in RTDB — it
+      // races no Firestore migration. Refusing it would break the read view.
+      intent: 'read',
       staff: decoded['staff'] === true,
       uid: decoded.uid,
       org:

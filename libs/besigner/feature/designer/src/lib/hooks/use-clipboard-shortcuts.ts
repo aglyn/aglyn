@@ -17,6 +17,7 @@
 
 import * as Besigner from '@aglyn/besigner'
 import { useEffect } from 'react'
+import { inlineMarkdownEdit } from '../utils/inline-markdown-edit.store'
 import { inlineTextEdit } from '../utils/inline-text-edit.store'
 import {
   useCopyElementsCallback,
@@ -33,9 +34,15 @@ import {
  * an inline text editor retargets to the shadow host and looks exactly like
  * "the canvas has focus". The inline editor's own store is the only honest
  * signal there, so it is consulted directly.
+ *
+ * The in-place markdown editor (AGL-1624) needs the same treatment for a
+ * second reason: its toolbar buttons, link popover and URL dialog take focus,
+ * so `document.activeElement` is often a BUTTON while the author is very much
+ * editing a document — and Cmd+C would then copy canvas ELEMENTS.
  */
 export function isEditingText(): boolean {
   if (inlineTextEdit.node) return true
+  if (inlineMarkdownEdit.node) return true
 
   const active = document.activeElement as HTMLElement | null
   if (!active) return false

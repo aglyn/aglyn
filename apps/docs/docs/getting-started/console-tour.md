@@ -73,11 +73,16 @@ appears only if you're an owner or admin of the site; it holds per-site plugin s
 the danger zone.
 
 :::note Sections that come and go
-Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Contacts**,
-**Bookings**, **Events**, **Redirects**, **Marketing** and **Marketplace** are contributed
-by plugins and appear only where that plugin is enabled for your workspace (they're
-inserted after **Analytics**). If a section these docs describe isn't in your tab strip,
-that's usually why — enable the plugin under **Organization → Plugins**.
+Tabs such as **Data**, **Products**, **Logic**, **Workflows**, **Inbox**, **Bookings**,
+**Events**, **Redirects**, **Marketing** and **Marketplace** are contributed by plugins
+and appear only where that plugin is enabled for your workspace (they're inserted after
+**Analytics**). If a section these docs describe isn't in your tab strip, that's usually
+why — enable the plugin under **Organization → Plugins**.
+
+**Contacts** is the exception: it's a release-flagged feature still
+[rolling out](../content-and-data/contacts/overview.md), so there is no switch for it
+under **Organization → Plugins** and looking for one is a dead end. It appears on its
+own once the rollout reaches your workspace.
 :::
 
 **Billing is not a site section.** Plan cards and usage meters are workspace-wide and live

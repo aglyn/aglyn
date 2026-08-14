@@ -12,6 +12,11 @@ for the how-to.
 
 ## August 2026 — editing together (newest)
 
+- **[A visual editor for long documents](building-sites/besigner/long-form-markdown.md#the-markdown-element)** —
+  the Markdown element's **Content** attribute is a WYSIWYG editor, not a text box:
+  headings, bold, links, lists, quotes, images, code and tables from a toolbar, pasting
+  from a Google Doc keeps its formatting, and a **Markdown** switch shows the raw source
+  when you want it. Editing a whole policy page no longer means preparing one long paste.
 - **[Live co-editing](building-sites/besigner/live-co-editing.md)** — open the same
   screen, layout, component, template, or designed email as a teammate and edit it
   **together**: presence avatars in the toolbar, each collaborator's cursor and
@@ -50,10 +55,11 @@ for the how-to.
   account, on any tier including Free.
 - **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#audience-contacts)** —
   your contacts CRM is priced as an included band per tier. On paid plans, growing past
-  the band **never drops a record**: extra contacts bill as small metered overage
+  the band **never drops a record**: extra contacts will bill as small metered overage
   ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new
-  Contacts meter with a live overage estimate, and the contacts page tells Free
-  workspaces how many signups were missed at the band.
+  Contacts meter with a live estimate. **Overage is not billed yet** — the
+  [Contacts page](content-and-data/contacts/overview.md) is still rolling out, and
+  nobody is charged for an audience they can't open.
 - **Clearer seat language** — what plan cards used to call "members per host" is now
   **site collaborators**: per-site teammate seats. Member accounts were never seats.
 - **[Platform fees on the plan cards](workspace-and-billing/billing-and-plans/overview.md#platform-fees)** —
@@ -250,8 +256,10 @@ The newest round tightened every marketing, billing, and operations loop:
 
 - **[Forms & lead capture](content-and-data/forms/overview.md)** — form components, an inbox reader, and
   dataset-backed submissions.
-- **[Contacts CRM](content-and-data/contacts/overview.md)** — unified ingestion from forms, members, orders,
-  and bookings, with tags, notes, CSV export, and **segments**.
+- **[Contacts CRM](content-and-data/contacts/overview.md)** *(rolling out)* — unified ingestion from forms,
+  members, orders, and bookings, with tags, notes, CSV export, and **segments**. Capture
+  and the [REST API](/api/resources/contacts) are live; the console page is still on its
+  way.
 - **[Email campaigns](marketing-and-automation/email-campaigns/overview.md)** — audiences, tiered send caps, and
   unsubscribe handling.
 - **[Marketing overlays](marketing-and-automation/marketing-overlays/overview.md)** — a site-wide announcement bar and

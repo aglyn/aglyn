@@ -107,6 +107,14 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 ## Audience (contacts)
 
+:::caution Rolling out
+The **[Contacts page](../../content-and-data/contacts/overview.md)** in the console
+isn't available yet. Contacts are still captured from your sites and readable over the
+[REST API](/api/resources/contacts), and the Free band below still applies — but while
+the page is unavailable, **paid audience overage is not billed**. The rates below are
+what will apply once Contacts opens.
+:::
+
 Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unified into
 one people list — is priced as an **audience band**, not a hard cap:
 
@@ -117,8 +125,8 @@ one people list — is priced as an **audience band**, not a hard cap:
   (Pro), $0.50 (Business), $0.40 (Scale), or $0.25 (Advanced) per extra 1,000
   contacts per month. Upgrading a tier is always cheaper than sustained overage.
 - On **Free**, the band is a hard limit: new visitors past 100 keep their member
-  accounts and orders, but no CRM record is kept — the contacts page shows how many
-  were missed so you can upgrade before it matters.
+  accounts and orders, but no CRM record is kept. The count of missed sign-ups is
+  recorded and will be shown on the contacts page once it opens.
 
 ## Organization data
 
