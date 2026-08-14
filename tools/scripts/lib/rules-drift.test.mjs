@@ -381,6 +381,110 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
     })
   })
 
+  // --- the promotion window is not drift (AGL-1690) ----------------------
+  //
+  // Rules deploy from a checkout pinned to the PROMOTED SHA, so on `main` the
+  // live ruleset is the one at the last promotion, not at HEAD. These pin the
+  // baseline flag that makes that comparison possible: the promotion window
+  // must be GREEN and itemised, while a ref that cannot be resolved must be
+  // exit 2 rather than a silent fall back to HEAD.
+
+  // The newest commit that touched the firestore rules, and its parent. The
+  // parent stands in for "the promoted SHA" — live is at the parent, HEAD
+  // carries one undeployed rules commit. Exactly the state that was failing.
+  const lastRulesCommit = execFileSync(
+    'git',
+    ['log', '-1', '--format=%H', '--', 'cloud/firebase-firestore.rules'],
+    { cwd: repoRoot, encoding: 'utf8' },
+  ).trim()
+  const promotedRef = `${lastRulesCommit}^`
+  const showAt = (ref, file) =>
+    execFileSync('git', ['show', `${ref}:${file}`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    })
+
+  it('live at the promoted baseline is GREEN even though HEAD is ahead, and the pending commit is itemised', async () => {
+    const promotedFirestore = showAt(promotedRef, 'cloud/firebase-firestore.rules')
+    // Guard the premise: the chosen commit really does change this file, so
+    // "green" below is not green-because-identical.
+    assert.notEqual(
+      normalizeRulesText(promotedFirestore),
+      normalizeRulesText(headFirestore),
+      'expected the last rules commit to change the firestore rules file',
+    )
+    await withStub(
+      {
+        firestore: promotedFirestore,
+        storage: showAt(promotedRef, 'cloud/firebase-storage.rules'),
+        database: showAt(promotedRef, 'cloud/firebase-database.rules.json'),
+      },
+      async (port) => {
+        const result = await runCli({
+          port,
+          args: [`--baseline=${promotedRef}`],
+        })
+        assert.equal(
+          result.status,
+          0,
+          `expected the promotion window to be clean, got ${result.status}:\n${result.stdout}\n${result.stderr}`,
+        )
+        assert.match(result.stdout, /OK firestore/)
+        assert.doesNotMatch(result.stderr, /DRIFT/)
+        // The signal survives the green: what is owed at the next promotion.
+        assert.match(result.stdout, /PENDING DEPLOY/)
+        assert.match(result.stdout, new RegExp(lastRulesCommit.slice(0, 7)))
+      },
+    )
+  })
+
+  it('a baseline that does not resolve exits 2 — never a silent fall back to HEAD', async () => {
+    await withStub(
+      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      async (port) => {
+        const result = await runCli({
+          port,
+          args: ['--baseline=refs/heads/no-such-ref-agl1690'],
+        })
+        assert.equal(
+          result.status,
+          2,
+          `expected cannot-check exit 2, got ${result.status}:\n${result.stdout}\n${result.stderr}`,
+        )
+        assert.match(result.stderr, /does not resolve to a commit/)
+        // Live matches HEAD here, so a fallback to HEAD would have printed a
+        // clean run and exited 0. It must not have compared anything at all.
+        assert.doesNotMatch(result.stdout, /OK firestore/)
+      },
+    )
+  })
+
+  it('RULES_DRIFT_BASELINE sets the baseline without a flag (the CI path)', async () => {
+    await withStub(
+      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      async (port) => {
+        const result = await runCli({
+          port,
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            FIREBASE_PROJECT_ID: PROJECT,
+            FIREBASE_CLIENT_EMAIL: 'stub@drift-test.iam.gserviceaccount.com',
+            FIREBASE_PRIVATE_KEY: 'stub',
+            RULES_CHECK_ACCESS_TOKEN: 'stub-token',
+            FIREBASE_RULES_API_BASE: `http://127.0.0.1:${port}`,
+            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: BUCKET,
+            NEXT_PUBLIC_FIREBASE_DATABASE_URL: `http://127.0.0.1:${port}/db`,
+            RULES_DRIFT_BASELINE: 'no-such-ref-agl1690',
+          },
+        })
+        assert.equal(result.status, 2, result.stderr)
+        assert.match(result.stderr, /no-such-ref-agl1690/)
+      },
+    )
+  })
+
   it('missing credentials exit 2 with the exact secret-setup command', async () => {
     const bare = mkdtempSync(join(tmpdir(), 'agl1509-nocreds-'))
     try {
@@ -440,6 +544,22 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(workflow, /secrets\.FIREBASE_PRIVATE_KEY/)
     assert.match(workflow, /gh secret set FIREBASE_CLIENT_EMAIL/)
     assert.match(workflow, /exit 2/)
+  })
+
+  it('the workflow compares against the PROMOTED baseline, with the history to resolve it (AGL-1690)', () => {
+    const workflow = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),
+      'utf8',
+    )
+    // Comparing against the checked-out branch is the bug: on `main` it
+    // reports the promotion window as a failure.
+    assert.match(workflow, /RULES_DRIFT_BASELINE:\s*origin\/production/)
+    // Resolving origin/production and listing origin/production..HEAD both
+    // need real history; a shallow clone would turn every run into exit 2.
+    assert.match(workflow, /fetch-depth:\s*0/)
+    // A skipped rules deploy must go red AT the promotion, not up to a day
+    // later on the schedule.
+    assert.match(workflow, /^ {6}- production$/m)
   })
 
   it('the CLI actually uses the shared comparison and shared auth', () => {
