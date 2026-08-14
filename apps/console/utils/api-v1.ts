@@ -33,6 +33,7 @@ import {
   lockdownRefusal,
   rateLimitHeaders,
   verifyApiKey,
+  withResponseHeaders,
 } from '@aglyn/tenant-data-admin'
 
 export interface ApiV1Context {
@@ -121,8 +122,16 @@ export async function authenticateApiV1(
   // An API key is an ORG credential: no uid (no user scope to evaluate)
   // and no staff bypass — staff lift locks with their console session, not
   // with a customer's API key.
+  //
+  // The refusal itself is built by a helper shared with ~36 console routes
+  // and the session mint, none of which have a rate-limit budget to report,
+  // so it carries only `Cache-Control` and `Retry-After`. Merge this key's
+  // budget back on here rather than teaching that helper about API v1
+  // (AGL-1596): the 423 is the response a client is MOST likely to retry on
+  // a schedule — it ships a `Retry-After` telling it when — so dropping the
+  // budget here is worse than the 401/403 case AGL-900 fixed.
   const locked = await lockdownRefusal({ org })
-  if (locked) return locked
+  if (locked) return withResponseHeaders(locked, headers)
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })
   }
