@@ -63,7 +63,9 @@ import {
   ICON_VARIANT_SEARCH,
 } from '@aglyn/shared-data-enums'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
-import createPageFromTemplate from './create-page-from-template'
+import createPageFromTemplate, {
+  withBundleRootScreen,
+} from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
@@ -452,7 +454,11 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           })
         }
         const used = new Set(existingSlugs)
-        for (const screen of template.screens) {
+        // A starter is a whole site, so it has to land ON the site's address:
+        // if nothing in the bundle asks for the root and this host has no home
+        // page yet, the first screen takes it (AGL-1575). Never moves a live
+        // home page.
+        for (const screen of withBundleRootScreen(template.screens, used)) {
           // Same helper the library's Use flow calls (AGL-672) — one
           // implementation of create-screen → write-version → publish-route,
           // including the slug de-confliction that must not overwrite a

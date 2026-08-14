@@ -24,6 +24,12 @@
 // `@aglyn/aglyn/server` drags `node:fs` into the client bundle. The constants
 // module is a leaf with no imports of its own, so it is safe on either side.
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+// Same deep-leaf reasoning: `screen-route` imports only a TYPE from
+// foundation, so it is erased at runtime and safe in both graphs.
+import {
+  normalizeScreenSlug,
+  SCREEN_ROOT_PATH,
+} from '@aglyn/aglyn/app-utils/screen-route'
 
 /**
  * First-party starter definitions (AGL-78/79), now SEED INPUT ONLY
@@ -52,7 +58,16 @@ export interface StarterTemplateScreen {
   key: string
   displayName: string
   description?: string
-  /** Routing-map slug ('' = home). */
+  /**
+   * Routing-map slug. `SCREEN_ROOT_PATH` (`'/'`) asks for the site root — the
+   * home page — and anything else is a single path segment.
+   *
+   * It used to be `''` that meant home, which no normalizer agreed with: both
+   * the apply path and the seed below read an empty string as "no address
+   * authored" and derived one from the display name, so the shop starters'
+   * home page was published at `/home` and the site 404'd at its own URL
+   * (AGL-1575).
+   */
   slug: string
   seo?: { title?: string; description?: string }
   /** Flat node map including the canvas root. */
@@ -101,30 +116,38 @@ export function starterTemplateDocId(
 export function buildStarterTemplateDocs(
   starter: StarterTemplate,
 ): StarterTemplateDoc[] {
-  return starter.screens.map((screen, index) => ({
-    id: starterTemplateDocId(starter.id, screen.key),
-    starterId: starter.id,
-    data: {
-      kind: 'page',
-      displayName: screen.displayName,
-      // Only the screen's own description, never the starter blurb: a
-      // template's `description` is carried onto the page it creates, and a
-      // screen description is the live site's meta-description fallback.
-      // The bundle blurb lives on `source.starterDescription` instead.
-      ...(screen.description ? { description: screen.description } : {}),
-      category: starter.category,
-      ...(screen.slug ? { slug: screen.slug } : {}),
-      ...(screen.seo ? { seo: screen.seo } : {}),
-      nodes: screen.nodes,
-      source: {
-        type: 'starter',
-        starterId: starter.id,
-        starterName: starter.displayName,
-        starterDescription: starter.description,
-        starterOrder: index,
+  return starter.screens.map((screen, index) => {
+    // Normalized on the way into the document so the persisted address is in
+    // the routing-map format the tenant matches against — in particular the
+    // root, which the previous `screen.slug ? …` guard dropped entirely when
+    // home was spelled `''` (AGL-1575). A slug that sanitizes away carries no
+    // field, and the apply path derives one from the display name.
+    const slug = normalizeScreenSlug(screen.slug)
+    return {
+      id: starterTemplateDocId(starter.id, screen.key),
+      starterId: starter.id,
+      data: {
+        kind: 'page',
+        displayName: screen.displayName,
+        // Only the screen's own description, never the starter blurb: a
+        // template's `description` is carried onto the page it creates, and a
+        // screen description is the live site's meta-description fallback.
+        // The bundle blurb lives on `source.starterDescription` instead.
+        ...(screen.description ? { description: screen.description } : {}),
+        category: starter.category,
+        ...(slug ? { slug } : {}),
+        ...(screen.seo ? { seo: screen.seo } : {}),
+        nodes: screen.nodes,
+        source: {
+          type: 'starter',
+          starterId: starter.id,
+          starterName: starter.displayName,
+          starterDescription: starter.description,
+          starterOrder: index,
+        },
       },
-    },
-  }))
+    }
+  })
 }
 
 /** Every document a starter COULD materialize as, in bundle order. */
@@ -260,7 +283,10 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
     {
       key: 'home',
       displayName: 'Home',
-      slug: '',
+      // The site root, spelled the way the routing map spells it. `''` here
+      // read as "no address" everywhere downstream and put the shop's home
+      // page at `/home` (AGL-1575).
+      slug: SCREEN_ROOT_PATH,
       seo: {
         title: digital ? 'Digital shop' : 'Shop',
         description: 'Browse our products.',
