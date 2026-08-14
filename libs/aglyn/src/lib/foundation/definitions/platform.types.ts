@@ -503,8 +503,27 @@ export interface PublishSchedule {
    *
    * Every reader tests `=== 'pending'`, so adding a member here degrades
    * correctly rather than needing each one updated — checked, not assumed.
+   *
+   * `skipped-unroutable` is the second terminal refusal (AGL-1589): the
+   * publish came due on a screen with no live route and no address the
+   * executor could give it — no slug on the screen or one of its ancestors,
+   * an address another screen already holds, or an email document, which has
+   * no URL at all. One value for the three because they share a remedy (fix
+   * the address in the console and schedule it again) and because a terminal
+   * state is a thing every reader has to reason about; the console names the
+   * causes in its message.
+   *
+   * It exists for the same reason as the value above: before AGL-1589 that
+   * publish reported `applied` while the page kept 404ing, which is a silent
+   * failure in the worst direction. A recorded refusal is the difference
+   * between a schedule that did not run and one that pretended it had.
    */
-  status: 'pending' | 'applied' | 'canceled' | 'skipped-unentitled'
+  status:
+    | 'pending'
+    | 'applied'
+    | 'canceled'
+    | 'skipped-unentitled'
+    | 'skipped-unroutable'
   createdAt?: ITimestamp
 }
 

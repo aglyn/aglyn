@@ -57,7 +57,7 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `click` | Reserved | Marketing | `link_domain`, `link_id`, `surface` | Acquisition — outbound to docs/GitHub |
 | `org_created` | Custom | Console | `plan?` | Activation |
 | `host_created` | Custom | Console | — | Activation |
-| **`site_published`** | Custom | Console | `first_publish?` | **Activation — "% who publish a site"** |
+| **`site_published`** | Custom | Console + **Server** (tenant) | `first_publish?` | **Activation — "% who publish a site"** |
 | `stripe_connected` | Custom | Console | — | **Activation — "% who connect Stripe"** |
 | `begin_checkout` | Reserved | Console | `currency`, `value`, `items`, `billing_interval` | Revenue — checkout funnel |
 | `purchase` | Reserved | **Server** | `transaction_id`, `currency`, `value`, `items`, `billing_interval` | Revenue — paid conversions, ARPA, annual mix |
@@ -80,7 +80,7 @@ the person to `/signup`), plus `passkey` and `sso` for `login`.
 | `generate_lead` | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe) |
 | `org_created` | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page |
 | `host_created` | `apps/console/components/create-host-dialog.component.tsx` |
-| `site_published` | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers |
+| `site_published` | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589) |
 | `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx` |
 | `begin_checkout` | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` |
 | `purchase` | `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler |
@@ -208,25 +208,38 @@ from the documentation app (AGL-1579), which reuses this module rather than
 growing a second one. Hostname already separates the domains in GA; `surface`
 separates surfaces that could share one.
 
-### 5. A scheduled publish is not an activation, and cannot be
+### 5. A scheduled FIRST publish is an activation — and the answer changed (AGL-1589)
 
 `applyDuePublishSchedule` runs from a cron beat and from ISR revalidation with
-no browser present, so client-side GA cannot see it — the obvious fix is to
-send `site_published` over the Measurement Protocol like `purchase`. It is not
-sent, because it would not be true.
+no browser present, so client-side GA cannot see it. AGL-1562 concluded that
+nothing needed to be sent, and the reasoning was sound at the time: a due
+publish wrote the version pointer and the schedule status and **never touched
+`hosts/{hostId}.screens`**, the routing map that decides which paths exist. A
+scheduled publish could therefore only swap which saved version an already-live
+route served — a content update — and `site_published` counts a route GOING
+LIVE, not a republish.
 
-A due publish writes the version pointer and the schedule status and **never
-touches `hosts/{hostId}.screens`**, the routing map that decides which paths
-exist. So a scheduled publish can only ever swap which saved version an
-already-live route serves — a content update — and `site_published` counts a
-route GOING LIVE, not a republish. Sending it would let one activated org look
-like many.
+That premise was a BUG, not a design. A scheduled first publish reported
+success and left the URL 404ing (AGL-1589). The executor now registers the
+routing entry, so the case AGL-1562 ruled out — a first publish that is
+scheduled rather than clicked — is real, and it is an activation no browser is
+present to report.
 
-The gap AGL-1562 worried about (a first publish that is scheduled rather than
-clicked, going uncounted) cannot occur for the same reason: nothing in that
-path makes an unpublished screen reachable. `apply-publish-schedule.spec.ts`
-pins it, so if the executor ever learns to register a route, the case goes red
-and the analytics decision gets made again with it.
+So `sendGa4SitePublished` (same module as the server-side `purchase`) sends it,
+and only in that case: **a due publish that registers a NEW routing entry**. A
+republish still sends nothing, because it is still a content update. The client
+id is derived from the HOST rather than randomly — one site is one synthetic GA
+user however many of its screens go live on a timer, which is the same
+inflation guard `publishScreenRoute` applies by firing only when a route goes
+live.
+
+The pinned case in `apply-publish-schedule.spec.ts` did what it was written to
+do: it went red the moment the executor learned to register a route, and now
+asserts the other half of the argument — that a republish reports nothing.
+
+> **Deployment gap:** `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` are not set on
+> the **aglyn-tenant** Vercel project, which is where this code runs, so the
+> event is a clean no-op there today. See the table below.
 
 ### 6. Authored events go through the same door, under a different name (AGL-1587)
 
@@ -332,12 +345,21 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    Without both, the server-side `purchase` is a silent no-op — which is the
    correct behaviour on self-hosted deployments and in development.
 
+   **Both projects, not one (AGL-1589).** `purchase` is sent by the console and
+   by the marketplace webhook; `site_published` is sent by the TENANT, from the
+   publish-schedule beat. Verified 2026-08-14 with `vercel env ls production`:
+   neither variable is listed on **aglyn-tenant**, and neither is listed on
+   **aglyn-console** either — so unless they are team-level shared variables
+   (which that listing does not show), the server-side `purchase` is also
+   no-opping in production today. Worth checking in the dashboard before
+   assuming any server-side event is arriving.
+
 ### Environment variables
 
 | Var | Where | Purpose |
 | --- | --- | --- |
-| `GA4_MEASUREMENT_ID` | Vercel production (console) | Target property for server-side `purchase` |
-| `GA4_API_SECRET` | Vercel production (console), **sensitive** | Measurement Protocol auth |
+| `GA4_MEASUREMENT_ID` | Vercel production (console **and tenant**) | Target property for server-side `purchase` and `site_published` |
+| `GA4_API_SECRET` | Vercel production (console **and tenant**), **sensitive** | Measurement Protocol auth |
 | `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set | Console's client-side GA + `client_id` capture |
 
 Documented in `apps/console/.env.development.local.example`.

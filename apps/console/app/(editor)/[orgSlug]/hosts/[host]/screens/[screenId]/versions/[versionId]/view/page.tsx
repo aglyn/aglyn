@@ -309,6 +309,14 @@ function ScreenDetails() {
     screen?.publishSchedule?.status === 'skipped-unentitled'
       ? screen.publishSchedule
       : undefined
+  // A publish that came due on a screen the executor could not give an
+  // address to (AGL-1589). Surfaced for the same reason as the one above, and
+  // it is the more actionable of the two: the fix is the Slug field directly
+  // below this chip.
+  const unroutableSchedule =
+    screen?.publishSchedule?.status === 'skipped-unroutable'
+      ? screen.publishSchedule
+      : undefined
 
   // --- Edit details dialog ---------------------------------------------
   const [editor, setEditor] = useState<{
@@ -1046,6 +1054,26 @@ function ScreenDetails() {
                                     : 'publish'
                                 } — plan does not include scheduling`
                               }
+                              color="warning"
+                              size="small"
+                              variant="outlined"
+                              onDelete={handleScheduleCancel}
+                            />
+                          </Tooltip>
+                        ) : null}
+                        {unroutableSchedule ? (
+                          <Tooltip
+                            title={
+                              'The scheduled publish ran, but this screen has ' +
+                              'no address it could be published at — its slug ' +
+                              "(or a parent page's) is missing, or another " +
+                              'screen is already published at that path. Set ' +
+                              'the slug below, publish or fix the parent, ' +
+                              'then schedule it again.'
+                            }
+                          >
+                            <Chip
+                              label="Did not publish — no available address"
                               color="warning"
                               size="small"
                               variant="outlined"

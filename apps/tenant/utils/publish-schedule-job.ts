@@ -143,12 +143,25 @@ registerPluginJob({
         // harmless and keeps the failure isolation of this loop intact.
         revalidateTag(tenantDataTag(hostId), 'max')
 
-        const hostSnapshot = await readHost(hostId)
+        let hostSnapshot = await readHost(hostId)
         if (!hostSnapshot.exists) continue
-        const screens = (hostSnapshot.get('screens') ?? {}) as Record<
+        let screens = (hostSnapshot.get('screens') ?? {}) as Record<
           string,
           string
         >
+        // The executor can now REGISTER a routing entry (AGL-1589), so a host
+        // snapshot cached earlier in THIS batch can predate the write for this
+        // screen — and a missing entry is exactly the case that needs the
+        // freshest read, because a first publish is the one whose page has
+        // never been generated. Re-read once on a miss rather than dropping
+        // the cache wholesale; a hit (the common republish) still pays one
+        // read per host per beat. An unpublish also misses, and re-reading to
+        // confirm an entry is gone is a read well spent.
+        if (!screens[doc.id]) {
+          hostCache.delete(hostId)
+          hostSnapshot = await readHost(hostId)
+          screens = (hostSnapshot.get('screens') ?? {}) as Record<string, string>
+        }
         const routePath = screens[doc.id]
         // An unpublish drops the routing-map entry, so `routePath` is gone by
         // now. That path still needs its cache dropped — otherwise the page
