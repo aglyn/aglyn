@@ -148,6 +148,69 @@ So the page never claims a state it has not read back:
 - A write that returns but whose re-read disagrees is reported as
   `NOT CONFIRMED`, loudly. Treat it as an unresolved incident, not a success.
 
+### What a caller is told
+
+You cannot check a lockdown by trying it yourself. Staff bypass every scope —
+that is the un-panic invariant, and it is deliberate — so your own request
+succeeds no matter what is locked. Signing out does not help either: without a
+credential the request is refused as unauthenticated long before the lockdown
+verdict runs. The customer-visible refusal lives in a band between those two
+that a staff operator has no way to stand in.
+
+**What would this caller be told?** answers it from the other side. Describe the
+caller — a user uid, a workspace id, a site id, or any combination — and the
+server runs the same verdict every API route runs and shows you:
+
+- whether that caller is refused, and under which scope and reason;
+- the **exact response body** they receive, built by the same code that builds
+  the real 423 — not a summary of it;
+- which capabilities (signups, uploads, checkout, marketplace installs, AI
+  assist) are refused for them, since a feature lock bites without touching any
+  scope;
+- whether the account you named is itself **staff**, in which case it bypasses
+  everything and the answer says nothing about whether a lock is engaged.
+
+Two honesty rules the panel follows, and you should read it by:
+
+1. **It is computed, not observed.** It is what this server derives from state
+   it reads at that moment. It does not prove that any route returned it, and
+   other server processes converge within about 15 seconds, so a lock armed
+   seconds ago may not yet be enforced everywhere.
+2. **A scope you leave blank is not evaluated.** "Not refused" for a bare uid
+   says nothing about that person's workspace. The panel lists exactly which
+   scopes the answer covers, and a workspace or site id that matches nothing is
+   reported as such rather than counted as clear.
+
+Reading is open to every staff role — during an incident the person who needs
+to answer "what is this customer actually seeing right now" is usually support,
+not the `super`-role operator who armed the lock.
+
+To confirm the refusal **on the wire** rather than in the abstract, you need a
+caller who is genuinely refused. An org API key is the cheapest one: it carries
+no staff claim and no uid, so `/api/v1` refuses its own holder. See
+[Verifying a lockdown on the wire](#verifying-a-lockdown-on-the-wire).
+
+### Verifying a lockdown on the wire
+
+A read-only API key on a disposable workspace turns the whole 423 sweep into one
+curl, because the customer REST API deliberately evaluates the verdict with
+neither a staff claim nor a uid:
+
+```bash
+# Unlocked: 200 with the service document.
+curl -i -H "Authorization: Bearer $AGLYN_DRILL_KEY" https://app.aglyn.com/api/v1
+
+# With that workspace locked: 423 Locked, Retry-After, and the notice body.
+# {"error":"locked","scope":"org","reason":"billing","title":"Account on hold",
+#  "message":"…","contact":"support@aglyn.com","untilMs":1786695133044}
+```
+
+The same key proves the platform scope (lock the platform, the same call answers
+`"scope":"platform"`). Feature scope needs a caller on a feature chokepoint —
+`signups` grants no staff bypass, so a staff token on
+`POST /api/auth/legal-acceptance` is refused under a signups lock and can be
+checked without any extra credential.
+
 ### What the audit row records
 
 Every lock and lift writes an `adminAudit` row carrying the actor, the `scope`,
