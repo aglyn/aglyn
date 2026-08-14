@@ -71,6 +71,20 @@ export const LINK_PREF: MakeLinkElementsConfig = [
   ],
 ]
 
+/**
+ * Font preconnects ONLY — no ad-tech, no analytics (AGL-1672).
+ *
+ * This list used to preconnect to `googletagmanager`, `google-analytics`,
+ * `adservice.google.com`, `static.doubleclick.net` and
+ * `googleads.g.doubleclick.net`. Nothing in the workspace ever loaded a script
+ * from any of them, so the preconnects announced ad-tech relationships that
+ * did not exist — while sitting in a SHARED lib, where any future Pages-Router
+ * surface would have inherited them for free.
+ *
+ * Keep this list to origins we genuinely fetch from. The two survivors pair
+ * with the Google Fonts stylesheet in `LINK_PREF` above; if that stylesheet is
+ * ever self-hosted, these two go with it.
+ */
 export const LINK_PRIORITY: MakeLinkElementsConfig = [
   [
     'preconnect',
@@ -84,30 +98,5 @@ export const LINK_PRIORITY: MakeLinkElementsConfig = [
       crossOrigin: 'anonymous',
       id: 'preconnect-fonts-gstatic',
     },
-  ],
-  [
-    'preconnect',
-    'https://www.googletagmanager.com',
-    { id: 'preconnect-googletagmanager' },
-  ],
-  [
-    'preconnect',
-    'https://www.google-analytics.com',
-    { id: 'preconnect-google-analytics' },
-  ],
-  [
-    'preconnect',
-    'https://adservice.google.com',
-    { id: 'preconnect-adservice-google' },
-  ],
-  [
-    'preconnect',
-    'https://static.doubleclick.net',
-    { id: 'preconnect-static-doubleclick' },
-  ],
-  [
-    'preconnect',
-    'https://googleads.g.doubleclick.net',
-    { id: 'preconnect-googleads-g' },
   ],
 ]

@@ -26,8 +26,6 @@ import {
   createWithThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import { Fragment } from 'react'
-import HsEmbedScript from '../components/hs-embed-script'
-import VisitorQueueScript from '../components/visitor-queue-script'
 import { withAppController } from '@aglyn/shared-util-fbclient'
 
 let app
@@ -83,12 +81,6 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
           <meta name="twitter:title" content={APP_WWW.TITLE} />
           <meta name="twitter:description" content={APP_WWW.DESCRIPTION} />
           <meta name="twitter:image" content={SOCIAL_CARD} />
-          {!IS_PRODUCTION ? null : (
-            <Fragment>
-              <HsEmbedScript />
-              <VisitorQueueScript />
-            </Fragment>
-          )}
           {headChildren}
         </Fragment>
       }
