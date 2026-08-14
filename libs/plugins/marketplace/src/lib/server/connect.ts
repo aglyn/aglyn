@@ -99,6 +99,13 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
         'accounts',
         new URLSearchParams({
           type: 'express',
+          // Explicit capabilities (AGL-1547): without them the account's
+          // abilities depend on unverified dashboard platform-profile
+          // defaults, and a destination charge (`transfer_data`) requires
+          // the destination to hold `transfers` — an account onboarded
+          // without it takes money that can never pay out.
+          'capabilities[card_payments][requested]': 'true',
+          'capabilities[transfers][requested]': 'true',
           'metadata[publisherOrgId]': orgId,
           ...(decoded.email ? { email: decoded.email } : {}),
         }),
@@ -112,12 +119,22 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
 
     const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
+    // Payout readiness rides along (AGL-1547): the gate stays on
+    // charges_enabled, but the profile records whether the money can
+    // actually LEAVE Stripe — the live drill (AGL-1548) reads it, and a
+    // seller panel can warn before the first sale strands funds.
+    const payoutsEnabled = Boolean(account?.payouts_enabled)
     await profileRef.set(
-      { stripeChargesEnabled: chargesEnabled },
+      {
+        stripeChargesEnabled: chargesEnabled,
+        stripePayoutsEnabled: payoutsEnabled,
+      },
       { merge: true },
     )
     if (chargesEnabled) {
-      return res.status(200).json({ accountId, chargesEnabled: true })
+      return res
+        .status(200)
+        .json({ accountId, chargesEnabled: true, payoutsEnabled })
     }
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
