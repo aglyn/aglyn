@@ -26,6 +26,8 @@ import {
   MAX_ORG_CREATIONS_PER_WINDOW,
   ORG_CREATION_WINDOW_MINUTES,
   memoizeWithTtl,
+  RATE_LIMIT_DEGRADED_WINDOW_MINUTES,
+  rateLimitsHealth,
   signupsHealth,
 } from './health-report'
 
@@ -264,6 +266,97 @@ describe('signupsHealth', () => {
       'threshold',
       'windowMinutes',
     ])
+  })
+})
+
+describe('rateLimitsHealth', () => {
+  const NOW = 1_755_100_800_000
+  const minutesAgo = (minutes: number) => NOW - minutes * 60_000
+
+  it('is ok when no limiter has fallen back', () => {
+    const check = rateLimitsHealth([], 4, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.degradedCalls).toBe(0)
+    expect(check.minutesSinceLast).toBeNull()
+    expect(check.windowMinutes).toBe(RATE_LIMIT_DEGRADED_WINDOW_MINUTES)
+  })
+
+  it('is degraded when a limiter fell back inside the window', () => {
+    const check = rateLimitsHealth(
+      [{ calls: 12, episodes: 1, lastAtMs: minutesAgo(3), code: 'unavailable' }],
+      4,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('rate-limiter-degraded')
+    expect(check.degradedCalls).toBe(12)
+    expect(check.degradedEpisodes).toBe(1)
+    expect(check.minutesSinceLast).toBe(3)
+  })
+
+  it('goes GREEN again once the window has passed', () => {
+    // The whole point of AGL-1693's constraint. Markers live 30 days, so a
+    // recovered blip would otherwise hold this red for a month and the check
+    // would be muted — which is worse than not having it. Contrast
+    // /api/health/backups, red by design until the bad backup is gone.
+    const marker = {
+      calls: 400,
+      episodes: 3,
+      lastAtMs: minutesAgo(RATE_LIMIT_DEGRADED_WINDOW_MINUTES + 1),
+    }
+    expect(rateLimitsHealth([marker], 4, NOW).ok).toBe(true)
+    expect(rateLimitsHealth([marker], 4, NOW).degradedCalls).toBe(0)
+    // …and it was red while it was inside the window.
+    expect(
+      rateLimitsHealth(
+        [marker],
+        4,
+        marker.lastAtMs + (RATE_LIMIT_DEGRADED_WINDOW_MINUTES - 1) * 60_000,
+      ).ok,
+    ).toBe(false)
+  })
+
+  it('sums across instances and dates itself from the most recent', () => {
+    // Several markers in one window means several instances degraded.
+    const check = rateLimitsHealth(
+      [
+        { calls: 5, episodes: 1, lastAtMs: minutesAgo(20) },
+        { calls: 7, episodes: 2, lastAtMs: minutesAgo(2) },
+        { calls: 999, episodes: 9, lastAtMs: minutesAgo(90) },
+      ],
+      4,
+      NOW,
+    )
+    expect(check.degradedCalls).toBe(12)
+    expect(check.degradedEpisodes).toBe(3)
+    expect(check.minutesSinceLast).toBe(2)
+  })
+
+  it('ignores a marker with no `lastAtMs` rather than counting it as recent', () => {
+    // A malformed or partially-written marker must not fake an incident.
+    const check = rateLimitsHealth([{ calls: 4, episodes: 1 }], 4, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.degradedCalls).toBe(0)
+  })
+
+  it('is degraded when the marker query itself failed', () => {
+    // An alarm that cannot see the thing it watches must not report calm —
+    // and this one reads the collection the limiter writes to.
+    const check = rateLimitsHealth(null, 4, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('markers-unavailable')
+    expect(check.degradedCalls).toBeNull()
+    expect(check.degradedEpisodes).toBeNull()
+  })
+
+  it('honours the threshold override, including the forced-failure lever', () => {
+    const marker = { calls: 3, episodes: 1, lastAtMs: minutesAgo(1) }
+    expect(rateLimitsHealth([marker], 4, NOW, 5).ok).toBe(true)
+    expect(rateLimitsHealth([marker], 4, NOW, 5).threshold).toBe(5)
+    // -1 makes even a clean probe report degraded: the way the alert path is
+    // proven end to end without inducing a real Firestore outage.
+    expect(rateLimitsHealth([], 4, NOW, -1).ok).toBe(false)
   })
 })
 

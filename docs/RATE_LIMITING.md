@@ -122,19 +122,44 @@ To see whether a window degraded, list the prefix:
 ```
 
 A marker is per instance per episode, so several documents in one minute bucket
-means several instances degraded — `episodes` counts them. Real alerting is
-still owed; this is the record it would read.
+means several instances degraded — `episodes` counts them.
 
-Note the distinction from a fail-*open* default, the pattern the pre-release
-audit flagged as systemic. The canonical example was the CSRF middleware's
-`CSRF_SECRET = process.env.CSRF_SECRET || ''`, which signed with an empty key
-when unset — making tokens forgeable while still reporting success. AGL-795
-made it fail closed; AGL-919 then deleted the module outright, because an
-audit found it had **no callers at all**: the fail-closed guard protected a
-path nothing executed, and its presence in the env implied a protection that
-did not exist. Degrading is only defensible here because the fallback still
-enforces *something*, and because this limiter is actually wired to live
-routes — which is the first thing to check before trusting any control.
+### …and only if someone is TOLD (AGL-1693)
+
+The marker above only helps a person who already suspects something and goes
+looking in Firestore. `GET /api/health/rate-limits` is the reader:
+
+```
+GET https://app.aglyn.com/api/health/rate-limits
+→ 200 { "status": "ok",       "checks": { "rateLimits": { "degradedCalls": 0, … } } }
+→ 503 { "status": "degraded", "checks": { "rateLimits": {
+          "code": "rate-limiter-degraded", "degradedCalls": 240,
+          "degradedEpisodes": 2, "minutesSinceLast": 4, "windowMinutes": 30 } } }
+```
+
+Same 200/503 contract as the sibling health endpoints, so the GCP uptime check
++ email path already watching serving watches this too — see
+`docs/UPTIME_AND_SLA.md`, including the note that the GCP check itself is still
+owed.
+
+**It reports a trailing 30-minute window, and that is the whole design.**
+Markers live 30 days. A check that asked "does a marker exist" would sit red
+for a month after a thirty-second blip, and a check that is permanently red
+gets muted — worse than not having one. This is the deliberate opposite of
+`/api/health/backups`, red by design until the bad backup is gone, because a
+missing restore point is a *condition* that persists while a degraded limiter
+window is an *event* that is already over. The window floor is set by the alert
+path (probe memo + check period + sustained-failure delay), not by taste.
+
+The query filters on `lastAtMs`, not the document id: ids are bucketed on
+`firstAtMs`, so an id-range window would miss precisely the long episodes. It
+is a range plus an `orderBy` on one field, so the automatic single-field index
+serves it — **no composite index, no `firebase-firestore.indexes.json` change
+and no rules change**, same property the markers themselves have.
+
+`RATE_LIMIT_ALARM_MAX_CALLS` overrides the "any fallback is degraded" default
+without a deploy. `-1` makes even a clean probe report degraded: the way to
+prove the alert path end to end without inducing a Firestore outage.
 
 ## Operational: enable the TTL policy
 

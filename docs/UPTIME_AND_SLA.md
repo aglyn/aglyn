@@ -21,6 +21,8 @@ GET  https://app.aglyn.com/api/health          console
 GET  https://demo.aglyn.com/api/health         tenant runtime
 GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
 GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
+GET  https://app.aglyn.com/api/health/rate-limits
+                                               rate-limiter fallbacks (AGL-1693)
 HEAD <any>                                     liveness only, touches nothing
 ```
 
@@ -137,11 +139,22 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `rate-limiter` ⚠️ | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
 Notes that keep these honest:
 
+- ⚠️ **`rate-limiter` is the only row above that is not yet created in GCP.**
+  The endpoint ships and is spec-covered; the uptime check and its alert policy
+  are a console/API action against production and are owed (AGL-1693). Until
+  that is done the endpoint answers correctly and nobody is listening, which
+  is the same gap AGL-1693 was filed for — one layer up. Create it exactly like
+  `signup-volume`: uptime check on the path, 5-minute period, JSONPath matcher
+  `$.status == "ok"`, notification channel `7043898327231541746`. Prove the
+  path end to end with the forced-failure lever (`RATE_LIMIT_ALARM_MAX_CALLS=-1`
+  in the console's Vercel env → every probe reports degraded → expect the
+  email → unset), which is why that knob exists.
 - `console-imaging` exists because `imaging.ok` is **deliberately body-only** —
   variant encoding being down is degraded, not an outage, so it must not 503
   the main check. A status-code monitor is blind to it; this check reads the
@@ -164,6 +177,27 @@ Notes that keep these honest:
   stdout never reaches GCP Logging (see the honest-gaps list), so the count
   is read from the `orgs` collection itself — which also means a creation
   path that skips any log line still moves the alarm.
+- `rate-limiter` is the AGL-1693 listener for AGL-1679's degradation markers.
+  `consumeRateLimit` fails **soft** — a Firestore blip drops every durable
+  limiter (sign-in, passkeys, password reset, email verification, org create,
+  form submit, page-protection unlock, the public REST API's per-key quota) to
+  a per-instance cap. AGL-1679 made that findable by writing one marker on
+  recovery; nothing read it, so a degraded window would still have passed
+  unnoticed in real time. The endpoint 503s when any fallback happened in the
+  **trailing 30 minutes**. **When it fires:** the limiters were wider than
+  advertised for a window, in the direction of allowing MORE — check Firestore
+  health and GCP status first, then `docs/RATE_LIMITING.md` for what the
+  fallback still enforced.
+- **The 30-minute window is the design, not a default.** Markers carry a
+  30-day `expiresAt`, so a check that asked "does a marker exist" would sit red
+  for a month after a thirty-second blip, and a permanently red check gets
+  muted. That is the deliberate **opposite** of `backup-state`, which is red by
+  design until the bad backup is gone (`DISASTER_RECOVERY.md` gap 2) because a
+  missing restore point is a *condition* that persists; a degraded limiter
+  window is an *event* that is already over. The window's floor is set by this
+  alert path, not by taste: 5 min probe memo + 5 min check period + ~10 min
+  sustained-failure before the email means anything under ~20 minutes can go
+  red and green again before anyone is told.
 - `customer-site` asserts on the demo site's own content. If someone renames
   the demo site's title away from "Aglyn Demo", this check goes red — update
   the content matcher, don't delete the check.
