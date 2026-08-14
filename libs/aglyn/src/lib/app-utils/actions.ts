@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveAuthoredEventName } from './analytics-events'
 import { HOST_EVENT_TYPES } from './workflows'
 
 /**
@@ -592,8 +593,20 @@ export function validateHostAction(action: HostAction): string | null {
     if (step.type === 'redirect' && !step.url?.trim() && !step.screenId) {
       return `${label}: pick a screen or enter the destination URL`
     }
-    if (step.type === 'trackGaEvent' && !step.eventName?.trim()) {
-      return `${label}: name the analytics event`
+    if (step.type === 'trackGaEvent') {
+      if (!step.eventName?.trim()) {
+        return `${label}: name the analytics event`
+      }
+      // AGL-1587: the author-facing half of the runtime refusal. The runtime
+      // can only drop a bad name silently — it is executing for a VISITOR —
+      // so the name is checked HERE, where the person who can fix it is.
+      const resolved = resolveAuthoredEventName(step.eventName)
+      if (resolved.reason === 'reserved') {
+        return `${label}: "${step.eventName.trim()}" is a reserved analytics event name — pick another`
+      }
+      if (!resolved.name) {
+        return `${label}: the analytics event name must start with a letter`
+      }
     }
     if (step.type === 'sendEmail') {
       if (!step.subject?.trim()) return `${label}: enter the subject`

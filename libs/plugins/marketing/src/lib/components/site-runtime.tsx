@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { trackAuthoredEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import DOMPurify from 'dompurify'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
@@ -385,7 +386,12 @@ function AutomationsEngine(props: {
               { hover: automation.event === 'elementHoverEnter' },
             )
           } else if (step.type === 'trackGaEvent') {
-            ;(window as any).gtag?.('event', step.eventName, step.params ?? {})
+            // AGL-1587: the name and the params are AUTHORED, which makes
+            // this the least trustworthy analytics input in the repo — a
+            // param could carry a form field's value. It goes through the
+            // shared sanitizer and the reserved-name refusal like everything
+            // else, never raw gtag.
+            trackAuthoredEvent(step.eventName, step.params)
           } else if (step.type === 'siteAlert') {
             showToast(
               String(step.message ?? '').slice(0, 300),

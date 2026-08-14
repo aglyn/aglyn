@@ -18,9 +18,13 @@
  */
 
 import {
+  ANALYTICS_EVENT_NAMES,
   configureAnalyticsTransport,
   resetAnalyticsTransport,
+  resetAuthoredEventWarnings,
+  resolveAuthoredEventName,
   sanitizeEventParams,
+  trackAuthoredEvent,
   trackEvent,
 } from './analytics-events'
 
@@ -220,6 +224,149 @@ describe('analytics-events (AGL-1561)', () => {
       })
 
       expect(calls[0][2]).toEqual({ form_name: 'Contact' })
+    })
+  })
+
+  describe('authored events (AGL-1587): the one untyped call site', () => {
+    let warn: jest.SpyInstance
+
+    beforeEach(() => {
+      resetAuthoredEventWarnings()
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    })
+
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    it('runs the PII sanitizer on author-supplied params', () => {
+      const calls = installGtag()
+
+      // Exactly the shape the issue describes: an author binds a form field
+      // into the step's params and a customer's address heads for GA.
+      trackAuthoredEvent('quote_requested', {
+        plan: 'pro',
+        email: 'zach@aglyn.com',
+        contact: 'someone@example.com',
+      })
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0][1]).toBe('quote_requested')
+      // The denied KEY is gone, and so is the email-shaped VALUE under an
+      // innocent key — which is the half a denylist alone would miss.
+      expect(calls[0][2]).toEqual({ plan: 'pro' })
+    })
+
+    it('reduces a URL param to origin + pathname, so the query string stays out', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('doc_opened', {
+        page: 'https://acme.com/thanks?email=buyer@acme.com&session=abc123',
+      })
+
+      expect(calls[0][2]).toEqual({ page: 'https://acme.com/thanks' })
+    })
+
+    it('caps a long authored value at the same 100 characters', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('essay_submitted', { note: 'x'.repeat(500) })
+
+      expect((calls[0][2].note as string).length).toBe(100)
+    })
+
+    it('refuses every name in our own taxonomy, so an authored hit cannot pollute a real metric', () => {
+      const calls = installGtag()
+
+      for (const name of ANALYTICS_EVENT_NAMES) {
+        trackAuthoredEvent(name, { value: 999 })
+      }
+
+      // Nothing was sent at all — `purchase` in particular must never gain a
+      // hand-authored row next to the Stripe-sourced revenue.
+      expect(calls).toHaveLength(0)
+      expect(ANALYTICS_EVENT_NAMES).toContain('purchase')
+      expect(ANALYTICS_EVENT_NAMES).toContain('sign_up')
+    })
+
+    it('refuses GA4 reserved names and reserved prefixes', () => {
+      const calls = installGtag()
+
+      for (const name of [
+        'session_start',
+        'first_visit',
+        'screen_view',
+        'firebase_thing',
+        'google_thing',
+        'ga_thing',
+      ]) {
+        trackAuthoredEvent(name, {})
+      }
+
+      expect(calls).toHaveLength(0)
+    })
+
+    it('refuses a reserved name however it was typed', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('  Purchase  ', { value: 1 })
+      trackAuthoredEvent('Sign Up', { value: 1 })
+
+      expect(calls).toHaveLength(0)
+    })
+
+    it('warns once per refused name rather than on every fire', () => {
+      trackAuthoredEvent('purchase', {})
+      trackAuthoredEvent('purchase', {})
+      trackAuthoredEvent('purchase', {})
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0][0])).toMatch(/reserved/)
+    })
+
+    it('normalizes a human-typed name instead of letting GA drop it', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('CTA Click!', {})
+
+      expect(calls[0][1]).toBe('cta_click')
+    })
+
+    it('caps the name at GA4s 40 characters', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('a'.repeat(80), {})
+
+      expect((calls[0][1] as string).length).toBe(40)
+    })
+
+    it('refuses a name with nothing usable left in it', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('123', {})
+      trackAuthoredEvent('   ', {})
+      trackAuthoredEvent(undefined, {})
+
+      expect(calls).toHaveLength(0)
+      expect(resolveAuthoredEventName('123').reason).toBe('unusable')
+    })
+
+    it('is consent-gated exactly like the taxonomy — no gtag, no event, no queue', () => {
+      // No transport and no window.gtag: an ungranted visitor.
+      expect(() => trackAuthoredEvent('cta_click', {})).not.toThrow()
+
+      const calls = installGtag()
+      trackAuthoredEvent('cta_click', {})
+
+      expect(calls).toHaveLength(1)
+    })
+
+    it('sends nothing when the step carries no params at all', () => {
+      const calls = installGtag()
+
+      trackAuthoredEvent('cta_click')
+
+      expect(calls[0][2]).toEqual({})
     })
   })
 })

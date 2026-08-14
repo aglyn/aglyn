@@ -71,6 +71,15 @@
  *
  * Sanitizing here rather than at each call site is the point: a new call site
  * cannot forget.
+ *
+ * ## Authored events (AGL-1587)
+ *
+ * One call site cannot use the taxonomy at all: the `trackGaEvent` action step,
+ * whose event name and params are typed by a SITE AUTHOR in the interaction
+ * builder. A closed union cannot contain a name nobody has written yet, so
+ * {@link trackAuthoredEvent} is the escape hatch — and it is deliberately the
+ * only one, so that untrusted input still passes {@link sanitizeEventParams}
+ * rather than reaching `window.gtag` raw.
  */
 
 /**
@@ -383,10 +392,24 @@ export function trackEvent<K extends AnalyticsEventName>(
   name: K,
   params: AnalyticsEventParams[K],
 ): void {
-  const safe = sanitizeEventParams(params as Record<string, unknown>)
+  deliver(name, sanitizeEventParams(params as Record<string, unknown>))
+}
+
+/**
+ * The one delivery path, shared by {@link trackEvent} and
+ * {@link trackAuthoredEvent}. Takes an ALREADY-sanitized payload — every
+ * caller sanitizes first, which is what keeps "a new call site cannot forget"
+ * true of the authored path too.
+ */
+function deliver(name: string, safe: Record<string, unknown>): void {
   try {
     if (configuredTransport) {
-      configuredTransport(name, safe)
+      // The transport's name parameter is the taxonomy union, which an
+      // authored name is by definition outside. Nominal only: the console is
+      // the sole surface that registers one and it has no authored events
+      // (the interaction runtime is tenant-side), and Firebase `logEvent`
+      // takes an arbitrary string regardless.
+      configuredTransport(name as AnalyticsEventName, safe)
       return
     }
     if (typeof window === 'undefined') return
@@ -397,4 +420,191 @@ export function trackEvent<K extends AnalyticsEventName>(
     // Analytics never breaks the page — the same posture as the error beacon
     // and the pageview beacon.
   }
+}
+
+/**
+ * The taxonomy's names at RUN time. A `Record<AnalyticsEventName, true>` rather
+ * than a hand-kept array so the compiler enforces both directions: adding an
+ * event to {@link AnalyticsEventParams} without adding it here is a missing-key
+ * error, and a name here that is not in the taxonomy is an excess-property one.
+ *
+ * It exists for {@link trackAuthoredEvent}, which has to refuse these names —
+ * a drifting copy would silently re-open the collision it is here to close.
+ */
+const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
+  sign_up: true,
+  login: true,
+  generate_lead: true,
+  select_content: true,
+  org_created: true,
+  host_created: true,
+  site_published: true,
+  stripe_connected: true,
+  begin_checkout: true,
+  purchase: true,
+  click: true,
+}
+
+/** The taxonomy, enumerable. */
+export const ANALYTICS_EVENT_NAMES = Object.keys(
+  TAXONOMY_EVENT_NAMES,
+) as AnalyticsEventName[]
+
+/**
+ * GA4's own reserved event names — GA drops a hit that uses one, so sending it
+ * is not pollution but silence, which is the worse failure of the two because
+ * nothing anywhere says so.
+ */
+const GA4_RESERVED_EVENT_NAMES: ReadonlySet<string> = new Set([
+  'ad_activeview',
+  'ad_click',
+  'ad_exposure',
+  'ad_impression',
+  'ad_query',
+  'ad_reward',
+  'adunit_exposure',
+  'app_background',
+  'app_clear_data',
+  'app_exception',
+  'app_install',
+  'app_remove',
+  'app_store_refund',
+  'app_store_subscription_cancel',
+  'app_store_subscription_convert',
+  'app_store_subscription_renew',
+  'app_update',
+  'app_upgrade',
+  'dynamic_link_app_open',
+  'dynamic_link_app_update',
+  'dynamic_link_first_open',
+  'error',
+  'first_open',
+  'first_visit',
+  'in_app_purchase',
+  'notification_dismiss',
+  'notification_foreground',
+  'notification_open',
+  'notification_receive',
+  'os_update',
+  'screen_view',
+  'session_start',
+  'user_engagement',
+])
+
+/** GA4 reserves these prefixes outright, whatever follows them. */
+const GA4_RESERVED_PREFIXES = ['firebase_', 'google_', 'ga_'] as const
+
+/** GA4's hard limit on an event name. Over it, GA drops the event. */
+const MAX_EVENT_NAME_LENGTH = 40
+
+/**
+ * The outcome of putting an authored name through GA4's rules, so the
+ * interaction builder can say WHY it refused a name and the runtime can drop
+ * the event for the same reason.
+ */
+export interface ResolvedAuthoredEventName {
+  /** The name to send, or null when the event must not be sent at all. */
+  name: string | null
+  /**
+   * `reserved` — collides with the taxonomy or with GA4's own names.
+   * `unusable` — nothing survives normalization (empty, or no leading letter).
+   */
+  reason?: 'reserved' | 'unusable'
+}
+
+/**
+ * Put an authored event name through GA4's naming rules and our own.
+ *
+ * Normalization is forgiving on purpose: `"CTA Click!"` becomes `cta_click`
+ * and still reports, where GA would have dropped it. Names already sitting in
+ * published sites were never validated, so refusing them outright would delete
+ * working metrics from a paying customer's property to fix a formatting nit.
+ *
+ * Collisions, in contrast, are refused rather than rewritten. On a tenant site
+ * the authored events and OUR events (`generate_lead` from the form element,
+ * `select_content`/`click` from the link listener) land in the same property,
+ * so an authored `purchase` does not merely add noise — it mixes hand-authored
+ * hits into a real revenue number. Refusing is also what keeps authored events
+ * separable in reports: an event that is not one of {@link ANALYTICS_EVENT_NAMES}
+ * is, by construction, authored.
+ *
+ * Deliberately NOT prefixed (`site_*`) to achieve that separation. A prefix
+ * would rename events already flowing into customers' properties and break
+ * every report and key-event conversion configured on the old name — a
+ * migration cost paid by people who did nothing wrong.
+ */
+export function resolveAuthoredEventName(
+  raw: string | undefined | null,
+): ResolvedAuthoredEventName {
+  const normalized = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    // Anything GA4 does not allow in a name becomes an underscore...
+    .replace(/[^a-z0-9_]+/g, '_')
+    // ...and a name must START with a letter, so drop what precedes one.
+    .replace(/^[^a-z]+/, '')
+    .replace(/_{2,}/g, '_')
+    .slice(0, MAX_EVENT_NAME_LENGTH)
+    // Truncation can leave a trailing underscore; so can the substitution.
+    .replace(/_+$/, '')
+  if (!normalized) return { name: null, reason: 'unusable' }
+  if (
+    TAXONOMY_EVENT_NAMES[normalized as AnalyticsEventName] ||
+    GA4_RESERVED_EVENT_NAMES.has(normalized) ||
+    GA4_RESERVED_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  ) {
+    return { name: null, reason: 'reserved' }
+  }
+  return { name: normalized }
+}
+
+/** One warning per distinct name per page load — an `everyTime` automation
+ * would otherwise fill the console with the same line. */
+const warnedAuthoredNames = new Set<string>()
+
+/**
+ * Fire an event whose name and params were written by a SITE AUTHOR, not by a
+ * developer — today only the `trackGaEvent` action step (AGL-1587).
+ *
+ * Same consent gate, same sanitizer, same drop-never-queue posture as
+ * {@link trackEvent}; the only difference is that the name is checked at run
+ * time instead of by the compiler, because there is no compiler between the
+ * interaction builder and here.
+ *
+ * A refused event is dropped and warned about in the console rather than
+ * surfaced in the page. Nothing here can reach the author — the code is
+ * running for a VISITOR of their site, and turning the author's configuration
+ * mistake into something a visitor sees would be a worse bug than the missing
+ * metric. The author-facing half lives in `validateHostAction`, which refuses
+ * to save a name this function would refuse to send, so a silent drop should
+ * only ever happen to a step authored before AGL-1587.
+ */
+export function trackAuthoredEvent(
+  name: string | undefined | null,
+  params?: Record<string, unknown> | null,
+): void {
+  const resolved = resolveAuthoredEventName(name)
+  if (!resolved.name) {
+    const key = String(name ?? '')
+    if (!warnedAuthoredNames.has(key)) {
+      warnedAuthoredNames.add(key)
+      try {
+        console.warn(
+          `[aglyn] analytics: the event "${key}" was not sent — ` +
+            (resolved.reason === 'reserved'
+              ? 'that name is reserved. Rename the step in the interaction builder.'
+              : 'an event name must start with a letter.'),
+        )
+      } catch {
+        // A console that throws is still not worth breaking the page for.
+      }
+    }
+    return
+  }
+  deliver(resolved.name, sanitizeEventParams(params ?? undefined))
+}
+
+/** Test seam — forgets which authored names have already been warned about. */
+export function resetAuthoredEventWarnings(): void {
+  warnedAuthoredNames.clear()
 }
