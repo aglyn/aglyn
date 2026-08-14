@@ -112,6 +112,90 @@ end time is restated in the reader's own local time; without one, no return
 time is promised. Genuine failures are untouched — a real error still shows a
 real error.
 
+## Asset quarantine — one file, not the site that serves it
+
+When the problem is **one uploaded file** — malware in a PDF, an abusive image,
+a DMCA-noticed asset — locking the host punishes a customer for one object.
+Quarantine is the proportionate lever: the CDN refuses that file worldwide
+while everything else in the workspace keeps serving.
+
+It is **reversible**, and that is the whole reason it exists instead of
+deletion: a false-positive scan or a successful counter-notice is undone by
+lifting the quarantine, with no re-upload and no lost URL.
+
+**Keyed by the file's content hash, not by the document.** One quarantine
+covers every media document that shares the bytes — a template duplicated into
+forty workspaces is forty documents and one hash — and it keeps biting if the
+same file is uploaded again. Two limits worth knowing:
+
+- The same bytes ingested through *different* upload routes do not currently
+  share a hash, so "re-upload stays quarantined" holds within an upload path.
+- Some documents carry no hash at all (older uploads, and very large files
+  stored as composite objects). For those, quarantine by **asset** instead —
+  it takes the scope segment and media id from the CDN URL.
+
+Use `by: "asset"` deliberately when the same bytes are legitimate elsewhere and
+only *this* workspace's copy is the subject of a report.
+
+| | |
+|---|---|
+| **Where the state lives** | `mediaQuarantines/index` — one document holding the whole deny list |
+| **Who may set or lift** | `super` staff role, same bar as a lockdown |
+| **Reasons** | `malware`, `abuse`, `dmca`, `legal`, `manual` |
+| **Audited** | Every set *and* lift, with reason, actor, expiry, and the message the customer sees |
+| **Expiry** | Optional, same semantics as a lockdown — when it passes, delivery restores with no action and no write |
+
+**What a fetcher sees:** a neutral `410 Gone`, byte-identical to the lockdown
+refusal. It deliberately says nothing about *why* — that a takedown notice or a
+malware finding exists on a specific file is not something an anonymous fetcher
+has standing to learn. The owning workspace is told the reason in the console;
+the internet is told the file is gone.
+
+**Billing is untouched, on purpose.** Quarantine does not delete the object,
+does not modify the media document, and does not change the storage counter.
+The file still exists and still belongs to the workspace — it is *suppressed*,
+not erased — so the customer's storage usage and invoice are unchanged. The
+customer notice says so explicitly, because someone whose file stops loading
+will otherwise assume their data was deleted.
+
+**How fast it bites, and what it cannot reach.** A warm server refuses within
+about 15 seconds of the write, and restores just as fast on a lift — the
+refusal is never cached, precisely so a lift takes effect immediately. What
+quarantine cannot recall is bytes *already* in a cache: a browser may hold an
+image up to 60 seconds, and the CDN edge may hold an image up to an hour. For
+an urgent takedown, quarantine stops the bleeding at the origin immediately but
+is not a purge; if the file must be unreachable everywhere *now*, quarantine it
+and then lock the scope as well.
+
+There is no staff UI yet — quarantine is operated through
+`POST /api/admin/media-quarantine` with a staff bearer token:
+
+```bash
+# Disable one file by its content hash (visible on the asset in the DAM).
+curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"quarantine","contentHash":"0123456789abcdef",
+       "scopeSegment":"org:acme","mediaId":"m1","reason":"dmca",
+       "note":"Notice #4417 — staff eyes only",
+       "message":"Disabled pending review of a copyright claim."}' \
+  https://app.aglyn.com/api/admin/media-quarantine
+
+# Lift it.
+curl -X POST -H "Authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"release","contentHash":"0123456789abcdef"}' \
+  https://app.aglyn.com/api/admin/media-quarantine
+
+# What is quarantined right now (open to every staff role).
+curl -H "Authorization: Bearer $STAFF_TOKEN" \
+  https://app.aglyn.com/api/admin/media-quarantine
+```
+
+`message` is **shown to the customer**; `note` is the internal rationale and
+never leaves the audit trail. Like every lockdown write, the response carries
+the server's re-read of what it wrote — if `confirmed` is `false`, the write
+returned and the state still disagrees. Treat that as an unresolved incident.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —
