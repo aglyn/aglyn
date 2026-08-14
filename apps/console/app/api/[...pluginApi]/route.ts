@@ -16,12 +16,14 @@
  */
 
 import {
+  lockdownFeatureForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
   resolvePluginApiRoute,
   runLegacyHandler,
 } from '@aglyn/aglyn/server'
 import {
+  featureLockdownRefusal,
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
   getHostDisabledPlugins,
@@ -135,6 +137,21 @@ async function dispatch(
     host: lockdownHost,
   })
   if (locked) return locked
+
+  // Feature lockdown (AGL-1510) for the paths this dispatcher owns:
+  // `ai/assist` → ai-assist (gated even while the handler 501s without an
+  // API key — the switch predates the key), `marketplace/install*` and
+  // `update-artifact` → marketplace-installs (installs-as-a-class), and
+  // `marketplace/checkout` → checkout (a NEW Stripe session is a NEW
+  // Stripe session, whichever surface starts it). Staff bypass follows
+  // LOCKDOWN_FEATURE_STAFF_BYPASS: granted for installs/ai-assist (staff
+  // reproduce and verify during the incident), refused for checkout (a
+  // staff session still charges a real card).
+  const feature = lockdownFeatureForPluginApiPath(path)
+  if (feature) {
+    const featureLocked = await featureLockdownRefusal({ feature, staff })
+    if (featureLocked) return featureLocked
+  }
 
   const route = resolvePluginApiRoute(path)
   if (!route) return Response.json({ error: 'Not found' }, { status: 404 })

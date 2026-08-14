@@ -59,7 +59,7 @@ import {
   type UserCredential,
 } from 'firebase/auth'
 import { doc, setDoc, type Firestore } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useAnalytics,
   useAuth,
@@ -219,6 +219,33 @@ function SignUp() {
   const firebaseAuth = useAuth()
   const firestore = useFirestore()
   const [error, setError] = useState<AuthResultError>(null)
+  // Signups feature lockdown (AGL-1510). The server chokepoints (the mint's
+  // new-account gate, the acceptance recorder) are the enforcement; this is
+  // the HONEST DOOR — the page says signups are paused instead of letting
+  // someone fill the form and hit a mystery refusal. Best-effort: a failed
+  // status read means "not paused" and the server gates still hold.
+  const [signupsPaused, setSignupsPaused] = useState<{
+    message: string
+  } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/lockdown-status?feature=signups')
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload?.locked) return
+        setSignupsPaused({
+          message: String(
+            payload.message ?? 'New signups are temporarily paused.',
+          ),
+        })
+      })
+      .catch(() => {
+        // Unreachable status surface = fail open; the server gates decide.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   // Account creation is contract formation, so both sign-up flows (email and
   // Google) require affirmative agreement to the Terms and Privacy Policy.
   const [consented, setConsented] = useState(false)
@@ -276,6 +303,11 @@ function SignUp() {
   const handleSignUp = useCallback(
     async (values?: any) => {
       if (loading) return
+      // All four doors funnel through here (password, Google popup, Google
+      // redirect) or land here via the /signin isNewUser bounce — one guard
+      // covers them. Server-side, the mint refuses the account anyway; this
+      // stops the doomed attempt before an account gets half-created.
+      if (signupsPaused) return
       // Gate both the email/password submit and the Google button on consent.
       if (!consented) {
         setConsentError(true)
@@ -407,6 +439,7 @@ function SignUp() {
       loading,
       planIntent,
       queueLoading,
+      signupsPaused,
     ],
   )
 
@@ -512,6 +545,14 @@ function SignUp() {
         subscription={{ values: true }}
         clearOnUnmount
       />
+      {signupsPaused ? (
+        // The honest notice (AGL-1510): a paused signup explains itself.
+        // The /signin Google door's isNewUser bounce lands here too, so a
+        // brand-new Google account sees this rather than a failed sign-in.
+        <Alert severity="warning" sx={{ mt: 2, mb: 1 }}>
+          {`New signups are temporarily paused — ${signupsPaused.message}`}
+        </Alert>
+      ) : null}
       {searchParams?.get('consent') === 'required' ? (
         // Bounced from /signin, where Google had just created this account
         // without ever showing the Terms (AGL-1497). Say so, or the redirect
@@ -542,6 +583,7 @@ function SignUp() {
           variant="outlined"
           startIcon={<MdiIcon path={mdiGoogle.path} />}
           onClick={handleGoogleButtonClick}
+          disabled={Boolean(signupsPaused)}
         >
           {'Google'}
         </Button>

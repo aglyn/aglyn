@@ -2670,7 +2670,38 @@ describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () =
         scope: 'user', uid: LOCKED_UID, reasonCode: 'abuse',
         lockedAtMs: Date.now(),
       })
+      // Feature scope (AGL-1510): `feature--{key}` docs live in the SAME
+      // collection so the same match block covers them — these cases pin
+      // that the id shape gets no special treatment anywhere.
+      await setDoc(doc(db, 'lockdowns', 'feature--uploads'), {
+        scope: 'feature', feature: 'uploads', reason: 'security',
+        atMs: Date.now(),
+      })
     })
+  })
+
+  it('feature docs (AGL-1510) ride the same block: staff read, nobody-write', async () => {
+    await mustAllow(
+      'staff reading a feature lockdown',
+      getDoc(doc(authed(STAFF, { staff: true }), 'lockdowns', 'feature--uploads')),
+    )
+    await assertFails(
+      getDoc(doc(authed(OWNER), 'lockdowns', 'feature--uploads')),
+    )
+    await assertFails(getDoc(doc(anon(), 'lockdowns', 'feature--uploads')))
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    await mustDeny(
+      'super staff creating a feature lockdown from the client',
+      setDoc(doc(superStaffDb, 'lockdowns', 'feature--checkout'), {
+        scope: 'feature', feature: 'checkout', reason: 'manual',
+      }),
+    )
+    // Deleting IS the lift, and a bare lift skips the cache invalidation
+    // and the audit row — only /api/admin/lockdown may restore a feature.
+    await mustDeny(
+      'super staff lifting a feature lockdown by deleting the doc',
+      deleteDoc(doc(superStaffDb, 'lockdowns', 'feature--uploads')),
+    )
   })
 
   it('staff read lockdowns; members, the locked user and anon cannot', async () => {

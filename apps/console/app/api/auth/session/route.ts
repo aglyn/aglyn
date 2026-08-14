@@ -16,13 +16,16 @@
  */
 
 import {
+  isLockdownActive,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
+  toEpochMs,
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getFeatureLockdown,
   getLockdownVerdict,
   isImpersonationSession,
   lockdownJsonResponse,
@@ -348,6 +351,37 @@ async function handler(request: Request): Promise<Response> {
             locked.headers.append('Set-Cookie', value)
           }
           return locked
+        }
+        // Feature lockdown: SIGNUPS (AGL-1510). Account creation itself
+        // happens client→Firebase, so the mint is the server chokepoint —
+        // the moment a brand-new account would become usable. The gate only
+        // bites accounts CREATED SINCE THE LOCK BEGAN: the bot wave's
+        // accounts are refused a session, every existing user signs in
+        // untouched. NO staff bypass at the feature stage, deliberately and
+        // consistently with LOCKDOWN_FEATURE_STAFF_BYPASS.signups=false: the
+        // predicate is about the ACCOUNT's age, not the caller's claims, and
+        // staff sign-ins pass because their accounts predate the lock — not
+        // because a claim exempts them. The platform-scope bypass above is
+        // unchanged. Cost: zero reads while the switch is off (TTL-cached
+        // null); one getUser per mint only while an incident is live.
+        const signupsLock = await getFeatureLockdown('signups')
+        if (
+          isLockdownActive(signupsLock, Date.now()) &&
+          typeof signupsLock?.atMs === 'number'
+        ) {
+          const pool = tenantId
+            ? auth.tenantManager().authForTenant(tenantId)
+            : auth
+          const createdAtMs = toEpochMs(
+            (await pool.getUser(decoded.uid)).metadata.creationTime,
+          )
+          if (typeof createdAtMs === 'number' && createdAtMs >= signupsLock.atMs) {
+            const locked = lockdownJsonResponse(signupsLock)
+            for (const value of clearTombstone ?? []) {
+              locked.headers.append('Set-Cookie', value)
+            }
+            return locked
+          }
         }
         if (!isImpersonationSession(decoded)) {
           signInIdentity = {

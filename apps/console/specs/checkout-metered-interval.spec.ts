@@ -59,6 +59,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  // Inert: this suite tests metered-price wiring; the checkout feature gate
+  // (AGL-1510) has its own specs.
+  featureLockdownRefusal: async () => null,
   memberHasOrgPermission: async () => true,
   readOrgBilling: async () => ({ stripeCustomerId: 'cus_test_1' }),
   resolveOrgMembership: async () => ({ orgId: 'org-1', member: { id: 'm-1' } }),

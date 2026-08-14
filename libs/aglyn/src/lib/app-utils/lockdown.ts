@@ -46,7 +46,85 @@
  * that.
  */
 
-export type LockdownScope = 'platform' | 'org' | 'host' | 'user'
+export type LockdownScope = 'platform' | 'org' | 'host' | 'user' | 'feature'
+
+/**
+ * FEATURE scope (AGL-1510): kill one capability platform-wide while
+ * everything else keeps serving. The launch set maps one-to-one onto the
+ * incident shapes the issue names — bot wave → `signups`, malware report →
+ * `uploads`, billing bug → `checkout`, malicious listing →
+ * `marketplace-installs`, provider incident/cost runaway → `ai-assist`.
+ *
+ * Precedence COMPOSES rather than ranks: a platform lock implies every
+ * feature (the feature verdict helpers check platform first), while a
+ * feature lock implies nothing about the platform/org/host/user scopes —
+ * feature states never enter `resolveLockdown`.
+ */
+export type LockdownFeatureKey =
+  | 'signups'
+  | 'uploads'
+  | 'checkout'
+  | 'marketplace-installs'
+  | 'ai-assist'
+
+const LOCKDOWN_FEATURE_KEY_SET: Record<LockdownFeatureKey, true> = {
+  signups: true,
+  uploads: true,
+  checkout: true,
+  'marketplace-installs': true,
+  'ai-assist': true,
+}
+/** Extensible launch set — the staff surface renders its checklist from it. */
+export const LOCKDOWN_FEATURE_KEYS = Object.keys(
+  LOCKDOWN_FEATURE_KEY_SET,
+) as LockdownFeatureKey[]
+
+export function isLockdownFeatureKey(
+  value: unknown,
+): value is LockdownFeatureKey {
+  return typeof value === 'string' && value in LOCKDOWN_FEATURE_KEY_SET
+}
+
+/** Staff-surface labels; the key stays the wire/API identity. */
+export const LOCKDOWN_FEATURE_LABELS: Record<LockdownFeatureKey, string> = {
+  signups: 'New signups',
+  uploads: 'Media uploads',
+  checkout: 'Checkout (new subscriptions)',
+  'marketplace-installs': 'Marketplace installs',
+  'ai-assist': 'AI assist',
+}
+
+/**
+ * The un-panic invariant, per feature (AGL-1510). At the PLATFORM scope a
+ * verified staff claim bypasses unconditionally — that is unchanged and not
+ * negotiable. A FEATURE lock is narrower, so the bypass is granted only
+ * where it aids incident response, and withheld where a staff action would
+ * be the very thing the lock exists to stop:
+ *
+ * - `uploads: true` — the uploads lock answers a malware report, and the
+ *   staff member responding needs to upload a test asset to verify the fix
+ *   before lifting the lock for everyone.
+ * - `marketplace-installs: true` — same shape: a malicious listing slipped
+ *   review, and reproducing the install is part of investigating it.
+ * - `ai-assist: true` — a provider incident is verified recovered by staff
+ *   making one real call, not by lifting the lock and watching customers
+ *   find out.
+ * - `checkout: false` — a checkout lock answers a billing/Stripe bug, and a
+ *   staff-created checkout session is still a real charge against a real
+ *   card. There is no incident-response step that needs money to move;
+ *   verification belongs in Stripe test mode.
+ * - `signups: false` — an account being created has no staff claim yet, so
+ *   a bypass here could never fire honestly; declaring `false` states that
+ *   rather than leaving a bypass that only a misattributed claim could use.
+ */
+export const LOCKDOWN_FEATURE_STAFF_BYPASS: Record<LockdownFeatureKey, boolean> =
+  {
+    signups: false,
+    uploads: true,
+    checkout: false,
+    'marketplace-installs': true,
+    'ai-assist': true,
+  }
 
 export type LockdownReasonCode =
   | 'security'
@@ -75,6 +153,8 @@ export function isLockdownReasonCode(
 /** The one shape every enforcement point consumes. */
 export interface LockdownState {
   scope: LockdownScope
+  /** Set only when `scope === 'feature'` — which capability is locked. */
+  feature?: LockdownFeatureKey
   reason: LockdownReasonCode
   /**
    * Visitor/user-facing notice text (bounded at write time). Anything staff
@@ -103,9 +183,14 @@ export interface LockdownState {
 export const LOCKDOWNS_COLLECTION = 'lockdowns'
 export const PLATFORM_LOCKDOWN_DOC_ID = 'platform'
 export const userLockdownDocId = (uid: string): string => `user--${uid}`
+/** `feature--{key}` — same collection, same rules, same audited writer. */
+export const featureLockdownDocId = (feature: LockdownFeatureKey): string =>
+  `feature--${feature}`
 
 export interface LockdownDoc {
   scope: LockdownScope
+  /** Present on `feature--{key}` docs only. */
+  feature?: LockdownFeatureKey
   reason: LockdownReasonCode
   message?: string
   atMs?: number
@@ -257,8 +342,15 @@ export function normalizeLockdownDoc(
 ): LockdownState | null {
   if (!doc) return null
   if (!isLockdownReasonCode(doc.reason)) return null
+  // A feature doc whose key is not (or no longer) in the enum is refused
+  // whole, matching the malformed-reason posture: the panic path does not
+  // guess, and an unknown key has no chokepoint to enforce it anyway.
+  if (scope === 'feature' && !isLockdownFeatureKey(doc.feature)) return null
   return {
     scope,
+    ...(scope === 'feature' && isLockdownFeatureKey(doc.feature)
+      ? { feature: doc.feature }
+      : {}),
     reason: doc.reason,
     message:
       typeof doc.message === 'string' && doc.message
@@ -304,6 +396,12 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
     typeof state.message === 'string' && state.message.trim()
       ? state.message.trim()
       : undefined
+  // Feature locks carry feature-specific, honest copy (AGL-1510): what is
+  // off, and — just as important — what is NOT affected. Same convention as
+  // the per-reason copy below: a staff message replaces the body only.
+  if (state.scope === 'feature' && state.feature) {
+    return featureLockdownNotice(state.feature, custom, state.untilMs)
+  }
   switch (state.reason) {
     case 'maintenance': {
       const until =
@@ -346,4 +444,99 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
         contact: LOCKDOWN_SUPPORT_EMAIL,
       }
   }
+}
+
+/**
+ * Per-feature visitor copy (AGL-1510). Each notice says what is paused AND
+ * what still works — a feature lock's whole point is that everything else
+ * keeps serving, and the copy must not let a narrow pause read as a wider
+ * outage. The checkout notice in particular must NEVER read as a payment
+ * failure: "your card was declined" and "we turned checkout off" are
+ * different sentences, and only one of them sends a customer to their bank.
+ */
+function featureLockdownNotice(
+  feature: LockdownFeatureKey,
+  custom: string | undefined,
+  untilMs?: number,
+): LockdownNotice {
+  const window =
+    typeof untilMs === 'number'
+      ? ` Expected back by ${new Date(untilMs).toUTCString()}.`
+      : ''
+  switch (feature) {
+    case 'signups':
+      return {
+        title: 'New signups are paused',
+        body:
+          custom ??
+          `New signups are temporarily paused. Existing accounts can sign in and work as usual.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+    case 'uploads':
+      return {
+        title: 'Uploads are paused',
+        body:
+          custom ??
+          `Media uploads are temporarily disabled while we address an issue. Your existing media and published sites are unaffected.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+    case 'checkout':
+      return {
+        title: 'Checkout is temporarily unavailable',
+        body:
+          custom ??
+          `Checkout is temporarily unavailable — this is not a payment failure, and your account, subscription, and sites are unaffected. Please try again shortly.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+    case 'marketplace-installs':
+      return {
+        title: 'Marketplace installs are paused',
+        body:
+          custom ??
+          `Installing from the marketplace is temporarily disabled. Everything already installed keeps working.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+    case 'ai-assist':
+    default:
+      return {
+        title: 'AI assist is temporarily unavailable',
+        body:
+          custom ??
+          `AI assist is temporarily unavailable. Your content is unaffected — please try again shortly.${window}`,
+        contact: LOCKDOWN_SUPPORT_EMAIL,
+      }
+  }
+}
+
+/**
+ * Which feature key, if any, gates a plugin-API dispatcher path (AGL-1510).
+ * Lives here (pure, beside the enum) so the dispatcher's wiring is one call
+ * and the mapping is unit-testable without a route harness.
+ *
+ * - `ai/assist` → `ai-assist` (gated even while the route 501s without an
+ *   API key — the switch predates the key on purpose).
+ * - `marketplace/install*` → `marketplace-installs`: installs-as-a-class,
+ *   every artifact kind. `marketplace/update-artifact` is included — it
+ *   re-copies a publisher's version into the org, which is an install by
+ *   another name and the same vector a malicious listing would ride.
+ * - `marketplace/checkout` → `checkout`: it creates NEW Stripe checkout
+ *   sessions exactly like the billing route, and a mid-charge Stripe bug
+ *   does not care which surface started the session.
+ *
+ * Publish/review/report paths map to nothing: a marketplace incident must
+ * not stop publishers reporting or staff reviewing.
+ */
+export function lockdownFeatureForPluginApiPath(
+  path: string,
+): LockdownFeatureKey | null {
+  if (path === 'ai/assist') return 'ai-assist'
+  if (path === 'marketplace/checkout') return 'checkout'
+  if (
+    path === 'marketplace/install' ||
+    path.startsWith('marketplace/install-') ||
+    path === 'marketplace/update-artifact'
+  ) {
+    return 'marketplace-installs'
+  }
+  return null
 }

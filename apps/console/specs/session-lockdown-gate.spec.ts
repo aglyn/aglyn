@@ -42,6 +42,8 @@ const mockVerifySessionCookie = jest.fn()
 const mockCreateSessionCookie = jest.fn()
 const mockCreateCustomToken = jest.fn()
 const mockGetLockdownVerdict = jest.fn()
+const mockGetFeatureLockdown = jest.fn()
+const mockGetUser = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -55,6 +57,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           mockCreateSessionCookie(...args),
         createCustomToken: (...args: unknown[]) =>
           mockCreateCustomToken(...args),
+        getUser: (...args: unknown[]) => mockGetUser(...args),
         tenantManager: () => ({
           authForTenant: () => ({
             createSessionCookie: (...args: unknown[]) =>
@@ -63,6 +66,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               mockVerifySessionCookie(...args),
             createCustomToken: (...args: unknown[]) =>
               mockCreateCustomToken(...args),
+            getUser: (...args: unknown[]) => mockGetUser(...args),
           }),
         }),
       }),
@@ -73,10 +77,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: () => false,
   getLockdownVerdict: (...args: unknown[]) => mockGetLockdownVerdict(...args),
+  getFeatureLockdown: (...args: unknown[]) => mockGetFeatureLockdown(...args),
   // The 423 shape is unit-tested in the lib; the route only forwards it.
-  lockdownJsonResponse: (state: { scope: string; reason: string }) =>
+  lockdownJsonResponse: (state: {
+    scope: string
+    reason: string
+    feature?: string
+  }) =>
     Response.json(
-      { error: 'locked', scope: state.scope, reason: state.reason },
+      {
+        error: 'locked',
+        scope: state.scope,
+        ...(state.feature ? { feature: state.feature } : {}),
+        reason: state.reason,
+      },
       { status: 423 },
     ),
   seedUserProfile: jest.fn(async () => undefined),
@@ -94,6 +108,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveIdpDisplayName: () => null,
   resolveIdpPhotoUrl: () => null,
   resolveIdpPhone: () => null,
+  // The REAL activity/expiry and time readers (AGL-1510) — a stubbed
+  // `isLockdownActive` would make "an expired signups lock restores with no
+  // write" unfalsifiable.
+  ...(() => {
+    const actual = jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/lockdown',
+    )
+    return { isLockdownActive: actual.isLockdownActive, toEpochMs: actual.toEpochMs }
+  })(),
 }))
 
 import { GET, POST } from '../app/api/auth/session/route'
@@ -127,6 +150,10 @@ beforeEach(() => {
   mockCreateSessionCookie.mockResolvedValue('minted-cookie')
   mockCreateCustomToken.mockResolvedValue('custom-token')
   mockGetLockdownVerdict.mockResolvedValue(null)
+  mockGetFeatureLockdown.mockResolvedValue(null)
+  mockGetUser.mockResolvedValue({
+    metadata: { creationTime: new Date(Date.now() - 86_400_000).toUTCString() },
+  })
 })
 
 describe('POST mint × lockdown (AGL-1501)', () => {
@@ -165,6 +192,64 @@ describe('POST mint × lockdown (AGL-1501)', () => {
     const response = await mint()
     expect(response.status).toBe(200)
     expect(cookies(response)).toContain('__session=minted-cookie')
+  })
+})
+
+describe('POST mint × SIGNUPS feature lock (AGL-1510)', () => {
+  const LOCK_AT = Date.now() - 3_600_000
+  const SIGNUPS_LOCK = {
+    scope: 'feature',
+    feature: 'signups',
+    reason: 'security',
+    atMs: LOCK_AT,
+  }
+
+  it('refuses an account CREATED SINCE THE LOCK the distinct feature 423, and never mints', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'bot-1', email_verified: true })
+    mockGetFeatureLockdown.mockResolvedValue(SIGNUPS_LOCK)
+    mockGetUser.mockResolvedValue({
+      // Created ten minutes after the lock began — the bot wave.
+      metadata: { creationTime: new Date(LOCK_AT + 600_000).toUTCString() },
+    })
+    const response = await mint()
+    expect(response.status).toBe(423)
+    expect(await response.json()).toMatchObject({
+      error: 'locked',
+      scope: 'feature',
+      feature: 'signups',
+    })
+    expect(mockCreateSessionCookie).not.toHaveBeenCalled()
+  })
+
+  it('mints for an account that PREDATES the lock — existing users untouched', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'u-old', email_verified: true })
+    mockGetFeatureLockdown.mockResolvedValue(SIGNUPS_LOCK)
+    mockGetUser.mockResolvedValue({
+      metadata: { creationTime: new Date(LOCK_AT - 600_000).toUTCString() },
+    })
+    const response = await mint()
+    expect(response.status).toBe(200)
+    expect(mockCreateSessionCookie).toHaveBeenCalledTimes(1)
+  })
+
+  it('an EXPIRED signups lock restores mints with no write and no account read', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'u-new', email_verified: true })
+    mockGetFeatureLockdown.mockResolvedValue({
+      ...SIGNUPS_LOCK,
+      untilMs: Date.now() - 1,
+    })
+    const response = await mint()
+    expect(response.status).toBe(200)
+    // The expiry short-circuits BEFORE the getUser read — restoration costs
+    // nothing and depends on no staff action.
+    expect(mockGetUser).not.toHaveBeenCalled()
+  })
+
+  it('costs zero account reads while the switch is off', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'u1', email_verified: true })
+    const response = await mint()
+    expect(response.status).toBe(200)
+    expect(mockGetUser).not.toHaveBeenCalled()
   })
 })
 

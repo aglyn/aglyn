@@ -39,7 +39,10 @@
  */
 
 import {
+  featureLockdownDocId,
+  isLockdownFeatureKey,
   isLockdownReasonCode,
+  LOCKDOWN_FEATURE_KEYS,
   LOCKDOWN_MESSAGE_MAX,
   LOCKDOWNS_COLLECTION,
   PLATFORM_LOCKDOWN_DOC_ID,
@@ -51,6 +54,7 @@ import {
   emailUnverifiedResponse,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
@@ -62,7 +66,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const SCOPES = new Set(['platform', 'org', 'host', 'user'])
+const SCOPES = new Set(['platform', 'org', 'host', 'user', 'feature'])
 
 /**
  * The platform scope's server-side type-to-confirm. The UI asks the
@@ -223,6 +227,61 @@ async function handler(request: Request): Promise<Response> {
         },
       })
       return Response.json({ ok: true, scope, action }, { status: 200 })
+    }
+
+    /*==========================================
+     * FEATURE (AGL-1510)
+     *=========================================*/
+    if (scope === 'feature') {
+      // No type-to-confirm phrase, deliberately. The platform phrase exists
+      // because one field in one body takes EVERYTHING down; a feature lock
+      // takes one named capability down and leaves the platform serving —
+      // the same blast-radius class as an org or host lock, which also
+      // confirm by explicit target + super role + audit rather than typing.
+      // Incident response wants the narrow lever fast; the wide one slow.
+      if (!isLockdownFeatureKey(targetId)) {
+        return Response.json(
+          {
+            error: `Unknown feature — one of: ${LOCKDOWN_FEATURE_KEYS.join(', ')}`,
+          },
+          { status: 400 },
+        )
+      }
+      const ref = firestore
+        .collection(LOCKDOWNS_COLLECTION)
+        .doc(featureLockdownDocId(targetId))
+      const before = (await ref.get()).data() ?? null
+      if (action === 'lock') {
+        await ref.set({
+          scope: 'feature',
+          feature: targetId,
+          reason: lock.reason,
+          ...(message ? { message } : {}),
+          ...(untilMs !== undefined ? { untilMs } : {}),
+          atMs: Date.now(),
+          actorUid: decoded.uid,
+        })
+      } else {
+        await ref.delete()
+      }
+      // The process that flipped the switch enforces it NOW; other
+      // processes converge within the reader's 15s TTL.
+      invalidateFeatureLockdownCache()
+      await audit({
+        ...actor,
+        action: `lockdown.${action}`,
+        target: `lockdowns/${featureLockdownDocId(targetId)}`,
+        before: { locked: before != null, reason: before?.['reason'] ?? null },
+        after: {
+          locked: action === 'lock',
+          feature: targetId,
+          ...(action === 'lock' ? { reason: lock.reason } : {}),
+        },
+      })
+      return Response.json(
+        { ok: true, scope, action, feature: targetId },
+        { status: 200 },
+      )
     }
 
     /*==========================================

@@ -35,7 +35,10 @@
  */
 
 import {
+  featureLockdownDocId,
   isLockdownActive,
+  LOCKDOWN_FEATURE_STAFF_BYPASS,
+  type LockdownFeatureKey,
   LOCKDOWNS_COLLECTION,
   type LockdownDoc,
   lockdownNotice,
@@ -102,6 +105,107 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
     })
   }
   return platformPending
+}
+
+/**
+ * Feature-doc cache (AGL-1510): same TTL and the same reasoning as the
+ * platform doc — feature gates sit on hot chokepoints (the session mint,
+ * every media ingress, the plugin dispatcher), and 15s is the worst-case
+ * lag between staff flipping a feature switch and a warm process enforcing
+ * it. One map for all keys; the admin route invalidates after every write.
+ */
+const featureCache = new Map<
+  LockdownFeatureKey,
+  { at: number; state: LockdownState | null }
+>()
+const featurePending = new Map<
+  LockdownFeatureKey,
+  Promise<LockdownState | null>
+>()
+
+/** Drop the in-process feature cache (all keys) after an admin write. */
+export function invalidateFeatureLockdownCache(): void {
+  featureCache.clear()
+  featurePending.clear()
+}
+
+/** `lockdowns/feature--{key}`, normalized; null = not locked (incl. error). */
+export async function getFeatureLockdown(
+  feature: LockdownFeatureKey,
+): Promise<LockdownState | null> {
+  const cached = featureCache.get(feature)
+  if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) return cached.state
+  let pending = featurePending.get(feature)
+  if (!pending) {
+    pending = (async () => {
+      let state: LockdownState | null = null
+      try {
+        const snapshot = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection(LOCKDOWNS_COLLECTION)
+          .doc(featureLockdownDocId(feature))
+          .get()
+        state = snapshot.exists
+          ? normalizeLockdownDoc(
+              snapshot.data() as Partial<LockdownDoc>,
+              'feature',
+            )
+          : null
+      } catch {
+        // Fail open, matching the platform read: an unreachable Firestore is
+        // an outage, not a feature lockdown.
+      }
+      featureCache.set(feature, { at: Date.now(), state })
+      return state
+    })().finally(() => {
+      featurePending.delete(feature)
+    })
+    featurePending.set(feature, pending)
+  }
+  return pending
+}
+
+/**
+ * The feature verdict and refusal in one call (AGL-1510) — the one-line
+ * wiring a feature chokepoint carries:
+ *
+ *   const locked = await featureLockdownRefusal({ feature: 'checkout', staff })
+ *   if (locked) return locked
+ *
+ * Composition, not ranking: a PLATFORM lock implies every feature, so it is
+ * checked first (TTL-cached — routes that already ran the scope verdict pay
+ * no extra read), and the platform-scope staff bypass there is UNCHANGED
+ * and unconditional. The feature doc is checked second, and its staff
+ * bypass is per-feature (`LOCKDOWN_FEATURE_STAFF_BYPASS`): granted where a
+ * staff action aids incident response (uploads, installs, ai-assist),
+ * withheld where it would BE the incident (checkout — a staff checkout
+ * session is still a real charge). A feature lock implies nothing about the
+ * org/host/user scopes — those stay with `lockdownRefusal` at the routes
+ * that carry it.
+ */
+export async function featureLockdownRefusal(options: {
+  feature: LockdownFeatureKey
+  /** Verified `staff` custom claim — from a VERIFIED token only. */
+  staff?: boolean
+  nowMs?: number
+}): Promise<Response | null> {
+  const nowMs = options.nowMs ?? Date.now()
+  const platform = await getPlatformLockdown()
+  if (isLockdownActive(platform, nowMs)) {
+    // The un-panic invariant at the platform scope, unchanged.
+    if (options.staff === true) return null
+    return lockdownJsonResponse(platform as LockdownState)
+  }
+  const state = await getFeatureLockdown(options.feature)
+  if (!isLockdownActive(state, nowMs)) return null
+  if (
+    options.staff === true &&
+    LOCKDOWN_FEATURE_STAFF_BYPASS[options.feature]
+  ) {
+    return null
+  }
+  return lockdownJsonResponse(state as LockdownState)
 }
 
 /** `lockdowns/user--{uid}`, normalized; null = not locked (incl. on error). */
@@ -205,6 +309,9 @@ export function lockdownJsonResponse(state: LockdownState): Response {
     {
       error: 'locked',
       scope: state.scope,
+      // Distinct per-feature body (AGL-1510): an API consumer sees WHICH
+      // capability is off ("uploads"), not a generic locked platform.
+      ...(state.feature ? { feature: state.feature } : {}),
       reason: state.reason,
       title: notice.title,
       message: notice.body,

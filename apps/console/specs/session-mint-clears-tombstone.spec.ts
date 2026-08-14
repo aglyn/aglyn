@@ -68,9 +68,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: (...args: unknown[]) =>
     mockIsImpersonationSession(...(args as [])),
-  // Lockdown (AGL-1501): nobody is locked in these scenarios; the gate's own
-  // behavior is covered by session-lockdown-gate.spec.ts.
+  // Lockdown (AGL-1501/1510): nobody is locked in these scenarios; the
+  // gates' own behavior is covered by session-lockdown-gate.spec.ts.
   getLockdownVerdict: async () => null,
+  getFeatureLockdown: async () => null,
   lockdownJsonResponse: () =>
     Response.json({ error: 'locked' }, { status: 423 }),
   seedUserProfile: jest.fn(async () => undefined),
@@ -91,6 +92,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   resolveIdpDisplayName: () => null,
   resolveIdpPhotoUrl: () => null,
   resolveIdpPhone: () => null,
+  isLockdownActive: (state: unknown) => state != null,
+  toEpochMs: () => undefined,
 }))
 
 import { POST } from '../app/api/auth/session/route'

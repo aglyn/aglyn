@@ -109,9 +109,11 @@ async function handler(request: Request): Promise<Response> {
     }
     // lockdown-423: via apps/console/utils/server/media-scope.ts — the scope
     // resolver runs the verdict on the org/host docs it already reads and
-    // hands the 423 refusal back as `error.response`.
+    // hands the 423 refusal back as `error.response`. This is an INGRESS
+    // route, so it also passes the UPLOADS feature gate (AGL-1510).
     const { scope, error } = await resolveMediaScope(body, query, decoded.uid, {
       staff: decoded['staff'] === true,
+      feature: 'uploads',
     })
     if (!scope) {
       return (

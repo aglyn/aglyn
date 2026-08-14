@@ -52,9 +52,12 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 import {
+  featureLockdownRefusal,
+  getFeatureLockdown,
   getLockdownVerdict,
   getPlatformLockdown,
   getUserLockdown,
+  invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
   lockdownJsonResponse,
 } from './lockdown'
@@ -66,6 +69,7 @@ beforeEach(() => {
   reads = 0
   failReads = false
   invalidatePlatformLockdownCache()
+  invalidateFeatureLockdownCache()
 })
 
 const lockPlatform = (over: Doc = {}) =>
@@ -81,6 +85,15 @@ const lockUser = (uid: string, over: Doc = {}) =>
   store.set(`lockdowns/user--${uid}`, {
     scope: 'user',
     reason: 'manual',
+    atMs: NOW,
+    ...over,
+  })
+
+const lockFeature = (feature: string, over: Doc = {}) =>
+  store.set(`lockdowns/feature--${feature}`, {
+    scope: 'feature',
+    feature,
+    reason: 'security',
     atMs: NOW,
     ...over,
   })
@@ -191,6 +204,133 @@ describe('platform cache', () => {
   it('a malformed platform doc is refused, not guessed at', async () => {
     store.set('lockdowns/platform', { reason: 'not-a-reason' })
     await expect(getPlatformLockdown()).resolves.toBeNull()
+  })
+})
+
+describe('FEATURE scope (AGL-1510) — one capability off, everything else serving', () => {
+  it('a locked feature refuses with the distinct feature 423 body', async () => {
+    lockFeature('uploads')
+    const refusal = await featureLockdownRefusal({
+      feature: 'uploads',
+      nowMs: NOW,
+    })
+    expect(refusal?.status).toBe(423)
+    const body = await (refusal as Response).json()
+    expect(body).toMatchObject({
+      error: 'locked',
+      scope: 'feature',
+      feature: 'uploads',
+      reason: 'security',
+    })
+  })
+
+  it('NON-INTERFERENCE: an uploads lock leaves every other feature serving', async () => {
+    lockFeature('uploads')
+    for (const feature of [
+      'signups',
+      'checkout',
+      'marketplace-installs',
+      'ai-assist',
+    ] as const) {
+      await expect(
+        featureLockdownRefusal({ feature, nowMs: NOW }),
+      ).resolves.toBeNull()
+    }
+  })
+
+  it('a feature lock implies NOTHING about the scope verdict', async () => {
+    lockFeature('uploads')
+    lockFeature('checkout')
+    // The scope resolver never consults feature docs — org-scoped routes
+    // keep serving during a feature lock.
+    await expect(
+      getLockdownVerdict({ uid: 'customer-1', nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('a PLATFORM lock implies every feature — composition, not ranking', async () => {
+    lockPlatform({ reason: 'maintenance' })
+    for (const feature of ['signups', 'uploads', 'checkout'] as const) {
+      const refusal = await featureLockdownRefusal({ feature, nowMs: NOW })
+      expect(refusal?.status).toBe(423)
+      expect((await (refusal as Response).json()).scope).toBe('platform')
+    }
+    // The platform-scope staff bypass is UNCHANGED — even on checkout,
+    // whose feature-stage bypass is withheld.
+    await expect(
+      featureLockdownRefusal({ feature: 'checkout', staff: true, nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('staff bypass EXACTLY where designed: uploads/installs/ai yes, checkout NO', async () => {
+    for (const feature of [
+      'uploads',
+      'marketplace-installs',
+      'ai-assist',
+    ] as const) {
+      lockFeature(feature)
+      invalidateFeatureLockdownCache()
+      // Staff verify the fix through the lock…
+      await expect(
+        featureLockdownRefusal({ feature, staff: true, nowMs: NOW }),
+      ).resolves.toBeNull()
+      // …customers wait for the lift.
+      const refusal = await featureLockdownRefusal({ feature, nowMs: NOW })
+      expect(refusal?.status).toBe(423)
+    }
+    // A staff checkout session is still a real charge — no bypass.
+    lockFeature('checkout')
+    invalidateFeatureLockdownCache()
+    const refusal = await featureLockdownRefusal({
+      feature: 'checkout',
+      staff: true,
+      nowMs: NOW,
+    })
+    expect(refusal?.status).toBe(423)
+    expect((await (refusal as Response).json()).feature).toBe('checkout')
+  })
+
+  it('EXPIRY restores the feature with no staff action and NO write', async () => {
+    lockFeature('signups', { untilMs: NOW + 60_000 })
+    expect(
+      (await featureLockdownRefusal({ feature: 'signups', nowMs: NOW }))?.status,
+    ).toBe(423)
+    invalidateFeatureLockdownCache()
+    await expect(
+      featureLockdownRefusal({ feature: 'signups', nowMs: NOW + 60_001 }),
+    ).resolves.toBeNull()
+    // The doc is still there — nothing wrote; the expiry alone restored it.
+    expect(store.has('lockdowns/feature--signups')).toBe(true)
+  })
+
+  it('a malformed feature doc is refused, not guessed at', async () => {
+    store.set('lockdowns/feature--uploads', {
+      scope: 'feature',
+      feature: 'not-a-real-feature',
+      reason: 'security',
+    })
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+  })
+
+  it('fails open on an unreachable Firestore — an outage is not a lockdown', async () => {
+    failReads = true
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+    await expect(
+      featureLockdownRefusal({ feature: 'uploads', nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('caches within the TTL and re-reads after invalidation', async () => {
+    lockFeature('uploads')
+    await getFeatureLockdown('uploads')
+    const after = reads
+    await getFeatureLockdown('uploads')
+    expect(reads).toBe(after)
+
+    store.delete('lockdowns/feature--uploads')
+    invalidateFeatureLockdownCache()
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+    expect(reads).toBe(after + 1)
   })
 })
 

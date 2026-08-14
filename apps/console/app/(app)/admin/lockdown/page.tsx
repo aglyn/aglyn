@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { LOCKDOWN_REASON_CODES } from '@aglyn/aglyn'
+import {
+  LOCKDOWN_FEATURE_KEYS,
+  LOCKDOWN_FEATURE_LABELS,
+  LOCKDOWN_REASON_CODES,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -71,6 +75,12 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [platformMessage, setPlatformMessage] = useState('')
   const [platformUntil, setPlatformUntil] = useState('')
   const [platformConfirm, setPlatformConfirm] = useState('')
+
+  // Feature form (AGL-1510) — one reason/message/until trio shared by the
+  // checklist rows; the feature key itself is the target.
+  const [featureReason, setFeatureReason] = useState('security')
+  const [featureMessage, setFeatureMessage] = useState('')
+  const [featureUntil, setFeatureUntil] = useState('')
 
   // Scoped form.
   const [scope, setScope] = useState('org')
@@ -282,6 +292,125 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
             </CardDisplay>
 
             <CardDisplay
+              header={'Features'}
+              help={docsHelp('lockdown', { anchor: '#feature-scope' })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  {
+                    'Kill one capability platform-wide while everything else keeps serving — signups off during a bot wave, uploads off on a malware report, checkout off over a billing bug. A platform lock implies every feature; a feature lock touches nothing else. No type-to-confirm: one named capability is the narrow lever, and it confirms like an org or site lock. Staff bypass: uploads, installs and AI assist stay usable to staff for verification; checkout does not (a staff checkout is still a real charge); signups is decided by account age, not claims.'
+                  }
+                </Typography>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  {reasonField(featureReason, setFeatureReason)}
+                  <TextField
+                    size="small"
+                    label="Customer-facing message (optional)"
+                    value={featureMessage}
+                    onChange={(event) => setFeatureMessage(event.target.value)}
+                    sx={{ flexGrow: 1, minWidth: 260 }}
+                  />
+                  <TextField
+                    size="small"
+                    type="datetime-local"
+                    label="Until (optional)"
+                    value={featureUntil}
+                    onChange={(event) => setFeatureUntil(event.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                </Stack>
+                <Stack spacing={1}>
+                  {LOCKDOWN_FEATURE_KEYS.map((feature) => {
+                    const record = records.find(
+                      (candidate) => candidate.id === `feature--${feature}`,
+                    )
+                    return (
+                      <Stack
+                        key={feature}
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Chip
+                          label={record ? 'LOCKED' : 'on'}
+                          color={record ? 'error' : 'success'}
+                          size="small"
+                        />
+                        <Typography variant="body2" sx={{ minWidth: 220 }}>
+                          {LOCKDOWN_FEATURE_LABELS[feature]}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: 'monospace' }}
+                          color="text.secondary"
+                        >
+                          {feature}
+                        </Typography>
+                        {record ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {`${record.reason ?? 'manual'}${
+                              record.untilMs
+                                ? ` — until ${new Date(record.untilMs).toLocaleString()}`
+                                : ''
+                            }`}
+                          </Typography>
+                        ) : null}
+                        {record ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="success"
+                            disabled={busy}
+                            onClick={() =>
+                              void act(
+                                {
+                                  action: 'unlock',
+                                  scope: 'feature',
+                                  targetId: feature,
+                                },
+                                () => undefined,
+                              )
+                            }
+                          >
+                            {'Restore'}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="error"
+                            disabled={busy}
+                            onClick={() =>
+                              void act(
+                                {
+                                  action: 'lock',
+                                  scope: 'feature',
+                                  targetId: feature,
+                                  reason: featureReason,
+                                  message: featureMessage || undefined,
+                                  untilMs: untilMsOf(featureUntil),
+                                },
+                                () => undefined,
+                              )
+                            }
+                          >
+                            {'Disable'}
+                          </Button>
+                        )}
+                      </Stack>
+                    )
+                  })}
+                </Stack>
+              </Stack>
+            </CardDisplay>
+
+            <CardDisplay
               header={'Workspace, site or account'}
               help={docsHelp('lockdown', { anchor: '#operating-it' })}
               contentGutterX
@@ -379,7 +508,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
             </CardDisplay>
 
             <CardDisplay
-              header={'Active platform & account lockdowns'}
+              header={'Active platform, feature & account lockdowns'}
               contentGutterX
               contentGutterY
             >
@@ -399,7 +528,13 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
                       <Chip
-                        label={record.id === 'platform' ? 'platform' : 'user'}
+                        label={
+                          record.id === 'platform'
+                            ? 'platform'
+                            : record.id.startsWith('feature--')
+                              ? 'feature'
+                              : 'user'
+                        }
                         color="error"
                         size="small"
                       />

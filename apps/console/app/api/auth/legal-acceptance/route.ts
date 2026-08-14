@@ -16,6 +16,7 @@
  */
 
 import {
+  featureLockdownRefusal,
   firebaseAdmin,
   recordLegalAcceptance,
 } from '@aglyn/tenant-data-admin'
@@ -24,8 +25,10 @@ import {
   LEGAL_DOCUMENTS,
 } from '../../../../constants/legal-documents'
 
-// lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org.
-// The session mint carries the lockdown gate for this flow.
+// lockdown-423: exempt — records the caller's own ToS acceptance during sign-in; pre-org,
+// so the org/host/user scope verdict has nothing to bind to; the session mint carries
+// the scope lockdown gate for this flow. The SIGNUPS feature gate below is separate
+// (AGL-1510): every acceptance context is a signup door, so a signups lock refuses here.
 
 /**
  * Records a clickwrap acceptance for the signed-in account (AGL-1497).
@@ -78,12 +81,23 @@ async function handler(request: Request): Promise<Response> {
   const context = String(body?.context ?? 'unknown').trim().slice(0, 60)
 
   let uid: string
+  let staff = false
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     uid = decoded.uid
+    staff = decoded['staff'] === true
   } catch {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
+
+  // Feature lockdown: SIGNUPS (AGL-1510). This endpoint exists solely to
+  // record acceptances from the account-creation doors (every `context` it
+  // receives is a signup door — AGL-1497), so a signups lock refuses it
+  // with the honest 423 body the client can show. The `staff` claim is
+  // passed for the platform-scope un-panic bypass only; the feature stage
+  // grants no bypass (LOCKDOWN_FEATURE_STAFF_BYPASS.signups = false).
+  const locked = await featureLockdownRefusal({ feature: 'signups', staff })
+  if (locked) return locked
 
   try {
     const result = await recordLegalAcceptance(uid, {
