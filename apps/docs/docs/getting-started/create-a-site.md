@@ -9,7 +9,7 @@ description: Sign in, create your first site, and understand what a site contain
 A **site** is one website you own in Aglyn — its screens, theme, data, domain, and
 settings. Everything you build lives under a site, and you can own several.
 
-![Your sites, with the New site action](/img/getting-started/sites-page.png)
+![The All Sites page with a Create site button, and one site card showing its Aglyn domain, its (unset) custom domain, and Visit and Manage actions](/img/getting-started/sites-page.png)
 
 ## Create your first site
 

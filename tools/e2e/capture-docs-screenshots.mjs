@@ -194,7 +194,11 @@ const shots = [
   },
   {
     out: 'getting-started/screens-list.png',
-    path: `/${HOST_BASE}/screens/list`,
+    // The bare `…/screens` is canonical; `…/screens/list` is a legacy alias
+    // kept only so browsers holding a cached 308 land on a real page, and its
+    // own header says it is safe to delete once those age out. Shooting the
+    // alias would have turned that deletion into a silently failing shot.
+    path: `/${HOST_BASE}/screens`,
     waitFor: 'Home',
     settleMs: 2500,
   },
