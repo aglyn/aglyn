@@ -15,8 +15,13 @@ plugin gate), AGL-1559 (the property consolidation).
 
 | Property | Measurement id | Surface |
 | --- | --- | --- |
-| Aglyn — Console (302497406) | `G-YW5PG16YTM` | **both** `app.aglyn.com` and `aglyn.com`, via one web stream (3230351080); Firebase-linked, live since AGL-118 |
-| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | — | retired 2026-08-14, collecting nothing. **Do not delete** — it holds the only copy of its own ~1 day of history. |
+| **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** Both `app.aglyn.com` and `aglyn.com`, via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
+| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`** (tagged Prod). Deleting it would sever that link. |
+| aglyn-f375b (284263481) | — | stray, **zero data streams**, so no measurement id and no traffic. No Firebase project of that name exists. Retirement candidate; see AGL-1564. |
+
+`GA4_MEASUREMENT_ID` / `GA4_API_SECRET` and any Measurement Protocol secret
+belong to **stream 3230351080 on property 302497406** — secrets are per-stream
+and do not migrate.
 
 **One property, one stream, both domains** (AGL-1559, done 2026-08-14). A single
 measurement id serves both surfaces, because the `_gl` linker is honoured
