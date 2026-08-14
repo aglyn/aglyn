@@ -17,6 +17,7 @@
 'use client'
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import { readGaClientId } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback } from 'react'
@@ -338,7 +339,25 @@ export function useMarketplaceActions(hostId: string) {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          body: JSON.stringify({ listingId: listing.$id, hostId }),
+          // The browser's GA client id rides along so the SERVER-side
+          // `purchase` the Stripe webhook sends can be attributed to the
+          // session — and therefore the campaign — that produced it
+          // (AGL-1638). The webhook has always read this off the session
+          // metadata; until now nothing captured it, so every marketplace
+          // sale landed on a synthetic, sessionless GA user and plugin
+          // revenue had no acquisition channel at all.
+          //
+          // Resolves to null within 500ms when gtag is absent (consent
+          // refused, ad blocker, analytics unconfigured), so it can never
+          // delay or block a purchase — same contract as the console's
+          // subscription checkout.
+          body: JSON.stringify({
+            listingId: listing.$id,
+            hostId,
+            gaClientId: await readGaClientId(
+              process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+            ),
+          }),
         })
         const payload = await response.json()
         // The PAID install door refuses under a lock too (AGL-1545): both

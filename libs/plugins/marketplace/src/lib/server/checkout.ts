@@ -163,6 +163,22 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[sellerOrgId]': sellerOrgId,
       'metadata[feeCents]': String(feeCents),
       'metadata[transferCents]': String(transferCents),
+      // The buyer's GA client id (AGL-1638), so the server-side `purchase`
+      // the webhook sends joins the browser session that produced it. The
+      // webhook has always READ `metadata.ga_client_id`; nothing wrote it,
+      // so the read was dead and every marketplace sale fell through to a
+      // synthesized, sessionless GA user — making plugin revenue permanently
+      // unattributable to any channel.
+      //
+      // Carried on the SESSION rather than a subscription because this is a
+      // one-time payment; `checkout.session.completed` is where it is read.
+      //
+      // Validated to GA's `<digits>.<digits>` shape and dropped otherwise:
+      // the value is client-supplied and ends up in Stripe metadata, so it is
+      // not accepted on trust. Same guard /api/billing/checkout applies.
+      ...(/^\d+\.\d+$/.test(String(req.body?.gaClientId ?? ''))
+        ? { 'metadata[ga_client_id]': String(req.body.gaClientId) }
+        : {}),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
     const response = await fetch(

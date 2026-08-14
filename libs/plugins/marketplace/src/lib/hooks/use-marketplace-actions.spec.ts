@@ -187,6 +187,55 @@ describe('AGL-1532 · the marketplace funnel renders the 423 body', () => {
     expect(text.toLowerCase()).toContain('paused')
   })
 
+  it('a purchase carries the browser GA client id (AGL-1638)', async () => {
+    // The server-side `purchase` is sent from the Stripe webhook, which has
+    // no browser to ask. Unless `buy` captures the client id here and posts
+    // it, the webhook's `metadata.ga_client_id` read is dead and every
+    // marketplace sale lands on a synthetic, sessionless GA user.
+    process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID = 'G-SPEC'
+    ;(window as unknown as { gtag?: unknown }).gtag = (
+      _command: string,
+      _measurementId: string,
+      _field: string,
+      callback: (value: string) => void,
+    ) => callback('555444333.1755100000')
+    // The reply deliberately carries no redirect URL: what matters here is
+    // the REQUEST, and jsdom's `window.location` cannot be stubbed to absorb
+    // the handoff to Stripe.
+    respond(200, {})
+    const { result } = renderHook(() => useMarketplaceActions('host-1'))
+    await act(async () => {
+      await result.current.buy(LISTING)
+    })
+    const request = (global.fetch as jest.Mock).mock.calls[0]
+    expect(String(request[0])).toBe('/api/marketplace/checkout')
+    expect(JSON.parse(String(request[1].body))).toMatchObject({
+      listingId: 'listing-1',
+      gaClientId: '555444333.1755100000',
+    })
+  })
+
+  it('a purchase still asks when gtag never ran (AGL-1638)', async () => {
+    // Consent refused, ad blocker, analytics unconfigured. `readGaClientId`
+    // resolves null within 500ms rather than hanging — attribution is lost,
+    // the sale is not, and analytics never delays a payment.
+    delete (window as unknown as { gtag?: unknown }).gtag
+    respond(200, {})
+    const { result } = renderHook(() => useMarketplaceActions('host-1'))
+    await act(async () => {
+      await result.current.buy(LISTING)
+    })
+    const body = JSON.parse(
+      String((global.fetch as jest.Mock).mock.calls[0][1].body),
+    )
+    expect(body.listingId).toBe('listing-1')
+    // The key is PRESENT and null — proof the capture ran and came back
+    // empty, which is a different fact from the capture never happening (the
+    // defect: `gaClientId` simply absent from every marketplace checkout).
+    expect(Object.hasOwn(body, 'gaClientId')).toBe(true)
+    expect(body.gaClientId).toBeNull()
+  })
+
   it('an expiry reads as a local time, never as an epoch number', async () => {
     const untilMs = Date.UTC(2026, 8, 1, 17, 0, 0)
     respond(423, {

@@ -283,3 +283,54 @@ describe('marketplace checkout take rate + sale-time gates (AGL-1543)', () => {
     expect(stripeCalls).toHaveLength(0)
   })
 })
+
+/**
+ * AGL-1638. The webhook reads `metadata.ga_client_id` off the completed
+ * session; until this handler writes it the read was dead, every marketplace
+ * purchase fell through to a synthesized client id, and marketplace revenue
+ * was permanently unattributable to the session that produced it.
+ *
+ * The subscription path is the template — `/api/billing/checkout` validates
+ * the same shape before writing it to Stripe metadata.
+ */
+describe('GA attribution rides the checkout session (AGL-1638)', () => {
+  it('writes the browser client id to the key the webhook already reads', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq({ gaClientId: '1234567890.1234567890' }), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripeCalls[0].params.get('metadata[ga_client_id]')).toBe(
+      '1234567890.1234567890',
+    )
+  })
+
+  it('drops anything that is not GA’s <digits>.<digits> shape', async () => {
+    // Client-supplied and bound for Stripe metadata, so it is not taken on
+    // trust — same guard the console checkout route applies.
+    for (const bogus of [
+      'not-a-client-id',
+      '<script>alert(1)</script>',
+      'buyer@example.com',
+      '123',
+      '',
+    ]) {
+      seed()
+      stripeCalls.length = 0
+      const res = makeRes()
+      await checkoutHandler(makeReq({ gaClientId: bogus }), res)
+      expect(`${bogus} → ${res.statusCode}`).toBe(`${bogus} → 200`)
+      expect(stripeCalls[0].params.get('metadata[ga_client_id]')).toBeNull()
+    }
+  })
+
+  it('still checks out when the buyer had no gtag at all', async () => {
+    // Consent refused, ad blocker, analytics unconfigured. Attribution is
+    // lost; the sale must not be.
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripeCalls[0].params.get('metadata[ga_client_id]')).toBeNull()
+    expect(stripeCalls[0].params.get('metadata[listingId]')).toBe('listing-1')
+  })
+})
