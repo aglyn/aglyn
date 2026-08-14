@@ -2119,8 +2119,12 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     await assertFails(
       updateDoc(doc(billingStaffDb, 'orgs', ORG), { slug: 'stolen' }),
     )
+    // Since AGL-1517 the suspended* family is Admin-SDK-only for EVERY
+    // client — the super token that used to be this test's positive control
+    // is now denied too (the flag without the fan-out is the AGL-1505 bug).
     const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
-    await assertSucceeds(
+    await mustDeny(
+      'super staff writing orgs/{orgId}.suspendedAt from the client',
       updateDoc(doc(superStaffDb, 'orgs', ORG), { suspendedAt: new Date() }),
     )
   })
@@ -2727,11 +2731,13 @@ describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () =
       deleteDoc(doc(authed(LOCKED_UID), 'lockdowns', `user--${LOCKED_UID}`)),
     )
     // Positive control: the same super-staff token IS otherwise the loosest
-    // in the file — it writes an org doc wholesale. So the denials above are
-    // this block's `write: false`, not a broken rules file.
+    // in the file — it writes org keys denied to everyone else. So the
+    // denials above are this block's `write: false`, not a broken rules
+    // file. (`enabledPlugins`, not `suspendedAt`: AGL-1517 made the
+    // suspended* family Admin-SDK-only for super staff too.)
     await mustAllow(
       'the same super-staff token updating an org doc',
-      updateDoc(doc(superStaffDb, 'orgs', ORG), { suspendedAt: new Date() }),
+      updateDoc(doc(superStaffDb, 'orgs', ORG), { enabledPlugins: ['paid'] }),
     )
   })
 })
@@ -2837,7 +2843,7 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
     }
   })
 
-  it('billing staff cannot write the new keys; super staff can', async () => {
+  it('billing staff cannot write the new keys; neither can super staff (AGL-1517)', async () => {
     const billingStaffDb = authed(STAFF, { staff: true, staffRole: 'billing' })
     for (const key of NEW_ORG_KEYS) {
       await mustDeny(
@@ -2854,14 +2860,19 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
         plan: 'business', suspendedUntilMs: 1,
       }),
     )
-    // Positive controls: the deny is the key diff, not the branch — billing
-    // staff still write plans, and super staff still write the family.
+    // Positive control: the deny is the key diff, not the branch — billing
+    // staff still write plans.
     await mustAllow(
       'billing staff still changing the plan',
       updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'business' }),
     )
-    await mustAllow(
-      'super staff writing the suspension record',
+    // The super-staff mustAllow that used to sit here was AGL-1507's
+    // documented positive control. AGL-1517 flipped it: with the last client
+    // writer gone (AGL-1505), a super-staff client write of the family is a
+    // flag without the fan-out, so the full deny matrix lives in the
+    // describe below.
+    await mustDeny(
+      'super staff writing the suspension record from the client',
       updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG), {
         suspendedReasonCode: 'abuse', suspendedMessage: 'Suspended',
         suspendedUntilMs: Date.now() + 86_400_000,
@@ -2889,6 +2900,97 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
       'the owner still renaming the org',
       updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Again' }),
     )
+  })
+})
+
+/**
+ * AGL-1517: the org `suspended*` family is Admin-SDK-only for EVERY client —
+ * super staff included. AGL-1505 removed the last legitimate client writer
+ * (the legacy staff toggle now POSTs /api/admin/lockdown), so a super-staff
+ * client write of these keys can only be the AGL-1505 bug reborn: the flag
+ * set with none of the four effects that make it real (the `orgSuspended`
+ * member projection fan-out, token revocation, tenant ISR eviction, the
+ * audit row). The super branch used to bypass every key diff; it now carries
+ * its own `hasAny` over the five-key family, with `erasureRequestedAt`
+ * deliberately left OFF it — the erasure toggle still writes that key
+ * client-side as super staff.
+ */
+describe('the org suspended* family is Admin-SDK-only — even for super staff (AGL-1517)', () => {
+  const ORG_SUSPENSION_KEYS = [
+    'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+    'suspendedMessage', 'suspendedUntilMs',
+  ]
+
+  it('super staff cannot set, clear, shorten or smuggle any suspended* key', async () => {
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    for (const key of ORG_SUSPENSION_KEYS) {
+      await mustDeny(
+        `orgs/{orgId} { ${key} } as super staff`,
+        updateDoc(doc(superStaffDb, 'orgs', ORG), {
+          [key]: key === 'suspendedAt'
+            ? new Date()
+            : key === 'suspendedUntilMs' ? Date.now() + 86_400_000 : 'bare-flag',
+        }),
+      )
+    }
+    // Now suspend the org the real way (Admin SDK) and prove the client
+    // cannot LIFT it either — clearing a key, shortening the sentence, or
+    // laundering a clear inside a key the super branch does allow. `hasAny`
+    // bites on the whole diff, so the bundle fails with the smuggled key.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        suspendedAt: new Date(), suspendedReason: 'manual',
+        suspendedReasonCode: 'manual', suspendedMessage: 'Suspended',
+        suspendedUntilMs: Date.now() + 86_400_000,
+      })
+    })
+    for (const key of ORG_SUSPENSION_KEYS) {
+      await mustDeny(
+        `clearing orgs/{orgId}.${key} as super staff`,
+        updateDoc(doc(superStaffDb, 'orgs', ORG), { [key]: deleteField() }),
+      )
+    }
+    await mustDeny(
+      'super staff lowering suspendedUntilMs',
+      updateDoc(doc(superStaffDb, 'orgs', ORG), { suspendedUntilMs: 1 }),
+    )
+    await mustDeny(
+      'smuggling the lift inside an enabledPlugins write',
+      updateDoc(doc(superStaffDb, 'orgs', ORG), {
+        enabledPlugins: ['paid'], suspendedAt: deleteField(),
+      }),
+    )
+  })
+
+  it('the carve-outs hold: erasureRequestedAt, the super branch, the Admin SDK', async () => {
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    // `erasureRequestedAt` is deliberately NOT on the super deny list — the
+    // erasure toggle still writes it client-side (AGL-1517's one carve-out).
+    await mustAllow(
+      'super staff writing erasureRequestedAt from the client',
+      updateDoc(doc(superStaffDb, 'orgs', ORG), {
+        erasureRequestedAt: new Date(),
+      }),
+    )
+    // The branch itself still works — the deny is five keys, not the token.
+    await mustAllow(
+      'super staff still writing an org key denied to everyone else',
+      updateDoc(doc(superStaffDb, 'orgs', ORG), { enabledPlugins: ['paid'] }),
+    )
+    // Positive control for the ONLY remaining writer: /api/admin/lockdown
+    // goes through the Admin SDK, which rules never applied to —
+    // `withSecurityRulesDisabled` is that path in the emulator. The family
+    // lands, and a member still reads the suspension the tenant runtime
+    // renders from.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        suspendedAt: new Date(), suspendedReason: 'security',
+        suspendedReasonCode: 'security', suspendedMessage: 'Locked',
+        suspendedUntilMs: Date.now() + 86_400_000,
+      })
+    })
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.equal(snapshot.data().suspendedReasonCode, 'security')
   })
 })
 
