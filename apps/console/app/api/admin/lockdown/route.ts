@@ -56,6 +56,7 @@ import {
   firebaseAdmin,
   invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
+  invalidateUserLockdownCache,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -333,6 +334,11 @@ async function handler(request: Request): Promise<Response> {
         await ref.delete()
         await pool.updateUser(targetId, { disabled: false })
       }
+      // The process that took the action refuses (or readmits) this uid NOW;
+      // other processes converge within the reader's 15s TTL (AGL-1522). The
+      // hard kill never rode that cache — the disable + revoke above stand
+      // on their own.
+      invalidateUserLockdownCache(targetId)
       await audit({
         ...actor,
         action: `lockdown.${action}`,

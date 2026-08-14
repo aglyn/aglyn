@@ -208,23 +208,99 @@ export async function featureLockdownRefusal(options: {
   return lockdownJsonResponse(state as LockdownState)
 }
 
+/**
+ * User-doc cache (AGL-1522): the last per-call read on the verdict path.
+ * AGL-1506 wired the verdict into ~36 routes plus the session mint/exchange,
+ * and every call carrying a `uid` paid one Firestore get on
+ * `lockdowns/user--{uid}` — an active console editor generated one read per
+ * wired mutation, against the AGL-1302 read budget. Same TTL, same pending
+ * dedupe, same fail-open posture as the platform and feature caches above —
+ * ONE cache pattern in this module, not three implementations.
+ *
+ * The staleness tradeoff, stated: a user locked mid-window keeps passing
+ * this check for up to PLATFORM_TTL_MS (15s) plus the caller's polling
+ * cadence — on every process EXCEPT the one that took the action, which
+ * refuses immediately because /api/admin/lockdown invalidates this uid's
+ * entry after the write (the platform/feature invalidation hook, mirrored).
+ * That bound is acceptable here for the same reason `media/sign` omits the
+ * user scope entirely: the hard kill never rode this read. A user lock also
+ * disables the Auth account and revokes refresh tokens, so the ID token
+ * stops refreshing and the session cookie dies at its next
+ * `verifySessionCookie(…, true)` — the cache can only delay the DISTINCT
+ * 423 body, not access itself, and 15s matches the platform scope's stated
+ * worst case and the drill's measured flip times.
+ *
+ * Bounded so a scan of uids cannot balloon a warm process: past
+ * USER_LOCKDOWN_CACHE_MAX entries the least-recently-USED is evicted (a
+ * cache hit refreshes recency, so active sessions survive a scan).
+ */
+export const USER_LOCKDOWN_CACHE_MAX = 5000
+
+const userCache = new Map<
+  string,
+  { at: number; state: LockdownState | null }
+>()
+const userPending = new Map<string, Promise<LockdownState | null>>()
+
+/**
+ * Drop one uid's cached verdict (after a user lock/unlock write), or the
+ * whole cache when called bare. The acting process serves a fresh verdict
+ * immediately; other processes converge within PLATFORM_TTL_MS.
+ */
+export function invalidateUserLockdownCache(uid?: string): void {
+  if (uid === undefined) {
+    userCache.clear()
+    userPending.clear()
+    return
+  }
+  userCache.delete(uid)
+  userPending.delete(uid)
+}
+
 /** `lockdowns/user--{uid}`, normalized; null = not locked (incl. on error). */
 export async function getUserLockdown(
   uid: string,
 ): Promise<LockdownState | null> {
-  try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection(LOCKDOWNS_COLLECTION)
-      .doc(userLockdownDocId(uid))
-      .get()
-    return snapshot.exists
-      ? normalizeLockdownDoc(snapshot.data() as Partial<LockdownDoc>, 'user')
-      : null
-  } catch {
-    return null
+  const cached = userCache.get(uid)
+  if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) {
+    // Re-insert to refresh recency: eviction is by least-recently-used, and
+    // an ACTIVE session must not be the one a uid scan pushes out.
+    userCache.delete(uid)
+    userCache.set(uid, cached)
+    return cached.state
   }
+  let pending = userPending.get(uid)
+  if (!pending) {
+    pending = (async () => {
+      let state: LockdownState | null = null
+      try {
+        const snapshot = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection(LOCKDOWNS_COLLECTION)
+          .doc(userLockdownDocId(uid))
+          .get()
+        state = snapshot.exists
+          ? normalizeLockdownDoc(snapshot.data() as Partial<LockdownDoc>, 'user')
+          : null
+      } catch {
+        // Fail open, matching the platform and feature reads: an unreachable
+        // Firestore is an outage, not a lockdown.
+      }
+      userCache.delete(uid)
+      userCache.set(uid, { at: Date.now(), state })
+      while (userCache.size > USER_LOCKDOWN_CACHE_MAX) {
+        const oldest = userCache.keys().next().value
+        if (oldest === undefined) break
+        userCache.delete(oldest)
+      }
+      return state
+    })().finally(() => {
+      userPending.delete(uid)
+    })
+    userPending.set(uid, pending)
+  }
+  return pending
 }
 
 export interface LockdownVerdictOptions {
