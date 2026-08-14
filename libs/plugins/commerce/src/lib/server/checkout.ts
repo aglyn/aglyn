@@ -87,6 +87,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // Inventory (AGL-281): variant-aware, honoring the product's oversell
     // policy (backorder products keep selling at zero). Enforced here (the
     // block's display is cosmetic) and decremented by the webhook.
+    //
+    // DELIBERATELY UNCHANGED for subscription sessions (AGL-1744), which this
+    // gate also covers and which nothing ever decrements — not the initial
+    // charge (AGL-1732) and not a renewal (AGL-1743). So on a
+    // subscription-only product the gate is permanently satisfied and one
+    // unit sells unlimited subscriptions. The fix went to the CONSOLE, which
+    // stops inviting the number (`stockTrackingApplies`), rather than here,
+    // for two reasons: this gate is the one shared by every other purchase
+    // path, and skipping it for subscription mode would silently RESUME
+    // selling for any merchant who set 0 to stop new subscribers — a lever
+    // that works today, on production data nobody has read. Whether to drop
+    // the gate for subscription mode, or decrement per renewal once AGL-1743
+    // lands, is the open product decision; both are recorded there.
     if (!CommerceModel.canPurchase(lifted, variant.id, quantity)) {
       return res.status(409).json({ error: 'Sold out' })
     }

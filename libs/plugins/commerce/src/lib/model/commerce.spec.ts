@@ -28,6 +28,7 @@ import {
   productPriceRange,
   registersWithinCap,
   resolveCheckoutBillingMode,
+  stockTrackingApplies,
   transferVariantInventory,
   validateCollection,
   validateProduct,
@@ -389,5 +390,81 @@ describe('resolveCheckoutBillingMode (AGL-545)', () => {
     expect(
       resolveCheckoutBillingMode({ subscriptionOptional: true }, 'subscribe'),
     ).toBe('payment')
+  })
+})
+
+/**
+ * Stock tracking is inert on a subscription-only product: nothing decrements
+ * it on the initial charge (AGL-1732) or on a renewal (AGL-1743), so the
+ * console must stop offering the number rather than maintain a false one.
+ *
+ * Each case is asserted individually — a single `toBe(false)` on the
+ * subscription-only shape would pass against a predicate that returned
+ * `!product.subscription`, which is the wrong answer for "Both".
+ */
+describe('stockTrackingApplies (AGL-1744)', () => {
+  const monthly = { interval: 'month' } as const
+
+  it('applies to a plain one-time product', () => {
+    expect(stockTrackingApplies({})).toBe(true)
+  })
+
+  it('does NOT apply to a subscription-only product', () => {
+    expect(stockTrackingApplies({ subscription: monthly })).toBe(false)
+    expect(stockTrackingApplies({ subscription: { interval: 'year' } })).toBe(
+      false,
+    )
+    // Explicitly false is still subscription-only, not "Both".
+    expect(
+      stockTrackingApplies({
+        subscription: monthly,
+        subscriptionOptional: false,
+      }),
+    ).toBe(false)
+  })
+
+  /**
+   * The half that must keep working. A "Both" product genuinely sells
+   * one-time — the cart only ever builds `mode: 'payment'`, and buy-now with
+   * `billing: 'once'` records a plain order that decrements — so withdrawing
+   * tracking here would delete a control that works.
+   */
+  it('DOES apply to a subscriptionOptional ("Both") product', () => {
+    expect(
+      stockTrackingApplies({
+        subscription: monthly,
+        subscriptionOptional: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('is not fooled by product type — a physical box is no truer', () => {
+    // `type` is deliberately not an input: a physical subscription wants a
+    // per-renewal decrement, which AGL-1743 blocks.
+    expect(
+      stockTrackingApplies(
+        product({ type: 'physical', subscription: monthly }),
+      ),
+    ).toBe(false)
+    expect(
+      stockTrackingApplies(product({ type: 'digital', subscription: monthly })),
+    ).toBe(false)
+  })
+
+  /**
+   * The predicate must not have moved the gate every other purchase path
+   * shares. Pinned here because AGL-1744's whole risk was altering it as a
+   * side effect.
+   */
+  it('leaves canPurchase untouched for one-time products', () => {
+    const oneTime = product({
+      variants: [
+        { id: 'a', priceUsd: 10, inventory: 2 },
+        { id: 'b', priceUsd: 12, inventory: 0 },
+      ],
+    })
+    expect(canPurchase(oneTime, 'a', 2)).toBe(true)
+    expect(canPurchase(oneTime, 'a', 3)).toBe(false)
+    expect(canPurchase(oneTime, 'b')).toBe(false)
   })
 })
