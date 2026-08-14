@@ -18,6 +18,7 @@
 
 import { type AglynOrgBilling } from '@aglyn/aglyn'
 import {
+  billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
   METERED_MARKUP,
@@ -26,7 +27,7 @@ import { Stack, Typography } from '@mui/material'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { documentId } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
 export interface BillingMeteredEstimateProps {
   hosts: any[]
@@ -39,6 +40,15 @@ export interface BillingMeteredEstimateProps {
 }
 
 /**
+ * What `/api/billing/usage-config` answered: the raw
+ * `BILL_ORG_LIBRARY_STORAGE_FROM` value, or `'unknown'` when the route could
+ * not be reached — in which case the card fails HIGH (includes the library),
+ * because understating the invoice is the one direction it must never be
+ * wrong in.
+ */
+type UsageConfig = { orgLibraryBilledFrom: string | null } | 'unknown'
+
+/**
  * Month-to-date metered cost estimate (AGL-41): mirrors the report-usage
  * rollup's math (shared `estimateMonthlyUsageCost`) over the same counters
  * so workspaces see the number before it lands on an invoice.
@@ -47,14 +57,34 @@ export interface BillingMeteredEstimateProps {
  * than reproducing it — the whole point of this card is that it agrees with
  * the invoice, and it could only do that by accident while it priced from
  * unit zero and the published terms promised overage-only.
+ *
+ * Since AGL-1473's console half it also reads `orgs/{id}/counters/media` —
+ * the ORG LIBRARY's stored bytes, which belong to no site and were invisible
+ * to a host-only sum. Exactly the rollup's shape: the library is one more
+ * `HostUsageSnapshot`, and TWO estimates come out. The truth (with the
+ * library) drives every usage figure; what an INVOICE may see excludes the
+ * library until `BILL_ORG_LIBRARY_STORAGE_FROM` names a month at or before
+ * this one, decided by the same `billsOrgLibraryStorage` the rollup calls
+ * over the same raw value (served by `/api/billing/usage-config`).
  */
 export function BillingMeteredEstimateComponent(
   props: BillingMeteredEstimateProps,
 ) {
   const { hosts, org } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const [snapshots, setSnapshots] = useState<HostUsageSnapshot[] | null>(null)
+  /**
+   * The org library's `counters/media.bytes`. `null` until it is KNOWN —
+   * a denied read stays null and holds the loading state, because a card
+   * that renders a host-only figure after a failed org read has quietly
+   * reintroduced the understatement (the billing-usage posture: better
+   * "Calculating…" than a number that is low).
+   */
+  const [orgLibraryBytes, setOrgLibraryBytes] = useState<number | null>(null)
+  const [config, setConfig] = useState<UsageConfig | null>(null)
   const month = new Date().toISOString().slice(0, 7)
+  const orgId = (org as any)?.$id as string | undefined
 
   useEffect(() => {
     let active = true
@@ -92,8 +122,89 @@ export function BillingMeteredEstimateComponent(
     }
   }, [hosts, firestore, month])
 
-  const estimate = estimateMonthlyUsageCost(snapshots ?? [], org)
+  // The ORG LIBRARY's bytes (AGL-1473). A missing counter is a true zero —
+  // the org has never uploaded to its library — but a FAILED read is not,
+  // so only the resolved path ever sets a number. An org without an id
+  // resolves free and meters nothing, so its library is zero by definition.
+  useEffect(() => {
+    if (!orgId) {
+      setOrgLibraryBytes(0)
+      return
+    }
+    let active = true
+    void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'media'))
+      .then((counter) => {
+        if (active) setOrgLibraryBytes(Number(counter.get('bytes') ?? 0))
+      })
+      .catch(() => {
+        // Held at null: the card keeps "Calculating…" rather than publishing
+        // a host-only sum as if it were the org's storage.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, orgId])
+
+  // Whether THIS month's invoice includes the library — a server env var
+  // (`BILL_ORG_LIBRARY_STORAGE_FROM`) this client component cannot read, so
+  // it is fetched once and evaluated through the same
+  // `billsOrgLibraryStorage` the rollup uses. Unreachable ⇒ 'unknown' ⇒ the
+  // estimate INCLUDES the library: at worst it overstates, never under.
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          '/api/billing/usage-config',
+          idToken
+            ? { headers: { Authorization: `Bearer ${idToken}` } }
+            : undefined,
+        )
+        if (!response.ok) throw new Error(`usage-config ${response.status}`)
+        const payload = await response.json()
+        if (active) {
+          setConfig({
+            orgLibraryBilledFrom:
+              typeof payload?.orgLibraryBilledFrom === 'string'
+                ? payload.orgLibraryBilledFrom
+                : null,
+          })
+        }
+      } catch {
+        if (active) setConfig('unknown')
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  const ready = snapshots !== null && orgLibraryBytes !== null && config !== null
+  const orgLibrary: HostUsageSnapshot = {
+    storageBytes: orgLibraryBytes ?? 0,
+    pageViews: 0,
+    formSubmissions: 0,
+  }
+  // TWO estimates, the rollup's exact split (AGL-1473): `estimate` is the
+  // TRUTH — every byte the org stores — and drives the usage lines.
+  // `billedEstimate` is what the INVOICE will see, and it excludes the org
+  // library until the switch covers this month.
+  const estimate = estimateMonthlyUsageCost(
+    [...(snapshots ?? []), orgLibrary],
+    org,
+  )
+  const libraryBilled =
+    config === 'unknown'
+      ? true
+      : config
+        ? billsOrgLibraryStorage(month, config.orgLibraryBilledFrom)
+        : true
+  const billedEstimate = libraryBilled
+    ? estimate
+    : estimateMonthlyUsageCost(snapshots ?? [], org)
   const { included } = estimate
+  const orgLibraryGb = (orgLibraryBytes ?? 0) / (1024 * 1024 * 1024)
   // `UNLIMITED` is Infinity, and a band derived from it stays Infinity —
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
@@ -118,21 +229,89 @@ export function BillingMeteredEstimateComponent(
   // only the monthly one puts this caption back in the position of promising
   // annual customers a settlement that never arrives.
   const annual = (org as any)?.subscription?.interval === 'year'
+
+  /**
+   * One metered dimension: used of included, with any billable excess as its
+   * own warning-coloured span (sibling inline spans — two-tone text) so the
+   * included portion and the part that costs money read apart at a glance.
+   * The excess comes off `billedEstimate`, so what is called "billable" is
+   * exactly what the dollars above price.
+   */
+  const usageRow = (
+    label: string,
+    used: string,
+    includedBand: string,
+    billable: number,
+    billableText: string,
+  ) => (
+    <Typography variant="body2" color="text.secondary">
+      {`${label}: ${used} of ${includedBand}`}
+      {included.metered && billable > 0 ? (
+        <Typography
+          component="span"
+          variant="body2"
+          sx={{ color: 'warning.main' }}
+        >
+          {` · ${billableText} billable`}
+        </Typography>
+      ) : null}
+    </Typography>
+  )
+
   return (
     <Stack spacing={0.5}>
       <Typography variant="h5">
-        {snapshots
-          ? `$${(estimate.billedCents / 100).toFixed(2)}`
+        {ready
+          ? `$${(billedEstimate.billedCents / 100).toFixed(2)}`
           : 'Calculating…'}
       </Typography>
-      <Typography variant="body2" color="text.secondary">
-        {`Month to date (${month}): ` +
-          `${estimate.storageGb.toFixed(2)} of ` +
-          `${band(included.storageGb, 2)} GB stored · ` +
-          `${estimate.pageViews} of ${band(included.pageViews)} page views · ` +
-          `${estimate.formSubmissions} of ` +
-          `${band(included.formSubmissions)} form submissions`}
+      {ready && included.metered && billedEstimate.billedCents === 0 ? (
+        // Reassurance is the feature: most orgs live inside their bands, and
+        // "no surprise bill" is the whole reason this card exists.
+        <Typography variant="body2" sx={{ color: 'success.main' }}>
+          {"You're within your plan's included usage — no metered charges " +
+            'this period.'}
+        </Typography>
+      ) : null}
+      <Typography variant="caption" color="text.secondary">
+        {`Month to date (${month})`}
       </Typography>
+      {/* No usage rows until the counters and the billing switch are known —
+          a row of zeros during loading is a wrong answer wearing a default
+          (`feedback_loading_default_answers_a_question`). */}
+      {ready ? (
+        <>
+          {usageRow(
+            'Storage',
+            estimate.storageGb.toFixed(2),
+            `${band(included.storageGb, 2)} GB`,
+            billedEstimate.billableStorageGb,
+            `${billedEstimate.billableStorageGb.toFixed(2)} GB`,
+          )}
+          {orgLibraryGb > 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Includes ${orgLibraryGb.toFixed(2)} GB in your organization library.` +
+                (libraryBilled
+                  ? ''
+                  : ' Organization-library storage is measured but not yet billed.')}
+            </Typography>
+          ) : null}
+          {usageRow(
+            'Page views',
+            estimate.pageViews.toLocaleString(),
+            band(included.pageViews),
+            billedEstimate.billablePageViews,
+            Math.ceil(billedEstimate.billablePageViews).toLocaleString(),
+          )}
+          {usageRow(
+            'Form submissions',
+            estimate.formSubmissions.toLocaleString(),
+            band(included.formSubmissions),
+            billedEstimate.billableFormSubmissions,
+            Math.ceil(billedEstimate.billableFormSubmissions).toLocaleString(),
+          )}
+        </>
+      ) : null}
       <Typography variant="caption" color="text.secondary">
         {included.metered
           ? `Only usage beyond your plan's included storage, bandwidth and ` +
@@ -140,7 +319,8 @@ export function BillingMeteredEstimateComponent(
             (annual
               ? 'Your subscription is annual, so usage accrues across the ' +
                 'year and settles on your renewal invoice.'
-              : 'Billed monthly alongside your subscription.')
+              : 'Metered charges settle on the same invoice as your ' +
+                'monthly subscription.')
           : "Your plan's storage, bandwidth and form submissions are " +
             'included caps, not meters — no usage charges.'}
       </Typography>
