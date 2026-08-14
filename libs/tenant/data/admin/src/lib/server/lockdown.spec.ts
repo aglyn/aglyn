@@ -52,11 +52,16 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 import {
+  featureLockdownRefusal,
+  getFeatureLockdown,
   getLockdownVerdict,
   getPlatformLockdown,
   getUserLockdown,
+  invalidateFeatureLockdownCache,
   invalidatePlatformLockdownCache,
+  invalidateUserLockdownCache,
   lockdownJsonResponse,
+  USER_LOCKDOWN_CACHE_MAX,
 } from './lockdown'
 
 const NOW = 1_755_000_000_000
@@ -66,6 +71,8 @@ beforeEach(() => {
   reads = 0
   failReads = false
   invalidatePlatformLockdownCache()
+  invalidateFeatureLockdownCache()
+  invalidateUserLockdownCache()
 })
 
 const lockPlatform = (over: Doc = {}) =>
@@ -81,6 +88,15 @@ const lockUser = (uid: string, over: Doc = {}) =>
   store.set(`lockdowns/user--${uid}`, {
     scope: 'user',
     reason: 'manual',
+    atMs: NOW,
+    ...over,
+  })
+
+const lockFeature = (feature: string, over: Doc = {}) =>
+  store.set(`lockdowns/feature--${feature}`, {
+    scope: 'feature',
+    feature,
+    reason: 'security',
     atMs: NOW,
     ...over,
   })
@@ -191,6 +207,249 @@ describe('platform cache', () => {
   it('a malformed platform doc is refused, not guessed at', async () => {
     store.set('lockdowns/platform', { reason: 'not-a-reason' })
     await expect(getPlatformLockdown()).resolves.toBeNull()
+  })
+})
+
+describe('FEATURE scope (AGL-1510) — one capability off, everything else serving', () => {
+  it('a locked feature refuses with the distinct feature 423 body', async () => {
+    lockFeature('uploads')
+    const refusal = await featureLockdownRefusal({
+      feature: 'uploads',
+      nowMs: NOW,
+    })
+    expect(refusal?.status).toBe(423)
+    const body = await (refusal as Response).json()
+    expect(body).toMatchObject({
+      error: 'locked',
+      scope: 'feature',
+      feature: 'uploads',
+      reason: 'security',
+    })
+  })
+
+  it('NON-INTERFERENCE: an uploads lock leaves every other feature serving', async () => {
+    lockFeature('uploads')
+    for (const feature of [
+      'signups',
+      'checkout',
+      'marketplace-installs',
+      'ai-assist',
+    ] as const) {
+      await expect(
+        featureLockdownRefusal({ feature, nowMs: NOW }),
+      ).resolves.toBeNull()
+    }
+  })
+
+  it('a feature lock implies NOTHING about the scope verdict', async () => {
+    lockFeature('uploads')
+    lockFeature('checkout')
+    // The scope resolver never consults feature docs — org-scoped routes
+    // keep serving during a feature lock.
+    await expect(
+      getLockdownVerdict({ uid: 'customer-1', nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('a PLATFORM lock implies every feature — composition, not ranking', async () => {
+    lockPlatform({ reason: 'maintenance' })
+    for (const feature of ['signups', 'uploads', 'checkout'] as const) {
+      const refusal = await featureLockdownRefusal({ feature, nowMs: NOW })
+      expect(refusal?.status).toBe(423)
+      expect((await (refusal as Response).json()).scope).toBe('platform')
+    }
+    // The platform-scope staff bypass is UNCHANGED — even on checkout,
+    // whose feature-stage bypass is withheld.
+    await expect(
+      featureLockdownRefusal({ feature: 'checkout', staff: true, nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('staff bypass EXACTLY where designed: uploads/installs/ai yes, checkout NO', async () => {
+    for (const feature of [
+      'uploads',
+      'marketplace-installs',
+      'ai-assist',
+    ] as const) {
+      lockFeature(feature)
+      invalidateFeatureLockdownCache()
+      // Staff verify the fix through the lock…
+      await expect(
+        featureLockdownRefusal({ feature, staff: true, nowMs: NOW }),
+      ).resolves.toBeNull()
+      // …customers wait for the lift.
+      const refusal = await featureLockdownRefusal({ feature, nowMs: NOW })
+      expect(refusal?.status).toBe(423)
+    }
+    // A staff checkout session is still a real charge — no bypass.
+    lockFeature('checkout')
+    invalidateFeatureLockdownCache()
+    const refusal = await featureLockdownRefusal({
+      feature: 'checkout',
+      staff: true,
+      nowMs: NOW,
+    })
+    expect(refusal?.status).toBe(423)
+    expect((await (refusal as Response).json()).feature).toBe('checkout')
+  })
+
+  it('EXPIRY restores the feature with no staff action and NO write', async () => {
+    lockFeature('signups', { untilMs: NOW + 60_000 })
+    expect(
+      (await featureLockdownRefusal({ feature: 'signups', nowMs: NOW }))?.status,
+    ).toBe(423)
+    invalidateFeatureLockdownCache()
+    await expect(
+      featureLockdownRefusal({ feature: 'signups', nowMs: NOW + 60_001 }),
+    ).resolves.toBeNull()
+    // The doc is still there — nothing wrote; the expiry alone restored it.
+    expect(store.has('lockdowns/feature--signups')).toBe(true)
+  })
+
+  it('a malformed feature doc is refused, not guessed at', async () => {
+    store.set('lockdowns/feature--uploads', {
+      scope: 'feature',
+      feature: 'not-a-real-feature',
+      reason: 'security',
+    })
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+  })
+
+  it('fails open on an unreachable Firestore — an outage is not a lockdown', async () => {
+    failReads = true
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+    await expect(
+      featureLockdownRefusal({ feature: 'uploads', nowMs: NOW }),
+    ).resolves.toBeNull()
+  })
+
+  it('caches within the TTL and re-reads after invalidation', async () => {
+    lockFeature('uploads')
+    await getFeatureLockdown('uploads')
+    const after = reads
+    await getFeatureLockdown('uploads')
+    expect(reads).toBe(after)
+
+    store.delete('lockdowns/feature--uploads')
+    invalidateFeatureLockdownCache()
+    await expect(getFeatureLockdown('uploads')).resolves.toBeNull()
+    expect(reads).toBe(after + 1)
+  })
+})
+
+describe('USER cache (AGL-1522) — one read per uid per TTL window, not one per call', () => {
+  it('N session verifications within the TTL cost ONE user read (+1 platform), and every one still refuses the locked user', async () => {
+    lockUser('bad-actor')
+    for (let i = 0; i < 20; i++) {
+      const verdict = await getLockdownVerdict({
+        uid: 'bad-actor',
+        nowMs: NOW,
+      })
+      // The refusal survives the cache: every verification refuses, not
+      // just the one that paid the read.
+      expect(verdict?.scope).toBe('user')
+    }
+    // 1 × `lockdowns/platform` + 1 × `lockdowns/user--bad-actor`. The
+    // uncached shape measured 21 here (one user read per call).
+    expect(reads).toBe(2)
+  })
+
+  it('concurrent verifications of one uid coalesce into ONE in-flight read', async () => {
+    lockUser('bad-actor')
+    const results = await Promise.all([
+      getUserLockdown('bad-actor'),
+      getUserLockdown('bad-actor'),
+      getUserLockdown('bad-actor'),
+    ])
+    expect(reads).toBe(1)
+    for (const state of results) expect(state?.scope).toBe('user')
+  })
+
+  it('the cache EXPIRES — the staleness bound is the TTL, not forever', async () => {
+    // The plant this spec exists to catch: a cache that never expires makes
+    // the staleness unbounded, and a freshly locked user's other-process
+    // sessions would never see the lock at all.
+    const spy = jest.spyOn(Date, 'now')
+    try {
+      spy.mockReturnValue(NOW)
+      // Not locked yet — the null verdict is what gets cached.
+      await expect(getUserLockdown('u1')).resolves.toBeNull()
+      lockUser('u1')
+      // INSIDE the window the stale null still serves, with no read: this is
+      // the documented ≤15s bound, pinned as intentional. 15_000 is written
+      // out on purpose — WIDENING the TTL loosens the documented staleness
+      // bound and should turn this spec red too.
+      spy.mockReturnValue(NOW + 15_000 - 1)
+      await expect(getUserLockdown('u1')).resolves.toBeNull()
+      expect(reads).toBe(1)
+      // AT the boundary the entry is dead: the lock is visible.
+      spy.mockReturnValue(NOW + 15_000)
+      const state = await getUserLockdown('u1')
+      expect(reads).toBe(2)
+      expect(state?.scope).toBe('user')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('invalidation after the admin write collapses staleness to the write moment', async () => {
+    // What /api/admin/lockdown does after a user lock/unlock: the acting
+    // process refuses immediately instead of waiting out the TTL.
+    await expect(getUserLockdown('u1')).resolves.toBeNull()
+    lockUser('u1')
+    invalidateUserLockdownCache('u1')
+    const state = await getUserLockdown('u1')
+    expect(state?.scope).toBe('user')
+    // …and the UNLOCK direction readmits just as immediately.
+    store.delete('lockdowns/user--u1')
+    invalidateUserLockdownCache('u1')
+    await expect(getUserLockdown('u1')).resolves.toBeNull()
+  })
+
+  it('invalidating one uid leaves every other entry cached', async () => {
+    await getUserLockdown('u1')
+    await getUserLockdown('u2')
+    const before = reads
+    invalidateUserLockdownCache('u1')
+    await getUserLockdown('u2')
+    expect(reads).toBe(before)
+    await getUserLockdown('u1')
+    expect(reads).toBe(before + 1)
+  })
+
+  it('an EXPIRED user lock restores access even when served from the cache', async () => {
+    lockUser('u1', { untilMs: NOW + 60_000 })
+    const during = await getLockdownVerdict({ uid: 'u1', nowMs: NOW })
+    expect(during?.scope).toBe('user')
+    const after = reads
+    // Same cached state, later nowMs: activity is evaluated per call, so
+    // expiry needs neither a staff action nor a fresh read.
+    await expect(
+      getLockdownVerdict({ uid: 'u1', nowMs: NOW + 60_001 }),
+    ).resolves.toBeNull()
+    expect(reads).toBe(after)
+  })
+
+  it('staff verdicts still perform NO reads and warm NO cache', async () => {
+    lockUser('staff-1')
+    await expect(
+      getLockdownVerdict({ staff: true, uid: 'staff-1', nowMs: NOW }),
+    ).resolves.toBeNull()
+    expect(reads).toBe(0)
+  })
+
+  it('the LRU bound holds: a uid scan cannot balloon the cache, and evicts oldest-first', async () => {
+    await getUserLockdown('first')
+    for (let i = 0; i < USER_LOCKDOWN_CACHE_MAX; i += 1) {
+      await getUserLockdown(`scan-${i}`)
+    }
+    const before = reads
+    // 'first' was the least recently used entry — evicted, so it re-reads…
+    await getUserLockdown('first')
+    expect(reads).toBe(before + 1)
+    // …while the scan's most recent uid is still cached.
+    await getUserLockdown(`scan-${USER_LOCKDOWN_CACHE_MAX - 1}`)
+    expect(reads).toBe(before + 1)
   })
 })
 

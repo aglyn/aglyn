@@ -39,7 +39,13 @@ import {
   type BillingInterval,
 } from '../../../../utils/server/billing-addons'
 
+// lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
+// sessions alive PRECISELY so members can reach billing and pay; a 423
+// here would break the page they need. Security/manual locks revoke
+// tokens at lock time, which closes this surface within the token hour.
+
 /** Kinds without a per-plan hard max get sane purchase ceilings. */
+
 const EXTRA_HOSTS_MAX = 100
 const POS_REGISTERS_MAX = 50
 
@@ -287,7 +293,10 @@ async function handler(request: Request): Promise<Response> {
         `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
           `&subscription=${encodeURIComponent(subscription.id)}` +
           query +
-          '&subscription_proration_behavior=create_prorations',
+          '&subscription_proration_behavior=create_prorations' +
+          // Preview under the same tax setting the set-action applies
+          // (AGL-1537), so the quoted proration matches the invoice.
+          '&automatic_tax[enabled]=true',
       )
       // amount_due is the WHOLE next invoice (renewal included); the cost
       // of this change is its proration lines — negative on removals
@@ -308,6 +317,10 @@ async function handler(request: Request): Promise<Response> {
 
     const params = new URLSearchParams({
       proration_behavior: 'create_prorations',
+      // Stripe Tax (AGL-1537): an add-on purchase is a subscription update,
+      // and updates are where subscriptions created before automatic tax
+      // gain it — same rule as the plan-switch route. No-op when already on.
+      'automatic_tax[enabled]': 'true',
     })
     for (const [key, value] of itemParams) {
       params.set(`items[0][${key}]`, value)

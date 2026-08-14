@@ -47,6 +47,7 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
+  resolveMarketplaceFeePct,
   resolveTransactionFeePct,
   UNLIMITED,
 } from './plan-entitlements'
@@ -332,10 +333,13 @@ describe('plan entitlements', () => {
       if (key === 'features') continue
       if (key === 'transactionFeePhysicalPct') continue
       if (key === 'transactionFeeDigitalPct') continue
+      // A fee RATE is not a capacity — unbounded would mean an infinite cut.
+      if (key === 'marketplaceFeePct') continue
       expect([key, value]).toEqual([key, UNLIMITED])
     }
     expect(resolved.transactionFeePhysicalPct).toBe(0)
     expect(resolved.transactionFeeDigitalPct).toBe(0)
+    expect(resolved.marketplaceFeePct).toBe(20)
     // The two Enterprise differentiators come from the PLAN now, with no
     // per-org entitlement override needed.
     expect(checkEntitlement(org, 'ssoEnabled')).toBe(true)
@@ -786,6 +790,46 @@ describe('plan entitlements', () => {
         'digital',
       ),
     ).toBe(0)
+  })
+
+  it('resolves the marketplace take rate from entitlements (AGL-1543)', () => {
+    // The published rates: 20% per sale, 30% on the Free plan.
+    expect(resolveMarketplaceFeePct({ plan: 'free' } as any)).toBe(30)
+    expect(resolveMarketplaceFeePct({ plan: 'starter' } as any)).toBe(20)
+    expect(resolveMarketplaceFeePct({ plan: 'pro' } as any)).toBe(20)
+    expect(resolveMarketplaceFeePct({ plan: 'agency' } as any)).toBe(20)
+    // Missing/unknown plans are free-plan sellers.
+    expect(resolveMarketplaceFeePct(null)).toBe(30)
+    expect(resolveMarketplaceFeePct({ plan: 'bogus' } as any)).toBe(30)
+    // The AGL-1543 defect: a dead subscription must price as free (30%),
+    // not at the paid rate the stale `plan` field still names.
+    expect(
+      resolveMarketplaceFeePct({
+        plan: 'pro',
+        subscription: { status: 'canceled' },
+      } as any),
+    ).toBe(30)
+    // A per-org override (negotiated rate) wins over the plan default.
+    expect(
+      resolveMarketplaceFeePct({
+        plan: 'pro',
+        entitlements: { marketplaceFeePct: 15 },
+      } as any),
+    ).toBe(15)
+    // Nonsense overrides fall back to the CONSERVATIVE (free-plan) rate —
+    // a bad doc must never grant a 0% cut by accident.
+    expect(
+      resolveMarketplaceFeePct({
+        plan: 'pro',
+        entitlements: { marketplaceFeePct: -5 },
+      } as any),
+    ).toBe(30)
+    expect(
+      resolveMarketplaceFeePct({
+        plan: 'pro',
+        entitlements: { marketplaceFeePct: 101 },
+      } as any),
+    ).toBe(30)
   })
 
   describe('MRR (AGL-925)', () => {

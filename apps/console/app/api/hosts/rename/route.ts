@@ -24,7 +24,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
   syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 
@@ -92,6 +94,18 @@ async function handler(request: Request): Promise<Response> {
         error: 'Changing the subdomain requires the site admin role',
       }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct
+    // 423 body; staff bypass is the un-panic invariant. The org doc is
+    // fetched deliberately — an org lock never stamps host docs, so a
+    // host-only verdict would silently miss it.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
 
     const previous = (hostSnapshot.get('subdomain') as string | undefined) ?? null
     if (previous === subdomain) return Response.json({ ok: true, subdomain }, { status: 200 })

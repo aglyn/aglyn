@@ -20,6 +20,7 @@ measure availability and will commit to a number once there is a quarter of it
 GET  https://app.aglyn.com/api/health          console
 GET  https://demo.aglyn.com/api/health         tenant runtime
 GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
+GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
 HEAD <any>                                     liveness only, touches nothing
 ```
 
@@ -135,6 +136,7 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `marketing-home` | `aglyn.com/` | 2xx and body contains `Aglyn` | 5 min |
 | `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
@@ -148,6 +150,20 @@ Notes that keep these honest:
 - `backup-state` closes AGL-1490's alert gap: 503 when any backup is failed,
   none is READY, or the newest READY is older than 8 days. The probe's verdict
   logic is `backupsHealth` in `health-report.ts`, spec-covered.
+- `signup-volume` is the AGL-1536 wave alarm — the detection layer over the
+  AGL-1534 rate limit. The endpoint 503s when more than 10 orgs were created
+  in the trailing hour (one maxed-out IP under the AGL-1534 cap can produce
+  exactly 10, so 11+ means multiple addresses — the shape the limiter cannot
+  see; baseline today is ~0/h against 4 orgs total). **When it fires:** open
+  the console org list and look at what arrived; a launch-day rush of real
+  people is good news, a wall of gibberish names is a wave — pull the
+  `signups` feature lock from the staff console (runbook:
+  `apps/docs/docs/staff-console/lockdown.md`), which refuses sessions to
+  accounts created after the lock while every existing account signs in
+  untouched. A pure log-based metric was the lighter design, but Vercel Hobby
+  stdout never reaches GCP Logging (see the honest-gaps list), so the count
+  is read from the `orgs` collection itself — which also means a creation
+  path that skips any log line still moves the alarm.
 - `customer-site` asserts on the demo site's own content. If someone renames
   the demo site's title away from "Aglyn Demo", this check goes red — update
   the content matcher, don't delete the check.

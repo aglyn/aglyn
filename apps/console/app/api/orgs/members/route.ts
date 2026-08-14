@@ -32,8 +32,10 @@ import {
   findUserByEmailAcrossPools,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
   listOrgMembers,
+  lockdownRefusal,
   logOrgActivity,
   memberHasOrgPermission,
   meterOrgEmail,
@@ -95,6 +97,16 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (method === 'GET') {
+      // Lockdown verdict (AGL-1506): platform/org/user scopes — this read
+      // path never reaches the POST branch's org read, so the org scope
+      // rides on the request-deduped `getOrgDoc` read; distinct 423 body;
+      // staff bypass is the un-panic invariant.
+      const locked = await lockdownRefusal({
+        staff: isStaff,
+        uid: decoded.uid,
+        org: (await getOrgDoc(orgId)) ?? undefined,
+      })
+      if (locked) return locked
       const members = await listOrgMembers(orgId)
       // `?counts=1` — the seat total WITHOUT the roster (AGL-1253).
       //
@@ -140,6 +152,15 @@ async function handler(request: Request): Promise<Response> {
     if (!orgSnapshot.exists) {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
+    // Lockdown verdict (AGL-1506): platform/org/user scopes with the org
+    // doc already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org: orgSnapshot.data(),
+    })
+    if (locked) return locked
     const ownerUid = orgSnapshot.data()?.['ownerUid']
 
     const action = String(body?.action ?? '')

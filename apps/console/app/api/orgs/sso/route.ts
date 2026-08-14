@@ -22,6 +22,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   issueDomainClaim,
+  lockdownRefusal,
   logOrgActivity,
   provisionSsoPool,
   publishSsoDomains,
@@ -90,6 +91,15 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
     const org = orgSnapshot.data() ?? {}
+    // Lockdown verdict (AGL-1506): platform/org/user scopes with the org
+    // doc already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org,
+    })
+    if (locked) return locked
     if (!checkEntitlement(org, 'ssoEnabled')) {
       return Response.json(
         {

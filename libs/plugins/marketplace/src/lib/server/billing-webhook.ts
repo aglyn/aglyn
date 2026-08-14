@@ -37,7 +37,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       object?.payment_status === 'paid'
     ) {
       // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
-      const { listingId, buyerUid, sellerOrgId, feeCents } =
+      const { listingId, buyerUid, sellerOrgId, feeCents, transferCents } =
         object.metadata ?? {}
       if (listingId && buyerUid && sellerOrgId) {
         await firebaseAdmin
@@ -49,10 +49,49 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             listingId,
             buyerUid,
             sellerOrgId,
+            // The remittance-correct split (AGL-1544): amount_total includes
+            // the tax automatic_tax added on top; taxCents is what the
+            // PLATFORM owes the state, transferCents is what the seller
+            // received (their share of the pre-tax price). Gross − tax −
+            // transfer = the platform fee, which feeCents also records.
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
+            taxCents: Number(object?.total_details?.amount_tax ?? 0),
+            transferCents: Number(transferCents ?? 0),
+            // The refund trail (AGL-1546): `charge.refunded` carries the
+            // payment intent, not the session — without this id a refund
+            // could never find the purchase it revokes.
+            paymentIntentId: String(object?.payment_intent ?? ''),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+      }
+    }
+
+    // Refund revocation (AGL-1546): a FULL refund un-buys the listing —
+    // the install gate treats a purchase with `refundedAt` as absent. Only
+    // `refunded: true` (the whole charge) revokes; a partial refund is a
+    // concession, not a revocation. Keyed by the payment intent stored at
+    // completion, and idempotent: a Stripe redelivery restamps the same
+    // values on the same doc. Requires the platform webhook endpoint to be
+    // subscribed to `charge.refunded` (AGL-1549).
+    if (type === 'charge.refunded' && object?.refunded === true) {
+      const paymentIntentId = String(object?.payment_intent ?? '')
+      if (paymentIntentId) {
+        const firestore = firebaseAdmin.app().firestore()
+        const purchases = await firestore
+          .collection('marketplacePurchases')
+          .where('paymentIntentId', '==', paymentIntentId)
+          .limit(1)
+          .get()
+        if (!purchases.empty) {
+          await purchases.docs[0].ref.set(
+            {
+              refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              refundedCents: Number(object?.amount_refunded ?? 0),
+            },
+            { merge: true },
+          )
+        }
       }
     }
 }

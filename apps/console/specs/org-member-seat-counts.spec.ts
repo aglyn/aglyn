@@ -58,6 +58,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   findUserByEmailAcrossPools: jest.fn(),
   findUserByUidAcrossPools: jest.fn(),
   isImpersonationSession: () => false,
+  // AGL-1506: inert verdict — the 423 wiring has its own specs; these
+  // suites test other properties and must not depend on lockdown reads.
+  getOrgDoc: async () => null,
+  lockdownRefusal: async () => null,
   listOrgMembers: (...a: unknown[]) => mockListOrgMembers(...a),
   logOrgActivity: jest.fn(),
   memberHasOrgPermission: jest.fn(async () => true),

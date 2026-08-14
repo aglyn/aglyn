@@ -30,6 +30,7 @@ import {
   checkRateLimit,
   firebaseAdmin,
   getOrgDoc,
+  lockdownRefusal,
   rateLimitHeaders,
   verifyApiKey,
 } from '@aglyn/tenant-data-admin'
@@ -113,6 +114,15 @@ export async function authenticateApiV1(
 
   const org = await getOrgDoc(verified.orgId)
   if (!org) return ApiErrors.unauthorized({ headers })
+  // Lockdown verdict (AGL-1506) at the one chokepoint every /v1 request
+  // passes through, so the whole customer REST API answers a distinct 423
+  // under a lock instead of resource-level mystery errors. The org doc is
+  // already in hand (no extra read) and the platform read is TTL-cached.
+  // An API key is an ORG credential: no uid (no user scope to evaluate)
+  // and no staff bypass — staff lift locks with their console session, not
+  // with a customer's API key.
+  const locked = await lockdownRefusal({ org })
+  if (locked) return locked
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })
   }

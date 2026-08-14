@@ -30,6 +30,9 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
+// "contact support", and a locked member doing so is the happy path.
+
 const MAX_BODY = 5000
 
 /**

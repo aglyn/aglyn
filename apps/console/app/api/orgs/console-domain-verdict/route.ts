@@ -17,6 +17,8 @@
 
 import { resolveConsoleDomain } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — pre-session advisory resolve of a console domain; no org action.
+
 export const dynamic = 'force-dynamic'
 
 /**

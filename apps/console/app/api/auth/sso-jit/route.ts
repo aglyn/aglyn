@@ -26,6 +26,7 @@ import {
 import {
   backfillMemberIdentity,
   firebaseAdmin,
+  lockdownRefusal,
   logOrgActivity,
   resolveOrgMembership,
   seedUserProfile,
@@ -111,6 +112,18 @@ async function handler(request: Request): Promise<Response> {
         { status: 403 },
       )
     }
+
+    // Lockdown verdict (AGL-1506): JIT provisioning WRITES membership into
+    // the org, so a locked org mints none — the SSO flow surfaces the 423
+    // notice here, one step before the session mint (already gated by
+    // AGL-1501) would refuse the same caller anyway. Org doc already in
+    // hand; staff bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: orgData,
+    })
+    if (locked) return locked
 
     // Seed the personal profile doc (AGL-1127). NOTHING else creates it: not
     // this route, and not sign-up either — `users/{uid}` was only ever born

@@ -24,7 +24,9 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
+  lockdownRefusal,
   logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
@@ -75,6 +77,16 @@ async function handler(request: Request): Promise<Response> {
     if (!actor && !isStaff) {
       return Response.json({ error: 'You are not a member of that organization' }, { status: 403 })
     }
+    // Lockdown verdict (AGL-1506): platform/org/user scopes — this route
+    // has no org read of its own, so the org scope rides on the
+    // request-deduped `getOrgDoc` read; distinct 423 body; staff bypass
+    // is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org: (await getOrgDoc(orgId)) ?? undefined,
+    })
+    if (locked) return locked
     const firestore = firebaseAdmin.app().firestore()
     const rolesRef = firestore.collection('orgs').doc(orgId).collection('roles')
 

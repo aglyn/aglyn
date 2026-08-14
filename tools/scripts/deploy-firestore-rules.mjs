@@ -25,47 +25,21 @@
 // (self-loads the service account from the repo's local .env files; already-set
 // process.env still wins, so `source .env` first is optional.)
 
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { cert, initializeApp } from 'firebase-admin/app'
 import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+import {
+  authHeaders,
+  getServiceAccountToken,
+  loadLocalEnv,
+  readServiceAccount,
+  rulesApiBase,
+} from './lib/firebase-rules-api.mjs'
 
-// Load admin creds from the repo's local env files so the script is a single
-// self-contained command (matches the backfill scripts). Already-set env wins.
-function loadLocalEnv() {
-  const roots = ['.', 'apps/console', 'cloud']
-  const names = [
-    '.env',
-    '.env.local',
-    '.env.development',
-    '.env.development.local',
-    '.env.production',
-    '.env.production.local',
-  ]
-  for (const file of roots.flatMap((r) => names.map((n) => `${r}/${n}`))) {
-    if (!existsSync(file)) continue
-    let text
-    try {
-      text = readFileSync(file, 'utf8')
-    } catch {
-      continue
-    }
-    for (const line of text.split('\n')) {
-      const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/)
-      if (!match) continue
-      const key = match[1]
-      if (process.env[key] !== undefined) continue
-      let value = match[2].trim()
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1)
-      }
-      process.env[key] = value
-    }
-  }
-}
+// Env loading, auth, and REST access are shared with the other deploy
+// scripts AND the drift checker (check-rules-drift.mjs) via
+// lib/firebase-rules-api.mjs — the reader must never diverge from the
+// writer it verifies (AGL-1509).
 loadLocalEnv()
 
 // Dirty-tree refusal (AGL-1489): this script deploys the WORKTREE copy of
@@ -87,28 +61,20 @@ try {
   process.exit(1)
 }
 
-const projectId = process.env.FIREBASE_PROJECT_ID
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-if (!projectId || !clientEmail || !privateKey) {
+const serviceAccount = readServiceAccount()
+if (!serviceAccount) {
   console.error('Missing FIREBASE_* service-account env vars (source .env).')
   process.exit(1)
 }
-
-const app = initializeApp({
-  credential: cert({ projectId, clientEmail, privateKey }),
-})
-const token = (await app.options.credential.getAccessToken()).access_token
-const headers = {
-  Authorization: `Bearer ${token}`,
-  'Content-Type': 'application/json',
-}
+const { projectId } = serviceAccount
+const token = await getServiceAccountToken(serviceAccount)
+const headers = authHeaders(token)
 const project = `projects/${projectId}`
 const content = readFileSync(rulesPath, 'utf8')
 
 // 1) Create the ruleset — the API compiles it and rejects on errors.
 const created = await (
-  await fetch(`https://firebaserules.googleapis.com/v1/${project}/rulesets`, {
+  await fetch(`${rulesApiBase()}/v1/${project}/rulesets`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -125,7 +91,7 @@ console.log('Ruleset created:', created.name)
 // 2) Point the live cloud.firestore release at it.
 const releaseName = `${project}/releases/cloud.firestore`
 const updated = await (
-  await fetch(`https://firebaserules.googleapis.com/v1/${releaseName}`, {
+  await fetch(`${rulesApiBase()}/v1/${releaseName}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify({

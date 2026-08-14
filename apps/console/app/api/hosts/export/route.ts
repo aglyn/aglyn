@@ -22,6 +22,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
   scopedToHost,
 } from '@aglyn/tenant-data-admin'
 // Shared bundle contract lives in _lib: route.ts may only export handlers.
@@ -77,6 +78,18 @@ async function handler(request: Request): Promise<Response> {
     // datasets and media are read from the org, not the host (AGL-1046).
     const owningOrg = await getOrgForHost(hostId)
     const orgId = owningOrg?.orgId
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes with the
+    // docs already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: owningOrg?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
+
     if (!checkEntitlement(owningOrg?.org as any, 'siteExport')) {
       return Response.json({ error: 'Site export requires a Pro plan' }, { status: 403 })
     }

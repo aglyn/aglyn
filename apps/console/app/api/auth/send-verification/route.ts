@@ -25,6 +25,9 @@ import {
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 
+// lockdown-423: exempt — account recovery/verification must always work; pre-org, and the
+// session mint carries the lockdown gate.
+
 /**
  * Send the address-verification email (AGL-1112).
  *

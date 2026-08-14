@@ -28,6 +28,10 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — advisory availability probe that fires per keystroke in the create
+// dialog and mutates nothing; hosts/create carries the gate, and the
+// per-call verdict reads are not worth it here (AGL-1302 read budget).
+
 async function subdomainTaken(
   firestore: FirebaseFirestore.Firestore,
   subdomain: string,

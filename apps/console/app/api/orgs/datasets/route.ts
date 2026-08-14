@@ -33,6 +33,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
@@ -75,11 +76,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const membership = await resolveOrgMembership(decoded.uid, orgId)
     const member = membership?.member as any
-    if (
-      !member ||
-      !WRITER_ROLES.has(String(member.role)) ||
-      member.orgSuspended === true
-    ) {
+    if (!member || !WRITER_ROLES.has(String(member.role))) {
       return Response.json({ error: 'Editing org data requires the editor role' }, { status: 403 })
     }
 
@@ -90,6 +87,17 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
     const org = orgSnapshot.data() as any
+
+    // Lockdown verdict (AGL-1506): subsumes the bare `orgSuspended`
+    // projection check this route used to make — the org doc is read just
+    // above anyway, so the full verdict (platform/org/user scopes, staff
+    // bypass, distinct 423 body) costs no extra org read here.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org,
+    })
+    if (locked) return locked
 
     if (action === 'create-dataset') {
       if (!checkEntitlement(org, 'dataStore')) {

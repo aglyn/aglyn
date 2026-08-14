@@ -27,13 +27,26 @@
 // the app uses) or FIREBASE_DATABASE_URL, falling back to the default
 // `{projectId}-default-rtdb.firebaseio.com` instance.
 //
-//   set -a && source .env && set +a && \
-//     node tools/scripts/deploy-database-rules.mjs
+//   node tools/scripts/deploy-database-rules.mjs
+// (self-loads the service account from the repo's local .env files; already-set
+// process.env still wins, so `source .env` first is optional.)
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { cert, initializeApp } from 'firebase-admin/app'
 import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+import {
+  databaseRulesRequest,
+  getServiceAccountToken,
+  loadLocalEnv,
+  readServiceAccount,
+  resolveDatabaseUrl,
+} from './lib/firebase-rules-api.mjs'
+
+// Env loading, auth, and the RTDB `/.settings/rules.json` access (including
+// the header-vs-query-param token fallback) are shared with the drift
+// checker (check-rules-drift.mjs) via lib/firebase-rules-api.mjs — the
+// reader must never diverge from the writer it verifies (AGL-1509).
+loadLocalEnv()
 
 // Dirty-tree refusal (AGL-1489): the deploy ships the worktree copy
 // wholesale, so uncommitted edits — possibly another session's — would go
@@ -52,18 +65,13 @@ try {
   process.exit(1)
 }
 
-const projectId = process.env.FIREBASE_PROJECT_ID
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-if (!projectId || !clientEmail || !privateKey) {
+const serviceAccount = readServiceAccount()
+if (!serviceAccount) {
   console.error('Missing FIREBASE_* service-account env vars (source .env).')
   process.exit(1)
 }
-const databaseUrl = (
-  process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ||
-  process.env.FIREBASE_DATABASE_URL ||
-  `https://${projectId}-default-rtdb.firebaseio.com`
-).replace(/\/+$/, '')
+const { projectId } = serviceAccount
+const databaseUrl = resolveDatabaseUrl(projectId)
 
 const content = readFileSync(rulesJsonPath, 'utf8')
 // RTDB rules are JSON — parse locally so a malformed file fails fast with a
@@ -75,33 +83,15 @@ try {
   process.exit(1)
 }
 
-const app = initializeApp({
-  credential: cert({ projectId, clientEmail, privateKey }),
-})
-const token = (await app.options.credential.getAccessToken()).access_token
+const token = await getServiceAccountToken(serviceAccount)
 
 // Overwrite the live ruleset for the instance. A successful PUT echoes the
 // stored rules; a failure returns an `error` field with a non-2xx status.
-// The RTDB REST endpoint accepts the OAuth token either as an Authorization
-// header or the `?access_token=` query param depending on the instance/region
-// — try the header first, fall back to the query param on an auth rejection.
-async function putRules(viaQueryParam) {
-  const url = viaQueryParam
-    ? `${databaseUrl}/.settings/rules.json?access_token=${encodeURIComponent(token)}`
-    : `${databaseUrl}/.settings/rules.json`
-  return fetch(url, {
-    method: 'PUT',
-    headers: viaQueryParam
-      ? { 'Content-Type': 'application/json' }
-      : { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: content,
-  })
-}
-
-let response = await putRules(false)
-if (response.status === 401 || response.status === 403) {
-  response = await putRules(true)
-}
+// databaseRulesRequest handles the header-vs-query-param token fallback.
+const response = await databaseRulesRequest(databaseUrl, token, {
+  method: 'PUT',
+  body: content,
+})
 if (!response.ok) {
   const detail = await response.text()
   console.error(`Rules update failed (HTTP ${response.status}):`, detail)

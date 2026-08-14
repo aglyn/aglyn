@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import materializeStarterTemplate, {
@@ -79,6 +81,19 @@ async function handler(request: Request): Promise<Response> {
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct
+    // 423 body; staff bypass is the un-panic invariant. The org doc is
+    // fetched deliberately — an org lock never stamps host docs, so a
+    // host-only verdict would silently miss it.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
+
     const result = await materializeStarterTemplate(
       firestore as unknown as SeedFirestore,
       hostId,

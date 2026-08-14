@@ -15,9 +15,17 @@
  * limitations under the License.
  */
 
-import { isOrgWideScope, visibleToHost } from '@aglyn/aglyn/server'
+import {
+  isLockdownActive,
+  isOrgWideScope,
+  type LockdownState,
+  normalizeHostLockdown,
+  normalizeOrgLockdown,
+  visibleToHost,
+} from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
+import { getPlatformLockdown } from './lockdown'
 import { verifyMediaAccess } from './media-signing'
 
 /** Variant widths generated at upload (AGL-175). */
@@ -50,9 +58,84 @@ const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
  *
  * The immutable content-hashed form is untouched: its URL changes with its
  * bytes, so it can and should be pinned in the browser for a year.
+ *
+ * Since AGL-1515 this policy applies to IMAGE responses only — see
+ * {@link mediaCdnEdgeCacheable}.
  */
 export const MEDIA_CDN_STABLE_CACHE_CONTROL =
   'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
+
+/**
+ * The stable URL's policy for types the edge must never hold (AGL-1515):
+ * the same 60-second browser window and the same ETag/304 contract, with
+ * `private` in place of `public, s-maxage` so no shared cache stores a
+ * full body.
+ *
+ * Why the edge must never hold one: Vercel's edge, holding a cached
+ * full-body 200, answers a `Range` request FROM that entry as a
+ * spec-violating hybrid — status 200, a `Content-Range` header, and only
+ * the requested slice as the body (`x-vercel-cache: HIT`; reproduced twice
+ * on production, 2026-08-13). A video player seeking into such an asset
+ * adopts a 100-byte slice as the complete file: silent playback corruption.
+ *
+ * The S4 shape below this constant was built on Vercel's documented
+ * cacheable-response criteria ("Request doesn't contain Range header"),
+ * read as "ranged requests bypass the edge". Production falsified that
+ * reading: the criteria govern what the edge STORES, not what it SERVES. A
+ * ranged request is still matched against the URL-keyed entry a previous
+ * plain GET left behind, and the edge's slicing layer rewrites the body
+ * and adds `Content-Range` without rewriting the stored 200 status.
+ *
+ * `private` is the lever because it is in the same documented criteria
+ * list as an absolute storage preventer ("Response doesn't contain the
+ * `private` … directives"), where `Vary: Range` is undocumented on
+ * Vercel, discouraged by RFC 9110, and untestable anywhere but a
+ * production deploy. What it costs: edge caching for non-image assets
+ * under Vercel's 10 MB cacheable-size cap. Real video mostly sits ABOVE
+ * the cap and was never edge-cached — the mangling reproduced on a 186 KB
+ * asset precisely because small ones are the ones that get cached.
+ */
+export const MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL =
+  'private, max-age=60'
+
+/** The immutable content-hashed URL's policy for edge-cacheable (image) types. */
+export const MEDIA_CDN_IMMUTABLE_CACHE_CONTROL =
+  'public, max-age=31536000, immutable'
+
+/**
+ * The immutable URL's policy for edge-bypassing types (AGL-1515): the
+ * browser keeps its year — the URL still changes with the bytes — while
+ * the edge holds nothing it could mangle.
+ */
+export const MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL =
+  'private, max-age=31536000, immutable'
+
+/**
+ * Whether a response of this content type may be edge-cached (AGL-1515).
+ *
+ * The split is "types no realistic client ranges into": browsers fetch
+ * images with plain GETs (`<img>`, `srcSet`, save-as — all of them), while
+ * every consumer that seeks or resumes — `<video>`/`<audio>` players, PDF
+ * viewers, download managers — operates on the non-image types. Images stay
+ * on the shared edge policy because they are the DAM grid's hot path (4.3 KB
+ * WebP tiles at volume), and pushing them to origin to fix video would trade
+ * a real regression for a theoretical one.
+ *
+ * Accepted residual, recorded here on purpose: a hand-built `Range` request
+ * against an edge-cached IMAGE can still be answered with the hybrid (that
+ * is exactly the AGL-1515 favicon repro). No browser or player issues one,
+ * and the alternative — `private` on images too — costs the hot path an
+ * edge hit rate it measurably has.
+ *
+ * Unknown or absent types return false: correctness over cache.
+ */
+export function mediaCdnEdgeCacheable(contentType: unknown): boolean {
+  return String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase()
+    .startsWith('image/')
+}
 
 /**
  * The CDN's OWN Content-Security-Policy (AGL-1474).
@@ -196,6 +279,191 @@ export function mediaCdnAllows(
   return scope.contextHostId
     ? visibleToHost(scoped, scope.contextHostId)
     : isOrgWideScope(scoped)
+}
+
+/**
+ * Lockdown on the delivery path (AGL-1520).
+ *
+ * A security-locked org's SITE stops within seconds (the tenant middleware
+ * 503s, AGL-1501) — but until this gate existed its public media kept
+ * serving worldwide: to hot-links, to third-party embeds, and to the
+ * infected asset's own URL, which for an "infected host" security lock is
+ * the exact thing the lock was pressed to stop.
+ *
+ * **Which reasons stop delivery — decided per reason, not blanket:**
+ *
+ * - `security` — REFUSE. The point of the lock: the org's content, media
+ *   included, must stop serving.
+ * - `manual` — REFUSE. A staff suspension with no reason code (every
+ *   pre-lockdown `suspendedAt` normalizes to `manual`) is "we turned this
+ *   org off"; content continuing to serve would make the kill partial.
+ * - `maintenance` — SERVE. The maintenance notice surface may itself
+ *   reference org assets (a logo on the notice page), the window is
+ *   temporary and non-adversarial, and blanking every image buys no safety.
+ * - `billing` — SERVE. The AGL-1506 principle: billing-locked orgs keep the
+ *   surfaces that let them come back (members can still reach billing to
+ *   pay). The site already 503s, so whether a hot-linked image serves is
+ *   nearly moot — and refusing would punish e.g. an email-signature logo
+ *   for a payment lapse. Serving is the cheap, reversible answer.
+ *
+ * Scopes are checked INDIVIDUALLY against that matrix rather than through
+ * `resolveLockdown`, on purpose: the resolver answers "which notice does a
+ * visitor see" and returns the WIDEST active scope — so a platform
+ * `maintenance` window would mask a concurrent org `security` lock and the
+ * infected asset would keep serving. Delivery has no notice to pick; the
+ * question is only "does ANY active lockdown demand these bytes stop".
+ */
+export function lockdownStopsMediaDelivery(
+  state: LockdownState | null | undefined,
+  nowMs: number,
+): boolean {
+  if (!state || !isLockdownActive(state, nowMs)) return false
+  return state.reason === 'security' || state.reason === 'manual'
+}
+
+/**
+ * **Read cost (AGL-1302):** the verdict inputs are TTL-cached in-process
+ * per CDN scope — one org-doc read (host scope: host doc + hostIndex + the
+ * owning org doc, since an org lock never stamps host docs) per scope per
+ * {@link MEDIA_CDN_LOCK_TTL_MS}, not per asset. A DAM grid firing dozens of
+ * requests coalesces into one lookup; the platform doc rides
+ * `getPlatformLockdown`'s existing 15s cache. Same fail-open posture as the
+ * verdict core: an unreachable Firestore is an outage, not a lockdown, and
+ * must not blank every customer image.
+ *
+ * **Staleness bound, stated rather than hidden:** a warm origin refuses
+ * within ≤15s of the org-doc write (the platform panic number). What the
+ * origin cannot reach: browsers hold the stable URL up to 60s
+ * (`max-age=60`); Vercel's edge holds image responses up to `s-maxage=3600`
+ * (+ one stale serve while revalidating) — so an already-edge-cached image
+ * URL can serve up to ~1h into a lock; non-image types are `private`
+ * (AGL-1515) and never edge-held. The immutable content-hashed form is
+ * browser-pinned for a year in clients that already fetched it — there is
+ * no per-asset purge API, so that copy is out of reach by design; NEW
+ * fetchers of the same URL refuse at the next origin miss. Compare the
+ * AGL-1501 drill: host pages flip ≤10s; assets lag minutes-to-an-hour at
+ * the caching tiers, which is the accepted trade for a near-zero read cost
+ * on the hottest unauthenticated path.
+ *
+ * **Out of this control's reach entirely:** free-tier raw
+ * `firebasestorage.googleapis.com` URLs — no code of ours runs there.
+ * Stated on AGL-1520; token rotation on lock is the filed follow-up.
+ */
+const MEDIA_CDN_LOCK_TTL_MS = 15_000
+
+const lockCache = new Map<string, { at: number; blocked: boolean }>()
+const lockPending = new Map<string, Promise<boolean>>()
+
+/**
+ * Drop the per-scope lock cache. Tests need it between cases; production
+ * convergence is the TTL — the lock is written by the console app and served
+ * by the tenant app, different processes an in-process invalidation can
+ * never reach.
+ */
+export function invalidateMediaCdnLockCache(): void {
+  lockCache.clear()
+  lockPending.clear()
+}
+
+/** The `suspended*` field family off a snapshot, for the normalizers. */
+const suspensionCarrier = (snapshot: {
+  get: (field: string) => unknown
+}): {
+  suspendedAt?: unknown
+  suspendedReasonCode?: unknown
+  suspendedUntilMs?: unknown
+} => ({
+  suspendedAt: snapshot.get('suspendedAt'),
+  suspendedReasonCode: snapshot.get('suspendedReasonCode'),
+  suspendedUntilMs: snapshot.get('suspendedUntilMs'),
+})
+
+/** TTL-cached: does any lockdown covering `scope` stop delivery? */
+async function mediaCdnScopeLocked(scope: MediaCdnScope): Promise<boolean> {
+  const key = `${scope.isOrg ? 'org' : 'host'}:${scope.scopeId}`
+  const cached = lockCache.get(key)
+  if (cached && Date.now() - cached.at < MEDIA_CDN_LOCK_TTL_MS) {
+    return cached.blocked
+  }
+  let pending = lockPending.get(key)
+  if (!pending) {
+    pending = (async () => {
+      let blocked = false
+      try {
+        const nowMs = Date.now()
+        // Platform first: cached, and a platform security lock is the panic
+        // button — asset delivery is part of what it stops.
+        blocked = lockdownStopsMediaDelivery(await getPlatformLockdown(), nowMs)
+        const firestore = firebaseAdmin.app().firestore()
+        if (!blocked && scope.isOrg) {
+          // Org forms (`org:{orgId}` and `org:{orgId}:{hostId}`): the org
+          // doc governs. The context host's own lock is not consulted — a
+          // suspended HOST's pages 503 already, and which sites may USE an
+          // org asset is `visibleTo`'s question, not the lock's.
+          const org = await firestore
+            .collection('orgs')
+            .doc(scope.scopeId)
+            .get()
+          blocked = lockdownStopsMediaDelivery(
+            normalizeOrgLockdown(suspensionCarrier(org)),
+            nowMs,
+          )
+        } else if (!blocked) {
+          // Host-library form: the host's own lock, and the OWNING org's —
+          // an org lock never stamps host docs (AGL-1506), so a host-only
+          // read would silently miss the very lock this issue is about.
+          const [host, hostIndex] = await Promise.all([
+            firestore.collection('hosts').doc(scope.scopeId).get(),
+            firestore.collection('hostIndex').doc(scope.scopeId).get(),
+          ])
+          blocked = lockdownStopsMediaDelivery(
+            normalizeHostLockdown(suspensionCarrier(host)),
+            nowMs,
+          )
+          const orgId = hostIndex.get('orgId')
+          if (!blocked && typeof orgId === 'string' && orgId) {
+            const org = await firestore.collection('orgs').doc(orgId).get()
+            blocked = lockdownStopsMediaDelivery(
+              normalizeOrgLockdown(suspensionCarrier(org)),
+              nowMs,
+            )
+          }
+        }
+      } catch {
+        // Fail open — the lockdown core's posture (see lockdown.ts): an
+        // unreachable Firestore is an outage, not a lockdown.
+        blocked = false
+      }
+      lockCache.set(key, { at: Date.now(), blocked })
+      return blocked
+    })().finally(() => {
+      lockPending.delete(key)
+    })
+    lockPending.set(key, pending)
+  }
+  return pending
+}
+
+/**
+ * THE delivery-policy seam: "may this asset be served at all?" — one
+ * question, one function, consulted once per request before any caching
+ * exit. Distinct from `mediaCdnAllows` (which site may use it under this
+ * URL) and from the signature check (may the public fetch it): this asks
+ * whether the platform is willing to serve the bytes to ANYONE.
+ *
+ * AGL-1512 (asset quarantine) extends THIS function: a contentHash
+ * quarantine consult slots in beside the scope-lock check and returns its
+ * own refusal kind — the handler's refusal path is already shaped for it.
+ * Do not add a second conditional in the handler.
+ */
+export async function mediaCdnServeBlock(
+  scope: MediaCdnScope,
+  _asset: {
+    /** For the AGL-1512 quarantine consult; unused by the lock check. */
+    contentHash?: string
+  },
+): Promise<'locked' | null> {
+  return (await mediaCdnScopeLocked(scope)) ? 'locked' : null
 }
 
 /**
@@ -407,6 +675,38 @@ export async function serveMediaCdn(
       res.status(404).json({ error: 'Not found' })
       return
     }
+    // Lockdown gate (AGL-1520) — see mediaCdnServeBlock for the reason
+    // matrix, the read-cost accounting and the staleness bound. Three shape
+    // decisions, argued:
+    //
+    // **Before the ETag/304 exit**, necessarily: a browser revalidating its
+    // 60s copy during a lock must be refused, not handed a 304 that renews
+    // the copy for another minute.
+    //
+    // **410, not 423.** The 423 body is the AGL-1506 discipline for
+    // authenticated API consumers who deserve "suspended: billing"; this
+    // response answers anonymous `<img>` fetches nobody parses, and a 423
+    // would confirm to any prober that a lock exists — which for a security
+    // lock is information. 410 Gone is neutral, indistinguishable in kind
+    // from a deleted asset, and tells well-behaved consumers to drop the
+    // link. (404 would also be neutral, but 410's "permanently gone"
+    // semantics discourage retry loops from embedders.)
+    //
+    // **`no-store`, absolutely** (the AGL-1515 lesson): the refusal is a
+    // function of a TTL'd verdict, not of the URL — a cached refusal would
+    // weld the asset's URL identity to "gone" past the unlock, and edge
+    // entries have no per-asset purge. The 60s negative window the 404s use
+    // is not acceptable here either: an unlock must restore delivery as
+    // fast as the lock stopped it. CSP + nosniff are already on the
+    // response (set first, before any exit).
+    const blockedBy = await mediaCdnServeBlock(scope, {
+      contentHash: currentHash,
+    })
+    if (blockedBy) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(410).json({ error: 'Gone' })
+      return
+    }
     // Scope check (AGL-1043). The bare `org:` form serves ORG-WIDE assets
     // only; a restricted asset must be requested through the form that
     // names the site using it. Today every asset is `['org']` after the
@@ -487,8 +787,20 @@ export async function serveMediaCdn(
     const etag = currentHash
       ? `"${currentHash}${useVariant ? `-w${width}` : ''}${download ? '-dl' : ''}"`
       : null
+    // AGL-1515: which cache tier may hold this response is a function of the
+    // served type — see mediaCdnEdgeCacheable. Decided here from the DOC's
+    // type (a variant serve is always `image/webp`) because the 304 exit
+    // below runs before the Storage metadata read; re-derived from the
+    // authoritative served type once metadata is in hand.
+    const stableCacheControlFor = (type: unknown) =>
+      mediaCdnEdgeCacheable(type)
+        ? MEDIA_CDN_STABLE_CACHE_CONTROL
+        : MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL
+    const docServedType = useVariant
+      ? 'image/webp'
+      : snapshot.get('contentType')
     if (!hashed) {
-      setCacheControl(MEDIA_CDN_STABLE_CACHE_CONTROL)
+      setCacheControl(stableCacheControlFor(docServedType))
       if (etag) res.setHeader('ETag', etag)
       if (etag && req.headers['if-none-match'] === etag) {
         res.status(304).end()
@@ -539,17 +851,25 @@ export async function serveMediaCdn(
     // PDF viewer or a download manager not to ask for something we would
     // happily serve, and the header is not part of any cache key.
     //
-    // Caching shape, established from Vercel's documented criteria rather
-    // than assumed: a request carrying `Range` fails the CDN's
-    // cacheable-response criteria ("Request doesn't contain Range header"),
-    // and 206 is not in its cacheable status list — so every ranged request
-    // reaches this function and its 206 is never stored at the edge. The
-    // edge keeps caching only the full 200s (as today), which means a cached
-    // full body and a function-served partial can never cross. The 206
-    // therefore keeps the URL class's own Cache-Control: at the edge it is
-    // moot, and in the browser a 206 under a STRONG validator is exactly
-    // what lets a player reuse the segments it already fetched.
+    // Caching shape (AGL-1515): S4 read Vercel's cacheable-response
+    // criteria ("Request doesn't contain Range header") as "a cached full
+    // body and a function-served partial can never cross". Production
+    // falsified that: the criteria govern what the edge STORES, not what it
+    // SERVES, and the edge answers a ranged request from an existing cached
+    // full-body 200 as a 200 + Content-Range + sliced-body hybrid. The fix
+    // is upstream of this line — every type a ranged consumer actually uses
+    // is served `private` (see mediaCdnEdgeCacheable), so the entry the
+    // edge would mangle never exists and every ranged request reaches this
+    // function for a real 206. In the browser the 206 rides the same
+    // Cache-Control as its URL class: a 206 under a STRONG validator is
+    // exactly what lets a player reuse the segments it already fetched.
     res.setHeader('Accept-Ranges', 'bytes')
+    // The authoritative tier decision, now that the served type is known
+    // from Storage metadata rather than inferred from the doc. Overwrites
+    // the header set before the 304 exit iff the two disagree — and the
+    // BODY-serving response is the one the edge could store, so this one
+    // must win.
+    if (!hashed) setCacheControl(stableCacheControlFor(servedType))
     const size = Number(metadata.size ?? NaN)
     // Range applies to GET only (RFC 9110 §14.2); a HEAD answers the full
     // representation's metadata. And with no known size there is no honest
@@ -602,9 +922,15 @@ export async function serveMediaCdn(
     // `immutable` for a year is the strongest possible caching, and on a
     // private asset it would be a permanent public copy of a file whose
     // whole point is that it expires (AGL-1051) — `setCacheControl` holds
-    // that line.
+    // that line. The year stays browser-only for non-image types
+    // (AGL-1515): the URL still changes with the bytes, but the edge must
+    // hold no full body it could slice.
     if (hashed) {
-      setCacheControl('public, max-age=31536000, immutable')
+      setCacheControl(
+        mediaCdnEdgeCacheable(servedType)
+          ? MEDIA_CDN_IMMUTABLE_CACHE_CONTROL
+          : MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL,
+      )
     }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82

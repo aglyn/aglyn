@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -83,6 +85,22 @@ async function handler(request: Request): Promise<Response> {
     if (!membership.exists) {
       return Response.json({ error: 'Not a member of this site' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): a locked org/host mints no presence or
+    // co-edit token. Host doc already in hand; the org scope rides the
+    // member doc's `orgSuspended` projection (also already read) — the org
+    // doc is fetched only when the projection trips, so the happy path
+    // adds no org read. Staff bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org:
+        membership.get('orgSuspended') === true
+          ? ((await getOrgDoc(orgId)) ?? {})
+          : undefined,
+      host: host.data(),
+    })
+    if (locked) return locked
 
     // Presence is a read/write of your own name and selection — every role
     // that can open the editor can be seen in it, viewers included.

@@ -16,7 +16,13 @@
  */
 'use client'
 
-import { PLAN_ENTITLEMENTS, PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
+import {
+  isLockdownReasonCode,
+  LOCKDOWN_REASON_CODES,
+  PLAN_ENTITLEMENTS,
+  PLAN_LABELS,
+  type OrgPlan,
+} from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -102,12 +108,22 @@ export const overrideCount = (org: any): number =>
  * (AGL-201/202/206) so the org DETAIL page can carry them too (AGL-939)
  * without staff bouncing back to the list to act.
  *
- * Each action writes the org doc through the scoped Firestore rules (the
- * server-side gate: super-staff for suspension/erasure keys, billing-staff
- * for plan and entitlements — a non-staff caller is denied by the rules, not
- * by this UI) and logs an `adminAudit` entry with the actor uid. Suspension
- * and erasure sit behind their existing confirmation gates: a reason dialog
- * for suspend, and the two-step request → confirm dialog for erasure, which
+ * Override and erasure write the org doc through the scoped Firestore rules
+ * (the server-side gate: super-staff for erasure keys, billing-staff for
+ * plan and entitlements — a non-staff caller is denied by the rules, not by
+ * this UI) and log an `adminAudit` entry with the actor uid.
+ *
+ * Suspension is DIFFERENT (AGL-1505): it goes through the lockdown core —
+ * `POST /api/admin/lockdown { scope: 'org' }` — never a direct Firestore
+ * write, because an org suspension is four effects, not a flag: the org
+ * doc's `suspendedAt` family, the `orgSuspended` member projection the
+ * rules and API routes read, member refresh-token revocation (security/
+ * manual reasons), and tenant ISR cache eviction. The route writes the
+ * audit row and is super-staff-only server-side.
+ *
+ * Suspension and erasure sit behind their existing confirmation gates: a
+ * reason dialog for suspend, and the two-step request → confirm dialog for
+ * erasure, which
  * only flags `erasureRequestedAt` — the hard delete happens after a 7-day
  * hold, from the `/api/admin/run-erasures` cron or by hand with
  * tools/scripts/erase-tenant.mjs, both of which are `eraseOrg` (AGL-1481).
@@ -133,55 +149,72 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     before: any
   } | null>(null)
 
-  // Suspension (AGL-202): reversible flag; the org's sites 503 within a
-  // minute and content writes are blocked by the rules.
+  // Suspension (AGL-202, rewired by AGL-1505): reversible, but NOT a flag
+  // write — the lockdown core behind /api/admin/lockdown does the org doc,
+  // the `orgSuspended` member projection, token revocation and tenant cache
+  // eviction together, and writes the audit row. This component must never
+  // write suspension state to Firestore directly (the old path set the flag
+  // and nothing else, so the projection-based blocks never engaged).
   const [suspender, setSuspender] = useState<{
     id: string
     suspended: boolean
+    /** Lockdown reason CODE (security | billing | maintenance | manual). */
     reason: string
+    /** Customer-facing notice, shown on the 503 page and to the owner. */
+    message: string
   } | null>(null)
   const handleSuspendSave = useCallback(async () => {
     if (!suspender) return
     try {
       const suspending = !suspender.suspended
-      await setDoc(
-        doc(firestore, 'orgs', suspender.id),
-        {
-          suspendedAt: suspending ? Timestamp.now() : deleteField(),
-          suspendedReason: suspending
-            ? suspender.reason.trim().slice(0, 200)
-            : deleteField(),
-          updatedAt: Timestamp.now(),
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/lockdown', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        { merge: true },
-      )
-      await addDoc(collection(firestore, 'adminAudit'), {
-        actorUid: (user as any)?.uid ?? 'unknown',
-        action: suspending ? 'org.suspend' : 'org.unsuspend',
-        target: `orgs/${suspender.id}`,
-        before: { suspended: suspender.suspended },
-        after: {
-          suspended: suspending,
-          ...(suspending ? { reason: suspender.reason.trim() } : {}),
-        },
-        at: Timestamp.now(),
+        body: JSON.stringify({
+          scope: 'org',
+          targetId: suspender.id,
+          action: suspending ? 'lock' : 'unlock',
+          ...(suspending
+            ? {
+                reason: suspender.reason,
+                ...(suspender.message.trim()
+                  ? { message: suspender.message.trim() }
+                  : {}),
+              }
+            : {}),
+        }),
       })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(
+          payload?.error ?? `Lockdown failed (${response.status})`,
+        )
+      }
       enqueueSnackbar(
         suspending
-          ? 'Organization suspended — its sites go offline within a minute (audited)'
-          : 'Organization unsuspended (audited)',
+          ? 'Organization suspended — sites offline now, member writes ' +
+              'blocked' +
+              (payload?.tokensRevoked
+                ? `, ${payload.tokensRevoked} member session(s) revoked`
+                : '') +
+              ' (audited)'
+          : 'Organization unsuspended — sites come back online (audited)',
         { variant: 'success', persist: false },
       )
       setSuspender(null)
       onChanged()
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [suspender, firestore, user, enqueueSnackbar, onChanged])
+  }, [suspender, user, enqueueSnackbar, onChanged])
 
   // GDPR erasure request (AGL-206): sets/clears the flag only — the hard
   // delete is a deliberate, separately-run script after a 7-day hold.
@@ -384,7 +417,10 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
           setSuspender({
             id: org.$id,
             suspended: Boolean(org.suspendedAt),
-            reason: org.suspendedReason ?? '',
+            reason: isLockdownReasonCode(org.suspendedReasonCode)
+              ? org.suspendedReasonCode
+              : 'manual',
+            message: org.suspendedMessage ?? '',
           })
         }
       >
@@ -537,22 +573,45 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
             {suspender?.suspended
               ? 'Their published sites come back online within a minute.'
               : 'Every published site of this organization returns 503 ' +
-                'within a minute and its members see a suspension banner ' +
-                'in the console. No data is deleted; this is reversible.'}
+                'now, member writes are blocked, and members see a ' +
+                'suspension notice. Security and manual suspensions also ' +
+                'log the members out. No data is deleted; this is ' +
+                'reversible. Audited.'}
           </Typography>
           {!suspender?.suspended ? (
-            <TextField
-              size="small"
-              label="Reason (shown to the owner)"
-              value={suspender?.reason ?? ''}
-              onChange={(event) =>
-                setSuspender((previous) =>
-                  previous
-                    ? { ...previous, reason: event.target.value }
-                    : previous,
-                )
-              }
-            />
+            <>
+              <TextField
+                select
+                size="small"
+                label="Reason"
+                value={suspender?.reason ?? 'manual'}
+                onChange={(event) =>
+                  setSuspender((previous) =>
+                    previous
+                      ? { ...previous, reason: event.target.value }
+                      : previous,
+                  )
+                }
+              >
+                {LOCKDOWN_REASON_CODES.map((code) => (
+                  <MenuItem key={code} value={code}>
+                    {code}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Notice (shown to the owner and visitors)"
+                value={suspender?.message ?? ''}
+                onChange={(event) =>
+                  setSuspender((previous) =>
+                    previous
+                      ? { ...previous, message: event.target.value }
+                      : previous,
+                  )
+                }
+              />
+            </>
           ) : null}
         </DialogContent>
         <DialogActions>

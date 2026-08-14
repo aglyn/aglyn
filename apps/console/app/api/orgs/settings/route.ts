@@ -32,8 +32,10 @@ import {
   changeOrgSlug,
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgDoc,
   isImpersonationSession,
   listOrgMembers,
+  lockdownRefusal,
   logOrgActivity,
   readOrgBilling,
   registerConsoleDomain,
@@ -76,6 +78,17 @@ async function handler(request: Request): Promise<Response> {
     ) {
       return Response.json({ error: 'Org settings require the admin role' }, { status: 403 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/user scopes — only some
+    // action branches read the org doc themselves, so the org scope rides
+    // on the request-deduped `getOrgDoc` read; distinct 423 body; staff
+    // bypass is the un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgDoc(orgId)) ?? undefined,
+    })
+    if (locked) return locked
 
     if (body?.action === 'rename') {
       const name = String(body?.name ?? '')

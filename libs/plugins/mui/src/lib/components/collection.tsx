@@ -20,6 +20,7 @@ import {
   mdiContentCopy,
   mdiFacebook,
   mdiLinkedin,
+  mdiMagnify,
   mdiNewspaperVariantOutline,
   mdiPostOutline,
   mdiShareVariant,
@@ -29,14 +30,19 @@ import {
   mdiTwitter,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+// The icon picker's fuzzy matcher (use-mdi-icons-fuzzy), not a re-implementation
+// (AGL-1516): search here has to feel like search does everywhere else in the
+// product, and two matchers is how they drift.
+import { Fuse } from '@aglyn/shared-util-vendor'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
+import InputBase from '@mui/material/InputBase'
 import MuiLink from '@mui/material/Link'
 import MuiStack, { type StackProps } from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { ReactNode } from 'react'
-import { forwardRef, useContext, useMemo, useState } from 'react'
+import { Children, forwardRef, useContext, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 // One coercion for every authored count in this bundle (AGL-1457) — number
@@ -82,6 +88,46 @@ export interface CollectionEntriesProps extends StackProps {
   perPage?: number | string
   /** 1-based page for `perPage` (compose-time, AGL-620). */
   page?: number | string
+  /**
+   * Show a search box that filters the RENDERED entries by title/excerpt as
+   * the reader types (AGL-1516, Figma 494:1220). Opt-in and default off, so
+   * every existing instance renders exactly as before.
+   *
+   * Client-evaluated over the entries this block already holds — the page is
+   * ISR-cached, so a keystroke never costs a Firestore read. On a paginated
+   * list that set is the CURRENT PAGE, and the empty state says so rather
+   * than pretending global search.
+   */
+  search?: boolean
+  /** Hint text inside the search box (blank = "Search posts…"). */
+  searchPlaceholder?: string
+  /**
+   * Server-stamped matchable text per rendered entry
+   * (`expandCollectionEntries`, AGL-1516); never set by hand.
+   */
+  searchIndex?: Aglyn.CollectionEntrySearchItem[]
+}
+
+/** The toolbar search field, from the frame (Figma 494:1220). */
+const SEARCH_FIELD_WIDTH = 240
+
+/**
+ * The frame's compact filled field: magnify glyph + hint on the quiet
+ * surface token, right-aligned so it sits where the toolbar row puts it.
+ * Palette tokens only, so it follows the site theme in both modes.
+ */
+const searchFieldSx = {
+  alignSelf: 'flex-end',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  px: 1.5,
+  py: 0.75,
+  borderRadius: 2,
+  bgcolor: 'action.hover',
+  color: 'text.secondary',
+  width: SEARCH_FIELD_WIDTH,
+  maxWidth: '100%',
 }
 
 /**
@@ -89,10 +135,21 @@ export interface CollectionEntriesProps extends StackProps {
  * (AGL-551) — the collections sibling of the dataset repeatable. The tenant
  * expands it at compose time with `{{entry.*}}` tokens; in the besigner the
  * template renders once with literal tokens, matching the repeatable UX.
+ *
+ * Search (AGL-1516): with `search` on, a toolbar search box filters the
+ * rendered entry clones client-side against the server-stamped
+ * `searchIndex` — fuzzy, via the same Fuse the icon picker uses. The clones
+ * arrive as `children` in stamp order, one group of template roots per
+ * entry, so group N of the children IS entry N of the index. Matches keep
+ * the list's own order rather than Fuse's score order: a blog list is
+ * chronological, and search narrows it, it does not reshuffle it. In the
+ * besigner the field renders as an inert affordance (the template renders
+ * once with literal tokens and there is no index to search), matching how
+ * Category Pills go inert on editing surfaces.
  */
 const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
-  // collectionSlug/entriesLimit/filter* are compose-time attributes: the
-  // tenant expands them before render; strip so they never hit the DOM.
+  // collectionSlug/entriesLimit/filter*/search* are compose-time or
+  // search-only attributes: strip so they never hit the DOM.
   (
     {
       collectionSlug,
@@ -101,15 +158,118 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       filterTag,
       perPage,
       page,
+      search,
+      searchPlaceholder,
+      searchIndex,
       children,
       ...props
     },
     ref,
-  ) => (
-    <MuiStack ref={ref} spacing={4} {...props}>
-      {children}
-    </MuiStack>
-  ),
+  ) => {
+    const { suppressNavigation } = useContext(Aglyn.ScreenLinkContext)
+    const [query, setQuery] = useState('')
+    const items = search ? searchIndex : undefined
+    const fuzzy = useMemo(
+      () =>
+        items?.length
+          ? new Fuse(items, {
+              // The icon picker's weighted-keys shape (use-mdi-icons-fuzzy):
+              // the title names the post, the excerpt merely describes it.
+              keys: [
+                { name: 'title', weight: 0.7 },
+                { name: 'excerpt', weight: 0.3 },
+              ],
+              includeScore: true,
+              shouldSort: true,
+              // Tuned for prose, MEASURED before shipping: the icon picker
+              // fuzzes 2-word icon names, where Fuse's defaults are fine. On
+              // sentence-long excerpts the default location scoring buries a
+              // legitimate mid-sentence hit ("…and workflows into one…"),
+              // and the default 0.6 threshold matches "media" against every
+              // post on letter soup. Ignoring location and tightening to 0.3
+              // keeps typo tolerance ("platfrom" still finds the post) while
+              // a filtered-out card actually means something.
+              ignoreLocation: true,
+              threshold: 0.3,
+            })
+          : null,
+      [items],
+    )
+    if (!search) {
+      return (
+        <MuiStack ref={ref} spacing={4} {...props}>
+          {children}
+        </MuiStack>
+      )
+    }
+    const childArray = Children.toArray(children)
+    // Template roots per entry. Every entry clones the same template, so the
+    // children divide evenly; anything else means the children are not the
+    // stamped clones, and filtering blind would hide the wrong cards —
+    // fail open and render everything.
+    const groupSize =
+      items?.length && childArray.length % items.length === 0
+        ? childArray.length / items.length
+        : 0
+    const live = !suppressNavigation && Boolean(fuzzy) && groupSize > 0
+    const trimmed = query.trim()
+    let visible: ReactNode[] | ReactNode = children
+    let emptyState: ReactNode = null
+    if (live && trimmed && fuzzy) {
+      const matched = new Set(
+        fuzzy.search(trimmed).map((result) => result.refIndex),
+      )
+      visible = childArray.filter((_, index) =>
+        matched.has(Math.floor(index / groupSize)),
+      )
+      if (!(visible as ReactNode[]).length) {
+        // HONEST scope (AGL-1516): a paginated block holds one page window,
+        // and pretending the search was global would turn every miss into a
+        // false "this post does not exist".
+        const paginated = (toCount(perPage, 0) ?? 0) > 0
+        emptyState = (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {paginated
+              ? `No matches for “${trimmed}” on this page — other pages ` +
+                'are not searched.'
+              : `No matches for “${trimmed}”.`}
+          </Typography>
+        )
+      }
+    }
+    // The field renders when there is something to search, and as an inert
+    // affordance on editing surfaces so the author sees what they enabled.
+    // A live surface with nothing stamped (unknown collection, zero entries)
+    // renders no field at all — a search box over nothing is a lie.
+    const field =
+      suppressNavigation || live ? (
+        <Box role="search" sx={searchFieldSx}>
+          <MdiIcon path={mdiMagnify.path} />
+          <InputBase
+            value={query}
+            placeholder={
+              (searchPlaceholder ?? '').trim() || 'Search posts…'
+            }
+            inputProps={{ 'aria-label': 'Search entries' }}
+            sx={{ flex: 1, fontSize: 14, color: 'text.primary' }}
+            // Inert in the canvas, like the pills: no onChange, so a click
+            // or stray keystroke never edits state the surface cannot use.
+            {...(suppressNavigation
+              ? { readOnly: true }
+              : {
+                  onChange: (event) => setQuery(event.target.value),
+                })}
+          />
+        </Box>
+      ) : null
+    return (
+      <MuiStack ref={ref} spacing={4} {...props}>
+        {field}
+        {visible}
+        {emptyState}
+      </MuiStack>
+    )
+  },
 )
 CollectionEntries.displayName = 'AglynCollectionEntries'
 
@@ -169,6 +329,27 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         component: Aglyn.FieldComponentType.TEXT_FIELD,
         type: 'number',
       },
+      {
+        name: 'search',
+        label: 'Search',
+        description:
+          'Show a search box that filters the rendered entries by title ' +
+          'and excerpt as the reader types. It searches the entries this ' +
+          'block rendered — on a paginated list, the current page only.',
+        component: Aglyn.FieldComponentType.SWITCH,
+      },
+      {
+        name: 'searchPlaceholder',
+        label: 'Search placeholder',
+        description:
+          'Hint text inside the search box (blank = "Search posts…").',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+        // Meaningless while there is no search box to hint in.
+        condition: { when: 'search', is: true },
+      },
+      // `searchIndex` is deliberately NOT an attribute: it is server-stamped
+      // by expandCollectionEntries, like Category Pills' `items` and Related
+      // Posts' `entries`.
       {
         name: 'spacing',
         label: 'Spacing',

@@ -27,6 +27,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   listApiKeys,
+  lockdownRefusal,
   logOrgActivity,
   mintApiKey,
   normalizeScopes,
@@ -75,6 +76,17 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
     const orgSnap = await firestore.collection('orgs').doc(orgId).get()
     const org = orgSnap.data() ?? {}
+
+    // Lockdown verdict (AGL-1506): platform/org/user scopes with the org
+    // doc already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org,
+    })
+    if (locked) return locked
+
     if (!checkEntitlement(org, 'apiAccess')) {
       return Response.json(
         { error: 'API access requires the Business plan' },

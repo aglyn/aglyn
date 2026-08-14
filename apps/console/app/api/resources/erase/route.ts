@@ -32,6 +32,7 @@ import {
   eraseSubtree,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
@@ -171,13 +172,30 @@ async function handler(request: Request): Promise<Response> {
     if (!isStaff && scope === 'orgs') {
       const membership = await resolveOrgMembership(decoded.uid, scopeId)
       const member = membership?.member as any
-      if (
-        !member ||
-        !ORG_WRITER_ROLES.has(String(member.role)) ||
-        member.orgSuspended === true
-      ) {
+      if (!member || !ORG_WRITER_ROLES.has(String(member.role))) {
         return Response.json({
           error: 'Deleting org data requires the editor role',
+        }, { status: 403 })
+      }
+      // Lockdown verdict (AGL-1506): the `orgSuspended` member projection
+      // stays the per-request org signal (no org-doc read on the happy
+      // path); when it trips, the org doc is read only then to build the
+      // distinct 423. The user scope rides along — an erase is destructive
+      // and rare, so the per-call read is proportionate. A projection/doc
+      // disagreement keeps the old refusal — never loosened.
+      const locked = await lockdownRefusal({
+        uid: decoded.uid,
+        org:
+          member.orgSuspended === true
+            ? ((
+                await firestore.collection('orgs').doc(scopeId).get()
+              ).data() ?? {})
+            : undefined,
+      })
+      if (locked) return locked
+      if (member.orgSuspended === true) {
+        return Response.json({
+          error: 'This workspace is suspended',
         }, { status: 403 })
       }
 
@@ -222,14 +240,19 @@ async function handler(request: Request): Promise<Response> {
         }, { status: 403 })
       }
       const orgId = hostSnapshot.get('orgId') as string | undefined
-      if (orgId) {
-        const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
-        if (orgSnapshot.get('suspendedAt')) {
-          return Response.json({
-            error: 'This workspace is suspended',
-          }, { status: 403 })
-        }
-      }
+      // Lockdown verdict (AGL-1506): replaces the ad-hoc `suspendedAt` 403
+      // this branch carried — the same org read as before, now feeding the
+      // shared helper so the platform/host/user scopes and the distinct
+      // 423 body come with it.
+      const orgSnapshot = orgId
+        ? await firestore.collection('orgs').doc(orgId).get()
+        : undefined
+      const locked = await lockdownRefusal({
+        uid: decoded.uid,
+        org: orgSnapshot?.data(),
+        host: hostSnapshot.data(),
+      })
+      if (locked) return locked
     }
 
     // `collections` holds two unrelated document kinds on one path (AGL-954).

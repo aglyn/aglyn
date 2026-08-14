@@ -78,10 +78,11 @@ service cloud.firestore {
       // Org creation/deletion and the slug/owner/billing keys are
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
       // two staff exceptions mirroring the retired tenants rules
-      // (AGL-206/238): super staff writes anything; billing staff writes
-      // plan/entitlements but the key diff keeps suspension, erasure and
-      // identity keys out of reach. Members with the admin role may
-      // rename the org; nothing else is client-writable.
+      // (AGL-206/238): super staff writes anything except the suspended*
+      // family (AGL-1517, see below); billing staff writes plan/entitlements
+      // but the key diff keeps suspension, erasure and identity keys out of
+      // reach. Members with the admin role may rename the org; nothing else
+      // is client-writable.
       allow create, delete: if false;
       // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
       // the install API after entitlement + kill-switch checks (AGL-501) —
@@ -108,7 +109,20 @@ service cloud.firestore {
       //    revenue.
       // Every console surface writes all four through an Admin-SDK route, so
       // denying them client-side costs the product nothing.
-      allow update: if isSuperStaff() ||
+      //
+      // The org `suspended*` family is Admin-SDK-only for EVERY client,
+      // super staff included (AGL-1517). AGL-1505 removed the last client
+      // writer — the legacy staff toggle now POSTs /api/admin/lockdown — and
+      // a bare client write would set the flag without the four effects that
+      // make a suspension real (the `orgSuspended` member projection fan-out,
+      // token revocation, tenant ISR eviction, the audit row). This mirrors
+      // the AGL-1501 host takedown keys below. `erasureRequestedAt` stays
+      // super-writable: the erasure toggle still legitimately writes it
+      // client-side.
+      allow update: if (isSuperStaff() &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+            ['suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+             'suspendedMessage', 'suspendedUntilMs'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',

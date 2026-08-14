@@ -40,7 +40,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 
+// lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; metering must
+// keep running under a lock so billing stays truthful.
+
 /** Previous calendar month as YYYY-MM (the default rollup target). */
+
 function previousMonth(): string {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))

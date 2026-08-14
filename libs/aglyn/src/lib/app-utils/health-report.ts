@@ -185,6 +185,70 @@ export function backupsHealth(
 }
 
 /**
+ * Org-creation volume, reduced to a health verdict (AGL-1536).
+ *
+ * The detection layer over the AGL-1534 rate limit: the limiter bounds each
+ * uid (3/h) and each IP (10/h), so a distributed farm holding every actor
+ * under both caps is invisible to it — but visible in aggregate. This turns
+ * "how many orgs appeared in the trailing hour" into the same 200/503
+ * contract the other health checks speak, so the existing uptime check +
+ * alert + email path is the listener, and a wave becomes an email instead of
+ * a surprise. The manual response lever is the AGL-1510 signups feature-lock.
+ *
+ * Pure on purpose, like `backupsHealth`: the route counts, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface SignupsCheck extends HealthCheck {
+  /**
+   * Orgs created inside the trailing window. A COUNT only — the endpoint is
+   * public, and org names, slugs or owners have no business in it. Null when
+   * the count query itself failed.
+   */
+  recentOrgCreations: number | null
+  /** The trailing window the count covers, so the body is self-describing. */
+  windowMinutes: number
+  /** The count above which this reports degraded. */
+  threshold: number
+}
+
+/** Trailing window the org-creation count covers. */
+export const ORG_CREATION_WINDOW_MINUTES = 60
+
+/**
+ * Degraded above 10 creations/hour. Calibrated against two facts: production
+ * holds 4 orgs TOTAL (2026-08), so the organic baseline is ~zero per hour;
+ * and the AGL-1534 per-IP cap is 10/h, so a single maxed-out address can
+ * never trip this — 11+/h necessarily means multiple addresses, which is
+ * exactly the distributed signature the rate limiter cannot see. If a launch
+ * day legitimately beats this, the alert asks a human to glance at the orgs
+ * list and enjoy the view; that is the correct outcome, not a false positive.
+ */
+export const MAX_ORG_CREATIONS_PER_WINDOW = 10
+
+export function signupsHealth(
+  recentOrgCreations: number | null,
+  ms: number,
+  threshold: number = MAX_ORG_CREATIONS_PER_WINDOW,
+): SignupsCheck {
+  // A failed count is degraded, not ok — an alarm that cannot see the thing
+  // it watches must say so rather than report calm.
+  const code =
+    recentOrgCreations === null
+      ? 'count-unavailable'
+      : recentOrgCreations > threshold
+        ? 'signup-wave'
+        : undefined
+  return {
+    ok: code === undefined,
+    ms,
+    ...(code === undefined ? {} : { code }),
+    recentOrgCreations,
+    windowMinutes: ORG_CREATION_WINDOW_MINUTES,
+    threshold,
+  }
+}
+
+/**
  * Reuse a probe result for `ttlMs`, per instance.
  *
  * The endpoint is public and unauthenticated, so an unthrottled dependency

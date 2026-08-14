@@ -25,6 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
+  featureLockdownRefusal,
   firebaseAdmin,
   getServerReleaseFlagValues,
   isImpersonationSession,
@@ -35,6 +36,13 @@ import {
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import { checkoutCustomerParams } from '../../../../utils/stripe-customer-identity'
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
+
+// lockdown-423: exempt — the payment recovery path — a billing-locked org must be able to pay
+// its way out (AGL-1501 keeps those sessions for exactly this). That exemption is about
+// the SCOPE verdict (org/host/user) and it stands: paying an existing subscription rides
+// the subscription/invoices routes, untouched. The CHECKOUT feature gate below (AGL-1510)
+// is a different question — it refuses only NEW checkout sessions, platform-wide, when
+// staff have turned checkout off over a live billing bug.
 
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -105,6 +113,19 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
+    // Feature lockdown: CHECKOUT (AGL-1510). Refuses creating a NEW Stripe
+    // checkout session while staff have checkout off over a billing bug.
+    // The 423 body is explicit that this is NOT a payment failure. The
+    // verified `staff` claim is passed for the platform-scope un-panic
+    // bypass only — at the feature stage there is deliberately NO staff
+    // bypass (LOCKDOWN_FEATURE_STAFF_BYPASS.checkout = false): a
+    // staff-created session is still a real charge against a real card,
+    // and no incident-response step needs money to move.
+    const locked = await featureLockdownRefusal({
+      feature: 'checkout',
+      staff: decoded['staff'] === true,
+    })
+    if (locked) return locked
     // Org metadata (AGL-445): orgId is the only billing key — the webhook
     // mirrors the subscription onto this org doc. Explicit orgId from
     // the workspace-scoped console wins; otherwise the user's first org.

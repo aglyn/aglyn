@@ -131,6 +131,20 @@ const smokeEnv = {
   ...process.env,
   FIREBASE_AUTH_EMULATOR_ENABLED: 'true',
   FIREBASE_FIRESTORE_EMULATOR_ENABLED: 'true',
+  // AGL-1504: the AGL-1500 boot warmup sets `preferRest: true`, and REST
+  // transport breaks the EMULATOR's admin bypass. Over gRPC the Admin SDK
+  // sends `Authorization: Bearer owner` (injected as a custom header when
+  // `FIRESTORE_EMULATOR_HOST` forces ssl:false) and the emulator waves
+  // admin reads past the rules. Over REST every request goes through the
+  // google-auth-library client (`auth.fetch` in gax's fallbackServiceStub),
+  // which stamps a REAL OAuth token minted from the service account in
+  // apps/tenant/.env over that header — the emulator can't parse it, treats
+  // the read as unauthenticated, and rules-evaluates it to a denial
+  // ("Property staff is undefined … for 'list'"). Every page then 404s and
+  // this gate dies before asserting anything. The kill switch restores the
+  // gRPC owner bypass; production keeps preferRest — the divergence exists
+  // only against the emulator, which is the only place this harness runs.
+  AGLYN_DISABLE_BOOT_WARMUP: '1',
   AGLYN_TENANT_DEMO: 'demo',
   NEXT_TELEMETRY_DISABLED: '1',
 }

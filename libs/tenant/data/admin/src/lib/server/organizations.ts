@@ -39,6 +39,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
+import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
 import {
   deleteMemberHostProjections,
@@ -74,6 +75,80 @@ export function isSlugReservationClaimable(
   if (!reservation) return true
   if (claimingOrgId !== null && reservation.orgId === claimingOrgId) return true
   return Boolean(reservation.movedTo)
+}
+
+/**
+ * How long after account creation the signup flow may still provision the
+ * org it collected, without a verified email (AGL-1523). Generous relative
+ * to the seconds the real flow needs, tight relative to abuse: outside this
+ * window the AGL-479 verified-email gate stands in full.
+ */
+export const SIGNUP_PROVISIONING_GRACE_MS = 15 * 60 * 1000
+
+/**
+ * The pure decision for the signup-provisioning grace (AGL-1523).
+ *
+ * The signup form collects an organization name and posts it to
+ * `/api/orgs/create` seconds after `createUserWithEmailAndPassword` — a
+ * moment at which a password account is ALWAYS unverified, so the AGL-479
+ * email gate refused every signup-time provisioning ever attempted on the
+ * password door. The gate's purpose is to keep unverified accounts out of
+ * the console, and it still does: creating the user's own first workspace
+ * grants no console access (the session mint and the app layout both still
+ * require verification). What the gate must stop refusing is the one
+ * request that is part of account creation itself.
+ *
+ * Grace is granted only when BOTH hold:
+ *  - the account is brand new (creation within the window — an unverified
+ *    account cannot come back later and start minting workspaces), and
+ *  - the account owns no org yet (grace provisions exactly ONE workspace;
+ *    it is not a window of unlimited slug reservation).
+ *
+ * A malformed/missing creation time fails CLOSED.
+ */
+export function isWithinSignupProvisioningGrace(options: {
+  creationTime: string | undefined
+  ownsAnyOrg: boolean
+  now?: number
+}): boolean {
+  const { creationTime, ownsAnyOrg, now = Date.now() } = options
+  if (ownsAnyOrg) return false
+  const createdAt = Date.parse(creationTime ?? '')
+  if (!Number.isFinite(createdAt)) return false
+  // A slightly-future creation time is clock skew on a definitionally
+  // brand-new account — within grace. Only age beyond the window denies.
+  return now - createdAt <= SIGNUP_PROVISIONING_GRACE_MS
+}
+
+/**
+ * Whether `uid` — an UNVERIFIED caller — may still create the org the signup
+ * flow collected (AGL-1523). Reads the auth record's creation time and the
+ * caller's owned-org count, then applies
+ * {@link isWithinSignupProvisioningGrace}. Any lookup failure fails CLOSED:
+ * the AGL-479 gate stands.
+ */
+export async function signupProvisioningGraceAllows(
+  uid: string,
+): Promise<boolean> {
+  try {
+    // Across pools (AGL-1122), not `auth().getUser` — a project-level lookup
+    // silently misses tenanted SSO accounts, and this helper failing closed
+    // would then wrongly 403 them.
+    const found = await findUserByUidAcrossPools(uid)
+    if (!found) return false
+    const owned = await firestore()
+      .collection('orgs')
+      .where('ownerUid', '==', uid)
+      .limit(1)
+      .get()
+    return isWithinSignupProvisioningGrace({
+      creationTime: found.record.metadata?.creationTime,
+      ownsAnyOrg: !owned.empty,
+    })
+  } catch (error) {
+    console.error('[orgs] signup provisioning grace check failed', error)
+    return false
+  }
 }
 
 export interface CreateOrganizationOptions {
@@ -361,15 +436,28 @@ export async function getOrgForHost(hostId: string): Promise<{
 }
 
 /**
+ * The raw host doc, `React.cache`-deduped per request like
+ * {@link resolveOrgIdForHost}. Null when missing. Added for AGL-1506 so a
+ * dispatcher that already pays this read for the plugin deny-list can also
+ * feed the host's `suspendedAt` family to the lockdown verdict without a
+ * second get. Same read-only contract as {@link getOrgDoc}.
+ */
+export const getHostDocAdmin = cache(
+  async (hostId: string): Promise<Record<string, unknown> | null> => {
+    const snapshot = await firestore().collection('hosts').doc(hostId).get()
+    return snapshot.exists ? (snapshot.data() as Record<string, unknown>) : null
+  },
+)
+
+/**
  * The host's per-site plugin deny-list (AGL-1014), for API dispatch and any
- * other server consumer of `resolveHostEnabledPlugins`. `React.cache`-deduped
- * per request like {@link resolveOrgIdForHost}. Fail-open to [] — an absent
+ * other server consumer of `resolveHostEnabledPlugins`. Rides
+ * {@link getHostDocAdmin}'s request-cached read. Fail-open to [] — an absent
  * host doc or field means "nothing disabled here", never a lockout.
  */
 export const getHostDisabledPlugins = cache(
   async (hostId: string): Promise<string[]> => {
-    const snapshot = await firestore().collection('hosts').doc(hostId).get()
-    const disabled = snapshot.data()?.['disabledPlugins']
+    const disabled = (await getHostDocAdmin(hostId))?.['disabledPlugins']
     return Array.isArray(disabled) ? disabled.map(String) : []
   },
 )

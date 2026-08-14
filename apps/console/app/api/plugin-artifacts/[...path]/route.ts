@@ -37,6 +37,9 @@
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// lockdown-423: exempt — content-addressed public artifact delivery (immutable sha-named
+// bundles, CORS *); no caller identity, no org scope at this surface.
+
 const LISTING_ID = /^[A-Za-z0-9_-]{1,64}$/
 const VERSION = /^[A-Za-z0-9._-]{1,32}$/
 const BUNDLE_FILE = /^[a-f0-9]{64}\.bundle$/

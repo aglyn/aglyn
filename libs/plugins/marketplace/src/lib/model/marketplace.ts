@@ -855,9 +855,15 @@ export function safePublisherHref(url: unknown): string | undefined {
     : undefined
 }
 
-/** Platform revenue share on paid listings (AGL-46). */
+/**
+ * Platform revenue share on paid listings (AGL-46) — UI COPY ONLY. The
+ * checkout route prices from the `marketplaceFeePct` ENTITLEMENT
+ * (`resolveMarketplaceFeePct`, AGL-1543), which resolves the effective
+ * plan and per-org overrides; these constants exist for seller-facing
+ * copy and must be kept in step with the plan table.
+ */
 export const MARKETPLACE_PLATFORM_FEE_PERCENT = 20
-/** Free-plan publishers pay a higher share. */
+/** Free-plan publishers pay a higher share. See AGL-1543 note above. */
 export const MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN = 30
 /** One-time listing price ceiling (whole USD). */
 export const MARKETPLACE_MAX_PRICE_USD = 1000

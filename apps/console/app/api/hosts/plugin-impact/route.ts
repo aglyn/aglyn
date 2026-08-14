@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
 import {
@@ -117,6 +119,20 @@ async function handler(request: Request): Promise<Response> {
       // the page names of another through an impact check.
       const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
       if (!memberRole) continue
+
+      // Lockdown verdict (AGL-1506): platform/org/host/user scopes;
+      // distinct 423 body; staff bypass is the un-panic invariant. Per
+      // host, like the membership check above — a locked site's page names
+      // must not leak through an impact scan, even a read-only one. The
+      // org doc is fetched deliberately — an org lock never stamps host
+      // docs, so a host-only verdict would silently miss it.
+      const locked = await lockdownRefusal({
+        staff: decoded['staff'] === true,
+        uid: decoded.uid,
+        org: (await getOrgForHost(hostId))?.org,
+        host: hostSnapshot.data(),
+      })
+      if (locked) return locked
 
       const [screens, layouts, components] = await Promise.all([
         readUsageCandidates(hostRef, 'screens', { withNodes: true, limit: 200 }),

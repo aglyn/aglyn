@@ -25,13 +25,27 @@
 // NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET (the same var the app routes use), or
 // FIREBASE_STORAGE_BUCKET, falling back to `{projectId}.appspot.com`.
 //
-//   set -a && source .env && set +a && \
-//     node tools/scripts/deploy-storage-rules.mjs
+//   node tools/scripts/deploy-storage-rules.mjs
+// (self-loads the service account from the repo's local .env files; already-set
+// process.env still wins, so `source .env` first is optional.)
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { cert, initializeApp } from 'firebase-admin/app'
 import { assertCleanDeploySource } from './lib/clean-deploy-source.mjs'
+import {
+  authHeaders,
+  getServiceAccountToken,
+  loadLocalEnv,
+  readServiceAccount,
+  resolveStorageBucket,
+  rulesApiBase,
+} from './lib/firebase-rules-api.mjs'
+
+// Env loading, auth, and REST access are shared with the other deploy
+// scripts AND the drift checker (check-rules-drift.mjs) via
+// lib/firebase-rules-api.mjs — the reader must never diverge from the
+// writer it verifies (AGL-1509).
+loadLocalEnv()
 
 // Dirty-tree refusal (AGL-1489): the deploy ships the worktree copy
 // wholesale, so uncommitted edits — possibly another session's — would go
@@ -50,32 +64,22 @@ try {
   process.exit(1)
 }
 
-const projectId = process.env.FIREBASE_PROJECT_ID
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-if (!projectId || !clientEmail || !privateKey) {
+const serviceAccount = readServiceAccount()
+if (!serviceAccount) {
   console.error('Missing FIREBASE_* service-account env vars (source .env).')
   process.exit(1)
 }
-const bucket =
-  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
-  process.env.FIREBASE_STORAGE_BUCKET ||
-  `${projectId}.appspot.com`
+const { projectId } = serviceAccount
+const bucket = resolveStorageBucket(projectId)
 
-const app = initializeApp({
-  credential: cert({ projectId, clientEmail, privateKey }),
-})
-const token = (await app.options.credential.getAccessToken()).access_token
-const headers = {
-  Authorization: `Bearer ${token}`,
-  'Content-Type': 'application/json',
-}
+const token = await getServiceAccountToken(serviceAccount)
+const headers = authHeaders(token)
 const project = `projects/${projectId}`
 const content = readFileSync(rulesPath, 'utf8')
 
 // 1) Create the ruleset — the API compiles it and rejects on errors.
 const created = await (
-  await fetch(`https://firebaserules.googleapis.com/v1/${project}/rulesets`, {
+  await fetch(`${rulesApiBase()}/v1/${project}/rulesets`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -93,7 +97,7 @@ console.log('Ruleset created:', created.name)
 // is `projects/*/releases/**`, so the slash in the id needs no encoding.
 const releaseName = `${project}/releases/firebase.storage/${bucket}`
 const updated = await (
-  await fetch(`https://firebaserules.googleapis.com/v1/${releaseName}`, {
+  await fetch(`${rulesApiBase()}/v1/${releaseName}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify({

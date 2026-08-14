@@ -71,6 +71,8 @@
     "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
     "test:erase-cli": "node --test tools/scripts/lib/erase-org-cli.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
+    "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
+    "check:rules-drift": "node tools/scripts/check-rules-drift.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",

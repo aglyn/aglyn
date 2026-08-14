@@ -17,6 +17,9 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — pre-auth IdP discovery (email -> tenant); no session, no org action.
+// The SSO JIT route and the session mint carry the lockdown gate.
+
 /**
  * Pre-auth SSO discovery (AGL-1101). The sign-in page has no user yet, so it
  * asks this route "does this email domain sign in via an IdP?" before deciding

@@ -119,6 +119,11 @@ async function handler(request: Request): Promise<Response> {
         createdAt: ts(data['createdAt']),
         suspendedAt: ts(data['suspendedAt']),
         suspendedReason: data['suspendedReason'] ?? null,
+        // Lockdown-core fields (AGL-1501/1505): the suspend dialog prefills
+        // its reason code and notice from these — projecting them away would
+        // silently reset every re-suspend to `manual` with no message.
+        suspendedReasonCode: data['suspendedReasonCode'] ?? null,
+        suspendedMessage: data['suspendedMessage'] ?? null,
         erasureRequestedAt: ts(data['erasureRequestedAt']),
       }
     })

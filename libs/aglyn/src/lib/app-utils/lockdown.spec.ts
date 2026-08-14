@@ -16,8 +16,14 @@
  */
 
 import {
+  featureLockdownDocId,
   isLockdownActive,
+  isLockdownFeatureKey,
+  LOCKDOWN_FEATURE_KEYS,
+  LOCKDOWN_FEATURE_LABELS,
+  LOCKDOWN_FEATURE_STAFF_BYPASS,
   LOCKDOWN_MESSAGE_MAX,
+  lockdownFeaturesForPluginApiPath,
   lockdownNotice,
   lockdownRetryAfterSeconds,
   normalizeHostLockdown,
@@ -216,6 +222,157 @@ describe('normalizeLockdownDoc — lockdowns/{platform|user--uid}', () => {
 
   it('doc id helper encodes the user scope', () => {
     expect(userLockdownDocId('abc')).toBe('user--abc')
+  })
+})
+
+describe('FEATURE scope (AGL-1510) — the pure half', () => {
+  it('the launch set is exactly the five incident levers, extensible by enum', () => {
+    expect(LOCKDOWN_FEATURE_KEYS).toEqual([
+      'signups',
+      'uploads',
+      'checkout',
+      'marketplace-installs',
+      'ai-assist',
+    ])
+    for (const key of LOCKDOWN_FEATURE_KEYS) {
+      expect(isLockdownFeatureKey(key)).toBe(true)
+      // Every key the staff checklist renders has a label.
+      expect(LOCKDOWN_FEATURE_LABELS[key]).toBeTruthy()
+    }
+    expect(isLockdownFeatureKey('everything')).toBe(false)
+  })
+
+  it('doc id helper encodes the feature scope in the shared collection', () => {
+    expect(featureLockdownDocId('uploads')).toBe('feature--uploads')
+  })
+
+  it('PINS the per-feature staff bypass decisions — change these on purpose only', () => {
+    // Bypass where a staff action aids incident response; withheld where it
+    // would BE the incident. Justifications live on the map's declaration.
+    expect(LOCKDOWN_FEATURE_STAFF_BYPASS).toEqual({
+      signups: false,
+      uploads: true,
+      checkout: false,
+      'marketplace-installs': true,
+      'ai-assist': true,
+    })
+  })
+
+  it('normalizes a feature doc, carrying the key; refuses unknown keys whole', () => {
+    const normalized = normalizeLockdownDoc(
+      { scope: 'feature', feature: 'uploads', reason: 'security', atMs: NOW },
+      'feature',
+    )
+    expect(normalized?.scope).toBe('feature')
+    expect(normalized?.feature).toBe('uploads')
+    expect(
+      normalizeLockdownDoc(
+        { scope: 'feature', feature: 'warp-drive' as never, reason: 'manual' },
+        'feature',
+      ),
+    ).toBeNull()
+    expect(
+      normalizeLockdownDoc({ scope: 'feature', reason: 'manual' }, 'feature'),
+    ).toBeNull()
+  })
+})
+
+describe('lockdownFeaturesForPluginApiPath — the dispatcher map', () => {
+  it('ai/assist is gated even while the handler 501s without a key', () => {
+    expect(lockdownFeaturesForPluginApiPath('ai/assist')).toEqual(['ai-assist'])
+  })
+
+  it('installs-as-a-class: every install path plus update-artifact', () => {
+    for (const path of [
+      'marketplace/install',
+      'marketplace/install-plugin',
+      'marketplace/install-theme',
+      'marketplace/install-template',
+      'marketplace/install-layout',
+      'marketplace/install-dataset-schema',
+      'marketplace/install-email-template',
+      'marketplace/update-artifact',
+    ]) {
+      expect(`${path} → ${lockdownFeaturesForPluginApiPath(path)}`).toBe(
+        `${path} → marketplace-installs`,
+      )
+    }
+  })
+
+  it('marketplace checkout gates on BOTH checkout and marketplace-installs (AGL-1545)', () => {
+    // A paid purchase is a new Stripe session AND the front door of an
+    // install: a malicious-listing incident must stop buyers PAYING for
+    // the artifact under investigation, not merely refuse the install
+    // after the money moved.
+    expect(lockdownFeaturesForPluginApiPath('marketplace/checkout')).toEqual([
+      'checkout',
+      'marketplace-installs',
+    ])
+  })
+
+  it('publish, report and review paths map to NOTHING — the incident response must not gag its own inputs', () => {
+    for (const path of [
+      'marketplace/publish',
+      'marketplace/publish-plugin',
+      'marketplace/report',
+      'marketplace/reviews',
+      'marketplace/listing-versions',
+      'marketplace/connect',
+      'anything/else',
+    ]) {
+      expect(lockdownFeaturesForPluginApiPath(path)).toEqual([])
+    }
+  })
+})
+
+describe('feature notices — honest, feature-specific copy', () => {
+  const featureState = (
+    feature: LockdownState['feature'],
+    over: Partial<LockdownState> = {},
+  ): LockdownState => ({
+    scope: 'feature',
+    feature,
+    reason: 'manual',
+    ...over,
+  })
+
+  it('a paused signup explains itself and reassures existing accounts', () => {
+    const notice = lockdownNotice(featureState('signups'))
+    expect(notice.title).toBe('New signups are paused')
+    expect(notice.body).toContain('Existing accounts')
+  })
+
+  it('a disabled checkout NEVER reads as a payment failure', () => {
+    const notice = lockdownNotice(featureState('checkout'))
+    expect(notice.title).toBe('Checkout is temporarily unavailable')
+    expect(notice.body).toContain('not a payment failure')
+    expect(notice.body).toContain('unaffected')
+    // And never words that send someone to their bank.
+    expect(notice.body.toLowerCase()).not.toContain('declined')
+    expect(notice.body.toLowerCase()).not.toContain('card')
+  })
+
+  it('uploads and installs say what still works', () => {
+    expect(lockdownNotice(featureState('uploads')).body).toContain('unaffected')
+    expect(lockdownNotice(featureState('marketplace-installs')).body).toContain(
+      'keeps working',
+    )
+  })
+
+  it('a staff message replaces the body; title and contact stay per-feature', () => {
+    const notice = lockdownNotice(
+      featureState('uploads', { message: 'Custom incident words.' }),
+    )
+    expect(notice.body).toBe('Custom incident words.')
+    expect(notice.title).toBe('Uploads are paused')
+    expect(notice.contact).toBe('support@aglyn.com')
+  })
+
+  it('a window names its end', () => {
+    const notice = lockdownNotice(
+      featureState('ai-assist', { untilMs: Date.parse('2026-09-01') }),
+    )
+    expect(notice.body).toContain('Expected back by')
   })
 })
 

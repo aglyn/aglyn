@@ -93,7 +93,22 @@ export function checkoutCustomerParams(
   email?: string | null,
 ): Record<string, string> {
   const customer = existingCustomerId?.trim()
-  if (customer) return { customer }
+  if (customer) {
+    return {
+      customer,
+      // Automatic tax with a REUSED customer (AGL-1537). Stripe resolves the
+      // tax location of an existing customer from the CUSTOMER record, not
+      // from the address typed into this session — so a reused customer with
+      // no stored address makes an `automatic_tax` session unresolvable.
+      // `auto` saves the billing address collected by this session back onto
+      // the customer, which both fixes that session and keeps the stored
+      // address current for later subscription updates (which also compute
+      // tax). Only valid alongside `customer` — Stripe rejects
+      // `customer_update` on a session without one, which is why it lives in
+      // this branch and not next to `billing_address_collection`.
+      'customer_update[address]': 'auto',
+    }
+  }
   const customerEmail = email?.trim()
   return customerEmail ? { customer_email: customerEmail } : {}
 }

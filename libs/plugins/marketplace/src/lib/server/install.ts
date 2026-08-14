@@ -87,13 +87,23 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       listing.profileId,
     )
     if (priceUsd > 0 && !ownsListing) {
+      // A FULLY refunded purchase no longer entitles (AGL-1546) — the
+      // webhook stamps `refundedAt` on `charge.refunded`. Fetch a few and
+      // require one live record rather than filtering in the query: a
+      // "refundedAt == null" predicate cannot match docs missing the
+      // field, and every pre-AGL-1546 purchase is missing it. A re-buy
+      // after a refund writes a fresh session-keyed doc, so a legitimate
+      // second purchase still installs.
       const purchases = await firestore
         .collection('marketplacePurchases')
         .where('buyerUid', '==', decoded.uid)
         .where('listingId', '==', listingId)
-        .limit(1)
+        .limit(10)
         .get()
-      if (purchases.empty) {
+      const hasLivePurchase = purchases.docs.some(
+        (purchase) => !purchase.get('refundedAt'),
+      )
+      if (!hasLivePurchase) {
         return res
           .status(402)
           .json({ error: 'Purchase required', priceUsd })

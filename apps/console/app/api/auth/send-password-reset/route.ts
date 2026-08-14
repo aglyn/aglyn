@@ -21,6 +21,9 @@ import { consumeRateLimit, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 
+// lockdown-423: exempt — account recovery must always work — a lockdown is not a password
+// incident, and the notice page tells locked users to contact support.
+
 /**
  * Self-serve "forgot password" (AGL-1112).
  *

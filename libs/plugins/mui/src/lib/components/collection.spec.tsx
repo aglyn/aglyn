@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import {
   CollectionCategories,
   CollectionEntries,
@@ -78,6 +78,183 @@ describe('Collection entries block (AGL-551)', () => {
       expect(json).toContain(token)
     }
     expect(json).toContain('Read more')
+  })
+})
+
+describe('Collection entries search (AGL-1516)', () => {
+  const index = [
+    { title: 'Design it live', excerpt: 'how besigner renders the page' },
+    { title: 'One platform, not a stack', excerpt: 'commerce forms media' },
+  ]
+  const cards = [
+    <article key="a">First card</article>,
+    <article key="b">Second card</article>,
+  ]
+
+  it('renders NO search box by default (regression pin)', () => {
+    const { container } = render(<CollectionEntries>{cards}</CollectionEntries>)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('search')).toBeNull()
+    // The block is exactly the stack of its children, as it always was.
+    expect(container.firstElementChild?.children).toHaveLength(2)
+    expect(container.firstElementChild?.textContent).toBe(
+      'First cardSecond card',
+    )
+  })
+
+  it('renders no box either while nothing is stamped on a live surface', () => {
+    // Unknown collection / zero entries: the expansion stamped no index, so
+    // a search box would be a control over nothing.
+    render(<CollectionEntries search>{cards}</CollectionEntries>)
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it('renders the search box when enabled with a stamped index', () => {
+    render(
+      <CollectionEntries search searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    const input = screen.getByRole('textbox', {
+      name: 'Search entries',
+    }) as HTMLInputElement
+    expect(input.placeholder).toBe('Search posts…')
+    // Everything renders while the box is empty.
+    expect(screen.getByText('First card')).toBeTruthy()
+    expect(screen.getByText('Second card')).toBeTruthy()
+  })
+
+  it('honours an authored placeholder', () => {
+    render(
+      <CollectionEntries
+        search
+        searchPlaceholder="Search the changelog…"
+        searchIndex={index}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    expect(input.placeholder).toBe('Search the changelog…')
+  })
+
+  it('filters the rendered entries by fuzzy title/excerpt match', () => {
+    render(
+      <CollectionEntries search searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    const input = screen.getByRole('textbox')
+    // Title hit — and typo-tolerant, which is the point of fuzzy.
+    fireEvent.change(input, { target: { value: 'platfrom' } })
+    expect(screen.queryByText('First card')).toBeNull()
+    expect(screen.getByText('Second card')).toBeTruthy()
+    // Excerpt hit.
+    fireEvent.change(input, { target: { value: 'besigner' } })
+    expect(screen.getByText('First card')).toBeTruthy()
+    expect(screen.queryByText('Second card')).toBeNull()
+    // Clearing restores the full list.
+    fireEvent.change(input, { target: { value: '' } })
+    expect(screen.getByText('First card')).toBeTruthy()
+    expect(screen.getByText('Second card')).toBeTruthy()
+  })
+
+  it('filters whole entry GROUPS when the template has several roots', () => {
+    // Two template roots per entry: children arrive as [a1, a2, b1, b2].
+    render(
+      <CollectionEntries search searchIndex={index}>
+        <article key="a1">First card</article>
+        <aside key="a2">First aside</aside>
+        <article key="b1">Second card</article>
+        <aside key="b2">Second aside</aside>
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'platform' },
+    })
+    expect(screen.queryByText('First card')).toBeNull()
+    expect(screen.queryByText('First aside')).toBeNull()
+    expect(screen.getByText('Second card')).toBeTruthy()
+    expect(screen.getByText('Second aside')).toBeTruthy()
+  })
+
+  it('says NO MATCHES honestly on an unpaginated block', () => {
+    render(
+      <CollectionEntries search searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(screen.getByText('No matches for “zzzz”.')).toBeTruthy()
+    expect(screen.queryByText('First card')).toBeNull()
+  })
+
+  it('scopes the empty state to the PAGE when the block paginates', () => {
+    // A paginated block holds one page window; claiming a global miss would
+    // turn "not on this page" into "this post does not exist".
+    render(
+      <CollectionEntries search searchIndex={index} perPage={2} page={1}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” on this page — other pages are not searched.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('keeps the search props off the DOM', () => {
+    const { container } = render(
+      <CollectionEntries search searchPlaceholder="Hint" searchIndex={index}>
+        {cards}
+      </CollectionEntries>,
+    )
+    const root = container.firstElementChild as HTMLElement
+    for (const attribute of ['search', 'searchPlaceholder', 'searchIndex'])
+      expect(root.getAttribute(attribute)).toBeNull()
+  })
+
+  it('renders an INERT affordance inside editing surfaces', () => {
+    // The canvas renders the template once with literal tokens and no
+    // stamped index — the author sees the field they enabled, and typing
+    // must not filter a list that is not there (pills pattern).
+    render(
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <CollectionEntries search>
+          <article>{'{{entry.title}}'}</article>
+        </CollectionEntries>
+      </Aglyn.ScreenLinkContext.Provider>,
+    )
+    const input = screen.getByRole('textbox') as HTMLInputElement
+    expect(input.readOnly).toBe(true)
+    fireEvent.change(input, { target: { value: 'anything' } })
+    expect(input.value).toBe('')
+    expect(screen.getByText('{{entry.title}}')).toBeTruthy()
+  })
+
+  it('offers Search as a switch and the placeholder gated behind it', () => {
+    const attribute = (name: string) =>
+      (collectionEntriesSchema.attributes ?? []).find(
+        (item) => item.name === name,
+      )
+    expect(attribute('search')?.component).toBe(
+      Aglyn.FieldComponentType.SWITCH,
+    )
+    expect(attribute('searchPlaceholder')?.component).toBe(
+      Aglyn.FieldComponentType.TEXT_FIELD,
+    )
+    expect(attribute('searchPlaceholder')?.condition).toEqual({
+      when: 'search',
+      is: true,
+    })
+    // `searchIndex` is server-stamped, never authored.
+    expect(attribute('searchIndex')).toBeUndefined()
   })
 })
 

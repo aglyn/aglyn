@@ -18,6 +18,13 @@
 import { runLegacyHandler } from '@aglyn/aglyn/server'
 import { serveMediaCdn } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — anonymous public delivery (images to visitors); no caller identity
+// to verdict, so the 423-with-body discipline does not apply. Lockdown IS
+// enforced here since AGL-1520 — inside serveMediaCdn itself (both mounts),
+// as a TTL-cached neutral 410 for security/manual locks; see
+// mediaCdnServeBlock in @aglyn/tenant-data-admin serve-media-cdn.ts for the
+// reason matrix, read-cost and staleness bound.
+
 export const dynamic = 'force-dynamic'
 
 /**

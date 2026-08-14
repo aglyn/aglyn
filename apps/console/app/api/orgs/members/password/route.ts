@@ -25,6 +25,7 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
+  lockdownRefusal,
   logOrgActivity,
   memberHasOrgPermission,
   passwordResetThrottleMessage,
@@ -113,6 +114,15 @@ async function handler(request: Request): Promise<Response> {
     if (!orgSnapshot.exists) {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
+    // Lockdown verdict (AGL-1506): platform/org/user scopes with the org
+    // doc already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: isStaff,
+      uid: decoded.uid,
+      org: orgSnapshot.data(),
+    })
+    if (locked) return locked
     // Membership is the scope of this endpoint: without it an org admin
     // could aim either action at any uid in the platform.
     const memberSnapshot = await firestore

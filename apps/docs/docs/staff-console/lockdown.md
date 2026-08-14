@@ -64,6 +64,41 @@ this is spec-enforced (a panic button that panics its own operator is worse than
 none). For the same reason, a staff account cannot be user-locked: revoke its
 staff claim first if it truly must go.
 
+## Feature scope
+
+The beta-week abuse-response kit: kill **one capability platform-wide** while
+everything else keeps serving. Feature locks live in the same `lockdowns`
+collection (`feature--{key}` docs), use the same reasons/messages/expiry, the
+same audited writer, and appear as a checklist on the same **Staff → Lockdown**
+page.
+
+| Feature key | What it stops | Reach for it when |
+|---|---|---|
+| `signups` | New account creation (all four doors — the signup form, both Google flows, and the sign-in page's new-account bounce). Accounts created *after* the lock began are refused a session; every existing account signs in untouched. | Bot registration wave, free-tier abuse storm |
+| `uploads` | New media bytes (upload, signed-URL upload, replace). Browsing, organizing, restoring, and serving existing media all keep working. | Malware/abuse report in the DAM |
+| `checkout` | **New** Stripe checkout sessions only — console plan upgrades and marketplace purchases. Existing subscriptions, invoices, and the pay-your-way-out path for billing-locked orgs are untouched, and the notice says explicitly that it is *not* a payment failure. | Stripe integration bug mid-charge |
+| `marketplace-installs` | Installing anything from the marketplace (all artifact kinds, including re-copying an updated artifact). Everything already installed keeps working; publishing, reviews, and abuse reports stay open. | A malicious listing slips review (the per-plugin kill switch takes out one listing; this is the wider valve) |
+| `ai-assist` | The AI assist endpoint. The switch works even while the feature is unconfigured — it predates the API key on purpose. | Provider incident, cost runaway |
+
+**Composition, not ranking:** a platform lock implies every feature; a feature
+lock implies nothing about the platform, workspace, site, or account scopes.
+
+**Confirm weight:** feature locks do *not* require the type-to-confirm phrase.
+The platform phrase exists because one request can take everything down; a
+feature lock is one named capability with the platform still serving — the same
+blast-radius class as an org or site lock, and incident response wants the
+narrow lever fast.
+
+**Staff bypass, per feature:** staff keep `uploads`, `marketplace-installs`,
+and `ai-assist` through a lock — responding staff need to upload a test file,
+reproduce an install, or make one AI call to verify the fix before lifting it.
+`checkout` grants **no** staff bypass: a staff-created checkout session is
+still a real charge, and verification belongs in Stripe test mode. `signups`
+is decided by account age, not claims — there is no bypass to grant.
+
+**Expiry** works the same as every scope: when the optional end time passes,
+the feature restores itself with no staff action and no write.
+
 ## Operating it
 
 1. Open **Staff → Lockdown** (or suspend a workspace from its org detail page —

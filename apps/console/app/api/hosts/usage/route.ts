@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { countBillableScreens } from '../resources/count-billable-screens'
@@ -103,6 +105,20 @@ async function handler(request: Request): Promise<Response> {
     if (!allowed) {
       return Response.json({ error: 'Not found' }, { status: 404 })
     }
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes; distinct
+    // 423 body — API consumers see it on reads too. The org doc is fetched
+    // deliberately (the fallback above reads a MEMBER doc, which carries no
+    // suspension fields) — an org lock never stamps host docs, so a
+    // host-only verdict would silently miss it. Staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org: (await getOrgForHost(hostId))?.org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
 
     return Response.json(
       {

@@ -28,13 +28,48 @@
  * reason, title, copy, contact, window — never the actor or any target id.
  */
 
-import { lockdownNotice, lockdownRetryAfterSeconds } from '@aglyn/aglyn/server'
-import { getPlatformLockdown } from '@aglyn/tenant-data-admin'
+import {
+  isLockdownActive,
+  isLockdownFeatureKey,
+  type LockdownFeatureKey,
+  lockdownNotice,
+  lockdownRetryAfterSeconds,
+} from '@aglyn/aglyn/server'
+import {
+  getFeatureLockdown,
+  getPlatformLockdown,
+} from '@aglyn/tenant-data-admin'
+
+// lockdown-423: exempt — THE notice surface — what a locked-out client calls to learn WHY.
+// Gating it on the lock would blank the notice it exists to serve.
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(): Promise<Response> {
-  const state = await getPlatformLockdown()
+/**
+ * `?feature=signups` (AGL-1510): the sanitized notice for ONE feature, so
+ * public surfaces like the signup page can explain a paused capability
+ * before the server refusal would. Feature locks are platform-wide by
+ * definition — reporting one names no org or account, so the
+ * anti-enumeration reasoning above is preserved. A platform lock implies
+ * every feature, so the feature answer reports locked under one too.
+ */
+export async function GET(request: Request): Promise<Response> {
+  const featureParam = new URL(request.url).searchParams.get('feature')
+  const feature: LockdownFeatureKey | null = isLockdownFeatureKey(featureParam)
+    ? featureParam
+    : null
+  const nowMs = Date.now()
+  const platform = await getPlatformLockdown()
+  // Expiry filter on BOTH carriers: once `untilMs` passes, the lock is
+  // inactive with no write, and this surface must stop reporting it —
+  // a notice for a lock that no longer refuses anyone is a false outage.
+  const state =
+    (isLockdownActive(platform, nowMs) ? platform : null) ??
+    (feature &&
+      (await getFeatureLockdown(feature).then((locked) =>
+        isLockdownActive(locked, nowMs) ? locked : null,
+      ))) ??
+    null
   if (!state) {
     return Response.json(
       { locked: false },
@@ -49,6 +84,7 @@ export async function GET(): Promise<Response> {
   return Response.json(
     {
       locked: true,
+      ...(state.feature ? { feature: state.feature } : {}),
       reason: state.reason,
       title: notice.title,
       message: notice.body,

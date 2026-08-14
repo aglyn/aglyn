@@ -120,6 +120,7 @@ export const viewport: Viewport = {
 // mobx behind an auth gate); nothing is statically prerenderable, so opt the
 // whole App Router tree out of static generation (AGL-401).
 import ServiceWorkerRegistrar from '../components/service-worker-registrar.component'
+import ErrorBeacon from '../components/error-beacon.component'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,6 +145,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 on the sign-in page" — was simply wrong. `Providers` wraps
                 every route, sign-in included. */}
             <ServiceWorkerRegistrar />
+            {/* First-party error beacon (AGL-1538): uncaught browser errors
+                → /api/errors → Cloud Error Reporting. Module-scope install,
+                null render — see the component. */}
+            <ErrorBeacon />
           </Providers>
         </AppRouterCacheProvider>
       </body>

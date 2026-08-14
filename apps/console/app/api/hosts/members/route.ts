@@ -24,6 +24,7 @@ import {
   getOrgForHost,
   grantHostAccess,
   isImpersonationSession,
+  lockdownRefusal,
   revokeHostAccess,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -81,6 +82,19 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'This site has no organization yet' }, { status: 409 })
     }
     const { orgId, org } = resolved
+
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes with the
+    // docs already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant. One check ahead of the method branches covers
+    // POST, PATCH, and DELETE alike.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org,
+      host,
+    })
+    if (locked) return locked
+
     const membersRef = hostRef.collection('members')
 
     if (method === 'POST') {

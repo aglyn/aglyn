@@ -22,6 +22,9 @@ import {
   parseActivity,
 } from './session-activity'
 
+// lockdown-423: exempt — account-scoped read of the caller's own auth activity; no org
+// context. The session mint/exchange carry the lockdown gate for auth.
+
 export const dynamic = 'force-dynamic'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'

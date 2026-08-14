@@ -138,6 +138,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrg }),
   isImpersonationSession: () => false,
+  // AGL-1506: inert verdict — the 423 wiring has its own specs; these
+  // suites test other properties and must not depend on lockdown reads.
+  lockdownRefusal: async () => null,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
 }))

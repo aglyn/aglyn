@@ -41,6 +41,9 @@ import {
   type AddonKind,
 } from '../../../../utils/server/billing-addons'
 
+// lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
+// billing lock; part of the surface AGL-1501 keeps sessions alive for.
+
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,
@@ -336,6 +339,12 @@ async function handler(request: Request): Promise<Response> {
     if (action === 'switch') {
       const params = new URLSearchParams({
         proration_behavior: 'create_prorations',
+        // Stripe Tax (AGL-1537): checkout has created subscriptions with
+        // automatic tax since AGL-1133, but a subscription created BEFORE
+        // that keeps billing untaxed forever unless an update turns it on —
+        // and this route is where existing subscriptions get updated. On a
+        // subscription that already has it, this is a no-op.
+        'automatic_tax[enabled]': 'true',
         'metadata[plan]': targetPlan,
         'metadata[orgId]': orgId,
       })
@@ -383,7 +392,11 @@ async function handler(request: Request): Promise<Response> {
       `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
         `&subscription=${encodeURIComponent(subscription.id)}` +
         itemsQuery +
-        `&subscription_proration_behavior=create_prorations`,
+        `&subscription_proration_behavior=create_prorations` +
+        // Preview under the same tax setting the switch will apply (AGL-1537)
+        // — otherwise a taxed customer is quoted one number and charged
+        // another.
+        `&automatic_tax[enabled]=true`,
     )
     return Response.json({
       amountDueCents: preview?.amount_due ?? 0,

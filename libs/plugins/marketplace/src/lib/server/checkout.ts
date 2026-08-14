@@ -15,9 +15,14 @@
  * limitations under the License.
  */
 
-import { MARKETPLACE_PLATFORM_FEE_PERCENT, MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN } from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  checkEntitlement,
+  resolveMarketplaceFeePct,
+  Route,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 import {
   canActAsPublisher,
   resolvePublisherProfile,
@@ -25,10 +30,13 @@ import {
 
 /**
  * Checkout for a paid marketplace listing (AGL-46): one-time destination
- * charge to the publisher's Express account with the platform fee taken
- * automatically (20%, 30% for free-plan publishers). The webhook writes the
- * purchase record on `checkout.session.completed`; install stays gated on
- * that record. 501 without Stripe env.
+ * charge to the publisher's Express account. The platform's cut comes from
+ * the seller org's ENTITLEMENTS (AGL-1543: 20%, 30% effective-free), sales
+ * tax is collected platform-side per the marketplace-provider registration
+ * (AGL-1544), and the seller receives a fixed transfer of their pre-tax
+ * share. The webhook writes the purchase record on
+ * `checkout.session.completed`; install stays gated on that record. 501
+ * without Stripe env.
  */
 export const checkoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -60,6 +68,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
+    // Review gating holds on the PAID path too (AGL-1543): browse hides
+    // rejected/submitted/in_review listings, so a direct checkout call must
+    // not be a side door that takes money for one. Absent = legacy = listed
+    // (AGL-432), and the same 404 as an unknown listing — purchasability is
+    // not a probe for review state.
+    const reviewStatus = listing.reviewStatus as string | undefined
+    if (reviewStatus && reviewStatus !== 'listed' && reviewStatus !== 'verified') {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     const priceUsd = Number(listing.priceUsd ?? 0)
     if (!(priceUsd > 0)) {
       return res.status(400).json({ error: 'Listing is free' })
@@ -77,14 +94,22 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'The publisher has not enabled payouts yet' })
     }
 
-    // Publisher's plan sets the platform share (free plan pays more); read
-    // the seller org directly now that profileId is its id (AGL-652).
+    // The platform's cut comes from ENTITLEMENTS (AGL-1543), never the raw
+    // `plan` field: `resolveMarketplaceFeePct` prices a dead subscription
+    // as free-plan (30%) while the stale field still says pro, and honors
+    // a negotiated per-org `marketplaceFeePct` override. Same read gates
+    // SALE time on `marketplaceSelling` — publish already refuses without
+    // it, and a publisher who downgrades must stop selling, not merely
+    // stop publishing. Resolved per request; entitlements are never cached.
     const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
-    const sellerPlan = (sellerOrgDoc.get('plan') as string | undefined) ?? 'free'
-    const feePercent =
-      sellerPlan === 'free'
-        ? MARKETPLACE_PLATFORM_FEE_PERCENT_FREE_PLAN
-        : MARKETPLACE_PLATFORM_FEE_PERCENT
+    const sellerOrg = (sellerOrgDoc.data() ?? {}) as any
+    if (!checkEntitlement(sellerOrg, 'marketplaceSelling')) {
+      return res.status(409).json({
+        error:
+          "The publisher's current plan does not include marketplace selling",
+      })
+    }
+    const feePercent = resolveMarketplaceFeePct(sellerOrg)
     const amountCents = Math.round(priceUsd * 100)
     const feeCents = Math.round((amountCents * feePercent) / 100)
 
@@ -106,16 +131,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const returnPath = buyerOrgSlug
       ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug: buyerOrgSlug })
       : Route.ORG_MARKETPLACE
+    // Tax + funds flow (AGL-1544). Aglyn registered as a marketplace
+    // provider with the Texas Comptroller: it collects and remits sales tax
+    // on sellers' behalf. That is the PLATFORM's charge — no `on_behalf_of`,
+    // `automatic_tax` on the platform session, tax added ON TOP of the
+    // listing price (`tax_behavior: exclusive`) with a full billing address
+    // to compute from. The transfer is a FIXED amount (the seller's share of
+    // the pre-tax price) rather than `application_fee_amount`, because the
+    // fee form makes Stripe transfer `amount_total − fee` — and amount_total
+    // includes the tax, which must stay with the platform that owes it.
+    const transferCents = amountCents - feeCents
     const params = new URLSearchParams({
       mode: 'payment',
       'line_items[0][quantity]': '1',
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(amountCents),
+      'line_items[0][price_data][tax_behavior]': 'exclusive',
       'line_items[0][price_data][product_data][name]': String(
         listing.displayName ?? 'Marketplace component',
       ).slice(0, 120),
-      'payment_intent_data[application_fee_amount]': String(feeCents),
+      'automatic_tax[enabled]': 'true',
+      billing_address_collection: 'required',
       'payment_intent_data[transfer_data][destination]': String(accountId),
+      'payment_intent_data[transfer_data][amount]': String(transferCents),
       success_url: `${origin}${returnPath}?purchase=success`,
       cancel_url: `${origin}${returnPath}?purchase=canceled`,
       client_reference_id: decoded.uid,
@@ -124,6 +162,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[buyerUid]': decoded.uid,
       'metadata[sellerOrgId]': sellerOrgId,
       'metadata[feeCents]': String(feeCents),
+      'metadata[transferCents]': String(transferCents),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
     const response = await fetch(

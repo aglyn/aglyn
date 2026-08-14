@@ -35,7 +35,10 @@
  */
 
 import {
+  featureLockdownDocId,
   isLockdownActive,
+  LOCKDOWN_FEATURE_STAFF_BYPASS,
+  type LockdownFeatureKey,
   LOCKDOWNS_COLLECTION,
   type LockdownDoc,
   lockdownNotice,
@@ -104,23 +107,200 @@ export async function getPlatformLockdown(): Promise<LockdownState | null> {
   return platformPending
 }
 
+/**
+ * Feature-doc cache (AGL-1510): same TTL and the same reasoning as the
+ * platform doc — feature gates sit on hot chokepoints (the session mint,
+ * every media ingress, the plugin dispatcher), and 15s is the worst-case
+ * lag between staff flipping a feature switch and a warm process enforcing
+ * it. One map for all keys; the admin route invalidates after every write.
+ */
+const featureCache = new Map<
+  LockdownFeatureKey,
+  { at: number; state: LockdownState | null }
+>()
+const featurePending = new Map<
+  LockdownFeatureKey,
+  Promise<LockdownState | null>
+>()
+
+/** Drop the in-process feature cache (all keys) after an admin write. */
+export function invalidateFeatureLockdownCache(): void {
+  featureCache.clear()
+  featurePending.clear()
+}
+
+/** `lockdowns/feature--{key}`, normalized; null = not locked (incl. error). */
+export async function getFeatureLockdown(
+  feature: LockdownFeatureKey,
+): Promise<LockdownState | null> {
+  const cached = featureCache.get(feature)
+  if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) return cached.state
+  let pending = featurePending.get(feature)
+  if (!pending) {
+    pending = (async () => {
+      let state: LockdownState | null = null
+      try {
+        const snapshot = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection(LOCKDOWNS_COLLECTION)
+          .doc(featureLockdownDocId(feature))
+          .get()
+        state = snapshot.exists
+          ? normalizeLockdownDoc(
+              snapshot.data() as Partial<LockdownDoc>,
+              'feature',
+            )
+          : null
+      } catch {
+        // Fail open, matching the platform read: an unreachable Firestore is
+        // an outage, not a feature lockdown.
+      }
+      featureCache.set(feature, { at: Date.now(), state })
+      return state
+    })().finally(() => {
+      featurePending.delete(feature)
+    })
+    featurePending.set(feature, pending)
+  }
+  return pending
+}
+
+/**
+ * The feature verdict and refusal in one call (AGL-1510) — the one-line
+ * wiring a feature chokepoint carries:
+ *
+ *   const locked = await featureLockdownRefusal({ feature: 'checkout', staff })
+ *   if (locked) return locked
+ *
+ * Composition, not ranking: a PLATFORM lock implies every feature, so it is
+ * checked first (TTL-cached — routes that already ran the scope verdict pay
+ * no extra read), and the platform-scope staff bypass there is UNCHANGED
+ * and unconditional. The feature doc is checked second, and its staff
+ * bypass is per-feature (`LOCKDOWN_FEATURE_STAFF_BYPASS`): granted where a
+ * staff action aids incident response (uploads, installs, ai-assist),
+ * withheld where it would BE the incident (checkout — a staff checkout
+ * session is still a real charge). A feature lock implies nothing about the
+ * org/host/user scopes — those stay with `lockdownRefusal` at the routes
+ * that carry it.
+ */
+export async function featureLockdownRefusal(options: {
+  feature: LockdownFeatureKey
+  /** Verified `staff` custom claim — from a VERIFIED token only. */
+  staff?: boolean
+  nowMs?: number
+}): Promise<Response | null> {
+  const nowMs = options.nowMs ?? Date.now()
+  const platform = await getPlatformLockdown()
+  if (isLockdownActive(platform, nowMs)) {
+    // The un-panic invariant at the platform scope, unchanged.
+    if (options.staff === true) return null
+    return lockdownJsonResponse(platform as LockdownState)
+  }
+  const state = await getFeatureLockdown(options.feature)
+  if (!isLockdownActive(state, nowMs)) return null
+  if (
+    options.staff === true &&
+    LOCKDOWN_FEATURE_STAFF_BYPASS[options.feature]
+  ) {
+    return null
+  }
+  return lockdownJsonResponse(state as LockdownState)
+}
+
+/**
+ * User-doc cache (AGL-1522): the last per-call read on the verdict path.
+ * AGL-1506 wired the verdict into ~36 routes plus the session mint/exchange,
+ * and every call carrying a `uid` paid one Firestore get on
+ * `lockdowns/user--{uid}` — an active console editor generated one read per
+ * wired mutation, against the AGL-1302 read budget. Same TTL, same pending
+ * dedupe, same fail-open posture as the platform and feature caches above —
+ * ONE cache pattern in this module, not three implementations.
+ *
+ * The staleness tradeoff, stated: a user locked mid-window keeps passing
+ * this check for up to PLATFORM_TTL_MS (15s) plus the caller's polling
+ * cadence — on every process EXCEPT the one that took the action, which
+ * refuses immediately because /api/admin/lockdown invalidates this uid's
+ * entry after the write (the platform/feature invalidation hook, mirrored).
+ * That bound is acceptable here for the same reason `media/sign` omits the
+ * user scope entirely: the hard kill never rode this read. A user lock also
+ * disables the Auth account and revokes refresh tokens, so the ID token
+ * stops refreshing and the session cookie dies at its next
+ * `verifySessionCookie(…, true)` — the cache can only delay the DISTINCT
+ * 423 body, not access itself, and 15s matches the platform scope's stated
+ * worst case and the drill's measured flip times.
+ *
+ * Bounded so a scan of uids cannot balloon a warm process: past
+ * USER_LOCKDOWN_CACHE_MAX entries the least-recently-USED is evicted (a
+ * cache hit refreshes recency, so active sessions survive a scan).
+ */
+export const USER_LOCKDOWN_CACHE_MAX = 5000
+
+const userCache = new Map<
+  string,
+  { at: number; state: LockdownState | null }
+>()
+const userPending = new Map<string, Promise<LockdownState | null>>()
+
+/**
+ * Drop one uid's cached verdict (after a user lock/unlock write), or the
+ * whole cache when called bare. The acting process serves a fresh verdict
+ * immediately; other processes converge within PLATFORM_TTL_MS.
+ */
+export function invalidateUserLockdownCache(uid?: string): void {
+  if (uid === undefined) {
+    userCache.clear()
+    userPending.clear()
+    return
+  }
+  userCache.delete(uid)
+  userPending.delete(uid)
+}
+
 /** `lockdowns/user--{uid}`, normalized; null = not locked (incl. on error). */
 export async function getUserLockdown(
   uid: string,
 ): Promise<LockdownState | null> {
-  try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection(LOCKDOWNS_COLLECTION)
-      .doc(userLockdownDocId(uid))
-      .get()
-    return snapshot.exists
-      ? normalizeLockdownDoc(snapshot.data() as Partial<LockdownDoc>, 'user')
-      : null
-  } catch {
-    return null
+  const cached = userCache.get(uid)
+  if (cached && Date.now() - cached.at < PLATFORM_TTL_MS) {
+    // Re-insert to refresh recency: eviction is by least-recently-used, and
+    // an ACTIVE session must not be the one a uid scan pushes out.
+    userCache.delete(uid)
+    userCache.set(uid, cached)
+    return cached.state
   }
+  let pending = userPending.get(uid)
+  if (!pending) {
+    pending = (async () => {
+      let state: LockdownState | null = null
+      try {
+        const snapshot = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection(LOCKDOWNS_COLLECTION)
+          .doc(userLockdownDocId(uid))
+          .get()
+        state = snapshot.exists
+          ? normalizeLockdownDoc(snapshot.data() as Partial<LockdownDoc>, 'user')
+          : null
+      } catch {
+        // Fail open, matching the platform and feature reads: an unreachable
+        // Firestore is an outage, not a lockdown.
+      }
+      userCache.delete(uid)
+      userCache.set(uid, { at: Date.now(), state })
+      while (userCache.size > USER_LOCKDOWN_CACHE_MAX) {
+        const oldest = userCache.keys().next().value
+        if (oldest === undefined) break
+        userCache.delete(oldest)
+      }
+      return state
+    })().finally(() => {
+      userPending.delete(uid)
+    })
+    userPending.set(uid, pending)
+  }
+  return pending
 }
 
 export interface LockdownVerdictOptions {
@@ -178,6 +358,26 @@ export async function getLockdownVerdict(
  * not a mystery 403. Carries only the sanitized, user-facing subset — never
  * the actor uid or staff rationale.
  */
+/**
+ * Verdict and refusal in one call — the two-line wiring every org-scoped
+ * API route carries (AGL-1506):
+ *
+ *   const locked = await lockdownRefusal({ staff, uid, org, host })
+ *   if (locked) return locked
+ *
+ * Null means "not locked, proceed". One mechanism: this delegates to
+ * `getLockdownVerdict` (so the un-panic invariant and fail-open posture are
+ * inherited, never re-implemented) and to `lockdownJsonResponse` for the
+ * distinct 423 body. Routes with a richer flow (the session mint clears
+ * cookies on refusal) keep calling the two halves directly.
+ */
+export async function lockdownRefusal(
+  options: LockdownVerdictOptions,
+): Promise<Response | null> {
+  const state = await getLockdownVerdict(options)
+  return state ? lockdownJsonResponse(state) : null
+}
+
 export function lockdownJsonResponse(state: LockdownState): Response {
   const notice = lockdownNotice(state)
   const retryAfter = lockdownRetryAfterSeconds(state, Date.now())
@@ -185,6 +385,9 @@ export function lockdownJsonResponse(state: LockdownState): Response {
     {
       error: 'locked',
       scope: state.scope,
+      // Distinct per-feature body (AGL-1510): an API consumer sees WHICH
+      // capability is off ("uploads"), not a generic locked platform.
+      ...(state.feature ? { feature: state.feature } : {}),
       reason: state.reason,
       title: notice.title,
       message: notice.body,

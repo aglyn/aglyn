@@ -25,6 +25,9 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
+// lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
+// part of the recovery surface AGL-1501 keeps sessions alive for.
+
 /**
  * Org invoice history (AGL-248, AGL-534): the subscription page's billing
  * history table. Returns finalized invoices (drafts excluded) with the

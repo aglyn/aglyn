@@ -25,6 +25,9 @@ import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
 import { dispatchResource } from '../../../../utils/api-v1-resources'
 
+// lockdown-423: via apps/console/utils/api-v1.ts — every /v1 dispatch
+// authenticates there, and the verdict runs beside the org-doc read.
+
 export const dynamic = 'force-dynamic'
 
 type RouteContext = { params: Promise<{ route?: string[] }> }

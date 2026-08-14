@@ -31,6 +31,7 @@ import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
@@ -48,6 +49,10 @@ import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
+import {
+  consumeSignUpOrgFailure,
+  type SignUpOrgFailure,
+} from '../../../utils/signup-org-failure'
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -67,6 +72,13 @@ function OrgJump() {
   const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [creatingSite, setCreatingSite] = useState(false)
+  // A signup-time org creation that failed left a note for this page
+  // (AGL-1523): the person typed a workspace name into the signup form and
+  // got nothing — landing them here with no explanation made the field feel
+  // like a lie. Consumed once; the create dialog re-offers the typed name.
+  const [signupOrgFailure] = useState<SignUpOrgFailure | null>(() =>
+    typeof window === 'undefined' ? null : consumeSignUpOrgFailure(),
+  )
 
   // Single-org members never see a picker — go straight to their sites.
   //
@@ -126,6 +138,25 @@ function OrgJump() {
         </Box>
       ) : (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {signupOrgFailure ? (
+            <Alert
+              severity="warning"
+              sx={{ mb: 3 }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => setCreatingOrg(true)}
+                >
+                  {'Create it now'}
+                </Button>
+              }
+            >
+              {`We couldn’t create your workspace “${signupOrgFailure.name}” during sign-up`}
+              {signupOrgFailure.error ? ` — ${signupOrgFailure.error}` : ''}
+              {'. Your account is ready; the workspace still needs creating.'}
+            </Alert>
+          ) : null}
           {orgs.length === 0 ? (
             invitesLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -251,6 +282,7 @@ function OrgJump() {
           <CreateOrgDialog
             open={creatingOrg}
             onClose={() => setCreatingOrg(false)}
+            initialName={signupOrgFailure?.name}
           />
         </Container>
       )}

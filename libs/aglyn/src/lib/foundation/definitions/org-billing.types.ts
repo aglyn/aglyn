@@ -390,6 +390,13 @@ export interface OrgEntitlements {
   transactionFeePhysicalPct?: number
   /** Platform fee % on digital storefront sales (Connect app fee). */
   transactionFeeDigitalPct?: number
+  /**
+   * Platform take rate % on the org's MARKETPLACE listing sales (AGL-46,
+   * resolved from entitlements per AGL-1543): 20 on paid plans, 30 on
+   * free. Distinct from the storefront `transactionFee*Pct` above — this
+   * is Aglyn's cut of a marketplace sale, priced off the SELLER org.
+   */
+  marketplaceFeePct?: number
   features?: OrgFeatureFlags
 }
 

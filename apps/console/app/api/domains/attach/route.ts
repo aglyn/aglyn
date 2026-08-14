@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -145,6 +146,16 @@ async function handler(request: Request): Promise<Response> {
     // Plan gate (AGL-469): custom domains are a Starter+ entitlement; a
     // plan-less org resolves as `free` and is denied.
     const org = (await getOrgForHost(hostId))?.org ?? {}
+    // Lockdown verdict (AGL-1506): platform/org/host/user scopes with the
+    // docs already in hand; distinct 423 body; staff bypass is the
+    // un-panic invariant.
+    const locked = await lockdownRefusal({
+      staff: decoded['staff'] === true,
+      uid: decoded.uid,
+      org,
+      host: hostSnapshot.data(),
+    })
+    if (locked) return locked
     if (!checkEntitlement(org, 'customDomain')) {
       return Response.json({
         error: 'Custom domains require a Starter plan',

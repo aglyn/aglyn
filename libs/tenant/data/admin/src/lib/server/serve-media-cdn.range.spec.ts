@@ -38,7 +38,11 @@
 import { Readable, Writable } from 'node:stream'
 import {
   MEDIA_CDN_BASE_CSP,
+  MEDIA_CDN_IMMUTABLE_CACHE_CONTROL,
+  MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL,
   MEDIA_CDN_STABLE_CACHE_CONTROL,
+  MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+  mediaCdnEdgeCacheable,
   serveMediaCdn,
 } from './serve-media-cdn'
 
@@ -214,12 +218,18 @@ describe('AGL-1442 S4 · single byte-ranges are served as 206', () => {
     expect(res.headers['content-range']).toBe('bytes 6-7/8')
   })
 
-  it('keeps the stable URL cache policy and the validator on a 206', async () => {
-    // The edge never stores a ranged response (the request fails Vercel's
-    // cacheable criteria), so this header speaks only to the browser — where
-    // a 206 under a strong ETag lets a player reuse fetched segments.
+  it('a video 206 is edge-bypassing but keeps the validator (AGL-1515)', async () => {
+    // This pin used to say `MEDIA_CDN_STABLE_CACHE_CONTROL` on the theory
+    // that the edge never stores a ranged response, so the header spoke only
+    // to the browser. Storage was the wrong verb: production showed the edge
+    // SERVES a ranged request from an existing full-body entry, as a
+    // 200 + Content-Range hybrid. Non-image types now go `private` so that
+    // entry never exists — and the ETag stays, because a 206 under a strong
+    // validator is what lets a player reuse the segments it already fetched.
     const res = await serve(['org:acme', 'm1'], {}, { range: 'bytes=0-3' })
-    expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
+    expect(res.headers['cache-control']).toBe(
+      MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
     expect(res.headers['etag']).toBe('"0123456789abcdef"')
   })
 
@@ -367,4 +377,143 @@ describe('AGL-1442 S4 · the existing contracts hold around the new branch', () 
       expect(res.headers['content-security-policy']).toBe(MEDIA_CDN_BASE_CSP)
     },
   )
+})
+
+/**
+ * AGL-1515: the Vercel edge, holding a cached full-body 200, answers a
+ * ranged request FROM that entry as a spec-violating hybrid — status 200,
+ * `Content-Range`, and only the slice as the body (`x-vercel-cache: HIT`,
+ * reproduced twice on production 2026-08-13). A player seeking would adopt
+ * a 100-byte slice as the whole file.
+ *
+ * The S4 assumption read Vercel's cacheable-response criteria ("request
+ * doesn't contain Range header") as "ranged requests bypass the edge". The
+ * criteria govern what the edge STORES, not what it serves: a ranged request
+ * is still answered from an existing URL-keyed entry, through a slicing
+ * layer that rewrites body and Content-Range but passes through the stored
+ * 200 status.
+ *
+ * So the fix is to make the entry not exist for any type a ranged consumer
+ * actually uses: every non-image response goes `private` (a documented,
+ * absolute storage preventer — "response doesn't contain the private
+ * directive"), so a ranged request always reaches this handler and gets a
+ * real 206. Browser caching and the ETag/304 contract are kept as-is.
+ * Images keep the shared edge policy untouched: they are the DAM grid's hot
+ * path, and no browser issues Range requests for `<img>` fetches.
+ */
+describe('AGL-1515 · non-image responses never leave a full body at the edge', () => {
+  it('a video full 200 is private to the browser — no edge entry to mangle', async () => {
+    const res = await serve(['org:acme', 'm1'])
+    expect(servedFull(res)).toBe(true)
+    expect(res.headers['cache-control']).toBe(
+      MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
+    // The two properties `private` buys, asserted directly so a reworded
+    // constant cannot silently lose them: no shared-cache storage, and no
+    // `s-maxage` inviting one.
+    expect(res.headers['cache-control']).toContain('private')
+    expect(res.headers['cache-control']).not.toContain('s-maxage')
+    // The browser contract survives: short max-age plus the strong validator.
+    expect(res.headers['etag']).toBe('"0123456789abcdef"')
+  })
+
+  it('the immutable video URL keeps its year — in the BROWSER only', async () => {
+    const res = await serve(['org:acme', 'm1', '0123456789abcdef'])
+    expect(res.headers['cache-control']).toBe(
+      MEDIA_CDN_IMMUTABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
+    expect(res.headers['cache-control']).toContain('private')
+    expect(res.headers['cache-control']).toContain('immutable')
+  })
+
+  it.each(['audio/mpeg', 'application/pdf', 'application/octet-stream'])(
+    '%s — every other realistic Range consumer bypasses the edge too',
+    async (contentType) => {
+      mockState.doc = { ...FULL_SHAPE, contentType }
+      mockState.metadata = { contentType, size: '8' }
+      const res = await serve(['org:acme', 'm1'])
+      expect(res.headers['cache-control']).toBe(
+        MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+      )
+    },
+  )
+
+  it('an asset with NO recorded type is treated as edge-bypassing — correctness over cache', async () => {
+    mockState.doc = { ...FULL_SHAPE, contentType: undefined }
+    mockState.metadata = { size: '8' }
+    const res = await serve(['org:acme', 'm1'])
+    expect(res.headers['cache-control']).toBe(
+      MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
+  })
+
+  it('an image keeps the shared edge policy — the DAM grid hot path is untouched', async () => {
+    mockState.doc = { ...FULL_SHAPE, fileName: 'logo.png', contentType: 'image/png' }
+    mockState.metadata = { contentType: 'image/png', size: '8' }
+    const res = await serve(['org:acme', 'm1'])
+    expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
+    const hashed = await serve(['org:acme', 'm1', '0123456789abcdef'])
+    expect(hashed.headers['cache-control']).toBe(
+      MEDIA_CDN_IMMUTABLE_CACHE_CONTROL,
+    )
+  })
+
+  it('a WebP variant serve is an image serve, whatever the query asked of it', async () => {
+    mockState.doc = {
+      ...FULL_SHAPE,
+      contentType: 'image/png',
+      variants: [320],
+    }
+    mockState.metadata = { contentType: 'image/png', size: '8' }
+    const res = await serve(['org:acme', 'm1'], { w: '320' })
+    expect(res.headers['content-type']).toBe('image/webp')
+    expect(res.headers['cache-control']).toBe(MEDIA_CDN_STABLE_CACHE_CONTROL)
+  })
+
+  it('the video ETag/304 path survives the header change — regression pin', async () => {
+    const res = await serve(
+      ['org:acme', 'm1'],
+      {},
+      { 'if-none-match': '"0123456789abcdef"' },
+    )
+    expect(res.statusCode).toBe(304)
+    expect(res.body).toBe('')
+    // The 304 is decided before the Storage metadata read, so its header
+    // comes from the DOC's contentType — and must agree: private for video.
+    expect(res.headers['cache-control']).toBe(
+      MEDIA_CDN_STABLE_EDGE_BYPASS_CACHE_CONTROL,
+    )
+  })
+
+  it('the CSP is on the edge-bypassing full 200 as everywhere else (AGL-1474)', async () => {
+    const res = await serve(['org:acme', 'm1'])
+    expect(res.headers['content-security-policy']).toBe(MEDIA_CDN_BASE_CSP)
+    expect(res.headers['x-content-type-options']).toBe('nosniff')
+  })
+
+  it('a signed private asset stays no-store — `private, max-age` never widens it', async () => {
+    mockState.doc = { ...FULL_SHAPE, private: true }
+    const res = await serve(['org:acme', 'm1'])
+    // No valid signature → 404, and the header is the no-store form, not
+    // the edge-bypass form — `setCacheControl` still wins at every exit.
+    expect(res.statusCode).toBe(404)
+    expect(res.headers['cache-control']).toBe('private, no-store')
+  })
+
+  describe('mediaCdnEdgeCacheable — the type split, pinned at the declaration', () => {
+    it.each([
+      ['image/png', true],
+      ['IMAGE/PNG', true],
+      ['image/svg+xml', true],
+      ['image/webp; some=param', true],
+      ['video/mp4', false],
+      ['audio/mpeg', false],
+      ['application/pdf', false],
+      ['application/octet-stream', false],
+      ['', false],
+      [undefined, false],
+    ])('%p → %p', (type, expected) => {
+      expect(mediaCdnEdgeCacheable(type)).toBe(expected)
+    })
+  })
 })
