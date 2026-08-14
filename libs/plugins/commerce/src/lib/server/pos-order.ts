@@ -398,6 +398,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         hostId,
         email: customerEmail,
         source: 'order',
+        // AGL-1748: the amount was formatted into the summary STRING below and
+        // never passed to the field that exists to hold it, so `ltvCents`
+        // counted online sales only — a shop-counter merchant's best customers
+        // all ranked at zero. `totals.totalCents` is what the cashier actually
+        // took (items + tax - discount, from `computeOrderTotals` above), not a
+        // figure re-derived from the product docs.
+        //
+        // Gross of the platform fee and gross of refunds, matching the cart,
+        // buy-now and subscription call sites; see the module note in
+        // `upsert-contact.ts`. Replay safety is the `claimAttempt` above: this
+        // line is past the point of no return, so a keyed double-submit never
+        // reaches it, and a KEYLESS one already wrote a second order document
+        // long before it got here — `purchaseCents` adds no hazard the order
+        // write does not already have.
+        purchaseCents: totals.totalCents,
         interaction: {
           refId: orderRef.id,
           summary: `In-store purchase ($${(totals.totalCents / 100).toFixed(2)})`,

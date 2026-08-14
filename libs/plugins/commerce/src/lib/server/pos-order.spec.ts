@@ -117,6 +117,9 @@ const fakeFirestore = {
     }),
 }
 
+/** Every `upsertHostContact` call the handler made, options verbatim (AGL-1748). */
+const contactUpserts: any[] = []
+
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
 const mockOrg: any = {
   org: {
@@ -142,7 +145,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   getOrgForHost: async () => mockOrg,
-  upsertHostContact: async () => undefined,
+  upsertHostContact: async (options: any) => {
+    contactUpserts.push(options)
+  },
 }))
 
 // ---------------------------------------------------------------------------
@@ -254,6 +259,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   docs.clear()
+  contactUpserts.length = 0
   stripeCalls.length = 0
   stripeSessionsByKey.clear()
   autoIdCounter = 0
@@ -435,5 +441,135 @@ describe('POS sale idempotency (AGL-1691)', () => {
     await post({ payment: 'cash', cashReceivedCents: 1000 })
     await post({ payment: 'cash', cashReceivedCents: 1000 })
     expect(orderDocs()).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * In-store sales in the customer's lifetime value (AGL-1748).
+ *
+ * The handler already recorded the sale as a contact INTERACTION, with the
+ * amount formatted into the summary string — and passed nothing to
+ * `purchaseCents`, the field that exists to hold it. So `ltvCents` counted
+ * online sales only, and a merchant whose business is a shop counter would see
+ * every one of their best customers ranked at zero.
+ *
+ * The basket below is deliberately priced so no two figures coincide: per
+ * AGL-1711, a test that asserts one total passes against a decomposition whose
+ * every component is wrong, so each stored field is asserted on its own.
+ *
+ *   unit              400   $4.00 flat white
+ *   x quantity          3
+ *   = itemsCents     1200
+ *   - discount        120   10% off the basket
+ *   + tax              89   8.25% origin tax on 1080
+ *   = totalCents     1169   what the cashier actually took
+ */
+describe('POS sale lifetime value (AGL-1748)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        pricesIncludeTax: false,
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+      },
+    })
+  })
+
+  async function sellBasket() {
+    return post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 2000,
+        discountPct: 10,
+        customerEmail: 'Regular@Example.com',
+        lines: [{ productId: 'product-1', quantity: 3 }],
+      },
+      { 'idempotency-key': 'ltv-a' },
+    )
+  }
+
+  /** The order is the reference: LTV must equal what was actually charged. */
+  it('stores the basket at 1169 cents', async () => {
+    const result = await sellBasket()
+    expect(result.status).toBe(200)
+    const stored = orderDocs()[0] as any
+    expect(stored.totals.itemsCents).toBe(1200)
+    expect(stored.totals.discountCents).toBe(120)
+    expect(stored.totals.taxCents).toBe(89)
+    expect(stored.totals.totalCents).toBe(1169)
+    expect(stored.channel).toBe('pos')
+  })
+
+  /**
+   * THE DEFECT. Before the fix `purchaseCents` was `undefined` here, which
+   * `upsertHostContact` treats as "no purchase at all": no `ltvCents`, no
+   * `ordersCount`, no `lastPurchaseAtMs`. The interaction summary carried the
+   * figure the whole time, in prose.
+   */
+  it('passes the charged amount as purchaseCents', async () => {
+    await sellBasket()
+    expect(contactUpserts).toHaveLength(1)
+    expect(contactUpserts[0].purchaseCents).toBe(1169)
+  })
+
+  /**
+   * Not the items subtotal, not the unit price, not the cash tendered — three
+   * plausible wrong answers that a total-shaped assertion alone would let
+   * through. Pinned individually so a future edit that reaches for the nearest
+   * number fails here.
+   */
+  it('is the charged total, not the subtotal or the tender', async () => {
+    await sellBasket()
+    const { purchaseCents } = contactUpserts[0]
+    expect(purchaseCents).toBe(1169)
+    expect(purchaseCents).not.toBe(1200) // itemsCents
+    expect(purchaseCents).not.toBe(400) // unit price
+    expect(purchaseCents).not.toBe(2000) // cash received
+  })
+
+  /** The rest of the capture is unchanged — asserted so the fix cannot regress it. */
+  it('still records the sale as an order-sourced interaction', async () => {
+    await sellBasket()
+    const upsert = contactUpserts[0]
+    expect(upsert.hostId).toBe('host-1')
+    expect(upsert.email).toBe('regular@example.com')
+    expect(upsert.source).toBe('order')
+    expect(upsert.interaction.summary).toBe('In-store purchase ($11.69)')
+    // The interaction points at the order document that was actually written,
+    // which is what lets a rebuild-from-orders backfill match the two up.
+    expect(childPaths('hosts/host-1/orders')).toContain(
+      `hosts/host-1/orders/${upsert.interaction.refId}`,
+    )
+  })
+
+  /**
+   * `purchaseCents` becomes a `FieldValue.increment`, so a replayed settlement
+   * would inflate lifetime value on every retry. The `claimAttempt` taken
+   * before the order write is what stops it — the contact call sits past the
+   * point of no return, so the replay never reaches it.
+   */
+  it('does not double-count a replayed settlement', async () => {
+    await sellBasket()
+    await sellBasket()
+    expect(orderDocs()).toHaveLength(1)
+    expect(contactUpserts).toHaveLength(1)
+  })
+
+  /**
+   * A card sale takes no contact here BY DESIGN — it is still pending at this
+   * point and completes through the webhook's `commerce-draft` branch, which is
+   * the other half of AGL-1748. Pinned so nobody "fixes" this path by capturing
+   * a customer who has not paid yet.
+   */
+  it('takes no contact for a card sale that is still pending', async () => {
+    await post(
+      { payment: 'link', customerEmail: 'regular@example.com' },
+      { 'idempotency-key': 'ltv-b' },
+    )
+    expect((orderDocs()[0] as any).status).toBe('pending')
+    expect(contactUpserts).toHaveLength(0)
   })
 })

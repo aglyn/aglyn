@@ -52,7 +52,33 @@ export async function upsertHostContact(options: {
   interaction: Omit<ContactInteraction, 'type' | 'atMs'> & { atMs?: number }
   /** Explicit marketing opt-in (AGL-301) with a consent timestamp. */
   marketingConsent?: boolean
-  /** Order value in cents — rolls into RFM fields (AGL-328). */
+  /**
+   * Order value in cents — rolls into RFM fields (AGL-328).
+   *
+   * WHAT IT COUNTS (AGL-1748). GROSS of the platform fee and GROSS of
+   * refunds — the money the customer handed over, not the money the merchant
+   * kept. Every writer passes the same thing: whatever was actually charged
+   * (`amount_total` for a Stripe path, `totals.totalCents` for POS), never a
+   * figure re-derived from product docs, which is the AGL-1698/AGL-1711
+   * lesson. Gross of the fee because this is a CUSTOMER attribute answering
+   * "what is this person worth to me?", and the fee is a cost of the channel,
+   * not something the buyer failed to spend.
+   *
+   * Refunds are the open half and are deliberately NOT netted here: nothing
+   * decrements `ltvCents`, so a customer who bought and returned still counts
+   * the sale, and the first RFM surface will rank a serial returner as a best
+   * customer. Netting needs a contact lookup from `refund.ts` — a new writer
+   * in a money-moving path — and the shape AGL-1747 chose for the same
+   * question on the orders CSV: keep the gross figure under its existing name
+   * and record the refunded amount BESIDE it, so a reader can show either.
+   * Filed separately rather than smuggled in here.
+   *
+   * Passing 0 or omitting it means "no purchase": `ltvCents`, `ordersCount`,
+   * `lastPurchaseAtMs` and `firstPurchaseAtMs` are all left untouched, which
+   * is why a caller that formats the amount into the interaction summary and
+   * forgets this field records a customer who has apparently never bought
+   * anything.
+   */
   purchaseCents?: number
 }): Promise<void> {
   try {
