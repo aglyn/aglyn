@@ -21,7 +21,7 @@ import {
   parseCspReports,
   violationKey,
   type CspViolation,
-} from '../utils/server/csp-report'
+} from './csp-report'
 
 /**
  * The CSP collector's value is entirely in what it THROWS AWAY (AGL-523).

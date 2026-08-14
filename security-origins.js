@@ -233,9 +233,130 @@ function imgSrcDirective(isProduction) {
   return `img-src ${sources.join(' ')}`
 }
 
+/**
+ * Third-party hosts a PUBLISHED CUSTOMER SITE legitimately loads images from
+ * (AGL-1703).
+ *
+ * One entry, and the shortness is the finding rather than an omission. A swept
+ * inventory of every image sink on the tenant render path — `<img>`, the
+ * favicon `<link>`, PWA manifest icons, `og:image`/`twitter:image`, canvas
+ * `background-image` — found exactly one hardcoded third-party image host in
+ * the whole path, and it is ours:
+ *
+ * `firebasestorage.googleapis.com` is where the DAM stores bytes, and it is
+ * needed for a reason sharper than back-compat: `mediaNodeSrc` mints a `media:`
+ * reference from `cdnPath`, and `cdnPath` is only written for orgs holding the
+ * PAID `mediaCdn` entitlement. Everyone else stores the absolute
+ * `firebasestorage.googleapis.com/v0/b/<bucket>/o/…` download URL, so dropping
+ * this entry would blank the images on every FREE-TIER customer's website
+ * while leaving paying customers' sites intact — the worst possible shape for
+ * a bug to have. `storage.googleapis.com` stays out for the AGL-1685 reason.
+ *
+ * `'self'` genuinely covers the CDN form: `serveMediaCdn` streams the bytes
+ * server-side out of the bucket and never redirects to the storage host, so a
+ * `/api/media/cdn/…` image is same-origin all the way down.
+ */
+const TENANT_IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com']
+
+/**
+ * `img-src` for a published tenant site — REPORT-ONLY (AGL-1703).
+ *
+ * ## Why this is not `imgSrcDirective` with a different list
+ *
+ * The console's directive was the obvious thing to reuse and it is the wrong
+ * shape here, in both directions:
+ *
+ * - It allowlists all 26 `PRODUCTION_DOMAINS`. A customer's website does not
+ *   load images from `console.aglyn.com` or `admin.aglyn.io`, and every entry
+ *   that is not needed is an entry the reports cannot tell apart from one that
+ *   is. Granting 26 origins to a policy built to find out which origins are
+ *   used defeats the exercise.
+ * - It would still not cover the site itself. `aglyn.app` — the domain every
+ *   tenant subdomain is served on — appears nowhere in `PRODUCTION_DOMAINS`,
+ *   and a customer's own custom domain could not appear there even in
+ *   principle.
+ *
+ * `'self'` is the primitive that handles both, and it handles them exactly:
+ * the browser resolves it against the document, so it means `acme.com` on the
+ * custom domain and `acme.aglyn.app` on the subdomain, with no list to
+ * maintain and no way for one customer's origin to authorise another's.
+ *
+ * ## What this will report, and what must NOT be done about it
+ *
+ * Two things are expected, and neither is an allowlist entry:
+ *
+ * 1. **Analytics pixels.** Published sites load gtag from
+ *    `googletagmanager.com` (`site-analytics.tsx`), and gtag has historically
+ *    fallen back to an `<img>` beacon, with Google Signals able to add pixels
+ *    on `stats.g.doubleclick.net` and `www.google.com/ads/ga-audiences`.
+ *    Whether ours does cannot be read out of source — it is inside the bundled
+ *    SDK, which is the blind spot this directive exists to cover. If those
+ *    hosts appear, the question is whether we ship ad-network pixels on
+ *    customers' websites and whether `/legal/subprocessors` names them, NOT
+ *    whether to add a line here.
+ * 2. **Author hotlinks, in volume.** `resolveMediaSrc` passes any non-`media:`
+ *    string through untouched — no scheme check, no host check — and the Image
+ *    component's own field help tells authors to paste a URL from elsewhere.
+ *    An inventory of the render path found 28 image sinks; the ones reachable
+ *    with an arbitrary host are not a corner: markdown and collection images
+ *    (scheme-only, `http:` included), the collection cover
+ *    `background-image`, every commerce and events sink, which bypass
+ *    `resolveMediaSrc` and emit the raw Firestore string, and two open-ended
+ *    CSS surfaces — the unsanitized author `<style>` block in
+ *    `custom-html.tsx` and `backgroundImage` typed into the Styles panel,
+ *    neither of which any source-level guard can see. Every one is a
+ *    third-party host learning a visitor's IP and a `Referer` naming the
+ *    customer's site. That is the number this exists to produce, and adding
+ *    the hosts it names would erase it.
+ *
+ * ## What it will NOT report, which matters when reading the total
+ *
+ * Marketplace plugins render inside an iframe on a dedicated cross-origin
+ * (`NEXT_PUBLIC_PLUGIN_ORIGIN`) carrying its OWN policy, and that policy is
+ * `img-src data: blob: https:` — any host at all. A document policy does not
+ * reach into a cross-origin frame, so plugin images will never appear in these
+ * reports and a count of zero from them means nothing. The tenant also sets no
+ * `frame-src`, so nothing at this layer constrains where a frame may point;
+ * both are separate directives and separate work.
+ *
+ * ## Why report-only is not caution here
+ *
+ * The blast radius is our customers' businesses. An enforced `img-src` that is
+ * wrong takes images off a published website — a stranger's shopfront — and
+ * throws nothing anyone will see — and the visitor harmed is not our user and
+ * has no channel to tell us. AGL-1726 records the flip conditions, stricter
+ * than the console's (AGL-1702) for exactly that reason; AGL-1725 is the
+ * inventory of arbitrary-host sinks that blocks it.
+ *
+ * ## Why this one is compatible with ISR and `script-src` was not
+ *
+ * AGL-1228 removed a report-only `script-src` because a per-request nonce
+ * cannot match ISR-cached bytes — two requests to one cached page returned
+ * BYTE-IDENTICAL HTML with a different nonce in each response header. Nothing
+ * in this directive is per-request: it is the same string on every response,
+ * so the cached bytes and the header agree by construction. That difference is
+ * the whole reason this is shippable where that one was not, and it is worth
+ * stating because the two look alike from the outside.
+ *
+ * `data:` and `blob:` are in the candidate policy rather than pending
+ * measurement because neither can leave the machine, so neither can carry a
+ * visitor's IP anywhere. They cover inline icons and canvas exports.
+ */
+function tenantImgSrcDirective(isProduction) {
+  const development = isProduction
+    ? []
+    : ['http://localhost:*', 'http://127.0.0.1:*']
+  const sources = ["'self'", 'data:', 'blob:']
+    .concat(TENANT_IMAGE_ORIGINS)
+    .concat(development)
+  return `img-src ${sources.join(' ')}`
+}
+
 module.exports = {
   PRODUCTION_DOMAINS,
   IMAGE_ORIGINS,
+  TENANT_IMAGE_ORIGINS,
   baseCspDirectives,
   imgSrcDirective,
+  tenantImgSrcDirective,
 }
