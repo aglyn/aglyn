@@ -22,7 +22,6 @@ import {
   notifyOrgAdmins,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
-import { createHmac, timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { stripeCustomerIdentityParams } from '../../../../utils/stripe-customer-identity'
 import {
@@ -34,45 +33,14 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
+// Signature verification lives in `utils/server/stripe-signature` so it can be
+// driven directly by spec — it is the security boundary this whole route sits
+// behind, and it must handle the MULTIPLE `v1` signatures a secret roll sends
+// (AGL-1552).
+import { verifyStripeSignature } from '../../../../utils/server/stripe-signature'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
-
-/** Verifies a `Stripe-Signature` header against the signing secret. */
-
-function verifyStripeSignature(
-  payload: Buffer,
-  header: string,
-  secret: string,
-): boolean {
-  const parts = Object.fromEntries(
-    header.split(',').map((pair) => pair.split('=') as [string, string]),
-  )
-  const timestamp = parts['t']
-  const signature = parts['v1']
-  if (!timestamp || !signature) return false
-  // Replay window (AGL-499): reject deliveries whose signed timestamp is more
-  // than 5 minutes from now — matching Stripe's constructEvent default — so a
-  // captured, once-valid payload cannot be replayed indefinitely.
-  const timestampSeconds = Number(timestamp)
-  if (
-    !Number.isFinite(timestampSeconds) ||
-    Math.abs(Date.now() / 1000 - timestampSeconds) > 300
-  ) {
-    return false
-  }
-  const expected = createHmac('sha256', secret)
-    .update(`${timestamp}.${payload.toString('utf8')}`)
-    .digest('hex')
-  try {
-    return timingSafeEqual(
-      Buffer.from(expected) as any,
-      Buffer.from(signature) as any,
-    )
-  } catch {
-    return false
-  }
-}
 
 
 
