@@ -51,6 +51,7 @@ import {
   resolveSxForDeviceWidth,
 } from '../utils/device-preview-styles'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
+import InlineMarkdownEditorComponent from './inline-markdown-editor.component'
 import InlineTextEditorComponent from './inline-text-editor.component'
 import NodeLeaf from './node-leaf'
 import NodeOverlay from './node-overlay'
@@ -267,6 +268,7 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       <NodeOverlay data-aglyn="overlay:hovered" variant="hovered" />
       <CanvasDropIndicator />
       <InlineTextEditorComponent />
+      <InlineMarkdownEditorComponent />
     </Box>
   )
 })

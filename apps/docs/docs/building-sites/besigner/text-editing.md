@@ -14,6 +14,8 @@ Text is edited **where it lives** — right on the canvas — so you see the res
 
 - **Double-click** any text-capable component to edit its text directly on the canvas.
 - Type, then click away to commit.
+- A **Markdown** element opens the full document editor the same way — see
+  [Long documents in markdown](long-form-markdown.md).
 
 ## Rich text
 

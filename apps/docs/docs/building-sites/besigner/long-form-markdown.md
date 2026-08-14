@@ -35,6 +35,12 @@ The toolbar's **Markdown** switch shows the raw source instead, for when you wan
 whole file in one go or check exactly what's stored. Both views edit the same text — the
 element stores markdown either way.
 
+**Double-click the element on the canvas** to get the same editor over the document itself,
+without going to the attributes panel — the same gesture that edits any other text element
+[in place](text-editing.md). What you type is kept as you type it, so **Done**, pressing
+`Esc`, and clicking another element all leave the document saved; use undo (`⌘Z`) to take an
+edit back.
+
 Text is set for reading rather than for a layout: 17px on a generous line height, in the
 theme's primary text colour, with headings that step up in size on wider screens. You don't
 need to style anything for it to look right.

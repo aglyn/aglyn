@@ -32,6 +32,10 @@ import {
 } from 'react'
 import ComponentPromotionContext from '../../contexts/component-promotion-context'
 import { MediaPickerContext } from '../../contexts/media-picker-context'
+import {
+  findMarkdownAttributeName,
+  inlineMarkdownEdit,
+} from '../../utils/inline-markdown-edit.store'
 import { inlineTextEdit } from '../../utils/inline-text-edit.store'
 import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
 
@@ -212,22 +216,61 @@ export const DraggableDroppable = observer(
           }
           return
         }
-        // Inline text editing for components that declare textEditable;
-        // locked nodes (layout chrome in the screen besigner) stay read-only
-        // — same gate the drag system uses.
+        // Locked nodes (layout chrome in the screen besigner) stay read-only —
+        // same gate the drag system uses — and while the interaction builder
+        // is picking a target, a double-click is two picks, never an edit.
+        if (!Besigner.dnd.canDragNode(node) || Besigner.pick.isPicking()) return
+        // Inline text editing for components that declare textEditable.
         const flag = node?.componentSchema?.flags?.textEditable
         const editable =
           typeof flag === 'number' && (flag & Aglyn.FEATURE_FLAG.ENABLED) !== 0
-        if (!editable || !Besigner.dnd.canDragNode(node)) return
+        if (editable) {
+          e.preventDefault()
+          e.stopPropagation()
+          const rect = (e.currentTarget as Element).getBoundingClientRect()
+          inlineTextEdit.open(node, {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          })
+          return
+        }
+        // In-place markdown editing (AGL-1624): a component whose schema
+        // declares a MARKDOWN attribute — the Markdown element's `content` is
+        // the one that exists — opens the WYSIWYG over the element, editing
+        // the whole document without a trip to the attributes panel.
+        //
+        // `stopPropagation` on the NATIVE event is what keeps the canvas still:
+        // React delegates `onDoubleClick` at the root container, so an event
+        // consumed here never reaches `ZoomablePanningComponent`'s
+        // double-click-to-zoom. That is the same guarantee the textEditable
+        // branch above has always relied on, not a new mechanism.
+        const markdownAttribute = findMarkdownAttributeName(node)
+        if (!markdownAttribute) return
         e.preventDefault()
         e.stopPropagation()
-        const rect = (e.currentTarget as Element).getBoundingClientRect()
-        inlineTextEdit.open(node, {
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height,
-        })
+        const markdownRect = (e.currentTarget as Element).getBoundingClientRect()
+        const stored = (node.props as Record<string, unknown> | undefined)?.[
+          markdownAttribute
+        ]
+        // The two mousedowns of a double-click TOGGLE selection, so by the time
+        // this fires the node has been selected and then deselected again.
+        // Editing an element is selecting it — the attributes panel should be
+        // showing it — and the editor closes when the selection moves off the
+        // node, so it has to be put back before the editor opens.
+        Besigner.focus.setSelectedNode(node)
+        inlineMarkdownEdit.open(
+          node,
+          {
+            left: markdownRect.left,
+            top: markdownRect.top,
+            width: markdownRect.width,
+            height: markdownRect.height,
+          },
+          markdownAttribute,
+          typeof stored === 'string' ? stored : '',
+        )
       }
       /** True when the double-click resolved to a prop edit it opened. */
       function handleInstanceDoubleClick(pointer: globalThis.MouseEvent) {
