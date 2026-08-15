@@ -19,12 +19,6 @@
 import { DoD } from '@aglyn/shared-data-types'
 import { getApps } from '@firebase/app'
 import {
-  type Analytics,
-  getAnalytics as getFbAnalytics,
-} from 'firebase/analytics'
-
-import 'firebase/analytics'
-import {
   type FirebaseApp,
   getApp as getFbApp,
   initializeApp,
@@ -63,7 +57,6 @@ import { FieldRefController } from './FieldRefController'
 export type FbApp = FirebaseApp
 export type FbAuth = Auth
 export type FbFirestore = Firestore
-export type FbAnalytics = Analytics
 export type FbUserCredential = UserCredential
 export type FbUser = AuthUser
 
@@ -110,7 +103,24 @@ export interface AppControllerConfig {
   messagingSenderId: string
   appId: string
   /**
-   * Google Analytics measurement ID
+   * Google Analytics measurement ID.
+   *
+   * Carried so it can be handed to `initializeApp` as part of the standard
+   * Firebase options, and for nothing else — this lib deliberately does NOT
+   * import `firebase/analytics` (AGL-1677). It used to, for a `getAnalytics()`
+   * wrapper that had zero call sites in the entire workspace, and the bare
+   * `import 'firebase/analytics'` beside it meant the GA4 SDK — gtag loader
+   * included — was pulled into every bundle that reached this barrel, whether
+   * or not anything intended to measure anything.
+   *
+   * An ID in a config object is inert data. The SDK is a capability, and one
+   * that a privacy review has to account for even when unfired, because the
+   * subprocessor register is incorporated as SCC Annex III in the DPA. Keep
+   * the two apart: if Firebase Analytics is genuinely wanted somewhere, it
+   * should be initialized at that call site behind the visitor consent gate
+   * (`libs/aglyn/src/lib/app-utils/visitor-consent.ts`) and disclosed — the
+   * way the console does it in `tenant-feature-instance`'s `firebase-services`
+   * — not made ambient by a shared util that nobody asked for analytics from.
    */
   measurementId: string
   // =================
@@ -131,7 +141,6 @@ export interface AppController {
   [name: string]: (...args: any[]) => any
   getConfig: () => AppControllerConfig
   getApp: () => FbApp
-  getAnalytics: () => FbAnalytics
   getAuth: () => FbAuth
   getFirestore: () => FbFirestore
   getCurrentUser: () => FbUser
@@ -328,7 +337,6 @@ export function withAppController(
   let existingApp = false
   let setAuth = false
   let setFirestore = false
-  let analytics: FbAnalytics = null
 
   const setupAuth = (auth: FbAuth): FbAuth => {
     setAuth = true
@@ -354,15 +362,6 @@ export function withAppController(
   }
   const getApp = (): FbApp => {
     return app ?? getFbApp(config.appName)
-  }
-  const getAnalytics = (): FbAnalytics => {
-    if (firebaseConfig.measurementId) {
-      if (analytics) {
-        return analytics
-      }
-      return (analytics = getFbAnalytics(app ?? app))
-    }
-    return null
   }
   const getAuth = (): FbAuth => {
     const auth = getFbAuth(app ?? app)
@@ -558,7 +557,6 @@ export function withAppController(
   return {
     getConfig,
     getApp,
-    getAnalytics,
     getAuth,
     getFirestore,
 
