@@ -383,12 +383,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : {}),
           }
         } else {
-          const productSnapshot = await hostRef
-            .collection('products')
-            .doc(productId || '__missing__')
-            .get()
+          // AGL-1763: no product id, no read. `doc('__missing__')` was a
+          // deliberate miss that Firestore does not permit — a document id
+          // matching `__.*__` is RESERVED, so the backend rejects the path with
+          // `INVALID_ARGUMENT` rather than returning an absent snapshot. And
+          // `runBillingWebhookHandlers` lets the first throw propagate, so that
+          // rejection would have dropped the whole renewal into the route's
+          // error path with the money unrecorded and Stripe re-delivering into
+          // the same throw. Narrow — `checkout.ts:323` always sets
+          // `subscription_data[metadata][productId]` — but it is reachable for
+          // exactly the population this branch now serves: a subscription
+          // Aglyn has no record of, whose metadata nothing of ours wrote.
+          const productSnapshot = productId
+            ? await hostRef.collection('products').doc(productId).get()
+            : null
           const lifted = CommerceModel.liftLegacyProduct(
-            (productSnapshot.data() as any) ?? { name: 'Subscription' },
+            (productSnapshot?.data() as any) ?? { name: 'Subscription' },
           )
           const variantId = String(soldSnapshot.get('variantId') ?? '')
           const variant = variantId
@@ -398,7 +408,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           snapshot = {
             productId,
             ...(variantId ? { variantId } : {}),
-            name: String(productSnapshot.get('name') ?? 'Subscription'),
+            name: String(productSnapshot?.get('name') ?? 'Subscription'),
             ...(variantOptions.length
               ? { variantLabel: variantOptions.join(' / ') }
               : {}),
@@ -423,6 +433,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           : Date.now()
         const periodEndMs = object?.period_end
           ? Number(object.period_end) * 1000
+          : null
+        // Hoisted alongside `periodEndMs` (AGL-1763): the reconstruction below
+        // dates the record from it, so the two must not drift.
+        const periodStartMs = object?.period_start
+          ? Number(object.period_start) * 1000
           : null
         // Idempotency, keyed on the INVOICE id (AGL-1743). Existence of the
         // invoice document IS that key — the doc id is the invoice id — and
@@ -455,9 +470,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             totals: invoiceTotals,
             ...(interval ? { interval } : {}),
             paidAtMs,
-            periodStartMs: object?.period_start
-              ? Number(object.period_start) * 1000
-              : null,
+            periodStartMs,
             periodEndMs,
             customerEmail:
               object?.customer_email ??
@@ -467,30 +480,93 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? { hostedInvoiceUrl: String(object.hosted_invoice_url) }
               : {}),
           })
+          const rollup = {
+            lastInvoiceId: invoiceId,
+            lastPaymentCents: paidCents,
+            lastPaymentAtMs: paidAtMs,
+            ...(periodEndMs ? { paidThroughMs: periodEndMs } : {}),
+            paidCents:
+              Math.max(0, Number(currentSubscription.get('paidCents') ?? 0)) +
+              paidCents,
+            invoicesCount:
+              Math.max(
+                0,
+                Number(currentSubscription.get('invoicesCount') ?? 0),
+              ) + 1,
+            // What the subscriber pays NOW, replacing the frozen opening
+            // charge — the divergence this issue is about. Never from the
+            // opening invoice, whose richer decomposition the session
+            // already stored, and never from a zero one: a trial's first
+            // invoice is $0 and would wipe the recorded sale to nothing.
+            ...(!isOpeningInvoice && paidCents > 0
+              ? { totals: invoiceTotals, ...(interval ? { interval } : {}) }
+              : {}),
+          }
+          // AGL-1763: `currentSubscription` was READ here and never asked
+          // whether it EXISTS. The roll-up went out as an unguarded merge-set,
+          // and a merge-set against a missing path CREATES the document — so a
+          // renewal for a subscription Aglyn had no record of minted one out of
+          // the roll-up alone: `paidCents`, `invoicesCount`, `lastPayment*` and
+          // nothing else. No `productId`, no `customerEmail`, no
+          // `stripeCustomerId`, no `status`, no `createdAtMs`.
+          //
+          // That is worse than it sounds, because EVERY reader of this
+          // collection filters on a field the stub lacks, and so cannot see it
+          // at all: `gate.ts:72` and `membership-account.ts:155` query
+          // `where('customerEmail', '==', …)`, `subscription-portal.ts:49` does
+          // the same and 404s "No subscription found", `member-post.ts:88`
+          // filters on `status`, and `order-analytics.ts:187` queries
+          // `checkoutSessionId`. The result was a money-bearing orphan — a
+          // total climbing every cycle inside a document nothing in the product
+          // can find — while the subscriber paying it got no content access and
+          // no route to the billing portal that would let them cancel.
+          //
+          // WHY THIS ONE CREATES RATHER THAN REFUSES. A renewal is real money
+          // that Stripe has already taken, so refusing it would be AGL-1732 in
+          // reverse: a payment collected and recorded nowhere. And this id is
+          // not caller-controlled the way AGL-1760's was — `object.subscription`
+          // arrives inside a signature-verified Stripe payload
+          // (`verifyStripeSignature`, the console route at :120), so there is no
+          // typo and no attacker to refuse. What was wrong was never the create;
+          // it was creating a stub. So the record is reconstructed with every
+          // field the invoice can honestly supply, which is what makes it
+          // FINDABLE by the readers above rather than merely non-empty. A
+          // create that fills the required fields is not the defect a stub is.
           transaction.set(
             subscriptionRef,
-            {
-              lastInvoiceId: invoiceId,
-              lastPaymentCents: paidCents,
-              lastPaymentAtMs: paidAtMs,
-              ...(periodEndMs ? { paidThroughMs: periodEndMs } : {}),
-              paidCents:
-                Math.max(0, Number(currentSubscription.get('paidCents') ?? 0)) +
-                paidCents,
-              invoicesCount:
-                Math.max(
-                  0,
-                  Number(currentSubscription.get('invoicesCount') ?? 0),
-                ) + 1,
-              // What the subscriber pays NOW, replacing the frozen opening
-              // charge — the divergence this issue is about. Never from the
-              // opening invoice, whose richer decomposition the session
-              // already stored, and never from a zero one: a trial's first
-              // invoice is $0 and would wipe the recorded sale to nothing.
-              ...(!isOpeningInvoice && paidCents > 0
-                ? { totals: invoiceTotals, ...(interval ? { interval } : {}) }
-                : {}),
-            },
+            currentSubscription.exists
+              ? rollup
+              : {
+                  ...(productId ? { productId } : {}),
+                  customerEmail: object?.customer_email ?? null,
+                  ...(object?.customer_name
+                    ? { customerName: String(object.customer_name) }
+                    : {}),
+                  stripeCustomerId: String(object?.customer ?? '') || null,
+                  // An invoice states that a cycle was paid, not what Stripe
+                  // calls the subscription — that lives on the subscription
+                  // object. `active` is the honest reading of money arriving
+                  // for a cycle, and the `customer.subscription.*` sync at :132
+                  // replaces it with Stripe's own the moment one lands.
+                  status: 'active',
+                  lineItems: invoiceLineItems,
+                  totals: invoiceTotals,
+                  ...(interval ? { interval } : {}),
+                  // NOT `Date.now()`. This subscription began before Aglyn knew
+                  // about it, and stamping "now" would date the sale to
+                  // whichever cycle happened to be the first one seen. The
+                  // start of THIS cycle is the earliest moment the invoice
+                  // actually proves.
+                  createdAtMs: periodStartMs ?? paidAtMs,
+                  // Provenance, so nothing downstream mistakes a reconstruction
+                  // for a recorded sale — and deliberately NO
+                  // `checkoutSessionId`: that field is AGL-1732's redelivery key
+                  // and `order-analytics.ts` resolves the opening purchase
+                  // through it, so inventing one would answer a question this
+                  // record cannot answer.
+                  reconstructedFromInvoiceId: invoiceId,
+                  ...rollup,
+                },
             { merge: true },
           )
           return true

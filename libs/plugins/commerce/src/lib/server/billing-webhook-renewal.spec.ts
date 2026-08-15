@@ -76,8 +76,24 @@ function makeDocRef(path: string): any {
 
 function makeCollectionRef(path: string): any {
   const ref: any = {
-    doc: (id?: string) =>
-      makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`),
+    /**
+     * A document id matching `__.*__` is RESERVED — Firestore rejects the path
+     * rather than returning an absent snapshot (AGL-1763). Reproduced because
+     * the handler used to reach for `products/__missing__` as a deliberate
+     * miss, and a double that quietly returned "not found" for it would hide
+     * exactly the throw that dropped the renewal.
+     */
+    doc: (id?: string) => {
+      if (id && /^__.*__$/.test(id)) {
+        const error: any = new Error(
+          `INVALID_ARGUMENT: Document name "${path}/${id}" is invalid: ` +
+            'the id matches the reserved pattern __.*__',
+        )
+        error.code = 3
+        throw error
+      }
+      return makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`)
+    },
     get: async () => ({
       docs: childPaths(path).map(makeSnapshot),
       size: childPaths(path).length,
@@ -674,6 +690,153 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     })
     expect(invoiceDocs()).toHaveLength(0)
     expect([...docs.keys()].some((key) => key.includes('undefined'))).toBe(false)
+  })
+
+  it('never calls Stripe', async () => {
+    await deliver(RENEWAL_INVOICE)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A renewal for a subscription Aglyn has NO RECORD OF (AGL-1763).
+ *
+ * The roll-up was an unguarded `set(..., { merge: true })` against a document
+ * that was read and never asked whether it exists, so this case minted one out
+ * of the roll-up alone — money and nothing else. Refusing instead would be
+ * AGL-1732 in reverse (a payment collected, recorded nowhere), and the id is
+ * not caller-controlled the way AGL-1760's was: it rides a signature-verified
+ * Stripe payload. So the record is RECONSTRUCTED, and these tests assert the
+ * identity fields individually (AGL-1711) — because "not a stub" is precisely
+ * the claim that every field a reader filters on is present.
+ */
+describe('a renewal whose subscription was never recorded (AGL-1763)', () => {
+  beforeEach(() => {
+    // The whole premise: the parent document is absent.
+    docs.delete('hosts/host-1/subscriptions/sub_1')
+  })
+
+  it('records the money in the invoice ledger regardless', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    expect(invoiceDocs()).toHaveLength(1)
+    const stored = invoiceDocs()[0] as any
+    expect(stored.invoiceId).toBe('in_2')
+    expect(stored.subscriptionId).toBe('sub_1')
+    expect(stored.paidCents).toBe(9000)
+    expect(stored.invoiceTotalCents).toBe(9000)
+    expect(stored.billingReason).toBe('subscription_cycle')
+    expect(stored.customerEmail).toBe('boxer@example.com')
+    expect(stored.hostedInvoiceUrl).toBe('https://invoice.stripe.com/i/in_2')
+  })
+
+  it('reconstructs the subscription with the identity a reader can find it by', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    const stored = storedSubscription()
+    expect(stored).toBeDefined()
+    // `gate.ts:72`, `membership-account.ts:155` and `subscription-portal.ts:49`
+    // all query `where('customerEmail', '==', …)`; a stub answered none of them.
+    expect(stored.customerEmail).toBe('boxer@example.com')
+    expect(stored.customerName).toBe('Bea Oxer')
+    // `subscription-portal.ts:52` needs this or it 404s "No subscription
+    // found" — the subscriber's only route to cancelling.
+    expect(stored.stripeCustomerId).toBe('cus_1')
+    // `gate.ts:76` and `member-post.ts:88` test `status` against LIVE_STATUSES.
+    expect(stored.status).toBe('active')
+    // `gate.ts:77` matches the entitlement on `productId`.
+    expect(stored.productId).toBe('product-1')
+    expect(stored.interval).toBe('month')
+  })
+
+  it('stores what the subscriber pays now, decomposed', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    const stored = storedSubscription()
+    expect(stored.totals.itemsCents).toBe(10000)
+    expect(stored.totals.discountCents).toBe(1000)
+    expect(stored.totals.taxCents).toBe(0)
+    expect(stored.totals.totalCents).toBe(9000)
+    expect(stored.lineItems).toHaveLength(1)
+    expect(stored.lineItems[0].productId).toBe('product-1')
+    expect(stored.lineItems[0].name).toBe('Monthly box')
+    expect(stored.lineItems[0].quantity).toBe(2)
+    expect(stored.lineItems[0].unitAmountCents).toBe(5000)
+  })
+
+  it('dates the record from the cycle it can prove, not from now', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    // `period_start` 1800000000s. `Date.now()` would date a subscription of
+    // unknown age to whichever cycle happened to be the first one seen.
+    expect(storedSubscription().createdAtMs).toBe(1800000000000)
+  })
+
+  it('marks the record as reconstructed and claims no checkout session', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    const stored = storedSubscription()
+    expect(stored.reconstructedFromInvoiceId).toBe('in_2')
+    // `checkoutSessionId` is AGL-1732's redelivery key and the id
+    // `order-analytics.ts:187` resolves the opening purchase through. A
+    // reconstruction cannot answer that question, so it must not appear to.
+    expect(stored.checkoutSessionId).toBeUndefined()
+  })
+
+  it('still rolls the money up, and still accumulates on the next cycle', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    expect(storedSubscription().paidCents).toBe(9000)
+    expect(storedSubscription().invoicesCount).toBe(1)
+    expect(storedSubscription().lastInvoiceId).toBe('in_2')
+
+    await deliver({
+      ...RENEWAL_INVOICE,
+      id: 'in_3',
+      amount_paid: 9000,
+      status_transitions: { paid_at: 1802678405 },
+    })
+
+    expect(invoiceDocs()).toHaveLength(2)
+    expect(storedSubscription().paidCents).toBe(18000)
+    expect(storedSubscription().invoicesCount).toBe(2)
+    expect(storedSubscription().lastInvoiceId).toBe('in_3')
+    // Cycle 2 must not re-date the record it did not create.
+    expect(storedSubscription().createdAtMs).toBe(1800000000000)
+    expect(storedSubscription().reconstructedFromInvoiceId).toBe('in_2')
+  })
+
+  /**
+   * The reserved-id landmine sitting in the same path. With no stored sale and
+   * no `productId` in the metadata, the identity fallback reached for
+   * `products/__missing__` — an id matching `__.*__`, which Firestore REFUSES.
+   * `runBillingWebhookHandlers` lets the first throw propagate, so the renewal
+   * was dropped whole and Stripe re-delivered into the same throw.
+   */
+  it('records the renewal when the metadata names no product', async () => {
+    await deliver({
+      ...RENEWAL_INVOICE,
+      subscription_details: {
+        metadata: { type: 'commerce-subscription', hostId: 'host-1' },
+      },
+    })
+
+    expect(invoiceDocs()).toHaveLength(1)
+    expect((invoiceDocs()[0] as any).paidCents).toBe(9000)
+    const stored = storedSubscription()
+    expect(stored.paidCents).toBe(9000)
+    // Nothing is invented: no product was named, so none is claimed.
+    expect(stored.productId).toBeUndefined()
+    expect(stored.lineItems[0].name).toBe('Subscription')
+    // The identity that IS knowable still lands, so the subscriber can still
+    // be found and can still reach the portal.
+    expect(stored.customerEmail).toBe('boxer@example.com')
+    expect(stored.stripeCustomerId).toBe('cus_1')
+  })
+
+  it('creates no order document, exactly as a recorded renewal does not', async () => {
+    await deliver(RENEWAL_INVOICE)
+    expect(orderDocs()).toHaveLength(0)
   })
 
   it('never calls Stripe', async () => {
