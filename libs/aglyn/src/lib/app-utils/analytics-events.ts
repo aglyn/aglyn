@@ -238,6 +238,19 @@ export interface AnalyticsEventParams {
     value: number
     items: AnalyticsItem[]
     billing_interval?: string
+    /**
+     * GA4's shipping charged on the transaction, in currency units. Optional
+     * because only a tenant STOREFRONT purchase ships anything — a plan or a
+     * marketplace purchase has no shipping to report and omits it.
+     *
+     * There is deliberately no sibling `tax` (AGL-1639, AGL-1641). The
+     * asymmetry is the point and is not an inconsistency to tidy away:
+     * `shipping` is a COMPONENT of the `value` beside it, so reporting it
+     * describes that value; `tax` is not, because `value` is already ex-tax,
+     * so reporting it would assert a relationship that does not hold and
+     * invite the subtraction that removes tax a second time.
+     */
+    shipping?: number
   }
 
   // --- Commerce (tenant storefronts, AGL-1591) -----------------------------

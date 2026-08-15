@@ -345,21 +345,45 @@ session metadata, and the quantity and unit price from the metadata too — so
 `value`, `price` and `quantity` are all right without this event changing at
 all. It reads stored fields; the fix belonged under it.
 
-**No `shipping` param either**, and the reason has now changed twice. It began
-as a live defect: the webhook read two of `total_details`' three siblings and
-skipped `amount_shipping`, so every online order stored `shippingCents: 0` while
-the shipping the shopper paid sat inside `amount_total`. AGL-1698 fixed the
-storage — `computeCheckoutSessionTotals` passes it, and the stored parts sum to
-the stored total. It then stayed unsent because the figure was structurally
-zero: no Checkout Session we created declared `shipping_options`, so Stripe
-never offered a shipping choice.
+**A `shipping` param IS sent** (AGL-1722), and the asymmetry with `tax` above is
+deliberate. Do not make the two consistent with each other in either direction.
+`shipping` is a **component of the `value`** reported beside it — `value` is
+`totalCents - taxCents`, and the shipping the shopper paid is inside that
+number — so the param decomposes the value rather than contradicting it, and a
+merchant reads "of the $105 you sold, $10 was shipping" with nothing counted
+twice. `tax` is the opposite: `value` already excludes it, so a `tax` beside it
+would assert a relationship that does not hold and invite the subtraction that
+removes tax a second time.
+
+It took three changes to become sendable, and the reason for withholding it
+expired twice along the way. It began as a live defect: the webhook read two of
+`total_details`' three siblings and skipped `amount_shipping`, so every online
+order stored `shippingCents: 0` while the shipping the shopper paid sat inside
+`amount_total` — sending the param then would have asserted **free shipping on
+every order**. AGL-1698 fixed the storage: `computeCheckoutSessionTotals` passes
+it and the stored parts sum to the stored total. It stayed unsent because the
+figure was still structurally zero — no Checkout Session we created declared
+`shipping_options`, so Stripe never offered a shipping choice.
 
 AGL-1707 closed that: `cart-checkout.ts` declares the merchant's configured
-zones and rates as `shipping_options`, so `amount_shipping` is now a real number
-on any cart session for a merchant who set shipping up. The param is still not
-sent, but the remaining reason is only that plumbing `shippingCents` from the
-stored order out to the wire shape is unbuilt work rather than a truthfulness
-problem — it is tracked separately and is now worth doing.
+zones and rates as `shipping_options`, so `amount_shipping` is a real number on
+any cart session for a merchant who set shipping up. What was left was plumbing,
+and AGL-1722 built it — `shippingCents` rides `StorefrontPurchaseSource` from
+the stored order out to the wire shape, and `buildStorefrontPurchaseParams`
+emits `shipping: toAmount(shippingCents)`.
+
+The param is **always sent, including as 0**. A download ships nothing, a
+merchant who saved no rates charges nothing, and POS and draft orders resolve no
+shipping; on all of those `shipping: 0` is a true statement about that order
+rather than the old structural zero, and omitting it would leave the merchant's
+shipping column sparse for a reason GA cannot tell apart from "not tracked".
+Orders written before AGL-1698 do report `shipping: 0` where the shopper in fact
+paid shipping — unrecoverable, and it does not touch `value`, which comes off
+`totalCents` for exactly this kind of reason.
+
+The **shipping amount** crosses the wire; the **shipping address** never does.
+They sit next to each other on the stored order and `order-analytics.spec.ts`
+pins the projection's key list exhaustively so widening it stays a decision.
 
 AGL-1720 then closed the same gap on buy-now, which had declared neither
 `shipping_address_collection` nor `shipping_options` and so charged nothing
@@ -376,7 +400,11 @@ one-time orders should express a rate re-charged every cycle at all, given
 Stripe bills a subscription's one-time line items on the first invoice only.
 So `amount_shipping` is now a real number on both storefront paths for a
 merchant who set shipping up, and structurally 0 only for one who did not.
-Draft orders and POS still resolve no shipping.
+Draft orders and POS still resolve no shipping. Both paths, and the subscription
+invoice path, reach GA through the same reducer: `toStorefrontPurchaseSource`
+reads `totals.shippingCents` whatever wrote it — `total_details.amount_shipping`
+on a session, `shipping_cost.amount_total` on an invoice, which has no
+`total_details`.
 
 `value` still comes off `totalCents`, and deliberately so. Deriving it from the
 stored parts would have **dropped that shipping revenue entirely** — the same

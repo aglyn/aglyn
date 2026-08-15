@@ -49,6 +49,7 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_worked_example',
       totalCents: AMOUNT_TOTAL,
       taxCents: TAX_CENTS,
+      shippingCents: SHIPPING_CENTS,
       lineItems: [LINE],
     })
 
@@ -63,6 +64,7 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_fee',
       totalCents: AMOUNT_TOTAL,
       taxCents: TAX_CENTS,
+      shippingCents: SHIPPING_CENTS,
       lineItems: [LINE],
     })
     // Platform net would be 105.00 - 4.75. On the merchant's property their
@@ -73,16 +75,77 @@ describe('buildStorefrontPurchaseParams', () => {
     expect(FEE_CENTS).toBe(475)
   })
 
-  it('sends no `tax` and no `shipping` param beside an ex-tax value', () => {
+  /**
+   * The asymmetry, pinned so nobody makes the two params consistent with each
+   * other (AGL-1722). `shipping` is a component of `value`; `tax` is not.
+   */
+  it('sends `shipping` but still no `tax` beside an ex-tax value', () => {
     const params = buildStorefrontPurchaseParams({
       transactionId: 'cs_test_params',
       totalCents: AMOUNT_TOTAL,
       taxCents: TAX_CENTS,
+      shippingCents: SHIPPING_CENTS,
       lineItems: [LINE],
     })
+    expect(params?.shipping).toBe(10.0)
     expect(params).not.toHaveProperty('tax')
-    expect(params).not.toHaveProperty('shipping')
     expect(params).not.toHaveProperty('billing_interval')
+  })
+
+  it('reports `shipping` as a part of `value`, never as an addition to it', () => {
+    const params = buildStorefrontPurchaseParams({
+      transactionId: 'cs_test_shipping_inside_value',
+      totalCents: AMOUNT_TOTAL,
+      taxCents: TAX_CENTS,
+      shippingCents: SHIPPING_CENTS,
+      lineItems: [LINE],
+    })
+    // 105.00 total, of which 10.00 is shipping and 95.00 is goods. The
+    // failure this guards is a `value` that grew to 115.00, or one that
+    // shrank to 95.00 because shipping was "moved" into its own param.
+    expect(params?.value).toBe(105.0)
+    expect(params?.shipping).toBe(10.0)
+    expect((params?.value ?? 0) - (params?.shipping ?? 0)).toBe(95.0)
+  })
+
+  it('sends a truthful `shipping: 0` rather than omitting the param', () => {
+    // A download, a merchant with no rates configured, POS, a draft. The old
+    // structural zero is gone (AGL-1707/AGL-1720), so 0 now says "no shipping
+    // was charged" — which is worth saying. Omitting it would be
+    // indistinguishable in GA from "not tracked".
+    const params = buildStorefrontPurchaseParams({
+      transactionId: 'cs_test_no_shipping',
+      totalCents: 4999,
+      taxCents: 0,
+      shippingCents: 0,
+      lineItems: [
+        { productId: 'p1', name: 'Zine (PDF)', quantity: 1, unitAmountCents: 4999 },
+      ],
+    })
+    expect(params).toHaveProperty('shipping')
+    expect(params?.shipping).toBe(0)
+    expect(params?.value).toBe(49.99)
+  })
+
+  it('carries shipping off the STORED order, not off a recomputed sum', () => {
+    // The reducer is the only place the figure is read, so this is the whole
+    // plumbing path: `totals.shippingCents` (Stripe's
+    // `total_details.amount_shipping`, per AGL-1698) out to the wire shape.
+    const params = buildStorefrontPurchaseParams(
+      toStorefrontPurchaseSource('cs_test_stored_shipping', {
+        totals: {
+          itemsCents: ITEMS_CENTS,
+          shippingCents: SHIPPING_CENTS,
+          taxCents: TAX_CENTS,
+          discountCents: DISCOUNT_CENTS,
+          totalCents: AMOUNT_TOTAL,
+          feeCents: FEE_CENTS,
+        },
+        lineItems: [LINE],
+      }),
+    )
+    expect(params?.shipping).toBe(10.0)
+    expect(params?.value).toBe(105.0)
   })
 
   /**
@@ -125,12 +188,16 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_decomposition',
       totalCents: AMOUNT_TOTAL,
       taxCents: TAX_CENTS,
+      shippingCents: SHIPPING_CENTS,
       lineItems: [LINE],
     })
     const reportedCents = Math.round((params?.value ?? 0) * 100)
     // goods (items - discount) + shipping + tax === what Stripe charged.
     expect(ITEMS_CENTS - DISCOUNT_CENTS + SHIPPING_CENTS).toBe(reportedCents)
     expect(reportedCents + TAX_CENTS).toBe(AMOUNT_TOTAL)
+    // And the reported `shipping` is the same SHIPPING_CENTS this sum used —
+    // the param cannot drift away from the decomposition it describes.
+    expect(Math.round((params?.shipping ?? 0) * 100)).toBe(SHIPPING_CENTS)
   })
 
   it('holds in a second jurisdiction, with no tax and no shipping', () => {
@@ -138,11 +205,13 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_no_tax',
       totalCents: 4999,
       taxCents: 0,
+      shippingCents: 0,
       lineItems: [
         { productId: 'p1', name: 'Zine', quantity: 1, unitAmountCents: 4999 },
       ],
     })
     expect(params?.value).toBe(49.99)
+    expect(params?.shipping).toBe(0)
   })
 
   it('carries product ids and per-unit prices so the funnel joins', () => {
@@ -150,6 +219,7 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_items',
       totalCents: 6000,
       taxCents: 0,
+      shippingCents: 0,
       lineItems: [
         { productId: 'p1', name: 'Mug', quantity: 3, unitAmountCents: 1000 },
         { productId: 'p2', name: 'Tea', quantity: 1, unitAmountCents: 3000 },
@@ -166,11 +236,15 @@ describe('buildStorefrontPurchaseParams', () => {
       transactionId: 'cs_test_float',
       totalCents: 5999,
       taxCents: 0,
+      shippingCents: 1999,
       lineItems: [
         { productId: 'p1', name: 'A', quantity: 1, unitAmountCents: 1999 },
       ],
     })
     expect(String(params?.value)).toBe('59.99')
+    // `shipping` goes through the same `toAmount`, so it cannot grow a float
+    // tail the `value` beside it does not have.
+    expect(String(params?.shipping)).toBe('19.99')
   })
 
   it('drops the event rather than fabricating one', () => {
@@ -180,6 +254,7 @@ describe('buildStorefrontPurchaseParams', () => {
         transactionId: '',
         totalCents: 1000,
         taxCents: 0,
+        shippingCents: 0,
         lineItems: [],
       }),
     ).toBeNull()
@@ -189,6 +264,7 @@ describe('buildStorefrontPurchaseParams', () => {
         transactionId: 'cs_test_zero',
         totalCents: 908,
         taxCents: 908,
+        shippingCents: 0,
         lineItems: [],
       }),
     ).toBeNull()
@@ -200,7 +276,7 @@ describe('toStorefrontPurchaseSource', () => {
     const source = toStorefrontPurchaseSource('cs_test_pii', {
       totals: {
         itemsCents: 10000,
-        shippingCents: 0,
+        shippingCents: 1000,
         taxCents: 908,
         discountCents: 500,
         totalCents: 11408,
@@ -229,5 +305,27 @@ describe('toStorefrontPurchaseSource', () => {
     expect(source).not.toHaveProperty('feeCents')
     expect(source.totalCents).toBe(11408)
     expect(source.taxCents).toBe(908)
+    // The shipping AMOUNT crosses the wire (AGL-1722); the shipping ADDRESS
+    // never does. The two live next to each other on the stored order and the
+    // projection has to keep telling them apart.
+    expect(source.shippingCents).toBe(1000)
+    expect(source).not.toHaveProperty('shippingAddress')
+  })
+
+  it('reads shipping off the stored totals, defaulting a legacy order to 0', () => {
+    // Orders written before AGL-1698 carry `shippingCents: 0` even where the
+    // shopper paid shipping, and orders written before AGL-1641 may carry no
+    // `totals` at all. Neither can be recovered here, and `value` is unharmed
+    // because it comes off `totalCents` — which is exactly why it does.
+    expect(
+      toStorefrontPurchaseSource('cs_legacy', {
+        totals: { totalCents: 11408, taxCents: 908 },
+        lineItems: [],
+      } as never).shippingCents,
+    ).toBe(0)
+    expect(
+      toStorefrontPurchaseSource('cs_none', { lineItems: [] } as never)
+        .shippingCents,
+    ).toBe(0)
   })
 })

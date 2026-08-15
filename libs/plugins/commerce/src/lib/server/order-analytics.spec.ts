@@ -322,8 +322,13 @@ describe('a subscription sale answers from its opening invoice (AGL-1746)', () =
     expect(result.body.hostedInvoiceUrl).toBeUndefined()
     // Not our cut either — a buyer learns only what they bought.
     expect(result.body.feeCents).toBeUndefined()
+    // An exhaustive list, not a sample: every key added here is a field
+    // handed to a shopper's browser, so widening it is a decision rather than
+    // a maintenance chore. `shippingCents` was added deliberately in AGL-1722
+    // — the amount, never the address.
     expect(Object.keys(result.body).sort()).toEqual([
       'lineItems',
+      'shippingCents',
       'taxCents',
       'totalCents',
       'transactionId',
@@ -353,13 +358,21 @@ describe('the value reported to the MERCHANT (AGL-1641 rule, AGL-1746 path)', ()
     expect(purchase?.value).not.toBe(32.48) // tax wrongly included
   })
 
-  it('sends no GA4 tax param beside an ex-tax value', async () => {
+  it('sends a GA4 shipping param but still no tax param (AGL-1722)', async () => {
     seedSubscriptionSale()
 
     const result = await callHandler({ hostId: HOST_ID, sessionId: SESSION_ID })
     const purchase = buildStorefrontPurchaseParams(result.body) as any
 
+    // Not an inconsistency: `shipping` is a component of the `value` beside
+    // it, `tax` is not — `value` is already ex-tax.
     expect('tax' in purchase).toBe(false)
+    expect('shipping' in purchase).toBe(true)
+    // This seed's invoice shipped nothing, and 0 says so. The invoice path
+    // reads the same stored `totals.shippingCents` the order path does —
+    // composed from `shipping_cost.amount_total`, since an invoice carries no
+    // `total_details`.
+    expect(purchase.shipping).toBe(0)
   })
 
   it('names the transaction and the product for GA to join on', async () => {
