@@ -42,6 +42,27 @@ jobs:
       # to make a red go away.
       - run: npm ci --prefix cloud/functions
 
+      # apps/docs is the SECOND such package, and it breaks a different step:
+      # `docs` is an nx project whose build target shells `docusaurus build`,
+      # so the `nx affected -t lint test build` at the bottom of this file
+      # fails with `sh: docusaurus: command not found` on a root-only install
+      # (AGL-1781). Same invisibility as above — every dev checkout has
+      # apps/docs/node_modules from a past docs build.
+      #
+      # It stays standalone rather than becoming an npm workspace, and that is
+      # not inertia: apps/docs/package.json pins React 18 and says in its own
+      # description that its node_modules are self-contained so they never
+      # collide with the root's React 19. Hoisting it is the one change that
+      # would break it. cloud/functions is standalone for its own reason —
+      # `firebase deploy` packs and uploads that directory as a self-contained
+      # package. A `workspaces` key would move both problems, not solve them.
+      #
+      # So the policy is: standalone packages are enumerated here, and the
+      # guard two steps below fails when a THIRD one lands without a line of
+      # its own — which is the part that stops this recurring, since neither
+      # of the first two was visible until CI (or a hand-run gate) hit it.
+      - run: npm ci --prefix apps/docs
+
       - uses: nrwl/nx-set-shas@v4
 
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
@@ -88,6 +109,13 @@ jobs:
       # the assertion stops running with it. Run from a second workflow it
       # becomes a real check on the first.
       - run: npm run test:rules-drift
+      # The standalone-install guard and its own self-test (AGL-1781): the two
+      # `npm ci --prefix` lines above are the whole of the policy, and nothing
+      # made them keep up with the tree. Both packages they cover produced a
+      # red that read as a source defect; a third would too. Cheap, pure node,
+      # and it runs BEFORE the heavy steps it protects.
+      - run: npm run test:standalone-installs
+      - run: npm run check:standalone-installs
       #
       # Deliberately NOT here: `npm run test:rules` (the Firestore/RTDB rules
       # emulator matrix, tools/scripts/test-rules.sh). It shells out to
