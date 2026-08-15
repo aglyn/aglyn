@@ -36,17 +36,41 @@ import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn'
  * without anyone editing this file.
  */
 
+/**
+ * The override writes its org document and its audit row in ONE BATCH since
+ * AGL-1784, so both come out of `mockBatchWrites` — and only once `commit()`
+ * resolves. `setDoc`/`addDoc` remain as tripwires for a return to two
+ * independent writes.
+ */
 const mockSetDoc = jest.fn(async () => undefined)
 const mockAddDoc = jest.fn(async () => undefined)
+const mockBatchWrites: Array<
+  [{ path: string }, Record<string, any>, unknown]
+> = []
+let mockAutoId = 0
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  doc: (parent: any, ...segments: string[]) =>
+    segments.length > 0
+      ? { path: segments.join('/') }
+      : { path: `${parent?.path ?? ''}/auto-${++mockAutoId}` },
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
   }),
   setDoc: (...args: unknown[]) => mockSetDoc(...(args as [])),
   addDoc: (...args: unknown[]) => mockAddDoc(...(args as [])),
   deleteField: () => '__DELETE__',
+  writeBatch: () => {
+    const staged: Array<[{ path: string }, Record<string, any>, unknown]> = []
+    return {
+      set: (ref: { path: string }, data: Record<string, any>, options?: unknown) => {
+        staged.push([ref, data, options])
+      },
+      commit: async () => {
+        mockBatchWrites.push(...staged)
+      },
+    }
+  },
 }))
 
 jest.mock('@aglyn/shared-util-timestamp', () => ({
@@ -84,18 +108,23 @@ const org = (over: Record<string, unknown> = {}) => ({
 })
 
 const setDocPayload = (index = 0) =>
-  mockSetDoc.mock.calls[index] as unknown as [
+  mockBatchWrites.filter(
+    ([ref]) => !ref.path.startsWith('adminAudit'),
+  )[index] as unknown as [
     { path: string },
     Record<string, any>,
     { merge: boolean },
   ]
 
 const auditPayload = (index = 0) =>
-  mockAddDoc.mock.calls[index] as unknown as [{ path: string }, any]
+  mockBatchWrites.filter(([ref]) =>
+    ref.path.startsWith('adminAudit'),
+  )[index] as unknown as [{ path: string }, any]
 
 describe('staff org override surface coverage (AGL-1635)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockBatchWrites.length = 0
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({}),
@@ -217,7 +246,9 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       fireEvent.click(option)
       await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
-      await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+      // The batch has to COMMIT — a staged write is not a write.
+      await waitFor(() => expect(mockBatchWrites.length).toBe(2))
+      expect(mockSetDoc).not.toHaveBeenCalled()
     }
 
     it('forces a flag ON for one org and audits the resulting state', async () => {
@@ -290,7 +321,9 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Force on' }))
       await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
-      await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+      // The batch has to COMMIT — a staged write is not a write.
+      await waitFor(() => expect(mockBatchWrites.length).toBe(2))
+      expect(mockSetDoc).not.toHaveBeenCalled()
       const [, write] = setDocPayload()
       expect(write['entitlements'].hostLimit).toBe(5)
       expect(write['releaseFlags'].release_edit_bar).toBe(true)

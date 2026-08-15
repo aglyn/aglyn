@@ -54,7 +54,9 @@ set password](/img/staff-console/admin-user-password.png)
   are written onto the audit row beside the before/after and shown wherever that row
   is: the audit log, the organization's own page, and the acting staff account's
   trail. The log is append-only, so a reason not given at the time cannot be added
-  afterwards.
+  afterwards. The override and its audit row are saved **together** — if a save
+  fails, the organization is unchanged and nothing was recorded, so it is safe to
+  correct the problem and save again.
 - **Users admin** — staff-claim management and disabling users, with gated listing
   and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
   granted to an **existing** account, so if someone isn't found, have them sign in to

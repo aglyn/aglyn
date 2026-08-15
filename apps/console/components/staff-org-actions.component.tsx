@@ -45,11 +45,10 @@ import {
   Typography,
 } from '@mui/material'
 import {
-  addDoc,
   collection,
   deleteField,
   doc,
-  setDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -186,6 +185,15 @@ export const overrideCount = (org: any): number =>
  * (the server-side gate: super-staff for erasure keys, billing-staff for
  * plan and entitlements — a non-staff caller is denied by the rules, not by
  * this UI) and log an `adminAudit` entry with the actor uid.
+ *
+ * BOTH WRITES ARE ONE BATCH (AGL-1784). They used to be two sequential
+ * awaits in one `try`, so a failure on the second left the org changed with
+ * no row recording it, under an error message that read as "nothing
+ * happened" — and the retry it invited recorded a `before` that was already
+ * the overridden state. `writeBatch` commits both documents or neither, and
+ * the failure copy now says which. Anything added to either handler belongs
+ * in the same batch: a third write appended after `commit()` reopens the
+ * gap this closed.
  *
  * Override also demands a REASON (AGL-1652) — a code from
  * `ORG_OVERRIDE_REASON_CODES` plus an optional note, required for `other` —
@@ -345,7 +353,12 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await setDoc(
+      // ONE atomic commit (AGL-1784) — the flag and its audit row, or
+      // neither. Sequential awaits meant a failure on the second left the
+      // org flagged with nothing recording who flagged it, while the catch
+      // below told the operator the write had failed.
+      const batch = writeBatch(firestore)
+      batch.set(
         doc(firestore, 'orgs', org.$id),
         {
           erasureRequestedAt: requesting ? Timestamp.now() : deleteField(),
@@ -353,7 +366,9 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         },
         { merge: true },
       )
-      await addDoc(collection(firestore, 'adminAudit'), {
+      // `doc(collection(...))` is the client-side auto-id `addDoc` would have
+      // generated; a batch needs the reference up front.
+      batch.set(doc(collection(firestore, 'adminAudit')), {
         actorUid: (user as any)?.uid ?? 'unknown',
         action: requesting ? 'org.erasureRequested' : 'org.erasureCanceled',
         target: `orgs/${org.$id}`,
@@ -361,35 +376,47 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         after: { erasureRequested: requesting },
         at: Timestamp.now(),
       })
-      // Acknowledge to the owner at request time (AGL-768 follow-up). Fire-
-      // and-forget: the request already succeeded, and the endpoint is
-      // best-effort. The completion confirmation is sent later by
-      // run-erasures.
-      if (requesting) {
+      await batch.commit()
+    } catch (error) {
+      console.error(error)
+      // Says what actually happened (AGL-1784). The batch is all-or-nothing
+      // and this `try` holds NOTHING ELSE, so reaching here means the server
+      // refused it and the organization is exactly as it was — which is what
+      // makes a retry safe to suggest.
+      enqueueSnackbar(
+        'Nothing was written — the erasure flag and its audit row commit ' +
+          'together, so the request is unchanged. Safe to retry.',
+        { variant: 'error', allowDuplicate: true },
+      )
+      return
+    }
+    // Committed. Everything below is after the fact and deliberately OUTSIDE
+    // the try: a token refresh or a parent re-read failing here would have
+    // told the operator nothing was written, about a write that landed.
+    //
+    // Acknowledge to the owner at request time (AGL-768 follow-up). Fire-
+    // and-forget: the request already succeeded, and the endpoint is
+    // best-effort. The completion confirmation is sent later by run-erasures.
+    if (requesting) {
+      void (async () => {
         const idToken = await (user as any)?.getIdToken?.()
-        void fetch('/api/admin/erasure-request', {
+        await fetch('/api/admin/erasure-request', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           body: JSON.stringify({ orgId: org.$id }),
-        }).catch(() => undefined)
-      }
-      enqueueSnackbar(
-        requesting
-          ? 'Erasure requested — deletable via script after 7 days (audited)'
-          : 'Erasure request canceled (audited)',
-        { variant: 'success', persist: false },
-      )
-      onChanged()
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+        })
+      })().catch(() => undefined)
     }
+    enqueueSnackbar(
+      requesting
+        ? 'Erasure requested — deletable via script after 7 days (audited)'
+        : 'Erasure request canceled (audited)',
+      { variant: 'success', persist: false },
+    )
+    onChanged()
   }, [org, confirm, firestore, user, enqueueSnackbar, onChanged])
 
   const handleOverrideOpen = useCallback(() => {
@@ -527,7 +554,27 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       releaseFlags: hasReleaseOverrides ? explicitReleaseFlags : null,
     }
     try {
-      await setDoc(
+      // ONE atomic commit (AGL-1784) — the override and its audit row land
+      // together or not at all.
+      //
+      // These were two sequential awaits, and the second one failing (a
+      // rules denial on `adminAudit`, App Check, a dropped connection) left
+      // the org's plan, entitlements and fee percentages already changed
+      // with NO row saying who changed them or why. The catch then said
+      // "Write failed", which reads as "nothing happened", so the honest
+      // response — retry — produced a second override whose `before` was
+      // the already-overridden state. AGL-1652 made the reason mandatory
+      // because the row is append-only and cannot be back-filled; that
+      // guarantee is only worth as much as the row existing at all.
+      //
+      // A batch is the right size for this: the rules already permit both
+      // writes from a staff client, and Firestore commits them or neither.
+      // The consistent shape for the admin surface is a route doing both
+      // writes with the Admin SDK, as AGL-1505 did for suspension — which
+      // would also move the reason gate server-side. That is AGL-1786; this
+      // closes the split-write without waiting for it.
+      const batch = writeBatch(firestore)
+      batch.set(
         doc(firestore, 'orgs', editor.id),
         {
           plan: plan || deleteField(),
@@ -537,7 +584,9 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         },
         { merge: true },
       )
-      await addDoc(collection(firestore, 'adminAudit'), {
+      // `doc(collection(...))` is the client-side auto-id `addDoc` would have
+      // generated; a batch needs the reference up front.
+      batch.set(doc(collection(firestore, 'adminAudit')), {
         actorUid: (user as any)?.uid ?? 'unknown',
         action: 'org.override',
         target: `orgs/${editor.id}`,
@@ -552,20 +601,33 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         note: reason.note,
         at: Timestamp.now(),
       })
-      enqueueSnackbar('Organization updated (audited)', {
-        variant: 'success',
-        persist: false,
-      })
-      setEditor(null)
-      onChanged()
+      await batch.commit()
     } catch (error) {
       console.error(error)
+      // NAMES THE OUTCOME, not just the failure (AGL-1784). "Write failed"
+      // was true of the batch and false of the organization — an operator
+      // reads it as "nothing happened", which was exactly what it could not
+      // promise before. It can now: the commit is atomic and this `try`
+      // holds nothing else, so reaching here means the server refused the
+      // whole thing. Saying so is what makes retrying safe rather than a
+      // second override based on the first one's result.
       enqueueSnackbar(
-        'Write failed — are the scoped Firestore rules deployed and is ' +
-          'your account staff?',
+        'Nothing was written — the override and its audit row commit ' +
+          'together, so the organization is unchanged. Safe to retry. Are ' +
+          'the scoped Firestore rules deployed and is your account staff?',
         { variant: 'error', allowDuplicate: true },
       )
+      return
     }
+    // Committed — the dialog closes and the owner re-reads. Outside the try
+    // on purpose: a parent re-read that threw would otherwise be reported as
+    // an override that never landed.
+    enqueueSnackbar('Organization updated (audited)', {
+      variant: 'success',
+      persist: false,
+    })
+    setEditor(null)
+    onChanged()
   }, [editor, firestore, user, enqueueSnackbar, onChanged])
 
   return (

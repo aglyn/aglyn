@@ -33,24 +33,45 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-/** Every `setDoc` the component made: [path, data]. */
-const mockSetDocs: Array<[string, Record<string, unknown>]> = []
-/** Every `addDoc` the component made: [collectionPath, data]. */
-const mockAddDocs: Array<[string, Record<string, unknown>]> = []
+/**
+ * Every write a COMMITTED batch applied: [path, data]. The override and its
+ * audit row are one batch since AGL-1784, so a refusal has to be read here —
+ * and only after `commit()`, never off a staged write.
+ */
+const mockWrites: Array<[string, Record<string, unknown>]> = []
+/** Un-batched writes. The tripwire — nothing here writes directly. */
+const mockDirectWrites: string[] = []
 /** Snackbar messages, so a refusal can be shown to SAY something. */
 const mockSnacks: string[] = []
+let mockAutoId = 0
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => segments.join('/'),
-  doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
+  // `doc(collectionRef)` — one argument, no segments — is the auto-id form a
+  // batch needs, since the reference has to exist before the commit.
+  doc: (parent: unknown, ...segments: string[]) =>
+    segments.length > 0
+      ? segments.join('/')
+      : `${String(parent ?? '')}/auto-${++mockAutoId}`,
   deleteField: () => '<<delete>>',
-  setDoc: (path: string, data: Record<string, unknown>) => {
-    mockSetDocs.push([path, data])
+  setDoc: (path: string) => {
+    mockDirectWrites.push(`setDoc ${path}`)
     return Promise.resolve()
   },
-  addDoc: (path: string, data: Record<string, unknown>) => {
-    mockAddDocs.push([path, data])
+  addDoc: (path: string) => {
+    mockDirectWrites.push(`addDoc ${path}`)
     return Promise.resolve({ id: 'audit-1' })
+  },
+  writeBatch: () => {
+    const staged: Array<[string, Record<string, unknown>]> = []
+    return {
+      set: (path: string, data: Record<string, unknown>) => {
+        staged.push([path, data])
+      },
+      commit: async () => {
+        mockWrites.push(...staged)
+      },
+    }
   },
 }))
 
@@ -108,12 +129,18 @@ const clickSave = (): void => {
 }
 
 const auditRows = () =>
-  mockAddDocs.filter(([path]) => path === 'adminAudit').map(([, data]) => data)
+  mockWrites
+    .filter(([path]) => path.startsWith('adminAudit/'))
+    .map(([, data]) => data)
+
+/** The org-document writes that actually landed. */
+const orgWrites = () => mockWrites.filter(([path]) => path === 'orgs/org-1')
 
 beforeEach(() => {
-  mockSetDocs.length = 0
-  mockAddDocs.length = 0
+  mockWrites.length = 0
+  mockDirectWrites.length = 0
   mockSnacks.length = 0
+  mockAutoId = 0
 })
 
 describe('staff org override — the reason gate', () => {
@@ -125,7 +152,7 @@ describe('staff org override — the reason gate', () => {
     // Not just "no audit row" — the ORG DOCUMENT must be untouched too. An
     // override that landed and then failed to be audited is the worse half
     // of this bug, not a partial fix of it.
-    expect(mockSetDocs).toHaveLength(0)
+    expect(orgWrites()).toHaveLength(0)
     expect(auditRows()).toHaveLength(0)
   })
 
@@ -160,7 +187,9 @@ describe('staff org override — the reason gate', () => {
     // The before/after contract AGL-201 established is untouched.
     expect(row).toHaveProperty('before')
     expect(row).toHaveProperty('after')
-    expect(mockSetDocs).toHaveLength(1)
+    expect(orgWrites()).toHaveLength(1)
+    // Both came out of the batch (AGL-1784); neither went around it.
+    expect(mockDirectWrites).toEqual([])
   })
 
   it('carries the note through when one is typed', async () => {
@@ -185,7 +214,7 @@ describe('staff org override — the reason gate', () => {
     clickSave()
     // `other` is the one code that means nothing by itself, so choosing it
     // must not be a cheaper way to satisfy the gate than the real codes.
-    expect(mockSetDocs).toHaveLength(0)
+    expect(orgWrites()).toHaveLength(0)
     expect(auditRows()).toHaveLength(0)
 
     fireEvent.change(screen.getByLabelText(/Note \(required/), {
@@ -216,6 +245,6 @@ describe('staff org override — the reason gate', () => {
     expect(saveButton().disabled).toBe(true)
     clickSave()
     expect(auditRows()).toHaveLength(1)
-    expect(mockSetDocs).toHaveLength(1)
+    expect(orgWrites()).toHaveLength(1)
   })
 })
