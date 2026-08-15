@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { readCartId } from './cart-cookie'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -51,7 +52,12 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     .toUpperCase()
     .slice(0, 40)
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const cartId = String(req.cookies[`aglyn_cart_${hostId}`] ?? '')
+  // AGL-1769: validated here even though this handler only READS the cart,
+  // because it is where the raw cookie left the request — `:342` stamps it
+  // into `metadata[cartId]`, and the billing webhook builds a document path
+  // from that copy. Closing it at the source is what lets the webhook keep
+  // taking its metadata at face value.
+  const cartId = readCartId(req.cookies, hostId)
   if (!cartId) return res.status(400).json({ error: 'Your cart is empty' })
 
   try {

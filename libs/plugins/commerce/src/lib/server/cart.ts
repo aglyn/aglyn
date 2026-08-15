@@ -19,7 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { randomBytes } from 'crypto'
+import { cartCookieName, isCartId, mintCartId, readCartId } from './cart-cookie'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -47,18 +47,36 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       ? JSON.parse(req.body || '{}')
       : (req.body ?? {})
     : {}
+  // AGL-1769: BOTH components of the path this handler writes come from the
+  // caller — `hostId` off the body, `cartId` off a cookie whose name embeds
+  // `hostId` — and `.doc()` appends a slash-separated PATH rather than taking
+  // one opaque id. So an unvalidated pair named the nesting as well as the
+  // document: a `hostId` of `a/b/c` wrote under `hosts/a/b/c`, invisible to
+  // every console list because they resolve the host doc first.
+  //
+  // This handler is the one visitor-facing write in the AGL-1763 sweep that
+  // needs NO credentials — no session, no member gate, no signature — so it is
+  // the one place the id rule has to hold on its own.
   const hostId = String((isPost ? body.hostId : req.query.hostId) ?? '')
-  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+  // The message names BOTH causes it now covers (`762621581`): the guard reads
+  // as "absent" but also refuses a hostId that is a path rather than an id, and
+  // a caller told only "missing" would go looking for the wrong mistake.
+  if (!isCartId(hostId))
+    return res.status(400).json({ error: 'Missing or invalid hostId' })
 
-  const cookieName = `aglyn_cart_${hostId}`
-  let cartId = String(req.cookies[cookieName] ?? '')
+  const cookieName = cartCookieName(hostId)
+  // A cookie that is not a single document id reads as NO cart: a GET returns
+  // an empty one and a POST mints a fresh id below, exactly as for a first-time
+  // visitor. Nothing is stranded — a path that was never a cart id was never a
+  // basket anyone filled.
+  let cartId = readCartId(req.cookies, hostId)
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
 
   try {
     if (!cartId) {
       if (!isPost) return res.status(200).json({ lines: [], count: 0 })
-      cartId = randomBytes(16).toString('hex')
+      cartId = mintCartId()
       res.setHeader(
         'Set-Cookie',
         `${cookieName}=${cartId}; Path=/; Max-Age=${60 * 60 * 24 * 90}; ` +
@@ -89,14 +107,27 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
           action === 'set' ? 'set' : 'add',
         )
       }
-      await cartRef.set(
-        {
-          lines: cart.lines,
-          updatedAtMs: Date.now(),
-          ...(cartSnapshot.exists ? {} : { createdAtMs: Date.now() }),
-        },
-        { merge: true },
-      )
+      // AGL-1769: never mint an EMPTY cart. `clear` returns above before the
+      // `!line.productId` check, so `{ hostId, action: 'clear' }` — no
+      // product, valid or otherwise, and no credentials — used to create a
+      // document per request holding `lines: []` and two timestamps. A `remove`
+      // or a `set 0` that empties an absent basket is the same request wearing
+      // a productId. A cart that would store no lines is not a cart.
+      //
+      // AGL-1760's test — does refusing discard money or work that already
+      // occurred — is passed trivially here: there is no basket to strand. The
+      // caller still gets its cookie and its empty-cart response, so the next
+      // add lands on this id and creates the document properly.
+      if (cartSnapshot.exists || cart.lines.length > 0) {
+        await cartRef.set(
+          {
+            lines: cart.lines,
+            updatedAtMs: Date.now(),
+            ...(cartSnapshot.exists ? {} : { createdAtMs: Date.now() }),
+          },
+          { merge: true },
+        )
+      }
     }
 
     // Resolve display lines from product docs — never trust stored data.

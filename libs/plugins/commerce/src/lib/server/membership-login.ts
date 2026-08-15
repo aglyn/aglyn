@@ -18,6 +18,7 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { readCartId } from './cart-cookie'
 import {
   MEMBER_SUSPENDED_ERROR,
   mintMemberSession,
@@ -102,7 +103,13 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
     // so there is no basket to attribute and no work to strand. `cart.ts` is
     // what creates a cart — on the first POST that puts something in it, with
     // the whole document written. This only ever stamps one.
-    const cartId = String(req.cookies?.[`aglyn_cart_${hostId}`] ?? '')
+    //
+    // AGL-1769 moved the cookie's name and its validity rule into
+    // `cart-cookie.ts`, so a slash-bearing value never reaches `.doc()` from
+    // here at all. `update()` stays: the rule bounds the value to ONE document
+    // id, and whether THAT document exists is a separate question only the
+    // write can answer.
+    const cartId = readCartId(req.cookies, hostId)
     if (cartId) {
       try {
         await firestore
