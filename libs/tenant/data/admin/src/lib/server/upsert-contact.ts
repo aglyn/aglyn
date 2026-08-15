@@ -64,14 +64,18 @@ export async function upsertHostContact(options: {
    * "what is this person worth to me?", and the fee is a cost of the channel,
    * not something the buyer failed to spend.
    *
-   * Refunds are the open half and are deliberately NOT netted here: nothing
-   * decrements `ltvCents`, so a customer who bought and returned still counts
-   * the sale, and the first RFM surface will rank a serial returner as a best
-   * customer. Netting needs a contact lookup from `refund.ts` — a new writer
-   * in a money-moving path — and the shape AGL-1747 chose for the same
-   * question on the orders CSV: keep the gross figure under its existing name
-   * and record the refunded amount BESIDE it, so a reader can show either.
-   * Filed separately rather than smuggled in here.
+   * Refunds are still NOT netted here, and now they are recorded elsewhere
+   * (AGL-1754). `refund.ts` writes `refundedCents`, `refundedOrdersCount` and
+   * `lastRefundAtMs` BESIDE these fields — the shape AGL-1747 chose for the
+   * same question on the orders CSV — rather than decrementing a stored number
+   * whose meaning would then differ between rows written before and after that
+   * commit. So `ltvCents` and `ordersCount` remain gross by definition, and a
+   * READER that wants the net computes `ltvCents - refundedCents`, clamping
+   * only what it ranks on: the difference can be negative for a customer whose
+   * pre-AGL-1748 purchase was never counted and whose refund was, which is a
+   * missing purchase showing itself rather than a corrupt contact. AGL-1753 is
+   * the backfill that reconciles it. See `contact-refund.ts` in the commerce
+   * plugin for the full reasoning and for why a refund never CREATES a contact.
    *
    * Passing 0 or omitting it means "no purchase": `ltvCents`, `ordersCount`,
    * `lastPurchaseAtMs` and `firstPurchaseAtMs` are all left untouched, which

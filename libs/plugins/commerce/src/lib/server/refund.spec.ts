@@ -54,6 +54,26 @@ function childPaths(path: string): string[] {
   )
 }
 
+/**
+ * `FieldValue.increment` as a sentinel the fake resolves on write (AGL-1754).
+ * The contact's `refundedCents` is an increment, so a fake that stored the
+ * sentinel object would let a double-count through unnoticed — the tests have
+ * to read a NUMBER back.
+ */
+function resolveFieldValues(
+  existing: Record<string, any> | undefined,
+  value: Record<string, any>,
+): Record<string, any> {
+  const resolved: Record<string, any> = {}
+  for (const [key, field] of Object.entries(value)) {
+    resolved[key] =
+      field && typeof field === 'object' && '__increment' in field
+        ? Number(existing?.[key] ?? 0) + Number(field.__increment)
+        : field
+  }
+  return resolved
+}
+
 function makeSnapshot(path: string) {
   const data = docs.get(path)
   return {
@@ -61,6 +81,7 @@ function makeSnapshot(path: string) {
     exists: data !== undefined,
     data: () => data,
     get: (field: string) => data?.[field],
+    ref: makeDocRef(path),
   }
 }
 
@@ -70,10 +91,28 @@ function makeDocRef(path: string): any {
     path,
     get: async () => makeSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
+      const existing = docs.get(path)
+      const resolved = resolveFieldValues(existing, value)
+      // `set(…, { merge: true })` CONJURES an absent document — the property
+      // the contact write must not rely on, and the counter write does.
       docs.set(
         path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
+        options?.merge ? { ...(existing ?? {}), ...resolved } : resolved,
       )
+    },
+    /**
+     * `update()` REJECTS an absent document with gRPC `NOT_FOUND` (code 5) —
+     * the whole reason `updateExisting` exists (AGL-1763). A fake that let an
+     * update conjure a document would report the phantom-contact case green.
+     */
+    update: async (value: Record<string, any>) => {
+      const existing = docs.get(path)
+      if (existing === undefined) {
+        const error: any = new Error(`NOT_FOUND: no entity to update: ${path}`)
+        error.code = 5
+        throw error
+      }
+      docs.set(path, { ...existing, ...resolveFieldValues(existing, value) })
     },
     /**
      * The atomic claim. Firestore rejects a `create()` on an existing
@@ -97,10 +136,58 @@ function makeDocRef(path: string): any {
   }
 }
 
+/**
+ * Set by a test to delete the contact between the query that finds it and the
+ * write that follows — the window `updateExisting` exists for (AGL-1754).
+ */
+let deleteContactDuringQuery = false
+
+interface FakeFilter {
+  field: string
+  op: '==' | 'array-contains-any'
+  value: any
+}
+
+function matchesFilter(data: Record<string, any>, filter: FakeFilter): boolean {
+  const field = data[filter.field]
+  if (filter.op === '==') return field === filter.value
+  // `array-contains-any` matches NOTHING on a document that lacks the field
+  // (AGL-1037) — the reason every contact carries `visibleTo`.
+  if (!Array.isArray(field)) return false
+  return (filter.value as any[]).some((token) => field.includes(token))
+}
+
+function makeQuery(path: string, filters: FakeFilter[], limit?: number): any {
+  return {
+    where: (field: string, op: any, value: any) =>
+      makeQuery(path, [...filters, { field, op, value }], limit),
+    limit: (count: number) => makeQuery(path, filters, count),
+    get: async () => {
+      const matched = childPaths(path).filter((child) =>
+        filters.every((filter) => matchesFilter(docs.get(child) ?? {}, filter)),
+      )
+      const snapshots = (limit == null ? matched : matched.slice(0, limit)).map(
+        makeSnapshot,
+      )
+      if (deleteContactDuringQuery) {
+        for (const child of matched) docs.delete(child)
+      }
+      return { empty: snapshots.length === 0, docs: snapshots }
+    },
+  }
+}
+
 function makeCollectionRef(path: string): any {
   return {
     doc: (id: string) => makeDocRef(`${path}/${id}`),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
+    where: (field: string, op: any, value: any) =>
+      makeQuery(path, [{ field, op, value }]),
+    add: async (value: Record<string, any>) => {
+      const id = `generated-${docs.size + 1}`
+      docs.set(`${path}/${id}`, value)
+      return makeDocRef(`${path}/${id}`)
+    },
   }
 }
 
@@ -140,11 +227,26 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: {
       FieldValue: {
         serverTimestamp: () => '<server-timestamp>',
+        increment: (by: number) => ({ __increment: by }),
       },
     },
   },
   getOrgForHost: async () => ({ org: { id: 'org-1', slug: 'acme' } }),
+  // Contacts are ORG-scoped (AGL-237), so the contact write resolves through
+  // the org, not `hosts/{hostId}/contacts`.
+  orgDataCollectionForHost: async (_hostId: string, name: string) =>
+    makeCollectionRef(`orgs/org-1/${name}`),
+  // Faithful to the real narrowing (AGL-1039): the same `visibleTo` filter,
+  // so a contact this host may not see is genuinely invisible to the query
+  // rather than invisible only in the assertion.
+  scopedToHost: (ref: any, hostId: string) =>
+    ref.where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]),
 }))
+
+// `updateExisting` is deliberately NOT mocked. It is imported from its leaf
+// entry point precisely so this barrel mock cannot stand in for it — a
+// permissive stub would report "the contact was updated" for a document that
+// never existed, which is the one case the tests below turn on.
 
 // ---------------------------------------------------------------------------
 // Stripe boundary — counted, never reached
@@ -260,9 +362,44 @@ function storedOrder() {
   return docs.get('hosts/host-1/orders/order-1') ?? {}
 }
 
+/** What actually landed on the buyer's org-scoped contact (AGL-1754). */
+function storedContact() {
+  return docs.get('orgs/org-1/contacts/contact-1') ?? {}
+}
+
+/** The counter a refund that reached no contact increments (AGL-1754). */
+function unmatchedCounter() {
+  return docs.get('hosts/host-1/counters/contactRefundsUnmatched') ?? {}
+}
+
+/**
+ * `recordContactRefund` swallows its own failures so it can never fail a
+ * refund that already moved money — which means a test could otherwise pass
+ * because nothing ran at all. Every assertion about the contact is paired with
+ * this.
+ */
+function expectNothingSwallowed() {
+  expect(consoleError).not.toHaveBeenCalledWith(
+    'recordContactRefund failed',
+    expect.anything(),
+  )
+}
+
+let consoleError: jest.SpyInstance
+let consoleWarn: jest.SpyInstance
+
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
   process.env.STRIPE_SECRET_KEY = 'sk_test_not_a_real_key'
+  consoleError = jest
+    .spyOn(console, 'error')
+    .mockImplementation(() => undefined)
+  consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+})
+
+afterAll(() => {
+  consoleError.mockRestore()
+  consoleWarn.mockRestore()
 })
 
 beforeEach(() => {
@@ -273,13 +410,39 @@ beforeEach(() => {
   transactionCount = 0
   transactionQueue = Promise.resolve()
   nextRefundOutcome = 'ok'
+  deleteContactDuringQuery = false
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
+  consoleError.mockClear()
+  consoleWarn.mockClear()
 
   docs.set('hosts/host-1', { memberRoles: { 'admin-1': 'admin' } })
+  // The buyer, already a contact from an earlier sale. Every figure is
+  // distinct from every other in this file (AGL-1711): the order is 5000, the
+  // partial 1500, the lifetime value 7400 and the order count 3, so no
+  // assertion can pass by reading the wrong field.
+  docs.set('orgs/org-1/contacts/contact-1', {
+    hostId: 'host-1',
+    visibleTo: ['org'],
+    email: 'buyer@example.com',
+    name: 'Dana Buyer',
+    sources: { booking: true },
+    interactions: [
+      {
+        type: 'booking',
+        atMs: 1,
+        refId: 'reservation-9',
+        summary: 'Reserved a stay ($210.00)',
+      },
+    ],
+    ltvCents: 7400,
+    ordersCount: 3,
+  })
   docs.set('hosts/host-1/orders/order-1', {
     status: 'paid',
     channel: 'online',
+    customerEmail: 'Buyer@Example.com',
+    customerName: 'Dana Buyer',
     paymentIntentId: 'pi_live_1',
     lineItems: [
       { productId: 'product-1', name: 'Chair', quantity: 1, unitAmountCents: 5000 },
@@ -499,5 +662,261 @@ describe('refund idempotency and cap (AGL-1696)', () => {
   it('reads and writes the cap inside a transaction', async () => {
     await post({}, { 'idempotency-key': 'attempt-a' })
     expect(transactionCount).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The customer's side of a refund (AGL-1754).
+ *
+ * `refund.ts` moved the money, transitioned the order and appended a timeline
+ * event, and never touched the buyer. `ltvCents` only ever rose, so a customer
+ * who bought $500 and returned all of it read identically to one who kept it.
+ *
+ * The chosen shape is AGL-1747's, not a decrement: `ltvCents` stays GROSS
+ * under its existing name and `refundedCents` is recorded beside it, so the
+ * stored numbers cannot go negative and a reader computes the net. These tests
+ * therefore assert BOTH — that the reversal landed and that the gross figure
+ * was left alone — since a decrement would pass "the contact knows about the
+ * refund" just as well.
+ */
+describe('refund and lifetime value (AGL-1754)', () => {
+  /**
+   * THE DEFECT. Before the fix the contact was untouched by a refund: no
+   * `refundedCents`, no timeline entry, `ltvCents` still the full sale.
+   */
+  it('records a full refund against the buyer without lowering ltvCents', async () => {
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(storedContact().refundedCents).toBe(5000)
+    // Gross, deliberately unchanged — the whole point of the shape.
+    expect(storedContact().ltvCents).toBe(7400)
+    expect(storedContact().ordersCount).toBe(3)
+    expect(storedContact().refundedOrdersCount).toBe(1)
+    expect(storedContact().lastRefundAtMs).toEqual(expect.any(Number))
+    expectNothingSwallowed()
+  })
+
+  /**
+   * The join key is the NORMALIZED email (AGL-1753 item 3): orders store
+   * whatever was typed, contacts are keyed lowercased. The fixture order
+   * carries `Buyer@Example.com` and the contact `buyer@example.com`, so a
+   * writer that skipped `normalizeContactEmail` would find nobody and quietly
+   * count this as an unmatched refund instead.
+   */
+  it('matches the contact through the normalized email', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(unmatchedCounter().total).toBeUndefined()
+  })
+
+  /** A partial refunds what was refunded, never the order total. */
+  it('records only the refunded part of a partial', async () => {
+    const result = await post(
+      { amountCents: 1500 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+
+    expect(result.status).toBe(200)
+    expect(storedContact().refundedCents).toBe(1500)
+    expect(storedContact().ltvCents).toBe(7400)
+    // The order is still open, so it is not a reversed ORDER yet.
+    expect(storedContact().refundedOrdersCount).toBeUndefined()
+    expect(storedOrder().status).toBe('paid')
+    expectNothingSwallowed()
+  })
+
+  /** Several partials accumulate, and close the order exactly once. */
+  it('sums partials and counts the closed order once', async () => {
+    await post({ amountCents: 1500 }, { 'idempotency-key': 'attempt-a' })
+    await post({ amountCents: 3500 }, { 'idempotency-key': 'attempt-b' })
+
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(storedContact().refundedOrdersCount).toBe(1)
+    expect(storedOrder().status).toBe('refunded')
+    expectNothingSwallowed()
+  })
+
+  /**
+   * The subtlety `closedTheOrder` exists for. Two partials that between them
+   * close an order both reserve before either settles, so BOTH re-read a
+   * completed `refundedCents` and both compute `fullyRefunded`. Writing
+   * `status: 'refunded'` twice is harmless; counting a reversed order twice is
+   * not. Keyed on the status transition rather than the total, this counts one.
+   */
+  it('counts one reversed order when two partials close it at once', async () => {
+    const first = post(
+      { amountCents: 4000 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+    const second = post(
+      { amountCents: 1000 },
+      { 'idempotency-key': 'attempt-b' },
+    )
+    await Promise.all([first, second])
+
+    expect(storedOrder().refundedCents).toBe(5000)
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(storedContact().refundedOrdersCount).toBe(1)
+    expectNothingSwallowed()
+  })
+
+  /**
+   * A retried attempt replays the recorded response without re-refunding, so
+   * it must not decrement the customer a second time either. `refundedCents`
+   * is a `FieldValue.increment`, which is exactly the shape a replay inflates.
+   */
+  it('does not double-count a retried attempt', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(refundCalls).toHaveLength(1)
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(storedContact().refundedOrdersCount).toBe(1)
+  })
+
+  /**
+   * A refund belongs in the contact's HISTORY, not only its total — the
+   * profile timeline is what a merchant looks at to understand a number they
+   * distrust.
+   */
+  it('appends the refund to the contact timeline, newest first', async () => {
+    await post({ amountCents: 1500 }, { 'idempotency-key': 'attempt-a' })
+
+    const interactions = storedContact().interactions
+    expect(interactions).toHaveLength(2)
+    expect(interactions[0]).toMatchObject({
+      type: 'order',
+      refId: 'order-1',
+      summary: '$15.00 refunded',
+    })
+    // The earlier interaction survives underneath it.
+    expect(interactions[1].refId).toBe('reservation-9')
+  })
+
+  /** A full refund says so, matching the order timeline's own wording. */
+  it('marks a timeline entry that closed the order as full', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(storedContact().interactions[0].summary).toBe(
+      '$50.00 refunded (full)',
+    )
+  })
+
+  /**
+   * `sources` records which capture silo produced the contact, and a refund
+   * captures nobody. This contact came from a booking; a refund must not
+   * rewrite it into an order-sourced contact and change which saved segments
+   * match it.
+   */
+  it('does not add a capture source for a refund', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(storedContact().sources).toEqual({ booking: true })
+  })
+
+  /**
+   * THE REFUSAL. A buyer whose order predates AGL-1748 — a payment link, a POS
+   * card sale — has no contact at all. Creating one here would be band-gated
+   * (billing a merchant for a customer record they never had), and would mint a
+   * contact holding a refund and no purchase. The refund is durable on the
+   * order either way, which is what AGL-1753's rebuild reads.
+   */
+  it('refuses to create a contact for a buyer that has none, and counts it', async () => {
+    docs.delete('orgs/org-1/contacts/contact-1')
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    // The money is still recorded where it belongs.
+    expect(storedOrder().refundedCents).toBe(5000)
+    // Nothing was conjured anywhere in the contacts collection.
+    expect(childPaths('orgs/org-1/contacts')).toHaveLength(0)
+    expect(unmatchedCounter().total).toBe(1)
+    expect(unmatchedCounter().lastReason).toBe('no-contact')
+    expect(unmatchedCounter().lastOrderId).toBe('order-1')
+  })
+
+  /**
+   * The window `updateExisting` exists for: the contact is deleted between the
+   * query that found it and the write that follows. `set(…, { merge: true })`
+   * would resurrect it as a document holding nothing but a refund — a contact
+   * with a negative lifetime value who never bought anything, and one that
+   * satisfies every query filtering on the fields it happens to carry.
+   */
+  it('does not resurrect a contact deleted under the write', async () => {
+    deleteContactDuringQuery = true
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(childPaths('orgs/org-1/contacts')).toHaveLength(0)
+    expect(unmatchedCounter().total).toBe(1)
+    expect(unmatchedCounter().lastReason).toBe('contact-deleted')
+  })
+
+  /** An order that never identified its buyer: refunded, recorded, no contact. */
+  it('records a refund on an order with no customer email', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...storedOrder(),
+      customerEmail: null,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().refundedCents).toBe(5000)
+    expect(storedContact().refundedCents).toBeUndefined()
+    expect(unmatchedCounter().lastReason).toBe('no-email')
+  })
+
+  /**
+   * Placement: the contact write sits past the settle transaction, so a refund
+   * Stripe REJECTED — where no money moved and the reservation was handed back
+   * — must leave the customer's figures alone.
+   */
+  it('leaves the contact alone when Stripe rejects the refund', async () => {
+    nextRefundOutcome = 'rejected'
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(502)
+    expect(storedContact().refundedCents).toBeUndefined()
+    expect(storedContact().ltvCents).toBe(7400)
+    expect(unmatchedCounter().total).toBeUndefined()
+  })
+
+  /** Nothing left to refund is not a refund. */
+  it('leaves the contact alone when there is nothing left to refund', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+    const second = await post(
+      { amountCents: 500 },
+      { 'idempotency-key': 'attempt-b' },
+    )
+
+    expect(second.status).toBe(409)
+    // Exactly the one refund, not a second helping of nothing.
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(storedContact().refundedOrdersCount).toBe(1)
+  })
+
+  /**
+   * The read is host-scoped (AGL-1039). A contact another site in the org owns
+   * exclusively must not be found by this host's refund — the admin SDK does
+   * not evaluate rules, so the query has to filter for itself.
+   */
+  it('does not reach a contact scoped to another site', async () => {
+    docs.set('orgs/org-1/contacts/contact-1', {
+      ...storedContact(),
+      visibleTo: ['host:host-2'],
+    })
+
+    await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(storedContact().refundedCents).toBeUndefined()
+    expect(unmatchedCounter().lastReason).toBe('no-contact')
   })
 })

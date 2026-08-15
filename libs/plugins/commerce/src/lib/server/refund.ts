@@ -20,6 +20,7 @@ import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { createHash } from 'crypto'
+import { recordContactRefund } from './contact-refund'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -300,12 +301,21 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     // whatever is there now rather than to the snapshot read at the top.
     let refundedCents = 0
     let fullyRefunded = false
+    let closedTheOrder = false
     await firestore.runTransaction(async (transaction) => {
       const fresh = CommerceModel.liftLegacyOrder(
         ((await transaction.get(orderRef)).data() ?? {}) as any,
       )
       refundedCents = Number(fresh.refundedCents ?? 0)
       fullyRefunded = refundedCents >= totalCents
+      // Whether THIS settle moved the order into `refunded`, which is not the
+      // same question as whether the order is now fully refunded (AGL-1754).
+      // Two partials that between them close an order can both reserve before
+      // either settles, so both re-read the completed total and both compute
+      // `fullyRefunded`. Writing `status: 'refunded'` twice is harmless;
+      // incrementing a count twice is not. Reading the status inside the same
+      // transaction that writes it makes the flip observable exactly once.
+      closedTheOrder = fullyRefunded && fresh.status !== 'refunded'
       transaction.set(
         orderRef,
         {
@@ -322,6 +332,32 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     })
     const payload = { refundedCents, fullyRefunded }
     await claim?.record(200, payload)
+    // The customer's side of the ledger (AGL-1754). Everything above records
+    // the money on the ORDER; without this the buyer's `ltvCents` still counts
+    // a sale they returned, and only ever rises.
+    //
+    // Placed AFTER the attempt is recorded so a slow contacts write cannot
+    // strand the claim: a retry that arrives while this is in flight replays
+    // the recorded 200 instead of being turned away with "already being
+    // processed". Awaited rather than fired off with `void` — the handler is
+    // serverless, and work left running past the response is work the
+    // container may be frozen before it finishes. `recordContactRefund`
+    // swallows its own failures, so awaiting adds no way for this to fail a
+    // refund that has already left the merchant's account.
+    //
+    // Amount is THIS attempt's `refundCents`, already capped against what was
+    // left, so several partials sum to at most the order total — the same
+    // number the order's own `refundedCents` follows. The retried and racing
+    // cases need no key of their own: a keyed retry never reaches here (it
+    // replays at the claim), and a keyless one is a genuinely new refund that
+    // moved more money and should be counted.
+    await recordContactRefund({
+      hostId,
+      orderId,
+      email: order.customerEmail,
+      amountCents: refundCents,
+      closedTheOrder,
+    })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
