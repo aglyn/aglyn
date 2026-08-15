@@ -17,7 +17,8 @@
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
 import { cartHandler } from './cart'
-import { isCartId, mintCartId, readCartId } from './cart-cookie'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { mintCartId, readCartId } from './cart-cookie'
 
 /**
  * The unauthenticated cart write (AGL-1769).
@@ -395,37 +396,22 @@ describe('the ordinary cart still works', () => {
   })
 })
 
-describe('isCartId', () => {
-  it('accepts the ids Aglyn mints', () => {
-    expect(isCartId(mintCartId())).toBe(true)
+describe('mintCartId', () => {
+  /**
+   * AGL-1771 moved the RULE to `@aglyn/tenant-data-admin/server/document-id`,
+   * whose own spec pins every clause of it against a `.doc()` double. What was
+   * cart-specific and is not covered there stays here: that the format this
+   * module actually mints satisfies the rule. If minting ever changed to
+   * something the predicate refuses, every cart would be orphaned on issue —
+   * and only this file knows both halves.
+   */
+  it('mints ids the shared document-id rule accepts', () => {
     expect(mintCartId()).toMatch(/^[0-9a-f]{32}$/)
+    expect(isDocumentId(mintCartId())).toBe(true)
   })
 
-  it('accepts any other single opaque component, so no live cart is orphaned', () => {
-    // Deliberately looser than the minted format — see the module comment.
-    expect(isCartId('cart-1')).toBe(true)
-    expect(isCartId('AbC_123.xyz')).toBe(true)
-  })
-
-  it.each([
-    ['empty', ''],
-    ['a nested path', 'a/b/c'],
-    ['an even-component path', 'half/path'],
-    ['a leading slash', '/cart-1'],
-    ['self', '.'],
-    ['parent', '..'],
-    ['a reserved id', '__missing__'],
-    ['not a string', 42],
-    ['absent', undefined],
-  ])('rejects %s', (_label, value) => {
-    expect(isCartId(value)).toBe(false)
-  })
-
-  it('rejects an id past Firestore’s 1500-byte ceiling, counting BYTES', () => {
-    expect(isCartId('a'.repeat(1500))).toBe(true)
-    expect(isCartId('a'.repeat(1501))).toBe(false)
-    // 4 bytes each in UTF-8 — a length check would have let this through.
-    expect(isCartId('😀'.repeat(376))).toBe(false)
+  it('mints a fresh id every time', () => {
+    expect(mintCartId()).not.toBe(mintCartId())
   })
 })
 

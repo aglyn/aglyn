@@ -44,24 +44,19 @@
  * the server mint. Tightening to the minted format would buy no bound that
  * matters and would silently empty the basket of anyone holding a cookie from
  * a format this file does not know about. What must be impossible is naming a
- * path; that is what {@link isCartId} decides.
+ * path; that is what {@link isDocumentId} decides.
  *
- * WHAT THIS IS NOT. Not a repo-wide Firestore id validator. That belongs
- * beside `updateExisting` in `tenant-data-admin`, and is its own change; this
- * one owns a single cookie whose every reader is in this directory.
+ * WHERE THE RULE ITSELF NOW LIVES. AGL-1769 wrote it out here and said plainly
+ * that a repo-wide validator belonged beside `updateExisting` in
+ * `tenant-data-admin` but was its own change. AGL-1771 made that change — the
+ * sweep found four call sites, which is where duplicating six lines stops
+ * being cheaper than the dependency. This module keeps the COOKIE: its name,
+ * its minter, and the decision to report a mangled value as absence. The id
+ * rule is {@link isDocumentId}, imported.
  */
 
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { randomBytes } from 'crypto'
-
-/**
- * Firestore reserves ids of the form `__…__` and rejects them with
- * `INVALID_ARGUMENT` rather than returning an absent snapshot — the same trap
- * `542b1023f` hit with `products/__missing__`.
- */
-const RESERVED_DOCUMENT_ID = /^__.*__$/
-
-/** Firestore's document id limit. */
-const MAX_DOCUMENT_ID_BYTES = 1500
 
 /** The `aglyn_cart_{hostId}` cookie name, in one place. */
 export function cartCookieName(hostId: string): string {
@@ -74,32 +69,11 @@ export function mintCartId(): string {
 }
 
 /**
- * Whether `value` is usable as ONE opaque Firestore document id.
- *
- * Every clause is a path escape, not a style preference: `/` is the nesting
- * hazard and the synchronous `.doc()` throw; `.` and `..` are path traversal
- * that Firestore rejects; the reserved form throws instead of missing; and the
- * length is Firestore's own ceiling, measured in UTF-8 bytes because that is
- * what the limit counts.
- */
-export function isCartId(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    !value.includes('/') &&
-    value !== '.' &&
-    value !== '..' &&
-    !RESERVED_DOCUMENT_ID.test(value) &&
-    Buffer.byteLength(value, 'utf8') <= MAX_DOCUMENT_ID_BYTES
-  )
-}
-
-/**
  * The cart id this request carries, or `''` when it carries none Aglyn is
  * willing to treat as one.
  *
- * A cookie that fails {@link isCartId} is reported as ABSENT rather than as an
- * error, and that is the whole design: every caller already has a correct
+ * A cookie that fails {@link isDocumentId} is reported as ABSENT rather than
+ * as an error, and that is the whole design: every caller already has a correct
  * branch for "this visitor has no cart" — mint one, return an empty cart, skip
  * the linkage — and none of them has anything to say to a visitor whose cookie
  * was mangled. Refusing loses nothing either, since a path that is not a cart
@@ -110,5 +84,5 @@ export function readCartId(
   hostId: string,
 ): string {
   const raw = cookies?.[cartCookieName(hostId)]
-  return isCartId(raw) ? raw : ''
+  return isDocumentId(raw) ? raw : ''
 }

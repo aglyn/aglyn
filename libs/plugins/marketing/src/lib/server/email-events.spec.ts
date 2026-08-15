@@ -253,6 +253,12 @@ const fakeFirestore = { collection: (name: string) => makeCollectionRef(name) }
 // `updateExisting` is the REAL one, reached through its secondary entry point
 // so that mocking the barrel (whose graph pulls the admin SDK, which does not
 // load under jest) does not quietly replace the helper under test.
+//
+// `isDocumentId` needs no entry here: AGL-1771 moved it to
+// `@aglyn/tenant-data-admin/server/document-id`, which this mock does not
+// intercept, so the handler always gets the real predicate. That is the point
+// of importing it from the leaf rather than the barrel — a permissive stub
+// would turn every path-shaped tag below into a false green.
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   updateExisting: jest.requireActual(

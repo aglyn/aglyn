@@ -19,7 +19,8 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { cartCookieName, isCartId, mintCartId, readCartId } from './cart-cookie'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+import { cartCookieName, mintCartId, readCartId } from './cart-cookie'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -61,7 +62,9 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
   // The message names BOTH causes it now covers (`762621581`): the guard reads
   // as "absent" but also refuses a hostId that is a path rather than an id, and
   // a caller told only "missing" would go looking for the wrong mistake.
-  if (!isCartId(hostId))
+  // AGL-1771: `isDocumentId`, not the cart module's old `isCartId` alias — this
+  // value is a HOST id, and the rule it has to satisfy was never about carts.
+  if (!isDocumentId(hostId))
     return res.status(400).json({ error: 'Missing or invalid hostId' })
 
   const cookieName = cartCookieName(hostId)

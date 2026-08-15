@@ -16,48 +16,18 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
+// AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
+// copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
+// refuse an edge between two feature plugins — every plugin carries only
+// `aglyn:addons`, and that tag's rule permits `aglyn:addons` as a target, which
+// is why `campaign-send.ts` already imports `@aglyn/plugins-commerce/model`. It
+// now lives beside `updateExisting` in the library where Firestore paths are
+// built, which was always the better home and is now the reachable one.
 import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
-
-/**
- * Firestore reserves ids of the form `__…__` and answers `INVALID_ARGUMENT`
- * rather than an absent snapshot (`542b1023f`).
- */
-const RESERVED_DOCUMENT_ID = /^__.*__$/
-
-/** Firestore's document id limit, counted in BYTES as the limit itself is. */
-const MAX_DOCUMENT_ID_BYTES = 1500
-
-/**
- * Whether `value` may be used as ONE opaque Firestore document id (AGL-1768).
- *
- * `CollectionReference.doc()` appends a SLASH-SEPARATED path and refuses it
- * only when the resulting component count comes out odd
- * (`@google-cloud/firestore`, `collection-reference.js:179-191`) — it never
- * treats its argument as one opaque id. So a tag of `a/b/c` reaches
- * `hosts/a/b/c`, a document beneath a parent that does not exist and therefore
- * invisible to every console list, and a tag of `a/b` throws SYNCHRONOUSLY.
- *
- * This is a deliberate LOCAL copy of `isCartId` from
- * `libs/plugins/commerce/src/lib/server/cart-cookie.ts` (`f053417fa`), not an
- * import: the two plugins are separate nx projects and
- * `@nx/enforce-module-boundaries` refuses the edge, correctly. Lifting the
- * predicate to `tenant-data-admin` beside `updateExisting` is AGL-1771 and is
- * the better home for it; six lines duplicated is the cheaper wait.
- */
-function isDocumentId(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    !value.includes('/') &&
-    value !== '.' &&
-    value !== '..' &&
-    !RESERVED_DOCUMENT_ID.test(value) &&
-    Buffer.byteLength(value, 'utf8') <= MAX_DOCUMENT_ID_BYTES
-  )
-}
 
 /**
  * Svix signature check (Resend webhooks): HMAC-SHA256 over
