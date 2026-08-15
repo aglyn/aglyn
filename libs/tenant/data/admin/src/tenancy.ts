@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-export { appCheck, firebaseApp } from '@aglyn/shared-util-fbclient'
-
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
 export * from './lib/server/auth-pools'
