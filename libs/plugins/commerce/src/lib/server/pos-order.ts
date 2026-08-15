@@ -192,8 +192,47 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (payment === 'cash' && cashReceivedCents < totals.totalCents) {
       return res.status(400).json({ error: 'Cash received is short' })
     }
-    if (payment === 'folio' && !reservationId) {
-      return res.status(400).json({ error: 'Pick a reservation' })
+    // AGL-1760: the stay must EXIST before the sale is rung, and here is the
+    // last place that can still be said. A `folio` tender moves no money at
+    // this counter — no card is charged and no cash is taken; the order is
+    // written `paid` because the charge is BOOKED against the stay and
+    // collected at check-out, at the register, as its own sale. So an unknown
+    // reservation is the same class of deterministic, retryable rejection as
+    // "cash received is short": the cashier picks the right stay and presses
+    // the same button. Sitting above the claim is what keeps the key unburned.
+    //
+    // The read is not an extra one. AGL-1757 already loaded this document a
+    // few lines below, to attribute the sale to its guest; it is HOISTED here
+    // rather than added, so a folio sale still costs exactly one reservation
+    // read — and that one read now answers both questions.
+    //
+    // Unlike AGL-1757's, this read is authoritative rather than best-effort:
+    // it IS the validation, so a Firestore failure must not be swallowed into
+    // "no such stay". It falls to the 500 below — before the claim, before any
+    // order — and the cashier retries the same key with nothing taken.
+    let folioGuestEmail = ''
+    let folioGuestName = ''
+    if (payment === 'folio') {
+      if (!reservationId) {
+        return res.status(400).json({ error: 'Pick a reservation' })
+      }
+      const reservationSnapshot = await hostRef
+        .collection('reservations')
+        .doc(reservationId)
+        .get()
+      if (!reservationSnapshot.exists) {
+        return res.status(404).json({ error: 'Unknown reservation' })
+      }
+      // The one POS tender where the customer is already identified by the
+      // system — `reserve.ts` populated these from the guest's own booking
+      // (AGL-1757). The console walk-in writes `guestEmail: null`, which
+      // leaves them empty and correctly attributes the sale to nobody.
+      folioGuestEmail = String(reservationSnapshot.get('guestEmail') ?? '')
+        .trim()
+        .toLowerCase()
+      folioGuestName = String(reservationSnapshot.get('guestName') ?? '')
+        .trim()
+        .slice(0, 120)
     }
 
     // Point of no return: everything past here writes an order or moves money.
@@ -305,6 +344,17 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // above, before the claim.
     const orderRef = hostRef.collection('orders').doc()
     const counterRef = hostRef.collection('counters').doc('orders')
+    // Held in a local so the folio branch below can re-state the timeline with
+    // a second event appended rather than blind-writing over this one.
+    const paidEvent = {
+      atMs: Date.now(),
+      event: 'paid',
+      detail:
+        payment === 'folio'
+          ? `Charged to reservation ${reservationId}`
+          : `Cash — received $${(cashReceivedCents / 100).toFixed(2)}, ` +
+            `change $${((cashReceivedCents - totals.totalCents) / 100).toFixed(2)}`,
+    }
     await firestore.runTransaction(async (transaction) => {
       const counter = await transaction.get(counterRef)
       const number = Number(counter.get('next') ?? 1)
@@ -317,63 +367,73 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         lineItems,
         totals,
         customerEmail: customerEmail || null,
-        timeline: [
-          {
-            atMs: Date.now(),
-            event: 'paid',
-            detail:
-              payment === 'folio'
-                ? `Charged to reservation ${reservationId}`
-                : `Cash — received $${(cashReceivedCents / 100).toFixed(2)}, ` +
-                  `change $${((cashReceivedCents - totals.totalCents) / 100).toFixed(2)}`,
-          },
-        ],
+        timeline: [paidEvent],
         ...(payment === 'folio' ? { reservationId } : {}),
         createdAtMs: Date.now(),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
     })
 
-    // Folio (AGL-317): the stay settles the charge at check-out.
-    //
-    // AGL-1757: this branch used to WRITE to the reservation without ever
-    // READING it, which is why the guest went unrecorded. The reservation is
-    // the one POS tender where the customer is already identified by the
-    // system — `reserve.ts` populated `guestName`/`guestEmail` from the
-    // guest's own booking — so load it here and carry that identity down to
-    // the contact call below. A missing or identity-less reservation (the
-    // console walk-in writes `guestEmail: null`) simply leaves these empty;
-    // the read is best-effort and never fails the sale, which is already
-    // paid by this point.
-    let folioGuestEmail = ''
-    let folioGuestName = ''
+    // Folio (AGL-317): the stay settles the charge at check-out. The guest
+    // identity behind `folioGuestEmail`/`folioGuestName` was read above, before
+    // the claim (AGL-1757, hoisted by AGL-1760).
     if (payment === 'folio') {
-      const reservationRef = hostRef
+      // AGL-1760: `update()`, never `set(..., { merge: true })`. A merge-set
+      // against a missing path CREATES the document, which is how a typo or a
+      // stale id used to mint a phantom stay — a `reservations/{id}` doc
+      // holding one folio line and nothing else: no guest, no dates, no room,
+      // invisible to a picker that filters on `status` and `NaN`-valued to the
+      // availability maths that reads `checkInDayMs`. `update()` rejects on a
+      // missing document instead of creating it, so the stub is not reachable
+      // by any argument. Same defect `a7a2d90df` fixed for bookings; the guard
+      // differs because that handler already had a transaction and a status to
+      // read, whereas here existence is the only question and `update` IS the
+      // check — atomic, and without a second read.
+      //
+      // The validation above makes a missing stay unreachable in practice.
+      // What is left is the race — a manager deleting it in the window between
+      // the two — and every other reason a write fails, which the old
+      // `.catch(() => undefined)` swallowed indistinguishably. The sale is
+      // committed by then, so this cannot refuse; and a paid sale must never be
+      // lost, nor an orphaned attribution be silent. So the order stands
+      // untouched and says so on its own timeline, which the console order
+      // dialog renders. The note claims only what is known — that the line is
+      // on no folio — rather than diagnosing why.
+      await hostRef
         .collection('reservations')
         .doc(reservationId)
-      const reservationSnapshot = await reservationRef.get().catch(() => null)
-      folioGuestEmail = String(reservationSnapshot?.get('guestEmail') ?? '')
-        .trim()
-        .toLowerCase()
-      folioGuestName = String(reservationSnapshot?.get('guestName') ?? '')
-        .trim()
-        .slice(0, 120)
-      await reservationRef
-        .set(
-          {
-            folio: firebaseAdmin.firestore.FieldValue.arrayUnion({
-              orderId: orderRef.id,
-              amountCents: totals.totalCents,
-              note: lineItems
-                .map((line) => `${line.quantity}× ${line.name}`)
-                .join(', ')
-                .slice(0, 120),
-              atMs: Date.now(),
-            }),
-          },
-          { merge: true },
-        )
-        .catch(() => undefined)
+        .update({
+          folio: firebaseAdmin.firestore.FieldValue.arrayUnion({
+            orderId: orderRef.id,
+            amountCents: totals.totalCents,
+            note: lineItems
+              .map((line) => `${line.quantity}× ${line.name}`)
+              .join(', ')
+              .slice(0, 120),
+            atMs: Date.now(),
+          }),
+        })
+        .catch(async (error) => {
+          console.error('Folio append failed', reservationId, error)
+          await orderRef
+            .set(
+              {
+                timeline: [
+                  paidEvent,
+                  {
+                    atMs: Date.now(),
+                    event: 'folio-unattached',
+                    detail:
+                      `Not recorded on reservation ${reservationId} — this ` +
+                      `$${(totals.totalCents / 100).toFixed(2)} charge is on ` +
+                      'no stay’s folio. Collect it at the register.',
+                  },
+                ],
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+        })
     }
 
     // Inventory decrement per line (location-aware, AGL-286).
@@ -425,9 +485,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // safe either way: `mergeContactInteraction` keeps an existing name, so
     // this fills a blank and never clobbers a better one.
     //
-    // Nothing is invented. A walk-in reservation (`guestEmail: null`) or a
-    // reservationId pointing at nothing leaves this empty, and no contact is
-    // created — which is the right answer, not a gap.
+    // Nothing is invented. A walk-in reservation (`guestEmail: null`) leaves
+    // this empty and no contact is created — the right answer, not a gap. The
+    // other case AGL-1757 handled here, a `reservationId` pointing at nothing,
+    // no longer arrives: AGL-1760 refuses that sale above, before the claim.
     const contactEmail = customerEmail || folioGuestEmail
     const contactName =
       contactEmail && contactEmail === folioGuestEmail ? folioGuestName : ''

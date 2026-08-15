@@ -86,6 +86,23 @@ function makeDocRef(path: string): any {
       }
       docs.set(path, value)
     },
+    /**
+     * The mirror image, and the AGL-1760 primitive: `update()` REJECTS on a
+     * missing document where `set(..., { merge: true })` would CREATE it. That
+     * rejection is the guard, so the fake has to reproduce it or the test
+     * proves nothing — a fake that merged into a missing path would pass
+     * against the stub-creating code as happily as against the fix.
+     */
+    update: async (value: Record<string, any>) => {
+      if (!docs.has(path)) {
+        const error: any = new Error(
+          `NOT_FOUND: no entity to update: ${path}`,
+        )
+        error.code = 5
+        throw error
+      }
+      docs.set(path, { ...(docs.get(path) ?? {}), ...value })
+    },
     delete: async () => {
       docs.delete(path)
     },
@@ -106,15 +123,27 @@ function makeCollectionRef(path: string): any {
   }
 }
 
+/**
+ * Fires once each `runTransaction` completes, so a test can mutate the store
+ * from INSIDE a handler run. The folio path's only transaction is the order
+ * write (`claimAttempt` uses `create`/`get`/`set`, never a transaction), so
+ * this hook lands in exactly the window AGL-1760's race needs: after the sale
+ * is committed and before the folio line is appended.
+ */
+let afterTransaction: (() => void) | null = null
+
 const fakeFirestore = {
   collection: (name: string) => makeCollectionRef(name),
-  runTransaction: async (fn: (transaction: any) => Promise<void>) =>
-    fn({
+  runTransaction: async (fn: (transaction: any) => Promise<void>) => {
+    const outcome = await fn({
       get: (ref: any) => ref.get(),
       set: (ref: any, value: any, options?: any) => {
         void ref.set(value, options)
       },
-    }),
+    })
+    afterTransaction?.()
+    return outcome
+  },
 }
 
 /** Every `upsertHostContact` call the handler made, options verbatim (AGL-1748). */
@@ -264,6 +293,7 @@ beforeEach(() => {
   stripeSessionsByKey.clear()
   autoIdCounter = 0
   stripeSessionCounter = 0
+  afterTransaction = null
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
@@ -752,10 +782,19 @@ describe('POS folio attribution (AGL-1757)', () => {
     expect(contactUpserts).toHaveLength(0)
   })
 
-  /** A reservationId pointing at nothing is likewise no identity, not a stub. */
+  /**
+   * A reservationId pointing at nothing is likewise no identity, not a stub.
+   *
+   * AGL-1760 CHANGED the outcome this pins. When AGL-1757 wrote it, the sale
+   * still went through at 200 and simply attributed nobody — which was the
+   * best available answer while the stub was still being created underneath.
+   * The sale is now refused outright, above the claim, so no contact is the
+   * same conclusion reached a better way. Asserted through the refusal rather
+   * than deleted, so the "invent nobody" intent keeps its test.
+   */
   it('creates no contact when the reservation does not exist', async () => {
     const result = await chargeRoom({ reservationId: 'ghost' }, 'folio-c')
-    expect(result.status).toBe(200)
+    expect(result.status).toBe(404)
     expect(contactUpserts).toHaveLength(0)
   })
 
@@ -776,5 +815,231 @@ describe('POS folio attribution (AGL-1757)', () => {
     await chargeRoom()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(stripeCalls).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Phantom stays from a folio sale (AGL-1760).
+ *
+ * THE DEFECT. The folio line was appended with an unguarded
+ * `set({ folio: arrayUnion(...) }, { merge: true })`, and a merge-set against a
+ * missing path CREATES the document. So a typo or a stale `reservationId` — the
+ * handler takes it verbatim from the request body — minted a
+ * `hosts/{h}/reservations/{id}` doc holding one folio line and nothing else: no
+ * guest, no dates, no room, no `status`. Invisible to the console list and the
+ * POS picker, which filter on `status`, and `NaN`-valued to the availability
+ * maths that reads `checkInDayMs` — but a real document with a real charge on
+ * it that nothing would ever settle or display. Same shape `a7a2d90df` fixed
+ * for bookings.
+ *
+ * The filing left the answer open because "the sale is already paid" by the
+ * append. Traced here rather than assumed, and the premise does not hold: a
+ * `folio` tender takes NO money at the counter. There is no Stripe call (the
+ * AGL-1757 suite above pins that) and no cash — the order is written `paid`
+ * because the charge is booked against the stay and collected at check-out, as
+ * its own sale. And `reservationId` arrives in the settle request body, at the
+ * top of the handler, long before anything is written. So the preventable
+ * option was reachable after all: refuse the tender before the claim, exactly
+ * where "cash received is short" already refuses.
+ *
+ * Fixtures follow AGL-1757's, priced so nothing coincides (AGL-1711), plus a
+ * TRACKED variant — inventory must not move for a sale that never happened, and
+ * an untracked one would make that assertion pass vacuously.
+ */
+describe('POS folio stub reservations (AGL-1760)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        pricesIncludeTax: false,
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+      },
+    })
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Negroni',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 17, inventory: 40 }],
+    })
+    docs.set('hosts/host-1/reservations/stay-1', {
+      resourceId: 'room-4',
+      status: 'checked_in',
+      guestName: 'Ada Lovelace',
+      guestEmail: 'ada@example.com',
+      nights: 7,
+      totalCents: 84000,
+      depositCents: 21000,
+      paidCents: 21000,
+    })
+  })
+
+  async function chargeRoom(
+    body: Record<string, unknown> = {},
+    key = 'stub-a',
+  ) {
+    return post(
+      {
+        payment: 'folio',
+        reservationId: 'stay-1',
+        lines: [{ productId: 'product-2', quantity: 3 }],
+        ...body,
+      },
+      { 'idempotency-key': key },
+    )
+  }
+
+  /** Every reservation document that actually landed. */
+  function reservationPaths() {
+    return childPaths('hosts/host-1/reservations')
+  }
+
+  /** The control: a real stay still transacts, and is the only stay there is. */
+  it('charges a real stay and leaves the collection alone', async () => {
+    const result = await chargeRoom()
+    expect(result.status).toBe(200)
+    expect(reservationPaths()).toEqual(['hosts/host-1/reservations/stay-1'])
+    const reservation = docs.get('hosts/host-1/reservations/stay-1') as any
+    expect(reservation.folio.__arrayUnion.amountCents).toBe(5521)
+    // The append must still not touch the stay's money — the deposit and each
+    // folio line are disjoint sums, each charged once (AGL-1755).
+    expect(reservation.paidCents).toBe(21000)
+    expect(reservation.totalCents).toBe(84000)
+  })
+
+  /**
+   * THE FIX, at the point it prevents rather than mitigates: the tender is
+   * refused before the claim, so nothing downstream ever runs.
+   */
+  it('refuses a folio sale against a reservation that does not exist', async () => {
+    const result = await chargeRoom({ reservationId: 'ghost-stay' })
+    expect(result.status).toBe(404)
+    expect(result.body.error).toBe('Unknown reservation')
+  })
+
+  /** The phantom itself, asserted as the document it would have been. */
+  it('creates no reservation document for an unknown id', async () => {
+    await chargeRoom({ reservationId: 'ghost-stay' })
+    expect(docs.has('hosts/host-1/reservations/ghost-stay')).toBe(false)
+    expect(reservationPaths()).toEqual(['hosts/host-1/reservations/stay-1'])
+  })
+
+  /** Nothing downstream of the refusal ran — each side effect on its own. */
+  it('writes no order, no contact and no inventory movement', async () => {
+    await chargeRoom({ reservationId: 'ghost-stay' })
+    expect(orderDocs()).toHaveLength(0)
+    expect(contactUpserts).toHaveLength(0)
+    expect(childPaths('hosts/host-1/inventoryAdjustments')).toHaveLength(0)
+    const product = docs.get('hosts/host-1/products/product-2') as any
+    expect(product.variants[0].inventory).toBe(40)
+  })
+
+  /** Nor the order counter — a refused sale must not consume a number. */
+  it('does not consume an order number', async () => {
+    await chargeRoom({ reservationId: 'ghost-stay' })
+    expect(docs.has('hosts/host-1/counters/orders')).toBe(false)
+    const good = await chargeRoom({}, 'stub-b')
+    expect(good.status).toBe(200)
+    expect((orderDocs()[0] as any).number).toBe(1)
+  })
+
+  /**
+   * The refusal is deterministic and retryable, so it must sit ABOVE the claim
+   * like "cash received is short" (AGL-1691). If it were taken below, the
+   * cashier's correction would replay the 404 forever.
+   */
+  it('does not burn the attempt key on an unknown reservation', async () => {
+    const refused = await chargeRoom({ reservationId: 'ghost-stay' }, 'stub-c')
+    expect(refused.status).toBe(404)
+
+    const retry = await chargeRoom({}, 'stub-c')
+    expect(retry.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+    expect((orderDocs()[0] as any).reservationId).toBe('stay-1')
+  })
+
+  /** An empty id is still the 400 it was — a different message, kept distinct. */
+  it('still asks for a reservation when none was picked', async () => {
+    const result = await chargeRoom({ reservationId: '' })
+    expect(result.status).toBe(400)
+    expect(result.body.error).toBe('Pick a reservation')
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  /** A refused folio sale may not reach Stripe either — localhost is LIVE. */
+  it('never calls Stripe when refusing a folio sale', async () => {
+    await chargeRoom({ reservationId: 'ghost-stay' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  /**
+   * The window the validation cannot close: a manager deletes the stay between
+   * the check and the append. The sale is committed by then, so this is the
+   * one case that must be HANDLED rather than prevented — and the three things
+   * that must hold are asserted separately.
+   */
+  describe('when the stay vanishes mid-sale', () => {
+    let consoleError: jest.SpyInstance
+
+    beforeEach(() => {
+      consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined)
+      afterTransaction = () => {
+        docs.delete('hosts/host-1/reservations/stay-1')
+        afterTransaction = null
+      }
+    })
+
+    afterEach(() => {
+      consoleError.mockRestore()
+    })
+
+    /** Still no stub: `update()` rejects where a merge-set would re-create it. */
+    it('does not re-create the deleted reservation', async () => {
+      await chargeRoom()
+      expect(docs.has('hosts/host-1/reservations/stay-1')).toBe(false)
+      expect(reservationPaths()).toHaveLength(0)
+    })
+
+    /** A paid sale is never lost, whatever happened to the stay. */
+    it('keeps the paid order intact', async () => {
+      const result = await chargeRoom()
+      expect(result.status).toBe(200)
+      expect(orderDocs()).toHaveLength(1)
+      const stored = orderDocs()[0] as any
+      expect(stored.status).toBe('paid')
+      expect(stored.totals.totalCents).toBe(5521)
+      expect(stored.reservationId).toBe('stay-1')
+    })
+
+    /**
+     * And the orphan is visible to someone rather than silent. The console
+     * order dialog renders `timeline`, so the merchant reading the order sees
+     * that this charge landed on no folio and is still to be collected.
+     */
+    it('stamps the order so the orphaned charge is visible', async () => {
+      await chargeRoom()
+      const timeline = (orderDocs()[0] as any).timeline
+      // The `paid` event is not replaced by the second one.
+      expect(timeline).toHaveLength(2)
+      expect(timeline[0].event).toBe('paid')
+      expect(timeline[0].detail).toBe('Charged to reservation stay-1')
+      expect(timeline[1].event).toBe('folio-unattached')
+      expect(timeline[1].detail).toContain('stay-1')
+      expect(timeline[1].detail).toContain('$55.21')
+      expect(consoleError).toHaveBeenCalled()
+    })
+
+    /** The guest was resolved before the deletion, so attribution survives. */
+    it('still attributes the charge to the guest it read', async () => {
+      await chargeRoom()
+      expect(contactUpserts).toHaveLength(1)
+      expect(contactUpserts[0].email).toBe('ada@example.com')
+      expect(contactUpserts[0].purchaseCents).toBe(5521)
+    })
   })
 })
