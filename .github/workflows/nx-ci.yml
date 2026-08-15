@@ -26,6 +26,22 @@ jobs:
 
       - run: npm ci
 
+      # cloud/functions is a SEPARATE npm package, not a workspace of the root
+      # one — the root package.json has no `workspaces` key and its postinstall
+      # is only patch-package, so the `npm ci` above installs nothing for it.
+      # tools/scripts/typecheck.mjs nonetheless walks cloud/functions/tsconfig
+      # (`cloud/` is in neither its SKIP nor its PRUNE list), so without this
+      # the typecheck step below fails with three TS2307s on firebase-functions
+      # subpaths — a missing-install artifact, not a source defect (AGL-1776).
+      # It goes unnoticed locally because every dev checkout has a nested
+      # install left over from a past `firebase deploy`.
+      #
+      # Installing is deliberately preferred over adding `cloud/` to that
+      # script's SKIP list: the Cloud Functions are a production surface, and
+      # skipping would silently drop them from the workspace's ONLY type gate
+      # to make a red go away.
+      - run: npm ci --prefix cloud/functions
+
       - uses: nrwl/nx-set-shas@v4
 
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
