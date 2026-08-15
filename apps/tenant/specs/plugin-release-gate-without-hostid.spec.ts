@@ -68,6 +68,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Nothing is locked in these scenarios; the verdict logic is unit-tested in
   // the tenant-data-admin lockdown suite.
   visitorWriteRefusal: jest.fn(async () => null),
+  // Likewise nothing is over its budget here (AGL-1770); the limiter's own
+  // behaviour is pinned in `plugin-api-visitor-write-rate-limit.spec.ts` and
+  // in the tenant-data-admin suite.
+  visitorWriteRateLimitRefusal: jest.fn(async () => null),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
