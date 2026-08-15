@@ -46,6 +46,7 @@ import {
   syncHostProjectionForMembers,
   syncMemberHostProjections,
 } from './host-memberships'
+import { updateExisting } from './update-existing'
 import { attachWorkspaceDomain } from './workspace-domains'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -983,21 +984,56 @@ export async function grantHostAccess(options: {
   await syncMemberHostProjections(orgId, uid)
 }
 
-/** Drops one host from a member's hostAccess map, then re-projects. */
+/**
+ * Drops one host from a member's hostAccess map, then re-projects.
+ *
+ * `updateExisting`, not a merge-set (AGL-1766). A merge-set whose entire
+ * payload is a delete sentinel still CREATES the document when it is absent,
+ * and the row it minted here is not merely untidy — it is a MEMBERSHIP, and
+ * one that reads as org-wide. `isOrgWideMember` treats "no `role`, no
+ * `allHosts`, empty `hostAccess`" as the pre-`allHosts` LEGACY shape and
+ * answers true (deliberately: reading it as "scoped, with access to nothing"
+ * would lock real members out). A genuine site collaborator never looks like
+ * that — `grantHostAccess` always writes `allHosts: false` — but a document
+ * conjured from this patch alone does, exactly.
+ *
+ * So the consequences land away from here, which is what made it hard to see:
+ * `resolveOrgMembership` finds the doc and returns a membership for someone
+ * who was removed from the org; `syncOrgAuthProjections` on the next line
+ * stamps it `scopeTokens: ['org']`, the read set the rules and every
+ * Admin-SDK `memberCanSee` resolve from; and `countManagerSeats` bills it as
+ * a manager seat. (It does NOT reach `hosts/*.memberRoles`, as AGL-1763
+ * supposed — `hostRoleFor` requires an `isOrgRole(role)` and the phantom has
+ * none.)
+ *
+ * Reachable without any race: `removeOrgMember` deletes the org member doc
+ * but leaves the `hosts/{hostId}/members` roster row, which is what this is
+ * called from. Deleting that leftover row re-created the membership it was
+ * meant to finish removing. (AGL-1766's "stale double-submit" is NOT a route:
+ * the caller 404s on the missing roster row before reaching here.)
+ *
+ * DOTTED FIELD PATH, not the nested map: `update()` accepts a delete sentinel
+ * only at the top level of its patch (`@google-cloud/firestore` serializer,
+ * `allowDeletes: 'root'`), so the nested form would throw INVALID_ARGUMENT.
+ * The dotted path is top-level and clears the one key while leaving the rest
+ * of `hostAccess` alone — the same field-by-field semantics the merge had.
+ * Safe as a string path because host ids are `createResourceUid()` nanoids
+ * (`A-Za-z0-9_-`), so none can contain the `.` the SDK splits on.
+ *
+ * REFUSE, and ignore the answer: revoking a grant that is not there is a
+ * no-op and discards nothing (AGL-1760). The projections still run — they are
+ * recomputed from the roster, so a pass that finds no member doc is exactly
+ * the self-heal a stale row needs.
+ */
 export async function revokeHostAccess(
   orgId: string,
   uid: string,
   hostId: string,
 ): Promise<void> {
-  await firestore()
-    .collection('orgs')
-    .doc(orgId)
-    .collection('members')
-    .doc(uid)
-    .set(
-      { hostAccess: { [hostId]: FieldValue.delete() } },
-      { merge: true },
-    )
+  await updateExisting(
+    firestore().collection('orgs').doc(orgId).collection('members').doc(uid),
+    { [`hostAccess.${hostId}`]: FieldValue.delete() },
+  )
   await syncOrgAuthProjections(orgId)
   await syncMemberHostProjections(orgId, uid)
 }
