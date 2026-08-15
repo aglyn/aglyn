@@ -91,17 +91,24 @@ reason written next to it.
 Anything not declared **refuses**, deliberately: a chokepoint nobody has
 audited is treated as a write, because an over-refused read costs a customer
 some friction and an under-refused write costs the data the freeze exists to
-protect. Two consequences worth knowing before a customer reports them:
+protect. One consequence worth knowing before a customer reports it:
 
 - the **tenant edit bar** stops appearing on published sites for the locked
   workspace. That is intended — the bar leads to an editor whose saves the
-  freeze denies anyway;
-- the folder-sharing **preview** in the media library refuses along with the
-  cascade it previews.
+  freeze denies anyway.
 
-Both are recorded decisions rather than oversights. If you find another
+That is a recorded decision rather than an oversight. If you find another
 operation that only reads and still 423s during a window, it is worth filing —
 that is how the declared list grows.
+
+A declaration is usually per route, but it does not have to be. The media
+**folder-sharing preview** — the "also apply to the 47 files in this folder and
+its subfolders?" count the library quotes before a sharing change — is declared
+per **request**, because it shares a route with five actions that write and with
+the cascade it previews. During a read-only window that count still answers; the
+cascade it precedes, and every other folder operation, still refuses. An author
+therefore sees the size of the change they cannot yet make, which is the
+question they were actually asking.
 
 ### How fast read-only takes hold {#read-only-timing}
 

@@ -34,6 +34,7 @@ import {
   sanitizeCustomMetadata,
   mediaCdnPathUpdate,
   scopeCascadeSlice,
+  isFolderScopePreviewRequest,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
 
@@ -81,6 +82,13 @@ async function handler(request: Request): Promise<Response> {
     // hands the 423 refusal back as `error.response`.
     const { scope, error } = await resolveMediaScope(body, query, decoded.uid, {
       staff: decoded['staff'] === true,
+      // AGL-1694: five of this route's six actions write, and so does the
+      // sixth unless it is the `set-scope` PREVIEW — which walks the subtree,
+      // counts it, and returns before the cascade, so a read-only lock must
+      // pass it. Declared per REQUEST rather than per route because the route
+      // is not a read; the verdict still runs here, unconditionally, above
+      // every branch, and every shape but that one is a `write`.
+      intent: isFolderScopePreviewRequest(body) ? 'read' : 'write',
     })
     if (!scope) {
       return (
@@ -350,7 +358,11 @@ async function handler(request: Request): Promise<Response> {
       // a different question from "also apply to the 3 files" (AGL-1045).
       // Counting is the same subtree walk, so it is the same action with
       // the writes skipped rather than a second endpoint that could drift.
-      if (body?.preview === true) {
+      //
+      // The SAME predicate the lockdown intent above is decided from
+      // (AGL-1694) — the shape that skips the writes and the shape that is
+      // called a read have to be one shape, or the declaration is a lie.
+      if (isFolderScopePreviewRequest(body)) {
         return Response.json(
           { ok: true, preview: true, folders: 1, assets: assets.length },
           { status: 200 },

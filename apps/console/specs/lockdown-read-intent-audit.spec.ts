@@ -89,6 +89,25 @@ const ROUTES = walk(resolve(REPO_ROOT, CONSOLE_API))
  */
 const DECLARES_READ = /\bintent:\s*'read'\s*(?:,|\})/
 
+/**
+ * The CONDITIONAL form — `intent: <predicate> ? 'read' : 'write'` (AGL-1694).
+ *
+ * A route whose method lies about only SOME of its requests cannot declare
+ * itself a read, so it decides per request instead. That is a strictly
+ * larger assertion than the flat form — it says a specific request shape
+ * mutates nothing — and this spec was blind to it: the flat regex needs a
+ * comma or brace after `'read'`, and a ternary has a colon, so the first
+ * conditional declaration passed every assertion below without ever being
+ * written down. Same audit, both spellings.
+ *
+ * Same-line only, and still not a type annotation: `intent?: 'read' |
+ * 'write'` has no `?` between `intent:` and the literal.
+ */
+const DECLARES_CONDITIONAL_READ = /\bintent:[^\n]*\?\s*'read'\s*:/
+
+const declaresRead = (line: string) =>
+  DECLARES_READ.test(line) || DECLARES_CONDITIONAL_READ.test(line)
+
 interface ReadDeclaration {
   file: string
   /** The contiguous `//` block immediately above the declaration. */
@@ -99,7 +118,7 @@ function readDeclarations(file: string): ReadDeclaration[] {
   const lines = read(resolve(REPO_ROOT, file)).split('\n')
   const found: ReadDeclaration[] = []
   lines.forEach((line, index) => {
-    if (!DECLARES_READ.test(line)) return
+    if (!declaresRead(line)) return
     const reason: string[] = []
     for (let above = index - 1; above >= 0; above -= 1) {
       const trimmed = lines[above].trim()
@@ -136,6 +155,12 @@ const AUDITED_READS: Record<string, number> = {
   'apps/console/app/api/media/sign/route.ts': 1,
   // AGL-1625: the per-asset usage scan, the media sibling of where-used.
   'apps/console/app/api/media/references/route.ts': 1,
+  // AGL-1694, and the only CONDITIONAL entry: five of this route's six
+  // actions write, so the declaration is on the `set-scope` PREVIEW request
+  // alone — the subtree count the sharing dialog quotes, which returns
+  // before the cascade. Audited end to end: the branch reaches no batch, no
+  // Storage object, and no timestamp before it answers.
+  'apps/console/app/api/media/folders/route.ts': 1,
 }
 
 describe('AGL-1625 · which console routes are declared READS', () => {
@@ -178,6 +203,13 @@ describe('AGL-1625 · which console routes are declared READS', () => {
     )
     expect(source).toMatch(/intent\?: LockdownVerdictOptions\['intent'\]/)
     expect(source).not.toMatch(DECLARES_READ)
+    expect(source).not.toMatch(DECLARES_CONDITIONAL_READ)
+    // Nor may it decide one on a route's behalf (AGL-1694). This module
+    // holds the `set-scope` preview PREDICATE, and a predicate is a fact
+    // about a request; the moment it returns `'read'` instead of a boolean,
+    // the declaration has moved somewhere the walk above cannot see and the
+    // equality check goes back to passing over an unaudited relaxation.
+    expect(source).not.toMatch(/'read'/)
     // And it must actually forward what it is given — an accepted-but-
     // ignored option would silently refuse the read it was told about.
     expect(source.match(/intent: options\?\.intent/g)?.length).toBe(2)
