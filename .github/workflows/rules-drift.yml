@@ -126,6 +126,17 @@ jobs:
       # the deploy scripts use, shared via tools/scripts/lib/firebase-rules-api.mjs.
       - run: npm ci
 
+      # Guard the guard (AGL-1778). Everything below trusts this detector's
+      # verdict about production security rules, and until now nothing checked
+      # that the detector still detects: `test:rules-drift` existed as a script
+      # and was invoked by no workflow at all. Run it BEFORE the comparison —
+      # a broken comparator that reports "no drift" is indistinguishable from
+      # convergence, which is the exact silent-pass this workflow exists to
+      # prevent (AGL-1489). Same reasoning nx-ci.yml applies to
+      # `test:eslint-rules`, and never affected-scoped for the same reason:
+      # tools/ is not an nx project, so `nx affected` cannot reach it.
+      - run: npm run test:rules-drift
+
       - name: Diff live rules against the promoted baseline
         env:
           # The promoted SHA is what the deploy script was pinned to, so it is

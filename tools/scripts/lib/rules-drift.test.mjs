@@ -546,6 +546,36 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(workflow, /exit 2/)
   })
 
+  it('the workflow also runs THIS self-test, before it trusts the comparison (AGL-1778)', () => {
+    const workflow = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),
+      'utf8',
+    )
+    // Until AGL-1778 the detector ran on every rules push and daily, and its
+    // own self-test ran in no workflow at all — a live control that nothing
+    // checked still detects. A comparator that has stopped comparing reports
+    // "no drift", which is indistinguishable from convergence.
+    const selfTest = workflow.indexOf('npm run test:rules-drift')
+    const check = workflow.indexOf('npm run check:rules-drift')
+    assert.ok(selfTest !== -1, 'rules-drift.yml must run npm run test:rules-drift')
+    assert.ok(check !== -1, 'rules-drift.yml must run npm run check:rules-drift')
+    // Order matters: a failing comparator must fail the job before its
+    // verdict is printed, not after.
+    assert.ok(
+      selfTest < check,
+      'the self-test must run BEFORE the drift comparison',
+    )
+    // This assertion is only worth anything because a SECOND workflow runs
+    // this suite (nx-ci.yml). Asserted solely from inside rules-drift.yml it
+    // would be circular — removing the step would remove the check on the
+    // removal.
+    const nxCi = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'nx-ci.yml'),
+      'utf8',
+    )
+    assert.match(nxCi, /npm run test:rules-drift/)
+  })
+
   it('the workflow compares against the PROMOTED baseline, with the history to resolve it (AGL-1690)', () => {
     const workflow = readFileSync(
       join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),

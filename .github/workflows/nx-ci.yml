@@ -58,8 +58,10 @@ jobs:
       # the census itself measures production and lives in its own scheduled
       # workflow, because the regression it hunts arrives as authored content
       # with no commit and CI has nothing to be affected by. What CI can do is
-      # keep the detector honest: it must still report all 176 occurrences on
-      # a page that has them, rather than the 6 distinct rules emotion leaves.
+      # keep the detector honest: on a fixture built from the shape /pricing
+      # actually delivered it must report every occurrence — 164 in that
+      # fixture — rather than deduping to the single distinct rule emotion
+      # leaves, which is how the live 176 read as 6 and stayed invisible.
       - run: npm run test:retired-colours
       # The dev-loop disk preflight (AGL-1425). This one can FAIL a serve
       # target, so a bug in its threshold parsing breaks every dev server in
@@ -67,6 +69,35 @@ jobs:
       # CI, where free space is whatever the runner happens to have. Only the
       # pure decision half is tested, and that is the half that decides.
       - run: npm run test:disk-space
+      # Three more tools/ self-tests that ran in NO workflow at all until
+      # AGL-1778 — dark permanently, not for the 39 days nx-ci.yml itself was
+      # switched off, because nothing had ever referenced them. Same never-
+      # affected-scoped argument as every step above: tools/ is not an nx
+      # project, so `nx affected` cannot reach it however the graph moves.
+      #
+      # The clean-deploy-source guard decides what gets shipped, and the
+      # org-erase CLI decides what gets destroyed; both were guarding a path
+      # while themselves unguarded.
+      - run: npm run test:deploy-guard
+      - run: npm run test:erase-cli
+      # Also run in rules-drift.yml, which is where it produces signal today
+      # (this workflow is disabled_manually — AGL-1776). Kept here as well on
+      # purpose: the suite asserts, at the DECLARATION, that rules-drift.yml
+      # still invokes the checker and this self-test. Asserted only from
+      # inside rules-drift.yml that claim is circular — delete the step and
+      # the assertion stops running with it. Run from a second workflow it
+      # becomes a real check on the first.
+      - run: npm run test:rules-drift
+      #
+      # Deliberately NOT here: `npm run test:rules` (the Firestore/RTDB rules
+      # emulator matrix, tools/scripts/test-rules.sh). It shells out to
+      # `firebase emulators:exec --only firestore,database`, so it needs the
+      # emulator suite and a JVM rather than the pure node the steps above
+      # use. That is a real exclusion with a real reason, recorded here so
+      # the next audit does not have to re-derive it (AGL-1778) — the rules
+      # themselves are not left unguarded, because rules-drift.yml compares
+      # the LIVE ruleset against the promoted one on every rules push and
+      # daily.
 
       # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
       # the typecheck above skips them by name — correctly, since they exist
