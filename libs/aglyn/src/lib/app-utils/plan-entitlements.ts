@@ -703,6 +703,34 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
  */
 export const POS_REGISTER_ADDON_MONTHLY_USD = 89
 
+/**
+ * Purchase ceilings for the two add-on kinds that have NO per-plan hard max
+ * (AGL-1738). They live here, beside the bands and the resolver they bound,
+ * because they ARE the bound — and until now they were two private literals
+ * in `app/api/billing/addons/route.ts`, seventeen hundred lines and one
+ * project away from the `+` they cap.
+ *
+ * That distance is why AGL-1738 read `resolveOrgEntitlements` as unbounded
+ * and proposed a `maxPosRegistersPerHost` clamp. Do not add one. Seats and
+ * datasets clamp at `checkSeatQuota` / `checkDatasetQuota` because their
+ * plans genuinely refuse to sell past a band (`upgradeRequired` flips and
+ * the answer is a plan change). Registers and extra sites are sold flat
+ * instead: `addonMax()` will sell an org up to these quantities on ANY plan
+ * carrying the feature, so a band-shaped clamp in the resolver would take
+ * back registers the merchant is being invoiced $89/mo each for — the
+ * expensive direction of a wrong clamp, and the reason the add stays open.
+ *
+ * The self-serve route is the only path that writes `seatAddons` from a
+ * purchase, so these are the real ceilings: a plan's band plus at most
+ * `POS_REGISTERS_ADDON_MAX` registers, or plus `EXTRA_HOSTS_ADDON_MAX` sites.
+ * Any console surface that windows a head-count must clear the SUM, not the
+ * band (`registers-card.component.tsx` still windows at 25; AGL-1738).
+ */
+export const EXTRA_HOSTS_ADDON_MAX = 100
+
+/** @see EXTRA_HOSTS_ADDON_MAX — the flat register ceiling, per org. */
+export const POS_REGISTERS_ADDON_MAX = 50
+
 export interface PlanPricing {
   /** Flat monthly base price in USD (month-to-month billing). */
   basePriceMonthlyUsd: number
@@ -1553,6 +1581,21 @@ function resolvePurchasedAddons(
  * (Seat/dataset add-ons instead fold in at `checkSeatQuota` /
  * `checkDatasetQuota`, where the per-plan hard max clamps them.)
  * Missing or unknown plans resolve as `free`.
+ *
+ * `hostLimit` and `posRegisters` are DELIBERATELY unclamped here (AGL-1738):
+ * there is no `maxHostsPerOrg` or `maxPosRegistersPerHost` to clamp against,
+ * because those two kinds are sold flat rather than up to a band. Their bound
+ * is the purchase ceiling — `EXTRA_HOSTS_ADDON_MAX` / `POS_REGISTERS_ADDON_MAX`
+ * — and a band-shaped `Math.min` added here would silently disable resources
+ * the org is invoiced for. See those constants before "fixing" this add.
+ *
+ * KNOWN DIVERGENCE, not fixed here: `posRegisters` is enforced PER HOST
+ * (`api/hosts/resources` counts `hosts/{hostId}/registers`) while
+ * `seatAddons.posRegisters` is bought once, ORG-wide — so one $89/mo register
+ * raises the cap on every site the org runs. `eventCalendar` above is
+ * deliberately org-wide and priced for it; the register add-on is documented
+ * as "per extra register/location" and is not. Allocating a purchase to a
+ * host is a pricing/data-model change, not a clamp.
  */
 export function resolveOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
