@@ -55,7 +55,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
-import useHostSubdomains from '../hooks/use-host-subdomains'
+import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
 import useOrgHosts from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -64,7 +64,10 @@ import {
   showDesktopNotification,
   unreadBadge,
 } from '../utils/notification-alerts'
-import { normalizeNotificationLink } from '../utils/notification-links'
+import {
+  normalizeNotificationLink,
+  resolveNotificationOrgSlug,
+} from '../utils/notification-links'
 
 /**
  * App-bar notifications dropdown (AGL-260): unread badge over the 10 most
@@ -149,24 +152,30 @@ export function NotificationsMenu() {
   // `useOrgHosts` above only covers the org currently open, so a notification
   // from any other org had no subdomain and fell through to its stored
   // `/{hostDocId}/…` link — a dead route (AGL-672). `hostIndex` resolves
-  // hosts in every org the user can see.
-  const indexedSubdomains = useHostSubdomains(
+  // hosts in every org the user can see, and carries the owning org too, so
+  // the rewrite no longer keys the org half off the open workspace
+  // (AGL-1773).
+  const indexedHosts = useHostIndexEntries(
     useMemo(() => (recent ?? []).map((item) => item.hostId), [recent]),
   )
 
   const resolveLink = useCallback(
     (notification: AglynNotification) =>
       normalizeNotificationLink(notification.link, {
-        orgSlug:
-          (notification.orgId ? slugByOrgId.get(notification.orgId) : null) ??
-          orgSlug,
+        orgSlug: resolveNotificationOrgSlug(notification, {
+          slugForOrgId: (orgId) => slugByOrgId.get(orgId),
+          indexedOrgId: notification.hostId
+            ? indexedHosts.get(notification.hostId)?.orgId
+            : undefined,
+          currentOrgSlug: orgSlug,
+        }),
         hostId: notification.hostId,
         hostSubdomain: notification.hostId
           ? (subdomainByHostId.get(notification.hostId) ??
-            indexedSubdomains.get(notification.hostId))
+            indexedHosts.get(notification.hostId)?.subdomain)
           : undefined,
       }),
-    [orgSlug, slugByOrgId, subdomainByHostId, indexedSubdomains],
+    [orgSlug, slugByOrgId, subdomainByHostId, indexedHosts],
   )
 
   // Detect arrivals by DIFFING DOCUMENT IDS, not by watching the count.
