@@ -25,6 +25,7 @@ import {
   notifyHostManagers,
   upsertHostContact,
   renderHostEmailWithTokens,
+  updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import {
@@ -83,6 +84,73 @@ async function assignLicenseKeys(
     console.error('license key assignment failed', error)
     return []
   }
+}
+
+/**
+ * Applies a redemption to a coupon, gift card or discount that must ALREADY
+ * exist, and — when it does not — stamps the orphan on the order (AGL-1767).
+ *
+ * `set(..., { merge: true })` reads as "update if present" and means "create if
+ * absent", so a merchant who deleted the code between the shopper starting
+ * checkout and this webhook landing got a phantom back. The gift card is the
+ * one that corrupts an aggregate: `increment(-N)` on a missing document creates
+ * it holding `balanceCents: -N`, so any outstanding-liability figure summed over
+ * `giftCards` is understated by N and re-issuing the code later starts the new
+ * card in the hole. The coupon ghosts carry a redemption count a re-created
+ * coupon inherits against its `maxRedemptions` cap, and the discount ghost is
+ * worse than inert: it passes every gate in `commerce-discounts.ts`'s
+ * `applies()`, because each one skips when its constraint field is ABSENT, so it
+ * reaches the automatic-promotion loop as a candidate and shows in the console
+ * list as a nameless always-on promotion nobody created. The only thing keeping
+ * it from discounting anything is `valueCents()` returning 0 for an unrecognised
+ * `kind` — one default, not a guard.
+ *
+ * REFUSE-AND-RECORD, not a bare refusal, which is AGL-1760's rule: the shopper's
+ * discount really was applied by Stripe and the gift-card balance really was
+ * spent, so dropping the fact silently would be AGL-1732 inverted — money moved,
+ * recorded nowhere. The note goes on the ORDER's own `timeline`, which the
+ * console order dialog renders, the way `47d3bccc5` records `folio-unattached`.
+ * The merchant reading the order sees "$25 was applied against a gift card that
+ * no longer exists" instead of a negative number quietly leaving a liability
+ * total. The coupon/gift-card document is not the place — that document IS the
+ * defect — and a new collection would be invisible until someone built UI for
+ * it, which is the same failure with an extra step.
+ *
+ * WHY `null` IS NOT `false`. `updateExisting` reports absence ONLY for gRPC
+ * `NOT_FOUND` and rethrows everything else, which matters here because the note
+ * this writes claims absence by name. A permission denial, an App Check
+ * rejection or a transport failure must not become "the merchant deleted your
+ * coupon" on an order the merchant is reading. Those are logged and left
+ * unstamped. Nothing rethrows: `runBillingWebhookHandlers` lets the first throw
+ * propagate, and a 500 here would have Stripe redeliver into the AGL-498
+ * existence guard, which returns before this whole fan-out — so a throw does not
+ * retry the redemption, it abandons the fulfilment that follows it.
+ */
+async function redeemExistingOrRecord(
+  ref: FirebaseFirestore.DocumentReference,
+  patch: Record<string, unknown>,
+  orderRef: FirebaseFirestore.DocumentReference,
+  detail: string,
+): Promise<void> {
+  const applied = await updateExisting(ref, patch).catch((error) => {
+    console.error('Redemption write failed', ref.path, error)
+    return null
+  })
+  if (applied !== false) return
+  console.error('Redemption against a missing document', ref.path)
+  // `update()`, not a merge-set: the order was created by the transaction a few
+  // lines above (a redelivery returns before here), so it exists — and writing
+  // this note through the very call being fixed would mint an order stub on the
+  // one path where it does not.
+  await orderRef
+    .update({
+      timeline: firebaseAdmin.firestore.FieldValue.arrayUnion({
+        atMs: Date.now(),
+        event: 'redemption-unrecorded',
+        detail,
+      }),
+    })
+    .catch(() => undefined)
 }
 
 /**
@@ -882,9 +950,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const checkoutRef = hostRef.collection('checkouts').doc(String(object.id))
         const checkoutSnapshot = await checkoutRef.get().catch(() => null)
         const marketingOptIn = Boolean(checkoutSnapshot?.get('marketingOptIn'))
-        await checkoutRef
-          .set({ status: 'completed', completedAtMs: Date.now() }, { merge: true })
-          .catch(() => undefined)
+        // AGL-1767: a plain refusal, and the only one of the five that needs no
+        // record. The `.get()` above is the AGL-1760 shape exactly — its result
+        // feeds `marketingOptIn` and is never asked `.exists` — and the merge-set
+        // it guarded nothing of minted a `checkouts/{sessionId}` row holding
+        // `status: 'completed'`. Harmless in itself (abandoned-cart recovery
+        // wants that state anyway), but nothing occurred that a missing checkout
+        // doc would strand: the order, the receipt and the fulfilment below are
+        // all written elsewhere. `updateExisting`, not the read above, is the
+        // check — it closes the window between them without a second round trip.
+        await updateExisting(checkoutRef, {
+          status: 'completed',
+          completedAtMs: Date.now(),
+        }).catch(() => undefined)
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
         if (isEmailConfigured() && buyerEmailForReceipt) {
@@ -1042,32 +1120,31 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         })
         if (couponCode) {
-          await hostRef
-            .collection('coupons')
-            .doc(String(couponCode))
-            .set(
-              {
-                redemptions: firebaseAdmin.firestore.FieldValue.increment(1),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          await redeemExistingOrRecord(
+            hostRef.collection('coupons').doc(String(couponCode)),
+            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+            orderRef,
+            `Coupon ${couponCode} was applied to this order but no longer ` +
+              'exists, so the redemption is uncounted against its limit.',
+          )
         }
         // Gift card balance decrement (AGL-322).
         if (object.metadata?.giftCardCode) {
-          await hostRef
-            .collection('giftCards')
-            .doc(String(object.metadata.giftCardCode))
-            .set(
-              {
-                balanceCents: firebaseAdmin.firestore.FieldValue.increment(
-                  -Number(object.metadata?.giftCardCents ?? 0),
-                ),
-                lastUsedAtMs: Date.now(),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          const giftCardCents = Number(object.metadata?.giftCardCents ?? 0)
+          await redeemExistingOrRecord(
+            hostRef
+              .collection('giftCards')
+              .doc(String(object.metadata.giftCardCode)),
+            {
+              balanceCents:
+                firebaseAdmin.firestore.FieldValue.increment(-giftCardCents),
+              lastUsedAtMs: Date.now(),
+            },
+            orderRef,
+            `$${(giftCardCents / 100).toFixed(2)} was applied from gift card ` +
+              `${object.metadata.giftCardCode}, which no longer exists. The ` +
+              'balance was not deducted from any card.',
+          )
         }
         // Gift card issuance (AGL-322): each purchased gift-card line
         // mints a code for its unit price and emails it to the buyer.
@@ -1133,16 +1210,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Discounts engine redemptions (AGL-305).
         if (object.metadata?.discountId) {
-          await hostRef
-            .collection('discounts')
-            .doc(String(object.metadata.discountId))
-            .set(
-              {
-                redemptions: firebaseAdmin.firestore.FieldValue.increment(1),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          await redeemExistingOrRecord(
+            hostRef
+              .collection('discounts')
+              .doc(String(object.metadata.discountId)),
+            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+            orderRef,
+            `Discount ${object.metadata.discountId} was applied to this order ` +
+              'but no longer exists, so the redemption is uncounted against ' +
+              'its limit.',
+          )
         }
       }
     }
@@ -1545,16 +1622,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         }
         if (couponCode) {
-          await hostRef
-            .collection('coupons')
-            .doc(String(couponCode))
-            .set(
-              {
-                redemptions: firebaseAdmin.firestore.FieldValue.increment(1),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          await redeemExistingOrRecord(
+            hostRef.collection('coupons').doc(String(couponCode)),
+            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+            orderRef,
+            `Coupon ${couponCode} was applied to this order but no longer ` +
+              'exists, so the redemption is uncounted against its limit.',
+          )
         }
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.
