@@ -17,6 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -33,7 +34,35 @@ export const notifyRestockHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(body.hostId ?? '')
   const productId = String(body.productId ?? '')
   const email = String(body.email ?? '').trim().toLowerCase()
-  if (!hostId || !productId || !EMAIL_PATTERN.test(email)) {
+  // AGL-1771/AGL-1774: both were checked non-empty and nothing else, on a
+  // handler that needs NO credentials — no session, no member gate, no
+  // signature — and they are not equally dangerous.
+  //
+  // `hostId` is a path component here: `.doc()` appends a SLASH-SEPARATED path
+  // rather than taking one opaque id, so `a/b/c` created the alert under
+  // `hosts/a/b/c/restockAlerts/…`, beneath a document that does not exist and
+  // therefore invisible to every console list, which resolve the host first.
+  //
+  // `productId` is worse precisely because it is NOT a path component here —
+  // it is stored as a FIELD, and `process-restock.ts` makes it a path
+  // component later. An even-component value threw synchronously out of that
+  // cron's `.doc()`, aborting the whole platform-wide run; and because the
+  // alert was never marked `notifiedAtMs` it came back on every later run, so
+  // one anonymous POST stopped back-in-stock email for every merchant,
+  // permanently. A field is not a path until someone makes it one, and the
+  // place to refuse is where it enters (AGL-1774 guards the cron as well, for
+  // the rows written before this).
+  //
+  // Answered separately from the email, following `762621581`: a caller told
+  // only "Enter a valid email" when the ids are the problem goes looking for
+  // the wrong mistake. A shopper never sees this — the storefront widget fills
+  // both ids — so the message is for whoever is driving the endpoint.
+  if (!isDocumentId(hostId) || !isDocumentId(productId)) {
+    return res
+      .status(400)
+      .json({ error: 'Missing or invalid hostId or productId' })
+  }
+  if (!EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Enter a valid email' })
   }
   try {

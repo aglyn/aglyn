@@ -22,6 +22,7 @@ import {
   getOrgForHost,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import {
   isEmailConfigured,
   loadHostEmail,
@@ -65,11 +66,30 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
       const hostRef = docSnapshot.ref.parent.parent
       if (!hostRef) continue
       const data = docSnapshot.data() as any
-      const cacheKey = `${hostRef.id}:${data.productId}`
-      if (!productCache.has(cacheKey)) {
+      // AGL-1774: `productId` is a STORED FIELD written by an unauthenticated
+      // POST (`notify-restock.ts`), and this line is where it becomes a path
+      // component. `.doc()` appends a slash-separated path and throws
+      // SYNCHRONOUSLY on an even component count — a throw that landed here,
+      // outside the loop body's own error handling, so it aborted the entire
+      // run. The scan is a `collectionGroup`, so that run is platform-wide;
+      // and because the offending alert was never stamped `notifiedAtMs` it
+      // returned on every subsequent run, taking every alert ordered after it
+      // down too. One anonymous request stopped back-in-stock email for every
+      // merchant, permanently.
+      //
+      // `notify-restock.ts` now refuses such a value at the door, but this
+      // guard is not redundant with that one: rows written BEFORE the fix are
+      // already in the database, and a create-time check does nothing about
+      // them. Treated as "no product" rather than as an error, which is the
+      // correct refusal by AGL-1760's test — there is no product, so there is
+      // no email owed and no work to discard — and it stamps the alert below
+      // so a poisoned row is retired instead of re-scanned forever.
+      const productId = isDocumentId(data.productId) ? data.productId : ''
+      const cacheKey = `${hostRef.id}:${productId}`
+      if (productId && !productCache.has(cacheKey)) {
         const productSnapshot = await hostRef
           .collection('products')
-          .doc(String(data.productId))
+          .doc(productId)
           .get()
         productCache.set(
           cacheKey,
@@ -78,7 +98,7 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
             : null,
         )
       }
-      const product = productCache.get(cacheKey)
+      const product = productId ? productCache.get(cacheKey) : null
       if (!product) {
         await docSnapshot.ref
           .set({ notifiedAtMs: Date.now(), skipped: true }, { merge: true })
