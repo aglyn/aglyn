@@ -16,11 +16,35 @@
  */
 
 // MARK – IMPORTS
+const path = require('path')
 // eslint-disable-next-line @typescript-eslint/no-var-requires, @nx/enforce-module-boundaries
 const withAglyn = require('../../with-aglyn.nextjs.config')
+// eslint-disable-next-line @nx/enforce-module-boundaries
+const { syncMonacoAssets } = require('../../tools/scripts/lib/sync-monaco-assets')
 
 // MARK – GLOBALS
 const isProduction = process.env.NODE_ENV !== 'production'
+
+/**
+ * Vendor Monaco into `public/monaco/vs` before Next reads `public/` (AGL-1779).
+ *
+ * The besigner's Edit -> Raw JSON opens `@aglyn/shared-ui-json-editor`, whose
+ * `@monaco-editor/loader` otherwise injects a `<script>` from
+ * `cdn.jsdelivr.net` into the `app.aglyn.com` origin — unpinned, un-SRI'd, and
+ * permitted by the bare `https:` in this app's `script-src`. The matching
+ * `loader.config({ paths: { vs: '/monaco/vs' } })` lives in
+ * `libs/shared/ui/json-editor/src/lib/components/monaco-editor.tsx` and has NO
+ * CDN fallback, so this copy is not optional — `syncMonacoAssets` throws and
+ * fails the build rather than letting the editor 404 in production while
+ * working locally.
+ *
+ * This runs here, at config load, because the config is the one step of a
+ * console build guaranteed to execute no matter who invokes it: `nx build
+ * console`, a bare `next build`, or Vercel's dashboard build command for the
+ * `aglyn-console` project, whose root directory is the repo root and whose
+ * command therefore lives outside this repo.
+ */
+syncMonacoAssets({ publicDir: path.join(__dirname, 'public') })
 
 /**
  * The files `sharp` needs at runtime that NOTHING traces (AGL-1471).

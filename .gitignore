@@ -73,3 +73,10 @@ vite.config.*.timestamp*
 
 # Transient scratch dir written while uploading to the DAM; never source.
 .dam-upload-tmp/
+
+# Monaco's `min/vs`, copied out of node_modules by `apps/console/next.config.js`
+# at build time (AGL-1779). ~15 MB / 121 files, and it is generated: committing
+# it would rot silently against the `monaco-editor` pin in package.json. The
+# copy is not optional — the build FAILS if it cannot be produced, because the
+# only alternative is `@monaco-editor/loader`'s jsDelivr default.
+/apps/console/public/monaco/
