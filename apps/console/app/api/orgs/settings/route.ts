@@ -83,13 +83,42 @@ async function handler(request: Request): Promise<Response> {
     // action branches read the org doc themselves, so the org scope rides
     // on the request-deduped `getOrgDoc` read; distinct 423 body; staff
     // bypass is the un-panic invariant.
+    const org = await getOrgDoc(orgId)
     const locked = await lockdownRefusal({
       request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
-      org: (await getOrgDoc(orgId)) ?? undefined,
+      org: org ?? undefined,
     })
     if (locked) return locked
+
+    // The org must EXIST (AGL-1766). Every branch below merge-sets
+    // `orgs/{orgId}` by the body-supplied id, so a mistyped one minted an
+    // unowned workspace holding a `name` or a `defaultResourceScope` or an
+    // `enabledPlugins` list and nothing else — invisible to the console's
+    // own lists, which scope by membership, but not to the staff orgs list,
+    // which does not.
+    //
+    // This costs NOTHING and needs no new read: `getOrgDoc` checks
+    // `snapshot.exists` itself and returns null for a missing org, so the
+    // line above already computed the answer and the `?? undefined` was
+    // laundering it away. That is the whole fix — the four branches below
+    // need nothing, which is the reason to make it here rather than there.
+    //
+    // Deliberately NOT `updateExisting` on those branches, unlike the other
+    // AGL-1766 sites. `update()` REPLACES a top-level map where
+    // `set({ merge: true })` deep-merges it, and two of these payloads are
+    // maps: `contact` in `update-profile`, and `billing` in the `after()`
+    // Stripe sync — which lives beside `stripeCustomerId`. A mechanical
+    // switch there would destroy fields it never mentions, so the refusal is
+    // the whole remedy and the merge-sets stay as they are.
+    //
+    // The check sits AFTER the lockdown verdict so a platform panic still
+    // answers 423 rather than leaking which org ids exist; it is only
+    // reachable at all by staff, since a non-staff caller must clear
+    // `canManageOrg(membership?.member.role)` and membership cannot resolve
+    // for an org that was never created.
+    if (!org) return Response.json({ error: 'No such workspace' }, { status: 404 })
 
     if (body?.action === 'rename') {
       const name = String(body?.name ?? '')
