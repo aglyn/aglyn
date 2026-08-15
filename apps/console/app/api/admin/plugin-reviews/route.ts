@@ -38,6 +38,7 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   isImpersonationSession,
+  updateExisting,
 } from '@aglyn/tenant-data-admin'
 import {
   buildRoute,
@@ -801,6 +802,32 @@ async function handler(request: Request): Promise<Response> {
       if (!versionSnapshot.exists) {
         return Response.json({ error: 'Unknown version' }, { status: 404 })
       }
+      // The LISTING has to exist too, and the check belongs up here rather
+      // than beside the writes that need it (AGL-1766). A version outliving
+      // its listing is not hypothetical — Firestore deletes are not
+      // recursive, so `pluginVersions` survives whatever removed the parent.
+      //
+      // The read below used to be `(await listingRef.get()).data() ?? {}`,
+      // and that default was not a convenience: it is what made the two
+      // mirrors fire. Both of their conditions are TRUE on `{}` —
+      // `!['listed','verified'].includes('')` and `previous == null` — so an
+      // absent listing was resurrected as `{ reviewStatus: 'listed' }`, i.e.
+      // browsable in the marketplace, from a merge-set. (The third mirror,
+      // `latestVersionReviewState`, compares `String(latestVersion ?? '')`
+      // against a non-empty `version` and is false on `{}` — it could not
+      // fire. The pattern is not uniform even inside one block, which is
+      // exactly why AGL-1763 could not express this as a lint rule.)
+      //
+      // Read BEFORE the verdict write, not after it. Refusing must not
+      // discard work that already happened (AGL-1760); refusing here happens
+      // before anything has, so the reviewer simply retries against a
+      // listing that exists. `?? {}` is gone with it — kept, it would have
+      // traded a resurrection for an `update()` rejection served as a 500.
+      const listingSnapshot = await listingRef.get()
+      if (!listingSnapshot.exists) {
+        return Response.json({ error: 'Unknown listing' }, { status: 404 })
+      }
+      const listing = listingSnapshot.data()
       const sha256 = String(versionSnapshot.get('sha256') ?? '')
       const approving = action === 'approve-version'
       if (approving) {
@@ -855,26 +882,31 @@ async function handler(request: Request): Promise<Response> {
       // A plugin with its first approved version becomes browsable. Later
       // approvals never change listing status — that is the point: an
       // update is reviewed without disturbing what customers already have.
-      const listing = (await listingRef.get()).data() ?? {}
+      //
+      // The three mirrors below write through `updateExisting` as the second
+      // line for the window the check above cannot close — a listing deleted
+      // mid-handler. Every payload here is FLAT with no delete sentinel, so
+      // the switch is semantically identical to the merge-set it replaces;
+      // the `false` return needs no branch, because a listing that is gone by
+      // now wants nothing mirrored onto it.
 
       // Mirror this verdict onto the listing for the marketplace (AGL-1121),
       // but ONLY when it is the newest version. Approving an old version
       // must not let the listing claim its newest bytes were reviewed —
       // which is the exact shape of the bug this mirror exists to fix.
       if (String(listing.latestVersion ?? '') === version) {
-        await listingRef.set(
-          { latestVersionReviewState: approving ? 'approved' : 'rejected' },
-          { merge: true },
-        )
+        await updateExisting(listingRef, {
+          latestVersionReviewState: approving ? 'approved' : 'rejected',
+        })
       }
       if (
         approving &&
         !['listed', 'verified'].includes(String(listing.reviewStatus ?? ''))
       ) {
-        await listingRef.set(
-          { reviewStatus: 'listed', updatedAt: FieldValue.serverTimestamp() },
-          { merge: true },
-        )
+        await updateExisting(listingRef, {
+          reviewStatus: 'listed',
+          updatedAt: FieldValue.serverTimestamp(),
+        })
       }
 
       // Denormalise the newest approved version onto the listing (AGL-1016).
@@ -892,13 +924,10 @@ async function handler(request: Request): Promise<Response> {
           previous == null ||
           (compareArtifactVersions(String(previous), version) ?? 0) < 0
         ) {
-          await listingRef.set(
-            {
-              latestApprovedVersion: version,
-              updatedAt: FieldValue.serverTimestamp(),
-            },
-            { merge: true },
-          )
+          await updateExisting(listingRef, {
+            latestApprovedVersion: version,
+            updatedAt: FieldValue.serverTimestamp(),
+          })
         }
       }
 
