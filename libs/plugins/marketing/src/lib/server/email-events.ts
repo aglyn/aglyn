@@ -16,10 +16,48 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
+
+/**
+ * Firestore reserves ids of the form `__…__` and answers `INVALID_ARGUMENT`
+ * rather than an absent snapshot (`542b1023f`).
+ */
+const RESERVED_DOCUMENT_ID = /^__.*__$/
+
+/** Firestore's document id limit, counted in BYTES as the limit itself is. */
+const MAX_DOCUMENT_ID_BYTES = 1500
+
+/**
+ * Whether `value` may be used as ONE opaque Firestore document id (AGL-1768).
+ *
+ * `CollectionReference.doc()` appends a SLASH-SEPARATED path and refuses it
+ * only when the resulting component count comes out odd
+ * (`@google-cloud/firestore`, `collection-reference.js:179-191`) — it never
+ * treats its argument as one opaque id. So a tag of `a/b/c` reaches
+ * `hosts/a/b/c`, a document beneath a parent that does not exist and therefore
+ * invisible to every console list, and a tag of `a/b` throws SYNCHRONOUSLY.
+ *
+ * This is a deliberate LOCAL copy of `isCartId` from
+ * `libs/plugins/commerce/src/lib/server/cart-cookie.ts` (`f053417fa`), not an
+ * import: the two plugins are separate nx projects and
+ * `@nx/enforce-module-boundaries` refuses the edge, correctly. Lifting the
+ * predicate to `tenant-data-admin` beside `updateExisting` is AGL-1771 and is
+ * the better home for it; six lines duplicated is the cheaper wait.
+ */
+function isDocumentId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !value.includes('/') &&
+    value !== '.' &&
+    value !== '..' &&
+    !RESERVED_DOCUMENT_ID.test(value) &&
+    Buffer.byteLength(value, 'utf8') <= MAX_DOCUMENT_ID_BYTES
+  )
+}
 
 /**
  * Svix signature check (Resend webhooks): HMAC-SHA256 over
@@ -113,24 +151,30 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     const tags = tagMap(data?.tags)
     const hostId = tags['hostId']
     const campaignId = tags['campaignId']
-    if (!hostId || !campaignId) {
+    // Both are path components, so "non-empty" was never the whole question.
+    if (!isDocumentId(hostId) || !isDocumentId(campaignId)) {
       return res.status(200).json({ ignored: true })
     }
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    await hostRef
-      .collection('campaigns')
-      .doc(campaignId)
-      .set(
-        {
-          stats: {
-            [type === 'email.opened' ? 'opens' : 'clicks']:
-              FieldValue.increment(1),
-          },
-        },
-        { merge: true },
-      )
-      .catch(() => undefined)
+    // Plain refusal (AGL-1768). A merge-set against a missing path CREATES it,
+    // so an open re-created a campaign the merchant had deleted — a document
+    // holding a `stats` map and nothing else: no subject, no body, no
+    // audience, no status. Opens trail sends by days, so deleting it again did
+    // not help. `updateExisting` rejects only that case (gRPC NOT_FOUND) and
+    // rethrows everything else, so a Firestore outage stays distinguishable
+    // from an open against a deleted campaign instead of being swallowed by a
+    // `.catch(() => undefined)`. AGL-1760's test — does refusing discard money
+    // or work that already happened? — is passed: the open count for a
+    // campaign that no longer exists has no reader.
+    //
+    // DOTTED FIELD PATH, not a nested map. `update({ stats: { opens: … } })`
+    // REPLACES the whole `stats` map, so every open would clobber `clicks`;
+    // only `set({ merge: true })` merges maps at depth.
+    await updateExisting(hostRef.collection('campaigns').doc(campaignId), {
+      [type === 'email.opened' ? 'stats.opens' : 'stats.clicks']:
+        FieldValue.increment(1),
+    })
 
     // Experiment conversion (AGL-268): clicks are the signal.
     const experimentId = tags['experimentId']
@@ -139,7 +183,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     )
       .trim()
       .toLowerCase()
-    if (type === 'email.clicked' && experimentId && recipient) {
+    if (type === 'email.clicked' && isDocumentId(experimentId) && recipient) {
       const experimentSnapshot = await hostRef
         .collection('experiments')
         .doc(experimentId)
@@ -153,7 +197,16 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           experimentId,
           recipient,
         )
-        if (variant) {
+        // `variant.id` is merchant-authored — `validateExperiment` checks the
+        // ids are unique and nothing about their SHAPE — and it is a path
+        // component here too.
+        if (variant && isDocumentId(variant.id)) {
+          // Still a merge-set, and deliberately so: this one CREATES. The
+          // first conversion for a variant has no stats document yet, the
+          // experiment it hangs off was just proven to exist, and the click
+          // is work that really happened — refusing would discard it. The
+          // `.catch(() => undefined)` is gone for the same reason as above: a
+          // swallowed failure here is a conversion lost silently.
           await experimentSnapshot.ref
             .collection('stats')
             .doc(variant.id)
@@ -164,7 +217,6 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
               },
               { merge: true },
             )
-            .catch(() => undefined)
         }
       }
     }
