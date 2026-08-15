@@ -335,10 +335,29 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     })
 
     // Folio (AGL-317): the stay settles the charge at check-out.
+    //
+    // AGL-1757: this branch used to WRITE to the reservation without ever
+    // READING it, which is why the guest went unrecorded. The reservation is
+    // the one POS tender where the customer is already identified by the
+    // system — `reserve.ts` populated `guestName`/`guestEmail` from the
+    // guest's own booking — so load it here and carry that identity down to
+    // the contact call below. A missing or identity-less reservation (the
+    // console walk-in writes `guestEmail: null`) simply leaves these empty;
+    // the read is best-effort and never fails the sale, which is already
+    // paid by this point.
+    let folioGuestEmail = ''
+    let folioGuestName = ''
     if (payment === 'folio') {
       const reservationRef = hostRef
         .collection('reservations')
         .doc(reservationId)
+      const reservationSnapshot = await reservationRef.get().catch(() => null)
+      folioGuestEmail = String(reservationSnapshot?.get('guestEmail') ?? '')
+        .trim()
+        .toLowerCase()
+      folioGuestName = String(reservationSnapshot?.get('guestName') ?? '')
+        .trim()
+        .slice(0, 120)
       await reservationRef
         .set(
           {
@@ -393,10 +412,30 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         } satisfies CommerceModel.InventoryAdjustment)
         .catch(() => undefined)
     }
-    if (customerEmail) {
+    // AGL-1757: the register's email box is optional, and a room charge is
+    // exactly the sale nobody stops to re-ask an email for — so a stay's
+    // ancillary revenue, the part a guest house most wants to see per guest,
+    // was the part most likely to be anonymous. Fall back to the reservation's
+    // guest, and prefer a TYPED address when there is one: a cashier
+    // correcting the guest's address should beat stale reservation data.
+    //
+    // The guest's name rides along only when the address we are attributing to
+    // IS the reservation's guest — if the cashier redirected the receipt to
+    // some other address, that person is not the named guest. Passing it is
+    // safe either way: `mergeContactInteraction` keeps an existing name, so
+    // this fills a blank and never clobbers a better one.
+    //
+    // Nothing is invented. A walk-in reservation (`guestEmail: null`) or a
+    // reservationId pointing at nothing leaves this empty, and no contact is
+    // created — which is the right answer, not a gap.
+    const contactEmail = customerEmail || folioGuestEmail
+    const contactName =
+      contactEmail && contactEmail === folioGuestEmail ? folioGuestName : ''
+    if (contactEmail) {
       void upsertHostContact({
         hostId,
-        email: customerEmail,
+        email: contactEmail,
+        ...(contactName ? { name: contactName } : {}),
         source: 'order',
         // AGL-1748: the amount was formatted into the summary STRING below and
         // never passed to the field that exists to hold it, so `ltvCents`
@@ -415,7 +454,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         purchaseCents: totals.totalCents,
         interaction: {
           refId: orderRef.id,
-          summary: `In-store purchase ($${(totals.totalCents / 100).toFixed(2)})`,
+          // `source` stays `'order'` for both (AGL-1757): a folio sale is a
+          // shop sale that happens to be settled against a stay, and the
+          // reservation's own `'booking'` interaction already exists. Only the
+          // human-readable summary distinguishes them, so a merchant reading
+          // the timeline can tell a counter sale from a room charge.
+          summary:
+            payment === 'folio'
+              ? `Room charge ($${(totals.totalCents / 100).toFixed(2)})`
+              : `In-store purchase ($${(totals.totalCents / 100).toFixed(2)})`,
         },
       })
     }

@@ -573,3 +573,208 @@ describe('POS sale lifetime value (AGL-1748)', () => {
     expect(contactUpserts).toHaveLength(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Folio sales attributed to the stay's guest (AGL-1757).
+ *
+ * A `folio` tender is the one POS path where the customer is already
+ * IDENTIFIED by the system: the cashier picked a reservation, and
+ * `hosts/{h}/reservations/{id}` carries `guestEmail`/`guestName` from the
+ * guest's own booking. The handler wrote the folio line onto that document and
+ * then fell back to "did the cashier also type an email?" for the contact — so
+ * a drink charged to room 4 produced a paid order with a real amount and, in
+ * the normal case where the email box was left empty, no contact at all.
+ *
+ * Fixtures are priced so nothing coincides (AGL-1711). Crucially the
+ * reservation's own money is nothing like the sale's, because reaching for it
+ * is the specific wrong answer here — the deposit and every folio line are
+ * DISJOINT sums, each charged exactly once (AGL-1755, `a7a2d90df`).
+ *
+ *   unit             1700   $17.00 negroni
+ *   x quantity          3
+ *   = itemsCents     5100
+ *   + tax             421   8.25% origin tax
+ *   = totalCents     5521   the room charge
+ *
+ *   reservation paidCents   21000   the deposit, already counted at `booking`
+ *   reservation totalCents  84000   the stay — money not yet handed over
+ */
+describe('POS folio attribution (AGL-1757)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        pricesIncludeTax: false,
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+      },
+    })
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Negroni',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 17, inventory: null }],
+    })
+    docs.set('hosts/host-1/reservations/stay-1', {
+      resourceId: 'room-4',
+      status: 'checked_in',
+      guestName: 'Ada Lovelace',
+      guestEmail: 'ada@example.com',
+      nights: 7,
+      totalCents: 84000,
+      depositCents: 21000,
+      paidCents: 21000,
+    })
+  })
+
+  async function chargeRoom(
+    body: Record<string, unknown> = {},
+    key = 'folio-a',
+  ) {
+    return post(
+      {
+        payment: 'folio',
+        reservationId: 'stay-1',
+        lines: [{ productId: 'product-2', quantity: 3 }],
+        ...body,
+      },
+      { 'idempotency-key': key },
+    )
+  }
+
+  /** The order is the reference: attribution must match what was charged. */
+  it('rings the room charge at 5521 cents', async () => {
+    const result = await chargeRoom()
+    expect(result.status).toBe(200)
+    const stored = orderDocs()[0] as any
+    expect(stored.totals.itemsCents).toBe(5100)
+    expect(stored.totals.taxCents).toBe(421)
+    expect(stored.totals.totalCents).toBe(5521)
+    expect(stored.status).toBe('paid')
+    expect(stored.reservationId).toBe('stay-1')
+  })
+
+  /**
+   * THE DEFECT. The cashier typed nothing, so before the fix `customerEmail`
+   * was empty and `upsertHostContact` was never reached — a real, paid sale
+   * attributed to nobody, even though the reservation names the guest.
+   */
+  it('falls back to the reservation guest when the cashier typed nothing', async () => {
+    await chargeRoom()
+    expect(contactUpserts).toHaveLength(1)
+    expect(contactUpserts[0].email).toBe('ada@example.com')
+  })
+
+  /** Each stored field on its own (AGL-1711), not one shape-matched blob. */
+  it('records the guest name, the host and an order-sourced interaction', async () => {
+    await chargeRoom()
+    const upsert = contactUpserts[0]
+    expect(upsert.hostId).toBe('host-1')
+    expect(upsert.name).toBe('Ada Lovelace')
+    expect(upsert.source).toBe('order')
+    expect(upsert.interaction.summary).toBe('Room charge ($55.21)')
+    // The interaction points at the order that actually landed, which is what
+    // lets an AGL-1753 backfill match the two up.
+    expect(childPaths('hosts/host-1/orders')).toContain(
+      `hosts/host-1/orders/${upsert.interaction.refId}`,
+    )
+  })
+
+  /**
+   * The amount is the SALE, never the stay. Reaching for the reservation's
+   * `paidCents` would re-count a deposit already counted at `source: 'booking'`,
+   * and its `totalCents` would claim money the guest has not handed over and
+   * will pay again at the register.
+   */
+  it('counts the sale, not the deposit or the stay total', async () => {
+    await chargeRoom()
+    const { purchaseCents } = contactUpserts[0]
+    expect(purchaseCents).toBe(5521)
+    expect(purchaseCents).not.toBe(21000) // the deposit
+    expect(purchaseCents).not.toBe(84000) // the stay total
+    expect(purchaseCents).not.toBe(5100) // itemsCents
+  })
+
+  /**
+   * Disjoint sums: the folio line is appended and `paidCents` is untouched.
+   * This is a pre-existing invariant (`a7a2d90df`) rather than new behaviour —
+   * asserted here so that reading the reservation for its guest cannot turn
+   * into writing money back to it.
+   */
+  it('appends the folio line without touching paidCents', async () => {
+    await chargeRoom()
+    const reservation = docs.get('hosts/host-1/reservations/stay-1') as any
+    expect(reservation.paidCents).toBe(21000)
+    expect(reservation.totalCents).toBe(84000)
+    expect(reservation.folio.__arrayUnion.amountCents).toBe(5521)
+    // The folio line points at the order that actually landed.
+    expect(childPaths('hosts/host-1/orders')).toContain(
+      `hosts/host-1/orders/${reservation.folio.__arrayUnion.orderId}`,
+    )
+  })
+
+  /**
+   * A cashier correcting the guest's address should win over stale reservation
+   * data — and the guest's NAME must not ride along to a different person.
+   */
+  it('prefers a typed email over the reservation, and withholds the name', async () => {
+    await chargeRoom({ customerEmail: 'Corrected@Example.com' })
+    expect(contactUpserts).toHaveLength(1)
+    expect(contactUpserts[0].email).toBe('corrected@example.com')
+    expect(contactUpserts[0].name).toBeUndefined()
+  })
+
+  /** Typed the same address the reservation holds: the name still applies. */
+  it('keeps the guest name when the typed email is the guest', async () => {
+    await chargeRoom({ customerEmail: 'ADA@example.com' })
+    expect(contactUpserts[0].email).toBe('ada@example.com')
+    expect(contactUpserts[0].name).toBe('Ada Lovelace')
+  })
+
+  /**
+   * Nothing is invented. The console walk-in writes `guestEmail: null`, so
+   * there is no identity to fall back to — and no contact is the CORRECT
+   * outcome, not a remaining gap. Pinned so nobody later mints a placeholder.
+   */
+  it('creates no contact for a walk-in stay with no email', async () => {
+    docs.set('hosts/host-1/reservations/stay-2', {
+      resourceId: 'room-9',
+      status: 'checked_in',
+      guestName: 'Walk-in',
+      guestEmail: null,
+      paidCents: 0,
+    })
+    const result = await chargeRoom({ reservationId: 'stay-2' }, 'folio-b')
+    expect(result.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
+    expect(contactUpserts).toHaveLength(0)
+  })
+
+  /** A reservationId pointing at nothing is likewise no identity, not a stub. */
+  it('creates no contact when the reservation does not exist', async () => {
+    const result = await chargeRoom({ reservationId: 'ghost' }, 'folio-c')
+    expect(result.status).toBe(200)
+    expect(contactUpserts).toHaveLength(0)
+  })
+
+  /**
+   * `purchaseCents` is a `FieldValue.increment`, so a replayed settlement would
+   * inflate the guest's lifetime value. The fallback sits INSIDE the
+   * `claimAttempt` taken before the order write (AGL-1691), not beside it.
+   */
+  it('does not double-count a replayed room charge', async () => {
+    await chargeRoom()
+    await chargeRoom()
+    expect(orderDocs()).toHaveLength(1)
+    expect(contactUpserts).toHaveLength(1)
+  })
+
+  /** No folio sale may reach Stripe — localhost carries the LIVE key. */
+  it('never calls Stripe for a folio sale', async () => {
+    await chargeRoom()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(stripeCalls).toHaveLength(0)
+  })
+})
