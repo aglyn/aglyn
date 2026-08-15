@@ -269,6 +269,14 @@ describe('StaffOrgActions (AGL-939)', () => {
     )
     fireEvent.click(screen.getByText('Override'))
     const dialog = screen.getByRole('dialog')
+    // An override needs a REASON since AGL-1652 — Save is refused without
+    // one, so every case that saves has to give one.
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: 'Negotiated enterprise or custom contract',
+      }),
+    )
     fireEvent.click(within(dialog).getByText('Save (audited)'))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
     const [target, write] = setDocPayload()
@@ -278,6 +286,11 @@ describe('StaffOrgActions (AGL-939)', () => {
     const [, audit] = auditPayload()
     expect(audit.action).toBe('org.override')
     expect(audit.actorUid).toBe('staff-1')
+    // WHO and WHY, not just who (AGL-1652). The note is an explicit null,
+    // never a dropped key — Firestore rejects `undefined`, and an absent
+    // key would read as a row written before the field existed.
+    expect(audit.reason).toBe('enterprise')
+    expect(audit.note).toBeNull()
     // `releaseFlags` joined the audited before-state in AGL-1635; an org
     // with no per-org release override records an explicit null rather than
     // omitting the key, so a reader can tell "none set" from "not recorded".

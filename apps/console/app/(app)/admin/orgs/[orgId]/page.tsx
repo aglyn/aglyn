@@ -22,6 +22,7 @@ import {
   ORG_BILLING_SUBCOLLECTION,
   orgCogsPreview,
   netOfProcessorFee,
+  orgOverrideReasonSummary,
   orgSiteCount,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
@@ -1856,32 +1857,58 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 ? people[entry.actorUid]
                                 : null,
                             )
+                            // WHY the action was taken (AGL-1652). This is
+                            // the surface an override is actually looked at
+                            // from, so it is the surface the reason has to
+                            // reach — an audit field nobody renders is the
+                            // same failure as no field.
+                            const why = orgOverrideReasonSummary(
+                              entry.reason,
+                              entry.note,
+                            )
                             return (
-                              <Stack
-                                key={entry.$id}
-                                direction="row"
-                                spacing={1}
-                                sx={{ justifyContent: 'space-between' }}
-                              >
-                                <Chip label={entry.action} size="small" />
-                                <Tooltip
-                                  title={
-                                    actor ? (entry.actorUid ?? '') : ''
-                                  }
+                              <Stack key={entry.$id} spacing={0.25}>
+                                <Stack
+                                  direction="row"
+                                  spacing={1}
+                                  sx={{ justifyContent: 'space-between' }}
                                 >
+                                  <Chip label={entry.action} size="small" />
+                                  <Tooltip
+                                    title={
+                                      actor ? (entry.actorUid ?? '') : ''
+                                    }
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                    >
+                                      {`${actor ?? entry.actorUid ?? '—'} · ${
+                                        entry.at?.seconds
+                                          ? new Date(
+                                              entry.at.seconds * 1000,
+                                            ).toLocaleString()
+                                          : '—'
+                                      }`}
+                                    </Typography>
+                                  </Tooltip>
+                                </Stack>
+                                {why ? (
                                   <Typography
                                     variant="caption"
                                     color="text.secondary"
                                   >
-                                    {`${actor ?? entry.actorUid ?? '—'} · ${
-                                      entry.at?.seconds
-                                        ? new Date(
-                                            entry.at.seconds * 1000,
-                                          ).toLocaleString()
-                                        : '—'
-                                    }`}
+                                    {`Why: ${why}`}
                                   </Typography>
-                                </Tooltip>
+                                ) : entry.action === 'org.override' ? (
+                                  <Typography
+                                    variant="caption"
+                                    color="warning.main"
+                                  >
+                                    {'Why: not recorded — predates the ' +
+                                      'required reason.'}
+                                  </Typography>
+                                ) : null}
                               </Stack>
                             )
                           })

@@ -129,12 +129,20 @@ async function handler(request: Request): Promise<Response> {
     // the page computed: the latest 200 entries, filtered to this org,
     // top 20. Fail-soft to null — a failed read must present as a failed
     // read, never as an empty history.
+    //
+    // `reason`/`note` ARE part of that shape (AGL-1652). A projection that
+    // dropped them would be the whole issue over again one layer down: the
+    // override dialog would demand a reason, the row would carry it, and
+    // the org's own page — the surface where the override is actually
+    // looked at — would still show who and never why.
     let audit:
       | Array<{
           $id: string
           action: string | null
           target: string | null
           actorUid: string | null
+          reason: string | null
+          note: string | null
           at: unknown
         }>
       | null = null
@@ -152,6 +160,8 @@ async function handler(request: Request): Promise<Response> {
           action: doc.get('action') ?? null,
           target: doc.get('target') ?? null,
           actorUid: doc.get('actorUid') ?? null,
+          reason: doc.get('reason') ?? null,
+          note: doc.get('note') ?? null,
           at: serialize(doc.get('at') ?? null),
         }))
     } catch (error) {

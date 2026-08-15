@@ -19,6 +19,7 @@
 import {
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
+  orgOverrideReasonSummary,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
@@ -96,6 +97,9 @@ interface UserDetail {
     actorUid: string | null
     action: string | null
     target: string | null
+    /** WHY, when the row carries one (AGL-1652) — see `org.override`. */
+    reason: string | null
+    note: string | null
     at: string | null
   }>
 }
@@ -609,6 +613,13 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           <TableRow>
                             <TableCell>{'Action'}</TableCell>
                             <TableCell>{'Target'}</TableCell>
+                            {/*
+                              An `org.override` this account performed shows
+                              up here too, so the reason has to reach this
+                              table as well (AGL-1652) — the audit page is
+                              not the only place the act is read from.
+                            */}
+                            <TableCell>{'Why'}</TableCell>
                             <TableCell>{'Actor'}</TableCell>
                             <TableCell>{'When'}</TableCell>
                           </TableRow>
@@ -618,6 +629,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             <TableRow key={entry.id}>
                               <TableCell>{entry.action ?? '—'}</TableCell>
                               <TableCell>{entry.target ?? '—'}</TableCell>
+                              <TableCell>
+                                {orgOverrideReasonSummary(
+                                  entry.reason,
+                                  entry.note,
+                                ) ?? '—'}
+                              </TableCell>
                               <TableCell>
                                 {entry.actorUid === detail.user.uid
                                   ? 'this account'

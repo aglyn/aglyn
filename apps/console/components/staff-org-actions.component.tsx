@@ -19,9 +19,15 @@
 import {
   isLockdownReasonCode,
   LOCKDOWN_REASON_CODES,
+  normalizeOrgOverrideReason,
+  ORG_OVERRIDE_NOTE_MAX,
+  ORG_OVERRIDE_REASON_CODES,
+  ORG_OVERRIDE_REASON_LABELS,
+  orgOverrideReasonNeedsNote,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   RELEASE_FLAGS,
+  type OrgOverrideReasonCode,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -181,6 +187,21 @@ export const overrideCount = (org: any): number =>
  * plan and entitlements — a non-staff caller is denied by the rules, not by
  * this UI) and log an `adminAudit` entry with the actor uid.
  *
+ * Override also demands a REASON (AGL-1652) — a code from
+ * `ORG_OVERRIDE_REASON_CODES` plus an optional note, required for `other` —
+ * written top-level on the audit row beside `before`/`after`. It is the one
+ * action here that changes what a customer is entitled to and billed
+ * against, including the three fee percentages and per-org release flags
+ * AGL-1635 exposed, and it was the one recording the least about why. The
+ * gate is `normalizeOrgOverrideReason`, shared with the field vocabulary, so
+ * the disabled Save and the written row cannot disagree.
+ *
+ * The reason is enforced in this component, not in the rules: `adminAudit`
+ * validates no shape at all (`allow create: if isStaff()`), so a staff user
+ * driving Firestore directly can still write a row without one — the same
+ * latitude every other client-written row here already has. What this closes
+ * is the console path, which is how every override is actually made.
+ *
  * Suspension is DIFFERENT (AGL-1505): it goes through the lockdown core —
  * `POST /api/admin/lockdown { scope: 'org' }` — never a direct Firestore
  * write, because an org suspension is four effects, not a flag: the org
@@ -215,8 +236,24 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     quotas: Record<string, string>
     flags: Record<string, '' | 'on' | 'off'>
     releaseFlags: Record<string, '' | 'on' | 'off'>
+    /**
+     * WHY (AGL-1652). Starts EMPTY on every open, deliberately: a select
+     * that opened on a valid default would be satisfied by not touching it,
+     * and a reason nobody chose is the same empty record with a code on it.
+     */
+    reason: '' | OrgOverrideReasonCode
+    /** Free-text rationale; required only for `other`. */
+    note: string
     before: any
   } | null>(null)
+  /**
+   * The ONE gate — the same predicate a server-side check would use, so the
+   * disabled Save and the written row can never disagree about what counts
+   * as a reason.
+   */
+  const overrideReason = editor
+    ? normalizeOrgOverrideReason(editor.reason, editor.note)
+    : null
 
   // Suspension (AGL-202, rewired by AGL-1505): reversible, but NOT a flag
   // write — the lockdown core behind /api/admin/lockdown does the org doc,
@@ -382,6 +419,10 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       quotas,
       flags,
       releaseFlags,
+      // Never carried over from the previous override — the reason belongs
+      // to THIS act, and a pre-filled one would be inherited, not given.
+      reason: '',
+      note: '',
       before: {
         plan: org.plan ?? null,
         entitlements: org.entitlements ?? null,
@@ -392,6 +433,21 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
 
   const handleSave = useCallback(async () => {
     if (!editor) return
+    // The reason is checked HERE and not only on the disabled button: the
+    // button is a hint, this is the gate. An override that reached the org
+    // doc without one could never be explained afterwards — the audit row
+    // is append-only, so a missing reason is missing forever.
+    const reason = normalizeOrgOverrideReason(editor.reason, editor.note)
+    if (!reason) {
+      enqueueSnackbar(
+        orgOverrideReasonNeedsNote(editor.reason as OrgOverrideReasonCode)
+          ? 'Say what "other" means — the code alone records nothing.'
+          : 'Pick a reason. Overrides change what a customer is billed ' +
+              'against, and the audit row cannot be back-filled later.',
+        { variant: 'warning', allowDuplicate: true },
+      )
+      return
+    }
     const plan = editor.plan as OrgPlan | ''
     // Full override build (AGL-201): only explicit entries persist —
     // empty quota fields and 'inherit' flags fall back to plan defaults.
@@ -487,6 +543,13 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         target: `orgs/${editor.id}`,
         before: editor.before ?? null,
         after,
+        // WHY, beside the what (AGL-1652). Top-level rather than folded
+        // into `after`, because `after` is the resulting STATE of the org
+        // and the reason is a fact about the ACT — the same placement the
+        // lockdown family uses. `note` is explicitly null when absent;
+        // Firestore rejects `undefined`.
+        reason: reason.reason,
+        note: reason.note,
         at: Timestamp.now(),
       })
       enqueueSnackbar('Organization updated (audited)', {
@@ -549,6 +612,61 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
             {editor?.id}
           </Typography>
+          {/*
+            WHY comes FIRST (AGL-1652), before the fields it explains. A
+            reason asked after the change has been composed is a rubber
+            stamp; asked before, it is the framing of the decision.
+          */}
+          <TextField
+            select
+            required
+            size="small"
+            label="Reason"
+            value={editor?.reason ?? ''}
+            error={Boolean(editor) && !editor?.reason}
+            helperText={
+              'Written to the audit row beside the before/after. The row is ' +
+              'append-only — a reason not given now cannot be added later.'
+            }
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev
+                  ? { ...prev, reason: event.target.value as OrgOverrideReasonCode }
+                  : prev,
+              )
+            }
+          >
+            {ORG_OVERRIDE_REASON_CODES.map((code) => (
+              <MenuItem key={code} value={code}>
+                {ORG_OVERRIDE_REASON_LABELS[code]}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            multiline
+            minRows={2}
+            label={
+              editor?.reason &&
+              orgOverrideReasonNeedsNote(editor.reason as OrgOverrideReasonCode)
+                ? 'Note (required for "other")'
+                : 'Note (optional — the deal, ticket or thread)'
+            }
+            value={editor?.note ?? ''}
+            error={
+              Boolean(editor?.reason) &&
+              orgOverrideReasonNeedsNote(
+                editor?.reason as OrgOverrideReasonCode,
+              ) &&
+              !editor?.note.trim()
+            }
+            slotProps={{ htmlInput: { maxLength: ORG_OVERRIDE_NOTE_MAX } }}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, note: event.target.value } : prev,
+              )
+            }
+          />
           <TextField
             select
             size="small"
@@ -699,7 +817,12 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-          <Button variant="contained" color="primary" onClick={handleSave}>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!overrideReason}
+            onClick={handleSave}
+          >
             {'Save (audited)'}
           </Button>
         </DialogActions>

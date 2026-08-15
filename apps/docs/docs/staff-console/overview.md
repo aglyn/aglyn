@@ -47,7 +47,14 @@ set password](/img/staff-console/admin-user-password.png)
   and GDPR-erasure flags, per organization. The directory is listed server-side with
   the Admin SDK (so it shows *every* org, not the subset client rules would return),
   ordered by organization id, 25 per page with Previous/Next.
-- **Entitlement editor** — full override editor for an organization's entitlements.
+- **Entitlement editor** — full override editor for an organization's entitlements,
+  its plan, and per-organization release flags. Every override needs a **reason**
+  chosen from a fixed list (negotiated contract, support remediation, early access,
+  correction, sales trial, or *other* — which requires a note). The reason and note
+  are written onto the audit row beside the before/after and shown wherever that row
+  is: the audit log, the organization's own page, and the acting staff account's
+  trail. The log is append-only, so a reason not given at the time cannot be added
+  afterwards.
 - **Users admin** — staff-claim management and disabling users, with gated listing
   and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
   granted to an **existing** account, so if someone isn't found, have them sign in to

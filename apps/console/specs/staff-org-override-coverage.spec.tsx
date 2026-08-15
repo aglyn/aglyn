@@ -185,6 +185,21 @@ describe('staff org override surface coverage (AGL-1635)', () => {
   })
 
   describe('the dialog writes release-flag overrides', () => {
+    /**
+     * Grant early access to one org — and say WHY (AGL-1652). Forcing an
+     * unreleased feature on for a single paying customer is exactly the act
+     * the reason field exists for, so the dialog refuses to save without
+     * one and every case here has to supply it.
+     */
+    const chooseReason = async (dialog: HTMLElement) => {
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+      fireEvent.click(
+        await screen.findByRole('option', {
+          name: 'Early access to an unreleased feature',
+        }),
+      )
+    }
+
     const openAndSetFlag = async (value: string, existing?: unknown) => {
       render(
         <StaffOrgActions
@@ -200,6 +215,7 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       fireEvent.mouseDown(control)
       const option = await screen.findByRole('option', { name: value })
       fireEvent.click(option)
+      await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
       await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
     }
@@ -216,6 +232,8 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       const [, audit] = auditPayload()
       expect(audit.action).toBe('org.override')
       expect(audit.actorUid).toBe('staff-1')
+      // Granting one org an unreleased feature now records WHY (AGL-1652).
+      expect(audit.reason).toBe('beta')
       // The audit records STATE, so no sentinel may reach it.
       expect(audit.after.releaseFlags).toEqual({ release_edit_bar: true })
       expect(Object.values(audit.after.releaseFlags)).not.toContain(
@@ -270,6 +288,7 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       const control = within(dialog).getByLabelText('Site admin bar')
       fireEvent.mouseDown(control)
       fireEvent.click(await screen.findByRole('option', { name: 'Force on' }))
+      await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
       await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
       const [, write] = setDocPayload()
