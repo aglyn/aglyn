@@ -31,7 +31,11 @@ import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // through a lib would mean the config could not read it, and the two would
 // drift into disagreeing CSPs, which is the exact class of bug AGL-523 was.
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import { baseCspDirectives, imgSrcDirective } from '../../security-origins'
+import {
+  baseCspDirectives,
+  imgSrcDirective,
+  scriptSrcReportOnlyDirective,
+} from '../../security-origins'
 
 /**
  * Where violations are posted (AGL-523). Same-origin and outside the matcher
@@ -335,6 +339,22 @@ export async function middleware(request: NextRequest) {
   // and breaks them the quiet way: an avatar or a customer's own logo that
   // stops rendering for one org and throws nothing.
   const imgSrc = imgSrcDirective(isProduction)
+  // CSP script-src: a REPORT-ONLY twin of the enforcing directive above, minus
+  // the bare `https:` (AGL-1785). Why the directive contains what it does lives
+  // with `scriptSrcReportOnlyDirective`; what belongs here is why the same
+  // `nonce` goes into both headers.
+  //
+  // It MUST be the same one. The enforcing policy is what Next reads the nonce
+  // from — the `||` short-circuits on it — so every inline script on the page
+  // carries `nonce-${nonce}`. A second `randomUUID()` here would match none of
+  // them and this header would report every inline script Next emits on every
+  // page load, which is precisely the AGL-1228 failure the tenant paid for.
+  //
+  // Reusing it is safe rather than merely convenient, and the enforcing header
+  // is the proof: an inline script can be authorised by nothing but a nonce, so
+  // if the header and the rendered bytes could ever disagree here, the console
+  // would already be serving no JavaScript at all. It does not, so they cannot.
+  const scriptSrcReportOnly = scriptSrcReportOnlyDirective(nonce, isProduction)
   // BOTH directives, because neither is universally supported: `report-uri` is
   // deprecated but is what Safari and older Chrome actually send, while
   // `report-to` is the modern one and needs the `Reporting-Endpoints` header
@@ -373,9 +393,14 @@ export async function middleware(request: NextRequest) {
     // Reports arrive at the same collector with `disposition: "report"` and
     // `effectiveDirective: "img-src"`, so they are separable from the enforcing
     // script-src stream in the log without a second endpoint.
+    //
+    // `script-src` joins it rather than getting a header of its own: a third
+    // CSP header is not a thing, and both directives want the same reporting
+    // endpoint. They stay separable in the log by `effectiveDirective`, which
+    // is what `csp-report.ts` already keys on.
     res.headers.set(
       'Content-Security-Policy-Report-Only',
-      `${imgSrc}; ${reportDirectives}`,
+      `${imgSrc}; ${scriptSrcReportOnly}; ${reportDirectives}`,
     )
     return res
   }

@@ -455,25 +455,56 @@ describe('CSP violation reporting (AGL-523)', () => {
     ).not.toHaveLength(0)
   })
 
-  it('keeps script-src, a nonce and strict-dynamic OUT of the report-only policy', async () => {
-    // Defence in depth behind the two clauses above, and the same narrowing
-    // AGL-1703 made on the tenant side, so one invariant covers both apps.
-    // Even on a hypothetical response where the enforcing header went missing,
-    // a report-only policy carrying no `script-src` and no `nonce-` cannot
-    // hand Next a WRONG nonce — the worst it can do is hand it none.
+  it('never lets the report-only policy carry a DIFFERENT nonce, or strict-dynamic', async () => {
+    // Defence in depth behind the two clauses above. This used to assert that
+    // the report-only header carried no `script-src` and no `nonce-` at all,
+    // which was right while `img-src` was the only thing in it — AGL-1785 added
+    // a report-only `script-src` to measure what the enforcing policy's bare
+    // `https:` is covering, and that directive is worthless without a nonce.
     //
-    // The mechanical reason a report-only `img-src` is safe where AGL-1228's
-    // report-only `script-src` was not: a nonce is per-request, so it can
-    // never agree with cached bytes, while an `img-src` is the same string on
-    // every response and agrees with them by construction.
+    // So the invariant is narrowed rather than dropped, and what replaces it is
+    // STRONGER than what it removes. The hazard was never "a nonce is present";
+    // it was "Next reads a nonce that does not match the rendered bytes"
+    // (AGL-523: every script became `nonce="$undefined"`). Forbidding the
+    // mechanism forbade one way of reaching that. Requiring every nonce in this
+    // header to be the ENFORCING one forbids the outcome directly — including
+    // the specific mistake of minting a second `randomUUID()` for the
+    // report-only directive, which would report every inline Next script on
+    // every page load and read as an all-clear the moment anyone stopped
+    // looking.
+    //
+    // Two things carry the rest of the weight, and neither is asserted here:
+    // the test above proves this header never ships without an enforcing one
+    // carrying `script-src`, so the `||` always short-circuits before this
+    // string is consulted; and console responses are uncached (`no-store`), so
+    // a per-request nonce agrees with the bytes — measured, and structurally
+    // guaranteed by the ENFORCING policy already depending on it.
+    //
+    // The tenant keeps the absolute version of this invariant in
+    // `apps/tenant/specs/csp-no-script-src.spec.ts`, and must: its pages ARE
+    // ISR-cached, so a per-request nonce there can never agree with the bytes
+    // (AGL-1228). The two apps genuinely differ; one invariant no longer covers
+    // both.
     const response = await middleware(request('app.aglyn.com'))
     const reportOnly =
       response.headers.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).not.toContain('script-src')
-    expect(reportOnly).not.toContain('nonce-')
+    const enforced = response.headers.get('Content-Security-Policy') ?? ''
     expect(reportOnly).not.toContain('strict-dynamic')
-    // CONTROL — see above: all three pass against a missing header.
+    const enforcedNonce = /'nonce-([a-f0-9]{32})'/.exec(enforced)?.[1]
+    expect(enforcedNonce).toBeTruthy()
+    const reportedNonces = [
+      ...reportOnly.matchAll(/'nonce-([a-f0-9]{32})'/g),
+    ].map((match) => match[1])
+    // Not `toContain`: EVERY nonce in the header has to be the enforcing one,
+    // so a second directive quietly acquiring its own fails this.
+    for (const nonce of reportedNonces) expect(nonce).toBe(enforcedNonce)
+    // CONTROLS. Every assertion above passes vacuously against a header that
+    // stopped shipping, or a `script-src` that quietly lost its nonce — and
+    // "the measurement quietly stopped" is the failure AGL-1685 exists to
+    // avoid.
     expect(reportOnly).toContain('img-src')
+    expect(reportOnly).toContain('script-src')
+    expect(reportedNonces).toHaveLength(1)
   })
 
   it('does not honour the retired ?csp= opt-in', async () => {

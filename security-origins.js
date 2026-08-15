@@ -234,6 +234,113 @@ function imgSrcDirective(isProduction) {
 }
 
 /**
+ * Third-party hosts the console legitimately loads SCRIPTS from (AGL-1785).
+ *
+ * Read out of the code that injects each one, on the same rule `IMAGE_ORIGINS`
+ * follows: anything that merely *might* load a script is left out, because an
+ * entry added on a hunch is indistinguishable in the reports from one that is
+ * needed, and the allowlist would then be documenting our guesses.
+ *
+ * Two are path-scoped. `www.google.com` and `www.gstatic.com` are shared
+ * Google hosts serving far more than reCAPTCHA, and a bare host entry for
+ * either would authorise all of it — which is the `https:` mistake in
+ * miniature. A source expression with a path matches by path PREFIX, so
+ * `/recaptcha/` admits the loader and its versioned release bundle and nothing
+ * else on those hosts. The known limitation is that CSP drops the path
+ * component across a redirect; neither URL redirects today, and a redirect
+ * would loosen this to the bare host rather than break the page.
+ */
+const SCRIPT_ORIGINS = [
+  // Stripe Checkout. `loadStripe` injects the tag at module scope in
+  // `apps/console/components/embedded-checkout-dialog.component.tsx:61`.
+  // Not path-scoped: `js.stripe.com` is a dedicated host, and Stripe moves the
+  // bundle path between versions (`/v3/`, `/basil/`) without notice — a path
+  // here would break checkout on their schedule, in the enforcing follow-up.
+  'https://js.stripe.com',
+  // App Check. `firebase-app.ts:55` constructs a `ReCaptchaV3Provider`, and the
+  // SDK loads `https://www.google.com/recaptcha/api.js` from it, which then
+  // pulls its implementation from `www.gstatic.com/recaptcha/releases/…`.
+  'https://www.google.com/recaptcha/',
+  'https://www.gstatic.com/recaptcha/',
+  // Firebase Analytics. `components/layouts/firebase-app.layout.tsx` imports
+  // `firebase/analytics` and calls `useAnalytics()`, and the GA4 SDK loads the
+  // gtag script from here. This is a script we deliberately ship, so it belongs
+  // in the candidate policy — unlike a gtag *pixel*, which would arrive as an
+  // `img-src` report and is a question about ad-network beacons in a logged-in
+  // console rather than an allowlist entry (see `imgSrcDirective`).
+  'https://www.googletagmanager.com',
+]
+
+/**
+ * `script-src` for the console — a REPORT-ONLY twin of the enforcing directive,
+ * built to measure the one source the enforcing policy cannot (AGL-1785).
+ *
+ * ## The hole this measures
+ *
+ * The enforcing policy is `script-src 'self' https: blob: 'nonce-…'`. The bare
+ * `https:` admits a script from ANY https origin, so a dependency that assembles
+ * a CDN URL and appends a `<script>` is permitted — not merely unreported.
+ * That is not hypothetical: `@monaco-editor/loader` did exactly this, pulling
+ * several MB of unpinned, un-SRI'd Monaco from `cdn.jsdelivr.net` into the
+ * `app.aglyn.com` origin on every besigner "Raw JSON" open (AGL-1779). It was
+ * found by reading `node_modules`, because nothing at runtime could see it.
+ *
+ * `strict-dynamic` is NOT the fix and must not be reached for here — the note
+ * above `scriptSrc` in `apps/console/middleware.ts` records the measurement:
+ * 1 violation became 70, because `strict-dynamic` makes `'self'` inert and
+ * Next's chunk loads are not nonce-propagated. Nothing in this directive
+ * implies it, and adding it would make this header report the entire bundle.
+ *
+ * ## Why this is not `default-src` or `connect-src`
+ *
+ * A `<script src>` is governed by `script-src`, and `default-src` never applies
+ * where a specific directive is present — so neither would have reported
+ * AGL-1779. The directive that permits the load is the directive that has to
+ * measure it.
+ *
+ * ## Why this is a CANDIDATE policy, not "the enforcing one minus `https:`"
+ *
+ * AGL-1785 proposed the latter, and it is the wrong trade for a mechanical
+ * reason. The collector caps one POST at `MAX_REPORTS_PER_REQUEST = 10`, shared
+ * with the `img-src` report-only stream that AGL-1702 is waiting on. A policy
+ * with no third-party entries reports gtag, reCAPTCHA and gstatic on EVERY page
+ * load — a steady stream of things we already know, which both buries the
+ * img-src signal and trains everyone to ignore this one. Listing what we
+ * provably load makes a report mean exactly one thing: **a script origin nobody
+ * wrote down**, which is the AGL-1779 class and nothing else.
+ *
+ * The cost is real and worth stating: this cannot tell us that gtag loads. We
+ * already know that from source, and the enforcing follow-up needs these
+ * entries regardless.
+ *
+ * ## Why a per-request nonce is safe HERE and was not on the tenant
+ *
+ * AGL-1228 removed a report-only `script-src` from the tenant because tenant
+ * pages are ISR-cached: the header carries a fresh nonce while the cached bytes
+ * carry an old one, so all 33 scripts violated on every load. That cannot
+ * happen here, and the proof is the ENFORCING policy rather than an argument
+ * about caching. Console responses carry the same per-request nonce in an
+ * enforcing `script-src`, and an inline script can be authorised by nothing but
+ * its nonce — so any drift between header and bytes would already be a total
+ * console outage, not a report flood. This directive reuses that same `nonce`
+ * string, so it is exactly as correct as the policy already load-bearing.
+ *
+ * That is also why the nonce is a PARAMETER. Building a second nonce here would
+ * reintroduce the AGL-1228 mismatch deliberately: every inline Next script
+ * would carry the enforcing nonce, match nothing in this policy, and report.
+ *
+ * `'unsafe-eval'` follows the enforcing policy off production for the same
+ * reason it is there — React's dev build evals, and a directive violated on
+ * every dev page load is one nobody reads.
+ */
+function scriptSrcReportOnlyDirective(nonce, isProduction) {
+  const sources = ["'self'", 'blob:', `'nonce-${nonce}'`]
+    .concat(SCRIPT_ORIGINS)
+    .concat(isProduction ? [] : ["'unsafe-eval'"])
+  return `script-src ${sources.join(' ')}`
+}
+
+/**
  * Third-party hosts a PUBLISHED CUSTOMER SITE legitimately loads images from
  * (AGL-1703).
  *
@@ -355,8 +462,10 @@ function tenantImgSrcDirective(isProduction) {
 module.exports = {
   PRODUCTION_DOMAINS,
   IMAGE_ORIGINS,
+  SCRIPT_ORIGINS,
   TENANT_IMAGE_ORIGINS,
   baseCspDirectives,
   imgSrcDirective,
+  scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
 }
