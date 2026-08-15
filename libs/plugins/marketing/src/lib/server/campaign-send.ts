@@ -35,6 +35,7 @@ import {
   getOrgForHost,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHash, createHmac } from 'crypto'
 import {
   EMAIL_NODE_ROOT_ID,
@@ -144,7 +145,12 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
       Object.values(nodes)
         .filter((node: any) => node?.componentId === 'emailProduct')
         .map((node: any) => String(node?.props?.productId ?? ''))
-        .filter(Boolean),
+        // AGL-1771: a besigner node prop is merchant-authored and reaches
+        // `.doc()` below, where a slash-bearing value throws and turns the
+        // whole send into a 500. Dropped rather than refused: the block simply
+        // resolves to no product, exactly as it does for a deleted one, and a
+        // designed campaign is not worth blocking over one bad reference.
+        .filter(isDocumentId),
     ),
   ].slice(0, 20)
   const products: Record<string, EmailRenderProduct> = {}
@@ -196,6 +202,36 @@ export async function performCampaignSend(
     )
   }
   const { hostId, subject, body, audience } = options
+
+  // AGL-1771: every optional id on `options` becomes a `.doc()` argument
+  // below, and `.doc()` appends a SLASH-SEPARATED path rather than taking one
+  // opaque id — so an unvalidated one names the nesting as well as the
+  // document. `campaignId` is the one that matters most: it is WRITTEN at the
+  // bottom of this function, so `a/b/c` filed the campaign at
+  // `campaigns/a/b/c`, beneath a document that does not exist and therefore
+  // invisible to the merchant's own campaigns list — and it is the same value
+  // that comes back on every Resend tag days later (AGL-1768), which is why
+  // tracing where an id was MINTED matters more than where it was last
+  // handled. The rest are read-only, where the cost is a 500 dressed up as an
+  // outage rather than a stray document; refused here so the caller is told
+  // which id was wrong.
+  //
+  // `hostId` is deliberately NOT guarded here, and that is measured rather
+  // than overlooked: both callers prove it first — the handler resolves the
+  // host document and checks the caller's role on it before calling in, and
+  // the scheduled processor passes `hostRef.id` off a document it just read. A
+  // guard here could not fail today. A third caller would need to earn that.
+  for (const [name, value] of [
+    ['campaignId', options.campaignId],
+    ['experimentId', options.experimentId],
+    ['templateScreenId', options.templateScreenId],
+    ['segmentId', options.segmentId],
+    ['listId', options.listId],
+  ] as const) {
+    if (value && !isDocumentId(value)) {
+      throw new CampaignSendError(`Invalid ${name}`, 400)
+    }
+  }
 
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
@@ -487,6 +523,14 @@ export async function performCampaignSend(
   // Sends are the email variant's exposures (AGL-255).
   if (experiment && experiment.status === 'running') {
     for (const [variantId, count] of Object.entries(variantSends)) {
+      // AGL-1771: `variant.id` is MERCHANT-AUTHORED — `validateExperiment`
+      // checks the ids are unique and nothing about their shape — and it is a
+      // path component here. The same third instance `d51e23df4` found on the
+      // conversion write in `email-events.ts`, on the exposure write that
+      // pairs with it. This one stays a merge-set and stays a create: the
+      // first send for a variant has no stats document, the experiment was
+      // just read, and the emails really went out.
+      if (!isDocumentId(variantId)) continue
       await hostRef
         .collection('experiments')
         .doc(experiment.$id)
@@ -610,6 +654,15 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       }
       const campaignId =
         String(req.body?.campaignId ?? '') || createResourceUid()
+      // AGL-1771: this branch WRITES, and it is the only campaign write that
+      // does not go through `performCampaignSend`'s guard. A `campaignId` of
+      // `a/b/c` scheduled the campaign at `campaigns/a/b/c` — which the
+      // scheduled-campaign processor would then pick up by `collectionGroup`
+      // and send, from a document the merchant can neither see in their
+      // campaigns list nor cancel.
+      if (!isDocumentId(campaignId)) {
+        return res.status(400).json({ error: 'Invalid campaignId' })
+      }
       await hostRef.collection('campaigns').doc(campaignId).set(
         {
           subject,
@@ -638,8 +691,15 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
 
     if (action === 'cancel') {
       const campaignId = String(req.body?.campaignId ?? '')
+      // AGL-1771: the ref used to be built one line ABOVE the `campaignId ?`
+      // check below, which defeated that check — `.doc('')` throws on an empty
+      // path segment, so the 400 this branch intends became a 500. Guarding
+      // first is what lets the ref be built at all.
+      if (!isDocumentId(campaignId)) {
+        return res.status(400).json({ error: 'Not a scheduled campaign' })
+      }
       const campaignRef = hostRef.collection('campaigns').doc(campaignId)
-      const campaignSnapshot = campaignId ? await campaignRef.get() : null
+      const campaignSnapshot = await campaignRef.get()
       if (
         !campaignSnapshot?.exists ||
         campaignSnapshot.get('status') !== 'scheduled'
