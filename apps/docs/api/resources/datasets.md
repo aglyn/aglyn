@@ -146,13 +146,19 @@ Returns `200` with the updated record. Two limits to know:
 
 ### Delete a record
 
-`DELETE /v1/datasets/{datasetId}/records/{recordId}` — scope `datasets:write`.
+`DELETE /v1/datasets/{datasetId}/records/{recordId}` — scope `datasets:write`. Accepts
+an [`Idempotency-Key`](../conventions.md#deletes).
 
 Returns `200` (not `204`):
 
 ```json
 { "id": "k3f9a1c7be", "object": "record", "deleted": true }
 ```
+
+Deleting a record that isn't there returns `404 not_found` (`"No such record"`) —
+**unless** the call carries the `Idempotency-Key` of the delete that removed it, in
+which case the original `200` receipt is replayed. Send a key whenever you retry, so
+a response lost to a timeout doesn't come back as a `404` you'd read as a failure.
 
 ## Validation
 
@@ -189,5 +195,6 @@ storage and into [metered overage](../rate-limits.md#monthly-quota--overage).
 | `403` | `insufficient_scope` | Key lacks `datasets:read` / `datasets:write`. |
 | `404` | `not_found` | `"No such dataset"` or `"No such record"`. |
 | `405` | `method_not_allowed` | Method not supported on that path. |
+| `409` | `conflict` | `code: "idempotency_in_progress"` — an earlier create or delete with the same key is still running. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.

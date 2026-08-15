@@ -201,7 +201,7 @@ jest.mock('firebase-admin/firestore', () => {
   }
 })
 
-import { POST } from '../app/api/v1/[[...route]]/route'
+import { DELETE, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 
 const DATASET = 'orgs/org-1/datasets'
 
@@ -224,6 +224,51 @@ function post({ dataset = 'ds_1', key = null, values = {} }: PostOptions = {}) {
   return POST(request, {
     params: Promise.resolve({ route: ['datasets', dataset, 'records'] }),
   })
+}
+
+interface RecordOptions {
+  dataset?: string
+  record: string
+  key?: string | null
+}
+
+function del({ dataset = 'ds_1', record, key = null }: RecordOptions) {
+  const headers: Record<string, string> = {
+    authorization: 'Bearer aglyn_sk_test',
+  }
+  if (key) headers['Idempotency-Key'] = key
+  const request = new Request(
+    `https://app.aglyn.com/api/v1/datasets/${dataset}/records/${record}`,
+    { method: 'DELETE', headers },
+  )
+  return DELETE(request, {
+    params: Promise.resolve({
+      route: ['datasets', dataset, 'records', record],
+    }),
+  })
+}
+
+function patch({ dataset = 'ds_1', record, key = null }: RecordOptions) {
+  const headers: Record<string, string> = {
+    authorization: 'Bearer aglyn_sk_test',
+    'content-type': 'application/json',
+  }
+  if (key) headers['Idempotency-Key'] = key
+  const request = new Request(
+    `https://app.aglyn.com/api/v1/datasets/${dataset}/records/${record}`,
+    { method: 'PATCH', headers, body: JSON.stringify({ values: {} }) },
+  )
+  return PATCH(request, {
+    params: Promise.resolve({
+      route: ['datasets', dataset, 'records', record],
+    }),
+  })
+}
+
+/** Create one record and hand back its id. */
+async function seedRecord(dataset = 'ds_1'): Promise<string> {
+  const created = await post({ dataset, values: { name: 'Avery' } })
+  return (await created.json()).id
 }
 
 /** The record documents that actually landed in a dataset. */
@@ -393,6 +438,174 @@ describe('AGL-1709 · the REST API claims a key before it writes', () => {
       // could replay one tenant's record to another.
       scopeId: 'org-1:ds_1',
       status: 'done',
+    })
+  })
+})
+
+/**
+ * A retried DELETE reads as "the delete didn't happen" (AGL-1710).
+ *
+ * `DELETE` read the record, 404'd if absent, then deleted. The STATE after two
+ * calls is right; the RESPONSE is not. An integrator whose first response was
+ * lost to a timeout retries, gets `404 No such record`, and cannot tell
+ * "already deleted, you're fine" from "that id never existed and nothing was
+ * deleted". The usual reaction is to escalate or to re-sync, neither warranted.
+ *
+ * The rejected alternative was to answer `204`/`200` for ANY missing record.
+ * That breaks two things at once: `apps/docs/api/resources/datasets.md`
+ * publishes `404 not_found "No such record"`, so it is a breaking change for
+ * anyone branching on it; and it destroys the genuine "you're calling the wrong
+ * id" signal for a caller that never saw the record. It would also make DELETE
+ * the odd one out on its own path — `GET` and `PATCH` on a missing record both
+ * answer 404, and this is the ONLY DELETE on the whole of `/v1` (`sites` and
+ * `contacts` are read-only), so there is no sibling convention it could match.
+ *
+ * So the key identifies the ATTEMPT, not the resource: a retry of the attempt
+ * that did the deleting replays its `200`, while a wrong id — with a fresh key
+ * or none — still answers `404`. That EXPANDS the published contract rather
+ * than changing it, which is why the issue was split out of AGL-1709.
+ */
+describe('AGL-1710 · a retried DELETE replays instead of 404ing', () => {
+  // ── The defect ────────────────────────────────────────────────────────────
+
+  it('replays 200 when the delete that already happened is retried', async () => {
+    const id = await seedRecord()
+
+    const first = await del({ record: id, key: 'd-1' })
+    expect(first.status).toBe(200)
+    expect(await first.json()).toEqual({
+      id,
+      object: 'record',
+      deleted: true,
+    })
+    expect(recordsIn('ds_1')).toHaveLength(0)
+
+    // The retry an integrator sends when the first response was lost to a
+    // timeout. Before the fix this fell to the existence check and answered
+    // `404 No such record` — indistinguishable from a typo'd id.
+    const retry = await del({ record: id, key: 'd-1' })
+    expect(retry.status).toBe(200)
+    expect(await retry.json()).toEqual({
+      id,
+      object: 'record',
+      deleted: true,
+    })
+  })
+
+  it('looks the key up BEFORE the existence check, not after', async () => {
+    const id = await seedRecord()
+    await del({ record: id, key: 'd-1' })
+
+    // The load-bearing ordering. `createRecord` claims BELOW its deterministic
+    // rejection so a 400 never burns a key; DELETE cannot copy that, because
+    // the record it is asked about is exactly the one the first attempt
+    // removed. A claim taken after the existence check would 404 the retry
+    // without ever consulting it, which is the bug verbatim.
+    for (let i = 0; i < 3; i += 1) {
+      const retry = await del({ record: id, key: 'd-1' })
+      expect(retry.status).toBe(200)
+    }
+  })
+
+  // ── The signal the fix must NOT destroy ──────────────────────────────────
+
+  it('still 404s a wrong id carrying a fresh key, and does not burn it', async () => {
+    const missing = await del({ record: 'rec_nope', key: 'd-1' })
+
+    // The whole reason this is not "204 on every missing record": a caller who
+    // never saw the resource keeps its "you're calling the wrong id" answer.
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toMatchObject({
+      error: { type: 'not_found', message: 'No such record' },
+    })
+
+    // And the key is released, like the 400 on create — the integrator fixes
+    // the id and retries with the same key rather than minting a new one.
+    expect(claims()).toHaveLength(0)
+    const id = await seedRecord()
+    const fixed = await del({ record: id, key: 'd-1' })
+    expect(fixed.status).toBe(200)
+  })
+
+  it('still 404s a repeat delete that carries NO key', async () => {
+    const id = await seedRecord()
+    expect((await del({ record: id })).status).toBe(200)
+
+    // Unchanged for every integration that has never sent the header: the
+    // documented `404 not_found` is what a keyless retry still gets, so this
+    // ships as an expansion rather than a breaking contract change.
+    const retry = await del({ record: id })
+    expect(retry.status).toBe(404)
+    expect(claims()).toHaveLength(0)
+  })
+
+  it('leaves PATCH taking no key at all', async () => {
+    const id = await seedRecord()
+    await del({ record: id })
+
+    // PATCH merges the supplied values over the stored ones, so the same body
+    // twice lands the same state and returns the same 200 — genuinely
+    // idempotent in BOTH state and response, with nothing to replay. Its 404
+    // on a missing target is the correct answer and stays one.
+    const missed = await patch({ record: id, key: 'd-1' })
+    expect(missed.status).toBe(404)
+    expect(claims()).toHaveLength(0)
+  })
+
+  // ── Claim behaviour ──────────────────────────────────────────────────────
+
+  it('deletes ONCE when two concurrent deletes carry the same key', async () => {
+    const id = await seedRecord()
+
+    const [a, b] = await Promise.all([
+      del({ record: id, key: 'd-1' }),
+      del({ record: id, key: 'd-1' }),
+    ])
+
+    expect(recordsIn('ds_1')).toHaveLength(0)
+    // Fails closed exactly as POST does: the loser is refused rather than
+    // served a 404 it would read as a failure.
+    const statuses = [a.status, b.status].sort()
+    expect(statuses).toEqual([200, 409])
+    const refused = a.status === 409 ? a : b
+    expect(await refused.json()).toMatchObject({
+      error: { type: 'conflict', code: 'idempotency_in_progress' },
+    })
+  })
+
+  it('does not replay a POST body to a DELETE that reuses its key', async () => {
+    const created = await post({ key: 'shared', values: { name: 'Avery' } })
+    const { id } = await created.json()
+
+    // The delete claim carries its own `kind`, so one key reused across the two
+    // operations cannot make a DELETE answer with the CREATE's record view —
+    // a wrong-shaped body a client would parse as a success. The POST digest is
+    // deliberately left alone; changing it would orphan keys in flight, which
+    // is the one cost AGL-1709 already paid once.
+    const deleted = await del({ record: id, key: 'shared' })
+    expect(deleted.status).toBe(200)
+    expect(await deleted.json()).toEqual({
+      id,
+      object: 'record',
+      deleted: true,
+    })
+    expect(recordsIn('ds_1')).toHaveLength(0)
+  })
+
+  it('stamps orgId and the dataset scope on the delete claim', async () => {
+    const id = await seedRecord()
+    await del({ record: id, key: 'd-1' })
+
+    const [claimPath] = claims()
+    expect(claimPath).toBeDefined()
+    expect(mockDocs.get(claimPath)).toMatchObject({
+      // `eraseOrgIdempotencyKeys` (AGL-1448) finds these by field, not by
+      // ancestry — an unstamped claim survives org erasure invisibly.
+      orgId: 'org-1',
+      kind: 'record-deletes',
+      scopeId: 'org-1:ds_1',
+      status: 'done',
+      responseStatus: 200,
     })
   })
 })

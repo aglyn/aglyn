@@ -116,14 +116,24 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
  * NOTE: the digest changes, so keys stored under the old `orgId:key` shape are
  * orphaned and a retry straddling this deploy creates a duplicate. Accepted —
  * the API is pre-beta and the alternative is carrying the race forever.
+ *
+ * `kind` separates the create's claims from the delete's (AGL-1710). The
+ * helper hashes it into the digest for exactly this reason, and the two record
+ * different response BODIES — a record view versus a `{ deleted: true }`
+ * receipt. Sharing one namespace would let a key reused across both operations
+ * replay the create's record to a delete, which a client parses as a success
+ * and which no amount of documentation makes safe. `POST` keeps `records`
+ * verbatim: changing its digest orphans keys in flight, and AGL-1709 already
+ * paid that cost once.
  */
 async function claimWrite(
   ctx: ApiV1Context,
   datasetId: string,
   key: string | null,
+  kind: 'records' | 'record-deletes',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
-    kind: 'records',
+    kind,
     scopeId: `${ctx.orgId}:${datasetId}`,
     // The field `eraseOrgIdempotencyKeys` sweeps on (AGL-1448).
     orgId: ctx.orgId,
@@ -260,10 +270,7 @@ async function handleDatasets(
   if (request.method === 'DELETE') {
     const denied = requireScope(ctx, 'datasets:write')
     if (denied) return denied
-    const snap = await recordRef.get()
-    if (!snap.exists) return ApiErrors.notFound({ message: 'No such record', headers: ctx.headers })
-    await recordRef.delete()
-    return apiJson({ id: recordId, object: 'record', deleted: true }, { headers: ctx.headers })
+    return deleteRecord(request, ctx, datasetSnap.id, recordRef)
   }
   return ApiErrors.methodNotAllowed({ headers: ctx.headers })
 }
@@ -299,6 +306,7 @@ async function createRecord(
     ctx,
     datasetSnap.id,
     request.headers.get('Idempotency-Key'),
+    'records',
   )
   if ('replay' in claimed) return claimed.replay
   const { claim } = claimed
@@ -375,6 +383,78 @@ async function updateRecord(
   await recordRef.update({ values: merged, updatedAt: Timestamp.now() })
   const updated = await recordRef.get()
   return apiJson(recordView(updated), { headers: ctx.headers })
+}
+
+/**
+ * Delete a record, and let a retry of the SAME attempt say so (AGL-1710).
+ *
+ * This used to read, 404 if absent, then delete. The state after two calls was
+ * right and the response was not: an integrator whose first response was lost
+ * to a timeout retried, got `404 No such record`, and had no way to separate
+ * "already deleted, you're fine" from "that id was wrong and nothing was ever
+ * deleted". Both readings prescribe different actions and the wrong one —
+ * escalate, or re-sync the whole dataset — is the one people pick.
+ *
+ * The obvious fix, `204` (or a `deleted: true` 200) for ANY missing record, is
+ * rejected on two counts. It is a BREAKING change: `datasets.md` publishes
+ * `404 not_found "No such record"` on this path and clients branch on it. And
+ * it spends a signal to buy one — a caller that never saw the resource would
+ * get a success for a typo'd id, losing the only feedback the API gives that
+ * it is asking about the wrong thing. Consistency points the same way: `GET`
+ * and `PATCH` on this very path answer 404 for a missing record, and since
+ * `sites` and `contacts` are read-only this is the ONLY `DELETE` on `/v1`,
+ * so there is no sibling convention that a 204 would be matching.
+ *
+ * So the key identifies the ATTEMPT rather than the resource, which is what
+ * the shared claim is already for. A retry of the attempt that did the
+ * deleting replays its receipt; a wrong id still 404s. That expands the
+ * published contract instead of changing it — a caller sending no header sees
+ * byte-identical behaviour.
+ *
+ * The claim is taken ABOVE the existence check, which is the one place this
+ * deliberately diverges from `createRecord` (which claims below validation, so
+ * a deterministic 400 never burns a key). It has to: the record a retry asks
+ * about is precisely the one the first attempt removed, so a claim consulted
+ * after the existence check would 404 the retry without ever reaching the
+ * replay — the bug verbatim. The cost is taking-and-releasing on a genuine
+ * miss, which is the trade the ordering requires.
+ */
+async function deleteRecord(
+  request: Request,
+  ctx: ApiV1Context,
+  datasetId: string,
+  recordRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    datasetId,
+    request.headers.get('Idempotency-Key'),
+    'record-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await recordRef.get()
+    if (!snap.exists) {
+      // Release, so the miss does not consume the key: the integrator corrects
+      // the id and retries with the same one, exactly as a create's 400 lets
+      // them correct the payload. A burned key here would be worse than the
+      // 404 — keys never expire, and integrators derive them from upstream
+      // event ids, so the corrected delete could never be sent at all.
+      await claim.release()
+      return ApiErrors.notFound({ message: 'No such record', headers: ctx.headers })
+    }
+    await recordRef.delete()
+    const view = { id: recordRef.id, object: 'record', deleted: true }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    // Same direction as `createRecord`: a failed attempt gives the key back.
+    // Nothing here moves money, and a stranded key is the irreversible failure.
+    await claim.release()
+    throw error
+  }
 }
 
 // ── Sites & form submissions ────────────────────────────────────────────────
