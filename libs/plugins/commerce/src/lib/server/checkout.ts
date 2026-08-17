@@ -262,21 +262,49 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //
     // The subtotal fed to the resolver is the PRE-discount list total, matching
     // the cart's, so "free over $50" means what the shopper saw it mean.
+    //
+    // WHICH DESTINATIONS the session may serve is decided with the rates and
+    // not after them (AGL-1721): a session that declared every zone's rates
+    // while accepting an address in any country let a shopper pick a domestic
+    // rate for an international parcel, and Stripe re-checks nothing — a
+    // `shipping_rate_data` carries no country. `planCheckoutShipping` pairs
+    // the two lists, and refuses rather than guessing.
     const shippingSettings = storeSettings.get('shipping') as
       | CommerceModel.ShippingSettings
       | undefined
-    const shippingOptions =
+    const shipsPhysically =
       (lifted.type ?? 'physical') === 'physical' && !isSubscription
-        ? CommerceModel.resolveCheckoutShippingOptions(
-            shippingSettings,
-            CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
-            {
-              subtotalCents: listUnitAmountCents * quantity,
-              totalGrams:
-                Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
-            },
-          )
-        : []
+    const shippingPlan = shipsPhysically
+      ? CommerceModel.planCheckoutShipping(
+          shippingSettings,
+          {
+            subtotalCents: listUnitAmountCents * quantity,
+            totalGrams:
+              Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+          },
+          body.shippingCountry,
+        )
+      : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.refusal === 'destination-required') {
+      return res.status(400).json({
+        error: 'Choose where you’re shipping to.',
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
+    if (shippingPlan.refusal === 'destination-unserved') {
+      const declared = CommerceModel.normalizeCheckoutShippingCountry(
+        body.shippingCountry,
+      )
+      return res.status(409).json({
+        error: `This store does not ship to ${
+          CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[declared as string] ??
+          'that country'
+        }.`,
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
 
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is
@@ -376,9 +404,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // to the one this handler built before shipping existed on it. Buy-now has
     // never collected an address, so declaring one unconditionally would put a
     // shipping form in front of every shopper on a store that charges none.
-    if (shippingOptions.length > 0) {
-      CommerceModel.appendShippingAddressCollectionParams(params)
-      CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
+    if (shippingPlan.options.length > 0) {
+      CommerceModel.appendShippingAddressCollectionParams(
+        params,
+        shippingPlan.countries,
+      )
+      CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
     }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',

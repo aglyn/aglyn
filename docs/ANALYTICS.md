@@ -367,7 +367,14 @@ figure was still structurally zero — no Checkout Session we created declared
 
 AGL-1707 closed that: `cart-checkout.ts` declares the merchant's configured
 zones and rates as `shipping_options`, so `amount_shipping` is a real number on
-any cart session for a merchant who set shipping up. What was left was plumbing,
+any cart session for a merchant who set shipping up. It was the RIGHT number
+only once AGL-1721 followed: AGL-1707 declared every zone's rates on a session
+that accepted an address anywhere, and Stripe charges whichever rate the
+shopper picks without comparing it to the address, so a shopper could report a
+domestic rate on an international parcel. `planCheckoutShipping` now pairs the
+rates with the countries the session will accept, which means `amount_shipping`
+is a rate that actually applies to the `shipping_details` sitting beside it —
+worth knowing before the two are ever reconciled. What was left was plumbing,
 and AGL-1722 built it — `shippingCents` rides `StorefrontPurchaseSource` from
 the stored order out to the wire shape, and `buildStorefrontPurchaseParams`
 emits `shipping: toAmount(shippingCents)`.

@@ -47,10 +47,18 @@ export interface ShippingSettingsCardProps {
  * and rates (flat / free-over / subtotal or weight tiers), stored on
  * `hosts/{hostId}/settings/store` under `shipping`. Cart checkout (AGL-1707)
  * and buy-now (AGL-1720) both read this document and declare the rates as
- * Stripe `shipping_options` (`resolveCheckoutShippingOptions`) — until those
- * landed nothing read it, and everything saved here was charged to nobody.
- * Buy-now resolves only for physical one-time sales; draft orders and POS
- * still resolve no shipping at all.
+ * Stripe `shipping_options` (`planCheckoutShipping`) — until those landed
+ * nothing read it, and everything saved here was charged to nobody. Buy-now
+ * resolves only for physical one-time sales; draft orders and POS still
+ * resolve no shipping at all.
+ *
+ * WHAT A ZONE LAYOUT COSTS THE SHOPPER (AGL-1721). A session's rates are
+ * charged as picked and never re-checked against the address, so the checkout
+ * can only offer rates that hold for every country it will ship to. Saving
+ * zones whose rates DIFFER therefore makes the storefront ask the shopper
+ * where the parcel is going before it can price one, and a destination no
+ * zone covers is refused outright rather than shipped for free. One zone, or
+ * one '*' zone, needs neither: the shopper is asked nothing.
  */
 export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   const { hostId } = props
