@@ -477,6 +477,38 @@ describe('POS sale idempotency (AGL-1691)', () => {
 // ---------------------------------------------------------------------------
 
 /**
+ * The card sale's location (AGL-1825).
+ *
+ * The webhook that completes a QR sale decrements from the order document —
+ * by then the register's chosen location exists nowhere else. 932559b60 stored
+ * `locationId` on the cash/folio order for the cancel release; the `link`
+ * pending write was the one that still dropped it, so a card sale could only
+ * ever decrement the flat total that the next location-aware write recomputes
+ * from the buckets.
+ */
+describe('POS card sale location (AGL-1825)', () => {
+  it('stores the sale location on the pending card order', async () => {
+    await post(
+      { payment: 'link', locationId: 'loc-front' },
+      { 'idempotency-key': 'attempt-loc' },
+    )
+    expect(orderDocs()).toHaveLength(1)
+    expect((orderDocs()[0] as any).locationId).toBe('loc-front')
+    expect((orderDocs()[0] as any).status).toBe('pending')
+  })
+
+  /** No chosen location writes NO field — not an empty string for the webhook
+   *  (and later the cancel release) to mistake for a bucket. */
+  it('writes no location field when the register sent none', async () => {
+    await post({ payment: 'link' }, { 'idempotency-key': 'attempt-noloc' })
+    expect(orderDocs()).toHaveLength(1)
+    expect('locationId' in (orderDocs()[0] as any)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
  * In-store sales in the customer's lifetime value (AGL-1748).
  *
  * The handler already recorded the sale as a contact INTERACTION, with the

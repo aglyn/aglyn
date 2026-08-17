@@ -590,3 +590,261 @@ describe('paid draft order inventory ledger (AGL-1807)', () => {
     ).toBeUndefined()
   })
 })
+
+/**
+ * The POS card sale's stock (AGL-1825).
+ *
+ * `commerce-draft` completes two sales: the console payment link, whose
+ * metadata names one `productId`, and the POS card (QR) sale, whose metadata is
+ * `{type, hostId, orderId}` and nothing else. The branch's only decrement sat
+ * under `if (productId)`, so a card sale flipped to paid, notified, fed
+ * contacts — and never took a unit off the shelf. The same basket paid in cash
+ * decrements per line, location-aware, with a ledger row; `cancel-order.ts`
+ * then releases a paid order's stock on cancel, so a cancelled card sale
+ * RESTOCKED units that were never taken.
+ *
+ * The order document already holds `lineItems`; these cases pin the per-line
+ * loop that decrements from it — location-aware via the `locationId` that
+ * `pos-order.ts` now stores on the pending card order, with the AGL-1807
+ * ledger row beside every movement.
+ */
+describe('POS card sale stock (AGL-1825)', () => {
+  /**
+   * Two tracked lines of ONE product (a located bucket and a flat count) plus
+   * an untracked line. Nothing coincides: quantities 2/1/5, stocks 9(6+3)/4,
+   * and 7700 = 2×2200 + 1×1800 + 5×300.
+   */
+  const POS_ORDER = {
+    number: 12,
+    status: 'pending',
+    channel: 'pos',
+    registerId: 'register-1',
+    locationId: 'loc-front',
+    lineItems: [
+      {
+        productId: 'product-2',
+        variantId: 'wool',
+        name: 'Beanie',
+        variantLabel: 'Wool',
+        productType: 'physical',
+        quantity: 2,
+        unitAmountCents: 2200,
+      },
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        name: 'Beanie',
+        variantLabel: 'Cotton',
+        productType: 'physical',
+        quantity: 1,
+        unitAmountCents: 1800,
+      },
+      {
+        productId: 'product-3',
+        variantId: 'default',
+        name: 'Sticker',
+        productType: 'physical',
+        quantity: 5,
+        unitAmountCents: 300,
+      },
+    ],
+    totals: {
+      itemsCents: 7700,
+      shippingCents: 0,
+      taxCents: 0,
+      discountCents: 0,
+      feeCents: 0,
+      totalCents: 7700,
+    },
+    customerEmail: null,
+    timeline: [{ atMs: 2000, event: 'pos-card-pending' }],
+    createdAtMs: 2000,
+  }
+
+  /** The register's session: `{type, hostId, orderId}` and NO productId. */
+  const POS_SESSION = {
+    id: 'cs_pos_1',
+    payment_status: 'paid',
+    payment_intent: 'pi_pos_1',
+    amount_total: 7700,
+    customer_details: null,
+    metadata: {
+      type: 'commerce-draft',
+      hostId: 'host-1',
+      orderId: 'order-pos',
+    },
+  }
+
+  function posLedgerRows() {
+    return [...docs.entries()]
+      .filter(([path]) => path.startsWith('hosts/host-1/inventoryAdjustments/'))
+      .map(([, value]) => value)
+  }
+
+  function beanie() {
+    return docs.get('hosts/host-1/products/product-2') as any
+  }
+
+  function beanieVariant(id: string) {
+    return beanie().variants.find((variant: any) => variant.id === id)
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Beanie',
+      type: 'physical',
+      variants: [
+        {
+          id: 'wool',
+          priceUsd: 22,
+          inventory: 9,
+          inventoryByLocation: { 'loc-front': 6, 'loc-back': 3 },
+        },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+    docs.set('hosts/host-1/products/product-3', {
+      name: 'Sticker',
+      type: 'physical',
+      variants: [{ id: 'default', priceUsd: 3 }],
+    })
+    docs.set('hosts/host-1/orders/order-pos', { ...POS_ORDER })
+  })
+
+  /**
+   * THE DEFECT. Before the fix a card sale decremented NOTHING — the branch's
+   * only decrement read `metadata.productId`, which the POS session does not
+   * carry. Both counts stood still while the cash path moved them.
+   */
+  it('decrements every tracked line when the card sale pays', async () => {
+    await deliver(POS_SESSION)
+    expect((docs.get('hosts/host-1/orders/order-pos') as any).status).toBe(
+      'paid',
+    )
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+  })
+
+  /**
+   * The units come out of the register's own bucket (AGL-286): the sale's
+   * `locationId` rides on the order, so the webhook decrements `loc-front`
+   * and leaves `loc-back` alone — not the flat total the next location-aware
+   * write would recompute away.
+   */
+  it('takes the units from the location the register sold from', async () => {
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+  })
+
+  /**
+   * Two lines of ONE product must compound: a loop that recomputed each line
+   * from the product as first read would erase the wool decrement when the
+   * cotton write landed. The denormalized flat total is the sum of both.
+   */
+  it('folds two lines of one product into one final count', async () => {
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(beanie().inventory).toBe(10)
+  })
+
+  /**
+   * The AGL-1807 ledger, from day one of this decrement: one `sale` row per
+   * tracked line, joined to the ORDER document (the session id names no order)
+   * and carrying the location the units left.
+   */
+  it('logs a sale ledger row per tracked line, joined to the order', async () => {
+    await deliver(POS_SESSION)
+    expect(posLedgerRows()).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'wool',
+        delta: -2,
+        reason: 'sale',
+        orderId: 'order-pos',
+        locationId: 'loc-front',
+        atMs: expect.any(Number),
+      },
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        delta: -1,
+        reason: 'sale',
+        orderId: 'order-pos',
+        locationId: 'loc-front',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /** An untracked line moves nothing and logs nothing, like every sibling. */
+  it('skips untracked lines entirely', async () => {
+    await deliver(POS_SESSION)
+    expect(
+      (docs.get('hosts/host-1/products/product-3') as any).variants[0]
+        .inventory,
+    ).toBeUndefined()
+    expect(posLedgerRows()).toHaveLength(2)
+  })
+
+  /** The `pending` → `paid` guard bounds this exactly as it bounds contacts. */
+  it('decrements once on a redelivered event', async () => {
+    await deliver(POS_SESSION)
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+    expect(posLedgerRows()).toHaveLength(2)
+  })
+
+  /**
+   * An order minted before the fix stored no `locationId` (the `link` pending
+   * write predates it), so the decrement falls back to the flat count — the
+   * same fallback `adjustVariantInventory` applies everywhere — and the row
+   * carries no location it does not know.
+   */
+  it('decrements the flat count when the order carries no location', async () => {
+    docs.set('hosts/host-1/orders/order-pos', {
+      ...POS_ORDER,
+      locationId: undefined,
+      lineItems: [POS_ORDER.lineItems[1]],
+    })
+    await deliver(POS_SESSION)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(posLedgerRows()).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        delta: -1,
+        reason: 'sale',
+        orderId: 'order-pos',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /**
+   * The console draft path is the OTHER tenant of this branch: its metadata
+   * names a product and its decrement already works. The line-items loop must
+   * be its `else`, or every draft sale would decrement twice.
+   */
+  it('still decrements a single-product draft exactly once', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBe(7)
+    expect(
+      posLedgerRows().filter((row) => row.productId === 'product-1'),
+    ).toHaveLength(1)
+  })
+
+  it('never calls Stripe', async () => {
+    await deliver(POS_SESSION)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

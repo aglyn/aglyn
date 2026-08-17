@@ -162,11 +162,30 @@ function makeDocRef(path: string): any {
   }
 }
 
-function makeCollectionRef(path: string): any {
+function makeCollectionRef(
+  path: string,
+  filters: Array<[string, unknown]> = [],
+): any {
   return {
     doc: (id?: string) =>
       makeDocRef(`${path}/${id ?? `generated-${++generatedIds}`}`),
-    get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
+    /**
+     * Equality only, like the one query the handler runs (AGL-1825). Anything
+     * fancier throws rather than silently matching everything — a fake `where`
+     * that ignored its filter would vouch for every order's ledger and pass
+     * the guard tests against a handler that never filtered at all.
+     */
+    where: (field: string, op: string, value: unknown) => {
+      if (op !== '==') throw new Error(`Unsupported operator: ${op}`)
+      return makeCollectionRef(path, [...filters, [field, value]])
+    },
+    get: async () => ({
+      docs: childPaths(path)
+        .map(makeSnapshot)
+        .filter((snapshot) =>
+          filters.every(([field, value]) => snapshot.get(field) === value),
+        ),
+    }),
   }
 }
 
@@ -722,6 +741,122 @@ describe('multi-location stock', () => {
     await post()
 
     expect(adjustments()[0]).not.toHaveProperty('locationId')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The POS card order whose sale may never have decremented (AGL-1825)
+// ---------------------------------------------------------------------------
+
+/**
+ * A POS card (QR) order is paid by the webhook's `commerce-draft` branch, and
+ * until AGL-1825 that branch decremented NOTHING for it — the sale completed
+ * and the shelf count never moved. Releasing such an order's stock on cancel
+ * restocks units that were never taken, silently inflating inventory.
+ *
+ * The sale's own ledger is the discriminator: every decrement path pairs the
+ * movement with a `reason: 'sale'` `inventoryAdjustments` row (AGL-1807 closed
+ * the last hole), and the AGL-1825 webhook decrement writes them from day one.
+ * So a paid card order with no sale row is one whose sale took nothing, and
+ * nothing is what the cancel puts back. Scoped to card orders (the
+ * `pos-card-pending` timeline event) because one historical path decremented
+ * WITHOUT rows — pre-AGL-1807 draft links — and gating those on the ledger
+ * would wrongly strand their stock.
+ */
+describe('a POS card order (AGL-1825)', () => {
+  /** A paid QR sale: card-pending first, then the webhook's paid flip. */
+  const CARD_TIMELINE = [
+    { atMs: 1, event: 'pos-card-pending' },
+    { atMs: 2, event: 'paid' },
+  ]
+
+  function seedSaleLedger(orderId: string = ORDER): void {
+    docs.set(`hosts/${HOST}/inventoryAdjustments/sale-row-1`, {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -3,
+      reason: 'sale',
+      orderId,
+      atMs: 3,
+    })
+  }
+
+  it('releases nothing when the sale never decremented', async () => {
+    seedTrackedShop({ channel: 'pos', timeline: CARD_TIMELINE })
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    expect(result.body).toEqual({ ok: true, released: 0, units: 0 })
+    expect(storedOrder().status).toBe('cancelled')
+    // The shelf counts stand exactly where the sale left them: untouched.
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(12)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(5)
+    expect(adjustments()).toEqual([])
+    // And the timeline does not claim units came back.
+    expect(storedOrder().timeline).toEqual([
+      ...CARD_TIMELINE,
+      { atMs: expect.any(Number), event: 'cancelled' },
+    ])
+  })
+
+  it('releases a card sale whose decrement is in the ledger', async () => {
+    seedTrackedShop({ channel: 'pos', timeline: CARD_TIMELINE })
+    seedSaleLedger()
+
+    const result = await post()
+
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+  })
+
+  /** A refund or cancellation row proves other movements, not the sale's. */
+  it('does not let a non-sale row vouch for the decrement', async () => {
+    seedTrackedShop({ channel: 'pos', timeline: CARD_TIMELINE })
+    docs.set(`hosts/${HOST}/inventoryAdjustments/refund-row-1`, {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: 3,
+      reason: 'refund',
+      orderId: ORDER,
+      atMs: 3,
+    })
+
+    const result = await post()
+
+    expect(result.body).toEqual({ ok: true, released: 0, units: 0 })
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(12)
+  })
+
+  /** Another order's sale is not this order's. */
+  it('does not let another order’s sale row vouch', async () => {
+    seedTrackedShop({ channel: 'pos', timeline: CARD_TIMELINE })
+    seedSaleLedger('order-somebody-else')
+
+    const result = await post()
+
+    expect(result.body).toEqual({ ok: true, released: 0, units: 0 })
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(12)
+  })
+
+  /**
+   * The guard is for CARD orders only. A cash register sale decremented
+   * synchronously in `pos-order.ts` — its ledger rows date from AGL-1807's
+   * siblings and can be missing for older sales, so the ledger must not be
+   * asked to vouch for a decrement that provably ran.
+   */
+  it('releases a cash register sale without consulting the ledger', async () => {
+    seedTrackedShop({
+      channel: 'pos',
+      timeline: [{ atMs: 1, event: 'paid' }],
+    })
+
+    const result = await post()
+
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
   })
 })
 

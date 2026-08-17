@@ -155,10 +155,50 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
         }
       }
 
+      // A POS CARD order's decrement happens in the webhook that pays it —
+      // and before AGL-1825 it did not happen AT ALL: the paying branch's
+      // decrement was gated on `productId` metadata the register's session
+      // never carried. Releasing such an order restocks units that were never
+      // taken, turning the silent under-count into a silent over-count. The
+      // sale's own ledger is the discriminator: every decrement pairs with a
+      // `reason: 'sale'` row (AGL-1807 closed the last hole, and the AGL-1825
+      // decrement writes them from day one), so a paid card order with no
+      // sale row is one whose sale took nothing — and nothing is released.
+      //
+      // Scoped to card orders (the `pos-card-pending` timeline event) rather
+      // than applied to every order, because one historical path decremented
+      // WITHOUT rows — draft links paid before AGL-1807 — and asking the
+      // ledger to vouch for those would wrongly strand their stock. The
+      // residual is stated plainly: the sibling-shaped decrement/ledger pair
+      // is two swallowed sequential writes, so a card order whose ledger add
+      // alone failed will not release — a bounded under-count on that one
+      // order, visible as a sale missing from the hub's history, against the
+      // alternative of inflating stock on every pre-fix cancel.
+      //
+      // One equality filter, so the automatic single-field index answers it;
+      // the reason test runs here, over the handful of rows one order has.
+      let saleDecremented = true
+      if (
+        order.status === 'paid' &&
+        order.channel === 'pos' &&
+        (order.timeline ?? []).some(
+          (event) => event.event === 'pos-card-pending',
+        )
+      ) {
+        const orderAdjustments = await transaction.get(
+          hostRef
+            .collection('inventoryAdjustments')
+            .where('orderId', '==', orderId),
+        )
+        saleDecremented = orderAdjustments.docs.some(
+          (row) => row.get('reason') === 'sale',
+        )
+      }
+
       // `paid` is the only status reachable here whose sale decremented; see
       // the header. Reads happen before any write, as a transaction requires.
       const { lines, products } =
-        order.status === 'paid'
+        order.status === 'paid' && saleDecremented
           ? await resolveTrackedRestockLines(hostRef, order, (ref) =>
               transaction.get(ref),
             )

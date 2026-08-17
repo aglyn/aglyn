@@ -1710,6 +1710,103 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 } satisfies CommerceModel.InventoryAdjustment)
                 .catch(() => undefined)
             }
+          } else {
+            // POS card sale (AGL-1825). This branch's other tenant: the
+            // register's QR session carries `{type, hostId, orderId}` and no
+            // `productId`, so the decrement above was unreachable for every
+            // card sale — the sale completed, contacts and totals were
+            // recorded, and the shelf count never moved, while the SAME basket
+            // paid in cash decremented per line in `pos-order.ts`. The order
+            // document already holds the server-priced `lineItems`, so the
+            // per-line loop runs here, in the AGL-281 shape, behind the same
+            // `pending` -> `paid` guard that bounds the contact increment.
+            //
+            // Location-aware (AGL-286): the register's chosen bucket rides on
+            // the order (`pos-order.ts` stores it on the pending write), and
+            // by webhook time it exists nowhere else. An order minted before
+            // that write carries none and falls back to the flat count.
+            //
+            // An `else`, not a second loop: a console draft carries BOTH
+            // `productId` metadata and `lineItems`, and running both paths
+            // would decrement it twice.
+            const paidProducts = new Map<string, CommerceModel.HostProduct>()
+            for (const line of order.lineItems ?? []) {
+              const lineProductId = String(line?.productId ?? '')
+              const soldQty = Math.round(Number(line?.quantity ?? 0))
+              if (!lineProductId || !(soldQty > 0)) continue
+              // Firestore reserves `__…__` ids and `.doc()` throws
+              // synchronously on one; a corrupt line must not fail the
+              // webhook (the restock-flag reader applies the same guard).
+              if (/^__.*__$/.test(lineProductId)) continue
+              if (!paidProducts.has(lineProductId)) {
+                const productSnapshot = await hostRef
+                  .collection('products')
+                  .doc(lineProductId)
+                  .get()
+                paidProducts.set(
+                  lineProductId,
+                  CommerceModel.liftLegacyProduct(
+                    (productSnapshot.data() as any) ?? { name: 'Product' },
+                  ),
+                )
+              }
+              const lineProduct = paidProducts.get(
+                lineProductId,
+              ) as CommerceModel.HostProduct
+              const soldVariantId =
+                line.variantId ?? lineProduct.variants[0]?.id
+              if (
+                !soldVariantId ||
+                !lineProduct.variants.some(
+                  (variant) =>
+                    variant.id === soldVariantId &&
+                    variant.inventory != null,
+                )
+              ) {
+                continue
+              }
+              const variants = CommerceModel.adjustVariantInventory(
+                lineProduct,
+                soldVariantId,
+                -soldQty,
+                order.locationId || undefined,
+              )
+              // Two lines of one product must COMPOUND: the next line starts
+              // from these variants, not from the product as first read —
+              // recomputing from the original would erase this decrement
+              // when the sibling line's write landed.
+              paidProducts.set(lineProductId, { ...lineProduct, variants })
+              await hostRef
+                .collection('products')
+                .doc(lineProductId)
+                .set(
+                  {
+                    variants,
+                    inventory: CommerceModel.productInventory({ variants }),
+                  },
+                  { merge: true },
+                )
+                .catch(() => undefined)
+              // The AGL-1807 ledger row, from this decrement's first day —
+              // joined to the ORDER doc (the session id names no order) and
+              // carrying the location the units left, which is what lets
+              // `cancel-order.ts` tell a decremented card sale from one that
+              // predates this fix.
+              await hostRef
+                .collection('inventoryAdjustments')
+                .add({
+                  productId: lineProductId,
+                  variantId: soldVariantId,
+                  delta: -soldQty,
+                  reason: 'sale',
+                  orderId: String(orderId),
+                  ...(order.locationId
+                    ? { locationId: order.locationId }
+                    : {}),
+                  atMs: Date.now(),
+                } satisfies CommerceModel.InventoryAdjustment)
+                .catch(() => undefined)
+            }
           }
         }
       }

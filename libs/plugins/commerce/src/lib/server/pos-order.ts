@@ -269,6 +269,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
+          // The bucket the sale comes out of (AGL-286). The cash write below
+          // has stored this since AGL-1808; the card sale needs it MORE — its
+          // decrement runs in the webhook (AGL-1825), where the register's
+          // chosen location exists nowhere but on this document.
+          ...(locationId ? { locationId } : {}),
           lineItems,
           totals,
           customerEmail: customerEmail || null,
