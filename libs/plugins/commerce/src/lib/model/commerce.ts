@@ -319,13 +319,19 @@ export function productInventory(
   return total
 }
 
-/** Reasons an inventory adjustment doc may carry (AGL-281). */
+/**
+ * Reasons an inventory adjustment doc may carry (AGL-281).
+ *
+ * `cancellation` is the only one written automatically in the PLUS direction
+ * (AGL-1808): cancelling an order the transition rules prove was never
+ * fulfilled puts back exactly what the sale took. It is deliberately not
+ * `refund` — no money moved — and not `correction`, which is what a merchant
+ * picks when the count disagreed with the shelf for a reason nobody recorded.
+ * Kept out of the "Adjust stock" dialog's menu on purpose: a merchant reaching
+ * for it by hand means something else happened.
+ */
 export type InventoryAdjustmentReason =
-  | 'sale'
-  | 'refund'
-  | 'restock'
-  | 'correction'
-  | 'damage'
+  'sale' | 'refund' | 'restock' | 'correction' | 'damage' | 'cancellation'
 
 /** `hosts/{hostId}/inventoryAdjustments/{id}` doc. */
 export interface InventoryAdjustment {

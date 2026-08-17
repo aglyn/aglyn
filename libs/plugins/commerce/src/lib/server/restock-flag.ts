@@ -114,7 +114,15 @@ export async function flagOrderRestock(options: {
     // already ANSWERED is a new question, because stock moved since.
     if (order.restockCheck && !order.restockCheck.resolution) return
 
-    const lines = await trackedRestockLines(hostRef, order)
+    const { lines } = await resolveTrackedRestockLines(
+      hostRef,
+      order,
+      // A product this flag cannot read drops out rather than failing the
+      // flag: the money has already moved. The cancellation writer (AGL-1808)
+      // passes its TRANSACTION's read instead, because a line it silently
+      // dropped would leave stock off the shelf it just promised to return.
+      (ref) => ref.get().catch(() => null),
+    )
     // Nothing was ever decremented for this order, so nothing is missing from
     // the shelf. Writing a prompt here would be the noise that teaches a
     // merchant to ignore the ones that matter.
@@ -165,6 +173,17 @@ export async function flagOrderRestock(options: {
   }
 }
 
+/** What an order's tracked lines resolved to, with the products behind them. */
+export interface TrackedRestockLines {
+  lines: CommerceModel.OrderRestockLine[]
+  /**
+   * The product doc behind each line, by product id — read once each, and
+   * handed back so a caller that WRITES stock (AGL-1808) does not read them a
+   * second time. Only products that contributed a line appear.
+   */
+  products: Map<string, CommerceModel.HostProduct>
+}
+
 /**
  * The order's lines whose stock the sale actually took off the shelf.
  *
@@ -176,11 +195,21 @@ export async function flagOrderRestock(options: {
  *
  * Products are read once each, so a three-line order of the same product costs
  * one read rather than three.
+ *
+ * `read` is the caller's, and the choice is not cosmetic (AGL-1808): the flag
+ * passes a swallowing `get()` because a product it cannot read must not fail a
+ * refund that already moved, while the cancellation writer passes its
+ * TRANSACTION's `get` so every product it is about to increment is read under
+ * the same transaction that writes it — and so a read failure aborts rather
+ * than quietly shortening the list.
  */
-async function trackedRestockLines(
+export async function resolveTrackedRestockLines(
   hostRef: FirebaseFirestore.DocumentReference,
   order: CommerceModel.HostOrder,
-): Promise<CommerceModel.OrderRestockLine[]> {
+  read: (
+    ref: FirebaseFirestore.DocumentReference,
+  ) => Promise<{ exists?: boolean; data?: () => unknown } | null>,
+): Promise<TrackedRestockLines> {
   const products = new Map<string, CommerceModel.HostProduct | null>()
   const lines: CommerceModel.OrderRestockLine[] = []
   for (const line of order.lineItems ?? []) {
@@ -192,11 +221,7 @@ async function trackedRestockLines(
     // single corrupt line item must not cost the whole flag.
     if (/^__.*__$/.test(productId)) continue
     if (!products.has(productId)) {
-      const snapshot = await hostRef
-        .collection('products')
-        .doc(productId)
-        .get()
-        .catch(() => null)
+      const snapshot = await read(hostRef.collection('products').doc(productId))
       products.set(
         productId,
         snapshot?.exists
@@ -219,5 +244,10 @@ async function trackedRestockLines(
       ...(line.variantLabel ? { variantLabel: line.variantLabel } : {}),
     })
   }
-  return lines
+  const resolved = new Map<string, CommerceModel.HostProduct>()
+  for (const line of lines) {
+    const product = products.get(line.productId)
+    if (product) resolved.set(line.productId, product)
+  }
+  return { lines, products: resolved }
 }

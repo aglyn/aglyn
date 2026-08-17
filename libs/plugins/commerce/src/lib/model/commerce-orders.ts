@@ -214,6 +214,16 @@ export interface HostOrder {
   number?: number
   status: OrderStatus
   channel?: OrderChannel
+  /**
+   * Which location's stock this sale came off, for the multi-location counts
+   * of AGL-286. Written by the POS register, the only sale path that decrements
+   * a location bucket rather than the flat count — and read back when the order
+   * is cancelled (AGL-1808), because putting the units on the flat total when
+   * the sale took them out of a bucket leaves the two disagreeing, and the next
+   * location-aware write recomputes the total from the buckets and silently
+   * erases the restock.
+   */
+  locationId?: string
   lineItems?: OrderLineItem[]
   totals?: OrderTotals
   customerEmail?: string | null

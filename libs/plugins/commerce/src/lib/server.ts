@@ -63,6 +63,7 @@ import { streamHandler } from './server/stream'
 import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
+import { cancelOrderHandler } from './server/cancel-order'
 import { draftOrderHandler } from './server/draft-order'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
@@ -127,6 +128,10 @@ export function registerCommerceConsoleApi(): void {
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/
   // subscriptions ride the platform webhook via the hook registry.
   registerBillingWebhookHandler(commerceBillingWebhookHandler)
+  // Cancel + stock release in one transaction (AGL-1808). Server-side because
+  // the release depends on the transition rule, and a client write could not
+  // re-ask it under the same lock that flips the status.
+  registerPluginApiRoute('commerce/cancel-order', cancelOrderHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
