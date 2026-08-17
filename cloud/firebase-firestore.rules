@@ -78,12 +78,13 @@ service cloud.firestore {
       // Org creation/deletion and the slug/owner/billing keys are
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
       // two staff exceptions mirroring the retired tenants rules
-      // (AGL-206/238): super staff writes anything except the suspended*
-      // family (AGL-1517), plan/entitlements/releaseFlags (AGL-1795) and
-      // the commercial/branding keys discount/enterprise/brandingProfile/
-      // billingStatus (AGL-1813); billing staff is denied those same keys
-      // plus the erasure and identity keys. Members with the admin role may
-      // rename the org; nothing else is client-writable.
+      // (AGL-206/238). After AGL-1517/1795/1813/1824 the two staff branches
+      // deny the SAME server-owned keys, with exactly two deliberate
+      // differences, both asserted by org-write-deny-coverage.spec.ts:
+      // super staff keeps `enabledPlugins` (the AGL-501 carve-out) and
+      // `erasureRequestedAt` (the erasure toggle's client batch); billing
+      // staff keeps the rename. Members with the admin role may rename the
+      // org; nothing else is client-writable.
       allow create, delete: if false;
       // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
       // the install API after entitlement + kill-switch checks (AGL-501) —
@@ -176,9 +177,37 @@ service cloud.firestore {
       // The only client Web SDK write to a top-level org document anywhere
       // is still the erasure batch (re-swept for AGL-1813), so denying the
       // four costs the product nothing.
+      //
+      // `seatAddons`, `stripeCustomerId` and `subscription` — the org-doc
+      // copies AGL-1028 moved to `billing/stripe` below — are Admin-SDK-only
+      // for EVERY client, staff included (AGL-1824). Vestigial but NOT dead:
+      // `readOrgBilling` falls back to the org-doc fields when the billing
+      // subdoc is missing, and `findOrgIdByStripeCustomer` falls back to a
+      // `where('stripeCustomerId' == …)` query on `orgs` — so a client-written
+      // `stripeCustomerId` on an org without a billing doc is an input to
+      // webhook → org resolution. Re-established per key (AGL-1795's method):
+      //  - all three are written only by `writeOrgBilling` (Admin-SDK batch;
+      //    `writeInline` defaults OFF and nothing passes it) and the
+      //    backfill-org-billing.mjs / drop-inline-org-billing.mjs scripts;
+      //  - both fallbacks are Admin-SDK READS, so denying the client write
+      //    cannot break the healing path — it only closes the poisoning one.
+      // The identity keys `sso`/`slug`/`ownerUid`/`hosts` join the super
+      // branch's list for the reasons that already put them on the other two
+      // (AGL-1354/1824): `sso` is the auth-routing field written only by
+      // /api/orgs/sso behind the `ssoEnabled` entitlement; `slug` is written
+      // only by the organizations.ts create/rename transactions that keep the
+      // `orgSlugs` index true; `ownerUid` only by org create and the
+      // ownership transfer in /api/orgs/settings; `hosts` only by the host
+      // APIs and the erase path. A bare client write of any of them bypasses
+      // the index/projection maintenance that makes the value mean anything.
+      // The only client Web SDK write to a top-level org document is still
+      // the erasure batch (re-swept for AGL-1824), so none of the seven has a
+      // client writer to lose.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['plan', 'entitlements', 'releaseFlags',
+            ['slug', 'ownerUid', 'hosts', 'sso',
+             'plan', 'entitlements', 'releaseFlags',
+             'seatAddons', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
@@ -186,6 +215,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
+             'seatAddons', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',

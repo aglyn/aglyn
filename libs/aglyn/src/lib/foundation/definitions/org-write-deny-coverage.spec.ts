@@ -280,6 +280,14 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
       // `enterprise` (no in-product writer at all — only the
       // migrate-enterprise-plan Admin-SDK script). Both staff branches, or
       // the OR leaves the other role writing them.
+      //
+      // AGL-1824, the same shape a third time: the AGL-1028 vestigial billing
+      // trio (`seatAddons`/`stripeCustomerId`/`subscription`, written only by
+      // `writeOrgBilling` and the backfill scripts, and still LIVE inputs via
+      // the `readOrgBilling` / `findOrgIdByStripeCustomer` fallbacks) joins
+      // both staff branches, and the identity quartet `sso`/`slug`/
+      // `ownerUid`/`hosts` (each owned by exactly one Admin-SDK surface)
+      // joins the super branch, which was the last branch allowing them.
       expect(rule.superStaffDenied).toEqual(
         expect.arrayContaining([
           'plan',
@@ -290,6 +298,13 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
           'brandingProfile',
           'discount',
           'enterprise',
+          'seatAddons',
+          'stripeCustomerId',
+          'subscription',
+          'sso',
+          'slug',
+          'ownerUid',
+          'hosts',
         ]),
       )
       expect(rule.billingStaffDenied).toEqual(
@@ -298,6 +313,9 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
           'brandingProfile',
           'discount',
           'enterprise',
+          'seatAddons',
+          'stripeCustomerId',
+          'subscription',
         ]),
       )
       // The AGL-1517 carve-out, asserted rather than left to be inferred from
@@ -305,6 +323,19 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
       // key must NOT join the super list. Denying it would refuse the last
       // client writer of a staff key with nothing to fall back on.
       expect(rule.superStaffDenied).not.toContain('erasureRequestedAt')
+      // The AGL-501 carve-out, pinned the same way: super staff enabling a
+      // gated plugin is the deliberate exception (and the emulator suite's
+      // positive control that the super branch is alive at all).
+      expect(rule.superStaffDenied).not.toContain('enabledPlugins')
+      // AGL-1824 made the convergence exact, so it is asserted exactly: the
+      // super list IS the billing list minus those two carve-outs. A third
+      // difference appearing in either direction means someone narrowed one
+      // branch and left the other behind — the AGL-1813/1824 bug reborn.
+      expect(
+        rule.billingStaffDenied
+          .filter((field) => !rule.superStaffDenied.includes(field))
+          .sort(),
+      ).toEqual(['enabledPlugins', 'erasureRequestedAt'])
       // isSuperStaff / isBillingStaff / canManageOrg.
       expect(rule.branches).toHaveLength(3)
     })
@@ -445,8 +476,10 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
     // says so — the AGL-1795 mutation run confirmed each half independently.
     //
     // A vacuous ladder proves nothing, so the floor is checked first.
-    // 13 = the AGL-1795 three + the AGL-1813 four + the six suspended* keys.
-    expect(rule.superStaffDenied.length).toBeGreaterThanOrEqual(13)
+    // 20 = the AGL-1795 three + the AGL-1813 four + the six suspended* keys
+    // + the AGL-1824 seven (the vestigial billing trio and the identity
+    // quartet).
+    expect(rule.superStaffDenied.length).toBeGreaterThanOrEqual(20)
     const looser = rule.superStaffDenied.filter(
       (field) => !rule.billingStaffDenied.includes(field),
     )

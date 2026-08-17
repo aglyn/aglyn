@@ -3647,4 +3647,247 @@ describe('discount/enterprise/brandingProfile/billingStatus are Admin-SDK-only �
   })
 })
 
+/**
+ * AGL-1824: the AGL-1028 vestigial billing trio (`seatAddons`,
+ * `stripeCustomerId`, `subscription`) is Admin-SDK-only for EVERY client,
+ * staff included — and the identity quartet (`sso`, `slug`, `ownerUid`,
+ * `hosts`) is denied to the SUPER branch, the last branch allowing it.
+ *
+ * The trio is vestigial (the real copies live in `billing/stripe` since
+ * AGL-1028) but NOT dead: `readOrgBilling` falls back to the org-doc fields
+ * when the billing subdoc is missing, and `findOrgIdByStripeCustomer` falls
+ * back to a `where('stripeCustomerId' == …)` query on `orgs` — so a
+ * client-written `stripeCustomerId` on an org without a billing doc was an
+ * input to webhook → org resolution.
+ *
+ * The AGL-1795 safety argument, re-established per key rather than assumed:
+ *  - `seatAddons`/`stripeCustomerId`/`subscription` — written only by
+ *    `writeOrgBilling` (Admin-SDK batch; `writeInline` defaults OFF and
+ *    nothing passes it) and the backfill-org-billing.mjs /
+ *    drop-inline-org-billing.mjs scripts. Both fallbacks are Admin-SDK
+ *    READS, so the deny cannot break the healing path;
+ *  - `sso` — written only by /api/orgs/sso behind the `ssoEnabled`
+ *    entitlement (the AGL-1354 auth-routing analysis);
+ *  - `slug` — written only by the organizations.ts create/rename
+ *    transactions that keep the `orgSlugs` index true;
+ *  - `ownerUid` — written only by org create and the ownership transfer in
+ *    /api/orgs/settings;
+ *  - `hosts` — written only by the host APIs and the erase path.
+ * A fresh sweep for this issue confirmed the erasure batch is still the only
+ * client Web SDK write to a top-level org document anywhere in the repo.
+ */
+describe('the vestigial billing trio and the identity quartet are Admin-SDK-only for staff (AGL-1824)', () => {
+  const SEVEN_KEYS = [
+    'seatAddons', 'stripeCustomerId', 'subscription',
+    'sso', 'slug', 'ownerUid', 'hosts',
+  ]
+  // Same three principals as AGL-1795/1813: a missing `staffRole` reads as
+  // super. The billing role was already denied the identity quartet
+  // (AGL-1354) — it stays in the matrix so the four shapes below keep proving
+  // that, while the trio and the super/pre-RBAC rows are the new fact.
+  const PRINCIPALS = [
+    ['super staff', { staff: true, staffRole: 'super' }],
+    ['billing staff', { staff: true, staffRole: 'billing' }],
+    ['pre-RBAC staff (no staffRole claim)', { staff: true }],
+  ]
+  const staffDb = (tokens) => authed(STAFF, tokens)
+
+  /** A real change per key — the shapes the legitimate owners write. */
+  const changed = (key) =>
+    ({
+      seatAddons: { sites: 25 },
+      stripeCustomerId: 'cus_attacker',
+      subscription: { status: 'active', priceId: 'price_enterprise' },
+      sso: { tenantId: 'tenant-attacker', provider: 'saml.attacker' },
+      slug: 'stolen',
+      ownerUid: STAFF,
+      hosts: { [HOST]: true, 'evil-host': true },
+    })[key]
+  /** Byte-identical to the seed (shared seed + the beforeEach below). */
+  const unchanged = (key) =>
+    ({
+      seatAddons: { sites: 2 },
+      stripeCustomerId: 'cus_acme',
+      subscription: { status: 'past_due', priceId: 'price_pro' },
+      sso: { tenantId: 'tenant-acme', provider: 'saml.acme' },
+      slug: 'acme',
+      ownerUid: OWNER,
+      hosts: { [HOST]: true },
+    })[key]
+
+  beforeEach(async () => {
+    // The shared seed carries `slug`/`ownerUid`/`hosts` but none of the trio
+    // or `sso`. All seven must EXIST, or the clearing case degenerates into a
+    // no-op diff (affectedKeys compares VALUES, so deleting an absent key is
+    // not a change and would pass while proving nothing).
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        seatAddons: unchanged('seatAddons'),
+        stripeCustomerId: unchanged('stripeCustomerId'),
+        subscription: unchanged('subscription'),
+        sso: unchanged('sso'),
+      })
+    })
+  })
+
+  it('refuses a staff client write of each key, in every shape, for every role', async () => {
+    for (const [who, tokens] of PRINCIPALS) {
+      const db = staffDb(tokens)
+      for (const key of SEVEN_KEYS) {
+        await mustDeny(
+          `${who} setting orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }),
+        )
+        // Clearing is a change too — and for `stripeCustomerId` it is the
+        // write that would detach an org from its Stripe customer.
+        await mustDeny(
+          `${who} clearing orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: deleteField() }),
+        )
+        // The merge-set is the shape a browser console reaches for.
+        await mustDeny(
+          `${who} merge-setting orgs/{orgId}.${key}`,
+          setDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }, { merge: true }),
+        )
+        // Smuggled inside a write the branch does allow — `hasAny` bites on
+        // the whole diff, so the bundle must fail with the smuggled key.
+        await mustDeny(
+          `${who} smuggling ${key} inside an org rename`,
+          updateDoc(doc(db, 'orgs', ORG), {
+            name: 'Innocent Rename', [key]: changed(key),
+          }),
+        )
+      }
+      // A nested field path is the same top-level diff and must not slip
+      // past — `subscription.status` is what `orgBillingStatusFrom` derives
+      // the dunning banner from, `sso.tenantId` decides which GCIP tenant
+      // signs the org in, and a new `hosts.*` entry is a projection claim.
+      await mustDeny(
+        `${who} flipping subscription.status by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'subscription.status': 'active' }),
+      )
+      await mustDeny(
+        `${who} pointing sso.tenantId by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'sso.tenantId': 'tenant-attacker' }),
+      )
+      await mustDeny(
+        `${who} claiming a host by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'hosts.evil-host': true }),
+      )
+    }
+  })
+
+  it('naming the seven without CHANGING them is still not a change', async () => {
+    // The AGL-1795 premise holds for this key family too: a client that
+    // re-sends the whole org document unchanged (a naive save) is judged on
+    // the DIFF, so denying the keys does not refuse it. The carrier write is
+    // `enabledPlugins`, the super branch's own carve-out.
+    const db = staffDb({ staff: true, staffRole: 'super' })
+    const allUnchanged = Object.fromEntries(
+      SEVEN_KEYS.map((key) => [key, unchanged(key)]),
+    )
+    await mustAllow(
+      'super staff enabling a plugin while re-sending all seven keys unchanged',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        { enabledPlugins: ['paid'], ...allUnchanged },
+        { merge: true },
+      ),
+    )
+    // The twin: one nested value differs and the same write is refused.
+    await mustDeny(
+      'the same write with ONE nested subscription field changed',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        {
+          enabledPlugins: ['paid'],
+          ...allUnchanged,
+          subscription: { status: 'active', priceId: 'price_pro' },
+        },
+        { merge: true },
+      ),
+    )
+  })
+
+  it('both staff branches and the erasure batch survive the narrowing', async () => {
+    // The deny is seven keys, not the token: each branch keeps a write only
+    // it can make (super: enabledPlugins; billing: the rename).
+    await mustAllow(
+      'super staff still writing an org key denied to everyone else',
+      updateDoc(doc(staffDb({ staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        enabledPlugins: ['paid'],
+      }),
+    )
+    await mustAllow(
+      'billing staff still renaming the org',
+      updateDoc(
+        doc(staffDb({ staff: true, staffRole: 'billing' }), 'orgs', ORG),
+        { name: 'Acme Billing' },
+      ),
+    )
+    // The last legitimate client writer of a staff key, both directions —
+    // the write every org-rule narrowing is most likely to break.
+    const db = staffDb({ staff: true, staffRole: 'super' })
+    const requestBatch = writeBatch(db)
+    requestBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: new Date(), updatedAt: new Date() },
+      { merge: true },
+    )
+    requestBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureRequested',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: false },
+      after: { erasureRequested: true },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the erasure request batch beside the AGL-1824 narrowing',
+      requestBatch.commit(),
+    )
+    const cancelBatch = writeBatch(db)
+    cancelBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: deleteField(), updatedAt: new Date() },
+      { merge: true },
+    )
+    cancelBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureCanceled',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: true },
+      after: { erasureRequested: false },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the erasure batch cancelling the request',
+      cancelBatch.commit(),
+    )
+  })
+
+  it('the legitimate server path still writes, and a member still reads the org', async () => {
+    // `writeOrgBilling`, the org create/rename transactions and the host APIs
+    // all go through the Admin SDK, which rules never see —
+    // `withSecurityRulesDisabled` is that path in the emulator.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG),
+        {
+          stripeCustomerId: 'cus_from_webhook',
+          subscription: changed('subscription'),
+          hosts: { [HOST]: true, 'host-b': true },
+        },
+        { merge: true },
+      )
+    })
+    // The org doc stays member-readable in full — that was AGL-1028's point:
+    // the confidentiality fix was MOVING the keys, not hiding this doc.
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.equal(snapshot.data().stripeCustomerId, 'cus_from_webhook')
+    assert.equal(snapshot.data().subscription.status, 'active')
+    assert.equal(snapshot.data().hosts['host-b'], true)
+  })
+})
+
 assert.ok(true)
