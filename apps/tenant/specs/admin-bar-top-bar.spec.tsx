@@ -136,6 +136,29 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(siteHeader.style.top).toBe('0px')
   })
 
+  it('brands the bar with the real Aglyn mark, not a placeholder glyph', async () => {
+    await renderReadyBar()
+    const brandLink = linkByText('Aglyn Marketing')
+    const mark = brandLink.querySelector('svg[data-aglyn-mark]')
+    expect(mark).not.toBeNull()
+    const paths = mark?.querySelectorAll('path') ?? []
+    expect(paths.length).toBe(2)
+    // Pinned to the canonical path data in
+    // libs/shared/ui/jsx/src/lib/const/svg-icons.tsx (AglynLogoMark) — if
+    // the brand mark changes there, this duplicate must follow.
+    expect(paths[0]?.getAttribute('d')?.startsWith('M5,16.202l-0.267')).toBe(
+      true,
+    )
+    expect(paths[1]?.getAttribute('d')?.startsWith('M15,9.997c0.323')).toBe(
+      true,
+    )
+    // The brand "multi" fills, visible on the dark bar.
+    expect(paths[0]?.getAttribute('fill')).toBe('#e040fb')
+    expect(paths[1]?.getAttribute('fill')).toBe('#00b0ff')
+    // The old placeholder was a literal "A" tile.
+    expect(brandLink.textContent).toBe('Aglyn Marketing')
+  })
+
   it('lays out the detail: dashboard link, screen, draft flag, quick links, identity', async () => {
     await renderReadyBar()
     expect(linkByText('Aglyn Marketing').href).toBe(CONTEXT_RESPONSE.consoleUrl)

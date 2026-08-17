@@ -140,19 +140,39 @@ const brandLinkStyle: React.CSSProperties = {
   minWidth: 0,
 }
 
-const markStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 20,
-  height: 20,
-  borderRadius: 5,
-  background: 'linear-gradient(135deg, #4f7cff, #8ecbff)',
-  color: '#0b1020',
-  fontSize: 12,
-  fontWeight: 800,
-  lineHeight: '20px',
-  flexShrink: 0,
+/**
+ * The Aglyn logo mark (AGL-1829 branding pass): the compass + bounding-box
+ * paths, deliberately DUPLICATED from the canonical `AglynLogoMark` in
+ * `libs/shared/ui/jsx/src/lib/const/svg-icons.tsx` (same path data as
+ * `apps/tenant/public/_static/images/brand/aglyn-logo-mark-multi.svg`) —
+ * the AGL-1810 duplicate-with-pointer pattern. Inline rather than imported
+ * because the shared component is `styled(SvgIcon)`: importing it would drag
+ * MUI and the theme into a lazy chunk that must stay lean on other people's
+ * websites, and an `<img>` would add a fetch this bar has none of. Fills are
+ * the brand "multi" colors (compass pink, bounding-box blue), which read on
+ * the dark bar. If the mark ever changes, change it there AND here.
+ */
+const MARK_COMPASS_PATH =
+  'M5,16.202l-0.267,0.183l-1.733,0.152l-0,1.46l-1,-0l-0,4l4,-0l0,-1l7.171,-0l-0.148,-0.263l-0,-1.737l-7.023,-0l0,-1l-1,-0l0,-1.795Zm14,-7.234l0,9.029l-0.004,-0l0,2.737l-0.714,1.263l3.718,-0l0,-4l-1,-0l0,-10.273c-0.37,-0 -0.836,-0 -0.836,-0.001c-0.307,0.47 -0.697,0.894 -1.164,1.245Zm-16,0.145l2,-1.376l0,-1.74l1,-0l0,-1l4.748,-0l0.279,-0.193c0.025,-0.623 0.167,-1.237 0.416,-1.807l-5.443,-0l0,-1l-4,-0l-0,4l1,-0l-0,3.116Zm19,-7.116l-2.029,-0c0.067,0.088 0.131,0.179 0.192,0.273l1.281,-0l0.556,0.556l0,-0.829Z'
+const MARK_BOUNDING_BOX_PATH =
+  'M15,9.997c0.323,0.073 0.661,0.112 1.01,0.112c0.348,-0 0.687,-0.039 1.009,-0.112l0,10.217l-1.009,1.783l-1.01,-1.783l0,-10.217Zm-1.898,-4.221c-0.345,-1.28 0.196,-2.683 1.398,-3.377c1.434,-0.828 3.27,-0.336 4.098,1.098c0.139,0.241 0.241,0.493 0.307,0.75l1.72,-0l0.375,0.375l-0,0.75l-0.375,0.375l-1.721,-0c-0.194,0.752 -0.679,1.429 -1.404,1.848c-1.052,0.607 -2.319,0.504 -3.247,-0.159l-3.458,2.379l-0.252,1.364l-3.296,2.267l-1.363,-0.252l-1.843,1.267l-2.041,0.179l0.897,-1.842l1.826,-1.257c0,0 0.257,-1.39 0.257,-1.39l3.296,-2.268l1.39,0.257l3.436,-2.364Zm3.398,0.087c-0.478,0.276 -1.09,0.112 -1.366,-0.366c-0.276,-0.478 -0.112,-1.09 0.366,-1.366c0.478,-0.276 1.09,-0.112 1.366,0.366c0.276,0.478 0.112,1.09 -0.366,1.366Z'
+
+function AglynMark() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      aria-hidden="true"
+      focusable="false"
+      style={{ flexShrink: 0, display: 'block' }}
+      data-aglyn-mark=""
+    >
+      <path d={MARK_COMPASS_PATH} fill="#e040fb" fillRule="evenodd" />
+      <path d={MARK_BOUNDING_BOX_PATH} fill="#00b0ff" fillRule="evenodd" />
+    </svg>
+  )
 }
 
 const dividerStyle: React.CSSProperties = {
@@ -460,9 +480,7 @@ export default function AdminBar({
         rel="noreferrer"
         title="Open this site's console dashboard"
       >
-        <span style={markStyle} aria-hidden="true">
-          A
-        </span>
+        <AglynMark />
         <strong
           style={{
             overflow: 'hidden',
