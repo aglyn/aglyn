@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
+import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readCartId } from './cart-cookie'
 
@@ -59,7 +60,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   // taking its metadata at face value.
   const cartId = readCartId(req.cookies, hostId)
   if (!cartId) return res.status(400).json({ error: 'Your cart is empty' })
+  // One checkout attempt, minted by the cart drawer (AGL-1697). Node
+  // lowercases incoming headers, but read both spellings — the plugin API
+  // request type makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
 
+  let claim: AttemptClaim | null = null
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
@@ -247,12 +255,45 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     if (resolvedDiscount?.codeProblem) {
       return res.status(400).json({ error: resolvedDiscount.codeProblem })
     }
+
+    // Point of no return (AGL-1697): everything past here creates Stripe
+    // objects — up to two coupons and the session — on the merchant's live
+    // account. The cart is not consumed until the webhook clears it, so
+    // before the claim one cart could spawn unlimited sessions, each retry
+    // leaving an orphan `checkouts/{sessionId}` doc (which feeds the AGL-323
+    // abandoned-cart emails) plus a stray coupon.
+    //
+    // The two refusals that remain BELOW this line (invalid legacy coupon,
+    // empty gift card) each release the claim: they are deterministic, the
+    // shopper fixes the code and presses the same button, and because the
+    // retry re-derives the same digest Stripe replays any coupon the first
+    // run already minted rather than creating a twin (AGL-1714's rule).
+    const claimed = await claimAttempt(firestore, {
+      kind: 'commerce-cart',
+      scopeId: `${hostId}:${cartId}`,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+      busyMessage: 'This checkout is already being processed',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+    // Derived per OBJECT, never the raw digest (AGL-1714): Stripe
+    // parameter-compares a repeated key account-wide, so one digest sent to
+    // `/v1/coupons` and then `checkout/sessions` would error the second call.
+    const stripeKeyHeader = (object: string): Record<string, string> => {
+      const derived = deriveStripeObjectKey(claimed.claim.stripeKey, object)
+      return derived ? { 'Idempotency-Key': derived } : {}
+    }
+
     if (resolvedDiscount && resolvedDiscount.discountCents > 0) {
       const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          ...stripeKeyHeader('coupon-discount'),
         },
         body: new URLSearchParams({
           amount_off: String(resolvedDiscount.discountCents),
@@ -290,6 +331,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         exhausted ||
         !(percentOff > 0 && percentOff <= 100)
       ) {
+        // Deterministic and retryable — the shopper fixes the code and
+        // presses the same button, so the key survives (AGL-1697).
+        await claim.release()
         return res.status(400).json({ error: 'Invalid or expired coupon' })
       }
       const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
@@ -297,6 +341,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          ...stripeKeyHeader('coupon-code'),
         },
         body: new URLSearchParams({
           percent_off: String(percentOff),
@@ -319,6 +364,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         .get()
       const balanceCents = Number(cardSnapshot.get('balanceCents') ?? 0)
       if (!cardSnapshot.exists || balanceCents <= 0) {
+        // Deterministic and retryable, but a discount coupon may already
+        // exist by now. Releasing means the retry re-derives the SAME derived
+        // key for it, so Stripe replays that coupon rather than minting a
+        // twin (AGL-1714's rule).
+        await claim.release()
         return res.status(400).json({ error: 'Gift card is empty or invalid' })
       }
       const applyCents = Math.min(balanceCents, itemsCents)
@@ -327,6 +377,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          ...stripeKeyHeader('coupon-gift'),
         },
         body: new URLSearchParams({
           amount_off: String(applyCents),
@@ -400,6 +451,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // The half that costs real money (AGL-1697): Stripe replays the
+          // existing session for a repeated key instead of opening a second
+          // one, covering the window where the claim is written but the
+          // response never arrives.
+          ...stripeKeyHeader('session'),
         },
         body: params.toString(),
       },
@@ -411,6 +467,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     }
     if (!response.ok || !session.url) {
       console.error('Stripe cart checkout error', session.error)
+      // The checkout did not happen — hand the key back so one flaky moment
+      // does not lock this cart out. The retry re-derives the same derived
+      // keys, so Stripe replays whatever objects the first run did create.
+      await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
     // Recoverable checkout (AGL-296): email captured before the redirect
@@ -428,12 +488,21 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)
-    return res.status(200).json({ url: session.url })
+    const payload = { url: session.url }
+    await claim.record(200, payload)
+    return res.status(200).json(payload)
   } catch (error: any) {
     if (error?.visible) {
+      // Line-availability refusals throw from the pricing loop, which sits
+      // ABOVE the claim — so there is nothing to release and the key
+      // survives, as a deterministic refusal should (AGL-1697).
+      await claim?.release()
       return res.status(409).json({ error: error.visible })
     }
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691's rule).
+    await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }
 }

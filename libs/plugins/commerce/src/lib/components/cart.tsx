@@ -34,7 +34,14 @@ import MenuItem from '@mui/material/MenuItem'
 import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useCallback, useEffect, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
@@ -158,14 +165,50 @@ function CartLines(props: {
     }).finally(settle)
   }
 
+  /**
+   * Idempotency key for ONE checkout attempt (AGL-1697).
+   *
+   * Minted lazily on the first checkout click, retired whenever the attempt
+   * changes shape — different lines, codes, email or destination are a
+   * different checkout. Keyed off a CONTENT signature of the lines rather
+   * than the `cart` object, whose identity changes on every refetch: retiring
+   * on identity would hand a genuine retry a fresh key, which is exactly the
+   * double-session this exists to prevent.
+   */
+  const attemptKey = useRef('')
+  const cartSignature = useMemo(
+    () =>
+      JSON.stringify(
+        (cart?.lines ?? []).map((line) => [
+          line.productId,
+          line.variantId ?? '',
+          line.quantity,
+        ]),
+      ),
+    [cart],
+  )
+  useEffect(() => {
+    attemptKey.current = ''
+  }, [cartSignature, email, coupon, giftCard, shipTo])
+
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
     setStatus('sending')
     setMessage('')
+    if (!attemptKey.current) {
+      attemptKey.current =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
     try {
       const response = await siteFetch('/api/commerce/cart-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Stable across a retry of THIS attempt (AGL-1697), so a
+          // double-click cannot spawn a second session from one cart.
+          'Idempotency-Key': attemptKey.current,
+        },
         body: JSON.stringify({
           hostId,
           ...(email.trim() ? { email: email.trim() } : {}),
