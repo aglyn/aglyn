@@ -62,13 +62,20 @@
  * ignores. Posting the built payload would therefore have turned every
  * "inherit" back into the AGL-1109 no-op, silently.
  *
- * So the body carries only what is EXPLICITLY overridden — `features` and
- * `releaseFlags` are maps of the keys forced on or off, and nothing else.
- * ABSENCE IS THE INHERIT SIGNAL, and this route expands it against the
- * registries (`PLAN_ENTITLEMENTS.free.features`, `RELEASE_FLAGS`) into the
+ * So the body carries only what is EXPLICITLY overridden — `quotas`,
+ * `features` and `releaseFlags` are maps of the keys the operator filled in
+ * or forced, and nothing else. ABSENCE IS THE INHERIT SIGNAL, and this route
+ * expands it against the registries (the numeric keys of
+ * `PLAN_ENTITLEMENTS.free`, its `features`, and `RELEASE_FLAGS`) into the
  * Admin SDK's `FieldValue.delete()`. The sentinel is minted on the side of
  * the wire that can hold one, and the key set comes from the source of truth
  * rather than from whatever the caller happened to send.
+ *
+ * The numeric family reached that contract late (AGL-1789): it omitted
+ * cleared quotas instead of deleting them, so emptying one field of several
+ * left the stored override in force while the audit row said it was gone.
+ * Absence is the signal there too now — and PRESENCE is what makes an
+ * override, so a quota of `0` is a real cap of none, not a cleared field.
  *
  * ## The role split is the rules' split, kept
  *
@@ -165,12 +172,18 @@ function readBooleanMap(
  * key the caller did not force. This is the AGL-1109 contract restated on
  * the side of the wire that can hold a sentinel — and derived from the
  * registry, so a flag shipped after the caller's bundle is still handled.
+ *
+ * KEY PRESENCE, never the value: `key in explicit`, so a forced `false` and
+ * a quota of `0` are overrides that are WRITTEN, not absences that are
+ * deleted. An org capped at zero registers or comped to a 0% marketplace fee
+ * is expressing a cap, and reading emptiness off the value would hand it the
+ * plan default instead (AGL-1789).
  */
-function withInheritDeletes(
-  explicit: Record<string, boolean>,
-  allKeys: string[],
-): Record<string, boolean | FieldValue> {
-  const payload: Record<string, boolean | FieldValue> = {}
+function withInheritDeletes<T extends boolean | number>(
+  explicit: Record<string, T>,
+  allKeys: Iterable<string>,
+): Record<string, T | FieldValue> {
+  const payload: Record<string, T | FieldValue> = {}
   for (const key of allKeys) {
     payload[key] = key in explicit ? explicit[key] : FieldValue.delete()
   }
@@ -247,12 +260,10 @@ async function handler(request: Request): Promise<Response> {
       return refuse(`Unknown plan: ${plan}`, 400)
     }
 
-    // Numeric entitlements. Only what the caller explicitly set — an omitted
-    // quota is left exactly as stored, which is the shipped behaviour of the
-    // dialog this replaces. That is the AGL-1109 bug still open for the
-    // numeric family (clearing ONE of several quotas does not remove it),
-    // preserved verbatim here so this migration changes no behaviour, and
-    // filed as AGL-1789 rather than half-fixed under a refactor.
+    // Numeric entitlements — the caller's EXPLICIT set, and absence is the
+    // inherit signal here exactly as it is for the two boolean families
+    // (AGL-1789). A quota the operator emptied is expanded into a delete
+    // below; one they typed `0` into is a present key and is written.
     const rawQuotas = body?.['quotas']
     if (
       rawQuotas !== undefined &&
@@ -310,13 +321,26 @@ async function handler(request: Request): Promise<Response> {
     // Deletes do not count as overrides, or clearing the last one would
     // leave an empty map behind instead of removing the field — and
     // `overrideCount` reads key presence, so the row chip would never clear.
+    // Counted by key presence on BOTH sides of that: an org whose only
+    // override is a `0` quota still has one.
     const hasOverrides =
       Object.keys(quotas).length > 0 || Object.keys(explicitFeatures).length > 0
     const hasReleaseOverrides = Object.keys(explicitReleaseFlags).length > 0
 
-    const entitlements: Record<string, unknown> = { ...quotas }
-    if (hasOverrides) {
-      entitlements['features'] = withInheritDeletes(explicitFeatures, FEATURE_KEYS)
+    // Both families expanded against their registry, so a quota the operator
+    // cleared is DELETED rather than omitted (AGL-1789). Omitting it was the
+    // AGL-1109 no-op wearing a number: a merge writes nested maps key by key,
+    // so clearing one of several left the stored override in force while the
+    // audit row's `after` recorded it as gone.
+    //
+    // Keys the registry does not name — `datasetsPerHost` and its `max`
+    // sibling, the pre-AGL-240 host-keyed overrides the resolver still
+    // honours — are left alone. They are not rendered by the dialog, so the
+    // operator cannot have meant to clear them; clearing every offered quota
+    // still drops the whole map below.
+    const entitlements: Record<string, unknown> = {
+      ...withInheritDeletes(quotas, QUOTA_KEYS),
+      features: withInheritDeletes(explicitFeatures, FEATURE_KEYS),
     }
 
     // `before` is read from the LIVE document, not taken from the caller.
