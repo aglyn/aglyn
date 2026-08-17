@@ -18,7 +18,9 @@
 import {
   HEALTH_NO_STORE,
   MAX_BACKUP_AGE_DAYS,
+  MAX_EXPORT_AGE_DAYS,
   backupsHealth,
+  exportsHealth,
   healthBody,
   healthHeaders,
   healthHttpStatus,
@@ -218,6 +220,76 @@ describe('backupsHealth', () => {
       'newestReadyAgeDays',
       'ok',
       'states',
+    ])
+  })
+})
+
+describe('exportsHealth', () => {
+  // Fixed clock: 2026-08-24T12:00:00Z (a week after the first real export).
+  const NOW = Date.parse('2026-08-24T12:00:00Z')
+  const days = (n: number) => new Date(NOW - n * 86_400_000).toISOString()
+
+  it('is ok with a fresh completed export', () => {
+    const check = exportsHealth([{ timeCreated: days(2) }], 7, NOW)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.exportCount).toBe(1)
+    expect(check.newestExportAgeDays).toBe(2)
+  })
+
+  it('judges only the NEWEST marker — old retained exports are history, not failures', () => {
+    // The 90-day lifecycle keeps ~13 weekly exports around. Their ages are
+    // the point of retention, not a symptom.
+    const check = exportsHealth(
+      [{ timeCreated: days(72) }, { timeCreated: days(2) }, { timeCreated: days(30) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.exportCount).toBe(3)
+    expect(check.newestExportAgeDays).toBe(2)
+  })
+
+  it('fails when the newest export exceeds the age budget', () => {
+    const check = exportsHealth([{ timeCreated: days(MAX_EXPORT_AGE_DAYS + 1) }], 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('export-stale')
+    expect(check.newestExportAgeDays).toBe(MAX_EXPORT_AGE_DAYS + 1)
+  })
+
+  it('fails on an empty bucket — the cron exists, so nothing is a failure', () => {
+    const check = exportsHealth([], 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-export')
+    expect(check.exportCount).toBe(0)
+    expect(check.newestExportAgeDays).toBeNull()
+  })
+
+  it('gives a marker with no parseable timestamp no freshness credit', () => {
+    // A hung export never writes its completion marker; a garbled listing
+    // must not masquerade as a fresh one.
+    const check = exportsHealth([{ timeCreated: 'not-a-date' }, {}], 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-export')
+    expect(check.exportCount).toBe(2)
+    expect(check.newestExportAgeDays).toBeNull()
+  })
+
+  it('reports a failed listing as degraded, never as calm', () => {
+    const check = exportsHealth(null, 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('exports-unavailable')
+    expect(check.exportCount).toBeNull()
+    expect(check.newestExportAgeDays).toBeNull()
+  })
+
+  it('exposes counts and an age only — no bucket names, no object paths', () => {
+    const check = exportsHealth([{ timeCreated: days(1) }], 7, NOW)
+    expect(Object.keys(check).sort()).toEqual([
+      'exportCount',
+      'ms',
+      'newestExportAgeDays',
+      'ok',
     ])
   })
 })

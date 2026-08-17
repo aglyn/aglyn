@@ -162,7 +162,15 @@ Notes that keep these honest:
   WebP variants, discovered by archaeology (AGL-1468).
 - `backup-state` closes AGL-1490's alert gap: 503 when any backup is failed,
   none is READY, or the newest READY is older than 8 days. The probe's verdict
-  logic is `backupsHealth` in `health-report.ts`, spec-covered.
+  logic is `backupsHealth` in `health-report.ts`, spec-covered. Since
+  AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
+  `exports` — watching the weekly Firestore GCS export
+  (`gs://aglyn-main-firestore-exports`, cron in `scheduled-crons.yml`): 503
+  when no completed export exists or the newest is older than 8 days
+  (`exportsHealth`, also spec-covered). Separate checks on purpose: the body
+  says WHICH recovery layer is degraded — `checks.backups` is Google's
+  managed backups, `checks.exports` is our own portable copy — instead of
+  blending two very different failures into one verdict.
 - `signup-volume` is the AGL-1536 wave alarm — the detection layer over the
   AGL-1534 rate limit. The endpoint 503s when more than 10 orgs were created
   in the trailing hour (one maxed-out IP under the AGL-1534 cap can produce
@@ -232,6 +240,10 @@ channel are free, and the backup probe is one metadata-only REST call per
 The backup probe needed one IAM grant:
 `roles/datastore.backupsViewer` (backups get/list, nothing else) to
 `firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com` (2026-08-13).
+The exports probe needs `storage.objects.list` on the export bucket, which
+the same service account's pre-existing project-level `roles/storage.admin`
+already covers; the export cron's own grants are documented in
+`docs/DISASTER_RECOVERY.md`.
 
 Checks and policies were created via the Monitoring REST API; to inspect or
 edit, the console UI is fine, or
