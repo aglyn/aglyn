@@ -580,6 +580,57 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(indexDrift, /npm run test:rules-drift/)
   })
 
+  it('the seven homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
+    // These suites' only other home is nx-ci.yml, which is `disabled_manually`
+    // and runs on no runner (AGL-1816) — text in a file that never executes.
+    // tools-guards.yml is their active home. The assertion lives HERE, in a
+    // suite that rules-drift.yml, index-drift.yml AND tools-guards.yml all
+    // run, because asserted only from inside tools-guards.yml it would be
+    // circular: deleting a step would delete the check on the deletion (the
+    // AGL-1804/AGL-1816 precedent). With two OTHER active homes for this
+    // suite, removing a guard step — or the whole workflow — turns both drift
+    // workflows red.
+    const workflow = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'tools-guards.yml'),
+      'utf8',
+    )
+    for (const script of [
+      'test:rules-drift', // the wiring guard itself — this suite
+      'test:eslint-rules',
+      'test:plugin-loader',
+      'test:disk-space',
+      'test:deploy-guard',
+      'test:erase-cli',
+      'test:standalone-installs',
+      'check:standalone-installs',
+    ]) {
+      // Match the STEP syntax, not the bare script name — the workflow's own
+      // comments mention these scripts, and an assertion a comment can
+      // satisfy is the vacuous-green shape this wiring block exists to catch.
+      assert.ok(
+        workflow.includes(`- run: npm run ${script}`),
+        `tools-guards.yml must have a step running npm run ${script}`,
+      )
+    }
+    // And the scripts it runs must exist — a renamed script plus a stale
+    // workflow is a step that fails on every run for the wrong reason.
+    const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+    for (const script of [
+      'test:eslint-rules',
+      'test:plugin-loader',
+      'test:disk-space',
+      'test:deploy-guard',
+      'test:erase-cli',
+      'test:standalone-installs',
+      'check:standalone-installs',
+    ]) {
+      assert.ok(
+        typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',
+        `package.json must define the ${script} script tools-guards.yml runs`,
+      )
+    }
+  })
+
   it('the workflow compares against the PROMOTED baseline, with the history to resolve it (AGL-1690)', () => {
     const workflow = readFileSync(
       join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),

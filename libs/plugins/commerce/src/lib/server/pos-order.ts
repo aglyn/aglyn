@@ -29,6 +29,7 @@ import {
   type AttemptClaim,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
+import { alertLowStockCrossing } from './low-stock'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -269,6 +270,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           channel: 'pos',
           registerId,
+          // The bucket the sale comes out of (AGL-286). The cash write below
+          // has stored this since AGL-1808; the card sale needs it MORE — its
+          // decrement runs in the webhook (AGL-1825), where the register's
+          // chosen location exists nowhere but on this document.
+          ...(locationId ? { locationId } : {}),
           lineItems,
           totals,
           customerEmail: customerEmail || null,
@@ -455,6 +461,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         -line.quantity,
         locationId || undefined,
       )
+      // Two lines of one product must COMPOUND (AGL-1828): the next line
+      // starts from these variants, not from the product as first read —
+      // recomputing from the original would erase this decrement when the
+      // sibling line's merge-set landed, while the ledger below recorded
+      // both. Same carry-forward as the webhook's POS card loop (AGL-1825).
+      const updated = { ...product, variants }
+      productsById.set(line.productId, updated)
       await hostRef
         .collection('products')
         .doc(line.productId)
@@ -475,6 +488,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           atMs: Date.now(),
         } satisfies CommerceModel.InventoryAdjustment)
         .catch(() => undefined)
+      // Low-stock crossing alert (AGL-1826): the register — the channel most
+      // likely to be selling down the last few units of physical shelf
+      // stock — used to cross the threshold silently while the buy-now
+      // button alerted. The compounded pair above means two lines of one
+      // product cross exactly once, on the line that breaches; the
+      // `claimAttempt` bounds a replayed settlement.
+      alertLowStockCrossing(hostId, product, updated)
     }
     // AGL-1757: the register's email box is optional, and a room charge is
     // exactly the sale nobody stops to re-ask an email for — so a stay's

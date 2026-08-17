@@ -18,6 +18,7 @@
 import {
   INERT_CSS_URL,
   isRefusedAuthorCssUrl,
+  isRefusedAuthorImageSrc,
   sanitizeAuthorCss,
   sanitizeAuthorSx,
 } from './author-css'
@@ -67,6 +68,28 @@ describe('isRefusedAuthorCssUrl (AGL-1725)', () => {
 
   it('does not read a relative path containing a colon as a scheme', () => {
     expect(isRefusedAuthorCssUrl('/a:b/c.png')).toBe(false)
+  })
+})
+
+describe('isRefusedAuthorImageSrc (AGL-1725, the raw <img> sinks)', () => {
+  it('refuses http: and unknown schemes', () => {
+    expect(isRefusedAuthorImageSrc('http://tracker.example/p.png')).toBe(true)
+    expect(isRefusedAuthorImageSrc('javascript:alert(1)')).toBe(true)
+    expect(isRefusedAuthorImageSrc('ftp://files.example/a.png')).toBe(true)
+  })
+
+  it('refuses a media reference, which a RAW sink would render as a literal', () => {
+    // These callers emit the stored string verbatim — `src="media:…"` is a
+    // relative request that cannot resolve, so refusing beats emitting it.
+    expect(isRefusedAuthorImageSrc('media:host-1/cover')).toBe(true)
+  })
+
+  it('keeps https, the media picker relative form, and inert schemes', () => {
+    expect(isRefusedAuthorImageSrc('https://cdn.example/a.png')).toBe(false)
+    expect(isRefusedAuthorImageSrc('/api/media/cdn/host-1/m-1')).toBe(false)
+    expect(isRefusedAuthorImageSrc('//cdn.example/a.png')).toBe(false)
+    expect(isRefusedAuthorImageSrc('data:image/png;base64,AAAA')).toBe(false)
+    expect(isRefusedAuthorImageSrc('blob:https://a.example/x')).toBe(false)
   })
 })
 

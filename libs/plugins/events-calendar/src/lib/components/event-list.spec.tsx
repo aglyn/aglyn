@@ -26,7 +26,9 @@
  * consumer that suffers is the one reading the markup out of band.
  */
 
-import { eventJsonLd, type EventItem } from './event-list'
+import * as Aglyn from '@aglyn/aglyn'
+import { render, screen, waitFor } from '@testing-library/react'
+import EventList, { eventJsonLd, type EventItem } from './event-list'
 
 const anEvent = (overrides: Partial<EventItem> = {}): EventItem => ({
   $id: 'e1',
@@ -107,5 +109,64 @@ describe('the Event node’s image (AGL-1351)', () => {
 
     expect(raw).not.toContain('</script>')
     expect(JSON.parse(raw).name).toBe('A </script> party')
+  })
+})
+
+/**
+ * The cover `<img>` on the published list — the same free-text field the
+ * JSON-LD suite above covers, at the sink that renders it verbatim to
+ * visitors. One of AGL-1725's raw author sinks, and (with the marketing
+ * popup) one of the two `http:`-accepting egresses left after AGL-1713 and
+ * the collection cover fix. Scheme rule only, never a host check: the site
+ * owner picks the host; refusing the scheme is what protects their visitors.
+ */
+describe('the Event List cover refuses the http: scheme (AGL-1725)', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+
+  const mountList = (events: EventItem[]) => {
+    global.fetch = jest.fn(async () => ({
+      json: async () => ({ events }),
+    })) as any
+    return render(
+      <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
+        <EventList />
+      </Aglyn.SiteContext.Provider>,
+    )
+  }
+
+  it('renders an https cover as stored — the advertised hotlink path', async () => {
+    const { container, unmount } = mountList([
+      anEvent({ coverImage: 'https://acme.example/party.jpg' }),
+    ])
+    await waitFor(() => expect(screen.getByText('Launch party')).toBeTruthy())
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'https://acme.example/party.jpg',
+    )
+    unmount()
+  })
+
+  it('renders the media picker relative form', async () => {
+    const { container, unmount } = mountList([
+      anEvent({ coverImage: '/api/media/cdn/host-1/m-1' }),
+    ])
+    await waitFor(() => expect(screen.getByText('Launch party')).toBeTruthy())
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/media/cdn/host-1/m-1',
+    )
+    unmount()
+  })
+
+  it('renders the event WITHOUT the cover for an http: url', async () => {
+    const { container, unmount } = mountList([
+      anEvent({ coverImage: 'http://tracker.example/party.jpg' }),
+    ])
+    // The event itself still renders — only the insecure egress is dropped.
+    await waitFor(() => expect(screen.getByText('Launch party')).toBeTruthy())
+    expect(container.querySelector('img')).toBeNull()
+    unmount()
   })
 })

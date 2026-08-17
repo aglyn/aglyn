@@ -502,3 +502,537 @@ describe('paid draft order shipping (AGL-1792)', () => {
     ).toBe(7)
   })
 })
+
+/**
+ * The ledger row the decrement never wrote (AGL-1807).
+ *
+ * This branch was the one stock writer of four that moved the count and logged
+ * nothing: the cart loop, the buy-now branch and `pos-order.ts` all pair the
+ * variant decrement with an `inventoryAdjustments` row, so a draft-link sale
+ * was the only movement the products hub's stock history could not explain —
+ * and the reason AGL-1797's restock flag could not use the ledger as its
+ * source of truth.
+ */
+describe('paid draft order inventory ledger (AGL-1807)', () => {
+  function ledgerRows() {
+    return [...docs.entries()]
+      .filter(([path]) => path.startsWith('hosts/host-1/inventoryAdjustments/'))
+      .map(([, value]) => value)
+  }
+
+  /**
+   * THE DEFECT: before the fix this array was empty — the decrement two tests
+   * up landed with no history behind it. The shape matches the sibling
+   * writers' byte for byte, so `products-hub-card.component.tsx` renders it
+   * with no reader change.
+   */
+  it('logs the sale in the inventory ledger', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toEqual([
+      {
+        productId: 'product-1',
+        variantId: 'large',
+        delta: -3,
+        reason: 'sale',
+        orderId: 'order-1',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /**
+   * The row references the ORDER document. The siblings write
+   * `String(object.id)` because their order doc id IS the session id; here the
+   * draft was pre-created under `metadata.orderId`, and a row keyed to
+   * `cs_draft_1` would join to nothing — invisible next to the order, useless
+   * to AGL-1797's `where('orderId', '==', …)` shape.
+   */
+  it('references the order document, not the checkout session', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()[0]?.orderId).toBe('order-1')
+    expect(ledgerRows()[0]?.orderId).not.toBe('cs_draft_1')
+  })
+
+  /**
+   * `-quantity`, not `-1` — the AGL-1711 defect this same branch's neighbour
+   * had, pinned here so the ledger can never disagree with the decrement it
+   * explains.
+   */
+  it('logs the sold quantity, not one unit', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()[0]?.delta).toBe(-3)
+  })
+
+  /** The redelivery guard covers the ledger exactly as it covers the count. */
+  it('logs once on a redelivered event', async () => {
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toHaveLength(1)
+  })
+
+  /**
+   * An untracked variant decrements nothing, so it must log nothing — a row
+   * for stock that did not move would corrupt the very history this fix
+   * completes (AGL-1797's argument, in the other direction). Passes before the
+   * fix too: it pins the row to the decrement's own guard.
+   */
+  it('logs nothing for an untracked variant', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      variants: [{ id: 'large', priceUsd: 15, sku: 'BOX-L' }],
+    })
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toHaveLength(0)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBeUndefined()
+  })
+})
+
+/**
+ * The POS card sale's stock (AGL-1825).
+ *
+ * `commerce-draft` completes two sales: the console payment link, whose
+ * metadata names one `productId`, and the POS card (QR) sale, whose metadata is
+ * `{type, hostId, orderId}` and nothing else. The branch's only decrement sat
+ * under `if (productId)`, so a card sale flipped to paid, notified, fed
+ * contacts — and never took a unit off the shelf. The same basket paid in cash
+ * decrements per line, location-aware, with a ledger row; `cancel-order.ts`
+ * then releases a paid order's stock on cancel, so a cancelled card sale
+ * RESTOCKED units that were never taken.
+ *
+ * The order document already holds `lineItems`; these cases pin the per-line
+ * loop that decrements from it — location-aware via the `locationId` that
+ * `pos-order.ts` now stores on the pending card order, with the AGL-1807
+ * ledger row beside every movement.
+ */
+describe('POS card sale stock (AGL-1825)', () => {
+  /**
+   * Two tracked lines of ONE product (a located bucket and a flat count) plus
+   * an untracked line. Nothing coincides: quantities 2/1/5, stocks 9(6+3)/4,
+   * and 7700 = 2×2200 + 1×1800 + 5×300.
+   */
+  const POS_ORDER = {
+    number: 12,
+    status: 'pending',
+    channel: 'pos',
+    registerId: 'register-1',
+    locationId: 'loc-front',
+    lineItems: [
+      {
+        productId: 'product-2',
+        variantId: 'wool',
+        name: 'Beanie',
+        variantLabel: 'Wool',
+        productType: 'physical',
+        quantity: 2,
+        unitAmountCents: 2200,
+      },
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        name: 'Beanie',
+        variantLabel: 'Cotton',
+        productType: 'physical',
+        quantity: 1,
+        unitAmountCents: 1800,
+      },
+      {
+        productId: 'product-3',
+        variantId: 'default',
+        name: 'Sticker',
+        productType: 'physical',
+        quantity: 5,
+        unitAmountCents: 300,
+      },
+    ],
+    totals: {
+      itemsCents: 7700,
+      shippingCents: 0,
+      taxCents: 0,
+      discountCents: 0,
+      feeCents: 0,
+      totalCents: 7700,
+    },
+    customerEmail: null,
+    timeline: [{ atMs: 2000, event: 'pos-card-pending' }],
+    createdAtMs: 2000,
+  }
+
+  /** The register's session: `{type, hostId, orderId}` and NO productId. */
+  const POS_SESSION = {
+    id: 'cs_pos_1',
+    payment_status: 'paid',
+    payment_intent: 'pi_pos_1',
+    amount_total: 7700,
+    customer_details: null,
+    metadata: {
+      type: 'commerce-draft',
+      hostId: 'host-1',
+      orderId: 'order-pos',
+    },
+  }
+
+  function posLedgerRows() {
+    return [...docs.entries()]
+      .filter(([path]) => path.startsWith('hosts/host-1/inventoryAdjustments/'))
+      .map(([, value]) => value)
+  }
+
+  function beanie() {
+    return docs.get('hosts/host-1/products/product-2') as any
+  }
+
+  function beanieVariant(id: string) {
+    return beanie().variants.find((variant: any) => variant.id === id)
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Beanie',
+      type: 'physical',
+      variants: [
+        {
+          id: 'wool',
+          priceUsd: 22,
+          inventory: 9,
+          inventoryByLocation: { 'loc-front': 6, 'loc-back': 3 },
+        },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+    docs.set('hosts/host-1/products/product-3', {
+      name: 'Sticker',
+      type: 'physical',
+      variants: [{ id: 'default', priceUsd: 3 }],
+    })
+    docs.set('hosts/host-1/orders/order-pos', { ...POS_ORDER })
+  })
+
+  /**
+   * THE DEFECT. Before the fix a card sale decremented NOTHING — the branch's
+   * only decrement read `metadata.productId`, which the POS session does not
+   * carry. Both counts stood still while the cash path moved them.
+   */
+  it('decrements every tracked line when the card sale pays', async () => {
+    await deliver(POS_SESSION)
+    expect((docs.get('hosts/host-1/orders/order-pos') as any).status).toBe(
+      'paid',
+    )
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+  })
+
+  /**
+   * The units come out of the register's own bucket (AGL-286): the sale's
+   * `locationId` rides on the order, so the webhook decrements `loc-front`
+   * and leaves `loc-back` alone — not the flat total the next location-aware
+   * write would recompute away.
+   */
+  it('takes the units from the location the register sold from', async () => {
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+  })
+
+  /**
+   * Two lines of ONE product must compound: a loop that recomputed each line
+   * from the product as first read would erase the wool decrement when the
+   * cotton write landed. The denormalized flat total is the sum of both.
+   */
+  it('folds two lines of one product into one final count', async () => {
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(beanie().inventory).toBe(10)
+  })
+
+  /**
+   * The AGL-1807 ledger, from day one of this decrement: one `sale` row per
+   * tracked line, joined to the ORDER document (the session id names no order)
+   * and carrying the location the units left.
+   */
+  it('logs a sale ledger row per tracked line, joined to the order', async () => {
+    await deliver(POS_SESSION)
+    expect(posLedgerRows()).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'wool',
+        delta: -2,
+        reason: 'sale',
+        orderId: 'order-pos',
+        locationId: 'loc-front',
+        atMs: expect.any(Number),
+      },
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        delta: -1,
+        reason: 'sale',
+        orderId: 'order-pos',
+        locationId: 'loc-front',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /** An untracked line moves nothing and logs nothing, like every sibling. */
+  it('skips untracked lines entirely', async () => {
+    await deliver(POS_SESSION)
+    expect(
+      (docs.get('hosts/host-1/products/product-3') as any).variants[0]
+        .inventory,
+    ).toBeUndefined()
+    expect(posLedgerRows()).toHaveLength(2)
+  })
+
+  /** The `pending` → `paid` guard bounds this exactly as it bounds contacts. */
+  it('decrements once on a redelivered event', async () => {
+    await deliver(POS_SESSION)
+    await deliver(POS_SESSION)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+    expect(posLedgerRows()).toHaveLength(2)
+  })
+
+  /**
+   * An order minted before the fix stored no `locationId` (the `link` pending
+   * write predates it), so the decrement falls back to the flat count — the
+   * same fallback `adjustVariantInventory` applies everywhere — and the row
+   * carries no location it does not know.
+   */
+  it('decrements the flat count when the order carries no location', async () => {
+    docs.set('hosts/host-1/orders/order-pos', {
+      ...POS_ORDER,
+      locationId: undefined,
+      lineItems: [POS_ORDER.lineItems[1]],
+    })
+    await deliver(POS_SESSION)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(posLedgerRows()).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'cotton',
+        delta: -1,
+        reason: 'sale',
+        orderId: 'order-pos',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /**
+   * The console draft path is the OTHER tenant of this branch: its metadata
+   * names a product and its decrement already works. The line-items loop must
+   * be its `else`, or every draft sale would decrement twice.
+   */
+  it('still decrements a single-product draft exactly once', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBe(7)
+    expect(
+      posLedgerRows().filter((row) => row.productId === 'product-1'),
+    ).toHaveLength(1)
+  })
+
+  it('never calls Stripe', async () => {
+    await deliver(POS_SESSION)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The low-stock crossing alert on this branch's two tenants (AGL-1826).
+ *
+ * THE DEFECT. Only buy-now followed its decrement with the AGL-281 crossing
+ * check, so a payment-link sale — and a POS card sale, which completes through
+ * this same branch — sold a product down to its threshold in silence while the
+ * storefront button notified every manager. The shared `alertLowStockCrossing`
+ * now sits beside both of this branch's decrements, fed the pre/post pair each
+ * caller just computed.
+ *
+ * `notifications` also carries this branch's `content.order` "Draft order
+ * paid" nudge, so every case filters to `content.lowStock`.
+ */
+describe('low-stock crossing alerts (AGL-1826)', () => {
+  const lowStockAlerts = () =>
+    notifications.filter(
+      (notification) => notification.type === 'content.lowStock',
+    )
+
+  /** product-1 at 10 with a threshold of 8: selling 3 crosses to 7. */
+  function trackProductOne(lowStockThreshold: number | undefined) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      ...(lowStockThreshold != null ? { lowStockThreshold } : {}),
+      variants: [{ id: 'large', priceUsd: 15, sku: 'BOX-L', inventory: 10 }],
+    })
+  }
+
+  /**
+   * THE DEFECT, draft-link shape: before the fix this array was empty on the
+   * exact decrement (10 - 3 = 7, at the threshold of 8) that alerts from the buy-now button.
+   */
+  it('alerts when a draft-link sale crosses the threshold', async () => {
+    trackProductOne(8)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toEqual([
+      {
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'Low stock — Monthly box',
+        body: '7 left across tracked variants',
+        link: '/host-1/products',
+      },
+    ])
+  })
+
+  /** The pending-to-paid flip bounds the alert as it bounds the count. */
+  it('alerts once on a redelivered draft event', async () => {
+    trackProductOne(8)
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(1)
+  })
+
+  /**
+   * One nudge per breach, not one per order after it — the buy-now dedupe,
+   * preserved verbatim. Holds either side of the fix.
+   */
+  it('does not re-alert a product already below its threshold', async () => {
+    trackProductOne(20)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /** No threshold configured means no alert, ever. Holds either side. */
+  it('does not alert a product with no threshold', async () => {
+    trackProductOne(undefined)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /**
+   * The POS card tenant of this branch. The beanie's tracked total walks
+   * 13 down to 11 (wool line) down to 10 (cotton line): the compounded pair
+   * from the AGL-1825 loop means the crossing lands on the line that actually
+   * breaches, exactly once.
+   */
+  describe('for a POS card sale', () => {
+    const POS_LOW_ORDER = {
+      number: 13,
+      status: 'pending',
+      channel: 'pos',
+      registerId: 'register-1',
+      lineItems: [
+        {
+          productId: 'product-2',
+          variantId: 'wool',
+          name: 'Beanie',
+          productType: 'physical',
+          quantity: 2,
+          unitAmountCents: 2200,
+        },
+        {
+          productId: 'product-2',
+          variantId: 'cotton',
+          name: 'Beanie',
+          productType: 'physical',
+          quantity: 1,
+          unitAmountCents: 1800,
+        },
+      ],
+      totals: {
+        itemsCents: 6200,
+        shippingCents: 0,
+        taxCents: 0,
+        discountCents: 0,
+        feeCents: 0,
+        totalCents: 6200,
+      },
+      customerEmail: null,
+      timeline: [{ atMs: 2000, event: 'pos-card-pending' }],
+      createdAtMs: 2000,
+    }
+
+    const POS_LOW_SESSION = {
+      id: 'cs_pos_low',
+      payment_status: 'paid',
+      payment_intent: 'pi_pos_low',
+      amount_total: 6200,
+      customer_details: null,
+      metadata: {
+        type: 'commerce-draft',
+        hostId: 'host-1',
+        orderId: 'order-pos-low',
+      },
+    }
+
+    function trackBeanie(lowStockThreshold: number) {
+      docs.set('hosts/host-1/products/product-2', {
+        name: 'Beanie',
+        type: 'physical',
+        lowStockThreshold,
+        variants: [
+          { id: 'wool', priceUsd: 22, inventory: 9 },
+          { id: 'cotton', priceUsd: 18, inventory: 4 },
+        ],
+      })
+    }
+
+    beforeEach(() => {
+      docs.set('hosts/host-1/orders/order-pos-low', { ...POS_LOW_ORDER })
+    })
+
+    /**
+     * THE DEFECT, register shape: the channel most likely to be selling the
+     * last few units of shelf stock crossed silently. Threshold 10 is
+     * breached by the SECOND line (11 becomes 10), so the single alert also
+     * pins that sibling lines compound before the check runs.
+     */
+    it('alerts once, on the line that breaches', async () => {
+      trackBeanie(10)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toEqual([
+        {
+          hostId: 'host-1',
+          type: 'content.lowStock',
+          title: 'Low stock — Beanie',
+          body: '10 left across tracked variants',
+          link: '/host-1/products',
+        },
+      ])
+    })
+
+    /**
+     * Threshold 11 is breached by the FIRST line (13 becomes 11) and the
+     * second line starts already-low — the crossing fires there and only
+     * there. Paired with the threshold-10 case above, which a stale
+     * read-once pair would MISS entirely (13 to 11 and 13 to 12, neither
+     * low), the two pin that the check consumes the compounded pair.
+     */
+    it('alerts on the first line when that is the crossing one', async () => {
+      trackBeanie(11)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toHaveLength(1)
+      expect(lowStockAlerts()[0].body).toBe('11 left across tracked variants')
+    })
+
+    /** The pending-to-paid flip bounds the register's alert too. */
+    it('alerts once on a redelivered card event', async () => {
+      trackBeanie(10)
+      await deliver(POS_LOW_SESSION)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toHaveLength(1)
+    })
+  })
+})

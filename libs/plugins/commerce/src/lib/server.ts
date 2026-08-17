@@ -65,6 +65,7 @@ import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
 import { draftOrderHandler } from './server/draft-order'
+import { fulfillOrderHandler } from './server/fulfill-order'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
 import { posOrderHandler } from './server/pos-order'
@@ -134,6 +135,10 @@ export function registerCommerceConsoleApi(): void {
   registerPluginApiRoute('commerce/cancel-order', cancelOrderHandler)
   registerPluginApiRoute('commerce/connect', connectHandler)
   registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
+  // Fulfil + mark-delivered with the transition re-asked under the write
+  // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
+  // stock release those two transitions never had.
+  registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
   registerPluginApiRoute('commerce/pos-order', posOrderHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)

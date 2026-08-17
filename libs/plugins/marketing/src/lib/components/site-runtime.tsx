@@ -820,7 +820,11 @@ function PopupOverlay(props: {
         >
           {'✕'}
         </button>
-        {popup.imageUrl ? (
+        {/* The popup image is a free-text console field rendered verbatim —
+            one of AGL-1725's raw author sinks. Scheme rule only, never a
+            host check: `http:` and unknown schemes render nothing;
+            https/relative (the media picker's forms) render as stored. */}
+        {popup.imageUrl && !Aglyn.isRefusedAuthorImageSrc(popup.imageUrl) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={popup.imageUrl}

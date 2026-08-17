@@ -39,9 +39,29 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import PasswordAdminControls from './password-admin-controls.component'
-import { computeLifetimePurchaseCents } from '../utils/site-member-purchases'
+import {
+  computeLifetimePurchaseCents,
+  splitReversalCents,
+} from '../utils/site-member-purchases'
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/**
+ * The reversal suffix on one order row, split by the door the money left
+ * through (AGL-1810). `refundedCents` carries a lost chargeback as well as a
+ * refund (AGL-1787 puts both there deliberately), so rendering the whole
+ * figure as "refunded" told the merchant they chose a reversal a bank took —
+ * the defect AGL-1796 fixed on the two commerce surfaces, on the third one it
+ * did not name. `computeLifetimePurchaseCents` keeps netting the total; only
+ * the label splits.
+ */
+const reversalSuffix = (order: any) => {
+  const { refundedCents, chargedBackCents } = splitReversalCents(order)
+  return (
+    (refundedCents ? ` · refunded ${usd(refundedCents)}` : '') +
+    (chargedBackCents ? ` · charged back ${usd(chargedBackCents)}` : '')
+  )
+}
 
 /** Display order number: v1 sequential `#1042`, else a doc-id stub. */
 const orderNumber = (order: any) =>
@@ -328,9 +348,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                   {orderCreatedMs(order)
                     ? new Date(orderCreatedMs(order)).toLocaleDateString()
                     : '—'}
-                  {order.refundedCents
-                    ? ` · refunded ${usd(Number(order.refundedCents) || 0)}`
-                    : ''}
+                  {reversalSuffix(order)}
                 </Typography>
                 {order.paymentIntentId ? (
                   <Typography

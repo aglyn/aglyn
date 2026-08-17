@@ -148,6 +148,8 @@ const fakeFirestore = {
 
 /** Every `upsertHostContact` call the handler made, options verbatim (AGL-1748). */
 const contactUpserts: any[] = []
+/** Every manager notification the handler fired (AGL-1826). */
+const notifications: any[] = []
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
 const mockOrg: any = {
@@ -174,6 +176,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   getOrgForHost: async () => mockOrg,
+  notifyHostManagers: async (hostId: string, notification: any) => {
+    notifications.push({ hostId, ...notification })
+  },
   upsertHostContact: async (options: any) => {
     contactUpserts.push(options)
   },
@@ -289,6 +294,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   contactUpserts.length = 0
+  notifications.length = 0
   stripeCalls.length = 0
   stripeSessionsByKey.clear()
   autoIdCounter = 0
@@ -471,6 +477,38 @@ describe('POS sale idempotency (AGL-1691)', () => {
     await post({ payment: 'cash', cashReceivedCents: 1000 })
     await post({ payment: 'cash', cashReceivedCents: 1000 })
     expect(orderDocs()).toHaveLength(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The card sale's location (AGL-1825).
+ *
+ * The webhook that completes a QR sale decrements from the order document —
+ * by then the register's chosen location exists nowhere else. 932559b60 stored
+ * `locationId` on the cash/folio order for the cancel release; the `link`
+ * pending write was the one that still dropped it, so a card sale could only
+ * ever decrement the flat total that the next location-aware write recomputes
+ * from the buckets.
+ */
+describe('POS card sale location (AGL-1825)', () => {
+  it('stores the sale location on the pending card order', async () => {
+    await post(
+      { payment: 'link', locationId: 'loc-front' },
+      { 'idempotency-key': 'attempt-loc' },
+    )
+    expect(orderDocs()).toHaveLength(1)
+    expect((orderDocs()[0] as any).locationId).toBe('loc-front')
+    expect((orderDocs()[0] as any).status).toBe('pending')
+  })
+
+  /** No chosen location writes NO field — not an empty string for the webhook
+   *  (and later the cancel release) to mistake for a bucket. */
+  it('writes no location field when the register sent none', async () => {
+    await post({ payment: 'link' }, { 'idempotency-key': 'attempt-noloc' })
+    expect(orderDocs()).toHaveLength(1)
+    expect('locationId' in (orderDocs()[0] as any)).toBe(false)
   })
 })
 
@@ -1041,5 +1079,316 @@ describe('POS folio stub reservations (AGL-1760)', () => {
       expect(contactUpserts[0].email).toBe('ada@example.com')
       expect(contactUpserts[0].purchaseCents).toBe(5521)
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Two lines of one product in the cash/folio decrement loop (AGL-1828).
+ *
+ * THE DEFECT. The loop read every line's product from `productsById` — a map
+ * built once from the pricing reads and never updated — so two lines of the
+ * same product (two variants, or one variant rung twice; `body.lines` is
+ * client-supplied and nothing merges duplicates) both computed
+ * `adjustVariantInventory` from the ORIGINAL variants array, and the second
+ * merge-set silently erased the first line's decrement. The ledger got BOTH
+ * `sale` rows, so the history claimed more movement than the count showed —
+ * the exact ledger/count disagreement AGL-1807 existed to prevent.
+ *
+ * The webhook's POS card loop (AGL-1825) already carries each adjustment
+ * forward; these cases pin the same compounding here. Quantities, stocks and
+ * prices are all distinct (AGL-1711) so the final counts cannot coincide:
+ *
+ *   wool    9 (6 front + 3 back)   sold 2 from loc-front   =  7 (4 + 3)
+ *   cotton  4 (flat)               sold 1                  =  3
+ *   flat total 13                                          = 10
+ */
+describe('POS cash sale with two lines of one product (AGL-1828)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-4', {
+      name: 'Beanie',
+      type: 'physical',
+      status: 'active',
+      variants: [
+        {
+          id: 'wool',
+          priceUsd: 22,
+          inventory: 9,
+          inventoryByLocation: { 'loc-front': 6, 'loc-back': 3 },
+        },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+    docs.set('hosts/host-1/products/product-5', {
+      name: 'Scarf',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 10, inventory: 9 }],
+    })
+  })
+
+  function beanieVariant(id: string) {
+    const product = docs.get('hosts/host-1/products/product-4') as any
+    return product.variants.find((variant: any) => variant.id === id)
+  }
+
+  function ledgerRows() {
+    return childPaths('hosts/host-1/inventoryAdjustments').map(
+      (path) => docs.get(path) as any,
+    )
+  }
+
+  /**
+   * THE DEFECT, variant shape: before the fix the cotton line recomputed from
+   * the product as first read, so its write landed wool back at 9 (6 front)
+   * and the sale's two wool units returned to the shelf on paper.
+   */
+  it('compounds two variant lines of one product into one final count', async () => {
+    const result = await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        locationId: 'loc-front',
+        lines: [
+          { productId: 'product-4', variantId: 'wool', quantity: 2 },
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-a' },
+    )
+    expect(result.status).toBe(200)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    // The denormalized flat total sums BOTH decrements, not just the last.
+    expect(
+      (docs.get('hosts/host-1/products/product-4') as any).inventory,
+    ).toBe(10)
+  })
+
+  /**
+   * THE DEFECT, same-variant shape: one variant rung twice must take both
+   * quantities off. Before the fix the second line started from 9 again, so
+   * 9 - 2 - 3 landed at 6 instead of 4.
+   */
+  it('compounds the same variant rung on two lines', async () => {
+    const result = await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [
+          { productId: 'product-5', quantity: 2 },
+          { productId: 'product-5', quantity: 3 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-b' },
+    )
+    expect(result.status).toBe(200)
+    expect(
+      (docs.get('hosts/host-1/products/product-5') as any).variants[0]
+        .inventory,
+    ).toBe(4)
+  })
+
+  /**
+   * The ledger was never the broken half: both lines logged their row while
+   * the count kept only the last. Pinned so the fix is measured as the count
+   * AGREEING with the history, not as the history shrinking to match.
+   */
+  it('logs one sale row per line, agreeing with the folded count', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        locationId: 'loc-front',
+        lines: [
+          { productId: 'product-4', variantId: 'wool', quantity: 2 },
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-c' },
+    )
+    const rows = ledgerRows().filter((row) => row.productId === 'product-4')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => [row.variantId, row.delta])).toEqual([
+      ['wool', -2],
+      ['cotton', -1],
+    ])
+    // 13 - (2 + 1) from the rows equals the stored flat count.
+    expect(
+      (docs.get('hosts/host-1/products/product-4') as any).inventory,
+    ).toBe(10)
+  })
+
+  /** Distinct products never contended — pinned so the carry-forward cannot
+   *  bleed one product's variants into another's. */
+  it('still decrements two different products independently', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        lines: [
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+          { productId: 'product-5', quantity: 2 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-d' },
+    )
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(beanieVariant('wool').inventory).toBe(9)
+    expect(
+      (docs.get('hosts/host-1/products/product-5') as any).variants[0]
+        .inventory,
+    ).toBe(7)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The low-stock crossing alert at the register (AGL-1826).
+ *
+ * THE DEFECT. Only the buy-now branch of `billing-webhook.ts` followed its
+ * decrement with the AGL-281 crossing check, so whether a merchant was told
+ * they were running out depended on which door the sale came through — and the
+ * register, the channel most likely to be selling down the last few units of
+ * physical shelf stock, crossed in silence. The shared
+ * `alertLowStockCrossing` now sits beside this loop's decrement too, fed the
+ * pre/post pair the loop just computed (never a re-read).
+ */
+describe('POS low-stock crossing alert (AGL-1826)', () => {
+  const lowStockAlerts = () =>
+    notifications.filter(
+      (notification) => notification.type === 'content.lowStock',
+    )
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 8,
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    docs.set('hosts/host-1/products/product-7', {
+      name: 'Beanie',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 10,
+      variants: [
+        { id: 'wool', priceUsd: 22, inventory: 9 },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+  })
+
+  /**
+   * THE DEFECT: before the fix this array was empty — the same basket bought
+   * through the storefront's buy-now button notified every manager.
+   */
+  it('alerts when a cash sale crosses the threshold', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-a' },
+    )
+    expect(lowStockAlerts()).toEqual([
+      {
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'Low stock — Candle',
+        body: '7 left across tracked variants',
+        link: '/host-1/products',
+      },
+    ])
+  })
+
+  /**
+   * Two lines of one product cross ONCE, on the line that breaches — the
+   * AGL-1828 carry-forward is what makes the second line's `lifted` the first
+   * line's `updated` (13 becomes 11 becomes 10, crossing the threshold of 10
+   * on the cotton line), so this can neither double-fire nor miss.
+   */
+  it('fires once for two lines of one product, on the breaching line', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        lines: [
+          { productId: 'product-7', variantId: 'wool', quantity: 2 },
+          { productId: 'product-7', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'low-b' },
+    )
+    expect(lowStockAlerts()).toHaveLength(1)
+    expect(lowStockAlerts()[0].title).toBe('Low stock — Beanie')
+    expect(lowStockAlerts()[0].body).toBe('10 left across tracked variants')
+  })
+
+  /**
+   * One nudge per threshold breach, not one per order after it — the buy-now
+   * branch's own dedupe, preserved verbatim. Holds either side of the fix.
+   */
+  it('does not re-alert a product already below its threshold', async () => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 20,
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-c' },
+    )
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /** No threshold configured means no alert, ever. Holds either side. */
+  it('does not alert a product with no threshold', async () => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-d' },
+    )
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /**
+   * A replayed settlement never reaches the loop — the `claimAttempt` above
+   * it is the redelivery guard the webhook branches get from their `created`
+   * transactions, so the crossing is computed once and alerted once.
+   */
+  it('alerts once for a replayed settlement', async () => {
+    const body = {
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [{ productId: 'product-6', quantity: 3 }],
+    }
+    await post(body, { 'idempotency-key': 'low-e' })
+    await post(body, { 'idempotency-key': 'low-e' })
+    expect(orderDocs()).toHaveLength(1)
+    expect(lowStockAlerts()).toHaveLength(1)
   })
 })

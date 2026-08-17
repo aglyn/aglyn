@@ -34,6 +34,43 @@ export interface PurchaseTotalOrder {
   refundedCents?: number
 }
 
+/**
+ * Money off one order, split by the door it left through (AGL-1810).
+ *
+ * `refundedCents` carries a lost chargeback as well as a refund — AGL-1787
+ * puts both there deliberately, and `computeLifetimePurchaseCents` below is
+ * right to net the whole thing off. Only the LABEL needs the split: "refunded"
+ * on money a bank took back reads as a decision the merchant made.
+ *
+ * This deliberately DUPLICATES `CommerceModel.splitOrderReversal`
+ * (`libs/plugins/commerce/src/lib/model/commerce-dispute.ts`) rather than
+ * importing it, for the same reason this file re-declares its order slice
+ * instead of importing the commerce model: apps must not depend on feature
+ * plugins (`scope:app` → `aglyn:addons` is a forbidden nx edge, AGL-417/419 —
+ * plugins reach the apps only through the generated loader manifests). The
+ * semantics mirror the model exactly, clamp included: a `reversedCents`
+ * larger than `refundedCents` means the two fields disagree, and yields a
+ * zero refund share rather than a negative one.
+ */
+export interface ReversalSplitOrder {
+  refundedCents?: number
+  /** The card dispute against this order's charge, when one exists. */
+  dispute?: { reversedCents?: number }
+}
+
+/** `{refundedCents, chargedBackCents}` — the merchant's choice vs the bank's. */
+export function splitReversalCents(order: ReversalSplitOrder): {
+  refundedCents: number
+  chargedBackCents: number
+} {
+  const total = Math.max(0, Number(order?.refundedCents ?? 0) || 0)
+  const chargedBackCents = Math.min(
+    total,
+    Math.max(0, Number(order?.dispute?.reversedCents ?? 0) || 0),
+  )
+  return { refundedCents: total - chargedBackCents, chargedBackCents }
+}
+
 /** Orders that never charged the customer don't count toward lifetime. */
 const UNCHARGED_STATUSES = new Set(['pending', 'cancelled'])
 

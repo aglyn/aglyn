@@ -16,8 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { fireEvent, render } from '@testing-library/react'
-import type { ClientAutomation } from '../model/site-contract'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ClientAutomation, PopupData } from '../model/site-contract'
 import { MarketingSiteRuntime } from './site-runtime'
 
 /**
@@ -301,5 +301,68 @@ describe('automations engine — nav interactions (AGL-562)', () => {
     expect(
       document.getElementById(Aglyn.ELEMENT_HIDDEN_STYLE_ID),
     ).toBeTruthy()
+  })
+})
+
+/**
+ * The popup image is a free-text console field rendered verbatim — one of
+ * AGL-1725's raw author `<img>` sinks, and (with the events cover) one of
+ * the two `http:`-accepting egresses left after AGL-1713 and the collection
+ * cover fix. Scheme rule only, never a host check: the site owner picks the
+ * host; the scheme is what protects their visitors.
+ */
+describe('the popup image refuses the http: scheme (AGL-1725)', () => {
+  afterEach(() => {
+    unmounts.forEach((unmount) => unmount())
+    unmounts = []
+  })
+
+  const mountWithPopup = (popup: PopupData) => {
+    window.localStorage.clear()
+    const utils = render(
+      <MarketingSiteRuntime
+        hostId="host-1"
+        screens={{}}
+        page={{
+          announcementBar: null,
+          popup,
+          experiments: [],
+          automationOverlays: null,
+          clientAutomations: [],
+        }}
+      />,
+    )
+    unmounts.push(utils.unmount)
+    return utils
+  }
+
+  const popupWith = (imageUrl: string): PopupData => ({
+    body: 'Join the list',
+    trigger: 'delay',
+    triggerValue: 0,
+    frequencyDays: 30,
+    contentHash: `hash-${imageUrl}`,
+    imageUrl,
+  })
+
+  it('renders an https image as stored — the advertised hotlink path', async () => {
+    mountWithPopup(popupWith('https://cdn.example/hero.png'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    const img = screen.getByRole('dialog').querySelector('img')
+    expect(img?.getAttribute('src')).toBe('https://cdn.example/hero.png')
+  })
+
+  it('renders the media picker relative form', async () => {
+    mountWithPopup(popupWith('/api/media/cdn/host-1/m-1'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    const img = screen.getByRole('dialog').querySelector('img')
+    expect(img?.getAttribute('src')).toBe('/api/media/cdn/host-1/m-1')
+  })
+
+  it('renders the popup WITHOUT the image for an http: url', async () => {
+    mountWithPopup(popupWith('http://tracker.example/pixel.png'))
+    // The popup itself still opens — only the insecure egress is dropped.
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    expect(screen.getByRole('dialog').querySelector('img')).toBeNull()
   })
 })

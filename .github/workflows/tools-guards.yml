@@ -1,0 +1,126 @@
+name: Tools guards
+
+# Runs the seven pure-node `tools/` guard suites whose only other home is
+# nx-ci.yml — which is `disabled_manually` and runs on no runner, so every
+# gate added to it since it was switched off has never executed once
+# (AGL-1776/AGL-1816/AGL-1822). These suites are secretless, dependency-light
+# and seconds each; this workflow is their one cheap ACTIVE home.
+#
+# What each guards:
+#  - test:eslint-rules        the seven local ESLint guard rules' RuleTester
+#                             suites (the RULES run at every `nx lint`; their
+#                             self-tests otherwise run nowhere)
+#  - test:plugin-loader       the sandbox CSP the plugin origin serves (AGL-1092)
+#  - test:disk-space          the dev-loop preflight that can fail every serve
+#                             target at once (AGL-1425)
+#  - test:deploy-guard        the clean-deploy-source guard that decides what
+#                             ships (AGL-1778)
+#  - test:erase-cli           the org-erase CLI that decides what gets
+#                             destroyed (AGL-1778)
+#  - test:standalone-installs the enumerated-standalone-packages policy
+#                             (AGL-1781)
+#  - check:standalone-installs  asserts every nested package with its own
+#                             lockfile has an install step in nx-ci.yml. That
+#                             file is currently disabled; the check still
+#                             matters because it keeps the TEXT complete for
+#                             the AGL-1776 re-enable decision, and because a
+#                             THIRD standalone package landing without any
+#                             install step is invisible on every dev checkout
+#                             (nested node_modules mask it). Run from HERE —
+#                             an active workflow — the assertion is about a
+#                             file's content, not about this workflow, so it
+#                             is not circular.
+#
+# tools/ is not an nx project, so `nx affected` cannot reach any of these and
+# no Nx Cloud involvement exists here (the thing nx-ci.yml was disabled over).
+# The paths filter below is the cheap approximation of affected-ness.
+#
+# NO nested installs: apps/docs and cloud/functions are standalone packages a
+# root `npm ci` does not reach (AGL-1781) — but none of these seven suites
+# imports from either, so this workflow deliberately does not pay for their
+# installs. If a suite ever grows such an import, add the matching
+# `npm ci --prefix <dir>` line rather than working around the failure.
+#
+# Anti-circularity (the AGL-1804/AGL-1816 precedent): "this workflow runs the
+# seven suites" is asserted from OUTSIDE this file, in
+# tools/scripts/lib/rules-drift.test.mjs — a suite that rules-drift.yml and
+# index-drift.yml (both active) each run. Deleting a step here turns both
+# drift workflows red. The `npm run test:rules-drift` step below runs that
+# same suite HERE as well, so an edit to this file that drops a guard step
+# goes red on the very push that makes it (this workflow triggers on itself),
+# not a day later on the drift workflows' schedules.
+#
+# ⚠️ Do NOT move these steps into nx-ci.yml, and do not make any step here
+# conditional. A skipped check that renders green is the silent failure mode
+# the whole AGL-1776 audit was about. Exit codes propagate naturally — never
+# pipe a gate command.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/**'
+      # The scripts themselves are defined here.
+      - package.json
+      - package-lock.json
+      # check:standalone-installs asserts against nx-ci.yml's text — an edit
+      # deleting an install step must trigger the check that would catch it.
+      - .github/workflows/nx-ci.yml
+      - .github/workflows/tools-guards.yml
+  schedule:
+    # Daily, 07:53 UTC — off the top of the hour, where GitHub's scheduler
+    # congestion is worst, and after the two drift workflows (07:23, 07:41)
+    # so the three do not contend for the same npm cache warm-up.
+    # (GitHub schedules are best-effort and pause on 60-day-quiet repos; a
+    # green history is not proof of continuous coverage.)
+    - cron: '53 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest verdict matters; a delayed run must not pile up.
+  group: tools-guards
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Shallow is fine: the only git consumer is check:standalone-installs,
+      # which uses `git ls-files` (worktree listing, no history).
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # Root install only — see the no-nested-installs note above. The
+      # RuleTester suites need eslint/@typescript-eslint from here; everything
+      # else is node builtins + files in tools/.
+      - run: npm ci
+
+      # The wiring guard, first: this suite asserts (among its own comparator
+      # tests) that THIS workflow still runs all seven guard steps below, so a
+      # broken wiring fails the job before any partial green is printed. Its
+      # other homes are rules-drift.yml and index-drift.yml — see the
+      # anti-circularity note above.
+      - run: npm run test:rules-drift
+
+      - run: npm run test:eslint-rules
+
+      - run: npm run test:plugin-loader
+
+      - run: npm run test:disk-space
+
+      - run: npm run test:deploy-guard
+
+      - run: npm run test:erase-cli
+
+      - run: npm run test:standalone-installs
+
+      - run: npm run check:standalone-installs

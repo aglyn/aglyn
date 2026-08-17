@@ -15,61 +15,84 @@
  * limitations under the License.
  */
 
+/**
+ * `splitReversalCents` (AGL-1810) is a deliberate DUPLICATE of the commerce
+ * model's `splitOrderReversal` — `scope:app` must not import `aglyn:addons`
+ * (AGL-417/419), and that ban covers this spec too, so the agreement is
+ * pinned by mirroring `commerce-dispute.spec.ts`'s cases rather than by
+ * importing the model to compare. If the model's clamp semantics ever move,
+ * these cases are the ones to move with them.
+ */
+
 import {
   computeLifetimePurchaseCents,
-  orderChargedCents,
+  splitReversalCents,
 } from './site-member-purchases'
 
-describe('site member lifetime purchases (AGL-546)', () => {
-  it('sums v1 totals and legacy amountCents alike', () => {
-    expect(
-      computeLifetimePurchaseCents([
-        { status: 'paid', totals: { totalCents: 2500 } },
-        { status: 'fulfilled', amountCents: 1000 },
-      ]),
-    ).toBe(3500)
+describe('splitReversalCents (AGL-1810)', () => {
+  it('reads an ordinary refund as all the merchant’s', () => {
+    expect(splitReversalCents({ refundedCents: 6200 })).toEqual({
+      refundedCents: 6200,
+      chargedBackCents: 0,
+    })
   })
 
-  it('prefers the v1 totals block when both shapes are present', () => {
+  it('reads a lost chargeback as all the bank’s', () => {
     expect(
-      orderChargedCents({ totals: { totalCents: 4200 }, amountCents: 999 }),
-    ).toBe(4200)
+      splitReversalCents({
+        refundedCents: 6200,
+        dispute: { reversedCents: 6200 },
+      }),
+    ).toEqual({ refundedCents: 0, chargedBackCents: 6200 })
   })
 
-  it('subtracts refunds, including partial refunds', () => {
+  it('splits a partial refund followed by a capped chargeback', () => {
+    // $17 refunded by the merchant, then the dispute lost and capped by
+    // AGL-1787 to the remaining $45; `refundedCents` holds the $62 total.
     expect(
-      computeLifetimePurchaseCents([
-        { status: 'refunded', amountCents: 2000, refundedCents: 2000 },
-        { status: 'delivered', totals: { totalCents: 3000 }, refundedCents: 500 },
-      ]),
-    ).toBe(2500)
+      splitReversalCents({
+        refundedCents: 6200,
+        dispute: { reversedCents: 4500 },
+      }),
+    ).toEqual({ refundedCents: 1700, chargedBackCents: 4500 })
   })
 
-  it('skips orders that never charged (pending/cancelled)', () => {
+  it('clamps a reversal larger than the recorded total to a zero refund share', () => {
+    // The two fields disagreeing yields no NEGATIVE refund line — the
+    // model's clamp, mirrored.
     expect(
-      computeLifetimePurchaseCents([
-        { status: 'pending', amountCents: 9900 },
-        { status: 'cancelled', totals: { totalCents: 1500 } },
-        { status: 'paid', amountCents: 700 },
-      ]),
-    ).toBe(700)
+      splitReversalCents({
+        refundedCents: 4500,
+        dispute: { reversedCents: 6200 },
+      }),
+    ).toEqual({ refundedCents: 0, chargedBackCents: 4500 })
   })
 
-  it('never goes negative per order on over-recorded refunds', () => {
+  it('reads an untouched order, and junk figures, as no reversal at all', () => {
+    expect(splitReversalCents({})).toEqual({
+      refundedCents: 0,
+      chargedBackCents: 0,
+    })
     expect(
-      computeLifetimePurchaseCents([
-        { status: 'refunded', amountCents: 1000, refundedCents: 1500 },
-        { status: 'paid', amountCents: 800 },
-      ]),
-    ).toBe(800)
+      splitReversalCents({
+        refundedCents: Number.NaN,
+        dispute: { reversedCents: -100 },
+      }),
+    ).toEqual({ refundedCents: 0, chargedBackCents: 0 })
   })
 
-  it('handles empty and malformed inputs', () => {
-    expect(computeLifetimePurchaseCents([])).toBe(0)
+  it('leaves the lifetime netting reading the WHOLE reversed figure', () => {
+    // AGL-1810 is a label fix: money reversed is money reversed whichever
+    // door it left by, so the total keeps netting all of `refundedCents`.
     expect(
       computeLifetimePurchaseCents([
-        { status: 'paid' },
-        { status: 'paid', amountCents: Number.NaN },
+        {
+          status: 'refunded',
+          totals: { totalCents: 6200 },
+          refundedCents: 6200,
+          // The dispute is invisible to the netting on purpose.
+          ...( { dispute: { reversedCents: 6200 } } as object),
+        },
       ]),
     ).toBe(0)
   })

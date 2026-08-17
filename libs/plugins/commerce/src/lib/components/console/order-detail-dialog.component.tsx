@@ -16,7 +16,6 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -33,7 +32,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
@@ -79,8 +78,9 @@ const usd = (cents: number | undefined) =>
 
 /**
  * Order detail (AGL-287): timeline, line items, totals, and the actions
- * the status machine allows — fulfill with tracking, refund (admin,
- * server API), cancel, notes, printable packing slip.
+ * the status machine allows — fulfill with tracking, refund, cancel, mark
+ * delivered (each a server route that re-asks the transition under the
+ * write), notes, printable packing slip.
  */
 export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const { hostId, order: rawOrder, onClose } = props
@@ -95,6 +95,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const order = rawOrder ? CommerceModel.liftLegacyOrder(rawOrder) : null
   const orderId = rawOrder?.$id
 
+  /**
+   * The one client write left in this dialog, and it is timeline-only ON
+   * PURPOSE: notes carry no status, so `ORDER_TRANSITIONS` has nothing to say
+   * about them and they stay out of the server routes' way. Every status
+   * write goes through a route that re-asks the transition under the write —
+   * cancel (AGL-1818), fulfil and mark-delivered (AGL-1819), refund
+   * (AGL-1696). The moment a status rides along with a note, it must move
+   * too; `order-fulfill-wiring.spec.tsx` pins the patch to `timeline` alone.
+   */
   const write = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!orderId) return
@@ -103,29 +112,139 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     [firestore, hostId, orderId],
   )
 
+  /**
+   * Fulfil and mark-delivered go through `/api/commerce/fulfill-order`
+   * (AGL-1819), not a client write — the same stale-dialog hole the cancel
+   * swap (AGL-1818) closed: `can(…)` below only decides whether to RENDER
+   * the buttons, so a dialog held open while the order was refunded in
+   * another tab used to write `fulfilled` straight onto it. The route
+   * re-asks `canTransitionOrder` inside the transaction that writes the
+   * status, and that race now comes back as a 409 carrying the state that
+   * refused.
+   *
+   * The messages follow the AGL-1784/1786 contract — say what happened: a
+   * 409 is the guard refusing, not the machinery failing; the route's own
+   * 500 is a rolled-back transaction (nothing landed, retry is safe and
+   * correct); an answer with no JSON word from the handler, or no answer at
+   * all, is NOT KNOWN — never "nothing happened". A retry is safe in every
+   * case because the route writes once: a repeat finds the order already in
+   * the target status and returns `already` without appending a second copy
+   * of the same fulfillment.
+   */
+  const transition = useCallback(
+    async (
+      to: 'fulfilled' | 'delivered',
+      extra: Record<string, string>,
+      copy: { done: string; already: string; subject: string; action: string },
+    ) => {
+      if (!orderId) return false
+      setBusy(true)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        let response: Response
+        try {
+          response = await fetch('/api/commerce/fulfill-order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ hostId, orderId, to, ...extra }),
+          })
+        } catch (error) {
+          console.error(error)
+          enqueueSnackbar(
+            `The request did not complete, so it is NOT known whether ${copy.subject}. ` +
+              'Reopen the order to check — retrying is safe, the server ' +
+              'writes it once.',
+            { variant: 'error', allowDuplicate: true },
+          )
+          return false
+        }
+        const payload: any = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          if (response.status === 409) {
+            // The transition guard refusing: the order moved on (refunded,
+            // cancelled) while this dialog was open. The route's message
+            // names the state that refused it, and nothing was written.
+            enqueueSnackbar(
+              payload?.error ?? `This order can no longer be ${to}`,
+              {
+                variant: 'warning',
+                allowDuplicate: true,
+              },
+            )
+          } else if (payload?.error && response.status < 500) {
+            // A refusal that wrote nothing — session, role, or an order that
+            // is not there. The route's own word, verbatim.
+            enqueueSnackbar(payload.error, {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+          } else if (payload?.error) {
+            // The route's 500 is a rolled-back transaction: nothing landed.
+            // Only the handler's own JSON word licenses saying so.
+            enqueueSnackbar(
+              `${payload.error} — nothing changed, the order is as it was. Retrying is safe.`,
+              { variant: 'error', allowDuplicate: true },
+            )
+          } else {
+            // No JSON word from the handler (a gateway page, a proxy
+            // timeout): whether the write landed is NOT known.
+            enqueueSnackbar(
+              `The ${copy.action} failed (${response.status}) and it is NOT ` +
+                'known whether it landed. Reopen the order to check — ' +
+                'retrying is safe, the server writes it once.',
+              { variant: 'error', allowDuplicate: true },
+            )
+          }
+          return false
+        }
+        enqueueSnackbar(payload?.already ? copy.already : copy.done, {
+          variant: 'success',
+          persist: false,
+        })
+        return true
+      } finally {
+        setBusy(false)
+      }
+    },
+    [orderId, user, hostId, enqueueSnackbar],
+  )
+
   const handleFulfill = useCallback(async () => {
     if (!order || !tracking) return
-    const fulfillment: CommerceModel.OrderFulfillment = {
-      id: Aglyn.createResourceUid(),
-      lineItemIds: (order.lineItems ?? []).map((_line, index) => index),
-      ...(tracking.carrier ? { carrier: tracking.carrier } : {}),
-      ...(tracking.number ? { trackingNumber: tracking.number } : {}),
-      atMs: Date.now(),
-    }
-    await write({
-      status: 'fulfilled',
-      fulfillments: [...(order.fulfillments ?? []), fulfillment],
-      timeline: CommerceModel.appendOrderEvent(
-        order,
-        'fulfilled',
-        tracking.number
-          ? `${tracking.carrier || 'Shipped'} ${tracking.number}`
-          : 'Fulfilled',
-      ),
-    })
-    setTracking(null)
-    enqueueSnackbar('Order fulfilled', { variant: 'success', persist: false })
-  }, [order, tracking, write, enqueueSnackbar])
+    const done = await transition(
+      'fulfilled',
+      {
+        ...(tracking.carrier ? { carrier: tracking.carrier } : {}),
+        ...(tracking.number ? { trackingNumber: tracking.number } : {}),
+      },
+      {
+        done: 'Order fulfilled',
+        already: 'Order was already fulfilled',
+        subject: 'the order was fulfilled',
+        action: 'fulfillment',
+      },
+    )
+    // The refused or unknown case keeps the form open — there is nothing to
+    // celebrate, and the tracking is not yet recorded anywhere.
+    if (done) setTracking(null)
+  }, [order, tracking, transition])
+
+  const handleDelivered = useCallback(async () => {
+    if (!order) return
+    await transition(
+      'delivered',
+      {},
+      {
+        done: 'Order marked delivered',
+        already: 'Order was already marked delivered',
+        subject: 'the order was marked delivered',
+        action: 'delivery update',
+      },
+    )
+  }, [order, transition])
 
   /**
    * Cancel goes through `/api/commerce/cancel-order` (AGL-1818), not a client
@@ -256,10 +375,20 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order || !orderId) return
     const confirmed = await confirm({
       title: 'Refund this order?',
-      description: `Refunds ${usd(
-        (order.totals?.totalCents ?? order.amountCents ?? 0) -
-          (order.refundedCents ?? 0),
-      )} to the buyer through Stripe.`,
+      description:
+        `Refunds ${usd(
+          (order.totals?.totalCents ?? order.amountCents ?? 0) -
+            (order.refundedCents ?? 0),
+        )} to the buyer through Stripe.` +
+        // An open INQUIRY keeps this button live on purpose (AGL-1820):
+        // Stripe names a full refund as the way to resolve one before it
+        // escalates to a chargeback. Said here so the admin reads the refund
+        // as the documented exit, not a risk taken against the badge.
+        (CommerceModel.orderHasOpenDispute(order) &&
+        !CommerceModel.orderDisputeBlocksRefund(order)
+          ? ' An inquiry is open on this charge — a full refund resolves it' +
+            ' before it can become a chargeback.'
+          : ''),
       confirmationText: 'Refund',
       confirmationButtonProps: { color: 'error' },
     })
@@ -291,8 +420,12 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       // so pressing Refund again dedupes rather than sends a second transfer.
       if (response.status < 500) attemptKey.current = ''
       if (!response.ok) {
+        // A 409 is a guard REFUSING — the status machine, or the open-dispute
+        // block (AGL-1809), whose body explains what to do instead — not the
+        // refund machinery failing. The route wrote nothing, so it surfaces
+        // verbatim as a warning, same as the cancel path's 409 (AGL-1818).
         enqueueSnackbar(payload?.error ?? 'Refund failed', {
-          variant: 'error',
+          variant: response.status === 409 ? 'warning' : 'error',
           allowDuplicate: true,
         })
       } else {
@@ -302,6 +435,107 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       setBusy(false)
     }
   }, [order, orderId, user, hostId, confirm, enqueueSnackbar])
+
+  /**
+   * Answer the restock question a reversal flagged (AGL-1806).
+   *
+   * The answer MOVES NO STOCK, which is AGL-1797's ledger argument and it is
+   * binding: the products hub's "Adjust stock" is the one stock writer (it
+   * writes the counts AND the `InventoryAdjustment` row the hub renders as
+   * history), so "Restocked" here is clicked AFTER the merchant used it, and
+   * "No restock" says the goods are not recoverable. Either answer only sets
+   * the `resolution` triple `OrderRestockCheck` declares and says so on the
+   * timeline.
+   *
+   * A TRANSACTION rather than the dialog's plain `write`, keyed on the
+   * rendered `flaggedAtMs`, because an answer must land ONCE. The flag writer
+   * re-asks an ANSWERED question after the next reversal, and the cancel
+   * route (AGL-1808) answers an open one itself when it returns the stock —
+   * so a stale dialog writing blind would either re-answer a settled question
+   * or replace a brand-new one with a resolved copy of the old. The
+   * transaction re-reads on the server (the web SDK will not run one from
+   * cache — the products hub's `writeGuardedBySeed` refusal of unconfirmed
+   * data, by other means) and refuses both cases with the truth: nothing was
+   * written.
+   */
+  const handleRestockAnswer = useCallback(
+    async (resolution: 'restocked' | 'dismissed') => {
+      const check = order?.restockCheck
+      if (!order || !orderId || !check || check.resolution) return
+      setBusy(true)
+      try {
+        const reference = doc(firestore, 'hosts', hostId, 'orders', orderId)
+        const verdict = await runTransaction(firestore, async (transaction) => {
+          const snapshot = await transaction.get(reference)
+          if (!snapshot.exists()) return 'gone'
+          const current = CommerceModel.liftLegacyOrder(
+            (snapshot.data() ?? {}) as never,
+          )
+          const fresh = current.restockCheck
+          if (!fresh || fresh.resolution) return 'answered'
+          if (fresh.flaggedAtMs !== check.flaggedAtMs) return 'changed'
+          const resolvedAtMs = Date.now()
+          const uid = String((user as any)?.uid ?? '')
+          transaction.update(reference, {
+            restockCheck: {
+              ...fresh,
+              resolution,
+              resolvedAtMs,
+              ...(uid ? { resolvedBy: uid } : {}),
+            } satisfies CommerceModel.OrderRestockCheck,
+            // The SERVER's timeline, not the dialog's — a note landed from
+            // another tab must survive the append.
+            timeline: CommerceModel.appendOrderEvent(
+              current,
+              'restock-check',
+              resolution === 'restocked'
+                ? 'answered — restocked'
+                : 'answered — no restock',
+              resolvedAtMs,
+            ),
+          })
+          return 'recorded'
+        })
+        if (verdict === 'recorded') {
+          enqueueSnackbar(
+            resolution === 'restocked'
+              ? 'Recorded as restocked'
+              : 'Recorded — no restock',
+            { variant: 'success', persist: false },
+          )
+        } else if (verdict === 'answered') {
+          // The cancel route, or another admin, got there first.
+          enqueueSnackbar(
+            'This restock question was already answered — nothing changed.',
+            { variant: 'info', persist: false },
+          )
+        } else if (verdict === 'changed') {
+          // A later reversal re-asked; this dialog shows the OLD question.
+          enqueueSnackbar(
+            'The restock question changed while this dialog was open — ' +
+              'nothing was written. Reopen the order to see the current one.',
+            { variant: 'warning', allowDuplicate: true },
+          )
+        } else {
+          enqueueSnackbar('This order no longer exists — nothing was written.', {
+            variant: 'warning',
+            allowDuplicate: true,
+          })
+        }
+      } catch (error) {
+        // A transaction is all-or-nothing, and a thrown one did not commit.
+        console.error(error)
+        enqueueSnackbar(
+          'The answer was not recorded — it needs a live connection and the ' +
+            'editor or admin role. Nothing changed; answering again is safe.',
+          { variant: 'error', allowDuplicate: true },
+        )
+      } finally {
+        setBusy(false)
+      }
+    },
+    [order, orderId, firestore, hostId, user, enqueueSnackbar],
+  )
 
   const handleNote = useCallback(async () => {
     if (!order || !note.trim()) return
@@ -347,6 +581,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   // chip alone tells the merchant they chose this. The badge is the correction.
   const dispute = CommerceModel.describeOrderDispute(order)
   const reversal = CommerceModel.splitOrderReversal(order)
+  // The restock question a reversal flagged, while it is still open
+  // (AGL-1806). Absent `resolution` IS the open state — the writer only ever
+  // re-flags an answered check (AGL-1797).
+  const restock =
+    order.restockCheck && !order.restockCheck.resolution
+      ? order.restockCheck
+      : null
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -438,6 +679,59 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             ) : null}
           </>
         ) : null}
+        {restock ? (
+          <>
+            <Divider />
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2">{'Restock check'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {`${restock.units} ${
+                  restock.units === 1 ? 'unit' : 'units'
+                } may need restocking after this ${
+                  restock.kind === 'chargeback' ? 'chargeback' : 'refund'
+                }.` +
+                  // The chargeback default is NO, same as the timeline's
+                  // wording: the shopper kept the item and took the money.
+                  (restock.kind === 'chargeback'
+                    ? ' The shopper kept the goods unless they actually came back.'
+                    : '') +
+                  // On a partial, no reversal records which lines it covered
+                  // (AGL-1797), so the flagged units are the MOST it could be.
+                  (restock.fullyReversed
+                    ? ''
+                    : ' Only part of the money came back, so these units are an upper bound — only you know which goods returned.')}
+              </Typography>
+              {restock.lines.map((line, index) => (
+                <Typography key={index} variant="caption" color="text.secondary">
+                  {`${line.quantity}× ${line.name ?? line.productId}` +
+                    (line.variantLabel ? ` — ${line.variantLabel}` : '')}
+                </Typography>
+              ))}
+              <Typography variant="caption" color="text.secondary">
+                {'If goods came back, put them on the shelf with "Adjust ' +
+                  'stock" in the products hub first — these answers move no ' +
+                  'stock, they only clear this question.'}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => handleRestockAnswer('restocked')}
+                >
+                  {'Restocked'}
+                </Button>
+                <Button
+                  size="small"
+                  disabled={busy}
+                  onClick={() => handleRestockAnswer('dismissed')}
+                >
+                  {'No restock'}
+                </Button>
+              </Stack>
+            </Stack>
+          </>
+        ) : null}
         <Divider />
         <Typography variant="subtitle2">{'Timeline'}</Typography>
         {(order.timeline ?? [])
@@ -482,7 +776,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               size="small"
               sx={{ flex: 1 }}
             />
-            <Button size="small" variant="contained" color="primary" onClick={handleFulfill}>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              disabled={busy}
+              onClick={handleFulfill}
+            >
               {'Fulfill'}
             </Button>
           </Stack>
@@ -511,9 +811,34 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         {can('refunded') ? (
-          <Button color="error" disabled={busy} onClick={handleRefund}>
-            {'Refund'}
-          </Button>
+          // Disabled on `orderDisputeBlocksRefund`, NOT the badge's broader
+          // `orderHasOpenDispute` (AGL-1820): a formal open dispute means the
+          // bank already pulled the funds and the route answers 409
+          // (AGL-1809), while an open INQUIRY shows the badge but must keep
+          // this button live — a full refund is how an inquiry is resolved.
+          CommerceModel.orderDisputeBlocksRefund(order) ? (
+            <Tooltip
+              title={
+                'A chargeback is open on this order, and refunding would not' +
+                ' withdraw it — the bank has already taken the disputed' +
+                ' amount, so a refund on top would pay the shopper twice.' +
+                ' Respond to the dispute or accept it in the Stripe' +
+                ' dashboard; refund any remainder once it settles.'
+              }
+            >
+              {/* A disabled button fires no pointer events; the wrapper
+                  carries the hover for the tooltip. */}
+              <span>
+                <Button color="error" disabled>
+                  {'Refund'}
+                </Button>
+              </span>
+            </Tooltip>
+          ) : (
+            <Button color="error" disabled={busy} onClick={handleRefund}>
+              {'Refund'}
+            </Button>
+          )
         ) : null}
         {(can('fulfilled') || can('partially_fulfilled')) && !tracking ? (
           <Button
@@ -525,14 +850,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         {can('delivered') ? (
-          <Button
-            onClick={() =>
-              write({
-                status: 'delivered',
-                timeline: CommerceModel.appendOrderEvent(order, 'delivered'),
-              })
-            }
-          >
+          <Button disabled={busy} onClick={handleDelivered}>
             {'Mark delivered'}
           </Button>
         ) : null}

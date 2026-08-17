@@ -22,7 +22,7 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 
 /**
  * The first-party half of the tenant admin bar's connect flow (admin edit
- * bar, AGL-1302 follow-on).
+ * bar, AGL-1302 follow-on; silent mode AGL-1829).
  *
  * A published site cannot see the console session — different registrable
  * domain, third-party cookies gone — so the bar opens THIS page in a popup.
@@ -32,6 +32,17 @@ import { Suspense, useEffect, useRef, useState } from 'react'
  * postMessaged back to the opener, but ONLY to an origin the server listed
  * as belonging to that host — a page that opened this popup under someone
  * else's hostId is not a valid delivery address and gets nothing.
+ *
+ * `?silent=1` (AGL-1829) is the SAME flow addressed to `window.parent`
+ * instead of `window.opener`: tenant sites that are same-site with the
+ * console (the `aglyn.com` first-party hosts — the only ancestors the
+ * middleware's `frame-ancestors` admits anyway) embed this page in a hidden
+ * iframe to auto-connect a signed-in editor without a popup or a chord. The
+ * server-side verification and the origins allowlist are identical; the only
+ * extra behaviour is an explicit "no" message on failure so the embedding
+ * bar can tear the iframe down instead of waiting out a timeout. The "no"
+ * carries nothing but the fact — no reason, no identity — because the
+ * requesting origin has not been proven to belong to the host at that point.
  *
  * Deliberately no auto-redirect to /signin: the popup names the problem and
  * links there instead, so a signed-out visitor is never bounced through an
@@ -48,11 +59,21 @@ type Phase =
   | 'error'
 
 const MESSAGE_TYPE = 'aglyn-edit-access'
+/** Silent-mode failure notice (AGL-1829); mirrored in admin-bar-shared.ts. */
+const RESULT_MESSAGE_TYPE = 'aglyn-edit-access-result'
+
+const FAILURE_PHASES: readonly Phase[] = [
+  'signed-out',
+  'denied',
+  'bad-origin',
+  'error',
+]
 
 function EditAccessBody() {
   const params = useSearchParams()
   const hostId = params?.get('hostId') ?? ''
   const targetOrigin = params?.get('origin') ?? ''
+  const silent = params?.get('silent') === '1'
   const { data: user } = useUser()
   const [phase, setPhase] = useState<Phase>('loading')
   const [detail, setDetail] = useState<string | undefined>(undefined)
@@ -62,6 +83,12 @@ function EditAccessBody() {
 
   useEffect(() => {
     if (!hostId || !targetOrigin) {
+      setPhase('missing-params')
+      return
+    }
+    // Silent mode only makes sense framed; a top-level visit with the param
+    // has no parent to deliver to and gets the visible flow's copy instead.
+    if (silent && window.parent === window) {
       setPhase('missing-params')
       return
     }
@@ -98,29 +125,46 @@ function EditAccessBody() {
           expiresAtMs: number
           origins: string[]
           siteName?: string
+          userEmail?: string
         }
-        // The server said where this token may go. The opener's origin has
-        // to be on that list, or the token stays here.
+        // The server said where this token may go. The requester's origin
+        // has to be on that list, or the token stays here.
         if (!payload.origins?.includes(targetOrigin)) {
           setPhase('bad-origin')
           return
         }
-        window.opener?.postMessage(
+        const delivery = silent ? window.parent : window.opener
+        delivery?.postMessage(
           {
             type: MESSAGE_TYPE,
             token: payload.token,
             expiresAtMs: payload.expiresAtMs,
             siteName: payload.siteName,
+            userEmail: payload.userEmail,
           },
           targetOrigin,
         )
         setPhase('sent')
-        window.setTimeout(() => window.close(), 1200)
+        if (!silent) window.setTimeout(() => window.close(), 1200)
       } catch {
         setPhase('error')
       }
     })()
-  }, [hostId, targetOrigin, user])
+  }, [hostId, targetOrigin, silent, user])
+
+  // Silent mode's explicit "no": the embedding bar removes its hidden iframe
+  // on this instead of waiting out its timeout. Content-free by design — the
+  // target origin is unproven on these paths.
+  useEffect(() => {
+    if (!silent || !targetOrigin) return
+    if (!FAILURE_PHASES.includes(phase)) return
+    if (window.parent === window) return
+    window.parent.postMessage({ type: RESULT_MESSAGE_TYPE, ok: false }, targetOrigin)
+  }, [silent, targetOrigin, phase])
+
+  // Nothing to show inside a hidden iframe — and nothing that could be
+  // clickjacked into view either.
+  if (silent) return null
 
   const copy: Record<Phase, { title: string; body: string }> = {
     loading: {

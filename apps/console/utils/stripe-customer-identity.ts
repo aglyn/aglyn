@@ -107,6 +107,24 @@ export function checkoutCustomerParams(
       // `customer_update` on a session without one, which is why it lives in
       // this branch and not next to `billing_address_collection`.
       'customer_update[address]': 'auto',
+      // REQUIRED by `tax_id_collection` on a reused customer (AGL-1823).
+      // Stripe hard-rejects the session otherwise: "Tax ID collection
+      // requires updating business name on the customer. To enable tax ID
+      // collection for an existing customer, please set
+      // `customer_update[name]` to `auto`." — reproduced in test mode
+      // 2026-08-15. Without this, EVERY churned org's resubscribe 502s at
+      // session creation; a first subscribe is unaffected (no `customer`).
+      //
+      // The trade-off is deliberate: `auto` lets Checkout overwrite the
+      // customer's `name` with whatever business name the buyer types into
+      // the tax-id form — the very field AGL-941 stamps with the workspace
+      // name. That rename is transient: the webhook re-stamps
+      // `stripeCustomerIdentityParams` (name + metadata) on every
+      // `customer.subscription.created/updated/deleted`, and a completed
+      // resubscribe fires `created` immediately, so the dashboard row
+      // self-heals. The typed legal name still reaches the invoice via the
+      // session's own `customer_details`/`business_name`.
+      'customer_update[name]': 'auto',
     }
   }
   const customerEmail = email?.trim()

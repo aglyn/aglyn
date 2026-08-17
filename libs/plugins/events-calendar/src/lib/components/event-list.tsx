@@ -174,7 +174,13 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
           spacing={2}
           sx={{ alignItems: 'flex-start' }}
         >
-          {event.coverImage ? (
+          {/* The cover is a free-text console field rendered verbatim — one
+              of AGL-1725's raw author sinks. Scheme rule only, never a host
+              check: `http:` (an insecure egress no browser defends) and
+              unknown schemes render nothing; https/relative/data render as
+              stored. */}
+          {event.coverImage &&
+          !Aglyn.isRefusedAuthorImageSrc(event.coverImage) ? (
             <Box
               component="img"
               src={event.coverImage}

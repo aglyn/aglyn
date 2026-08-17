@@ -120,6 +120,7 @@ describe('checkoutCustomerParams (AGL-941)', () => {
     expect(checkoutCustomerParams('cus_123', 'owner@example.com')).toEqual({
       customer: 'cus_123',
       'customer_update[address]': 'auto',
+      'customer_update[name]': 'auto',
     })
   })
 
@@ -131,6 +132,7 @@ describe('checkoutCustomerParams (AGL-941)', () => {
     expect(Object.keys(params).sort()).toEqual([
       'customer',
       'customer_update[address]',
+      'customer_update[name]',
     ])
   })
 
