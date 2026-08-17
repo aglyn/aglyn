@@ -369,3 +369,136 @@ describe('paid draft order (AGL-1748)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The shipping a paid draft was charged (AGL-1792).
+ *
+ * This branch never wrote `totals` at all — it flipped the status and merged
+ * the payment intent, the buyer and the timeline over the figures the console
+ * froze when the draft was composed. That was harmless only while no draft
+ * session could charge shipping. Once `draft-order.ts` declares
+ * `shipping_options`, the buyer pays postage that lands in `amount_total` and
+ * NOWHERE in the stored order — the exact AGL-1698 defect, on real money, and
+ * the ordering constraint AGL-1707 wrote down. So this lands with (and is
+ * pinned ahead of) the charging half.
+ *
+ * A session that charged no shipping is left byte-identical, which is every
+ * draft that exists today AND every POS card sale — `pos-order.ts` completes
+ * its QR through this same branch, and a counter sale must not acquire a
+ * shipping line or an address it never had.
+ */
+describe('paid draft order shipping (AGL-1792)', () => {
+  /** $7.99 postage on the three boxes: 4500 items + 799 shipping = 5299. */
+  const SHIPPED_SESSION = {
+    ...DRAFT_SESSION,
+    amount_total: 5299,
+    total_details: { amount_shipping: 799 },
+    shipping_details: {
+      name: 'Ida Voiced',
+      address: {
+        line1: '14 Kiln Row',
+        line2: 'Unit 3',
+        city: 'Leeds',
+        state: 'WY',
+        postal_code: 'LS1 4AB',
+        country: 'GB',
+      },
+    },
+  }
+
+  /**
+   * THE DEFECT. Before the fix the stored order kept `shippingCents: 0` and
+   * `totalCents: 4500` while the buyer had paid 5299, so the merchant's own
+   * record understated the sale by exactly the postage they collected.
+   */
+  it('records what Stripe charged for shipping', async () => {
+    await deliver(SHIPPED_SESSION)
+    expect(storedOrder().totals).toEqual({
+      itemsCents: 4500,
+      shippingCents: 799,
+      taxCents: 0,
+      discountCents: 0,
+      feeCents: 146,
+      totalCents: 5299,
+    })
+  })
+
+  /** AGL-1698's invariant: the stored parts sum to the stored total. */
+  it('keeps the parts summing to the total', async () => {
+    await deliver(SHIPPED_SESSION)
+    const totals = storedOrder().totals
+    expect(
+      totals.itemsCents +
+        totals.shippingCents +
+        totals.taxCents -
+        totals.discountCents,
+    ).toBe(totals.totalCents)
+  })
+
+  /** The merchant collected postage, so they must be told where to post it. */
+  it('records the address Stripe collected', async () => {
+    await deliver(SHIPPED_SESSION)
+    expect(storedOrder().shippingAddress).toEqual({
+      name: 'Ida Voiced',
+      line1: '14 Kiln Row',
+      line2: 'Unit 3',
+      city: 'Leeds',
+      state: 'WY',
+      postalCode: 'LS1 4AB',
+      country: 'GB',
+    })
+  })
+
+  /**
+   * Every draft that exists today, and every POS card sale. The totals are
+   * compared whole rather than field by field: a handler that rebuilt them
+   * from the session would zero the tax and discount a POS sale prices into
+   * its single "In-store purchase" line, and a per-field assertion on
+   * `shippingCents` alone would pass straight through that.
+   */
+  it('leaves a session that charged no shipping untouched', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(storedOrder().totals).toEqual(DRAFT_ORDER.totals)
+    expect(storedOrder().shippingAddress).toBeUndefined()
+    // ...including one that reports the field as an explicit zero.
+    docs.set('hosts/host-1/orders/order-1', { ...DRAFT_ORDER })
+    await deliver({ ...DRAFT_SESSION, total_details: { amount_shipping: 0 } })
+    expect(storedOrder().totals).toEqual(DRAFT_ORDER.totals)
+  })
+
+  /**
+   * `shipping_details` ONLY — unlike the cart branch, which falls back to
+   * `customer_details`. That fallback is a billing address, and this branch
+   * also serves the register: a card sale rung up at a counter would otherwise
+   * acquire a "shipping address" nobody ever asked for and nothing will ship
+   * to. Stripe populates `shipping_details` exactly when the session declared
+   * `shipping_address_collection`, which is exactly when we priced a parcel.
+   */
+  it('does not mistake a billing address for a destination', async () => {
+    await deliver({
+      ...DRAFT_SESSION,
+      customer_details: {
+        email: 'Paid@Example.com',
+        name: 'Ida Voiced',
+        address: { line1: '1 Card Street', country: 'US' },
+      },
+    })
+    expect(storedOrder().shippingAddress).toBeUndefined()
+  })
+
+  /** A shipped draft is still a draft: nothing else about the branch moves. */
+  it('leaves the rest of the branch alone', async () => {
+    await deliver(SHIPPED_SESSION)
+    const order = storedOrder()
+    expect(order.status).toBe('paid')
+    expect(order.paymentIntentId).toBe('pi_draft_1')
+    expect(order.lineItems).toEqual(DRAFT_ORDER.lineItems)
+    expect(contactUpserts).toHaveLength(1)
+    // The contact's lifetime value is what Stripe charged, postage included.
+    expect(contactUpserts[0].purchaseCents).toBe(5299)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBe(7)
+  })
+})

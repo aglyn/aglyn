@@ -1536,6 +1536,37 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // before the session exists, so existence is guaranteed and says
         // nothing; only the transition distinguishes the first delivery.
         let paidOrder: CommerceModel.HostOrder | null = null
+        // Shipping (AGL-1792). This branch wrote no `totals` at all: the
+        // console froze them when the draft was composed, and while no draft
+        // session could charge postage there was nothing to add. Now
+        // `draft-order.ts` declares `shipping_options`, so the buyer picks a
+        // rate and pays an amount that arrives only inside `amount_total` —
+        // leaving the stored order alone would recreate AGL-1698 against real
+        // money, which is the ordering constraint AGL-1707 wrote down.
+        //
+        // ADDITIVE, never a rebuild. `computeCheckoutSessionTotals` is the
+        // obvious reach and is wrong here: this same branch completes a POS
+        // card sale, whose tax and discount are priced into one "In-store
+        // purchase" line and are therefore absent from Stripe's
+        // `total_details`, so rebuilding would zero them. Only the part Stripe
+        // alone knows is folded in, and a session that charged no shipping
+        // leaves the document byte-identical — which is every draft that
+        // exists today and every counter sale.
+        //
+        // The whole map is written rather than one field of it, so a
+        // `merge`-set's nested-map merge and a plain replace agree.
+        const shippingCents = Math.max(
+          0,
+          Math.round(Number(object?.total_details?.amount_shipping ?? 0) || 0),
+        )
+        const chargedTotalCents = Number(object?.amount_total ?? NaN)
+        // `shipping_details` ONLY, unlike the cart branch's
+        // `?? customer_details` fallback: that address is the BILLING one, and
+        // a card sale rung up at a register completes here too — it must not
+        // acquire a destination nobody entered and nothing will ship to.
+        // Stripe populates this exactly when the session asked for an address,
+        // which is exactly when a parcel was priced.
+        const shipTo = object?.shipping_details
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
@@ -1552,6 +1583,34 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
+              ...(shippingCents > 0
+                ? {
+                    totals: {
+                      ...(lifted.totals ?? {}),
+                      shippingCents,
+                      // Stripe's own figure, for the AGL-1698 reason: the
+                      // frozen total is what the draft was priced at, and only
+                      // `amount_total` is the money that moved.
+                      totalCents: Number.isFinite(chargedTotalCents)
+                        ? chargedTotalCents
+                        : Number(lifted.totals?.totalCents ?? 0) +
+                          shippingCents,
+                    },
+                  }
+                : {}),
+              ...(shipTo?.address
+                ? {
+                    shippingAddress: {
+                      name: shipTo.name ?? undefined,
+                      line1: shipTo.address.line1 ?? undefined,
+                      line2: shipTo.address.line2 ?? undefined,
+                      city: shipTo.address.city ?? undefined,
+                      state: shipTo.address.state ?? undefined,
+                      postalCode: shipTo.address.postal_code ?? undefined,
+                      country: shipTo.address.country ?? undefined,
+                    },
+                  }
+                : {}),
             },
             { merge: true },
           )
