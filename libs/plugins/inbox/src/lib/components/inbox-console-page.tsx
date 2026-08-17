@@ -18,6 +18,7 @@
 
 import {
   type ConsolePluginPageProps,
+  formSpamCaughtNotice,
   formSubmissionsPausedNotice,
   submissionMonthKey,
 } from '@aglyn/aglyn'
@@ -103,6 +104,22 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   const pausedNotice = formSubmissionsPausedNotice({
     refused: Number(refusedCounter?.[submissionMonthKey()] ?? 0),
     ceiling: Number(refusedCounter?.['ceiling']) || undefined,
+  })
+
+  // Bot submissions the honeypot caught (AGL-1831 → AGL-1836). The staff org
+  // page has shown this number per host since AGL-1831; this is the same
+  // count where the site's OWNER already looks, so "is my form being hit by
+  // bots?" is answered by their own inbox instead of a support ticket. Same
+  // client-unwritable counters document shape as the refusal counter above,
+  // same host-admin read the rules already grant (AGL-1367), same shared
+  // month key — and the shared sentence returns null below one catch, so a
+  // quiet month renders nothing rather than a reassuring zero.
+  const { data: spamCounter } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'formSubmissionsSpam'),
+    [firestore, hostId],
+  )
+  const spamNotice = formSpamCaughtNotice({
+    spam: Number(spamCounter?.[submissionMonthKey()] ?? 0),
   })
 
   // Site members + leads (AGL-109).
@@ -209,6 +226,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           >
             {pausedNotice.until}
           </Typography>
+        </Alert>
+      ) : null}
+      {/* Beside the paused notice, and info rather than warning on purpose
+          (AGL-1836): the honeypot count reports protection WORKING — those
+          submissions were caught, dropped, and never stored or billed. An
+          owner whose inbox went quiet checks here; bots absorbed silently is
+          the answer that stops the support ticket. */}
+      {spamNotice ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {spamNotice}
         </Alert>
       ) : null}
       <HubTabs

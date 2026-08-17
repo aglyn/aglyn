@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { formCeilingResetAt } from '@aglyn/aglyn'
+import { formCeilingResetAt, formSpamCaughtNotice } from '@aglyn/aglyn'
 import { Chip, Tooltip } from '@mui/material'
 
 /** The per-host counters join `/api/admin/hosts?orgId=…` serves (AGL-1681). */
@@ -81,13 +81,10 @@ const StaffHostFormCountersChips = ({
       : '') +
     `. Nothing refused is stored or billed. Accepting again on ${reset}.`
   // The spam chip reports the honeypot WORKING, not something wrong
-  // (AGL-1831) — neutral color, caught-and-dropped copy. It is also the
-  // AGL-1664 revisit input: spam creeping toward ~20% of a paying host's
-  // submissions is the trigger for reopening the App Check / CAPTCHA call.
-  const spamDetail =
-    `${spam.toLocaleString()} bot submission${spam === 1 ? '' : 's'} ` +
-    `${spam === 1 ? 'was' : 'were'} caught and dropped by the honeypot ` +
-    `this month — nothing was stored or billed.`
+  // (AGL-1831) — neutral color, and the shared caught-and-dropped sentence
+  // the owner's inbox notice (AGL-1836) renders verbatim, so the two
+  // surfaces cannot drift into telling different stories about one number.
+  const spamDetail = formSpamCaughtNotice({ spam })
   return (
     <>
       {refused >= 1 ? (

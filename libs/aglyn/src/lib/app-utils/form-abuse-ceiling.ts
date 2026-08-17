@@ -144,6 +144,32 @@ export function formCeilingResetAt(now: Date = new Date()): Date {
 }
 
 /**
+ * The honeypot's month, as the one sentence every surface renders (AGL-1831
+ * staff chip tooltip, AGL-1836 owner inbox notice).
+ *
+ * The framing is the point, and it is why the sentence lives here instead of
+ * in either component: the count reports the honeypot WORKING — caught and
+ * dropped, nothing stored, nothing billed — not something wrong. A surface
+ * that restated it could drift into alarm ("N spam attacks!") and train the
+ * owner to fear the number that should reassure them. It is also the
+ * AGL-1664 revisit input: spam creeping toward ~20% of a paying host's
+ * submissions is the trigger for reopening the App Check / CAPTCHA call.
+ *
+ * Returns `null` below one catch, same rule as `formSubmissionsPausedNotice`
+ * and for the same reason — the counter document persists from its first
+ * catch forever, and a reassuring zero trains the reader to ignore the row.
+ */
+export function formSpamCaughtNotice(input: { spam: number }): string | null {
+  const spam = Math.floor(Number(input.spam) || 0)
+  if (spam < 1) return null
+  return (
+    `${spam.toLocaleString()} bot submission${spam === 1 ? '' : 's'} ` +
+    `${spam === 1 ? 'was' : 'were'} caught and dropped by the honeypot ` +
+    `this month — nothing was stored or billed.`
+  )
+}
+
+/**
  * The owner's notice — the half deliberately withheld from the visitor.
  *
  * Shaped like `LockdownRefusalNotice` ({title, message, until}) so the
