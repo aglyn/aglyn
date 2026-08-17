@@ -256,10 +256,20 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order || !orderId) return
     const confirmed = await confirm({
       title: 'Refund this order?',
-      description: `Refunds ${usd(
-        (order.totals?.totalCents ?? order.amountCents ?? 0) -
-          (order.refundedCents ?? 0),
-      )} to the buyer through Stripe.`,
+      description:
+        `Refunds ${usd(
+          (order.totals?.totalCents ?? order.amountCents ?? 0) -
+            (order.refundedCents ?? 0),
+        )} to the buyer through Stripe.` +
+        // An open INQUIRY keeps this button live on purpose (AGL-1820):
+        // Stripe names a full refund as the way to resolve one before it
+        // escalates to a chargeback. Said here so the admin reads the refund
+        // as the documented exit, not a risk taken against the badge.
+        (CommerceModel.orderHasOpenDispute(order) &&
+        !CommerceModel.orderDisputeBlocksRefund(order)
+          ? ' An inquiry is open on this charge — a full refund resolves it' +
+            ' before it can become a chargeback.'
+          : ''),
       confirmationText: 'Refund',
       confirmationButtonProps: { color: 'error' },
     })
@@ -291,8 +301,12 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       // so pressing Refund again dedupes rather than sends a second transfer.
       if (response.status < 500) attemptKey.current = ''
       if (!response.ok) {
+        // A 409 is a guard REFUSING — the status machine, or the open-dispute
+        // block (AGL-1809), whose body explains what to do instead — not the
+        // refund machinery failing. The route wrote nothing, so it surfaces
+        // verbatim as a warning, same as the cancel path's 409 (AGL-1818).
         enqueueSnackbar(payload?.error ?? 'Refund failed', {
-          variant: 'error',
+          variant: response.status === 409 ? 'warning' : 'error',
           allowDuplicate: true,
         })
       } else {
@@ -672,9 +686,34 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         {can('refunded') ? (
-          <Button color="error" disabled={busy} onClick={handleRefund}>
-            {'Refund'}
-          </Button>
+          // Disabled on `orderDisputeBlocksRefund`, NOT the badge's broader
+          // `orderHasOpenDispute` (AGL-1820): a formal open dispute means the
+          // bank already pulled the funds and the route answers 409
+          // (AGL-1809), while an open INQUIRY shows the badge but must keep
+          // this button live — a full refund is how an inquiry is resolved.
+          CommerceModel.orderDisputeBlocksRefund(order) ? (
+            <Tooltip
+              title={
+                'A chargeback is open on this order, and refunding would not' +
+                ' withdraw it — the bank has already taken the disputed' +
+                ' amount, so a refund on top would pay the shopper twice.' +
+                ' Respond to the dispute or accept it in the Stripe' +
+                ' dashboard; refund any remainder once it settles.'
+              }
+            >
+              {/* A disabled button fires no pointer events; the wrapper
+                  carries the hover for the tooltip. */}
+              <span>
+                <Button color="error" disabled>
+                  {'Refund'}
+                </Button>
+              </span>
+            </Tooltip>
+          ) : (
+            <Button color="error" disabled={busy} onClick={handleRefund}>
+              {'Refund'}
+            </Button>
+          )
         ) : null}
         {(can('fulfilled') || can('partially_fulfilled')) && !tracking ? (
           <Button
