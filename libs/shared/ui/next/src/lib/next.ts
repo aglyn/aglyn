@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-// The Pages Router `_app` / `_document` pieces are intentionally NOT
-// re-exported here: `_emotion-document.component` imports `next/document`,
-// which webpack cannot resolve in an App Router production build, so any
-// App Router consumer that value-imports this barrel (e.g. a feature plugin
-// pulled into the tenant/console app graph) would fail to build. The only
-// consumer is `apps/www` (Pages Router), which deep-imports them directly
-// from `./components/_app.component` and `./components/_emotion-document.component`.
+// This barrel serves App Router consumers only. The Pages Router `_app` /
+// `_document` components that once lived beside these were deleted with
+// `apps/www`, the last Pages Router app (AGL-1833): their `next/document`
+// import cannot resolve in an App Router production build, so nothing here
+// may ever re-export a module that touches it.
 export * from './components/hub-tabs'
 export * from './components/image'
 export * from './components/page-decorated'
