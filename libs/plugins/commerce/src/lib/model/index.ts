@@ -25,6 +25,7 @@
 export * from './commerce'
 export * from './commerce-cart'
 export * from './commerce-discounts'
+export * from './commerce-dispute'
 export * from './commerce-io'
 export * from './commerce-orders'
 export * from './commerce-reservations'

@@ -30,6 +30,7 @@ import {
   Divider,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -53,6 +54,24 @@ const STATUS_COLOR: Record<
   delivered: 'success',
   cancelled: 'default',
   refunded: 'error',
+}
+
+/**
+ * The dispute chip's colour (AGL-1796).
+ *
+ * `open` is WARNING rather than error because it is the case that still has a
+ * deadline on it — the merchant can still act, and a red chip on a case they
+ * might win says the money is gone when it is not. `lost` is the one that took
+ * the money, and shares `refunded`'s red for that reason.
+ */
+export const DISPUTE_COLOR: Record<
+  CommerceModel.OrderDisputeTone,
+  'default' | 'success' | 'warning' | 'error'
+> = {
+  open: 'warning',
+  lost: 'error',
+  won: 'success',
+  settled: 'default',
 }
 
 const usd = (cents: number | undefined) =>
@@ -236,6 +255,10 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   if (!order) return null
   const totals = order.totals
   const can = (to: CommerceModel.OrderStatus) => CommerceModel.canTransitionOrder(order.status, to)
+  // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the status
+  // chip alone tells the merchant they chose this. The badge is the correction.
+  const dispute = CommerceModel.describeOrderDispute(order)
+  const reversal = CommerceModel.splitOrderReversal(order)
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -248,6 +271,16 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             color={STATUS_COLOR[order.status] ?? 'default'}
             variant="outlined"
           />
+          {dispute ? (
+            <Tooltip title={dispute.detail}>
+              <Chip
+                label={dispute.label}
+                size="small"
+                color={DISPUTE_COLOR[dispute.tone]}
+                variant="filled"
+              />
+            </Tooltip>
+          ) : null}
           {order.channel && order.channel !== 'online' ? (
             <Chip label={order.channel} size="small" variant="outlined" />
           ) : null}
@@ -298,9 +331,21 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 </Typography>
               </Stack>
             ))}
-            {order.refundedCents ? (
+            {/*
+              Both figures live in `refundedCents` (AGL-1787), so a lost
+              chargeback used to render as "Refunded $62.00" — the merchant's
+              own decision, spelled the same as money taken from them. Split by
+              door, and show BOTH when a partial refund and a chargeback each
+              took a piece.
+             */}
+            {reversal.refundedCents ? (
               <Typography variant="caption" color="error">
-                {`Refunded ${usd(order.refundedCents)}`}
+                {`Refunded ${usd(reversal.refundedCents)}`}
+              </Typography>
+            ) : null}
+            {reversal.chargedBackCents ? (
+              <Typography variant="caption" color="error">
+                {`Charged back ${usd(reversal.chargedBackCents)}`}
               </Typography>
             ) : null}
           </>

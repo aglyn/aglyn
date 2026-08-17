@@ -21,6 +21,8 @@ import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
+  AlertTitle,
   Button,
   Chip,
   Dialog,
@@ -30,13 +32,16 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
-import OrderDetailDialog from './order-detail-dialog.component'
+import OrderDetailDialog, {
+  DISPUTE_COLOR,
+} from './order-detail-dialog.component'
 
 export interface HostOrdersCardProps {
   hostId: string
@@ -79,6 +84,14 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const [dateFilter, setDateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
+  /**
+   * Disputes filter (AGL-1796), separate from Status on purpose: the two are
+   * orthogonal. An OPEN dispute sits on an order that is still `paid`, and a
+   * lost one sits on `refunded` beside every ordinary refund — so folding
+   * either into the Status select would make that control lie about what it
+   * selects.
+   */
+  const [disputeFilter, setDisputeFilter] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<{
     productId: string
@@ -111,12 +124,47 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       if (channelFilter && (lifted.channel ?? 'online') !== channelFilter) {
         return false
       }
+      if (
+        disputeFilter === 'open' &&
+        !CommerceModel.orderHasOpenDispute(lifted)
+      ) {
+        return false
+      }
+      // `lost` is the tone, not the raw status: a dispute that was WON also
+      // closes with money untouched, and listing it under "charged back"
+      // would tell a merchant they lost a case they won.
+      if (
+        disputeFilter === 'lost' &&
+        CommerceModel.describeOrderDispute(lifted)?.tone !== 'lost'
+      ) {
+        return false
+      }
       const created = order.createdAt?.seconds ?? 0
       if (dateFilter === '7d' && now - created > 7 * 86400) return false
       if (dateFilter === '30d' && now - created > 30 * 86400) return false
       return true
     })
-  }, [orders, productFilter, dateFilter, statusFilter, channelFilter])
+  }, [
+    orders,
+    productFilter,
+    dateFilter,
+    statusFilter,
+    channelFilter,
+    disputeFilter,
+  ])
+
+  /**
+   * Raised over EVERY loaded order, not the visible ones (AGL-1796). A
+   * merchant filtered to "delivered" still has a deadline running on a `paid`
+   * order, and the evidence window is days long.
+   */
+  const openDisputes = useMemo(
+    () =>
+      CommerceModel.summariseOpenDisputes(
+        orders.map((order: any) => CommerceModel.liftLegacyOrder(order)),
+      ),
+    [orders],
+  )
   const handleExportCsv = useCallback(() => {
     // The rows themselves are built by the pure model helper (AGL-1747) so the
     // column-by-column arithmetic is unit-testable without a Firestore mock.
@@ -200,6 +248,35 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1}>
+          {openDisputes.count > 0 ? (
+            <Alert
+              severity={openDisputes.overdue ? 'error' : 'warning'}
+              action={
+                disputeFilter === 'open' ? undefined : (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    onClick={() => setDisputeFilter('open')}
+                  >
+                    {'Show them'}
+                  </Button>
+                )
+              }
+            >
+              <AlertTitle>
+                {openDisputes.count === 1
+                  ? 'A shopper has disputed a charge with their bank'
+                  : `${openDisputes.count} charges are disputed with the shopper’s bank`}
+              </AlertTitle>
+              {openDisputes.soonestDaysLeft === undefined
+                ? 'Answer in the Stripe dashboard while the case is open — an unanswered dispute is decided for the shopper.'
+                : openDisputes.soonestDaysLeft < 0
+                  ? 'The evidence deadline has passed on at least one of these. Stripe decides an unanswered dispute for the shopper.'
+                  : `Evidence is due to Stripe in ${openDisputes.soonestDaysLeft} day${
+                      openDisputes.soonestDaysLeft === 1 ? '' : 's'
+                    } on the tightest of these. An unanswered dispute is decided for the shopper.`}
+            </Alert>
+          ) : null}
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <TextField
               select
@@ -258,6 +335,18 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               <MenuItem value="pos">{'POS'}</MenuItem>
               <MenuItem value="draft">{'Draft'}</MenuItem>
             </TextField>
+            <TextField
+              select
+              size="small"
+              label="Disputes"
+              value={disputeFilter}
+              onChange={(event) => setDisputeFilter(event.target.value)}
+              sx={{ minWidth: 140 }}
+            >
+              <MenuItem value="">{'All orders'}</MenuItem>
+              <MenuItem value="open">{'Open dispute'}</MenuItem>
+              <MenuItem value="lost">{'Charged back'}</MenuItem>
+            </TextField>
             <Button size="small" onClick={handleExportCsv}>
               {'Export CSV'}
             </Button>
@@ -274,6 +363,9 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           </Stack>
           {visibleOrders.map((order: any) => {
             const lifted = CommerceModel.liftLegacyOrder(order)
+            // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the
+            // status chip on this row cannot tell the two apart either.
+            const dispute = CommerceModel.describeOrderDispute(lifted)
             return (
               <Stack
                 key={order.$id}
@@ -290,6 +382,16 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                         '') +
                       ` · $${(((lifted.totals?.totalCents ?? order.amountCents) ?? 0) / 100).toFixed(2)}`}
                   </Typography>
+                  {dispute ? (
+                    <Tooltip title={dispute.detail}>
+                      <Chip
+                        label={dispute.label}
+                        size="small"
+                        color={DISPUTE_COLOR[dispute.tone]}
+                        variant="filled"
+                      />
+                    </Tooltip>
+                  ) : null}
                   <Chip
                     label={lifted.status.replace('_', ' ')}
                     size="small"
@@ -302,6 +404,24 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                       ? order.createdAt.toDate().toLocaleString()
                       : '')}
                 </Typography>
+                {/*
+                  The deadline on the row itself, while the case is open —
+                  the one fact on this screen that expires.
+                 */}
+                {dispute?.evidenceDaysLeft !== undefined ? (
+                  <Typography
+                    variant="caption"
+                    color={
+                      dispute.evidenceDaysLeft < 0 ? 'error' : 'warning.main'
+                    }
+                  >
+                    {dispute.evidenceDaysLeft < 0
+                      ? 'Evidence deadline passed'
+                      : `Evidence due in ${dispute.evidenceDaysLeft} day${
+                          dispute.evidenceDaysLeft === 1 ? '' : 's'
+                        }`}
+                  </Typography>
+                ) : null}
               </Stack>
             )
           })}

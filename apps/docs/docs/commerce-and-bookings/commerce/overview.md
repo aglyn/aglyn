@@ -64,6 +64,15 @@ snapshots, totals, and a timeline:
 - **Fulfill with tracking**, print **packing slips**, add internal notes.
 - **Refunds** (full or partial) go through Stripe and reverse the platform
   fee; site-admin only.
+- **Chargebacks** are shown apart from refunds. When a shopper disputes a
+  charge with their bank, the order gets a **Chargeback open** badge and the
+  list warns you with the date Stripe needs your evidence by — answer it in
+  the Stripe dashboard, because an unanswered dispute is decided for the
+  shopper. If the dispute is lost the money is reversed, the order reads
+  **Charged back** rather than Refunded, and the buyer loses the downloads,
+  membership and verified-purchase review a refund would have withdrawn. A
+  dispute you win reverses nothing. Filter the list by **Disputes** to find
+  either.
 - **Draft orders**: build an order in the console and send the buyer a
   payment link (Shopify parity).
 
