@@ -64,6 +64,7 @@ const ORG_ID = process.env.WIRE_ORG ?? 'e2e-owner'
 const STAFF_UID = 'e2e-owner'
 const PROBE_UID = 'wire-readonly-probe'
 const PROBE_EMAIL = 'wire-readonly-probe@aglyn.test'
+const PROBE_MEDIA_ID = 'agl-1800-private-media-probe'
 const BOOT_BUDGET_MS = Number(process.env.WIRE_BOOT_BUDGET_MS ?? 120_000)
 // The page surface converges through TWO caches — the tenant data cache
 // (HOST_DOC_TTL_SECONDS = 60 in apps/tenant/utils/get-host.ts) and the
@@ -786,6 +787,106 @@ if (!consoleUp) {
     )
     await liftPlatformLock()
   }
+
+  console.log('\n=== G. PRIVATE MEDIA PREVIEW (AGL-1800) ===')
+  // The pair AGL-1790's fix was owed on the wire: under a read-only org lock
+  // the console must still be able to DISPLAY a private asset — the sign
+  // route serves the read — while a genuine write on the same media surface
+  // refuses, and the same sign refuses under a FULL lock. Only the pair
+  // discriminates: signing under both modes would mean the verdict is not
+  // consulted at all; refusing under both would be AGL-1790 back again.
+  //
+  // WHAT THIS ARMS, PRECISELY (#read-only-revocation-evidence): the lock is
+  // armed the way this harness always arms locks — the `suspended*` carrier
+  // written directly — plus the `orgSuspended: true` member projection the
+  // sign route uses as its per-request org signal, written here BY HAND.
+  // That second write mimics `applyOrgLockdown`'s projection stamp; it does
+  // not run it. So these probes prove the ROUTE's verdict wiring —
+  // projection tripped, carrier read fresh, mode honoured — and prove
+  // nothing about `applyOrgLockdown` itself, which is pinned by
+  // `lockdown-revocation-wiring.spec.ts`. The projection write is also what
+  // keeps G1/G3 non-vacuous: without it the route never reads the org
+  // carrier at all, and a sign would answer 200 under EITHER mode — the
+  // different bug the pair exists to tell apart.
+  {
+    // A private asset that exists ONLY in the emulator — which is also what
+    // pins these probes to it: a console pointed anywhere else answers 404
+    // here (missing asset), never 200.
+    await orgRef.collection('media').doc(PROBE_MEDIA_ID).set({
+      fileName: 'agl-1800-wire-probe.png',
+      contentType: 'image/png',
+      private: true,
+      createdAt: Date.now(),
+    })
+
+    // F5 lifted the platform lock, but the console holds the platform scope
+    // in a 15s in-process cache (PLATFORM_TTL_MS); probing before it expires
+    // would let a cached PLATFORM verdict answer for the org assertions
+    // below and skew their `scope`/`mode` bodies.
+    await wait(16_000)
+
+    await armOrgLock('read-only')
+    await orgRef
+      .collection('members')
+      .doc(PROBE_UID)
+      .set({ orgSuspended: true }, { merge: true })
+
+    const sign = await consolePost(
+      '/api/media/sign',
+      { orgId: ORG_ID, mediaId: PROBE_MEDIA_ID },
+      probeToken,
+    )
+    record(
+      'G1 media/sign SERVES a private preview under a read-only lock',
+      sign.status === 200 &&
+        String(sign.json?.url ?? '').includes(
+          `/api/media/cdn/org:${ORG_ID}/${PROBE_MEDIA_ID}?`,
+        ),
+      `HTTP ${sign.status} — ${JSON.stringify(sign.json ?? sign.text)}`,
+    )
+
+    // The genuine write on the same surface: a restore is refused by the
+    // same `resolveMediaScope` verdict (intent absent = write) before it
+    // touches tombstones or Storage, so this leaves nothing behind.
+    const write = await consolePost(
+      '/api/media/restore',
+      { orgId: ORG_ID, mediaId: PROBE_MEDIA_ID },
+      probeToken,
+    )
+    record(
+      'G2 …while a genuine write on the same surface refuses 423',
+      write.status === 423 &&
+        write.json?.error === 'locked' &&
+        write.json?.mode === 'read-only' &&
+        write.json?.scope === 'org',
+      `HTTP ${write.status} — ${JSON.stringify(write.json ?? write.text)}`,
+    )
+
+    // Same carrier, mode FULL. Absent means full — and the merge write must
+    // DELETE the read-only marker, or it survives the merge and this stays
+    // the same lock (section C's trap).
+    await armOrgLock(undefined, { suspendedMode: FieldValue.delete() })
+    const fullSign = await consolePost(
+      '/api/media/sign',
+      { orgId: ORG_ID, mediaId: PROBE_MEDIA_ID },
+      probeToken,
+    )
+    record(
+      'G3 the same sign refuses 423 under a FULL lock',
+      fullSign.status === 423 &&
+        fullSign.json?.error === 'locked' &&
+        fullSign.json?.scope === 'org' &&
+        fullSign.json?.mode === undefined,
+      `HTTP ${fullSign.status} — ${JSON.stringify(fullSign.json ?? fullSign.text)}`,
+    )
+
+    await liftOrgLock()
+    await orgRef
+      .collection('members')
+      .doc(PROBE_UID)
+      .set({ orgSuspended: FieldValue.delete() }, { merge: true })
+    await orgRef.collection('media').doc(PROBE_MEDIA_ID).delete()
+  }
 }
 
 // ── teardown + report ───────────────────────────────────────────────────────
@@ -816,6 +917,14 @@ await hostRef
 await orgRef
   .collection('members')
   .doc(PROBE_UID)
+  .delete()
+  .catch(() => {})
+// The G-section media fixture too, in case that section aborted mid-way: a
+// stray PRIVATE asset in the shared seed's org library is exactly the kind
+// of leftover that pads someone else's library-count assertion.
+await orgRef
+  .collection('media')
+  .doc(PROBE_MEDIA_ID)
   .delete()
   .catch(() => {})
 stopServer()
