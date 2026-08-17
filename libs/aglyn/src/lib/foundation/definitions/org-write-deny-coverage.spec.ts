@@ -113,6 +113,16 @@ interface OrgUpdateRule {
   orgAdminDenied: string[]
   /** Denied to billing staff. */
   billingStaffDenied: string[]
+  /**
+   * Denied to SUPER staff — the loosest branch, and until AGL-1795 the one
+   * branch this guard never read. It asserted `branches` had length 3 and then
+   * parsed two of them, so `plan` could have fallen off the super list with
+   * every test here still green. That is the same shape as the hole the file
+   * exists to close, one level up: super staff satisfies `isBillingStaff()`
+   * too, the branches are OR'd, and the LOOSER one wins — so for a super token
+   * this is the only list that decides anything.
+   */
+  superStaffDenied: string[]
   /** Every OR'd branch of the single `allow update` statement. */
   branches: string[]
   /** Depth-0 statements of `match /orgs/{orgId}`. */
@@ -167,6 +177,7 @@ function parseOrgUpdateRule(): OrgUpdateRule {
   return {
     orgAdminDenied: hasAnyKeys(branchFor('canManageOrg()')),
     billingStaffDenied: hasAnyKeys(branchFor('isBillingStaff()')),
+    superStaffDenied: hasAnyKeys(branchFor('isSuperStaff()')),
     branches,
     statements,
     topLevelMatches,
@@ -257,6 +268,22 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
       expect(rule.billingStaffDenied).toEqual(
         expect.arrayContaining(['sso', 'suspendedAt', 'erasureRequestedAt']),
       )
+      // AGL-1795: /api/admin/org-override is the only writer of these three,
+      // so they are denied to every client — including the super token, whose
+      // branch is the loosest and therefore the one that decides.
+      expect(rule.superStaffDenied).toEqual(
+        expect.arrayContaining([
+          'plan',
+          'entitlements',
+          'releaseFlags',
+          'suspendedAt',
+        ]),
+      )
+      // The AGL-1517 carve-out, asserted rather than left to be inferred from
+      // an absence: the erasure toggle is still a client `writeBatch`, so this
+      // key must NOT join the super list. Denying it would refuse the last
+      // client writer of a staff key with nothing to fall back on.
+      expect(rule.superStaffDenied).not.toContain('erasureRequestedAt')
       // isSuperStaff / isBillingStaff / canManageOrg.
       expect(rule.branches).toHaveLength(3)
     })
@@ -383,6 +410,23 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
     // `sso` came to be on both lists in AGL-1354.
     const looser = rule.billingStaffDenied.filter(
       (field) => !rule.orgAdminDenied.includes(field),
+    )
+    expect(looser).toEqual([])
+  })
+
+  it('denies billing staff everything super staff is denied (AGL-1795)', () => {
+    // The other rung of the same ladder — super ⊆ billing ⊆ org admin — and
+    // the one that actually bites. `isBillingStaff()` is true for the SUPER
+    // role as well, so both staff branches evaluate for a super token and
+    // Firestore ORs them: adding a key to the billing list alone leaves super
+    // staff writing it, and adding it to the super list alone leaves the
+    // billing role writing it. A key has to reach BOTH, and only the ladder
+    // says so — the AGL-1795 mutation run confirmed each half independently.
+    //
+    // A vacuous ladder proves nothing, so the floor is checked first.
+    expect(rule.superStaffDenied.length).toBeGreaterThanOrEqual(9)
+    const looser = rule.superStaffDenied.filter(
+      (field) => !rule.billingStaffDenied.includes(field),
     )
     expect(looser).toEqual([])
   })

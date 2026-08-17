@@ -30,6 +30,7 @@ import {
   Divider,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -53,6 +54,24 @@ const STATUS_COLOR: Record<
   delivered: 'success',
   cancelled: 'default',
   refunded: 'error',
+}
+
+/**
+ * The dispute chip's colour (AGL-1796).
+ *
+ * `open` is WARNING rather than error because it is the case that still has a
+ * deadline on it — the merchant can still act, and a red chip on a case they
+ * might win says the money is gone when it is not. `lost` is the one that took
+ * the money, and shares `refunded`'s red for that reason.
+ */
+export const DISPUTE_COLOR: Record<
+  CommerceModel.OrderDisputeTone,
+  'default' | 'success' | 'warning' | 'error'
+> = {
+  open: 'warning',
+  lost: 'error',
+  won: 'success',
+  settled: 'default',
 }
 
 const usd = (cents: number | undefined) =>
@@ -108,8 +127,25 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     enqueueSnackbar('Order fulfilled', { variant: 'success', persist: false })
   }, [order, tracking, write, enqueueSnackbar])
 
+  /**
+   * Cancel goes through `/api/commerce/cancel-order` (AGL-1818), not a client
+   * write. The status flip and the stock release are one transaction there,
+   * and the route re-asks `canTransitionOrder` under the same lock — the
+   * `can('cancelled')` gate below only decides whether to RENDER the button,
+   * so a dialog held open while the order ships in another tab used to write
+   * `cancelled` straight onto a `fulfilled` order. Now that race comes back
+   * as a 409 carrying the state that refused it.
+   *
+   * The messages follow the AGL-1784/1786 contract — say what happened:
+   * a 409 is the guard refusing, not the cancel machinery failing; the
+   * route's own 500 is a rolled-back transaction (nothing landed, retry is
+   * safe and correct); an answer with no JSON word from the handler, or no
+   * answer at all, is NOT KNOWN — never "nothing happened". A retry is safe
+   * in every case because the route cancels once: a second cancel finds
+   * `cancelled` and returns success without touching stock.
+   */
   const handleCancel = useCallback(async () => {
-    if (!order) return
+    if (!order || !orderId) return
     const confirmed = await confirm({
       title: 'Cancel this order?',
       description:
@@ -120,11 +156,82 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await write({
-      status: 'cancelled',
-      timeline: CommerceModel.appendOrderEvent(order, 'cancelled'),
-    })
-  }, [order, confirm, write])
+    setBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      let response: Response
+      try {
+        response = await fetch('/api/commerce/cancel-order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ hostId, orderId }),
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(
+          'The request did not complete, so it is NOT known whether the ' +
+            'order was cancelled. Reopen the order to check — retrying is ' +
+            'safe, the server cancels once.',
+          { variant: 'error', allowDuplicate: true },
+        )
+        return
+      }
+      const payload: any = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (response.status === 409) {
+          // The transition guard refusing: the order moved on (shipped,
+          // refunded) while this dialog was open. The route's message names
+          // the state that refused it, and nothing was written.
+          enqueueSnackbar(
+            payload?.error ?? 'This order can no longer be cancelled',
+            {
+              variant: 'warning',
+              allowDuplicate: true,
+            },
+          )
+        } else if (payload?.error && response.status < 500) {
+          // A refusal that wrote nothing — session, role, or an order that
+          // is not there. The route's own word, verbatim.
+          enqueueSnackbar(payload.error, {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        } else if (payload?.error) {
+          // The route's 500 is a rolled-back transaction: nothing landed and
+          // the order is still open. Only the handler's own JSON word
+          // licenses saying so.
+          enqueueSnackbar(
+            `${payload.error} — nothing changed, the order is still open. Retrying is safe.`,
+            { variant: 'error', allowDuplicate: true },
+          )
+        } else {
+          // No JSON word from the handler (a gateway page, a proxy timeout):
+          // whether the cancel landed is NOT known.
+          enqueueSnackbar(
+            `The cancel failed (${response.status}) and it is NOT known ` +
+              'whether it landed. Reopen the order to check — retrying is ' +
+              'safe, the server cancels once.',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        return
+      }
+      const units = Number(payload?.units ?? 0)
+      enqueueSnackbar(
+        payload?.alreadyCancelled
+          ? 'Order was already cancelled'
+          : units > 0
+            ? `Order cancelled — ${units} ${units === 1 ? 'unit' : 'units'} returned to stock`
+            : 'Order cancelled',
+        { variant: 'success', persist: false },
+      )
+    } finally {
+      setBusy(false)
+    }
+  }, [order, orderId, user, hostId, confirm, enqueueSnackbar])
 
   /**
    * Idempotency key for ONE refund attempt (AGL-1696), the same shape the POS
@@ -236,6 +343,10 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   if (!order) return null
   const totals = order.totals
   const can = (to: CommerceModel.OrderStatus) => CommerceModel.canTransitionOrder(order.status, to)
+  // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the status
+  // chip alone tells the merchant they chose this. The badge is the correction.
+  const dispute = CommerceModel.describeOrderDispute(order)
+  const reversal = CommerceModel.splitOrderReversal(order)
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -248,6 +359,16 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
             color={STATUS_COLOR[order.status] ?? 'default'}
             variant="outlined"
           />
+          {dispute ? (
+            <Tooltip title={dispute.detail}>
+              <Chip
+                label={dispute.label}
+                size="small"
+                color={DISPUTE_COLOR[dispute.tone]}
+                variant="filled"
+              />
+            </Tooltip>
+          ) : null}
           {order.channel && order.channel !== 'online' ? (
             <Chip label={order.channel} size="small" variant="outlined" />
           ) : null}
@@ -298,9 +419,21 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 </Typography>
               </Stack>
             ))}
-            {order.refundedCents ? (
+            {/*
+              Both figures live in `refundedCents` (AGL-1787), so a lost
+              chargeback used to render as "Refunded $62.00" — the merchant's
+              own decision, spelled the same as money taken from them. Split by
+              door, and show BOTH when a partial refund and a chargeback each
+              took a piece.
+             */}
+            {reversal.refundedCents ? (
               <Typography variant="caption" color="error">
-                {`Refunded ${usd(order.refundedCents)}`}
+                {`Refunded ${usd(reversal.refundedCents)}`}
+              </Typography>
+            ) : null}
+            {reversal.chargedBackCents ? (
+              <Typography variant="caption" color="error">
+                {`Charged back ${usd(reversal.chargedBackCents)}`}
               </Typography>
             ) : null}
           </>
@@ -373,7 +506,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       <DialogActions>
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
         {can('cancelled') ? (
-          <Button color="error" onClick={handleCancel}>
+          <Button color="error" disabled={busy} onClick={handleCancel}>
             {'Cancel order'}
           </Button>
         ) : null}

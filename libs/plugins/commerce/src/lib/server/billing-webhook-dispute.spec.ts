@@ -436,6 +436,15 @@ beforeEach(() => {
     ltvCents: 9100,
     ordersCount: 4,
   })
+  // The product the sale decremented (AGL-1797). Stocked at 8, which is not
+  // any other figure in this file, and the order line names no variant so the
+  // first-variant fallback is the path under test.
+  docs.set('hosts/host-1/products/product-1', {
+    name: 'Chair',
+    type: 'physical',
+    status: 'active',
+    variants: [{ id: 'var-default', priceUsd: 62, inventory: 8 }],
+  })
 })
 
 afterEach(() => {
@@ -863,6 +872,125 @@ describe('the contact the reversal cannot reach', () => {
       lastReason: 'no-contact',
       lastOrderId: 'order-1',
     })
+    expectNothingSwallowed()
+  })
+})
+
+/**
+ * The shelf's side of the ledger (AGL-1797), through the chargeback door.
+ *
+ * Neither door touched inventory: the checkout webhook decremented variant
+ * stock on the sale and nothing put it back, so a lost dispute left the
+ * merchant's count permanently one lower than their shelf. These are WIRING
+ * cases — the writer's own behaviour is pinned in `restock-flag.spec.ts` — and
+ * what they measure is that this door calls it on the ONE event that moves
+ * money and on none of the others, so the two doors cannot diverge the way the
+ * contact ledger did before AGL-1754.
+ */
+describe('the stock a chargeback left off the shelf (AGL-1797)', () => {
+  const restockEvents = () =>
+    ((order().timeline ?? []) as any[]).filter(
+      (entry) => entry.event === 'restock-check',
+    )
+
+  function expectNothingFlagFailed() {
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'flagOrderRestock failed',
+      expect.anything(),
+    )
+  }
+
+  it('flags the stock a LOST dispute left off the shelf', async () => {
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expectNothingFlagFailed()
+    expect(order().restockCheck).toMatchObject({
+      kind: 'chargeback',
+      units: 1,
+      fullyReversed: true,
+      lines: [
+        { productId: 'product-1', variantId: 'var-default', quantity: 1 },
+      ],
+    })
+    // FLAGGED, NOT RELEASED, and a chargeback is the clearest case for that:
+    // the shopper kept the item and took the money, so incrementing would
+    // invent stock the merchant does not have.
+    expect(
+      docs.get('hosts/host-1/products/product-1').variants[0].inventory,
+    ).toBe(8)
+    expect(restockEvents()).toHaveLength(1)
+    expect(restockEvents()[0].detail).toContain(
+      'the shopper kept the goods unless they came back',
+    )
+  })
+
+  it('leaves the shelf alone on `created`, which reverses nothing', async () => {
+    await deliver('charge.dispute.created', disputeEvent())
+    expect(order().restockCheck).toBeUndefined()
+    expect(restockEvents()).toHaveLength(0)
+  })
+
+  it('leaves the shelf alone when the dispute is WON', async () => {
+    await deliver('charge.dispute.created', disputeEvent())
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
+    // Nothing was reversed, so nothing is missing from the shelf — the same
+    // reason a win has no contact write and no status flip.
+    expect(order().restockCheck).toBeUndefined()
+    expect(
+      docs.get('hosts/host-1/products/product-1').variants[0].inventory,
+    ).toBe(8)
+  })
+
+  it('leaves the shelf alone on `warning_closed`', async () => {
+    // Asserted separately from `won` so "anything not lost" cannot regress
+    // into "anything that is won".
+    await deliver(
+      'charge.dispute.closed',
+      disputeEvent({ status: 'warning_closed' }),
+    )
+    expect(order().restockCheck).toBeUndefined()
+  })
+
+  it('flags nothing when a lost dispute found nothing left to reverse', async () => {
+    // Already refunded in full by hand, so the dispute reverses $0 — and a
+    // reversal of nothing left nothing off the shelf.
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order(),
+      status: 'refunded',
+      refundedCents: ORDER_TOTAL_CENTS,
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(order().restockCheck).toBeUndefined()
+  })
+
+  it('says nothing at all when the merchant tracks no stock', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Chair',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'var-default', priceUsd: 62, inventory: null }],
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expectNothingFlagFailed()
+    // The reversal still landed; only the prompt is withheld.
+    expect(order().refundedCents).toBe(DISPUTE_CENTS)
+    expect(order().restockCheck).toBeUndefined()
+    expect(restockEvents()).toHaveLength(0)
+  })
+
+  it('flags once across a redelivered `closed`', async () => {
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const flaggedAtMs = order().restockCheck.flaggedAtMs
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(restockEvents()).toHaveLength(1)
+    expect(order().restockCheck.flaggedAtMs).toBe(flaggedAtMs)
+  })
+
+  it('does not disturb the reversal the flag rides behind', async () => {
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(order().refundedCents).toBe(DISPUTE_CENTS)
+    expect(order().status).toBe('refunded')
+    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
+    expect(contact().ltvCents).toBe(9100)
     expectNothingSwallowed()
   })
 })

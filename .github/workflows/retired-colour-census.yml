@@ -33,6 +33,17 @@ on:
   schedule:
     - cron: '0 7 * * *' # daily 07:00 UTC
   workflow_dispatch:
+  # A detector edit runs the SELF-TEST immediately rather than at the next
+  # 07:00 UTC (the census job below sits push runs out — see its `if`).
+  push:
+    branches:
+      - main
+    paths:
+      - tools/scripts/check-retired-colours.mjs
+      - tools/scripts/lib/retired-colours.mjs
+      - tools/scripts/lib/retired-colours-nodes.mjs
+      - tools/scripts/lib/retired-colours.test.mjs
+      - .github/workflows/retired-colour-census.yml
 
 concurrency:
   group: retired-colour-census
@@ -42,7 +53,40 @@ permissions:
   contents: read
 
 jobs:
+  # Guard the guard (AGL-1778/AGL-1816): everything below trusts this
+  # detector's verdict about production content, and its self-test's only
+  # other home is nx-ci.yml — which is `disabled_manually` and runs on no
+  # runner, so until this job the suite executed nowhere. The suite is the
+  # thing that caught the live 176 reading as 6: a detector that dedupes to
+  # distinct rules reports "almost clean" on a page that is anything but.
+  #
+  # A SEPARATE job, deliberately NOT a step of (or a `needs:` of) the census:
+  # the census below runs installless so a registry outage cannot break the
+  # monitor, and this job's `npm ci` must not reintroduce that coupling. A
+  # broken detector and a content regression stay distinguishable in the run
+  # view — self-test red means "do not trust today's census verdict".
+  self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # The suite builds its fixture with @msgpack/msgpack (the second of the
+      # two storage forms `nodes` ships in), so unlike the census it needs the
+      # workspace installed.
+      - run: npm ci
+
+      - run: npm run test:retired-colours
+
   census:
+    # Push runs exist for the self-test above; the census measures PUBLISHED
+    # content, which a detector edit does not change.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

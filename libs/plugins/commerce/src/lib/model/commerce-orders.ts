@@ -132,12 +132,98 @@ export interface OrderDispute {
   reversedCents?: number
 }
 
+/**
+ * One line whose stock a reversal MAY need to put back (AGL-1797).
+ *
+ * Only lines the sale actually DECREMENTED appear here — an untracked variant
+ * (`inventory == null`) had nothing taken off it, so it has nothing to return,
+ * and a digital line is untracked for that same reason rather than by a
+ * type test of its own. A merchant who tracks license stock on a digital
+ * product does get it back.
+ */
+export interface OrderRestockLine {
+  productId: string
+  variantId: string
+  /**
+   * Units this line sold. It is the MOST that can come back, never a claim
+   * that they did: on a partial reversal the merchant reversed some of the
+   * money and only they know which goods returned.
+   */
+  quantity: number
+  /** Purchase-time snapshots, so a reader renders the prompt with no product read. */
+  name?: string
+  variantLabel?: string
+}
+
+/**
+ * Stock left off the shelf by a reversed order, FLAGGED rather than released
+ * (AGL-1797).
+ *
+ * The checkout webhook decrements variant inventory on a sale and nothing put
+ * it back, so a fully reversed order read one unit light forever and the error
+ * compounded with every return. The fix is not the obvious increment, because
+ * an increment is wrong more often than it is right:
+ *
+ *  - a **returned** item genuinely comes back, and stock should rise — but only
+ *    once it is RECEIVED, and there is no fulfilment event that records receipt
+ *    (`OrderFulfillment` has no returned state);
+ *  - a **refund with no return** — goodwill, damaged, lost in post — leaves the
+ *    goods gone, so incrementing invents stock the merchant does not have and
+ *    sells something that is not on the shelf. That is worse than the bug it
+ *    replaces: under-counting refuses a sale, over-counting takes one it cannot
+ *    fill;
+ *  - a **chargeback** is the clearest do-not-restock case of all, since the
+ *    shopper kept the item and took the money back.
+ *
+ * And the quantities are not even knowable on a partial reversal: a refund is
+ * requested as an AMOUNT (`refund.ts` takes `amountCents`) and records no line
+ * selection anywhere, so "$17 of a $62 order" names no line. `quantity` is
+ * therefore an upper bound and `fullyReversed` says whether it is a tight one.
+ *
+ * So this records the question instead of guessing the answer, and the merchant
+ * answers it from the stock adjustment they already have. The release action is
+ * NOT rebuilt here: the products hub's "Adjust stock" already writes the
+ * variant counts and an `InventoryAdjustment` row with a reason.
+ */
+export interface OrderRestockCheck {
+  /** Which door the money left by; the two deserve different default wording. */
+  kind: 'refund' | 'chargeback'
+  /** Inventory-tracked lines only — exactly what the sale decremented. */
+  lines: OrderRestockLine[]
+  /** Sum of `lines[].quantity`, denormalized so a badge needs no arithmetic. */
+  units: number
+  /**
+   * False when only part of the money came back, which is what makes
+   * `quantity` an upper bound rather than a proposal.
+   */
+  fullyReversed: boolean
+  flaggedAtMs: number
+  /**
+   * Set once a merchant answers. Absent means the question is still open, and
+   * it is the only state a fresh reversal will overwrite.
+   */
+  resolution?: 'restocked' | 'dismissed'
+  resolvedAtMs?: number
+  /** Console uid that answered. */
+  resolvedBy?: string
+}
+
 /** `hosts/{hostId}/orders/{id}` doc. */
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
   number?: number
   status: OrderStatus
   channel?: OrderChannel
+  /**
+   * Which location's stock this sale came off, for the multi-location counts
+   * of AGL-286. Written by the POS register, the only sale path that decrements
+   * a location bucket rather than the flat count — and read back when the order
+   * is cancelled (AGL-1808), because putting the units on the flat total when
+   * the sale took them out of a bucket leaves the two disagreeing, and the next
+   * location-aware write recomputes the total from the buckets and silently
+   * erases the restock.
+   */
+  locationId?: string
   lineItems?: OrderLineItem[]
   totals?: OrderTotals
   customerEmail?: string | null
@@ -158,6 +244,8 @@ export interface HostOrder {
   refundedCents?: number
   /** The card dispute against this charge, open or settled (AGL-1787). */
   dispute?: OrderDispute
+  /** Stock a reversal left off the shelf, awaiting the merchant (AGL-1797). */
+  restockCheck?: OrderRestockCheck
   createdAtMs?: number
   // Legacy Commerce Starter fields (AGL-90) kept readable.
   productId?: string
@@ -262,6 +350,12 @@ export interface CheckoutSessionTotalsParts {
    * only in `manual` tax mode and sets `automatic_tax` only in `stripe` mode —
    * so summing is right in every reachable case and correct in principle if
    * both were ever charged at once.
+   *
+   * A manual-tax SUBSCRIPTION session is the third construction (AGL-1751):
+   * there the tax is a real Stripe Tax Rate (a one-time line would bill on
+   * the first invoice only), `amount_tax` carries it, and `checkout.ts`
+   * writes `metadata[taxCents]` as 0 — the exclusivity this sum rests on,
+   * kept from the other side.
    */
   lineItemTaxCents?: number
   /**

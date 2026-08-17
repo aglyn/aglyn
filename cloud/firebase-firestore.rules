@@ -79,10 +79,10 @@ service cloud.firestore {
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
       // two staff exceptions mirroring the retired tenants rules
       // (AGL-206/238): super staff writes anything except the suspended*
-      // family (AGL-1517, see below); billing staff writes plan/entitlements
-      // but the key diff keeps suspension, erasure and identity keys out of
-      // reach. Members with the admin role may rename the org; nothing else
-      // is client-writable.
+      // family (AGL-1517) and plan/entitlements/releaseFlags (AGL-1795);
+      // billing staff is denied those same keys plus the erasure and
+      // identity keys. Members with the admin role may rename the org;
+      // nothing else is client-writable.
       allow create, delete: if false;
       // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
       // the install API after entitlement + kill-switch checks (AGL-501) —
@@ -110,17 +110,39 @@ service cloud.firestore {
       // Every console surface writes all four through an Admin-SDK route, so
       // denying them client-side costs the product nothing.
       //
-      // `releaseFlags` (AGL-1635) is denied to the org admin AND to billing
-      // staff, which is stricter than `entitlements` beside it. It is the
-      // per-org override of a RELEASE flag — "is this feature launched" —
-      // and the platform-wide editor for the same flags
-      // (/api/admin/flags) is already super-staff-only, on the reasoning
-      // that flipping one changes what customers see. Scoping the flip to a
-      // single org does not change its class, so the two surfaces agree:
-      // super staff only. It is also not a billing act — nothing about it
-      // is priced, so the billing-staff branch has no business in it, and
-      // an unreleased feature forced on for one org is a support and
-      // liability question rather than a commercial one.
+      // `plan`, `entitlements` and `releaseFlags` are Admin-SDK-only for
+      // EVERY client, staff included (AGL-1795). AGL-1786 moved the staff
+      // override to /api/admin/org-override, which was the last client
+      // writer of the three: what remains on this document from a browser is
+      // the org rename (`canManageOrg()`, which already excludes them) and
+      // the erasure toggle's `erasureRequestedAt`. So denying them costs the
+      // product nothing, and it is what makes the reason gate a BOUNDARY —
+      // `adminAudit` validates no shape at all (`allow create: if isStaff()`),
+      // so while a staff session could still write these keys directly it
+      // could change a fee percentage and write a reasonless audit row, or
+      // none. AGL-1652 declined to police the reason's shape in these rules,
+      // and that judgement stands: validating one action's field here would
+      // imply the other client-written rows are validated when they are not.
+      // Closing the WRITE is the thing rules can say honestly, so that is
+      // what they say.
+      //
+      // This empties the `isBillingStaff()` branch of its original purpose —
+      // plan and entitlement writes were the whole point of that role — and
+      // that is the honest outcome rather than a regression: billing staff
+      // still make those changes, through the route, where the role is
+      // re-checked.
+      //
+      // THE ROLE SPLIT IS NOT EXPRESSED HERE ANY MORE, and cannot be. It was
+      // `releaseFlags` super-only (AGL-1635: the per-org override of "is this
+      // feature launched", matching the super-staff-only platform-wide editor
+      // at /api/admin/flags, and not a billing act since nothing about it is
+      // priced) while `plan`/`entitlements` stayed open to billing staff.
+      // Once both branches deny all three keys there is no split left for a
+      // rule to draw. It lives in the route, restated server-side because the
+      // Admin SDK bypasses rules — and enforced there on the CHANGE, not the
+      // payload, exactly as `affectedKeys()` does below: every override write
+      // NAMES `releaseFlags`, so refusing billing staff for naming it
+      // unchanged would take away quota overrides they can make today.
       //
       // The org `suspended*` family is Admin-SDK-only for EVERY client,
       // super staff included (AGL-1517). AGL-1505 removed the last client
@@ -133,12 +155,13 @@ service cloud.firestore {
       // client-side.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['suspendedAt', 'suspendedReason', 'suspendedReasonCode',
+            ['plan', 'entitlements', 'releaseFlags',
+             'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
-             'releaseFlags',
+             'plan', 'entitlements', 'releaseFlags',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'erasureRequestedAt'])) ||

@@ -349,6 +349,26 @@ async function handler(request: Request): Promise<Response> {
           'subscription_data[metadata][orgId]': orgId,
           'subscription_data[metadata][plan]': plan,
           'subscription_data[metadata][custom]': 'true',
+          // Stripe computes and charges tax (AGL-1811) — the enterprise route
+          // was the last of Aglyn's own charge paths without it (self-serve
+          // checkout/switch/add-ons have carried it since AGL-1133/1537).
+          //
+          // The three parameters are load-bearing as a SET, same as the
+          // self-serve session: the flag alone on an address-less session
+          // reports `requires_location_inputs` and silently charges nothing,
+          // and this session always names a REUSED customer, whose tax
+          // location Stripe resolves from the CUSTOMER record rather than
+          // from what the buyer types here. `customer_update[address]=auto`
+          // saves the collected address back onto the customer — which is
+          // also what makes every later renewal invoice computable.
+          //
+          // The ad-hoc enterprise Price carries no `tax_code`, so it inherits
+          // the account default (`txcd_10103001`, SaaS/business use), which
+          // carries the Texas 80% data-processing base the ruling request
+          // argues for — verified against a live calculation in AGL-1817.
+          'automatic_tax[enabled]': 'true',
+          billing_address_collection: 'required',
+          'customer_update[address]': 'auto',
         },
         objectKey(claim.stripeKey, 'session'),
       )
@@ -375,6 +395,19 @@ async function handler(request: Request): Promise<Response> {
           'metadata[plan]': plan,
           'metadata[custom]': 'true',
           'expand[0]': 'latest_invoice',
+          // Stripe computes and charges tax (AGL-1811). This is a DIRECT
+          // subscription create — there is no Checkout session downstream to
+          // collect an address — so Stripe resolves the tax location from
+          // the customer record alone, and REFUSES the create with
+          // `customer_tax_location_invalid` when it can't. That is the
+          // guaranteed first-run outcome for a customer this route just
+          // minted (name + metadata only), which is why the refusal is
+          // mapped to an actionable message below instead of the generic
+          // 502. Deliberately failing at CREATE rather than enabling tax
+          // lazily: an untaxed net-30 subscription would bill wrong for its
+          // whole life, and finalization-time failures on later invoices
+          // surface only in the Stripe dashboard, weeks out.
+          'automatic_tax[enabled]': 'true',
         },
         // The call that costs real money. Covers the window where our claim is
         // written but the response never arrives: Stripe replays the existing
@@ -384,6 +417,24 @@ async function handler(request: Request): Promise<Response> {
       if (!subscription.ok) {
         // An explicit Stripe refusal means no subscription exists.
         await claim.release()
+        // The decided failure mode for a customer without an address
+        // (AGL-1811): tell staff what to do, on the screen they are already
+        // on. The released key means the SAME button works once the address
+        // is set — either on the customer in the Stripe dashboard, or by
+        // provisioning in `checkout` mode instead, where the buyer enters it.
+        if (subscription.body?.error?.code === 'customer_tax_location_invalid') {
+          return Response.json(
+            {
+              error:
+                'Stripe cannot compute tax because this customer has no ' +
+                'billing address. Add one to the customer in the Stripe ' +
+                'dashboard and retry, or provision in checkout mode so the ' +
+                'buyer enters it.',
+              code: 'customer_address_required',
+            },
+            { status: 409 },
+          )
+        }
         return Response.json(
           {
             error:

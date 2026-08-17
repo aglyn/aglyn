@@ -122,9 +122,13 @@ const stamp = async (ref, value) => {
   if (!COMMIT) return
   batch.update(ref, { nameLower: value })
   if ((buffered += 1) >= 400) {
-    await batch.commit()
+    // Swap in the fresh batch BEFORE awaiting the full one: `batch` never
+    // points at an in-flight commit, which is also what satisfies
+    // require-atomic-updates (AGL-1815).
+    const full = batch
     batch = firestore.batch()
     buffered = 0
+    await full.commit()
   }
 }
 

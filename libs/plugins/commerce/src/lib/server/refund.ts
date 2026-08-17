@@ -21,6 +21,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { createHash } from 'crypto'
 import { recordContactRefund } from './contact-refund'
+import { flagOrderRestock } from './restock-flag'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -141,6 +142,29 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(409)
         .json({ error: `Orders in "${order.status}" cannot refund` })
+    }
+    // A refund does not withdraw a dispute (AGL-1809). While a chargeback is
+    // formally open the bank has already pulled the disputed funds, Stripe's
+    // refund API refuses the charge (`charge_disputed`), and a refund that did
+    // go through would pay the shopper twice — the merchant loses the refund
+    // AND the dispute plus its fee. Refused HERE, before the claim and the
+    // reservation, so a refusal burns no idempotency key and strands nothing:
+    // no state has been written yet (AGL-1754's contract). An open INQUIRY
+    // (`warning_*`) deliberately passes — no funds have moved and Stripe names
+    // a full refund as the way to resolve one before it escalates — and the
+    // status guard above already turns away a LOST dispute, which parked the
+    // order in `refunded`. This reads the pre-transaction snapshot; a dispute
+    // webhook racing this exact request is caught by the `charge_disputed`
+    // mapping on the Stripe response below.
+    if (CommerceModel.orderDisputeBlocksRefund(order)) {
+      return res.status(409).json({
+        error:
+          'A chargeback is open on this order, so it was not refunded. ' +
+          'Refunding would not withdraw the dispute — the bank has already ' +
+          'taken the disputed amount, and a refund on top of it would pay ' +
+          'the shopper twice. Respond to the dispute or accept it in the ' +
+          'Stripe dashboard; refund any remainder once it settles.',
+      })
     }
     const paymentIntentId =
       order.paymentIntentId ??
@@ -291,6 +315,24 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         })
         .catch(() => undefined)
       await claim?.release()
+      // Stripe refusing BECAUSE OF A DISPUTE is the guard above arriving by
+      // the other door — our order document simply didn't know yet (webhook
+      // lag, or an order from before disputes were subscribed at all). Same
+      // answer, same accuracy: a 409 naming the dispute, not a 502 reading
+      // "The charge you're attempting to refund has been charged back", which
+      // an admin has no reason to connect to the Refund button they pressed.
+      const stripeCode = String(refund?.error?.code ?? '')
+      if (
+        stripeCode === 'charge_disputed' ||
+        stripeCode === 'refund_disputed_payment'
+      ) {
+        return res.status(409).json({
+          error:
+            'Stripe refused this refund because the charge is disputed. ' +
+            'Respond to the dispute or accept it in the Stripe dashboard; ' +
+            'refund any remainder once it settles.',
+        })
+      }
       return res
         .status(502)
         .json({ error: refund?.error?.message ?? 'Refund failed' })
@@ -358,6 +400,15 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       amountCents: refundCents,
       closedTheOrder,
     })
+    // The shelf's side of the ledger (AGL-1797). The sale decremented variant
+    // inventory and nothing put it back, so a fully refunded order read one
+    // unit light forever. This FLAGS rather than releases — a refund with no
+    // return leaves the goods gone, and inventing stock the merchant does not
+    // have is worse than under-counting it — and the merchant answers from the
+    // stock adjustment they already have. Same placement and same swallow-all
+    // contract as the contact write above, for the same reason: the money has
+    // moved and the order records it, so nothing here may fail the refund.
+    await flagOrderRestock({ hostId, orderId, kind: 'refund', closedTheOrder })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

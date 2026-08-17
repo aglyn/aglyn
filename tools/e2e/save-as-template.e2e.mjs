@@ -30,15 +30,12 @@
 // synthetic localStorage session races connectAuthEmulator and leaves the
 // SDK pointed at production (see the note in console.e2e.mjs).
 
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
@@ -81,21 +78,25 @@ const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)
  * An ID token for the seeded owner, via a custom token — no password, and
  * it exercises the same verifyIdToken path the route uses in production.
  */
+// Memoize the PROMISE, not the value: the slot is claimed before the first
+// await, so concurrent callers share one exchange instead of racing the
+// write-back (require-atomic-updates, AGL-1815).
 let cachedIdToken
-async function idToken() {
-  if (cachedIdToken) return cachedIdToken
-  const customToken = await getAuth().createCustomToken('e2e-owner')
-  const response = await fetch(
-    `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: customToken, returnSecureToken: true }),
-    },
-  )
-  const payload = await response.json()
-  if (!payload.idToken) throw new Error('token exchange failed')
-  cachedIdToken = payload.idToken
+function idToken() {
+  cachedIdToken ??= (async () => {
+    const customToken = await getAuth().createCustomToken('e2e-owner')
+    const response = await fetch(
+      `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+      },
+    )
+    const payload = await response.json()
+    if (!payload.idToken) throw new Error('token exchange failed')
+    return payload.idToken
+  })()
   return cachedIdToken
 }
 

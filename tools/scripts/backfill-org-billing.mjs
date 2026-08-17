@@ -81,14 +81,16 @@ stats.orgs = orgsSnapshot.size
 let batch = db.batch()
 let pending = 0
 const flush = async () => {
-  if (!APPLY || !pending) {
-    pending = 0
-    batch = db.batch()
-    return
-  }
-  await batch.commit()
+  // Swap in the fresh batch BEFORE awaiting the full one: `batch` never
+  // points at an in-flight commit, which is also what satisfies
+  // require-atomic-updates (AGL-1815). Behaviour is unchanged: a dry run or
+  // an empty batch is discarded exactly as before, just without the commit.
+  const full = batch
+  const hadPending = pending > 0
   batch = db.batch()
   pending = 0
+  if (!APPLY || !hadPending) return
+  await full.commit()
 }
 
 for (const orgDoc of orgsSnapshot.docs) {

@@ -18,7 +18,12 @@
 // One-command Stripe bootstrap for Aglyn subscriptions:
 //
 //   STRIPE_SECRET_KEY=sk_... node tools/scripts/setup-stripe.mjs \
-//     [--webhook-url https://app.aglyn.com/api/billing/webhook] [--dry-run]
+//     [--webhook-url https://app.aglyn.com/api/billing/webhook] [--dry-run] \
+//     [--reconcile-events]
+//
+// --reconcile-events subscribes an EXISTING endpoint to any event in
+// WEBHOOK_EVENTS it is missing (adds only, never removes, never touches the
+// URL). Without it the gap is printed and nothing is written.
 //
 // --dry-run resolves every lookup key and prints the env block WITHOUT
 // creating anything. Use it against a LIVE key: a Stripe price cannot be
@@ -55,6 +60,21 @@ const webhookUrl =
  * The printed env block is then exactly what the account already has.
  */
 const DRY_RUN = args.includes('--dry-run')
+
+/**
+ * Subscribe an EXISTING endpoint to any `WEBHOOK_EVENTS` it is missing.
+ *
+ * Off by default because it is the one write this script makes against an
+ * endpoint it did not create. The drift is REPORTED either way — a run
+ * without this flag still prints what is unsubscribed, which is the part
+ * three issues had to name as a manual dashboard step.
+ *
+ * Adds only; never removes and never touches the URL, so the deployed
+ * STRIPE_WEBHOOK_SECRET is untouched and a hand-subscribed event survives.
+ * Ignored under --dry-run, which reports the gap and writes nothing.
+ */
+const RECONCILE_EVENTS = args.includes('--reconcile-events')
+
 /** Set when a dry run finds a lookup key with no price behind it. */
 let dryRunMissing = 0
 
@@ -199,6 +219,41 @@ for (const {
   }
 }
 
+/**
+ * Every event a handler in this repo actually reads — the checked-in record
+ * of what the endpoint must carry (AGL-1798).
+ *
+ * A missing entry here is not a syntax error anywhere: the handler compiles,
+ * its tests pass against a synthesised event, and it simply never runs in
+ * production. `charge.refunded` was missing for exactly that reason and the
+ * live endpoint carries it only because someone added it by hand.
+ *
+ * Add an event here in the same commit as the handler that reads it, and say
+ * which one in the comment, so the next reader can tell a live subscription
+ * from a dead one without opening the dashboard.
+ */
+const WEBHOOK_EVENTS = [
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  // Marketplace purchases (AGL-46).
+  'checkout.session.completed',
+  // Billing notifications (AGL-259): invoice availability + dunning.
+  'invoice.finalized',
+  'invoice.paid',
+  'invoice.payment_failed',
+  // Marketplace refunds (AGL-1546): a FULLY refunded purchase loses its
+  // install entitlement. `libs/plugins/marketplace/src/lib/server/billing-webhook.ts`
+  // has handled this since AGL-1546 shipped and this list never carried the
+  // event, so any endpoint this script created would have revoked nothing.
+  'charge.refunded',
+  // Card disputes (AGL-1787): `created` flags the order and warns the
+  // merchant while the evidence window is open; `closed` is the only one
+  // that moves money, and only when `status` is `lost`.
+  'charge.dispute.created',
+  'charge.dispute.closed',
+]
+
 if (webhookUrl) {
   // Reuse an existing endpoint for the URL: Stripe returns the signing
   // secret only at creation, so recreating would orphan the deployed
@@ -210,30 +265,46 @@ if (webhookUrl) {
     (endpoint) => endpoint.url === webhookUrl,
   )
   if (existing) {
+    // The DRIFT is the thing to report. Skipping an existing endpoint keeps
+    // its signing secret, which is right, but it also meant the event list
+    // above was never compared against the live one — so a handler could be
+    // dead in production while this script printed a clean "already covers".
+    // Naming the gap costs no write and needs no flag (AGL-1798).
+    const enabled = existing.enabled_events ?? []
+    const missing = enabled.includes('*')
+      ? []
+      : WEBHOOK_EVENTS.filter((event) => !enabled.includes(event))
     console.log(
       `= webhook endpoint ${existing.id} already covers ${webhookUrl} — ` +
         'keeping the deployed STRIPE_WEBHOOK_SECRET',
     )
+    if (missing.length === 0) {
+      console.log(`  ✓ all ${WEBHOOK_EVENTS.length} events subscribed`)
+    } else if (RECONCILE_EVENTS && !DRY_RUN) {
+      // PATCH `enabled_events` only — never the URL, so the signing secret is
+      // never orphaned. The write is the UNION, not this file: an event
+      // subscribed by hand and not listed here stays subscribed. Unsubscribing
+      // silently breaks a handler nothing in this repo can see, so removal
+      // stays a human decision in the dashboard.
+      const union = [...enabled, ...missing]
+      const updated = await stripe(
+        `webhook_endpoints/${existing.id}`,
+        Object.fromEntries(
+          union.map((event, index) => [`enabled_events[${index}]`, event]),
+        ),
+      )
+      console.log(
+        `  + subscribed ${missing.join(', ')} ` +
+          `(${(updated.enabled_events ?? []).length} events now)`,
+      )
+    } else {
+      console.log(`  ! NOT subscribed: ${missing.join(', ')}`)
+      console.log(
+        '    the handlers for these never run on this endpoint — re-run with ' +
+          '--reconcile-events to add them (or add them in the dashboard)',
+      )
+    }
   } else {
-    const events = [
-      'customer.subscription.created',
-      'customer.subscription.updated',
-      'customer.subscription.deleted',
-      // Marketplace purchases (AGL-46).
-      'checkout.session.completed',
-      // Billing notifications (AGL-259): invoice availability + dunning.
-      'invoice.finalized',
-      'invoice.paid',
-      'invoice.payment_failed',
-      // Card disputes (AGL-1787): `created` flags the order and warns the
-      // merchant while the evidence window is open; `closed` is the only one
-      // that moves money, and only when `status` is `lost`. Note this list is
-      // used ONLY when the endpoint is CREATED — an endpoint that already
-      // exists is left alone above, so adding an event here does not add it to
-      // the live endpoint. Do that in the dashboard.
-      'charge.dispute.created',
-      'charge.dispute.closed',
-    ]
     if (DRY_RUN) {
       console.log(`! webhook endpoint for ${webhookUrl} MISSING (would be created)`)
     } else {
@@ -241,7 +312,10 @@ if (webhookUrl) {
         'webhook_endpoints',
         Object.fromEntries([
           ['url', webhookUrl],
-          ...events.map((event, index) => [`enabled_events[${index}]`, event]),
+          ...WEBHOOK_EVENTS.map((event, index) => [
+            `enabled_events[${index}]`,
+            event,
+          ]),
         ]),
       )
       env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
@@ -342,6 +416,11 @@ async function ensureMeteredPrice(lookupKey, interval) {
     console.log(`! ${lookupKey} MISSING (would be created)`)
     return { id: `<MISSING:${lookupKey}>` }
   }
+  // Prices are created one at a time by a sequential top-level loop; the
+  // worst concurrent case would be a duplicate product create, and
+  // restructuring a live-mode Stripe setup script to promise-memoize is not
+  // worth that non-risk (AGL-1815).
+  // eslint-disable-next-line require-atomic-updates -- sequential caller
   meteredProductId ??= (
     await stripe('products', {
       name: 'Aglyn metered usage',

@@ -189,7 +189,9 @@ export const overrideCount = (org: any): number =>
  * sentinel "inherit" needs (AGL-1109), has no JSON form, so a serialised one
  * would arrive as `{}` and quietly restore the very no-op that sentinel
  * exists to prevent. Absence is the inherit signal, and the route expands it
- * against the same registries rendered here.
+ * against the same registries rendered here — for the numeric quotas too
+ * since AGL-1789, which is why an unreadable quota field refuses the save
+ * rather than being skipped: skipping it now CLEARS the stored override.
  *
  * That move is what makes the REASON (AGL-1652) a boundary rather than a
  * dialog gate. `adminAudit` validates no shape at all
@@ -494,15 +496,30 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     // So only the EXPLICIT overrides go over the wire, and absence is the
     // inherit signal. The route expands it against the same registries this
     // dialog renders from and mints `FieldValue.delete()` on the side that
-    // can hold one.
+    // can hold one — for the numeric quotas as well as the two boolean
+    // families since AGL-1789.
+    //
+    // AN EMPTY QUOTA FIELD IS A CLEARED OVERRIDE (AGL-1789), not a field to
+    // skip: the route deletes every quota absent from this map. So a value
+    // that cannot be read must NOT fall through to absence — dropping it
+    // silently used to mean "nothing happens", and now it would mean
+    // "remove the override the operator was in the middle of changing". It
+    // refuses instead, naming the field. A typed `0` is a real cap of none
+    // and goes over the wire as one.
     const quotas: Record<string, number> = {}
     for (const field of QUOTA_FIELDS) {
       const raw = (editor.quotas[field.key] ?? '').trim()
       if (raw === '') continue
       const value = Number(raw)
-      if (Number.isFinite(value) && value >= 0) {
-        quotas[field.key] = value
+      if (!Number.isFinite(value) || value < 0) {
+        enqueueSnackbar(
+          `${field.label} has to be a number of 0 or more, or empty to ` +
+            'inherit the plan default. Nothing was sent.',
+          { variant: 'warning', allowDuplicate: true },
+        )
+        return
       }
+      quotas[field.key] = value
     }
     const features: Record<string, boolean> = {}
     for (const key of FLAG_FIELDS) {
@@ -729,8 +746,10 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
           </TextField>
           <Typography variant="subtitle2">{'Quota overrides'}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {'Empty = plan default. Only filled fields persist as ' +
-              'per-organization overrides.'}
+            {'Empty = plan default: only filled fields persist as ' +
+              'per-organization overrides, and emptying one REMOVES that ' +
+              'override on save. 0 is an override too — a cap of none, not ' +
+              'an inherit.'}
           </Typography>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
             {QUOTA_FIELDS.map((field) => {

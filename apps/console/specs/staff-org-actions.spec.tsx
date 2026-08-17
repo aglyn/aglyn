@@ -372,6 +372,84 @@ describe('StaffOrgActions (AGL-939)', () => {
     expect(mockAddDoc).not.toHaveBeenCalled()
   })
 
+  describe('a cleared quota field (AGL-1789)', () => {
+    /**
+     * EMPTY IS THE SIGNAL. The route deletes every quota absent from the
+     * posted map, so what this side has to get right is which keys it sends:
+     * an emptied field must drop out, a `0` must not, and a value it cannot
+     * read must not drop out silently — that would now clear the very
+     * override the operator was editing.
+     */
+    const openWithQuotas = async () => {
+      render(
+        <StaffOrgActions
+          org={org({ entitlements: { hostLimit: 5, posRegisters: 3 } })}
+          onChanged={jest.fn()}
+        />,
+      )
+      fireEvent.click(screen.getByText('Override'))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.mouseDown(
+        within(dialog).getByRole('combobox', { name: 'Reason' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('option', { name: 'Correcting an earlier mistake' }),
+      )
+      return dialog
+    }
+
+    it('omits ONLY the emptied key, and keeps the others', async () => {
+      const dialog = await openWithQuotas()
+      // Both are prefilled from storage; the operator clears one of them.
+      expect(
+        (within(dialog).getByLabelText('Sites') as HTMLInputElement).value,
+      ).toBe('5')
+      fireEvent.change(within(dialog).getByLabelText('Sites'), {
+        target: { value: '' },
+      })
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() => expect(overrideRequests().length).toBe(1))
+
+      const { quotas } = overrideRequests()[0].body
+      expect(quotas).not.toHaveProperty('hostLimit')
+      expect(quotas.posRegisters).toBe(3)
+    })
+
+    it('sends a typed 0 as a real override, not as an empty field', async () => {
+      // The trap the fix has to clear: `0` is a cap of none — an org held to
+      // no POS registers, a comped 0% fee — and absence is what clears. A
+      // console that dropped falsy values would hand it the plan default.
+      const dialog = await openWithQuotas()
+      fireEvent.change(within(dialog).getByLabelText('Sites'), {
+        target: { value: '0' },
+      })
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() => expect(overrideRequests().length).toBe(1))
+      expect(overrideRequests()[0].body.quotas.hostLimit).toBe(0)
+    })
+
+    it('refuses a quota it cannot read instead of clearing it', async () => {
+      // Before AGL-1789 an unreadable value was skipped and the save was a
+      // no-op for that field. Now a skipped key is a DELETE, so silently
+      // dropping it would remove an override the operator never meant to
+      // touch. Nothing is sent at all, and the message names the field.
+      const dialog = await openWithQuotas()
+      fireEvent.change(within(dialog).getByLabelText('Sites'), {
+        target: { value: '-5' },
+      })
+      fireEvent.click(within(dialog).getByText('Save (audited)'))
+      await waitFor(() =>
+        expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+          expect.stringContaining('Sites'),
+          expect.objectContaining({ variant: 'warning' }),
+        ),
+      )
+      expect(overrideRequests()).toEqual([])
+      // The dialog stays open on the field that has to be corrected.
+      expect(screen.getByRole('dialog')).toBeTruthy()
+    })
+  })
+
   it('renders disabled actions for a null org instead of crashing', () => {
     render(<StaffOrgActions org={null} onChanged={jest.fn()} />)
     for (const label of ['Override', 'Suspend', 'Erasure']) {

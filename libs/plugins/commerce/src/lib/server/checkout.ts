@@ -215,11 +215,83 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const useStripeTax = taxSettings.mode === 'stripe' && !lifted.taxExempt
     let taxCents = 0
     let taxLabel = ''
+    let taxPct = 0
     if (taxSettings.mode === 'manual' && !lifted.taxExempt) {
       const rate = CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
       if (rate && !taxSettings.pricesIncludeTax) {
         taxCents = CommerceModel.computeTaxCents(amountCents, rate.pct)
         taxLabel = rate.label || `Tax (${rate.pct}%)`
+        taxPct = rate.pct
+      }
+    }
+
+    // Recurring manual tax (AGL-1751). The manual tax cannot ride the
+    // `line_items[1]` product line on a SUBSCRIPTION session: a non-recurring
+    // price in `mode: subscription` is a one-time item, and Stripe bills
+    // one-time items on the FIRST invoice only — so the merchant's tax was
+    // collected once and then, on every renewal the buyer had been shown a
+    // taxed price for, never again. A Stripe Tax Rate attached to the
+    // subscription line recurs: Checkout carries `line_items[][tax_rates]`
+    // onto the subscription item, every invoice applies it, and the figure
+    // lands where the records already look — the session's
+    // `total_details.amount_tax` for the sale (AGL-1732) and the invoice's
+    // own tax fields for each renewal (AGL-1743). No webhook change.
+    //
+    // The rate is created on the PLATFORM account — no Stripe-Account header,
+    // matching the session call below — because that is where the
+    // subscription lives (destination transfer); a connected-account rate id
+    // would not resolve. Tax rates are immutable, so one is minted per
+    // (percentage, label) and cached under the host; a merchant editing their
+    // zone rate misses the cache and mints a fresh object, while the old one
+    // stays behind on the subscriptions that already carry it, exactly as it
+    // should.
+    //
+    // A creation failure is a VISIBLE 502, never a fallback: the one-time
+    // line is this very bug, and a session with no tax at all would
+    // under-collect every invoice silently.
+    let recurringTaxRateId = ''
+    if (isSubscription && taxCents > 0) {
+      // ≤4 decimal places, which is all Stripe accepts on a tax rate.
+      const percentage = Math.round(taxPct * 10000) / 10000
+      const displayLabel = taxLabel.slice(0, 50)
+      const cacheKey = `p${Math.round(percentage * 10000)}-${encodeURIComponent(
+        displayLabel,
+      )}`
+      const cacheRef = hostRef.collection('stripeTaxRates').doc(cacheKey)
+      const cached = await cacheRef.get()
+      recurringTaxRateId = String(cached.get('taxRateId') ?? '')
+      if (!recurringTaxRateId) {
+        const rateResponse = await fetch('https://api.stripe.com/v1/tax_rates', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            display_name: displayLabel,
+            percentage: String(percentage),
+            inclusive: 'false',
+          }).toString(),
+        })
+        const taxRate = (await rateResponse.json()) as {
+          id?: string
+          error?: any
+        }
+        if (!rateResponse.ok || !taxRate.id) {
+          console.error('Stripe tax rate error', taxRate.error)
+          return res.status(502).json({ error: 'Checkout failed' })
+        }
+        recurringTaxRateId = String(taxRate.id)
+        // Best-effort: the rate exists either way, and two concurrent misses
+        // racing this write just means one orphan rate on the dashboard.
+        await cacheRef
+          .set({
+            taxRateId: recurringTaxRateId,
+            pct: percentage,
+            label: displayLabel,
+            createdAtMs: Date.now(),
+          })
+          .catch(() => undefined)
       }
     }
 
@@ -351,7 +423,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
             'subscription_data[metadata][productId]': productId,
           }
         : {}),
-      ...(taxCents > 0
+      // One-time sales keep the AGL-1711 construction — an ordinary product
+      // line Stripe is never told is tax; subscriptions get the recurring
+      // tax rate resolved above instead (AGL-1751). Never both: the rate
+      // would tax the opening invoice a second time on top of the line.
+      ...(taxCents > 0 && !isSubscription
         ? {
             'line_items[1][quantity]': '1',
             'line_items[1][price_data][currency]': 'usd',
@@ -361,6 +437,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               120,
             ),
           }
+        : {}),
+      ...(recurringTaxRateId
+        ? { 'line_items[0][tax_rates][0]': recurringTaxRateId }
         : {}),
       ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
       // Stripe rejects a zero application fee — omit it on 0% plans.
@@ -393,8 +472,14 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // `line_items[0]`'s unit amount — so the webhook cannot recover them
       // from the session. Frozen here rather than re-derived from the product
       // doc at webhook time, which a price edit in between would falsify.
+      //
+      // EXCEPT the tax on a subscription (AGL-1751): there it is a real tax
+      // rate, `amount_tax` carries it, and this snapshot must say 0 —
+      // `computeBuyNowOrder` SUMS the metadata figure with Stripe's, on the
+      // documented ground that the two are mutually exclusive, so carrying
+      // both would double-count the tax on the recorded sale.
       'metadata[unitAmountCents]': String(listUnitAmountCents),
-      'metadata[taxCents]': String(taxCents),
+      'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
       'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
     })

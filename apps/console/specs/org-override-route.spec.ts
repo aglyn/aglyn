@@ -53,9 +53,21 @@
  *    stored value. Every inherit case below asserts the sentinel is present
  *    in what reaches Firestore AND absent from the audit row, which records
  *    state.
+ *
+ * A COMMITTED WRITE IS ALSO APPLIED to `mockStore` with real
+ * `set(…, { merge: true })` semantics — nested maps merged key by key, a
+ * `DELETE` sentinel REMOVING the key — so the quota cases (AGL-1789) can
+ * assert the RESULTING DOCUMENT rather than only the payload. That matters
+ * because the bug they cover is precisely a payload that looks like a
+ * removal (`after.entitlements` without the key) over a document that still
+ * holds the override: an omitted key under a merge changes nothing.
  */
 
-import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn/server'
+import {
+  PLAN_ENTITLEMENTS,
+  RELEASE_FLAGS,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn/server'
 
 /** Distinguishable sentinels — a real merge acts on these, JSON cannot. */
 const DELETE = { __sentinel: 'delete' }
@@ -100,6 +112,37 @@ let mockAutoId = 0
 const mockDecodedToken: Record<string, unknown> = {}
 let mockVerifyIdToken: (token: string) => Promise<Record<string, unknown>> =
   async () => mockDecodedToken
+
+/**
+ * `set(…, { merge: true })`, modelled rather than approximated: a merge
+ * writes nested maps KEY BY KEY (an omitted key keeps whatever was stored)
+ * and a delete sentinel removes the key it names. A double that replaced the
+ * document instead would make "only the cleared key is gone" vacuously true,
+ * and one that ignored the sentinel would make it unreachable.
+ */
+function applyMerge(
+  target: Record<string, unknown>,
+  data: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value === DELETE) {
+      delete target[key]
+    } else if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      value !== SERVER_TIMESTAMP
+    ) {
+      // A merge does not replace a map — it merges INTO it, and the result is
+      // a new map rather than a mutation of the seeded one.
+      const merged = { ...((target[key] as Record<string, unknown>) ?? {}) }
+      applyMerge(merged, value as Record<string, unknown>)
+      target[key] = merged
+    } else {
+      target[key] = value
+    }
+  }
+}
 
 const mockDocHandle = (path: string) => ({
   path,
@@ -152,6 +195,10 @@ const mockFirestore = {
             mockAuditRows.push(write.data)
           } else {
             mockOrgWrites.push({ batch, ...write })
+            const merge = Boolean((write.options as any)?.merge)
+            const target = merge ? { ...(mockStore[write.path] ?? {}) } : {}
+            applyMerge(target, write.data)
+            mockStore[write.path] = target
           }
         }
       },
@@ -221,6 +268,13 @@ const onlyOrgWrite = () => {
 const onlyAuditRow = () => {
   expect(mockAuditRows).toHaveLength(1)
   return mockAuditRows[0]
+}
+/** The org document AFTER the committed merge — what a reader would load. */
+const storedOrg = () => mockStore['orgs/org-1'] as Record<string, any>
+const storedQuotas = () => {
+  const { features: _features, ...quotas } = (storedOrg()['entitlements'] ??
+    {}) as Record<string, unknown>
+  return quotas
 }
 
 beforeEach(() => {
@@ -395,6 +449,25 @@ describe('"inherit" still DELETES the key across the wire (AGL-1109)', () => {
     )
   })
 
+  it('writes a forced-OFF feature as false — not as an inherit', async () => {
+    // The same key-presence question the quota `0` raises (AGL-1789), on the
+    // boolean family: "force off" is an override that has to be STORED, and
+    // it was the only workaround while inherit could not clear one (AGL-1109).
+    // An expansion that read the VALUE rather than the key would delete it and
+    // hand the org its plan default instead.
+    const response = await post(validBody({ features: { pos: false } }))
+    expect(response.status).toBe(200)
+    const entitlements = onlyOrgWrite().data['entitlements'] as Record<
+      string,
+      any
+    >
+    expect(entitlements['features']['pos']).toBe(false)
+    expect(storedOrg()['entitlements']['features']).toEqual({ pos: false })
+    expect(onlyAuditRow()['after']).toMatchObject({
+      entitlements: { features: { pos: false } },
+    })
+  })
+
   it('mints one for every release flag the caller did not force', async () => {
     const forced = RELEASE_KEYS[0]
     await post(validBody({ releaseFlags: { [forced]: true } }))
@@ -439,6 +512,158 @@ describe('"inherit" still DELETES the key across the wire (AGL-1109)', () => {
     const after = onlyAuditRow()['after'] as Record<string, any>
     expect(JSON.stringify(after)).not.toContain('sentinel')
     expect(after['entitlements']['features']).toEqual({ pos: true })
+  })
+})
+
+describe('clearing ONE numeric quota removes it (AGL-1789)', () => {
+  /**
+   * The half of AGL-1109 that was never fixed, and was preserved verbatim by
+   * the AGL-1786 migration so that move changed no behaviour.
+   *
+   * The quotas map used to be written as-sent — only the keys the operator
+   * had filled in. Under `{ merge: true }` an omitted key is NOT a change, so
+   * emptying one field of several left the stored override exactly where it
+   * was, while `after` (built from the same explicit map) recorded it as
+   * gone. Clearing them ALL happened to work, because `hasOverrides` went
+   * false and the whole `entitlements` map was deleted — which is why this
+   * survived: the common case, clearing one of several, is the broken one.
+   */
+  it('deletes the cleared quota and leaves the others exactly as stored', async () => {
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      // A raised site cap and a negotiated marketplace rate. Removing the
+      // rate must not touch the cap.
+      entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
+    }
+    const response = await post(
+      validBody({ quotas: { hostLimit: 25 } }),
+    )
+    expect(response.status).toBe(200)
+
+    const entitlements = onlyOrgWrite().data['entitlements'] as Record<
+      string,
+      any
+    >
+    expect(entitlements['hostLimit']).toBe(25)
+    // A sentinel, not an omission — an omitted key under a merge is a no-op.
+    expect(entitlements['marketplaceFeePct']).toBe(DELETE)
+    // And the DOCUMENT, after the merge: the override is actually gone.
+    expect(storedQuotas()).toEqual({ hostLimit: 25 })
+    expect('marketplaceFeePct' in storedQuotas()).toBe(false)
+  })
+
+  it('hands the org back to the plan default it was overriding', async () => {
+    // The point of clearing one. `resolveMarketplaceFeePct` reads the stored
+    // override first, so as long as the key survives the org keeps being
+    // charged the negotiated rate the operator just removed.
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
+    }
+    await post(validBody({ quotas: { hostLimit: 25 } }))
+
+    const resolved = resolveOrgEntitlements(storedOrg())
+    expect(resolved.marketplaceFeePct).toBe(
+      PLAN_ENTITLEMENTS.business.marketplaceFeePct,
+    )
+    // …and the override that was NOT cleared still wins over the plan.
+    expect(resolved.hostLimit).toBe(25)
+    expect(PLAN_ENTITLEMENTS.business.hostLimit).not.toBe(25)
+  })
+
+  it('keeps a deliberate ZERO — a cap of none is not an inherit', async () => {
+    // The sharpest trap in the fix. "Cleared" is an ABSENT key; `0` is a
+    // present one and a real override — a comped marketplace at 0%, an org
+    // capped to no POS registers. A fix that read emptiness off the VALUE
+    // rather than off key presence would delete both, and this org would
+    // silently start being charged the plan's take rate.
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      entitlements: { marketplaceFeePct: 0, posRegisters: 0 },
+    }
+    const response = await post(
+      validBody({ quotas: { marketplaceFeePct: 0, posRegisters: 0 } }),
+    )
+    expect(response.status).toBe(200)
+
+    const write = onlyOrgWrite().data
+    // The MAP survives too: `hasOverrides` counts keys, not truthy values.
+    expect(write['entitlements']).not.toBe(DELETE)
+    expect((write['entitlements'] as Record<string, any>)['marketplaceFeePct'])
+      .toBe(0)
+    expect(storedQuotas()).toEqual({ marketplaceFeePct: 0, posRegisters: 0 })
+    expect(resolveOrgEntitlements(storedOrg()).marketplaceFeePct).toBe(0)
+    expect(onlyAuditRow()['after']).toMatchObject({
+      entitlements: { marketplaceFeePct: 0, posRegisters: 0, features: {} },
+    })
+  })
+
+  it('expands from the REGISTRY, so every quota key is decided', async () => {
+    // The same property the features expansion has: the key set comes from
+    // `PLAN_ENTITLEMENTS`, not from what the caller happened to send, so a
+    // quota shipped after the caller's bundle is still cleared rather than
+    // left stored.
+    await post(validBody({ quotas: { hostLimit: 9 } }))
+    const entitlements = onlyOrgWrite().data['entitlements'] as Record<
+      string,
+      any
+    >
+    const quotaKeys = Object.entries(PLAN_ENTITLEMENTS.free)
+      .filter(([, value]) => typeof value === 'number')
+      .map(([key]) => key)
+    expect(Object.keys(entitlements).sort()).toEqual(
+      [...quotaKeys, 'features'].sort(),
+    )
+    for (const key of quotaKeys) {
+      if (key === 'hostLimit') continue
+      expect(entitlements[key]).toBe(DELETE)
+    }
+  })
+
+  it('records an `after` the organization is actually in', async () => {
+    // The second half of the defect: `after` was built from the same
+    // omitting loop, so the row said the override was gone while the
+    // document still held it. The row is the only account of what a staff
+    // member did, and it was describing a state nobody was in.
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
+    }
+    await post(validBody({ quotas: { hostLimit: 25 } }))
+
+    const after = onlyAuditRow()['after'] as Record<string, any>
+    expect(after['entitlements']).toEqual(storedOrg()['entitlements'])
+    expect(JSON.stringify(after)).not.toContain('sentinel')
+    // `before` still describes what it was changed FROM.
+    expect(onlyAuditRow()['before']).toMatchObject({
+      entitlements: { hostLimit: 25, marketplaceFeePct: 12 },
+    })
+  })
+
+  it('still removes the whole map when the LAST quota is cleared', async () => {
+    // Already true before AGL-1789 — `hasOverrides` went false and the field
+    // was deleted — and the reason the bug read as intermittent. Pinned so
+    // the fix does not leave an empty map behind instead: `overrideCount`
+    // reads key presence, so the row chip would never clear.
+    mockStore['orgs/org-1'] = { plan: 'business', entitlements: { hostLimit: 25 } }
+    await post(validBody({ quotas: {} }))
+
+    expect(onlyOrgWrite().data['entitlements']).toBe(DELETE)
+    expect(storedOrg()['entitlements']).toBeUndefined()
+  })
+
+  it('leaves a stored key the dialog does not offer alone', async () => {
+    // `datasetsPerHost` is the pre-AGL-240 host-keyed override the resolver
+    // still honours. It is not in the registry, so it is not rendered and
+    // the operator cannot have meant to clear it — deleting it here would
+    // remove an override nobody saw. Clearing every offered quota still
+    // drops the whole map, which is the one way it goes.
+    mockStore['orgs/org-1'] = {
+      plan: 'business',
+      entitlements: { hostLimit: 25, datasetsPerHost: 7 },
+    }
+    await post(validBody({ quotas: { hostLimit: 25 } }))
+    expect(storedQuotas()).toEqual({ hostLimit: 25, datasetsPerHost: 7 })
   })
 })
 

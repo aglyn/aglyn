@@ -85,7 +85,7 @@ import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { setDefaultResultOrder } from 'node:dns'
 import { getApps, initializeApp } from 'firebase-admin/app'
-import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { createJiti } from 'jiti'
 
 // `<sub>.localhost` resolves to BOTH `::1` and `127.0.0.1` on macOS and Node

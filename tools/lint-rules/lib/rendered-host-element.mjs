@@ -171,7 +171,7 @@ function candidateFiles(target, componentName) {
     if (path && existsSync(path) && statSync(path).isFile()) files.push(path)
   }
 
-  let directory = target
+  const directory = target
   if (statSync(target).isFile()) {
     const stem = basename(target).replace(
       /\.(d\.[mc]?ts|[mc]?tsx?|[mc]?jsx?)$/,

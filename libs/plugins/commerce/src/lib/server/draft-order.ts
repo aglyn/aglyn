@@ -129,6 +129,70 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       feePct > 0 ? Math.max(1, Math.round((itemsCents * feePct) / 100)) : 0
     const totals = CommerceModel.computeOrderTotals(lineItems, { feeCents })
 
+    // Shipping (AGL-1792), from the same settings document the two storefront
+    // paths read. This handler contained no `shipping` string at all: a
+    // merchant who configured zones and rates collected them on a cart
+    // (AGL-1707) and on buy-now (AGL-1720), and nothing when they invoiced the
+    // same buyer for the same parcel through a payment link. The session
+    // collected no address either, so the merchant was not even told where to
+    // send it — the webhook records one now that Stripe is asked for it.
+    //
+    // The premise AGL-1792 filed this under was that "the destination IS known
+    // — the merchant typed it". It is not: the draft dialog collects a product,
+    // a variant, a quantity and an email, and this handler reads exactly those.
+    // So the destination is as unknown here as it is in the cart, and the same
+    // asking machinery applies rather than none of it.
+    //
+    // CONDITIONAL on the product being physical, exactly as buy-now is: this
+    // dialog invoices downloads and consulting too, and charging that buyer
+    // postage would be worse than the bug. A missing `type` reads as physical,
+    // matching the fee ladder above — the two reads must not disagree about
+    // what a part-migrated doc is. The one-time condition buy-now also carries
+    // is structural here: this path only ever builds `mode: 'payment'`.
+    //
+    // RESOLVED BEFORE THE ORDER DOCUMENT, because the plan can refuse and the
+    // order is written before Stripe is called. Refusing after it would strand
+    // a `pending` draft on the merchant's orders list for every attempt —
+    // this path's version of the orphaned coupon AGL-1721 kept out of the cart.
+    const storeSettings = await hostRef
+      .collection('settings')
+      .doc('store')
+      .get()
+    const shippingSettings = storeSettings.get('shipping') as
+      CommerceModel.ShippingSettings | undefined
+    const shippingPlan =
+      (product.type ?? 'physical') === 'physical'
+        ? CommerceModel.planCheckoutShipping(
+            shippingSettings,
+            {
+              subtotalCents: itemsCents,
+              totalGrams:
+                Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+            },
+            body.shippingCountry,
+          )
+        : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.refusal === 'destination-required') {
+      return res.status(400).json({
+        error: 'Choose where this order ships to.',
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
+    if (shippingPlan.refusal === 'destination-unserved') {
+      const declared = CommerceModel.normalizeCheckoutShippingCountry(
+        body.shippingCountry,
+      )
+      return res.status(409).json({
+        error: `This store does not ship to ${
+          CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[declared as string] ??
+          'that country'
+        }.`,
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
+
     // Order doc first (transactional number), then the payment link.
     const orderRef = hostRef.collection('orders').doc()
     const counterRef = hostRef.collection('counters').doc('orders')
@@ -178,6 +242,18 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       ...(variantId ? { 'metadata[variantId]': variantId } : {}),
       'metadata[feeCents]': String(feeCents),
     })
+    // Both keys or neither (AGL-1720's rule, inherited). Stripe will not apply
+    // a shipping rate without an address to ship to, and a merchant who
+    // configured nothing plans to no options and so gets neither — a payment
+    // link byte-identical to the one this handler built before shipping
+    // existed on it.
+    if (shippingPlan.options.length > 0) {
+      CommerceModel.appendShippingAddressCollectionParams(
+        params,
+        shippingPlan.countries,
+      )
+      CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
+    }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {

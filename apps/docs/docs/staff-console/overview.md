@@ -56,8 +56,18 @@ set password](/img/staff-console/admin-user-password.png)
   trail. The log is append-only, so a reason not given at the time cannot be added
   afterwards. The reason is checked by the **server** that performs the override,
   not only by the dialog, so a request without one is refused rather than applied.
+  The database now refuses a plan, entitlement or release-flag change made any
+  other way, so that server is the *only* route an override can take and the
+  reason cannot be skipped by going around the console.
   Changing an organization's release flags needs the **super** staff role; plan and
   entitlement changes are open to **billing** staff as well.
+  **Clearing an override removes it.** Emptying a quota field, or setting a feature
+  or release flag back to *Inherit*, deletes that override on save and hands the
+  organization back to its plan default — one at a time, so the overrides you leave
+  in place are untouched. **`0` is not empty**: a quota of zero is a real override,
+  a cap of none (a comped 0% fee, an organization held to no POS registers), and it
+  is kept. A quota field that cannot be read as a number of 0 or more refuses the
+  save rather than being ignored.
   The override and its audit row are saved **together** — either both land or
   neither does. Read the message on a failure rather than assuming: it says
   *"nothing was written … safe to retry"* when the server refused the change, and

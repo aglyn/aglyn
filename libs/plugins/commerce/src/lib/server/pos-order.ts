@@ -364,6 +364,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         status: 'paid',
         channel: 'pos',
         registerId,
+        // The bucket the decrement below comes out of (AGL-1808). Without it
+        // a cancellation can only put the units back on the flat total, which
+        // the next location-aware write recomputes away.
+        ...(locationId ? { locationId } : {}),
         lineItems,
         totals,
         customerEmail: customerEmail || null,

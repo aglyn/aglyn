@@ -1,0 +1,149 @@
+name: Index drift
+
+# Fails when the LIVE Firestore index configuration differs from
+# `cloud/firebase-firestore.indexes.json` (AGL-1804). The index counterpart of
+# rules-drift.yml, and it exists for the same reason: indexes deploy MANUALLY
+# (`firebase deploy --only firestore:indexes`), outside the git -> Vercel
+# pipeline, so a merged commit touching the index file is NOT evidence the
+# index shipped.
+#
+# One day's manual diff (AGL-1793) found three separate bugs a standing check
+# would have caught the day each landed, and they are the two directions the
+# checker reports separately because they need OPPOSITE responses:
+#
+#  - PROD-ONLY — in the project, not in the file. The next index deploy
+#    DELETES it, because that deploy reconciles the file onto the project and
+#    removes whatever the file does not list, `fieldOverrides` included.
+#    AGL-866 is that having already happened once (the `versions.nodes`
+#    exemption); AGL-1801 is a live `mediaTombstones.expiresAt` TTL policy an
+#    unrelated deploy was armed to disable. THIS IS THE DANGEROUS DIRECTION,
+#    and it is why a bare "does the file match" check is not enough — the file
+#    being wrong is not what hurts, deploying it is.
+#
+#  - FILE-ONLY — in the file, not in the project. The index is not deployed
+#    and every query needing it throws FAILED_PRECONDITION. AGL-1793/AGL-1802:
+#    three cron collection-group scans that had never once run against real
+#    data, each swallowing the failure into a 500 nobody reads.
+#
+# UNLIKE rules-drift.yml THERE IS NO PROMOTED BASELINE. Rules ship with a
+# promotion, from a checkout pinned to the promoted SHA, so `main` being ahead
+# of live is a designed state. An index deploy is not tied to a promotion at
+# all — it is a manual step run against the file as it stands — so the file on
+# `main` is what should be live, and there is no window to excuse. A red run
+# on `main` means the deploy is owed NOW.
+#
+# Four triggers:
+#  - push to `main` touching the index file or the checker: the moment the
+#    deploy becomes owed.
+#  - push to `production`: an index change reaching production with its deploy
+#    still unrun is the AGL-1793 state (three dead crons) shipping again.
+#  - daily schedule: catches a console/gcloud change on days nothing merged —
+#    which is exactly how AGL-1801 happened (a gcloud TTL enable that never
+#    reached the file). (GitHub schedules are best-effort and pause on
+#    60-day-quiet repos; a green history is not proof of continuous
+#    convergence.)
+#  - manual dispatch, for use right before running an index deploy.
+#
+# Requires the SAME repo secrets rules-drift.yml already uses — the checker
+# reads the Firestore Admin API with the rules deploy's service account, so it
+# costs no new credential:
+#   gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'
+#   gh secret set FIREBASE_PRIVATE_KEY --body "$(jq -r .private_key service-account.json)"
+# Optional repo var: FIREBASE_PROJECT_ID (default aglyn-main). NOTE repo
+# variables survive domain/org migrations (AGL-786) — if the project ever
+# moves, update them, don't trust them.
+#
+# When the secrets are ABSENT the guard step below fails the job loudly. Never
+# convert that to a skip: a skipped check that renders green is the exact
+# silent-drift failure mode this workflow exists to prevent, and the checker
+# itself exits 2 (cannot-check) rather than 0 for the same reason.
+#
+# ⚠️ Do NOT move these steps into nx-ci.yml. That workflow is
+# `disabled_manually` and runs on no runner at all; gates added to it since it
+# was switched off have never executed once.
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - cloud/firebase-firestore.indexes.json
+      - tools/scripts/check-index-drift.mjs
+      - tools/scripts/lib/index-drift.mjs
+      - tools/scripts/lib/firestore-indexes-api.mjs
+      - .github/workflows/index-drift.yml
+  schedule:
+    # Daily, 07:41 UTC — off the top of the hour, where GitHub's scheduler
+    # congestion is worst, and after rules-drift.yml so the two do not contend
+    # for the same npm cache warm-up.
+    - cron: '41 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest comparison matters; a delayed run must not pile up.
+  group: index-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
+            echo "" >&2
+            echo "This job compares the LIVE Firestore index config against the repo" >&2
+            echo "file. Without credentials it cannot see live, and passing anyway" >&2
+            echo "would be the silent-drift failure mode it exists to prevent" >&2
+            echo "(AGL-1801: a live TTL policy the next index deploy would delete)." >&2
+            echo "Create the secrets once, from the service-account JSON:" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY --body \"\$(jq -r .private_key service-account.json)\"" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # firebase-admin mints the service-account token — the same auth path the
+      # rules deploy and rules-drift check use, shared via
+      # tools/scripts/lib/firebase-rules-api.mjs.
+      - run: npm ci
+
+      # Guard the guard (AGL-1778). Everything below trusts this comparator's
+      # verdict about production, and a broken comparator that reports "no
+      # drift" is indistinguishable from convergence. Run it BEFORE the
+      # comparison so a failing comparator fails the job before its verdict is
+      # printed, not after.
+      #
+      # This suite also runs in rules-drift.yml, which is what stops the claim
+      # from being circular: asserted only from inside the workflow it guards,
+      # deleting the step would delete the check on the deletion.
+      - run: npm run test:index-drift
+
+      # The RULES checker's self-test, for the same reason in the other
+      # direction (AGL-1816). AGL-1778 gave it a second home in nx-ci.yml —
+      # which is `disabled_manually` and runs on no runner, so that redundancy
+      # existed only as text. rules-drift.yml and this workflow now each run
+      # both self-tests, and both of them actually execute.
+      - run: npm run test:rules-drift
+
+      - name: Diff the live index config against the repo file
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: npm run check:index-drift

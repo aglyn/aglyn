@@ -566,14 +566,18 @@ describe('the checker is wired (workflow + package.json)', () => {
       'the self-test must run BEFORE the drift comparison',
     )
     // This assertion is only worth anything because a SECOND workflow runs
-    // this suite (nx-ci.yml). Asserted solely from inside rules-drift.yml it
-    // would be circular — removing the step would remove the check on the
-    // removal.
-    const nxCi = readFileSync(
-      join(repoRoot, '.github', 'workflows', 'nx-ci.yml'),
+    // this suite. Asserted solely from inside rules-drift.yml it would be
+    // circular — removing the step would remove the check on the removal.
+    //
+    // AGL-1816: that second home used to be nx-ci.yml, which is
+    // `disabled_manually` and runs on no runner, so the redundancy existed
+    // only as text in a file that never executes. index-drift.yml is active,
+    // and the two drift workflows now each run both self-tests.
+    const indexDrift = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'index-drift.yml'),
       'utf8',
     )
-    assert.match(nxCi, /npm run test:rules-drift/)
+    assert.match(indexDrift, /npm run test:rules-drift/)
   })
 
   it('the workflow compares against the PROMOTED baseline, with the history to resolve it (AGL-1690)', () => {
