@@ -84,6 +84,12 @@ interface EditContext {
   faviconUrl?: string | null
   screenId: string | null
   screenName: string | null
+  /** Set when the page is a composed collection route (AGL-1845): the
+   * collection's display name, with `collectionEntry` telling an entry
+   * apart from a (paginated/filtered) list. `screenName` is then the
+   * TEMPLATE screen serving the route. */
+  collectionName?: string | null
+  collectionEntry?: boolean
   versionId: string | null
   /** True when a version newer than the live pointer exists; null unknown. */
   draftChanges?: boolean | null
@@ -709,8 +715,21 @@ export default function AdminBar({
           color: '#c3ccd9',
           minWidth: 0,
         }}
+        title={
+          context?.collectionName
+            ? `A ${context.collectionName} ${
+                context.collectionEntry ? 'entry' : 'list page'
+              } rendered by the "${context.screenName ?? 'template'}" screen`
+            : undefined
+        }
       >
-        {context?.screenName ?? 'Unrouted page'}
+        {context?.collectionName
+          ? // A composed collection route (AGL-1845): name the collection
+            // context, then the template screen serving it.
+            `${context.collectionName}${
+              context.collectionEntry ? ' entry' : ''
+            } · ${context.screenName ?? 'Template'}`
+          : (context?.screenName ?? 'Unrouted page')}
       </span>
       {context?.draftChanges === true ? (
         <span

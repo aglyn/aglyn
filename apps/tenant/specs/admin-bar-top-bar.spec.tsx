@@ -235,6 +235,16 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(identity.closest('a')).toBeNull()
   })
 
+  it('names a composed collection route instead of "Unrouted page" (AGL-1845)', async () => {
+    await renderReadyBar({
+      screenName: 'Blog entry template',
+      collectionName: 'Blog',
+      collectionEntry: true,
+    })
+    expect(screen.getByText('Blog entry · Blog entry template')).toBeTruthy()
+    expect(screen.queryByText('Unrouted page')).toBeNull()
+  })
+
   it('hides the draft flag when the server says false', async () => {
     await renderReadyBar({ draftChanges: false })
     expect(screen.queryByText('Draft changes')).toBeNull()

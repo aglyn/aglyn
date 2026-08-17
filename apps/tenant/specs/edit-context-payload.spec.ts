@@ -53,6 +53,10 @@ let mockAnalyticsDayId: string | undefined
 let mockScreenAnalyticsData: FakeDocData | null
 let mockScreenAnalyticsReads: number
 let mockScreenAnalyticsDocId: string | undefined
+// The collection doc the AGL-1845 fallback queries by slug on a map miss.
+let mockCollectionData: FakeDocData | null
+let mockCollectionQueries: number
+let mockCollectionSlugQueried: string | undefined
 
 function docSnapshot(data: FakeDocData | null) {
   return {
@@ -108,6 +112,28 @@ function hostSubcollection(sub: string) {
           return docSnapshot(mockAnalyticsDayData)
         },
       }),
+    }
+  }
+  if (sub === 'collections') {
+    return {
+      where: (field: string, op: string, value: string) => {
+        expect(field).toBe('slug')
+        expect(op).toBe('==')
+        return {
+          limit: (count: number) => ({
+            get: async () => {
+              expect(count).toBe(1)
+              mockCollectionQueries += 1
+              mockCollectionSlugQueried = value
+              return {
+                docs: mockCollectionData
+                  ? [docSnapshot(mockCollectionData)]
+                  : [],
+              }
+            },
+          }),
+        }
+      },
     }
   }
   if (sub === 'screenAnalytics') {
@@ -193,6 +219,9 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     mockScreenAnalyticsData = { total: 12 }
     mockScreenAnalyticsReads = 0
     mockScreenAnalyticsDocId = undefined
+    mockCollectionData = null
+    mockCollectionQueries = 0
+    mockCollectionSlugQueried = undefined
   })
 
   it('reports draft changes when a newer version than the live pointer exists', async () => {
@@ -309,6 +338,60 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     const payload = await (await POST(contextRequest())).json()
     expect(payload.screenViewsToday).toBeNull()
     expect(mockScreenAnalyticsReads).toBe(0)
+  })
+
+  it('resolves a collection ENTRY route to its entry template screen (AGL-1845)', async () => {
+    // `/blog/aglyn-is-in-early-access` is composed, not in the routing map —
+    // before the fix this was "Unrouted page" with no edit link.
+    mockCollectionData = { displayName: 'Blog', entryScreenId: 'screen-1' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/aglyn-is-in-early-access'))
+    ).json()
+    expect(mockCollectionSlugQueried).toBe('blog')
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.screenName).toBe('About')
+    expect(payload.collectionName).toBe('Blog')
+    expect(payload.collectionEntry).toBe(true)
+    // Edit this page deep-links the TEMPLATE's besigner.
+    expect(payload.editUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
+    )
+  })
+
+  it('falls back to the legacy templateScreenId pointer (pre-AGL-1400 docs)', async () => {
+    mockCollectionData = { displayName: 'Blog', templateScreenId: 'screen-1' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/some-post'))
+    ).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.collectionEntry).toBe(true)
+  })
+
+  it('resolves a paginated LIST route to the routed list screen', async () => {
+    // `/blog/page/2` misses the map, but the list template is published AT
+    // the collection root (AGL-1387) — prefer that routed screen.
+    mockHostData = { ...mockHostData, screens: { 'screen-1': 'blog' } }
+    mockCollectionData = { displayName: 'Blog', listScreenId: 'screen-9' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/page/2'))
+    ).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.collectionName).toBe('Blog')
+    expect(payload.collectionEntry).toBe(false)
+  })
+
+  it('leaves a genuinely unrouted path unrouted when no collection matches', async () => {
+    mockHostData = { ...mockHostData, screens: {} }
+    const payload = await (await POST(contextRequest())).json()
+    expect(mockCollectionQueries).toBe(1)
+    expect(payload.screenId).toBeNull()
+    expect(payload.collectionName).toBeNull()
+  })
+
+  it('never queries collections when the routing map already answers', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(mockCollectionQueries).toBe(0)
   })
 
   it('refuses a bad token with 401 before any read', async () => {

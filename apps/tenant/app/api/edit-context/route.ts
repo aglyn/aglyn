@@ -19,6 +19,7 @@ import {
   buildRoute,
   checkEntitlement,
   findScreenIdByRoutePath,
+  parseCollectionRoute,
   resolveHostEnabledPlugins,
   resolveMediaSrc,
   Route,
@@ -123,7 +124,61 @@ export async function POST(request: Request): Promise<Response> {
     const rawPath = typeof body?.path === 'string' ? body.path : '/'
     const normalized =
       rawPath.split('?')[0].replace(/^\/+|\/+$/g, '') || SCREEN_ROOT_PATH
-    const screenId = findScreenIdByRoutePath(hostDoc.screens, normalized)
+    let screenId = findScreenIdByRoutePath(hostDoc.screens, normalized)
+
+    // Collection routes are COMPOSED, not routed (AGL-81/AGL-1400), so the
+    // routing map legitimately misses them: /{collection}/{entry} renders
+    // through the collection's entry TEMPLATE screen, and the paginated /
+    // category list URLs (/{c}/page/2, /{c}/category/x) render the list
+    // screen. Before AGL-1845 the bar called every one of these "Unrouted
+    // page" with no edit link, while the page loader happily served them.
+    // On a map miss, resolve the same way the loader does: the same
+    // parseCollectionRoute, then the collection doc by slug (one read,
+    // editor-only), then the same template-screen fields the compose
+    // pipeline picks (`compose-collection-page.ts`). Best-effort — a
+    // failure here just leaves the honest miss the bar showed before.
+    let collectionName: string | undefined
+    let collectionEntry = false
+    if (!screenId && normalized !== SCREEN_ROOT_PATH) {
+      const collectionRoute = parseCollectionRoute(normalized.split('/'))
+      if (collectionRoute) {
+        try {
+          const collectionQuery = await firestore
+            .collection('hosts')
+            .doc(claims.hostId)
+            .collection('collections')
+            .where('slug', '==', collectionRoute.collectionSlug)
+            .limit(1)
+            .get()
+          const collectionDoc = collectionQuery.docs[0]
+          if (collectionDoc) {
+            const templateScreenId = collectionRoute.entrySlug
+              ? ((collectionDoc.get('entryScreenId') ||
+                  collectionDoc.get('templateScreenId')) as
+                  | string
+                  | undefined)
+              : // A list template is published AT the collection root
+                // (AGL-1387), so prefer the routed screen there; the
+                // stored pointer is the fallback.
+                (findScreenIdByRoutePath(
+                  hostDoc.screens,
+                  collectionRoute.collectionSlug,
+                ) ??
+                ((collectionDoc.get('listScreenId') as string | undefined) ||
+                  undefined))
+            if (templateScreenId && typeof templateScreenId === 'string') {
+              screenId = templateScreenId
+              collectionName =
+                (collectionDoc.get('displayName') as string | undefined) ||
+                collectionRoute.collectionSlug
+              collectionEntry = Boolean(collectionRoute.entrySlug)
+            }
+          }
+        } catch {
+          // No verdict beats a wrong one — the bar keeps the plain miss.
+        }
+      }
+    }
 
     let screenName: string | undefined
     let versionId: string | undefined
@@ -319,6 +374,10 @@ export async function POST(request: Request): Promise<Response> {
         faviconUrl,
         screenId: screenId ?? null,
         screenName: screenName ?? null,
+        // Collection context (AGL-1845): the page is a composed collection
+        // route served by a template screen, not a routed screen of its own.
+        collectionName: collectionName ?? null,
+        collectionEntry,
         versionId: versionId ?? null,
         // True when a version newer than the live pointer exists; null when
         // the answer isn't known (no screen, or the read failed).
