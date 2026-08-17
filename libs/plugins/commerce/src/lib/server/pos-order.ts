@@ -460,6 +460,12 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         -line.quantity,
         locationId || undefined,
       )
+      // Two lines of one product must COMPOUND (AGL-1828): the next line
+      // starts from these variants, not from the product as first read —
+      // recomputing from the original would erase this decrement when the
+      // sibling line's merge-set landed, while the ledger below recorded
+      // both. Same carry-forward as the webhook's POS card loop (AGL-1825).
+      productsById.set(line.productId, { ...product, variants })
       await hostRef
         .collection('products')
         .doc(line.productId)

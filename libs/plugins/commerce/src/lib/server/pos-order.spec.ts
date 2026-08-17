@@ -1075,3 +1075,168 @@ describe('POS folio stub reservations (AGL-1760)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Two lines of one product in the cash/folio decrement loop (AGL-1828).
+ *
+ * THE DEFECT. The loop read every line's product from `productsById` — a map
+ * built once from the pricing reads and never updated — so two lines of the
+ * same product (two variants, or one variant rung twice; `body.lines` is
+ * client-supplied and nothing merges duplicates) both computed
+ * `adjustVariantInventory` from the ORIGINAL variants array, and the second
+ * merge-set silently erased the first line's decrement. The ledger got BOTH
+ * `sale` rows, so the history claimed more movement than the count showed —
+ * the exact ledger/count disagreement AGL-1807 existed to prevent.
+ *
+ * The webhook's POS card loop (AGL-1825) already carries each adjustment
+ * forward; these cases pin the same compounding here. Quantities, stocks and
+ * prices are all distinct (AGL-1711) so the final counts cannot coincide:
+ *
+ *   wool    9 (6 front + 3 back)   sold 2 from loc-front   =  7 (4 + 3)
+ *   cotton  4 (flat)               sold 1                  =  3
+ *   flat total 13                                          = 10
+ */
+describe('POS cash sale with two lines of one product (AGL-1828)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-4', {
+      name: 'Beanie',
+      type: 'physical',
+      status: 'active',
+      variants: [
+        {
+          id: 'wool',
+          priceUsd: 22,
+          inventory: 9,
+          inventoryByLocation: { 'loc-front': 6, 'loc-back': 3 },
+        },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+    docs.set('hosts/host-1/products/product-5', {
+      name: 'Scarf',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 10, inventory: 9 }],
+    })
+  })
+
+  function beanieVariant(id: string) {
+    const product = docs.get('hosts/host-1/products/product-4') as any
+    return product.variants.find((variant: any) => variant.id === id)
+  }
+
+  function ledgerRows() {
+    return childPaths('hosts/host-1/inventoryAdjustments').map(
+      (path) => docs.get(path) as any,
+    )
+  }
+
+  /**
+   * THE DEFECT, variant shape: before the fix the cotton line recomputed from
+   * the product as first read, so its write landed wool back at 9 (6 front)
+   * and the sale's two wool units returned to the shelf on paper.
+   */
+  it('compounds two variant lines of one product into one final count', async () => {
+    const result = await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        locationId: 'loc-front',
+        lines: [
+          { productId: 'product-4', variantId: 'wool', quantity: 2 },
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-a' },
+    )
+    expect(result.status).toBe(200)
+    expect(beanieVariant('wool').inventoryByLocation).toEqual({
+      'loc-front': 4,
+      'loc-back': 3,
+    })
+    expect(beanieVariant('wool').inventory).toBe(7)
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    // The denormalized flat total sums BOTH decrements, not just the last.
+    expect(
+      (docs.get('hosts/host-1/products/product-4') as any).inventory,
+    ).toBe(10)
+  })
+
+  /**
+   * THE DEFECT, same-variant shape: one variant rung twice must take both
+   * quantities off. Before the fix the second line started from 9 again, so
+   * 9 - 2 - 3 landed at 6 instead of 4.
+   */
+  it('compounds the same variant rung on two lines', async () => {
+    const result = await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [
+          { productId: 'product-5', quantity: 2 },
+          { productId: 'product-5', quantity: 3 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-b' },
+    )
+    expect(result.status).toBe(200)
+    expect(
+      (docs.get('hosts/host-1/products/product-5') as any).variants[0]
+        .inventory,
+    ).toBe(4)
+  })
+
+  /**
+   * The ledger was never the broken half: both lines logged their row while
+   * the count kept only the last. Pinned so the fix is measured as the count
+   * AGREEING with the history, not as the history shrinking to match.
+   */
+  it('logs one sale row per line, agreeing with the folded count', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        locationId: 'loc-front',
+        lines: [
+          { productId: 'product-4', variantId: 'wool', quantity: 2 },
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-c' },
+    )
+    const rows = ledgerRows().filter((row) => row.productId === 'product-4')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => [row.variantId, row.delta])).toEqual([
+      ['wool', -2],
+      ['cotton', -1],
+    ])
+    // 13 - (2 + 1) from the rows equals the stored flat count.
+    expect(
+      (docs.get('hosts/host-1/products/product-4') as any).inventory,
+    ).toBe(10)
+  })
+
+  /** Distinct products never contended — pinned so the carry-forward cannot
+   *  bleed one product's variants into another's. */
+  it('still decrements two different products independently', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        lines: [
+          { productId: 'product-4', variantId: 'cotton', quantity: 1 },
+          { productId: 'product-5', quantity: 2 },
+        ],
+      },
+      { 'idempotency-key': 'clobber-d' },
+    )
+    expect(beanieVariant('cotton').inventory).toBe(3)
+    expect(beanieVariant('wool').inventory).toBe(9)
+    expect(
+      (docs.get('hosts/host-1/products/product-5') as any).variants[0]
+        .inventory,
+    ).toBe(7)
+  })
+})
