@@ -1366,7 +1366,15 @@ service cloud.firestore {
     }
 
     // Staff-only, append-only audit log of admin actions
-    // ({ actorUid, action, target, before, after, at }).
+    // ({ actorUid, action, target, before, after, at }), plus an optional
+    // top-level { reason, note } pair recording WHY — required by the staff
+    // override dialog since AGL-1652, and rendered on all three staff
+    // surfaces that read these rows.
+    //
+    // The shape is NOT validated here, deliberately: every field above is
+    // already trusted from a staff client, and a rule that policed one
+    // action's `reason` would imply the rest are enforced when they are not.
+    // The reason gate lives where the override is actually made.
     match /adminAudit/{entryId} {
       allow read, create: if isStaff();
       allow update, delete: if false;

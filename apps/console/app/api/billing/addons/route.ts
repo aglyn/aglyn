@@ -16,8 +16,10 @@
  */
 
 import {
+  EXTRA_HOSTS_ADDON_MAX,
   isLiveSubscriptionStatus,
   pluginRequestFromWeb,
+  POS_REGISTERS_ADDON_MAX,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -46,10 +48,13 @@ import {
 // here would break the page they need. Security/manual locks revoke
 // tokens at lock time, which closes this surface within the token hour.
 
-/** Kinds without a per-plan hard max get sane purchase ceilings. */
-
-const EXTRA_HOSTS_MAX = 100
-const POS_REGISTERS_MAX = 50
+/**
+ * Kinds without a per-plan hard max get sane purchase ceilings. These now
+ * live in `plan-entitlements.ts` beside the bands and the resolver they
+ * bound (AGL-1738) — as two private literals here they were invisible to
+ * anyone reading `resolveOrgEntitlements`, which is how that add came to be
+ * read as unbounded.
+ */
 
 async function stripeRequest(
   secretKey: string,
@@ -110,7 +115,7 @@ function addonMax(
   baseline: ReturnType<typeof resolveOrgEntitlements>,
 ): number {
   const bounded = (included: number, max: number) =>
-    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_MAX
+    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
   switch (kind) {
     case 'managers':
       return bounded(baseline.managersPerOrg, baseline.maxManagersPerOrg)
@@ -119,9 +124,9 @@ function addonMax(
     case 'datasets':
       return bounded(baseline.datasetsPerOrg, baseline.maxDatasetsPerOrg)
     case 'hosts':
-      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_MAX
+      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_ADDON_MAX
     case 'posRegisters':
-      return baseline.features.pos ? POS_REGISTERS_MAX : 0
+      return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
     case 'eventCalendar':
       return 1
   }

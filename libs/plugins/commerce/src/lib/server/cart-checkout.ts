@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { readCartId } from './cart-cookie'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -51,7 +52,12 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     .toUpperCase()
     .slice(0, 40)
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const cartId = String(req.cookies[`aglyn_cart_${hostId}`] ?? '')
+  // AGL-1769: validated here even though this handler only READS the cart,
+  // because it is where the raw cookie left the request — `:342` stamps it
+  // into `metadata[cartId]`, and the billing webhook builds a document path
+  // from that copy. Closing it at the source is what lets the webhook keep
+  // taking its metadata at face value.
+  const cartId = readCartId(req.cookies, hostId)
   if (!cartId) return res.status(400).json({ error: 'Your cart is empty' })
 
   try {
@@ -103,6 +109,12 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // Weight-tier shipping rates price off this (AGL-1707). Without it every
     // `weight_tiers` rate would resolve at 0g and quote the lightest tier.
     let totalGrams = 0
+    // Whether anything in this cart is posted at all (AGL-1721). Buy-now has
+    // always resolved shipping for physical products only; the cart never
+    // asked, so a cart of downloads could be charged to ship. It matters more
+    // now that an unresolvable destination REFUSES: a shopper buying two PDFs
+    // must not be asked which country to ship them to.
+    let hasPhysicalLine = false
     // Cart checkout never builds subscription sessions — every line bills
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
@@ -135,6 +147,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       const unitCents = Math.round(Number(variant.priceUsd) * 100)
       itemsCents += unitCents * line.quantity
       totalGrams += Math.max(0, Number(variant.weightGrams ?? 0)) * line.quantity
+      // A missing `type` reads as physical, exactly as the fee ladder below
+      // reads it — `liftLegacyProduct` only defaults the field on docs it
+      // synthesizes variants for, so a part-migrated doc can reach here
+      // without one and the two reads must not disagree about what it is.
+      if ((product.type ?? 'physical') === 'physical') hasPhysicalLine = true
       const feePct = Aglyn.resolveTransactionFeePct(
         ownerOrg.org as any,
         product.type,
@@ -155,6 +172,59 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         }`.slice(0, 120),
       )
     })
+
+    // Shipping (AGL-1707), from the settings document tax is also read from.
+    // This is the ONLY thing that makes Stripe charge shipping: without
+    // `shipping_options` it presents no shipping choice,
+    // `total_details.amount_shipping` is 0, and the zones and rates the
+    // merchant configured in the console are silently worth nothing.
+    //
+    // RESOLVED BEFORE ANY STRIPE CALL, ahead of the discount block below,
+    // because the plan can refuse — and the discount block creates real coupon
+    // objects on the merchant's account. Refusing after them would leave one
+    // orphaned on every attempt.
+    //
+    // A merchant who has configured nothing plans to no options and gets a
+    // session byte-identical to today's: no shipping charged, exactly as
+    // before. Only a merchant who set rates up starts collecting them.
+    const storeSettings = await hostRef
+      .collection('settings')
+      .doc('store')
+      .get()
+    const shippingPlan = hasPhysicalLine
+      ? CommerceModel.planCheckoutShipping(
+          storeSettings.get('shipping') as
+            | CommerceModel.ShippingSettings
+            | undefined,
+          { subtotalCents: itemsCents, totalGrams },
+          body.shippingCountry,
+        )
+      : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    // The shopper is asked, then the answer is ENFORCED (AGL-1721): a declared
+    // destination narrows `allowed_countries` to itself, so the rate resolved
+    // for it is the only one on the session and no other address can be
+    // entered against it. Answering the 400 is not optional — a caller that
+    // skips the field is refused again rather than served the union.
+    if (shippingPlan.refusal === 'destination-required') {
+      return res.status(400).json({
+        error: 'Choose where you’re shipping to.',
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
+    if (shippingPlan.refusal === 'destination-unserved') {
+      const declared = CommerceModel.normalizeCheckoutShippingCountry(
+        body.shippingCountry,
+      )
+      return res.status(409).json({
+        error: `This store does not ship to ${
+          CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[declared as string] ??
+          'that country'
+        }.`,
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
 
     // Discounts engine (AGL-305): entered codes and automatic
     // promotions from hosts/{id}/discounts; the AGL-96 coupons remain a
@@ -284,42 +354,23 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       'payment_intent_data[transfer_data][destination]',
       String(accountId),
     )
-    // Address collection feeds order shipping + destination tax later. The
-    // country list and the emission are shared with buy-now (AGL-1720).
-    CommerceModel.appendShippingAddressCollectionParams(params)
+    // Address collection feeds order shipping + destination tax later, and is
+    // the enforcing half of the plan above (AGL-1721) — emitted from the
+    // plan's own country list, never a default, so it cannot widen past the
+    // destinations the declared rates were resolved for. The emission is
+    // shared with buy-now (AGL-1720).
+    CommerceModel.appendShippingAddressCollectionParams(
+      params,
+      shippingPlan.countries,
+    )
+    CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
 
     // Stripe Tax when opted in (manual destination tax lands with the
     // AGL-296 checkout, which knows the address before the session).
-    const storeSettings = await hostRef
-      .collection('settings')
-      .doc('store')
-      .get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
     if (taxSettings.mode === 'stripe') {
       params.set('automatic_tax[enabled]', 'true')
     }
-
-    // Shipping (AGL-1707), from the same settings doc as tax. This is the
-    // ONLY thing that makes Stripe charge shipping: without `shipping_options`
-    // it presents no shipping choice, `total_details.amount_shipping` is 0,
-    // and the zones and rates the merchant configured in the console are
-    // silently worth nothing. The subtotal fed to the rate resolver is the
-    // pre-discount items total — the "Subtotal" the cart itself shows, and
-    // the same figure `resolveDiscount` is given above — so a free-over-$50
-    // threshold means what the shopper saw it mean.
-    //
-    // A merchant who has configured nothing resolves to no options and gets a
-    // session byte-identical to today's: no shipping is charged, exactly as
-    // before. Only a merchant who set rates up starts collecting them.
-    const shippingSettings = storeSettings.get('shipping') as
-      | CommerceModel.ShippingSettings
-      | undefined
-    const shippingOptions = CommerceModel.resolveCheckoutShippingOptions(
-      shippingSettings,
-      CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
-      { subtotalCents: itemsCents, totalGrams },
-    )
-    CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
 
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`

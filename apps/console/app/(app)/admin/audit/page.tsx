@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { orgOverrideReasonSummary } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -64,8 +65,11 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     const term = filter.trim().toLowerCase()
     const all = entryDocs ?? []
     if (!term) return all
+    // The reason and its note are searchable too (AGL-1652) — "why did we
+    // give them the enterprise rate" is a question asked by the reason, not
+    // by an actor or a target anyone remembers.
     return all.filter((entry: any) =>
-      [entry.actorUid, entry.action, entry.target]
+      [entry.actorUid, entry.action, entry.target, entry.reason, entry.note]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -84,8 +88,11 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           : String(value ?? '')
       return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
     }
+    // `reason`/`note` are columns of their own (AGL-1652) rather than being
+    // left inside a JSON blob: the compliance export is read in a
+    // spreadsheet, and a why nobody can filter on is a why nobody reads.
     const rows = [
-      ['at', 'actorUid', 'action', 'target', 'before', 'after'],
+      ['at', 'actorUid', 'action', 'target', 'reason', 'note', 'before', 'after'],
       ...entries.map((entry: any) => [
         entry.at?.seconds
           ? new Date(entry.at.seconds * 1000).toISOString()
@@ -93,6 +100,8 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         entry.actorUid,
         entry.action,
         entry.target,
+        entry.reason ?? '',
+        entry.note ?? '',
         entry.before,
         entry.after,
       ]),
@@ -152,7 +161,20 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   {'No audit entries match.'}
                 </Typography>
               ) : (
-                entries.map((entry: any) => (
+                entries.map((entry: any) => {
+                  /**
+                   * WHY the action was taken (AGL-1652), when the row
+                   * carries one. `org.override` rows get the reason
+                   * vocabulary's label; any other row that grows a
+                   * top-level reason renders its raw code rather than
+                   * being silently dropped for not being an override.
+                   */
+                  const why =
+                    orgOverrideReasonSummary(entry.reason, entry.note) ??
+                    (entry.reason
+                      ? [entry.reason, entry.note].filter(Boolean).join(' — ')
+                      : null)
+                  return (
                   <Stack
                     key={entry.$id}
                     spacing={0.5}
@@ -191,6 +213,23 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                         }`}
                       </Typography>
                     </Stack>
+                    {/*
+                      Shown COLLAPSED, not only in the expanded diff: a
+                      reason nobody sees without clicking is the same
+                      failure as no reason at all. `org.override` rows
+                      written before AGL-1652 have none, and say so rather
+                      than rendering a blank that would pass for one.
+                    */}
+                    {why ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {`Why: ${why}`}
+                      </Typography>
+                    ) : entry.action === 'org.override' ? (
+                      <Typography variant="caption" color="warning.main">
+                        {'Why: not recorded — this override predates the ' +
+                          'required reason.'}
+                      </Typography>
+                    ) : null}
                     {expanded === entry.$id ? (
                       <Typography
                         component="pre"
@@ -204,14 +243,20 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                         }}
                       >
                         {JSON.stringify(
-                          { before: entry.before, after: entry.after },
+                          {
+                            reason: entry.reason ?? null,
+                            note: entry.note ?? null,
+                            before: entry.before,
+                            after: entry.after,
+                          },
                           null,
                           2,
                         )}
                       </Typography>
                     ) : null}
                   </Stack>
-                ))
+                  )
+                })
               )}
             </Stack>
           </CardDisplay>

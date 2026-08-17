@@ -310,9 +310,11 @@ rather than ignored:
   the webhook wrote. The Stripe session id is the bearer credential: it is
   unguessable, it is handed only to the buyer, and the lookup is scoped to the
   host that owns the order.
-* *"it would re-fire on a refresh"* — `transaction_id` is that same session id,
-  and GA4 de-duplicates purchases on it. A `sessionStorage` guard is the cheap
-  second layer, not the guarantee.
+* *"it would re-fire on a refresh"* — `transaction_id` is a deterministic id
+  for the money that moved (that same session id for a one-time order; the
+  opening **invoice** id for a subscription, see below), and GA4 de-duplicates
+  purchases on it. A `sessionStorage` guard is the cheap second layer, not the
+  guarantee.
 
 **Whose revenue the number is.** The merchant's. This is the inverse of the
 marketplace call (AGL-1639): there the property is ours and `value` is platform
@@ -343,21 +345,52 @@ session metadata, and the quantity and unit price from the metadata too — so
 `value`, `price` and `quantity` are all right without this event changing at
 all. It reads stored fields; the fix belonged under it.
 
-**No `shipping` param either**, and the reason has now changed twice. It began
-as a live defect: the webhook read two of `total_details`' three siblings and
-skipped `amount_shipping`, so every online order stored `shippingCents: 0` while
-the shipping the shopper paid sat inside `amount_total`. AGL-1698 fixed the
-storage — `computeCheckoutSessionTotals` passes it, and the stored parts sum to
-the stored total. It then stayed unsent because the figure was structurally
-zero: no Checkout Session we created declared `shipping_options`, so Stripe
-never offered a shipping choice.
+**A `shipping` param IS sent** (AGL-1722), and the asymmetry with `tax` above is
+deliberate. Do not make the two consistent with each other in either direction.
+`shipping` is a **component of the `value`** reported beside it — `value` is
+`totalCents - taxCents`, and the shipping the shopper paid is inside that
+number — so the param decomposes the value rather than contradicting it, and a
+merchant reads "of the $105 you sold, $10 was shipping" with nothing counted
+twice. `tax` is the opposite: `value` already excludes it, so a `tax` beside it
+would assert a relationship that does not hold and invite the subtraction that
+removes tax a second time.
+
+It took three changes to become sendable, and the reason for withholding it
+expired twice along the way. It began as a live defect: the webhook read two of
+`total_details`' three siblings and skipped `amount_shipping`, so every online
+order stored `shippingCents: 0` while the shipping the shopper paid sat inside
+`amount_total` — sending the param then would have asserted **free shipping on
+every order**. AGL-1698 fixed the storage: `computeCheckoutSessionTotals` passes
+it and the stored parts sum to the stored total. It stayed unsent because the
+figure was still structurally zero — no Checkout Session we created declared
+`shipping_options`, so Stripe never offered a shipping choice.
 
 AGL-1707 closed that: `cart-checkout.ts` declares the merchant's configured
-zones and rates as `shipping_options`, so `amount_shipping` is now a real number
-on any cart session for a merchant who set shipping up. The param is still not
-sent, but the remaining reason is only that plumbing `shippingCents` from the
-stored order out to the wire shape is unbuilt work rather than a truthfulness
-problem — it is tracked separately and is now worth doing.
+zones and rates as `shipping_options`, so `amount_shipping` is a real number on
+any cart session for a merchant who set shipping up. It was the RIGHT number
+only once AGL-1721 followed: AGL-1707 declared every zone's rates on a session
+that accepted an address anywhere, and Stripe charges whichever rate the
+shopper picks without comparing it to the address, so a shopper could report a
+domestic rate on an international parcel. `planCheckoutShipping` now pairs the
+rates with the countries the session will accept, which means `amount_shipping`
+is a rate that actually applies to the `shipping_details` sitting beside it —
+worth knowing before the two are ever reconciled. What was left was plumbing,
+and AGL-1722 built it — `shippingCents` rides `StorefrontPurchaseSource` from
+the stored order out to the wire shape, and `buildStorefrontPurchaseParams`
+emits `shipping: toAmount(shippingCents)`.
+
+The param is **always sent, including as 0**. A download ships nothing, a
+merchant who saved no rates charges nothing, and POS and draft orders resolve no
+shipping; on all of those `shipping: 0` is a true statement about that order
+rather than the old structural zero, and omitting it would leave the merchant's
+shipping column sparse for a reason GA cannot tell apart from "not tracked".
+Orders written before AGL-1698 do report `shipping: 0` where the shopper in fact
+paid shipping — unrecoverable, and it does not touch `value`, which comes off
+`totalCents` for exactly this kind of reason.
+
+The **shipping amount** crosses the wire; the **shipping address** never does.
+They sit next to each other on the stored order and `order-analytics.spec.ts`
+pins the projection's key list exhaustively so widening it stays a decision.
 
 AGL-1720 then closed the same gap on buy-now, which had declared neither
 `shipping_address_collection` nor `shipping_options` and so charged nothing
@@ -365,10 +398,20 @@ however many rates the merchant saved — the same merchant and product billing
 two different totals depending on which button the shopper pressed. Buy-now
 resolves through the same AGL-1707 translation, narrowed to physical one-time
 sales: a digital or service product ships nothing, and a subscription session
-is excluded because its webhook branch records no order to store the figure in.
+is excluded on a product question rather than a recording gap. The gap itself
+is closed — AGL-1732 gave the initial charge a home on the subscription
+document, `amount_shipping` included, and AGL-1743 records every paid invoice
+after it, reading `shipping_cost.amount_total` (an invoice has no
+`total_details`). What is unanswered is whether a rate editor written for
+one-time orders should express a rate re-charged every cycle at all, given
+Stripe bills a subscription's one-time line items on the first invoice only.
 So `amount_shipping` is now a real number on both storefront paths for a
 merchant who set shipping up, and structurally 0 only for one who did not.
-Draft orders and POS still resolve no shipping.
+Draft orders and POS still resolve no shipping. Both paths, and the subscription
+invoice path, reach GA through the same reducer: `toStorefrontPurchaseSource`
+reads `totals.shippingCents` whatever wrote it — `total_details.amount_shipping`
+on a session, `shipping_cost.amount_total` on an invoice, which has no
+`total_details`.
 
 `value` still comes off `totalCents`, and deliberately so. Deriving it from the
 stored parts would have **dropped that shipping revenue entirely** — the same
@@ -379,6 +422,63 @@ number verbatim and reconciles by construction, while `itemsCents` is priced
 from the host's product docs and a price edit mid-session would diverge.
 `purchase-analytics.spec.ts` still pins the decomposition, and
 `commerce-orders.spec.ts` now pins the reconciliation.
+
+#### A storefront SUBSCRIPTION sale reports its first payment, once (AGL-1746)
+
+A subscription writes no order document — deliberately, on the evidence
+gathered in AGL-1732 — so `/api/commerce/order-analytics` looked up an order
+that would never exist and 404'd forever. The merchant's property therefore
+showed traffic and `begin_checkout` on the subscription product and then no
+`purchase` at all, which does not read as an unmeasured path: it reads as a
+**100% checkout abandonment rate**, authoritatively.
+
+The route now falls back from the missing order to the subscription that
+session created (`subscriptions` where `checkoutSessionId ==` the session id)
+and answers from that subscription's **opening invoice** — the
+`subscription_create` one AGL-1743 records beneath it. Both reads are
+single-field equality queries with `limit(1)`, served by Firestore's automatic
+single-field indexes; there is no composite index here to create.
+
+**The invoice, not the subscription document, because of the id.** The invoice
+id is Stripe's own id for the money that moved, it is unique per cycle, and it
+is stable — the same sale resolves to the same invoice on every poll, so a
+shopper who refreshes the return page cannot produce a second `purchase` under
+a different id. Its `lineItems` and `totals` were built by
+`computeSubscriptionInvoiceOrder`, which is the helper that knows **an invoice
+is not a Checkout Session**: AGL-1743 found invoices carry no `total_details`
+at all, that tax is `tax` or `total_taxes` by API version, discount is
+`total_discount_amounts[]`, and the fee is a real `application_fee_amount`.
+Reading the stored figures inherits all of that rather than re-deriving it
+against the wrong shape.
+
+`value` needs no special case: it flows through the same
+`toStorefrontPurchaseSource` / `buildStorefrontPurchaseParams` pair, so the
+storefront rule above applies unchanged — the merchant is the seller, Aglyn's
+fee is **not** subtracted, tax is excluded, and no GA4 `tax` param is sent.
+
+**A trial answers 409, not a $0 purchase.** Nothing was charged, so there is no
+revenue to report, and the refusal is terminal rather than retryable because it
+will never become true for that invoice.
+
+**Renewals send nothing, and could not.** On the merits, `purchase` is what
+GA4's acquisition and ROAS reporting is terminated by, so firing one per cycle
+would credit a single acquisition to its campaign once a month and inflate
+return on ad spend by the subscriber's whole lifetime. But it does not come
+down to the merits: this sender is the shopper's browser, and a renewal months
+later has no browser in it. Reaching the merchant's property server-side would
+need a per-host Measurement Protocol API secret this product does not collect
+and has nowhere to store — the same conclusion decision 1 reached from the
+other direction. `ga4-measurement-protocol.ts` is not that channel: its single
+`GA4_MEASUREMENT_ID`/`GA4_API_SECRET` pair is **ours**, reporting our revenue.
+Row 1 of the decision table above still holds and is about that property, not
+this one. So the storefront reports the first payment and stops — mirroring
+AGL-1743's own refusal to re-count the opening invoice where the checkout
+session had already counted it.
+
+`order-analytics.spec.ts` pins each of these: the transaction id is the invoice
+id and not the session id, a renewal invoice is never what answers, the two
+webhook races stay retryable, and the projection still withholds the
+subscriber's email, name and our fee.
 
 ### 2. Consent-blocked means the event is gone, not queued
 

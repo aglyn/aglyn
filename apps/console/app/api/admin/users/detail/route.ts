@@ -222,6 +222,11 @@ async function handler(request: Request): Promise<Response> {
         actorUid: doc.get('actorUid') ?? null,
         action: doc.get('action') ?? null,
         target: doc.get('target') ?? null,
+        // WHY (AGL-1652). An `org.override` performed BY this account is in
+        // the `byActor` half above, so dropping the reason here would hide
+        // it on one of the three surfaces the act is read from.
+        reason: doc.get('reason') ?? null,
+        note: doc.get('note') ?? null,
         at: doc.get('at')?.toDate?.()?.toISOString() ?? null,
       }))
       .sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')))

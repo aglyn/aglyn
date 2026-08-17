@@ -358,9 +358,26 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                 >
                   <Stack sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" noWrap>
+                      {/*
+                       * The amount (AGL-1732). This row named the product and
+                       * the renewal date and stopped, and no other console
+                       * surface carried the figure either — orders, analytics
+                       * and the CSV all read `orders`, which a subscription
+                       * sale does not create. "What is this subscriber paying
+                       * me?" was answerable only in Stripe. Subscriptions
+                       * written before that fix have no `totals`, so the
+                       * amount is omitted rather than shown as $0.00.
+                       */}
                       {productNames[subscription.productId] ??
                         subscription.productId ??
                         'Subscription'}
+                      {subscription.totals?.totalCents != null
+                        ? ` · ${usd(Number(subscription.totals.totalCents) || 0)}${
+                            subscription.interval
+                              ? `/${subscription.interval}`
+                              : ''
+                          }`
+                        : ''}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {subscription.currentPeriodEndMs
@@ -368,6 +385,22 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
                             Number(subscription.currentPeriodEndMs),
                           ).toLocaleDateString()}`
                         : '—'}
+                      {/*
+                       * What this subscriber has actually paid, across every
+                       * cycle (AGL-1743). Renewals used to be invisible to
+                       * Aglyn entirely — `invoice.payment_succeeded` was
+                       * unhandled — so a subscriber in month 12 read exactly
+                       * like one in month 1. Omitted, not shown as 0, for
+                       * subscriptions whose cycles all predate the fix: those
+                       * invoices are recoverable only from Stripe.
+                       */}
+                      {Number(subscription.invoicesCount ?? 0) > 0
+                        ? ` · ${usd(Number(subscription.paidCents) || 0)} paid over ${
+                            Number(subscription.invoicesCount) === 1
+                              ? '1 invoice'
+                              : `${Number(subscription.invoicesCount)} invoices`
+                          }`
+                        : ''}
                     </Typography>
                   </Stack>
                   <Chip

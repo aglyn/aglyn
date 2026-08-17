@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   sendGa4Purchase,
   notifyOrgAdmins,
+  updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
@@ -86,6 +87,60 @@ function subscriptionCoupon(object: any): {
     promotionCodeId:
       typeof promo === 'string' ? promo : (promo?.id ?? null),
   }
+}
+
+/**
+ * Refuse-and-record (AGL-1763): a subscription whose `metadata.orgId` names no
+ * workspace we hold.
+ *
+ * Refusing is the whole point — the alternative is what this fixed. A merge-set
+ * against a missing `orgs/{orgId}` CREATES it, holding a paid `plan` and
+ * nothing else: no owner, no members, no slug, invisible to every console list
+ * that filters on them, and yet counted by the MRR roll-up and honoured by
+ * every feature gate, all of which read `org.plan`.
+ *
+ * But a silent refusal is the AGL-1760 failure shape in the other direction:
+ * the subscription is REAL and billing on Stripe's side, so dropping the event
+ * without a trace leaves a customer paying for a workspace that does not
+ * exist, with nothing anywhere to reconcile against. So the event is recorded
+ * where staff already look — `adminAudit`, the append-only surface the audit
+ * page (AGL-203) lists newest-first — with a system actor, the form
+ * `reap-plugin-artifacts` and `sso-jit` already write from non-staff paths.
+ *
+ * The caller still answers 200. This is a PERMANENT condition, not a transient
+ * one: the org id is stamped at checkout, which requires an existing org, so a
+ * miss means the workspace was erased or the metadata is wrong — and neither
+ * heals on a redelivery. A 500 would un-claim the event (AGL-498) and buy
+ * several days of identical retries that all end here, then silence.
+ *
+ * Best-effort, like every other write on this path: the `console.error` is the
+ * floor, and a failed audit append must not 500 a billing webhook.
+ */
+async function recordOrphanedSubscription(entry: {
+  orgId: string
+  reason: 'no-such-org' | 'erased-mid-handler'
+  eventType: string
+  subscriptionId: string | null
+  stripeCustomerId: string | null
+  plan: string
+}): Promise<void> {
+  console.error(
+    '[billing/webhook] subscription metadata names no workspace',
+    entry,
+  )
+  await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('adminAudit')
+    .add({
+      actorUid: 'system:stripe-webhook',
+      action: 'billing.orphanedSubscription',
+      target: `orgs/${entry.orgId}`,
+      before: null,
+      after: { ...entry },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
 }
 
 /**
@@ -162,7 +217,38 @@ async function handler(request: Request): Promise<Response> {
       type === 'customer.subscription.deleted'
     ) {
       const orgId = object?.metadata?.orgId
-      if (orgId) {
+      const orgRef = orgId
+        ? firebaseAdmin
+            .app()
+            .firestore()
+            .collection('orgs')
+            .doc(String(orgId))
+        : null
+      // THE EXISTENCE CHECK (AGL-1763), and it is ONE read, hoisted rather
+      // than added. `metadata.orgId` is caller data: Stripe echoes back
+      // whatever checkout stamped, and a dashboard-edited, hand-migrated or
+      // stale subscription can name a workspace that is gone or never was.
+      // `if (orgId)` only proved the string was non-empty.
+      //
+      // The block below already read this document twice — for the existing
+      // `discount` and for the customer-identity stamp — each conditionally,
+      // neither checking `.exists`. Both now come off this snapshot, so a
+      // subscription event costs at most one org read where it used to cost up
+      // to two. Reading before the writes is safe because nothing here touches
+      // `name`, `slug` or `discount`.
+      const orgSnapshot = orgRef ? await orgRef.get() : null
+      if (orgRef && !orgSnapshot?.exists) {
+        await recordOrphanedSubscription({
+          orgId: String(orgId),
+          reason: 'no-such-org',
+          eventType: type,
+          subscriptionId: object?.id ? String(object.id) : null,
+          stripeCustomerId:
+            typeof object?.customer === 'string' ? object.customer : null,
+          plan: String(object?.metadata?.plan ?? ''),
+        })
+      }
+      if (orgRef && orgSnapshot?.exists) {
         const canceled = type === 'customer.subscription.deleted'
         const items: any[] = object?.items?.data ?? []
         // With add-on items on the subscription (AGL-526), items[0] is no
@@ -176,11 +262,6 @@ async function handler(request: Request): Promise<Response> {
         const plan = canceled
           ? 'free'
           : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
-        const orgRef = firebaseAdmin
-          .app()
-          .firestore()
-          .collection('orgs')
-          .doc(String(orgId))
         // Discount mirror (AGL-1105): reflect the coupon on the subscription
         // onto org.discount so the net-of-discount billing figure is right
         // whether the discount was staff-applied or self-serve-redeemed at
@@ -189,25 +270,34 @@ async function handler(request: Request): Promise<Response> {
         // zeros). Staff-set `appliedBy`/`reason` survive a resync — Stripe
         // does not carry them — so the audit context is not overwritten by
         // the periodic subscription.updated events.
+        //
+        // Written as DOTTED FIELD PATHS rather than a nested `discount` map,
+        // because the write below is now an `update()`. A merge-set accepts a
+        // delete sentinel at any depth; `update()` accepts one only at the top
+        // level of its patch (`@google-cloud/firestore` validates with
+        // `allowDeletes: 'root'`, and a nested one throws INVALID_ARGUMENT — a
+        // 500, not a silent miss). A dotted path IS top-level, and it merges
+        // field-by-field exactly as the nested map under `{ merge: true }`
+        // did, so the staff-set keys still survive a resync.
         const del = firebaseAdmin.firestore.FieldValue.delete()
-        let discountField: unknown = del
+        let discountUpdate: Record<string, unknown> = { discount: del }
         const found = canceled ? null : subscriptionCoupon(object)
         if (found) {
-          const existing = (await orgRef.get()).get('discount') ?? {}
+          const existing = (orgSnapshot.get('discount') as any) ?? {}
           const { coupon, promotionCodeId } = found
-          discountField = {
-            couponId: String(coupon.id),
-            percentOff:
+          discountUpdate = {
+            'discount.couponId': String(coupon.id),
+            'discount.percentOff':
               coupon.percent_off != null ? Number(coupon.percent_off) : del,
-            amountOffUsd:
+            'discount.amountOffUsd':
               coupon.amount_off != null ? Number(coupon.amount_off) / 100 : del,
-            code: coupon.name ? String(coupon.name) : del,
-            promotionCodeId: promotionCodeId ?? del,
-            appliedBy: existing.appliedBy ?? 'system',
-            appliedAt:
+            'discount.code': coupon.name ? String(coupon.name) : del,
+            'discount.promotionCodeId': promotionCodeId ?? del,
+            'discount.appliedBy': existing.appliedBy ?? 'system',
+            'discount.appliedAt':
               existing.appliedAt ??
               firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-            ...(existing.reason ? { reason: existing.reason } : {}),
+            ...(existing.reason ? { 'discount.reason': existing.reason } : {}),
           }
         }
         // Custom enterprise price mirror (AGL-1110): an enterprise deal bills
@@ -236,29 +326,59 @@ async function handler(request: Request): Promise<Response> {
             : ((object?.customer as { id?: string } | null)?.id ?? null)
         // What stays on the org doc: the plan every console surface gates
         // features on, and the discount the MRR roll-up reads.
-        await orgRef.set({ plan, discount: discountField }, { merge: true })
+        //
+        // SECOND LINE OF DEFENCE (AGL-1763), for the window the read above
+        // cannot close: a GDPR erasure landing between the check and the
+        // write. `update()` rejects on a missing document where a merge-set
+        // creates one, so the phantom is unreachable by any argument, race
+        // included. `updateExisting` distinguishes that rejection from every
+        // other failure — a `.catch(() => …)` here would read a permission or
+        // transport error as "the org is gone" and record a lie.
+        const mirrored = await updateExisting(orgRef, { plan, ...discountUpdate })
+        if (!mirrored) {
+          await recordOrphanedSubscription({
+            orgId: String(orgId),
+            reason: 'erased-mid-handler',
+            eventType: type,
+            subscriptionId: object?.id ? String(object.id) : null,
+            stripeCustomerId,
+            plan: String(plan),
+          })
+        }
         // What moved behind `canManageOrg()` (AGL-1028). This also mirrors a
         // bare `billingStatus` string back onto the org doc for the dunning
         // banner, and maintains the customer -> org index the
         // `invoice.payment_failed` branch below resolves through.
-        await writeOrgBilling(String(orgId), {
-          stripeCustomerId,
-          // Add-on quantities sync from the items (AGL-527): Stripe is
-          // the source of truth; explicit zeros make removals, dashboard
-          // edits, and full cancellations all converge.
-          seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
-          subscription: {
-            status: canceled ? 'canceled' : (object?.status ?? 'active'),
-            priceId: priceId ?? null,
-            // Billing interval (AGL-532): the Billing page's monthly/
-            // annual toggle initializes from this mirror.
-            interval: isYearly ? 'year' : 'month',
-            customMonthlyUsd,
-            currentPeriodEnd: object?.current_period_end
-              ? new Date(object.current_period_end * 1000)
-              : null,
-          },
-        } as never)
+        //
+        // Gated on the mirror having landed, because these are the only other
+        // FIRESTORE writes in this block and both re-open the hole otherwise:
+        // `writeOrgBilling` merge-sets `billingStatus` straight back onto the
+        // org doc, and it stamps `stripeCustomers/{customerId} -> orgId`,
+        // which is what the invoice branch below resolves through — so an
+        // index entry pointing at an erased workspace would keep sending every
+        // later invoice event back to it. The two Stripe-side steps that
+        // follow write nothing here and are left to run: they are best-effort
+        // and self-healing by contract.
+        if (mirrored) {
+          await writeOrgBilling(String(orgId), {
+            stripeCustomerId,
+            // Add-on quantities sync from the items (AGL-527): Stripe is
+            // the source of truth; explicit zeros make removals, dashboard
+            // edits, and full cancellations all converge.
+            seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
+            subscription: {
+              status: canceled ? 'canceled' : (object?.status ?? 'active'),
+              priceId: priceId ?? null,
+              // Billing interval (AGL-532): the Billing page's monthly/
+              // annual toggle initializes from this mirror.
+              interval: isYearly ? 'year' : 'month',
+              customMonthlyUsd,
+              currentPeriodEnd: object?.current_period_end
+                ? new Date(object.current_period_end * 1000)
+                : null,
+            },
+          } as never)
+        }
 
         // Back-fill the metered usage item (AGL-1352).
         //
@@ -322,7 +442,9 @@ async function handler(request: Request): Promise<Response> {
         // whole event and the mirrors above would be re-applied for nothing.
         if (stripeCustomerId && process.env.STRIPE_SECRET_KEY) {
           try {
-            const orgSnapshot = await orgRef.get()
+            // Reads off the hoisted snapshot (AGL-1763) rather than a second
+            // get. Nothing written above touches `name` or `slug`, so the
+            // values are the same ones this read here.
             const identity = stripeCustomerIdentityParams({
               orgId: String(orgId),
               name: orgSnapshot.get('name') as string | undefined,

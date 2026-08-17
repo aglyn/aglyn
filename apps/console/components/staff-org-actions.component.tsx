@@ -19,9 +19,15 @@
 import {
   isLockdownReasonCode,
   LOCKDOWN_REASON_CODES,
+  normalizeOrgOverrideReason,
+  ORG_OVERRIDE_NOTE_MAX,
+  ORG_OVERRIDE_REASON_CODES,
+  ORG_OVERRIDE_REASON_LABELS,
+  orgOverrideReasonNeedsNote,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   RELEASE_FLAGS,
+  type OrgOverrideReasonCode,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -39,11 +45,10 @@ import {
   Typography,
 } from '@mui/material'
 import {
-  addDoc,
   collection,
   deleteField,
   doc,
-  setDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -176,10 +181,41 @@ export const overrideCount = (org: any): number =>
  * (AGL-201/202/206) so the org DETAIL page can carry them too (AGL-939)
  * without staff bouncing back to the list to act.
  *
- * Override and erasure write the org doc through the scoped Firestore rules
- * (the server-side gate: super-staff for erasure keys, billing-staff for
- * plan and entitlements — a non-staff caller is denied by the rules, not by
- * this UI) and log an `adminAudit` entry with the actor uid.
+ * OVERRIDE IS A ROUTE (AGL-1786): `POST /api/admin/org-override`, which
+ * validates the reason and commits the org document and its `adminAudit` row
+ * with the Admin SDK in one batch. This component posts the operator's
+ * INTENT — the plan, and only the quotas/features/release flags explicitly
+ * forced — and never builds the Firestore payload: `deleteField()`, the
+ * sentinel "inherit" needs (AGL-1109), has no JSON form, so a serialised one
+ * would arrive as `{}` and quietly restore the very no-op that sentinel
+ * exists to prevent. Absence is the inherit signal, and the route expands it
+ * against the same registries rendered here.
+ *
+ * That move is what makes the REASON (AGL-1652) a boundary rather than a
+ * dialog gate. `adminAudit` validates no shape at all
+ * (`allow create: if isStaff()`), and policing one action's field in the
+ * rules would imply the others are enforced when they are not — so before
+ * this, a staff session driving Firestore directly could change a fee
+ * percentage and write no row at all. `normalizeOrgOverrideReason` still
+ * runs here so Save can be disabled with a reason the operator can act on;
+ * the route runs the same predicate, and the route is the one that decides.
+ *
+ * ATOMICITY IS KEPT (AGL-1784), not given back: the two documents commit
+ * together or neither lands, now in the route's `firestore.batch()`. What a
+ * route cannot inherit is the client batch's other guarantee — a rejected
+ * commit PROVED nothing was written, and a request that dies in the network
+ * proves nothing at all. So the route stamps every response it produces with
+ * `written`, and `handleSave` claims "unchanged" only on `written: false`;
+ * a transport failure or a gateway error page is reported as UNKNOWN. That
+ * distinction is the whole AGL-1784 lesson: the harm was never the failed
+ * write, it was the retry a wrong "nothing happened" invited.
+ *
+ * ERASURE IS STILL A CLIENT BATCH (AGL-1784), deliberately: it writes one
+ * boolean the rules already gate on super staff, it is visible on the page
+ * and reversible, and the destructive step is a separate 7-day-hold job. It
+ * is the last client writer of a staff key — see AGL-1786 for the decision
+ * to leave it. Anything added to that handler belongs in the same batch: a
+ * write appended after `commit()` reopens the gap it closed.
  *
  * Suspension is DIFFERENT (AGL-1505): it goes through the lockdown core —
  * `POST /api/admin/lockdown { scope: 'org' }` — never a direct Firestore
@@ -215,8 +251,23 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
     quotas: Record<string, string>
     flags: Record<string, '' | 'on' | 'off'>
     releaseFlags: Record<string, '' | 'on' | 'off'>
-    before: any
+    /**
+     * WHY (AGL-1652). Starts EMPTY on every open, deliberately: a select
+     * that opened on a valid default would be satisfied by not touching it,
+     * and a reason nobody chose is the same empty record with a code on it.
+     */
+    reason: '' | OrgOverrideReasonCode
+    /** Free-text rationale; required only for `other`. */
+    note: string
   } | null>(null)
+  /**
+   * The ONE gate — the same predicate a server-side check would use, so the
+   * disabled Save and the written row can never disagree about what counts
+   * as a reason.
+   */
+  const overrideReason = editor
+    ? normalizeOrgOverrideReason(editor.reason, editor.note)
+    : null
 
   // Suspension (AGL-202, rewired by AGL-1505): reversible, but NOT a flag
   // write — the lockdown core behind /api/admin/lockdown does the org doc,
@@ -308,7 +359,12 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await setDoc(
+      // ONE atomic commit (AGL-1784) — the flag and its audit row, or
+      // neither. Sequential awaits meant a failure on the second left the
+      // org flagged with nothing recording who flagged it, while the catch
+      // below told the operator the write had failed.
+      const batch = writeBatch(firestore)
+      batch.set(
         doc(firestore, 'orgs', org.$id),
         {
           erasureRequestedAt: requesting ? Timestamp.now() : deleteField(),
@@ -316,7 +372,9 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         },
         { merge: true },
       )
-      await addDoc(collection(firestore, 'adminAudit'), {
+      // `doc(collection(...))` is the client-side auto-id `addDoc` would have
+      // generated; a batch needs the reference up front.
+      batch.set(doc(collection(firestore, 'adminAudit')), {
         actorUid: (user as any)?.uid ?? 'unknown',
         action: requesting ? 'org.erasureRequested' : 'org.erasureCanceled',
         target: `orgs/${org.$id}`,
@@ -324,35 +382,47 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         after: { erasureRequested: requesting },
         at: Timestamp.now(),
       })
-      // Acknowledge to the owner at request time (AGL-768 follow-up). Fire-
-      // and-forget: the request already succeeded, and the endpoint is
-      // best-effort. The completion confirmation is sent later by
-      // run-erasures.
-      if (requesting) {
+      await batch.commit()
+    } catch (error) {
+      console.error(error)
+      // Says what actually happened (AGL-1784). The batch is all-or-nothing
+      // and this `try` holds NOTHING ELSE, so reaching here means the server
+      // refused it and the organization is exactly as it was — which is what
+      // makes a retry safe to suggest.
+      enqueueSnackbar(
+        'Nothing was written — the erasure flag and its audit row commit ' +
+          'together, so the request is unchanged. Safe to retry.',
+        { variant: 'error', allowDuplicate: true },
+      )
+      return
+    }
+    // Committed. Everything below is after the fact and deliberately OUTSIDE
+    // the try: a token refresh or a parent re-read failing here would have
+    // told the operator nothing was written, about a write that landed.
+    //
+    // Acknowledge to the owner at request time (AGL-768 follow-up). Fire-
+    // and-forget: the request already succeeded, and the endpoint is
+    // best-effort. The completion confirmation is sent later by run-erasures.
+    if (requesting) {
+      void (async () => {
         const idToken = await (user as any)?.getIdToken?.()
-        void fetch('/api/admin/erasure-request', {
+        await fetch('/api/admin/erasure-request', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           body: JSON.stringify({ orgId: org.$id }),
-        }).catch(() => undefined)
-      }
-      enqueueSnackbar(
-        requesting
-          ? 'Erasure requested — deletable via script after 7 days (audited)'
-          : 'Erasure request canceled (audited)',
-        { variant: 'success', persist: false },
-      )
-      onChanged()
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('An error has occurred', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
+        })
+      })().catch(() => undefined)
     }
+    enqueueSnackbar(
+      requesting
+        ? 'Erasure requested — deletable via script after 7 days (audited)'
+        : 'Erasure request canceled (audited)',
+      { variant: 'success', persist: false },
+    )
+    onChanged()
   }, [org, confirm, firestore, user, enqueueSnackbar, onChanged])
 
   const handleOverrideOpen = useCallback(() => {
@@ -382,128 +452,164 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
       quotas,
       flags,
       releaseFlags,
-      before: {
-        plan: org.plan ?? null,
-        entitlements: org.entitlements ?? null,
-        releaseFlags: org.releaseFlags ?? null,
-      },
+      // Never carried over from the previous override — the reason belongs
+      // to THIS act, and a pre-filled one would be inherited, not given.
+      reason: '',
+      note: '',
+      // No `before` snapshot is carried any more (AGL-1786): the route reads
+      // it from the live document at write time. A snapshot taken when the
+      // dialog opened is exactly the stale `before` AGL-1784 was about.
     })
   }, [org])
 
   const handleSave = useCallback(async () => {
     if (!editor) return
+    // Checked here too, though the GATE now lives in the route (AGL-1786):
+    // this saves a round trip and gives a message about the field the
+    // operator is looking at. `/api/admin/org-override` refuses the same
+    // request with the same predicate, so a caller that skips the dialog
+    // gets the same answer.
+    const reason = normalizeOrgOverrideReason(editor.reason, editor.note)
+    if (!reason) {
+      enqueueSnackbar(
+        orgOverrideReasonNeedsNote(editor.reason as OrgOverrideReasonCode)
+          ? 'Say what "other" means — the code alone records nothing.'
+          : 'Pick a reason. Overrides change what a customer is billed ' +
+              'against, and the audit row cannot be back-filled later.',
+        { variant: 'warning', allowDuplicate: true },
+      )
+      return
+    }
     const plan = editor.plan as OrgPlan | ''
-    // Full override build (AGL-201): only explicit entries persist —
-    // empty quota fields and 'inherit' flags fall back to plan defaults.
-    const entitlements: Record<string, unknown> = {}
+    // WHAT THE WIRE CARRIES IS INTENT, NOT A FIRESTORE PAYLOAD (AGL-1786).
+    //
+    // "Inherit" has to DELETE the key rather than omit it (AGL-1109): the
+    // org write is `{ merge: true }`, and a merge writes nested maps key by
+    // key, so a `features` map that simply left out an inherited flag
+    // changed nothing — the stored `true` survived and the override could
+    // never be cleared. `deleteField()` is the sentinel a merge acts on, and
+    // it HAS NO JSON FORM: posting it would arrive as `{}` and reinstate
+    // exactly that no-op, silently.
+    //
+    // So only the EXPLICIT overrides go over the wire, and absence is the
+    // inherit signal. The route expands it against the same registries this
+    // dialog renders from and mints `FieldValue.delete()` on the side that
+    // can hold one.
+    const quotas: Record<string, number> = {}
     for (const field of QUOTA_FIELDS) {
       const raw = (editor.quotas[field.key] ?? '').trim()
       if (raw === '') continue
       const value = Number(raw)
       if (Number.isFinite(value) && value >= 0) {
-        entitlements[field.key] = value
+        quotas[field.key] = value
       }
     }
-    // "Inherit" has to DELETE the key, not omit it (AGL-1109).
-    //
-    // The write below is `{ merge: true }`, and a merge writes nested maps by
-    // key rather than replacing them. So a `features` map that simply left out
-    // an inherited flag changed nothing: the stored `true` survived, the org
-    // kept the feature, and the override count stayed put. Only "Force off"
-    // appeared to work, because writing an explicit `false` is a change a
-    // merge can see. That made a clean revert impossible — you could turn an
-    // override off, but never remove it.
-    //
-    // `deleteField()` is the sentinel a merge does act on.
-    const features: Record<string, boolean | ReturnType<typeof deleteField>> = {}
-    // Tracked separately from `features`, which now contains delete sentinels
-    // and can therefore be non-empty while expressing no override at all.
-    const explicitFeatures: Record<string, boolean> = {}
+    const features: Record<string, boolean> = {}
     for (const key of FLAG_FIELDS) {
       const state = editor.flags[key] ?? ''
-      if (state === 'on') {
-        features[key] = true
-        explicitFeatures[key] = true
-      } else if (state === 'off') {
-        features[key] = false
-        explicitFeatures[key] = false
-      } else {
-        features[key] = deleteField()
-      }
+      if (state === 'on') features[key] = true
+      else if (state === 'off') features[key] = false
     }
-    // Whether anything is actually overridden — quotas, or a flag forced
-    // either way. Deletes do not count, or clearing the last override would
-    // leave an empty `entitlements` map behind instead of removing it.
-    const hasOverrides =
-      Object.keys(entitlements).length > 0 ||
-      Object.keys(explicitFeatures).length > 0
-    if (hasOverrides) entitlements['features'] = features
-    // Release-flag overrides (AGL-1635) use the same inherit/on/off contract
-    // and the same `deleteField()` sentinel as the features above, for the
-    // same AGL-1109 reason: this write is `{ merge: true }`, so an inherited
-    // flag that is merely omitted keeps whatever was stored. "Inherit" has
-    // to DELETE.
-    const releaseFlags: Record<
-      string,
-      boolean | ReturnType<typeof deleteField>
-    > = {}
-    const explicitReleaseFlags: Record<string, boolean> = {}
+    // Release-flag overrides (AGL-1635) ride the same inherit/on/off
+    // contract, and are super-staff-only — enforced by the route, which is
+    // where the Firestore rules' own split now has to be restated.
+    const releaseFlags: Record<string, boolean> = {}
     for (const field of RELEASE_FLAG_FIELDS) {
       const state = editor.releaseFlags[field.key] ?? ''
-      if (state === 'on') {
-        releaseFlags[field.key] = true
-        explicitReleaseFlags[field.key] = true
-      } else if (state === 'off') {
-        releaseFlags[field.key] = false
-        explicitReleaseFlags[field.key] = false
-      } else {
-        releaseFlags[field.key] = deleteField()
-      }
+      if (state === 'on') releaseFlags[field.key] = true
+      else if (state === 'off') releaseFlags[field.key] = false
     }
-    const hasReleaseOverrides = Object.keys(explicitReleaseFlags).length > 0
-    const after = {
-      plan: plan || null,
-      // The audit row records the resulting STATE, never the sentinels — a
-      // `deleteField()` does not serialise to anything a reader can act on.
-      entitlements: hasOverrides
-        ? { ...entitlements, features: explicitFeatures }
-        : null,
-      releaseFlags: hasReleaseOverrides ? explicitReleaseFlags : null,
-    }
+
+    // Refreshed BEFORE the request and outside its try, so a failed refresh
+    // is reported as what it is: nothing left the browser.
+    let idToken: string | undefined
     try {
-      await setDoc(
-        doc(firestore, 'orgs', editor.id),
-        {
-          plan: plan || deleteField(),
-          entitlements: hasOverrides ? entitlements : deleteField(),
-          releaseFlags: hasReleaseOverrides ? releaseFlags : deleteField(),
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true },
-      )
-      await addDoc(collection(firestore, 'adminAudit'), {
-        actorUid: (user as any)?.uid ?? 'unknown',
-        action: 'org.override',
-        target: `orgs/${editor.id}`,
-        before: editor.before ?? null,
-        after,
-        at: Timestamp.now(),
-      })
-      enqueueSnackbar('Organization updated (audited)', {
-        variant: 'success',
-        persist: false,
-      })
-      setEditor(null)
-      onChanged()
+      idToken = await (user as any)?.getIdToken?.()
     } catch (error) {
       console.error(error)
       enqueueSnackbar(
-        'Write failed — are the scoped Firestore rules deployed and is ' +
-          'your account staff?',
+        'Could not refresh your staff session, so nothing was sent — the ' +
+          'organization is unchanged. Safe to retry.',
         { variant: 'error', allowDuplicate: true },
       )
+      return
     }
-  }, [editor, firestore, user, enqueueSnackbar, onChanged])
+
+    // THE OVERRIDE IS A ROUTE (AGL-1786), like suspension (AGL-1505).
+    //
+    // It used to be a client `writeBatch` of the org doc plus its audit row
+    // — atomic since AGL-1784, and that property is kept: the route commits
+    // both documents in one Admin SDK batch. What the batch could not do is
+    // make the reason a BOUNDARY. `adminAudit` validates no shape at all, so
+    // the gate was the dialog, and a staff session driving Firestore
+    // directly could change a fee percentage with no row at all. A batch
+    // that is never issued is still atomic.
+    //
+    // WHAT THIS COSTS, stated plainly because AGL-1784 was about a message
+    // that lied: a rejected client commit proved nothing was written. A
+    // request that dies in the network does not. So the outcome is read from
+    // an explicit `written` flag the route puts on every response it
+    // produces, and anything else — a transport failure, a gateway error
+    // page — is reported as UNKNOWN rather than as safe to retry, because a
+    // blind retry is how the `before` on the eventual row stops describing
+    // the state the change was made against.
+    let response: Response
+    try {
+      response = await fetch('/api/admin/org-override', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId: editor.id,
+          plan: plan || null,
+          quotas,
+          features,
+          releaseFlags,
+          reason: reason.reason,
+          note: reason.note,
+        }),
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar(
+        'The request did not complete, so it is NOT known whether the ' +
+          'override was applied. Check the organization and /admin/audit ' +
+          'before saving again — a blind retry would record a before-state ' +
+          'that is already overridden.',
+        { variant: 'error', allowDuplicate: true },
+      )
+      return
+    }
+    const payload: any = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      // `written === false` is the route's own word, and the ONLY thing that
+      // licenses "unchanged". A 502 from a gateway, an HTML error page or
+      // anything else that never reached the handler carries no such field,
+      // and is reported as unknown.
+      enqueueSnackbar(
+        payload?.written === false
+          ? `Nothing was written — the organization is unchanged. Safe to ` +
+              `retry. ${payload?.error ?? `The request was refused (${response.status}).`}`
+          : 'The request failed and it is NOT known whether the override ' +
+              'was applied. Check the organization and /admin/audit before ' +
+              'saving again — a blind retry would record a before-state ' +
+              'that is already overridden.',
+        { variant: 'error', allowDuplicate: true },
+      )
+      return
+    }
+    // Applied — the dialog closes and the owner re-reads. Outside the branch
+    // above on purpose: a parent re-read that threw must never be reported
+    // as an override that never landed.
+    enqueueSnackbar('Organization updated (audited)', {
+      variant: 'success',
+      persist: false,
+    })
+    setEditor(null)
+    onChanged()
+  }, [editor, user, enqueueSnackbar, onChanged])
 
   return (
     <>
@@ -549,6 +655,61 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
             {editor?.id}
           </Typography>
+          {/*
+            WHY comes FIRST (AGL-1652), before the fields it explains. A
+            reason asked after the change has been composed is a rubber
+            stamp; asked before, it is the framing of the decision.
+          */}
+          <TextField
+            select
+            required
+            size="small"
+            label="Reason"
+            value={editor?.reason ?? ''}
+            error={Boolean(editor) && !editor?.reason}
+            helperText={
+              'Written to the audit row beside the before/after. The row is ' +
+              'append-only — a reason not given now cannot be added later.'
+            }
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev
+                  ? { ...prev, reason: event.target.value as OrgOverrideReasonCode }
+                  : prev,
+              )
+            }
+          >
+            {ORG_OVERRIDE_REASON_CODES.map((code) => (
+              <MenuItem key={code} value={code}>
+                {ORG_OVERRIDE_REASON_LABELS[code]}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            multiline
+            minRows={2}
+            label={
+              editor?.reason &&
+              orgOverrideReasonNeedsNote(editor.reason as OrgOverrideReasonCode)
+                ? 'Note (required for "other")'
+                : 'Note (optional — the deal, ticket or thread)'
+            }
+            value={editor?.note ?? ''}
+            error={
+              Boolean(editor?.reason) &&
+              orgOverrideReasonNeedsNote(
+                editor?.reason as OrgOverrideReasonCode,
+              ) &&
+              !editor?.note.trim()
+            }
+            slotProps={{ htmlInput: { maxLength: ORG_OVERRIDE_NOTE_MAX } }}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, note: event.target.value } : prev,
+              )
+            }
+          />
           <TextField
             select
             size="small"
@@ -699,7 +860,12 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
-          <Button variant="contained" color="primary" onClick={handleSave}>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!overrideReason}
+            onClick={handleSave}
+          >
             {'Save (audited)'}
           </Button>
         </DialogActions>

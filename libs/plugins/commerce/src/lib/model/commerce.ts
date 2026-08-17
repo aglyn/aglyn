@@ -359,6 +359,44 @@ export function canPurchase(
   return Number(variant.inventory) >= quantity
 }
 
+/**
+ * Whether stock tracking MEANS anything on a product (AGL-1744).
+ *
+ * `canPurchase` above gates every checkout on stock, subscription sessions
+ * included, but nothing ever decrements for a subscription — not on the
+ * initial charge (the `commerce-subscription` webhook branch deliberately
+ * writes no order and touches no inventory, AGL-1732) and not on renewal
+ * (`invoice.payment_succeeded` is unhandled repo-wide, AGL-1743). So on a
+ * subscription-only product that gate is permanently satisfied: one unit of
+ * stock sells an unlimited number of subscriptions, and the count never
+ * moves however many boxes ship. The merchant set a number, the system
+ * checks it on every sale, and the number is never true.
+ *
+ * The honest split is subscription-ONLY vs `subscriptionOptional`, NOT
+ * physical vs digital:
+ *
+ *   - `subscriptionOptional` ("Both") products have a real one-time path —
+ *     the cart only ever builds `mode: 'payment'` sessions, and buy-now with
+ *     `billing: 'once'` records a plain order — and that path decrements
+ *     honestly. Withdrawing stock tracking there would delete a working
+ *     control and re-open the AGL-1711 oversell on the half that works.
+ *   - a PHYSICAL subscription box does consume a unit every cycle and
+ *     genuinely wants a per-renewal decrement, but that cannot be built
+ *     before AGL-1743 decides whether renewals are recorded at all. Until
+ *     then its count is no truer than a digital subscription's, so `type`
+ *     does not rescue it.
+ *
+ * This says nothing about what `canPurchase` returns — that is the gate for
+ * every other purchase path and is deliberately untouched. This is a console
+ * predicate: it stops the editor inviting a merchant to set a number the
+ * system will never keep true.
+ */
+export function stockTrackingApplies(
+  product: Pick<HostProduct, 'subscription' | 'subscriptionOptional'>,
+): boolean {
+  return !product.subscription || product.subscriptionOptional === true
+}
+
 /** Buyer's requested billing mode on a checkout POST (AGL-545). */
 export type CheckoutBillingChoice = 'once' | 'subscribe'
 

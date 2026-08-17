@@ -103,9 +103,9 @@ bisect a payload:
 
 ## Idempotency
 
-`POST /v1/datasets/{datasetId}/records` accepts an **`Idempotency-Key`** header. Send
-the same key to retry safely — if the original succeeded, the same record comes back
-instead of a duplicate:
+`POST` and `DELETE` on `/v1/datasets/{datasetId}/records` accept an
+**`Idempotency-Key`** header. Send the same key to retry safely — if the original
+succeeded, the same response comes back instead of a duplicate or a `404`:
 
 ```bash
 curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
@@ -117,10 +117,12 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 
 - A fresh create returns **`201`**; a replay of a key we've already seen returns
   **`200`** with the original record. Use the status to tell them apart.
-- Keys are scoped to the **dataset you post to**, and **never expire** — a key really
-  is single-use forever. Use a UUID per logical operation, and don't reuse one key
-  across datasets: the second dataset treats it as a separate operation and creates
-  its own record.
+- Keys are scoped to the **dataset you post to** and to the **operation**, and
+  **never expire** — a key really is single-use forever. Use a UUID per logical
+  operation, and don't reuse one key across datasets: the second dataset treats it as
+  a separate operation and creates its own record. Reusing one key for a create *and*
+  a delete is likewise two separate operations, so a delete never replays a create's
+  record.
 - The replay is the **original response**, replayed verbatim. It keeps working after
   the record has been edited or deleted — a retry never re-creates a record you have
   since removed.
@@ -131,5 +133,32 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 - A request that **fails** releases its key, so you can fix the cause and retry with
   the same one. A `400` never consumes a key at all.
 
-Other methods don't take the header: `PATCH` and `DELETE` are already idempotent by
-nature.
+### Deletes
+
+`DELETE` changes the same state twice over, but it doesn't answer the same way twice.
+Without a key, deleting a record that's already gone returns `404 not_found` — which
+is correct for a wrong id and misleading for a retry, because you can't tell the two
+apart. Send a key and the retry replays the original receipt instead:
+
+```bash
+curl -X DELETE https://app.aglyn.com/api/v1/datasets/ds_1/records/k3f9a1c7be \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Idempotency-Key: 7c1e0a92-…"
+```
+
+```json
+{ "id": "k3f9a1c7be", "object": "record", "deleted": true }
+```
+
+- The **first** call deletes and returns `200`. A retry **with the same key** returns
+  the same `200` body, whether or not the record still exists — so a response lost to
+  a timeout is safe to re-send.
+- A record that was **never there** still returns `404 not_found`, even with a key.
+  That's deliberate: a `204`-for-everything would hand you a success for a typo'd id
+  and take away the only signal that you're asking about the wrong record.
+- A `404` **releases** the key, so you can correct the id and retry with the same one.
+
+`PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
+over the stored ones, so the same body twice lands the same state *and* returns the
+same `200` record — idempotent in the response as well as the state. It answers `404`
+for a missing record, and that stays the right answer.

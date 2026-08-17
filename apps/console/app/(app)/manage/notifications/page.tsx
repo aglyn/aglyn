@@ -63,7 +63,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useNotificationAlertPrefs from '../../../../hooks/use-notification-prefs'
-import useHostSubdomains from '../../../../hooks/use-host-subdomains'
+import useHostIndexEntries from '../../../../hooks/use-host-index-entries'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import {
@@ -72,7 +72,10 @@ import {
   requestDesktopNotifications,
   showDesktopNotification,
 } from '../../../../utils/notification-alerts'
-import { normalizeNotificationLink } from '../../../../utils/notification-links'
+import {
+  normalizeNotificationLink,
+  resolveNotificationOrgSlug,
+} from '../../../../utils/notification-links'
 
 const PAGE_SIZE = 25
 
@@ -157,7 +160,10 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
-  const indexedSubdomains = useHostSubdomains(
+  // `hostIndex` carries the owning org alongside the subdomain, so a
+  // notification resolves its OWN workspace rather than the open one
+  // (AGL-1773).
+  const indexedHosts = useHostIndexEntries(
     useMemo(() => rows.map((row) => row.hostId), [rows]),
   )
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
@@ -274,16 +280,22 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     }
     const target = normalizeNotificationLink(notification.link, {
       // The notification's own org, not the one currently open (AGL-644).
-      orgSlug:
-        (notification.orgId
-          ? (orgs ?? []).find((org) => org.$id === notification.orgId)?.slug
-          : null) ?? orgSlug,
+      // Host notifications carry no `orgId` of their own before AGL-1773, so
+      // `hostIndex` answers for the whole stored backlog.
+      orgSlug: resolveNotificationOrgSlug(notification, {
+        slugForOrgId: (orgId) =>
+          (orgs ?? []).find((org) => org.$id === orgId)?.slug,
+        indexedOrgId: notification.hostId
+          ? indexedHosts.get(notification.hostId)?.orgId
+          : undefined,
+        currentOrgSlug: orgSlug,
+      }),
       hostId: notification.hostId,
       // `hosts` only covers the org currently open; hostIndex covers the
       // rest, so cross-org notifications resolve too (AGL-672).
       hostSubdomain: notification.hostId
         ? ((hosts ?? []).find((host) => host.$id === notification.hostId)
-            ?.subdomain ?? indexedSubdomains.get(notification.hostId))
+            ?.subdomain ?? indexedHosts.get(notification.hostId)?.subdomain)
         : undefined,
     })
     if (target) void router.push(target)

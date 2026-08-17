@@ -26,6 +26,43 @@ jobs:
 
       - run: npm ci
 
+      # cloud/functions is a SEPARATE npm package, not a workspace of the root
+      # one — the root package.json has no `workspaces` key and its postinstall
+      # is only patch-package, so the `npm ci` above installs nothing for it.
+      # tools/scripts/typecheck.mjs nonetheless walks cloud/functions/tsconfig
+      # (`cloud/` is in neither its SKIP nor its PRUNE list), so without this
+      # the typecheck step below fails with three TS2307s on firebase-functions
+      # subpaths — a missing-install artifact, not a source defect (AGL-1776).
+      # It goes unnoticed locally because every dev checkout has a nested
+      # install left over from a past `firebase deploy`.
+      #
+      # Installing is deliberately preferred over adding `cloud/` to that
+      # script's SKIP list: the Cloud Functions are a production surface, and
+      # skipping would silently drop them from the workspace's ONLY type gate
+      # to make a red go away.
+      - run: npm ci --prefix cloud/functions
+
+      # apps/docs is the SECOND such package, and it breaks a different step:
+      # `docs` is an nx project whose build target shells `docusaurus build`,
+      # so the `nx affected -t lint test build` at the bottom of this file
+      # fails with `sh: docusaurus: command not found` on a root-only install
+      # (AGL-1781). Same invisibility as above — every dev checkout has
+      # apps/docs/node_modules from a past docs build.
+      #
+      # It stays standalone rather than becoming an npm workspace, and that is
+      # not inertia: apps/docs/package.json pins React 18 and says in its own
+      # description that its node_modules are self-contained so they never
+      # collide with the root's React 19. Hoisting it is the one change that
+      # would break it. cloud/functions is standalone for its own reason —
+      # `firebase deploy` packs and uploads that directory as a self-contained
+      # package. A `workspaces` key would move both problems, not solve them.
+      #
+      # So the policy is: standalone packages are enumerated here, and the
+      # guard two steps below fails when a THIRD one lands without a line of
+      # its own — which is the part that stops this recurring, since neither
+      # of the first two was visible until CI (or a hand-run gate) hit it.
+      - run: npm ci --prefix apps/docs
+
       - uses: nrwl/nx-set-shas@v4
 
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
@@ -42,8 +79,10 @@ jobs:
       # the census itself measures production and lives in its own scheduled
       # workflow, because the regression it hunts arrives as authored content
       # with no commit and CI has nothing to be affected by. What CI can do is
-      # keep the detector honest: it must still report all 176 occurrences on
-      # a page that has them, rather than the 6 distinct rules emotion leaves.
+      # keep the detector honest: on a fixture built from the shape /pricing
+      # actually delivered it must report every occurrence — 164 in that
+      # fixture — rather than deduping to the single distinct rule emotion
+      # leaves, which is how the live 176 read as 6 and stayed invisible.
       - run: npm run test:retired-colours
       # The dev-loop disk preflight (AGL-1425). This one can FAIL a serve
       # target, so a bug in its threshold parsing breaks every dev server in
@@ -51,6 +90,42 @@ jobs:
       # CI, where free space is whatever the runner happens to have. Only the
       # pure decision half is tested, and that is the half that decides.
       - run: npm run test:disk-space
+      # Three more tools/ self-tests that ran in NO workflow at all until
+      # AGL-1778 — dark permanently, not for the 39 days nx-ci.yml itself was
+      # switched off, because nothing had ever referenced them. Same never-
+      # affected-scoped argument as every step above: tools/ is not an nx
+      # project, so `nx affected` cannot reach it however the graph moves.
+      #
+      # The clean-deploy-source guard decides what gets shipped, and the
+      # org-erase CLI decides what gets destroyed; both were guarding a path
+      # while themselves unguarded.
+      - run: npm run test:deploy-guard
+      - run: npm run test:erase-cli
+      # Also run in rules-drift.yml, which is where it produces signal today
+      # (this workflow is disabled_manually — AGL-1776). Kept here as well on
+      # purpose: the suite asserts, at the DECLARATION, that rules-drift.yml
+      # still invokes the checker and this self-test. Asserted only from
+      # inside rules-drift.yml that claim is circular — delete the step and
+      # the assertion stops running with it. Run from a second workflow it
+      # becomes a real check on the first.
+      - run: npm run test:rules-drift
+      # The standalone-install guard and its own self-test (AGL-1781): the two
+      # `npm ci --prefix` lines above are the whole of the policy, and nothing
+      # made them keep up with the tree. Both packages they cover produced a
+      # red that read as a source defect; a third would too. Cheap, pure node,
+      # and it runs BEFORE the heavy steps it protects.
+      - run: npm run test:standalone-installs
+      - run: npm run check:standalone-installs
+      #
+      # Deliberately NOT here: `npm run test:rules` (the Firestore/RTDB rules
+      # emulator matrix, tools/scripts/test-rules.sh). It shells out to
+      # `firebase emulators:exec --only firestore,database`, so it needs the
+      # emulator suite and a JVM rather than the pure node the steps above
+      # use. That is a real exclusion with a real reason, recorded here so
+      # the next audit does not have to re-derive it (AGL-1778) — the rules
+      # themselves are not left unguarded, because rules-drift.yml compares
+      # the LIVE ruleset against the promoted one on every rules push and
+      # daily.
 
       # apps/*/tsconfig.next.json are GENERATED from tsconfig.base.json, and
       # the typecheck above skips them by name — correctly, since they exist

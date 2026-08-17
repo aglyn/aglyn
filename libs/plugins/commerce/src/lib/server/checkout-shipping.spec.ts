@@ -145,6 +145,8 @@ interface Scenario {
   /** Seeded at `hosts/host-1/coupons/{couponCode}`. */
   coupon?: Record<string, any>
   billing?: string
+  /** What the shopper declared, exactly as it arrives over the wire. */
+  shippingCountry?: unknown
 }
 
 /** Seeds a host that can sell one 400g $30 physical product. */
@@ -179,6 +181,9 @@ async function runCheckout(scenario: Scenario = {}) {
       quantity: scenario.quantity ?? 1,
       ...(scenario.couponCode ? { couponCode: scenario.couponCode } : {}),
       ...(scenario.billing ? { billing: scenario.billing } : {}),
+      ...('shippingCountry' in scenario
+        ? { shippingCountry: scenario.shippingCountry }
+        : {}),
     },
     cookies: {},
     headers: { host: 'shop.example.com' },
@@ -212,6 +217,23 @@ function shippingOptions(body: URLSearchParams | null) {
 /** Every shipping-related key the handler emitted, sorted. */
 function shippingKeys(body: URLSearchParams | null) {
   return [...(body?.keys() ?? [])].filter((key) => key.includes('shipping'))
+}
+
+/** The countries the session will accept an address in, in emitted order. */
+function allowedCountries(body: URLSearchParams | null) {
+  const out: string[] = []
+  for (
+    let index = 0;
+    body?.has(`shipping_address_collection[allowed_countries][${index}]`);
+    index += 1
+  ) {
+    out.push(
+      String(
+        body.get(`shipping_address_collection[allowed_countries][${index}]`),
+      ),
+    )
+  }
+  return out
 }
 
 const shipping = {
@@ -282,11 +304,25 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
     }
   })
 
-  it('declares the merchant’s configured rates on the session', async () => {
-    const { result, body } = await runCheckout({ settings: { shipping } })
-    expect(result.status).toBe(200)
-    expect(shippingOptions(body)).toEqual([
+  it('declares the destination’s rate, and only that destination (AGL-1721)', async () => {
+    const us = await runCheckout({
+      settings: { shipping },
+      shippingCountry: 'US',
+    })
+    expect(us.result.status).toBe(200)
+    expect(shippingOptions(us.body)).toEqual([
       { name: 'Standard', amount: '799', currency: 'usd', type: 'fixed_amount' },
+    ])
+    // Stripe applies no shipping rate without somewhere to ship to, so the
+    // options are worthless without these keys — and it re-checks the rate
+    // against nothing, so a wider list here is the whole defect.
+    expect(allowedCountries(us.body)).toEqual(['US'])
+
+    const fr = await runCheckout({
+      settings: { shipping },
+      shippingCountry: 'FR',
+    })
+    expect(shippingOptions(fr.body)).toEqual([
       {
         name: 'International',
         amount: '2999',
@@ -294,17 +330,62 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
         type: 'fixed_amount',
       },
     ])
+    expect(allowedCountries(fr.body)).toEqual(['FR'])
   })
 
-  it('collects an address for the same six countries the cart does', async () => {
-    // Stripe applies no shipping rate without somewhere to ship to, so the
-    // options are worthless without these keys.
-    const { body } = await runCheckout({ settings: { shipping } })
-    expect(
-      ['0', '1', '2', '3', '4', '5'].map((index) =>
-        body?.get(`shipping_address_collection[allowed_countries][${index}]`),
-      ),
-    ).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+  it('refuses a buy-now whose rates differ by destination', async () => {
+    const { result, body } = await runCheckout({ settings: { shipping } })
+    expect(result.status).toBe(400)
+    expect(result.body).toMatchObject({ needsShippingCountry: true })
+    expect(body).toBeNull()
+  })
+
+  it('keeps all six countries when one rate serves them all', async () => {
+    // The single-'*'-zone merchant, whose union was exact all along. Asking
+    // this shopper anything would be a regression, and the buy-now path must
+    // agree with the cart's answer for the same settings document.
+    const { result, body } = await runCheckout({
+      settings: { shipping: byWeight },
+    })
+    expect(result.status).toBe(200)
+    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(shippingOptions(body)).toHaveLength(1)
+  })
+
+  it('refuses a destination this merchant does not serve', async () => {
+    const { result, body } = await runCheckout({
+      settings: {
+        shipping: {
+          zones: [{ id: 'us', name: 'United States', countries: ['US'] }],
+          rates: [
+            {
+              id: 'std',
+              zoneId: 'us',
+              name: 'Standard',
+              kind: 'flat',
+              amountCents: 799,
+            },
+          ],
+        },
+      },
+      shippingCountry: 'FR',
+    })
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toContain('France')
+    expect(body).toBeNull()
+  })
+
+  it('never narrows the address form on a product that ships nothing', async () => {
+    // A declared destination is about pricing a parcel. A digital product has
+    // none, so the country must not leak into the session as an address
+    // restriction — this path emits no shipping keys at all for one.
+    const { result, body } = await runCheckout({
+      settings: { shipping },
+      product: { type: 'digital' },
+      shippingCountry: 'US',
+    })
+    expect(result.status).toBe(200)
+    expect(shippingKeys(body)).toEqual([])
   })
 
   it('weighs the units bought, not one unit', async () => {
@@ -385,11 +466,12 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
     const { body } = await runCheckout({
       settings: { shipping },
       product: { type: undefined },
+      shippingCountry: 'US',
     })
     expect(shippingOptions(body).map((option) => option.name)).toEqual([
       'Standard',
-      'International',
     ])
+    expect(allowedCountries(body)).toEqual(['US'])
   })
 
   it('ships nothing on a subscription session', async () => {
@@ -413,12 +495,13 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
     const { body } = await runCheckout({
       settings: { shipping, tax: { mode: 'stripe' } },
       quantity: 2,
+      shippingCountry: 'US',
     })
     expect(body?.get('metadata[unitAmountCents]')).toBe('3000')
     expect(body?.get('metadata[quantity]')).toBe('2')
     expect(body?.get('metadata[taxCents]')).toBe('0')
     expect(body?.get('metadata[discountCents]')).toBe('0')
     expect(body?.get('automatic_tax[enabled]')).toBe('true')
-    expect(shippingOptions(body)).toHaveLength(2)
+    expect(shippingOptions(body)).toHaveLength(1)
   })
 })

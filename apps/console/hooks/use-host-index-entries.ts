@@ -21,8 +21,16 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
 
+/** The routing fields a stored notification link needs to be rewritten. */
+export interface HostIndexEntry {
+  subdomain: string
+  /** Owning org, mirrored from the host doc (AGL-233). */
+  orgId?: string
+}
+
 /**
- * Resolve `hostId → subdomain` for an arbitrary set of hosts (AGL-672).
+ * Resolve `hostId → { subdomain, orgId }` for an arbitrary set of hosts
+ * (AGL-672, AGL-1773).
  *
  * Notification links are stored as `/{hostDocId}/rest` and rewritten to
  * `/{orgSlug}/hosts/{subdomain}/rest` when followed. Resolving the subdomain
@@ -35,15 +43,26 @@ import firestoreOneShotRetry from '../utils/firestore-one-shot-retry'
  * `host-id-provider` uses it for cross-org redirects). So it resolves hosts in
  * every org the user can see, not just the open one.
  *
+ * It mirrors `orgId` too, and this used to return the subdomain alone — so the
+ * cross-org fix was half done (AGL-1773): the rewrite got the right subdomain
+ * and then keyed the org half off whichever workspace the reader had OPEN,
+ * producing `/{other-org}/hosts/{subdomain}/…`, which `HostGuard` 404s because
+ * it only resolves subdomains inside the current org. Returning the org with
+ * the subdomain repairs the whole stored backlog, not just links written from
+ * now on: a notification's `link` is frozen at write time, so fixing the
+ * emitters alone can never reach one that already exists.
+ *
  * Ids are fetched once and cached for the life of the component. Failures are
  * swallowed and simply leave the id unresolved — callers must degrade to the
  * stored link rather than to a wrong destination.
  */
-export function useHostSubdomains(
+export function useHostIndexEntries(
   hostIds: Array<string | undefined | null>,
-): Map<string, string> {
+): Map<string, HostIndexEntry> {
   const firestore = useFirestore()
-  const [resolved, setResolved] = useState<Map<string, string>>(new Map())
+  const [resolved, setResolved] = useState<Map<string, HostIndexEntry>>(
+    new Map(),
+  )
   // Ids already fetched — including ones that came back empty, so a host
   // without an index entry is not re-requested on every render.
   const attemptedRef = useRef<Set<string>>(new Set())
@@ -72,18 +91,25 @@ export function useHostSubdomains(
             'hostIndex',
           )
           const subdomain = snapshot.get('subdomain') as string | undefined
-          return subdomain ? ([id, subdomain] as const) : null
+          const orgId = snapshot.get('orgId') as string | undefined
+          // The subdomain is what makes an entry usable at all — an index
+          // row without one cannot be routed to, with or without an org.
+          return subdomain
+            ? ([id, { subdomain, ...(orgId ? { orgId } : {}) }] as const)
+            : null
         } catch {
           return null
         }
       }),
     ).then((entries) => {
       if (!active) return
-      const found = entries.filter(Boolean) as Array<readonly [string, string]>
+      const found = entries.filter(Boolean) as Array<
+        readonly [string, HostIndexEntry]
+      >
       if (!found.length) return
       setResolved((previous) => {
         const next = new Map(previous)
-        found.forEach(([id, subdomain]) => next.set(id, subdomain))
+        found.forEach(([id, entry]) => next.set(id, entry))
         return next
       })
     })
@@ -96,4 +122,4 @@ export function useHostSubdomains(
   return resolved
 }
 
-export default useHostSubdomains
+export default useHostIndexEntries

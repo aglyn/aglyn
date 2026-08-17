@@ -30,10 +30,72 @@ Firestore counter, so the cap is global.
 | `POST /api/forms/submit` | 10 / min per (site, IP) | Spam. The monthly plan quota is the hard cap, but burning a site's whole allowance *is* the damage — it shouldn't be the protection. |
 | `POST /api/orgs/create` | 3 / hour per uid AND 10 / hour per IP | Scripted org minting (AGL-1534). The AGL-1523 signup grace admits a brand-new unverified account, so each fresh account can create one org; the uid key catches a stuck or scripted client, the IP key catches a farm rotating accounts. A real person creates at most 2–3 workspaces in a burst, so 3/h/uid clears every human while an office NAT signing up a team still fits under 10/h/IP. |
 | `/api/v1/*` (customer REST API) | 120 / min per API key | The limit is **published** (AGL-1679). Not a secret to protect — a number customers plan against. See below. |
+| `/api/*` plugin dispatcher, **writes** | 120 / min per (site, IP) | Unbounded document creation in the *merchant's* Firestore (AGL-1770). See below. |
 
 Keys are compound on purpose. Unlock is keyed per *(screen, IP)* so a shared
 office NAT can't be locked out of a whole site by one person, while one IP
 still can't get a fresh budget for every screen it attacks.
+
+## The visitor-write limiter on the plugin dispatcher (AGL-1770)
+
+`apps/tenant/app/api/[...pluginApi]/route.ts` is the single chokepoint every
+plugin's visitor endpoints pass through — cart, checkout, reserve, reviews,
+newsletter, membership registration, bookings, A/B beacons — and it had **no
+rate limit of any kind**. The gates it did have each refuse something
+narrower: per-site enablement is skipped by an unresolvable `hostId`, the
+release gate only checks that the plugin is on, and `visitorWriteRefusal`
+refuses only a *paused or suspended* site. None of them bounds volume from a
+working, enabled site, which is every live merchant.
+
+AGL-1769 closed the *shape* of the unauthenticated cart write and was explicit
+that it did not bound the *quantity* — "id control never multiplied volume; it
+bought shape". This is the other half. The cost lands in the merchant's own
+Firestore: document count and storage on a tenant who did nothing wrong.
+
+Policy is pure and lives in `@aglyn/aglyn/server`
+(`app-utils/plugin-api-rate-limit.ts`); the durable half is
+`visitorWriteRateLimitRefusal` in `@aglyn/tenant-data-admin`, beside
+`visitorWriteRefusal`. The reasoning for each decision is in those files; the
+summary:
+
+- **Key: compound (site, IP).** Per-site *alone* was rejected — one attacker
+  would spend the merchant's whole allowance and every real shopper would then
+  be refused, an attacker-triggered DoS against the victim that costs the
+  merchant *sales* rather than storage. Per-IP alone is trivially distributed.
+  A second, platform-wide per-IP limiter was considered and dropped: it costs a
+  second transaction on every storefront write to bound an attack the compound
+  key already prices at one full budget per merchant. The path is **not** in
+  the key, so a caller cannot multiply its budget by cycling endpoints.
+- **Ceiling: 120/min, deliberately generous.** `cart.tsx` puts the quantity
+  field's `onChange` straight onto a POST with no debounce, so typing `100` is
+  three writes; `experiments/track` is a per-page-view beacon. A limit that
+  trips on genuine use is worse than none, because it gets raised until it
+  means nothing. A tighter cap buys little: 120/min still allows ~172k
+  documents/day from one source, 30/min ~43k. What the cap actually buys —
+  turning a one-line flood script into something needing a botnet, and turning
+  an incident from instantaneous into detectable — is bought at either.
+- **Writes only.** Reads leave the dispatcher before any Firestore read, so a
+  durable limiter there would be the *only* Firestore work in the request —
+  the analytics-beacon anti-pattern this document already names. Tenant read
+  cost is real but its remedy is caching and ISR, not a per-request
+  transaction.
+- **Machine surfaces are exempt**, by an explicit path list: `email/events`
+  (Resend/Svix signature), `campaigns/send` (console token or `CRON_SECRET`),
+  `bookings/reminders` (`x-cron-secret`) and `hooks/…` (per-hook secret, and it
+  already carries its own 30/min limiter). Their volume is set by campaign size
+  or a cron schedule, so no shopper-sized ceiling fits — one 50k-recipient
+  campaign's open/click webhooks arrive from a handful of IPs for one host.
+  The list is an *exemption* list, so the default is limited and a new visitor
+  endpoint is covered by doing nothing; only a forgotten machine endpoint
+  fails, and it fails loudly as 429s with `Retry-After`. Header presence
+  (`authorization`, `svix-signature`) is deliberately **not** an exemption —
+  the dispatcher cannot verify signatures it does not own, so any caller could
+  attach a garbage one to a cart POST.
+- **Placed after route resolution.** Limiting earlier would make an
+  unregistered path — free today — cost a transaction, a cheaper amplification
+  than the one being closed.
+- **Not nested in `if (hostId)`.** A limiter a caller switches off by declining
+  to name a site is not a limiter; host-less writes share one bucket per IP.
 
 ## A published limit is a third reason to be durable (AGL-1679)
 

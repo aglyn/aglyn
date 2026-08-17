@@ -74,6 +74,11 @@ import { HostDatasetsCard } from './host-datasets-card.component'
  * under the default 5s alone; over it when the suite runs alongside the
  * rest of the project's workers. The fixture size is the contract, so the
  * budget moves rather than the fixture.
+ *
+ * This budget is NOT the one the old `settled()` used to exhaust, and
+ * raising it would never have helped: an RTL `waitFor` carries its own
+ * 1,000ms default, so a missed state update reported as a timeout this
+ * file's own 30s appeared to contradict (AGL-1762).
  */
 jest.setTimeout(30_000)
 
@@ -149,6 +154,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 const limitSpy = jest.fn((value: number) => value)
 /** Paths are joined so the two aggregates are distinguishable. */
 const countSpy = jest.fn(async (path: string) => {
+  // A server aggregate is a NETWORK round-trip: its answer cannot land in
+  // the same drain as the mount that asked for it. Resolving it there was
+  // the fixture's own fiction, and it is what let a settle helper that
+  // flushed a fixed number of microtasks look correct (AGL-1756/1758/1762).
+  //
+  // TWO macrotasks, not one, and the difference is measured rather than
+  // guessed: `await act(async () => …)` resolves through React's
+  // `enqueueTask` (`setImmediate`, else a `MessageChannel`), so the old
+  // helper's own settle already yielded to the task queue once for free.
+  // Two is the first schedule it cannot beat, and still orders of magnitude
+  // cheaper than any real `getCountFromServer`.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
   const key = path.includes('records') ? 'records' : 'datasets'
   if (aggregate[key] == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
@@ -193,24 +211,81 @@ beforeEach(() => {
 const mount = (org: any = ORG) => render(<HostDatasetsCard orgId="org-1" org={org} />)
 
 /**
- * Both aggregates have answered AND their answers have reached state — the
- * fallback is not what is under test here. The call count alone is not
- * enough: it reaches two on mount, while the resolutions are still
- * microtasks, so a click issued on that signal alone would read the very
- * fallback these cases are meant to leave behind.
+ * The aggregate for `which` has ANSWERED — settled either way, and its
+ * answer has reached a render.
+ *
+ * This replaces a helper that waited for `countSpy` to have been called
+ * TWICE and then flushed a fixed two microtasks, assuming both answers had
+ * arrived (AGL-1762). It was the worst of the five copies of that shape: a
+ * single call-count threshold gated TWO independent promise chains on one
+ * tick budget, so both had to reach state inside it. When they did not, the
+ * click read `RECORD_ROWS` of 500 or `DATASET_ROWS` of 100 — under
+ * `scale`'s 500,000 records and 250 datasets, so nothing was refused — and
+ * the trailing `waitFor` spent RTL's 1,000ms default, not this file's
+ * `jest.setTimeout(30_000)`, before reporting a value mismatch that reads
+ * as a timeout.
+ *
+ * A tick budget cannot be made large enough, only large enough for today's
+ * promise chain, so the condition replaces it rather than widening it. Nor
+ * is a call count a condition: it says the read STARTED.
+ *
+ * NEITHER earlier remedy transfers here, and both were checked first.
+ * AGL-1758's is a `waitFor` on a rendered caption: this card renders no
+ * consequence of either count on mount — `datasetCount` reaches nothing but
+ * `checkDatasetQuota`, `recordCount` reaches `checkQuota`, the delete
+ * prompt (which is a click away) and a schema dialog that is closed, and
+ * `quota.limit` appears only inside the refusal snackbars. AGL-1756's is a
+ * wrapping mock over `checkQuota`, waited on for the number it was computed
+ * FROM: the products card calls it in a `useMemo` during render, while this
+ * one calls both gates inside click handlers, so there is nothing to
+ * observe until after the click the counts were supposed to have settled
+ * before.
+ *
+ * So the condition is the card's OWN promise, per aggregate — this is the
+ * naming the old threshold could not do. Awaiting it is not a tick count at
+ * any remove: reactions run in registration order, the card registered its
+ * `.then` in the effect and this registers later, so its setState has
+ * already been called when this resumes, and `act`'s exit yields a
+ * macrotask and flushes the work loop that renders it.
+ *
+ * It subsumes AGL-1756's separate `readRejected()`: a denied read is
+ * settled too, and awaiting it is the only way to tell "the read failed and
+ * the rows stood in" from "the read has not answered yet", since each
+ * fallback is also the value the FIRST render used.
  */
-const settled = async () => {
-  await waitFor(() => expect(countSpy).toHaveBeenCalledTimes(2))
+const countAnswered = async (which: 'datasets' | 'records') => {
+  // The JOINED path names what the aggregate counted — the record read ends
+  // in `…/datasets/{id}/records`, the dataset read in `…/datasets` — which
+  // is the same rule `countSpy` itself answers by.
+  const isMine = (path: unknown) =>
+    String(path).endsWith('/records') === (which === 'records')
+  await waitFor(() =>
+    expect(countSpy.mock.calls.some(([path]) => isMine(path))).toBe(true),
+  )
   await act(async () => {
-    await Promise.resolve()
-    await Promise.resolve()
+    await Promise.all(
+      countSpy.mock.results
+        .filter((_result, index) => isMine(countSpy.mock.calls[index][0]))
+        .map((result) => result.value.catch(() => undefined)),
+    )
   })
+}
+
+/**
+ * Both, awaited one at a time on its own promise. Every case needs the
+ * whole mount settled — an aggregate left in flight lands its setState
+ * outside `act` — but each case turns on ONE of them, named where it does.
+ */
+const bothCountsAnswered = async () => {
+  await countAnswered('datasets')
+  await countAnswered('records')
 }
 
 describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
   it('refuses a record over the band the loaded window hid', async () => {
     mount()
-    await settled()
+    // Turns on the RECORD aggregate.
+    await bothCountsAnswered()
 
     // 600,000 documents against `scale`'s included 500,000. Before the fix
     // the input was 500 — under every paid band — so this opened the
@@ -218,37 +293,41 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     // counts the collection for real.
     fireEvent.click(screen.getByText('Add record'))
 
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Record limit reached (500000)'),
-        ),
-      ).toBe(true),
-    )
+    // Asserted directly, not inside a `waitFor`: `handleOpenRecord` enqueues
+    // before it awaits anything, so there is nothing here to wait FOR. A
+    // budget around a synchronous assertion only decides how long a real
+    // failure takes to report.
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Record limit reached (500000)'),
+      ),
+    ).toBe(true)
     expect(screen.queryByText('New record')).toBeNull()
   })
 
   it('refuses a dataset over the limit the picker window hid', async () => {
     mount()
-    await settled()
+    // Turns on the DATASET aggregate.
+    await bothCountsAnswered()
 
     // 300 datasets against `scale`'s effective 250. Before the fix the
     // input was the picker's 100 rows, comfortably under.
     fireEvent.click(screen.getByText('Add dataset'))
 
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Dataset limit reached (250)'),
-        ),
-      ).toBe(true),
-    )
+    // Direct, for the same reason as the record case above:
+    // `handleAddDataset` enqueues before it awaits anything.
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Dataset limit reached (250)'),
+      ),
+    ).toBe(true)
     expect(screen.queryByText('New dataset')).toBeNull()
   })
 
   it('quotes the real size in the delete prompt, not the loaded page', async () => {
     mount()
-    await settled()
+    // Turns on the RECORD aggregate — the prompt quotes `recordCount`.
+    await bothCountsAnswered()
 
     // The toolbar's collection-level Delete; the per-row buttons carry the
     // same label and follow it in the DOM.
@@ -264,7 +343,8 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
 
   it('keeps both lists capped — the caps were never the defect', async () => {
     mount()
-    await settled()
+    // Turns on neither count — the caps are the listeners' business.
+    await bothCountsAnswered()
 
     // Fixing the head-counts must not turn a picker into 300 rows or a
     // table into 600,000. That the two questions now have two answers is
@@ -275,7 +355,9 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
 
   it('re-reads the record count after a delete', async () => {
     mount()
-    await settled()
+    // Both, so `mockClear` cannot drop a read that had not answered yet and
+    // leave its resolution to land after the assertion below.
+    await bothCountsAnswered()
     countSpy.mockClear()
 
     // Row-level delete is client-direct, so nothing else would tell the
@@ -292,7 +374,12 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
   it('falls back to the loaded rows, never to zero, when a read fails', async () => {
     aggregate.records = null
     mount()
-    await settled()
+    // Awaiting the record read is what makes the first half non-vacuous:
+    // its fallback of 500 is also the value the FIRST render used, so any
+    // condition that did not await the read itself would be satisfied
+    // BEFORE it had failed — passing while proving nothing. The second half
+    // turns on the DATASET aggregate having answered anyway.
+    await bothCountsAnswered()
 
     fireEvent.click(screen.getAllByText('Delete')[0])
     await waitFor(() => expect(confirm).toHaveBeenCalled())
@@ -306,12 +393,10 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     // The dataset aggregate answered, so its count is unaffected by the
     // record read failing — one denial does not poison the other.
     fireEvent.click(screen.getByText('Add dataset'))
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Dataset limit reached (250)'),
-        ),
-      ).toBe(true),
-    )
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Dataset limit reached (250)'),
+      ),
+    ).toBe(true)
   })
 })

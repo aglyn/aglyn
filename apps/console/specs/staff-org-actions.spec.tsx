@@ -36,21 +36,55 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
  * Authorization is server-side (the scoped Firestore rules and the
  * staff-gated endpoints); the non-staff 403 is asserted against
  * /api/admin/org-usage in org-usage-authz.spec.ts.
+ *
+ * Override and erasure each write their org document and their audit row in
+ * ONE BATCH (AGL-1784), so the assertions below read the batch rather than
+ * `setDoc`/`addDoc` — which now stand as tripwires for a return to two
+ * independent writes. The atomicity itself is covered in
+ * staff-org-actions-atomic-audit.spec.tsx; what these cases pin is that the
+ * PAYLOADS AGL-201/939/1109/1635/1652 established are unchanged by the move.
  */
 
+/** Un-batched writes. Must stay uncalled: nothing here writes directly. */
 const mockSetDoc = jest.fn(async () => undefined)
 const mockAddDoc = jest.fn(async () => undefined)
+/**
+ * Writes a COMMITTED batch applied: `[ref, data, options]`, the shape the
+ * `setDoc`/`addDoc` assertions already read. Staged writes are recorded only
+ * when `commit()` resolves — a double that recorded each `set()` as it
+ * arrived would pass against the split-write this replaced.
+ */
+const mockBatchWrites: Array<
+  [{ path: string }, Record<string, any>, unknown]
+> = []
+const mockCommit = jest.fn(async () => undefined)
+let mockAutoId = 0
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
-  doc: (_db: unknown, ...segments: string[]) => ({
-    path: segments.join('/'),
-  }),
+  // `doc(db, 'orgs', id)` names a document; `doc(collectionRef)` mints the
+  // auto-id `addDoc` used to generate, which a batch needs up front.
+  doc: (parent: any, ...segments: string[]) =>
+    segments.length > 0
+      ? { path: segments.join('/') }
+      : { path: `${parent?.path ?? ''}/auto-${++mockAutoId}` },
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
   }),
   setDoc: (...args: unknown[]) => mockSetDoc(...(args as [])),
   addDoc: (...args: unknown[]) => mockAddDoc(...(args as [])),
   deleteField: () => '__DELETE__',
+  writeBatch: () => {
+    const staged: Array<[{ path: string }, Record<string, any>, unknown]> = []
+    return {
+      set: (ref: { path: string }, data: Record<string, any>, options?: unknown) => {
+        staged.push([ref, data, options])
+      },
+      commit: async () => {
+        await mockCommit()
+        mockBatchWrites.push(...staged)
+      },
+    }
+  },
 }))
 
 jest.mock('@aglyn/shared-util-timestamp', () => ({
@@ -86,25 +120,41 @@ const org = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/** The org-document write out of the committed batch. */
 const setDocPayload = (index = 0) =>
-  mockSetDoc.mock.calls[index] as unknown as [
+  mockBatchWrites.filter(
+    ([ref]) => !ref.path.startsWith('adminAudit'),
+  )[index] as unknown as [
     { path: string },
     Record<string, unknown>,
     { merge: boolean },
   ]
 
+/** The `adminAudit` row out of the same committed batch. */
 const auditPayload = (index = 0) =>
-  mockAddDoc.mock.calls[index] as unknown as [
-    { path: string },
-    Record<string, any>,
-  ]
+  mockBatchWrites.filter(([ref]) =>
+    ref.path.startsWith('adminAudit'),
+  )[index] as unknown as [{ path: string }, Record<string, any>]
+
+/**
+ * The override POSTs the console made, body parsed. Both staff writes are
+ * routes now — suspension since AGL-1505, override since AGL-1786 — so the
+ * assertions read requests, and the Firestore doubles are pure tripwires for
+ * either coming back as a client write.
+ */
+const overrideRequests = () =>
+  ((global.fetch as jest.Mock).mock.calls as Array<[string, any]>)
+    .filter(([url]) => url === '/api/admin/org-override')
+    .map(([, init]) => ({ init, body: JSON.parse(init.body) }))
 
 describe('StaffOrgActions (AGL-939)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockBatchWrites.length = 0
     global.fetch = jest.fn(async () => ({
       ok: true,
-      json: async () => ({}),
+      status: 200,
+      json: async () => ({ ok: true, written: true }),
     })) as unknown as typeof fetch
   })
 
@@ -136,10 +186,14 @@ describe('StaffOrgActions (AGL-939)', () => {
     // The AGL-1505 tripwire: the legacy path wrote the org doc and an
     // adminAudit row from the CLIENT, which set the flag without the
     // projection fan-out, revocation or cache eviction. Re-adding ANY
-    // direct write turns these red — the route is the only writer (and it
-    // writes the audit row server-side).
+    // client write turns these red — direct or batched — because the route
+    // is the only writer (and it writes the audit row server-side).
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockAddDoc).not.toHaveBeenCalled()
+    // Batched or not, still no client write (AGL-1784 gave this component a
+    // second way to reach Firestore, and the tripwire has to cover it).
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(mockBatchWrites).toEqual([])
   })
 
   it('unsuspend posts action:unlock to the same route — still no direct write', async () => {
@@ -169,6 +223,10 @@ describe('StaffOrgActions (AGL-939)', () => {
     })
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockAddDoc).not.toHaveBeenCalled()
+    // Batched or not, still no client write (AGL-1784 gave this component a
+    // second way to reach Firestore, and the tripwire has to cover it).
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(mockBatchWrites).toEqual([])
   })
 
   it('the suspend dialog prefills the stored lockdown reason code and notice', () => {
@@ -211,6 +269,10 @@ describe('StaffOrgActions (AGL-939)', () => {
     expect(onChanged).not.toHaveBeenCalled()
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockAddDoc).not.toHaveBeenCalled()
+    // Batched or not, still no client write (AGL-1784 gave this component a
+    // second way to reach Firestore, and the tripwire has to cover it).
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(mockBatchWrites).toEqual([])
     // The dialog stays open so the operator can retry or bail.
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
@@ -255,6 +317,10 @@ describe('StaffOrgActions (AGL-939)', () => {
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled())
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockAddDoc).not.toHaveBeenCalled()
+    // Batched or not, still no client write (AGL-1784 gave this component a
+    // second way to reach Firestore, and the tripwire has to cover it).
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(mockBatchWrites).toEqual([])
     expect(global.fetch).not.toHaveBeenCalled()
     expect(onChanged).not.toHaveBeenCalled()
   })
@@ -269,29 +335,41 @@ describe('StaffOrgActions (AGL-939)', () => {
     )
     fireEvent.click(screen.getByText('Override'))
     const dialog = screen.getByRole('dialog')
+    // An override needs a REASON since AGL-1652 — Save is refused without
+    // one, so every case that saves has to give one.
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+    fireEvent.click(
+      await screen.findByRole('option', {
+        name: 'Negotiated enterprise or custom contract',
+      }),
+    )
     fireEvent.click(within(dialog).getByText('Save (audited)'))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
-    const [target, write] = setDocPayload()
-    expect(target.path).toBe('orgs/org-1')
-    expect(write['plan']).toBe('pro')
-    expect((write['entitlements'] as any).hostLimit).toBe(5)
-    const [, audit] = auditPayload()
-    expect(audit.action).toBe('org.override')
-    expect(audit.actorUid).toBe('staff-1')
-    // `releaseFlags` joined the audited before-state in AGL-1635; an org
-    // with no per-org release override records an explicit null rather than
-    // omitting the key, so a reader can tell "none set" from "not recorded".
-    expect(audit.before).toEqual({
-      plan: 'pro',
-      entitlements: { hostLimit: 5 },
-      releaseFlags: null,
-    })
-    // The audit row records resulting STATE — no delete sentinels.
-    expect(audit.after.plan).toBe('pro')
-    expect(audit.after.entitlements.hostLimit).toBe(5)
-    expect(Object.values(audit.after.entitlements.features)).not.toContain(
-      '__DELETE__',
-    )
+    // The override is a ROUTE since AGL-1786 — the org document and its
+    // audit row are both written there, in one Admin SDK batch
+    // (specs/org-override-route.spec.ts). What AGL-939 pins here is that the
+    // surface asks for the right change and writes nothing itself.
+    const request = overrideRequests()[0]
+    expect(request.init.method).toBe('POST')
+    expect(request.init.headers.Authorization).toBe('Bearer tok')
+    expect(request.body.orgId).toBe('org-1')
+    expect(request.body.plan).toBe('pro')
+    expect(request.body.quotas.hostLimit).toBe(5)
+    // WHO comes from the verified token server-side; WHY comes from here
+    // (AGL-1652). The note is an explicit null, never a dropped key — the
+    // route writes it straight onto the row and Firestore rejects
+    // `undefined`, while an absent key would read as a row written before
+    // the field existed.
+    expect(request.body.reason).toBe('enterprise')
+    expect(request.body.note).toBeNull()
+    // INTENT, not a payload: `deleteField()` has no JSON form, so inherit is
+    // expressed by absence and the route mints the sentinel (AGL-1109).
+    expect(JSON.stringify(request.body)).not.toContain('__DELETE__')
+    expect(request.body.features).toEqual({})
+    // Tripwires: neither document may be written from the client any more.
+    expect(mockBatchWrites).toEqual([])
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockAddDoc).not.toHaveBeenCalled()
   })
 
   it('renders disabled actions for a null org instead of crashing', () => {

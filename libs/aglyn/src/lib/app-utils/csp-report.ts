@@ -113,13 +113,27 @@ export function documentPath(rawUrl: unknown): string {
 }
 
 /**
- * Normalize either wire format into `CspViolation[]`.
+ * Normalize every wire format into `CspViolation[]`.
  *
- * Two exist and both are live: `report-uri` posts a single
- * `{"csp-report": {...}}` with kebab-case keys, while the Reporting API
- * (`report-to`) posts an ARRAY of `{type, body}` with camelCase ones. Both
- * directives are sent, because no single one is supported everywhere — so
- * this has to read both or half the browsers report into a parse error.
+ * There are THREE, not two, and all three are live (AGL-1788, measured in real
+ * browsers against a real response rather than read from a spec):
+ *
+ * 1. **Legacy** — `{"csp-report": {...}}`, kebab-case keys,
+ *    `application/csp-report`. What `report-uri` posts when the policy carries
+ *    no `report-to`.
+ * 2. **Reporting API** — an ARRAY of `{type, body}` with camelCase keys,
+ *    `application/reports+json`. What Chrome posts for `report-to`, batched.
+ * 3. **Safari's hybrid** — a SINGLE `{type, url, body}` with the camelCase
+ *    body of (2) but the `application/csp-report` content type of (1). Safari
+ *    switches to the modern body shape as soon as `report-to` is present in
+ *    the policy, without adopting the array envelope.
+ *
+ * Shape (3) is why this comment exists. It parsed as neither of the other two
+ * — not an array, and no `csp-report` key — so it fell through to `[]`, and
+ * the console and tenant collectors silently discarded every report Safari
+ * sent for as long as the policy has carried both directives. A dropped report
+ * and a clean page are indistinguishable downstream, which is the same
+ * false all-clear AGL-518 shipped.
  */
 export function parseCspReports(payload: unknown): CspViolation[] {
   if (!payload || typeof payload !== 'object') return []
@@ -128,12 +142,7 @@ export function parseCspReports(payload: unknown): CspViolation[] {
   // types (deprecation, intervention) that share the endpoint.
   if (Array.isArray(payload)) {
     return payload
-      .filter(
-        (entry) =>
-          entry &&
-          typeof entry === 'object' &&
-          (entry as { type?: unknown }).type === 'csp-violation',
-      )
+      .filter(isViolationEnvelope)
       .map((entry) => fromModern((entry as { body?: unknown }).body))
       .filter((violation): violation is CspViolation => violation !== null)
   }
@@ -143,8 +152,22 @@ export function parseCspReports(payload: unknown): CspViolation[] {
     const violation = fromLegacy(legacy)
     return violation ? [violation] : []
   }
+
+  // Safari's single envelope. Checked AFTER `csp-report` so a legacy body that
+  // happens to carry a `body` key cannot be read with the wrong key set, and
+  // gated on `type` so this cannot swallow an unrelated object shape.
+  if (isViolationEnvelope(payload)) {
+    const violation = fromModern((payload as { body?: unknown }).body)
+    return violation ? [violation] : []
+  }
   return []
 }
+
+/** A Reporting API envelope that is specifically a CSP violation. */
+const isViolationEnvelope = (entry: unknown): boolean =>
+  !!entry &&
+  typeof entry === 'object' &&
+  (entry as { type?: unknown }).type === 'csp-violation'
 
 function fromModern(body: unknown): CspViolation | null {
   if (!body || typeof body !== 'object') return null

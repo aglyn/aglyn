@@ -234,6 +234,113 @@ function imgSrcDirective(isProduction) {
 }
 
 /**
+ * Third-party hosts the console legitimately loads SCRIPTS from (AGL-1785).
+ *
+ * Read out of the code that injects each one, on the same rule `IMAGE_ORIGINS`
+ * follows: anything that merely *might* load a script is left out, because an
+ * entry added on a hunch is indistinguishable in the reports from one that is
+ * needed, and the allowlist would then be documenting our guesses.
+ *
+ * Two are path-scoped. `www.google.com` and `www.gstatic.com` are shared
+ * Google hosts serving far more than reCAPTCHA, and a bare host entry for
+ * either would authorise all of it — which is the `https:` mistake in
+ * miniature. A source expression with a path matches by path PREFIX, so
+ * `/recaptcha/` admits the loader and its versioned release bundle and nothing
+ * else on those hosts. The known limitation is that CSP drops the path
+ * component across a redirect; neither URL redirects today, and a redirect
+ * would loosen this to the bare host rather than break the page.
+ */
+const SCRIPT_ORIGINS = [
+  // Stripe Checkout. `loadStripe` injects the tag at module scope in
+  // `apps/console/components/embedded-checkout-dialog.component.tsx:61`.
+  // Not path-scoped: `js.stripe.com` is a dedicated host, and Stripe moves the
+  // bundle path between versions (`/v3/`, `/basil/`) without notice — a path
+  // here would break checkout on their schedule, in the enforcing follow-up.
+  'https://js.stripe.com',
+  // App Check. `firebase-app.ts:55` constructs a `ReCaptchaV3Provider`, and the
+  // SDK loads `https://www.google.com/recaptcha/api.js` from it, which then
+  // pulls its implementation from `www.gstatic.com/recaptcha/releases/…`.
+  'https://www.google.com/recaptcha/',
+  'https://www.gstatic.com/recaptcha/',
+  // Firebase Analytics. `components/layouts/firebase-app.layout.tsx` imports
+  // `firebase/analytics` and calls `useAnalytics()`, and the GA4 SDK loads the
+  // gtag script from here. This is a script we deliberately ship, so it belongs
+  // in the candidate policy — unlike a gtag *pixel*, which would arrive as an
+  // `img-src` report and is a question about ad-network beacons in a logged-in
+  // console rather than an allowlist entry (see `imgSrcDirective`).
+  'https://www.googletagmanager.com',
+]
+
+/**
+ * `script-src` for the console — a REPORT-ONLY twin of the enforcing directive,
+ * built to measure the one source the enforcing policy cannot (AGL-1785).
+ *
+ * ## The hole this measures
+ *
+ * The enforcing policy is `script-src 'self' https: blob: 'nonce-…'`. The bare
+ * `https:` admits a script from ANY https origin, so a dependency that assembles
+ * a CDN URL and appends a `<script>` is permitted — not merely unreported.
+ * That is not hypothetical: `@monaco-editor/loader` did exactly this, pulling
+ * several MB of unpinned, un-SRI'd Monaco from `cdn.jsdelivr.net` into the
+ * `app.aglyn.com` origin on every besigner "Raw JSON" open (AGL-1779). It was
+ * found by reading `node_modules`, because nothing at runtime could see it.
+ *
+ * `strict-dynamic` is NOT the fix and must not be reached for here — the note
+ * above `scriptSrc` in `apps/console/middleware.ts` records the measurement:
+ * 1 violation became 70, because `strict-dynamic` makes `'self'` inert and
+ * Next's chunk loads are not nonce-propagated. Nothing in this directive
+ * implies it, and adding it would make this header report the entire bundle.
+ *
+ * ## Why this is not `default-src` or `connect-src`
+ *
+ * A `<script src>` is governed by `script-src`, and `default-src` never applies
+ * where a specific directive is present — so neither would have reported
+ * AGL-1779. The directive that permits the load is the directive that has to
+ * measure it.
+ *
+ * ## Why this is a CANDIDATE policy, not "the enforcing one minus `https:`"
+ *
+ * AGL-1785 proposed the latter, and it is the wrong trade for a mechanical
+ * reason. The collector caps one POST at `MAX_REPORTS_PER_REQUEST = 10`, shared
+ * with the `img-src` report-only stream that AGL-1702 is waiting on. A policy
+ * with no third-party entries reports gtag, reCAPTCHA and gstatic on EVERY page
+ * load — a steady stream of things we already know, which both buries the
+ * img-src signal and trains everyone to ignore this one. Listing what we
+ * provably load makes a report mean exactly one thing: **a script origin nobody
+ * wrote down**, which is the AGL-1779 class and nothing else.
+ *
+ * The cost is real and worth stating: this cannot tell us that gtag loads. We
+ * already know that from source, and the enforcing follow-up needs these
+ * entries regardless.
+ *
+ * ## Why a per-request nonce is safe HERE and was not on the tenant
+ *
+ * AGL-1228 removed a report-only `script-src` from the tenant because tenant
+ * pages are ISR-cached: the header carries a fresh nonce while the cached bytes
+ * carry an old one, so all 33 scripts violated on every load. That cannot
+ * happen here, and the proof is the ENFORCING policy rather than an argument
+ * about caching. Console responses carry the same per-request nonce in an
+ * enforcing `script-src`, and an inline script can be authorised by nothing but
+ * its nonce — so any drift between header and bytes would already be a total
+ * console outage, not a report flood. This directive reuses that same `nonce`
+ * string, so it is exactly as correct as the policy already load-bearing.
+ *
+ * That is also why the nonce is a PARAMETER. Building a second nonce here would
+ * reintroduce the AGL-1228 mismatch deliberately: every inline Next script
+ * would carry the enforcing nonce, match nothing in this policy, and report.
+ *
+ * `'unsafe-eval'` follows the enforcing policy off production for the same
+ * reason it is there — React's dev build evals, and a directive violated on
+ * every dev page load is one nobody reads.
+ */
+function scriptSrcReportOnlyDirective(nonce, isProduction) {
+  const sources = ["'self'", 'blob:', `'nonce-${nonce}'`]
+    .concat(SCRIPT_ORIGINS)
+    .concat(isProduction ? [] : ["'unsafe-eval'"])
+  return `script-src ${sources.join(' ')}`
+}
+
+/**
  * Third-party hosts a PUBLISHED CUSTOMER SITE legitimately loads images from
  * (AGL-1703).
  *
@@ -352,11 +459,113 @@ function tenantImgSrcDirective(isProduction) {
   return `img-src ${sources.join(' ')}`
 }
 
+/**
+ * Where violations are posted (AGL-523).
+ *
+ * Relative on purpose: it resolves against the document, so a tenant report
+ * lands on the customer's own domain rather than ours. Same-origin and outside
+ * both middlewares' matchers, so reporting cannot recurse through them.
+ */
+const CSP_REPORT_PATH = '/api/csp-report'
+
+/** The `Reporting-Endpoints` group name `report-to` resolves against. */
+const CSP_REPORT_GROUP = 'csp'
+
+/**
+ * The `report-uri` / `report-to` tail every policy in the repo ends with.
+ *
+ * ## `report-to` is NOT a fallback for `report-uri` — it REPLACES it
+ *
+ * The comment this replaces claimed the pair covered two browser families by
+ * redundancy, so that if one channel failed the other still delivered. That is
+ * not what browsers do, and the difference is the whole reason this function
+ * exists (AGL-1788). Measured in real browsers against real responses, one
+ * violation per case, a report-only `img-src 'self'` plus the reporting tail
+ * under test:
+ *
+ * | policy tail                                     | Chrome 152 | Safari 26 |
+ * | ----------------------------------------------- | ---------- | --------- |
+ * | `report-uri` alone                              | delivered  | delivered |
+ * | `report-uri` + `report-to`, over **https**      | delivered  | delivered |
+ * | `report-uri` + `report-to`, over **plain http** | **NOTHING**| delivered |
+ * | `report-to` with no `Reporting-Endpoints`       | **NOTHING**| **NOTHING**|
+ *
+ * Row four is the proof: adding `report-to` switches `report-uri` OFF even
+ * when the group resolves to nothing, so there is no second channel to fall
+ * back to. Row three is that rule biting — Chrome refuses a
+ * `Reporting-Endpoints` header on a non-secure transport, which leaves the
+ * group unresolvable and `report-uri` already suppressed.
+ *
+ * So the pair does cover both families, but only over https, and for a reason
+ * the old comment had backwards: Chrome delivers through the Reporting API
+ * (batched, `application/reports+json`) while Safari posts a single report to
+ * the `report-uri` path. Both shapes reach `parseCspReports`.
+ *
+ * ## Why the http branch is not merely a dev nicety
+ *
+ * Production is https, so production has always delivered — this does not fix
+ * a production outage. What it fixes is that on `http://localhost` the policy
+ * we ship reports NOTHING to anyone, so nobody can see a CSP report while
+ * developing, and "no reports" reads as "no violations". That is the AGL-518
+ * failure at desk scale, and it is what made this defect survivable long
+ * enough to be mistaken for a production one.
+ *
+ * The failure mode if `isSecureTransport` is ever computed wrong is benign in
+ * the direction that matters: guessing http on an https response emits
+ * `report-uri` alone, which row two shows still delivers in both browsers.
+ * Guessing https on an http response restores today's behaviour.
+ *
+ * @param {boolean} isSecureTransport Whether the RESPONSE goes out over https.
+ */
+function reportingDirectives(isSecureTransport) {
+  return isSecureTransport
+    ? `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`
+    : `report-uri ${CSP_REPORT_PATH}`
+}
+
+/**
+ * The `Reporting-Endpoints` header value, or `null` when the transport cannot
+ * carry the Reporting API at all.
+ *
+ * Returning `null` rather than the header on http keeps the two in step: a
+ * `Reporting-Endpoints` header without `report-to` is inert, and `report-to`
+ * without the header is row four above — silence.
+ *
+ * @param {boolean} isSecureTransport Whether the RESPONSE goes out over https.
+ */
+function reportingEndpointsHeader(isSecureTransport) {
+  return isSecureTransport ? `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"` : null
+}
+
+/**
+ * Is this request going to be answered over https?
+ *
+ * `x-forwarded-proto` first because the proxy is the only thing that knows:
+ * Vercel terminates TLS ahead of the function, so `nextUrl.protocol` can read
+ * `http:` on a request the browser made over https. It is a comma-separated
+ * list when proxies chain, and the FIRST entry is the client-facing hop.
+ *
+ * @param {Headers} headers Request headers.
+ * @param {string} protocol `nextUrl.protocol`, e.g. `https:`.
+ */
+function isSecureTransport(headers, protocol) {
+  const forwarded = headers.get('x-forwarded-proto')
+  const scheme = forwarded ? forwarded.split(',')[0] : protocol
+  return scheme.trim().toLowerCase().replace(/:$/, '') === 'https'
+}
+
 module.exports = {
   PRODUCTION_DOMAINS,
   IMAGE_ORIGINS,
+  SCRIPT_ORIGINS,
   TENANT_IMAGE_ORIGINS,
+  CSP_REPORT_PATH,
+  CSP_REPORT_GROUP,
   baseCspDirectives,
   imgSrcDirective,
+  isSecureTransport,
+  reportingDirectives,
+  reportingEndpointsHeader,
+  scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
 }

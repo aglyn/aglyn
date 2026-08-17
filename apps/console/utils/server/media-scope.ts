@@ -323,6 +323,34 @@ export function mediaObjectPath(
 }
 
 /**
+ * Is this folder request the scope cascade's PREVIEW — the count, not the
+ * cascade? (AGL-1694)
+ *
+ * `POST /api/media/folders` carries six actions and five of them write, so
+ * the route cannot declare a read intent; only this one request SHAPE can.
+ * The predicate is deliberately narrow and deliberately boolean: it names
+ * the action AND requires `preview === true` exactly, because both halves
+ * come from a client and `{action: 'delete', preview: true}` must not buy a
+ * delete a reader's verdict.
+ *
+ * It returns a fact about the request, never an intent. The read-intent
+ * literal itself stays at the route's call site, because
+ * `lockdown-read-intent-audit.spec.ts` walks route files for it and pins
+ * this module against ever spelling one — a declaration this module made on
+ * a route's behalf is a relaxation that audit could not see.
+ *
+ * The route's preview branch tests the same predicate, so the shape that
+ * skips the writes and the shape that is called a read cannot drift apart.
+ */
+export function isFolderScopePreviewRequest(
+  body: Record<string, unknown> | undefined,
+): boolean {
+  return (
+    String(body?.['action'] ?? '') === 'set-scope' && body?.['preview'] === true
+  )
+}
+
+/**
  * The `cdnPath` field value for a media doc — a path, or the sentinel that
  * removes it (AGL-1051).
  *

@@ -53,6 +53,8 @@ import {
   resolveOrgEntitlements,
   resolveMarketplaceFeePct,
   resolveTransactionFeePct,
+  EXTRA_HOSTS_ADDON_MAX,
+  POS_REGISTERS_ADDON_MAX,
   UNLIMITED,
 } from './plan-entitlements'
 import type { OrgPlan } from '../foundation'
@@ -484,6 +486,54 @@ describe('plan entitlements', () => {
       seatAddons: { hosts: 1 },
     } as any
     expect(resolveOrgEntitlements(stacked).hostLimit).toBe(6)
+  })
+
+  it('honours a register/site purchase to its ceiling — no band clamp (AGL-1738)', () => {
+    // AGL-1738 proposed adding a `maxPosRegistersPerHost` and `Math.min`-ing
+    // the add, on the analogy of `checkDatasetQuota`. Declined: seats and
+    // datasets clamp because their plans REFUSE to sell past a band, and
+    // registers/sites are not sold that way — `addonMax()` sells a flat
+    // POS_REGISTERS_ADDON_MAX / EXTRA_HOSTS_ADDON_MAX on any plan carrying
+    // the feature. A band clamp here would take back resources the merchant
+    // is invoiced $89/mo each for, so this pins the resolver to the ceiling
+    // the purchase route will actually sell.
+    //
+    // Agency is the largest STOCK band (20 registers, 25 sites), so every
+    // number below is above every band a clamp could reasonably use.
+    const maxedRegisters = {
+      plan: 'agency',
+      seatAddons: { posRegisters: POS_REGISTERS_ADDON_MAX },
+    } as any
+    expect(resolveOrgEntitlements(maxedRegisters).posRegisters).toBe(
+      PLAN_ENTITLEMENTS.agency.posRegisters + POS_REGISTERS_ADDON_MAX,
+    )
+    // The consequence a clamp would break, stated as the merchant sees it:
+    // the 70th register is still creatable, and the 71st is not.
+    expect(checkQuota(maxedRegisters, 'posRegisters', 69).allowed).toBe(true)
+    expect(checkQuota(maxedRegisters, 'posRegisters', 70).allowed).toBe(false)
+    // Same shape for extra sites, the other flat-ceiling kind.
+    const maxedHosts = {
+      plan: 'agency',
+      seatAddons: { hosts: EXTRA_HOSTS_ADDON_MAX },
+    } as any
+    expect(resolveOrgEntitlements(maxedHosts).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.agency.hostLimit + EXTRA_HOSTS_ADDON_MAX,
+    )
+    // And no plan carries a register hard max to clamp against — the key a
+    // future "fix" would reach for does not exist on ANY band, which is the
+    // fact that makes the asymmetry deliberate rather than an oversight.
+    for (const entitlements of Object.values(PLAN_ENTITLEMENTS)) {
+      expect(entitlements).not.toHaveProperty('maxPosRegistersPerHost')
+      expect(entitlements).not.toHaveProperty('maxHostsPerOrg')
+    }
+    // Enterprise resolves UNLIMITED (Infinity), so the add is a no-op there
+    // and every `limit === UNLIMITED` console renderer keeps saying so.
+    expect(
+      resolveOrgEntitlements({
+        plan: 'enterprise',
+        seatAddons: { posRegisters: 5, hosts: 5 },
+      } as any).posRegisters,
+    ).toBe(UNLIMITED)
   })
 
   it('stops counting purchased add-ons on dead subscriptions (AGL-524)', () => {

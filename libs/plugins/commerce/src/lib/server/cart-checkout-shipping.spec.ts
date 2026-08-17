@@ -22,13 +22,22 @@ import type {
 import { cartCheckoutHandler } from './cart-checkout'
 
 /**
- * Shipping reaches the Checkout Session (AGL-1707).
+ * Shipping reaches the Checkout Session (AGL-1707), for the destination it
+ * was resolved for and no other (AGL-1721).
  *
  * The model half is specced in `commerce-shipping.spec.ts`; what is proved
  * HERE is the wiring the defect was about — that the merchant's saved
  * settings document is actually read and actually lands on the session as
  * `shipping_options`. A model that resolves rates nobody sends is exactly the
  * state this issue found.
+ *
+ * AGL-1721 then made the ALLOWED COUNTRIES load-bearing rather than
+ * decorative. Stripe offers a session's `shipping_options` to whoever opens
+ * it and charges whichever the shopper picks — a `shipping_rate_data` has no
+ * country and nothing re-checks one against the address — so the assertions
+ * about `shipping_address_collection` below are not cosmetic: they are the
+ * only thing stopping a French shopper from paying a US rate. Every test that
+ * pins a rate list also pins the countries that list is honest for.
  *
  * Stripe is mocked absolutely, as in `pos-order.spec.ts`: localhost carries
  * the LIVE secret key, so nothing in this file may reach api.stripe.com. The
@@ -123,8 +132,21 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
       }),
     }
   }
+  // A real endpoint with a real side effect: every call CREATES a coupon
+  // object on the merchant's account. Modelled so the ordering assertion
+  // below — that a refused checkout creates none — can be made at all.
+  if (target.endsWith('/v1/coupons')) {
+    return { ok: true, json: async () => ({ id: 'co_test_1' }) }
+  }
   throw new Error(`Unexpected Stripe endpoint ${target}`)
 })
+
+/** Stripe calls the handler made, by endpoint. */
+function stripeCalls(endpoint: string) {
+  return fetchMock.mock.calls.filter((call) =>
+    String(call[0]).endsWith(endpoint),
+  ).length
+}
 
 // ---------------------------------------------------------------------------
 // Request / response plumbing
@@ -156,10 +178,24 @@ function makeResponse() {
   return { res, result }
 }
 
-function makeRequest(): PluginApiRequest {
+interface Scenario {
+  /** What the shopper declared, exactly as it arrives over the wire. */
+  shippingCountry?: unknown
+  couponCode?: string
+  /** Overrides on the single cart product. */
+  product?: Record<string, any>
+}
+
+function makeRequest(scenario: Scenario): PluginApiRequest {
   return {
     method: 'POST',
-    body: { hostId: 'host-1' },
+    body: {
+      hostId: 'host-1',
+      ...(scenario.couponCode ? { couponCode: scenario.couponCode } : {}),
+      ...('shippingCountry' in scenario
+        ? { shippingCountry: scenario.shippingCountry }
+        : {}),
+    },
     cookies: { 'aglyn_cart_host-1': 'cart-1' },
     headers: { host: 'shop.example.com' },
     query: {},
@@ -167,7 +203,10 @@ function makeRequest(): PluginApiRequest {
 }
 
 /** Seeds a host that can sell, with one 800g $60 item in the cart. */
-function seedStore(storeSettings: Record<string, any> | null) {
+function seedStore(
+  storeSettings: Record<string, any> | null,
+  scenario: Scenario,
+) {
   docs.clear()
   docs.set('hosts/host-1/carts/cart-1', {
     lines: [{ productId: 'p1', variantId: 'v1', quantity: 2 }],
@@ -181,16 +220,43 @@ function seedStore(storeSettings: Record<string, any> | null) {
     status: 'active',
     type: 'physical',
     variants: [{ id: 'v1', priceUsd: 30, weightGrams: 400, inventory: 10 }],
+    ...(scenario.product ?? {}),
   })
   if (storeSettings) docs.set('hosts/host-1/settings/store', storeSettings)
+  if (scenario.couponCode) {
+    docs.set(`hosts/host-1/coupons/${scenario.couponCode}`, {
+      percentOff: 50,
+      enabled: true,
+    })
+  }
 }
 
-async function runCheckout(storeSettings: Record<string, any> | null) {
-  seedStore(storeSettings)
+async function runCheckout(
+  storeSettings: Record<string, any> | null,
+  scenario: Scenario = {},
+) {
+  seedStore(storeSettings, scenario)
   sessionBody = null
   const { res, result } = makeResponse()
-  await cartCheckoutHandler(makeRequest(), res)
+  await cartCheckoutHandler(makeRequest(scenario), res)
   return { result, body: sessionBody as URLSearchParams | null }
+}
+
+/** The countries the session will accept an address in, in emitted order. */
+function allowedCountries(body: URLSearchParams | null) {
+  const out: string[] = []
+  for (
+    let index = 0;
+    body?.has(`shipping_address_collection[allowed_countries][${index}]`);
+    index += 1
+  ) {
+    out.push(
+      String(
+        body.get(`shipping_address_collection[allowed_countries][${index}]`),
+      ),
+    )
+  }
+  return out
 }
 
 /** Every `shipping_options[n]` in the emitted form body, in index order. */
@@ -245,16 +311,28 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     fetchMock.mockClear()
   })
 
-  it('declares the merchant’s configured rates on the session', async () => {
-    const { result, body } = await runCheckout({ shipping })
-    expect(result.status).toBe(200)
-    expect(shippingOptions(body)).toEqual([
+  it('declares the destination’s rate, and only that destination (AGL-1721)', async () => {
+    // The canonical shape from the issue: a US zone at $7.99 and a
+    // rest-of-world zone at $29.99. Before this, BOTH were declared on one
+    // session that accepted an address in any of six countries, so a shopper
+    // in France picked $7.99 and the merchant paid the difference.
+    const us = await runCheckout({ shipping }, { shippingCountry: 'US' })
+    expect(us.result.status).toBe(200)
+    expect(shippingOptions(us.body)).toEqual([
       {
         name: 'Standard',
         amount: '799',
         currency: 'usd',
         type: 'fixed_amount',
       },
+    ])
+    // THE ENFORCING HALF. Filtering the rate list alone would leave a session
+    // still willing to ship a $7.99 parcel to France.
+    expect(allowedCountries(us.body)).toEqual(['US'])
+
+    const fr = await runCheckout({ shipping }, { shippingCountry: 'FR' })
+    expect(fr.result.status).toBe(200)
+    expect(shippingOptions(fr.body)).toEqual([
       {
         name: 'International',
         amount: '2999',
@@ -262,6 +340,91 @@ describe('cart checkout shipping options (AGL-1707)', () => {
         type: 'fixed_amount',
       },
     ])
+    expect(allowedCountries(fr.body)).toEqual(['FR'])
+  })
+
+  it('refuses to price a cart whose rates differ by destination', async () => {
+    const { result, body } = await runCheckout({ shipping })
+    expect(result.status).toBe(400)
+    expect(result.body).toMatchObject({ needsShippingCountry: true })
+    expect(result.body.shippingCountries).toEqual([
+      'US',
+      'CA',
+      'GB',
+      'AU',
+      'DE',
+      'FR',
+    ])
+    // No session at all — not a session with the union on it.
+    expect(body).toBeNull()
+    expect(stripeCalls('/v1/checkout/sessions')).toBe(0)
+  })
+
+  it('refuses a country it cannot collect an address for, rather than serving one', async () => {
+    // The forgery shape. A crafted body naming something outside the
+    // collectable list must not fall through to the old union — which is what
+    // a handler that only narrowed WHEN IT RECOGNISED the country would do.
+    for (const shippingCountry of ['JP', '', 'us; DROP', null, 42, ['US']]) {
+      const { result, body } = await runCheckout(
+        { shipping },
+        { shippingCountry },
+      )
+      expect(result.status).toBe(400)
+      expect(result.body).toMatchObject({ needsShippingCountry: true })
+      expect(body).toBeNull()
+    }
+    // …and the lower-case spelling of a real one is accepted, not refused.
+    const { result } = await runCheckout(
+      { shipping },
+      { shippingCountry: ' us ' },
+    )
+    expect(result.status).toBe(200)
+  })
+
+  it('refuses a destination the merchant ships nowhere near', async () => {
+    // A US-only merchant with no rest-of-world zone. Charging this shopper
+    // nothing is the AGL-1707 defect; charging them the US rate is AGL-1721.
+    // Saying so is the only honest third answer.
+    const usOnly = {
+      zones: [{ id: 'us', name: 'United States', countries: ['US'] }],
+      rates: [
+        {
+          id: 'std',
+          zoneId: 'us',
+          name: 'Standard',
+          kind: 'flat',
+          amountCents: 799,
+        },
+      ],
+    }
+    const { result, body } = await runCheckout(
+      { shipping: usOnly },
+      { shippingCountry: 'FR' },
+    )
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toContain('France')
+    expect(body).toBeNull()
+  })
+
+  it('creates no Stripe coupon on a refused checkout', async () => {
+    // Ordering, not decoration: the discount block POSTs a real coupon object
+    // to the merchant's account. Refusing after it would orphan one on every
+    // attempt, and a shopper answering the destination prompt makes two.
+    const { result } = await runCheckout({ shipping }, { couponCode: 'HALF' })
+    expect(result.status).toBe(400)
+    expect(stripeCalls('/v1/coupons')).toBe(0)
+  })
+
+  it('never asks a cart that ships nothing', async () => {
+    // A cart of downloads must not be asked which country to post them to —
+    // and must not be charged to ship them either.
+    const { result, body } = await runCheckout(
+      { shipping },
+      { product: { type: 'digital' } },
+    )
+    expect(result.status).toBe(200)
+    expect(shippingOptions(body)).toEqual([])
+    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
   })
 
   it('declares none for a merchant who configured no shipping', async () => {
@@ -278,14 +441,43 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     }
   })
 
-  it('leaves the collectable countries and the tax opt-in alone', async () => {
-    const { body } = await runCheckout({ shipping, tax: { mode: 'stripe' } })
-    expect(
-      ['0', '1', '2', '3', '4', '5'].map((index) =>
-        body?.get(`shipping_address_collection[allowed_countries][${index}]`),
-      ),
-    ).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+  it('keeps all six collectable countries when one rate serves them all', async () => {
+    // The configuration AGL-1721 calls invisible, and the one that must not
+    // regress: a single '*' zone resolves the same everywhere, so the union
+    // IS exact, no destination is needed, and the session is the one AGL-1707
+    // shipped. A fix that asked every shopper regardless would fail here.
+    const { result, body } = await runCheckout({
+      shipping: {
+        zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+        rates: [
+          {
+            id: 'flat',
+            zoneId: 'world',
+            name: 'Standard',
+            kind: 'flat',
+            amountCents: 500,
+          },
+        ],
+      },
+      tax: { mode: 'stripe' },
+    })
+    expect(result.status).toBe(200)
+    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(shippingOptions(body).map((option) => option.amount)).toEqual([
+      '500',
+    ])
     expect(body?.get('automatic_tax[enabled]')).toBe('true')
+  })
+
+  it('collects an address everywhere for a merchant who charges no shipping', async () => {
+    // Address collection predates shipping on this path — it feeds the order
+    // record and destination tax — so narrowing it is reserved for sessions
+    // where a rate depends on it. A store that charges none keeps all six.
+    const { result, body } = await runCheckout(null, {
+      shippingCountry: 'US',
+    })
+    expect(result.status).toBe(200)
+    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
   })
 
   it('prices a weight-tiered rate off the cart’s real weight', async () => {

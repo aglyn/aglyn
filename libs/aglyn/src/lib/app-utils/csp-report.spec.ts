@@ -82,6 +82,52 @@ describe('CSP violation reports (AGL-523)', () => {
       })
     })
 
+    it("reads Safari's single envelope — the format that was being dropped", () => {
+      // AGL-1788. Captured verbatim from Safari 26 against a report-only
+      // `img-src 'self'; report-uri /collect; report-to csp` — the console's
+      // and tenant's exact directive pair. Safari takes the modern camelCase
+      // BODY as soon as `report-to` is present, but posts it bare rather than
+      // in the Reporting API's array, so it matched neither branch and every
+      // Safari report was discarded before it reached the log.
+      const [violation] = parseCspReports({
+        type: 'csp-violation',
+        url: 'https://app.aglyn.com/dashboard',
+        body: {
+          documentURL: 'https://app.aglyn.com/dashboard?tab=members',
+          disposition: 'report',
+          referrer: '',
+          effectiveDirective: 'img-src',
+          blockedURL: 'https://tracker.example/pixel.png',
+          originalPolicy: "img-src 'self'; report-uri /x; report-to csp",
+          statusCode: 200,
+          sample: '',
+          sourceFile: 'https://app.aglyn.com/dashboard',
+          lineNumber: 0,
+          columnNumber: 1,
+        },
+      })
+      expect(violation).toMatchObject({
+        documentPath: '/dashboard',
+        effectiveDirective: 'img-src',
+        blockedUri: 'https://tracker.example/pixel.png',
+        disposition: 'report',
+      })
+      // And it must survive the filter, or reading it changes nothing.
+      expect(isActionableViolation(violation)).toBe(true)
+    })
+
+    it('does not treat a bare envelope of another report type as a violation', () => {
+      // The single-envelope branch is gated on `type`, so a deprecation report
+      // posted alone cannot become a fabricated CSP violation.
+      expect(
+        parseCspReports({
+          type: 'deprecation',
+          url: 'https://app.aglyn.com/dashboard',
+          body: { id: 'x', sourceFile: 'https://app.aglyn.com/x.js' },
+        }),
+      ).toEqual([])
+    })
+
     it('ignores other report types sharing the endpoint', () => {
       // The Reporting API multiplexes deprecation and intervention reports
       // through the same group. Treating those as CSP violations would invent

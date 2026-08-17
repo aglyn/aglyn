@@ -18,6 +18,7 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { readCartId } from './cart-cookie'
 import {
   MEMBER_SUSPENDED_ERROR,
   mintMemberSession,
@@ -81,15 +82,53 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
     await emitHostEvent(hostId, 'memberSignIn', { email })
     // Cart linkage (AGL-294): stamp the guest cart with the member so
     // abandoned-cart and analytics can attribute it.
-    const cartId = String(req.cookies?.[`aglyn_cart_${hostId}`] ?? '')
+    //
+    // AGL-1763: `update()`, never `set(..., { merge: true })`. `cartId` is the
+    // `aglyn_cart_{hostId}` cookie verbatim — the one value on this request the
+    // client chooses — and a merge-set against a missing path CREATES the
+    // document. So a member could mint `carts/{anything}` at will, one document
+    // per sign-in, each holding a `customerId` and nothing else: no `lines`, no
+    // `createdAtMs`, no `updatedAtMs`. Inert to read — `cart.ts` treats a
+    // missing `lines` as `[]` — but real storage on the merchant's Firestore
+    // and real weight in the per-host document count, growing without bound and
+    // belonging to no basket anyone ever filled.
+    //
+    // Nor is the cookie confined to one document. `CollectionReference.doc()`
+    // appends a SLASH-SEPARATED path and refuses it only when the component
+    // count comes out odd, so a cookie of `a/b/c` wrote to `carts/a/b/c` — a
+    // document at a nesting of the caller's choosing.
+    //
+    // Refusing loses nothing, which is why this is a plain refusal rather than
+    // AGL-1760's refuse-and-record: a cart that does not exist holds no lines,
+    // so there is no basket to attribute and no work to strand. `cart.ts` is
+    // what creates a cart — on the first POST that puts something in it, with
+    // the whole document written. This only ever stamps one.
+    //
+    // AGL-1769 moved the cookie's name and its validity rule into
+    // `cart-cookie.ts`, so a slash-bearing value never reaches `.doc()` from
+    // here at all. `update()` stays: the rule bounds the value to ONE document
+    // id, and whether THAT document exists is a separate question only the
+    // write can answer.
+    const cartId = readCartId(req.cookies, hostId)
     if (cartId) {
-      await firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('carts')
-        .doc(cartId)
-        .set({ customerId: memberDoc.id }, { merge: true })
-        .catch(() => undefined)
+      try {
+        await firestore
+          .collection('hosts')
+          .doc(hostId)
+          .collection('carts')
+          .doc(cartId)
+          .update({ customerId: memberDoc.id })
+      } catch (error) {
+        // Absent cart, malformed cookie, or a Firestore failure — none of them
+        // may fail a sign-in that has already succeeded, so this stays
+        // swallowed as it was. It is no longer SILENT, though: the old
+        // `.catch(() => undefined)` could not tell a missing cart from an
+        // outage. And the guard is a `try` rather than a `.catch()` because
+        // `.doc()` throws SYNCHRONOUSLY on an odd-component path, outside the
+        // promise the old handler covered — a mangled cookie used to 500 the
+        // member's own sign-in.
+        console.error('Cart linkage failed', hostId, error)
+      }
     }
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberDoc.id))
     return res.status(200).json({ ok: true })

@@ -146,6 +146,40 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const error = current.name ? CommerceModel.validateProduct(current) : null
 
+  /**
+   * Stock tracking is inert on a subscription-only product (AGL-1744) —
+   * nothing decrements it on the first charge or on any renewal, so the
+   * editor stops offering a number it cannot keep true. Existing
+   * configuration is NOT discarded: the stored value stays on the document
+   * (this save is a full replace of `current`, and `current` is untouched
+   * here), stays visible in the disabled field, and becomes editable again
+   * the moment Billing goes back to "One-time purchase" or "Both".
+   */
+  const stockApplies = CommerceModel.stockTrackingApplies(current)
+  const strandedStock = stockApplies
+    ? null
+    : CommerceModel.productInventory(current)
+
+  /**
+   * The one destructive move, and the merchant makes it deliberately.
+   *
+   * Needed because the checkout gate is unchanged: a stored `0` on a
+   * subscription-only product still 409s every new subscriber, and with the
+   * field disabled that would be a trap with no way out. `inventoryByLocation`
+   * goes with it — `adjustVariantInventory` re-sums the flat count from those
+   * buckets (AGL-286), so leaving them would let a later restock resurrect a
+   * count this just cleared. Keys are DELETED rather than set undefined; the
+   * save is a client-direct `setDoc`, which rejects undefined values.
+   */
+  const handleClearStockTracking = () => {
+    update({
+      variants: current.variants.map((variant) => {
+        const { inventoryByLocation: _perLocation, ...rest } = variant
+        return { ...rest, inventory: null }
+      }),
+    })
+  }
+
   const handleName = (name: string) =>
     update({
       name,
@@ -623,13 +657,19 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                   <TableCell>
                     <TextField
                       value={variant.inventory ?? ''}
-                      placeholder="—"
+                      placeholder={stockApplies ? '—' : 'n/a'}
+                      disabled={!stockApplies}
                       onChange={(event) =>
                         handleVariantField(index, 'inventory', event.target.value)
                       }
                       size="small"
                       sx={{ width: 72 }}
-                      slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+                      slotProps={{
+                        htmlInput: {
+                          inputMode: 'numeric',
+                          'aria-label': `Stock — ${comboLabel(variant.options)}`,
+                        },
+                      }}
                     />
                   </TableCell>
                   <TableCell>
@@ -649,9 +689,31 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           </Table>
         </Box>
         <Typography variant="caption" color="text.secondary">
-          {'Blank stock = untracked; 0 shows sold out. The first variant’s ' +
-            'price feeds legacy Product blocks.'}
+          {stockApplies
+            ? 'Blank stock = untracked; 0 shows sold out. The first variant’s ' +
+              'price feeds legacy Product blocks.'
+            : 'Stock is not tracked on a subscription-only product — nothing ' +
+              'decrements it, on the first charge or on any renewal. Choose ' +
+              '“Both — buyer chooses” below to track stock on the one-time ' +
+              'sales. The first variant’s price feeds legacy Product blocks.'}
         </Typography>
+        {strandedStock != null ? (
+          <Alert
+            severity="warning"
+            action={
+              <Button size="small" onClick={handleClearStockTracking}>
+                {'Clear stock'}
+              </Button>
+            }
+          >
+            {`This product still has stock set (${strandedStock}), but ` +
+              'subscriptions never decrement it — not the first charge, not ' +
+              'any renewal — so the number will not change on its own and ' +
+              'does not cap subscribers. It is kept, not deleted: a stored 0 ' +
+              'still blocks new subscribers, and the value becomes editable ' +
+              'again if you switch Billing back to one-time or “Both”.'}
+          </Alert>
+        ) : null}
         <Stack direction="row" spacing={2}>
           <TextField
             label="When out of stock"
@@ -699,6 +761,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             label="Low-stock alert at"
             value={current.lowStockThreshold ?? ''}
             placeholder="Off"
+            disabled={!stockApplies}
             onChange={(event) => {
               const raw = event.target.value.trim()
               update({

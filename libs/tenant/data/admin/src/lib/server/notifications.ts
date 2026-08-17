@@ -125,6 +125,21 @@ export async function notifyOrgAdmins(
  * Notifies everyone who manages a host (admin/editor in the host doc's
  * `memberRoles` projection) — the audience for form submissions and
  * bookings on that site.
+ *
+ * The OWNING ORG travels with the notification (AGL-1773). Host links are
+ * stored in the legacy `/{hostDocId}/rest` shape and rewritten to
+ * `/{orgSlug}/hosts/{subdomain}/rest` when they are FOLLOWED
+ * (`normalizeNotificationLink`, AGL-644) — a rewrite that needs an org slug.
+ * With no `orgId` on the doc the console had nothing to key on and fell back
+ * to whichever org the reader happens to have OPEN, so a manager who belongs
+ * to more than one workspace was routed to `/{other-org}/hosts/{subdomain}/…`
+ * and got a designed 404: `HostGuard` only resolves subdomains belonging to
+ * the current org. `notifyOrgAdmins` has always stamped it; the host fan-out
+ * — every form submission, booking, order and stock alert — never did.
+ *
+ * The host doc already carries `orgId` (AGL-233), so this costs no extra
+ * read. Spread conditionally: the field is optional on the host model and
+ * Firestore rejects `undefined`.
  */
 export async function notifyHostManagers(
   hostId: string,
@@ -137,7 +152,12 @@ export async function notifyHostManagers(
     const managers = Object.entries(memberRoles)
       .filter(([, role]) => role === 'admin' || role === 'editor')
       .map(([uid]) => uid)
-    await notifyUsers(managers, { ...payload, hostId })
+    const orgId = payload.orgId ?? (host.get('orgId') as string | undefined)
+    await notifyUsers(managers, {
+      ...payload,
+      hostId,
+      ...(orgId ? { orgId } : {}),
+    })
   } catch (error) {
     console.error('host manager notification failed', error)
   }

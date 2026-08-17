@@ -82,20 +82,52 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 const mockWriteOrgBilling = jest.fn()
-const mockOrgSet = jest.fn()
+const mockOrgUpdate = jest.fn()
+
+/**
+ * The org EXISTS here, and the fake says so.
+ *
+ * Before AGL-1763 the route never asked, so `get()` could return a snapshot
+ * with no `exists` at all and every test above still ran. It asks now — the
+ * merge-set that used to mint `orgs/{orgId}` from unchecked webhook metadata is
+ * an `updateExisting`, which needs a document to update. A fake that stayed
+ * silent on existence would report this file's subject (the back-fill) as
+ * broken for a reason that has nothing to do with it, so existence is modelled
+ * rather than stubbed around: `update()` resolves for the seeded org and would
+ * reject for any other id.
+ */
+const mockUpdateExisting = jest.requireActual(
+  '../../../libs/tenant/data/admin/src/lib/server/update-existing',
+).updateExisting
 
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const doc = () => ({
+  const doc = (id: string) => ({
     create: async () => undefined,
-    get: async () => ({ get: () => undefined, ref: { id: 'org-1' } }),
-    set: async (...args: unknown[]) => mockOrgSet(...args),
+    get: async () => ({
+      exists: id === 'org-1',
+      get: () => undefined,
+      ref: { id },
+    }),
+    set: async () => undefined,
+    update: async (...args: unknown[]) => {
+      if (id !== 'org-1') {
+        const error: Error & { code?: number } = new Error('5 NOT_FOUND')
+        error.code = 5
+        throw error
+      }
+      return mockOrgUpdate(...args)
+    },
     delete: async () => undefined,
-    ref: { id: 'org-1' },
+    ref: { id },
   })
   return {
     __esModule: true,
     firebaseAdmin: {
-      app: () => ({ firestore: () => ({ collection: () => ({ doc }) }) }),
+      app: () => ({
+        firestore: () => ({
+          collection: () => ({ doc, add: async () => ({ id: 'audit-1' }) }),
+        }),
+      }),
       firestore: {
         FieldValue: {
           delete: () => '__delete__',
@@ -106,6 +138,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     findOrgIdByStripeCustomer: async () => null,
     notifyOrgAdmins: async () => undefined,
     writeOrgBilling: async (...args: unknown[]) => mockWriteOrgBilling(...args),
+    updateExisting: (...args: unknown[]) => mockUpdateExisting(...args),
   }
 })
 
@@ -448,7 +481,7 @@ describe('the webhook actually performs the back-fill (AGL-1352)', () => {
 
   beforeEach(() => {
     mockWriteOrgBilling.mockReset()
-    mockOrgSet.mockReset()
+    mockOrgUpdate.mockReset()
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
   })

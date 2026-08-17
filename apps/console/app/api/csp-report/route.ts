@@ -44,6 +44,7 @@
  */
 
 import {
+  type CspViolation,
   isActionableViolation,
   parseCspReports,
   violationKey,
@@ -63,6 +64,11 @@ const MAX_BODY_BYTES = 16_384
 /**
  * One page load can emit many violations, but a caller sending hundreds is
  * not a browser. Bounded so a single POST cannot turn into a log flood.
+ *
+ * Counted in DISTINCT violations — see the dedup below. Ten repeats of one
+ * problem cost one slot, so this is a budget for how many separate things a
+ * page may be doing wrong, which is what makes it survivable for two
+ * report-only directives sharing the endpoint (AGL-1785).
  */
 const MAX_REPORTS_PER_REQUEST = 10
 
@@ -83,18 +89,63 @@ export async function POST(request: Request): Promise<Response> {
       return accepted()
     }
 
-    const violations = parseCspReports(payload)
-      .filter(isActionableViolation)
-      .slice(0, MAX_REPORTS_PER_REQUEST)
-
     // Deduplicated within the request: a page that loads the same offending
     // script in a loop would otherwise emit the same line many times and make
     // one defect look like many.
+    //
+    // The dedup runs BEFORE the cap, and the order is deliberate (AGL-1785).
+    // It used to run after, which made the cap a budget of ten REPORTS rather
+    // than ten PROBLEMS — ten repeats of one defect could consume it and leave
+    // one log line to show for it.
     const seen = new Set<string>()
+    const distinct = parseCspReports(payload)
+      .filter(isActionableViolation)
+      .filter((violation) => {
+        const key = violationKey(violation)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+    // Then round-robin across DIRECTIVES before capping, which is the part that
+    // actually protects the measurement (AGL-1785).
+    //
+    // The console now runs two report-only directives through this one
+    // endpoint: `img-src` (AGL-1685 — the data AGL-1702's flip is gated on) and
+    // `script-src` (AGL-1785). The `report-to` wire format batches many
+    // violations into a single POST, so in report order one noisy directive
+    // takes the whole budget and the other is truncated away in silence.
+    //
+    // Deduping alone does NOT fix that, and assuming it did was the mistake
+    // worth recording: a loader pulling twelve DIFFERENT chunk URLs off one CDN
+    // is twelve distinct violations, so nothing collapses them — and that is
+    // exactly the AGL-1779 shape. Interleaving is what bounds the damage: with
+    // one violation of a directive present anywhere in the batch, that
+    // directive is served in the first round and cannot be starved by another.
+    //
+    // The flood bound this cap exists for is unchanged — still at most ten log
+    // lines per POST — and the set is bounded by what fits in `MAX_BODY_BYTES`.
+    const byDirective = new Map<string, CspViolation[]>()
+    for (const violation of distinct) {
+      const bucket = byDirective.get(violation.effectiveDirective)
+      if (bucket) bucket.push(violation)
+      else byDirective.set(violation.effectiveDirective, [violation])
+    }
+    const fair: CspViolation[] = []
+    for (let round = 0; fair.length < distinct.length; round += 1) {
+      let added = false
+      for (const bucket of byDirective.values()) {
+        if (round < bucket.length) {
+          fair.push(bucket[round])
+          added = true
+        }
+      }
+      if (!added) break
+    }
+    const violations = fair.slice(0, MAX_REPORTS_PER_REQUEST)
+
     for (const violation of violations) {
       const key = violationKey(violation)
-      if (seen.has(key)) continue
-      seen.add(key)
       console.warn(
         JSON.stringify({
           tag: 'AGL-523:csp-violation',

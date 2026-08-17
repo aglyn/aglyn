@@ -36,17 +36,52 @@ import { PLAN_ENTITLEMENTS, RELEASE_FLAGS } from '@aglyn/aglyn'
  * without anyone editing this file.
  */
 
+/**
+ * The override is `POST /api/admin/org-override` since AGL-1786, so what
+ * this suite reads is the REQUEST BODY: the console sends the operator's
+ * intent — plan, and only the quotas/features/release flags explicitly
+ * forced — and the route mints the `FieldValue.delete()` sentinels
+ * "inherit" needs. `setDoc`/`addDoc`/`writeBatch` remain as tripwires for a
+ * return to a client write of either document.
+ *
+ * Which side of the wire holds the sentinel is not cosmetic. `deleteField()`
+ * has no JSON form, so a body carrying one would arrive as `{}` and the
+ * merge would keep the stored value — the AGL-1109 bug, reintroduced
+ * silently by the migration. The route's own expansion is pinned in
+ * org-override-route.spec.ts; what these cases pin is that the console sends
+ * ABSENCE and not a payload.
+ */
 const mockSetDoc = jest.fn(async () => undefined)
 const mockAddDoc = jest.fn(async () => undefined)
+const mockBatchWrites: Array<
+  [{ path: string }, Record<string, any>, unknown]
+> = []
+/** Bodies of the override POSTs, parsed. */
+const mockOverrideBodies: any[] = []
+let mockAutoId = 0
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  doc: (parent: any, ...segments: string[]) =>
+    segments.length > 0
+      ? { path: segments.join('/') }
+      : { path: `${parent?.path ?? ''}/auto-${++mockAutoId}` },
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
   }),
   setDoc: (...args: unknown[]) => mockSetDoc(...(args as [])),
   addDoc: (...args: unknown[]) => mockAddDoc(...(args as [])),
   deleteField: () => '__DELETE__',
+  writeBatch: () => {
+    const staged: Array<[{ path: string }, Record<string, any>, unknown]> = []
+    return {
+      set: (ref: { path: string }, data: Record<string, any>, options?: unknown) => {
+        staged.push([ref, data, options])
+      },
+      commit: async () => {
+        mockBatchWrites.push(...staged)
+      },
+    }
+  },
 }))
 
 jest.mock('@aglyn/shared-util-timestamp', () => ({
@@ -83,23 +118,24 @@ const org = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const setDocPayload = (index = 0) =>
-  mockSetDoc.mock.calls[index] as unknown as [
-    { path: string },
-    Record<string, any>,
-    { merge: boolean },
-  ]
-
-const auditPayload = (index = 0) =>
-  mockAddDoc.mock.calls[index] as unknown as [{ path: string }, any]
+/** What the console asked the route to apply. */
+const overridePayload = (index = 0) => mockOverrideBodies[index]
 
 describe('staff org override surface coverage (AGL-1635)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({}),
-    })) as unknown as typeof fetch
+    mockBatchWrites.length = 0
+    mockOverrideBodies.length = 0
+    global.fetch = jest.fn(async (url: string, init: any) => {
+      if (String(url) === '/api/admin/org-override') {
+        mockOverrideBodies.push(JSON.parse(init.body))
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, written: true }),
+      }
+    }) as unknown as typeof fetch
   })
 
   describe('field lists track their sources', () => {
@@ -185,6 +221,21 @@ describe('staff org override surface coverage (AGL-1635)', () => {
   })
 
   describe('the dialog writes release-flag overrides', () => {
+    /**
+     * Grant early access to one org — and say WHY (AGL-1652). Forcing an
+     * unreleased feature on for a single paying customer is exactly the act
+     * the reason field exists for, so the dialog refuses to save without
+     * one and every case here has to supply it.
+     */
+    const chooseReason = async (dialog: HTMLElement) => {
+      fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Reason' }))
+      fireEvent.click(
+        await screen.findByRole('option', {
+          name: 'Early access to an unreleased feature',
+        }),
+      )
+    }
+
     const openAndSetFlag = async (value: string, existing?: unknown) => {
       render(
         <StaffOrgActions
@@ -200,46 +251,43 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       fireEvent.mouseDown(control)
       const option = await screen.findByRole('option', { name: value })
       fireEvent.click(option)
+      await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
-      await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+      await waitFor(() => expect(mockOverrideBodies.length).toBe(1))
+      // Nothing written from the client — the route owns both documents.
+      expect(mockSetDoc).not.toHaveBeenCalled()
+      expect(mockAddDoc).not.toHaveBeenCalled()
+      expect(mockBatchWrites).toEqual([])
     }
 
-    it('forces a flag ON for one org and audits the resulting state', async () => {
+    it('forces a flag ON for one org, and says WHY', async () => {
       await openAndSetFlag('Force on')
-      const [target, write] = setDocPayload()
-      expect(target.path).toBe('orgs/org-1')
-      expect(write['releaseFlags'].release_edit_bar).toBe(true)
-      // Untouched flags are DELETE sentinels, never omitted: the write is a
-      // merge, so an omitted key would keep whatever was stored (AGL-1109).
-      expect(write['releaseFlags'].release_contacts).toBe('__DELETE__')
-
-      const [, audit] = auditPayload()
-      expect(audit.action).toBe('org.override')
-      expect(audit.actorUid).toBe('staff-1')
-      // The audit records STATE, so no sentinel may reach it.
-      expect(audit.after.releaseFlags).toEqual({ release_edit_bar: true })
-      expect(Object.values(audit.after.releaseFlags)).not.toContain(
-        '__DELETE__',
-      )
+      const body = overridePayload()
+      expect(body.orgId).toBe('org-1')
+      expect(body.releaseFlags.release_edit_bar).toBe(true)
+      // Untouched flags are ABSENT from the wire, never a sentinel: the
+      // route expands absence into `FieldValue.delete()` against the
+      // registry, because a serialised sentinel is `{}` and a merge ignores
+      // it — which is the AGL-1109 no-op (org-override-route.spec.ts pins
+      // the expansion).
+      expect(body.releaseFlags).not.toHaveProperty('release_contacts')
+      expect(JSON.stringify(body)).not.toContain('__DELETE__')
+      // Granting one org an unreleased feature records WHY (AGL-1652).
+      expect(body.reason).toBe('beta')
     })
 
     it('forces a flag OFF — the per-org kill switch', async () => {
       await openAndSetFlag('Force off')
-      const [, write] = setDocPayload()
-      expect(write['releaseFlags'].release_edit_bar).toBe(false)
-      const [, audit] = auditPayload()
-      expect(audit.after.releaseFlags).toEqual({ release_edit_bar: false })
+      expect(overridePayload().releaseFlags.release_edit_bar).toBe(false)
     })
 
-    it('reverting the last override to Inherit REMOVES the field', async () => {
-      // Not an empty map left behind: `overrideCount` reads key presence, so
-      // an empty `releaseFlags` would keep showing a chip forever.
+    it('reverting the last override to Inherit sends NO forced flags', async () => {
+      // Not an empty map left behind on the org: `overrideCount` reads key
+      // presence, so an empty `releaseFlags` would keep showing a chip
+      // forever. From here that is expressed as an empty request map, which
+      // the route turns into a delete of the whole field.
       await openAndSetFlag('Inherit (default off)', { release_edit_bar: true })
-      const [, write] = setDocPayload()
-      expect(write['releaseFlags']).toBe('__DELETE__')
-      const [, audit] = auditPayload()
-      expect(audit.after.releaseFlags).toBeNull()
-      expect(audit.before.releaseFlags).toEqual({ release_edit_bar: true })
+      expect(overridePayload().releaseFlags).toEqual({})
     })
 
     it('prefills the stored override when the dialog reopens', () => {
@@ -270,11 +318,15 @@ describe('staff org override surface coverage (AGL-1635)', () => {
       const control = within(dialog).getByLabelText('Site admin bar')
       fireEvent.mouseDown(control)
       fireEvent.click(await screen.findByRole('option', { name: 'Force on' }))
+      await chooseReason(dialog)
       fireEvent.click(within(dialog).getByText('Save (audited)'))
-      await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
-      const [, write] = setDocPayload()
-      expect(write['entitlements'].hostLimit).toBe(5)
-      expect(write['releaseFlags'].release_edit_bar).toBe(true)
+      await waitFor(() => expect(mockOverrideBodies.length).toBe(1))
+      expect(mockSetDoc).not.toHaveBeenCalled()
+      const body = overridePayload()
+      // The stored quota is re-sent from the prefilled field, so the merge
+      // keeps it; the release flag rides beside it as a separate family.
+      expect(body.quotas.hostLimit).toBe(5)
+      expect(body.releaseFlags.release_edit_bar).toBe(true)
     })
   })
 })

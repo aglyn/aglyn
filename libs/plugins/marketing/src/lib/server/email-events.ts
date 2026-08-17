@@ -16,7 +16,15 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+// AGL-1771 lifted `isDocumentId` here from the local copy AGL-1768 wrote. The
+// copy's stated reason was wrong: `@nx/enforce-module-boundaries` does NOT
+// refuse an edge between two feature plugins — every plugin carries only
+// `aglyn:addons`, and that tag's rule permits `aglyn:addons` as a target, which
+// is why `campaign-send.ts` already imports `@aglyn/plugins-commerce/model`. It
+// now lives beside `updateExisting` in the library where Firestore paths are
+// built, which was always the better home and is now the reachable one.
+import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
+import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
@@ -113,24 +121,30 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     const tags = tagMap(data?.tags)
     const hostId = tags['hostId']
     const campaignId = tags['campaignId']
-    if (!hostId || !campaignId) {
+    // Both are path components, so "non-empty" was never the whole question.
+    if (!isDocumentId(hostId) || !isDocumentId(campaignId)) {
       return res.status(200).json({ ignored: true })
     }
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    await hostRef
-      .collection('campaigns')
-      .doc(campaignId)
-      .set(
-        {
-          stats: {
-            [type === 'email.opened' ? 'opens' : 'clicks']:
-              FieldValue.increment(1),
-          },
-        },
-        { merge: true },
-      )
-      .catch(() => undefined)
+    // Plain refusal (AGL-1768). A merge-set against a missing path CREATES it,
+    // so an open re-created a campaign the merchant had deleted — a document
+    // holding a `stats` map and nothing else: no subject, no body, no
+    // audience, no status. Opens trail sends by days, so deleting it again did
+    // not help. `updateExisting` rejects only that case (gRPC NOT_FOUND) and
+    // rethrows everything else, so a Firestore outage stays distinguishable
+    // from an open against a deleted campaign instead of being swallowed by a
+    // `.catch(() => undefined)`. AGL-1760's test — does refusing discard money
+    // or work that already happened? — is passed: the open count for a
+    // campaign that no longer exists has no reader.
+    //
+    // DOTTED FIELD PATH, not a nested map. `update({ stats: { opens: … } })`
+    // REPLACES the whole `stats` map, so every open would clobber `clicks`;
+    // only `set({ merge: true })` merges maps at depth.
+    await updateExisting(hostRef.collection('campaigns').doc(campaignId), {
+      [type === 'email.opened' ? 'stats.opens' : 'stats.clicks']:
+        FieldValue.increment(1),
+    })
 
     // Experiment conversion (AGL-268): clicks are the signal.
     const experimentId = tags['experimentId']
@@ -139,7 +153,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     )
       .trim()
       .toLowerCase()
-    if (type === 'email.clicked' && experimentId && recipient) {
+    if (type === 'email.clicked' && isDocumentId(experimentId) && recipient) {
       const experimentSnapshot = await hostRef
         .collection('experiments')
         .doc(experimentId)
@@ -153,7 +167,16 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           experimentId,
           recipient,
         )
-        if (variant) {
+        // `variant.id` is merchant-authored — `validateExperiment` checks the
+        // ids are unique and nothing about their SHAPE — and it is a path
+        // component here too.
+        if (variant && isDocumentId(variant.id)) {
+          // Still a merge-set, and deliberately so: this one CREATES. The
+          // first conversion for a variant has no stats document yet, the
+          // experiment it hangs off was just proven to exist, and the click
+          // is work that really happened — refusing would discard it. The
+          // `.catch(() => undefined)` is gone for the same reason as above: a
+          // swallowed failure here is a conversion lost silently.
           await experimentSnapshot.ref
             .collection('stats')
             .doc(variant.id)
@@ -164,7 +187,6 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
               },
               { merge: true },
             )
-            .catch(() => undefined)
         }
       }
     }

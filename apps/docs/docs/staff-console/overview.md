@@ -47,7 +47,24 @@ set password](/img/staff-console/admin-user-password.png)
   and GDPR-erasure flags, per organization. The directory is listed server-side with
   the Admin SDK (so it shows *every* org, not the subset client rules would return),
   ordered by organization id, 25 per page with Previous/Next.
-- **Entitlement editor** — full override editor for an organization's entitlements.
+- **Entitlement editor** — full override editor for an organization's entitlements,
+  its plan, and per-organization release flags. Every override needs a **reason**
+  chosen from a fixed list (negotiated contract, support remediation, early access,
+  correction, sales trial, or *other* — which requires a note). The reason and note
+  are written onto the audit row beside the before/after and shown wherever that row
+  is: the audit log, the organization's own page, and the acting staff account's
+  trail. The log is append-only, so a reason not given at the time cannot be added
+  afterwards. The reason is checked by the **server** that performs the override,
+  not only by the dialog, so a request without one is refused rather than applied.
+  Changing an organization's release flags needs the **super** staff role; plan and
+  entitlement changes are open to **billing** staff as well.
+  The override and its audit row are saved **together** — either both land or
+  neither does. Read the message on a failure rather than assuming: it says
+  *"nothing was written … safe to retry"* when the server refused the change, and
+  says the outcome is **not known** when the request never got an answer (a dropped
+  connection, a gateway error). In that second case, check the organization and the
+  audit log before saving again — saving blind would record a before-state that is
+  already overridden.
 - **Users admin** — staff-claim management and disabling users, with gated listing
   and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
   granted to an **existing** account, so if someone isn't found, have them sign in to

@@ -89,6 +89,46 @@ const ROUTES = walk(resolve(REPO_ROOT, CONSOLE_API))
  */
 const DECLARES_READ = /\bintent:\s*'read'\s*(?:,|\})/
 
+/**
+ * The CONDITIONAL form — `intent: <predicate> ? 'read' : 'write'` (AGL-1694).
+ *
+ * A route whose method lies about only SOME of its requests cannot declare
+ * itself a read, so it decides per request instead. That is a strictly
+ * larger assertion than the flat form — it says a specific request shape
+ * mutates nothing — and this spec was blind to it: the flat regex needs a
+ * comma or brace after `'read'`, and a ternary has a colon, so the first
+ * conditional declaration passed every assertion below without ever being
+ * written down. Same audit, both spellings.
+ *
+ * Same-line only, and still not a type annotation: `intent?: 'read' |
+ * 'write'` has no `?` between `intent:` and the literal.
+ */
+const DECLARES_CONDITIONAL_READ = /\bintent:[^\n]*\?\s*'read'\s*:/
+
+const declaresRead = (line: string) =>
+  DECLARES_READ.test(line) || DECLARES_CONDITIONAL_READ.test(line)
+
+/**
+ * A refusal whose ENTIRE condition is the `orgSuspended` member projection
+ * (AGL-1790).
+ *
+ * `applyOrgLockdown` writes that projection for every lock MODE, so the
+ * projection answers "is this org locked at all" and cannot answer "does
+ * this lock refuse this request". A route that declares a read intent and
+ * then refuses on the bare projection has a mode-blind gate standing beside
+ * a mode-aware one, and the blind one wins — which is precisely what 404'd
+ * every private media preview in the console under a read-only lock while
+ * the declaration above it, the audit below, and the mode table in
+ * `apps/docs/docs/staff-console/lockdown.md` all read as correct.
+ *
+ * Deliberately narrow: the closing paren must follow the literal, so a
+ * conjunction (`&& !isLockdownActive(…)`) is not matched. That is the
+ * distinction — the projection may still gate a refusal, it may just not be
+ * the whole of one on a route that has been allowed through a lock.
+ */
+const BARE_PROJECTION_REFUSAL =
+  /\bif\s*\(\s*[A-Za-z_$][\w$]*(?:\.orgSuspended|\.get\('orgSuspended'\))\s*===\s*true\s*\)/
+
 interface ReadDeclaration {
   file: string
   /** The contiguous `//` block immediately above the declaration. */
@@ -99,7 +139,7 @@ function readDeclarations(file: string): ReadDeclaration[] {
   const lines = read(resolve(REPO_ROOT, file)).split('\n')
   const found: ReadDeclaration[] = []
   lines.forEach((line, index) => {
-    if (!DECLARES_READ.test(line)) return
+    if (!declaresRead(line)) return
     const reason: string[] = []
     for (let above = index - 1; above >= 0; above -= 1) {
       const trimmed = lines[above].trim()
@@ -136,6 +176,12 @@ const AUDITED_READS: Record<string, number> = {
   'apps/console/app/api/media/sign/route.ts': 1,
   // AGL-1625: the per-asset usage scan, the media sibling of where-used.
   'apps/console/app/api/media/references/route.ts': 1,
+  // AGL-1694, and the only CONDITIONAL entry: five of this route's six
+  // actions write, so the declaration is on the `set-scope` PREVIEW request
+  // alone — the subtree count the sharing dialog quotes, which returns
+  // before the cascade. Audited end to end: the branch reaches no batch, no
+  // Storage object, and no timestamp before it answers.
+  'apps/console/app/api/media/folders/route.ts': 1,
 }
 
 describe('AGL-1625 · which console routes are declared READS', () => {
@@ -178,8 +224,74 @@ describe('AGL-1625 · which console routes are declared READS', () => {
     )
     expect(source).toMatch(/intent\?: LockdownVerdictOptions\['intent'\]/)
     expect(source).not.toMatch(DECLARES_READ)
+    expect(source).not.toMatch(DECLARES_CONDITIONAL_READ)
+    // Nor may it decide one on a route's behalf (AGL-1694). This module
+    // holds the `set-scope` preview PREDICATE, and a predicate is a fact
+    // about a request; the moment it returns `'read'` instead of a boolean,
+    // the declaration has moved somewhere the walk above cannot see and the
+    // equality check goes back to passing over an unaudited relaxation.
+    expect(source).not.toMatch(/'read'/)
     // And it must actually forward what it is given — an accepted-but-
     // ignored option would silently refuse the read it was told about.
     expect(source.match(/intent: options\?\.intent/g)?.length).toBe(2)
+  })
+})
+
+describe('AGL-1790 · a read declaration undone by the line beside it', () => {
+  it('detects the bare projection refusal and only the bare one', () => {
+    // The guard, made to fail on purpose before it is trusted. Without
+    // this, a regex that silently stopped matching anything would report
+    // the whole route surface as clean.
+    expect(
+      BARE_PROJECTION_REFUSAL.test(
+        'if (member.orgSuspended === true) return refuse()',
+      ),
+    ).toBe(true)
+    expect(
+      BARE_PROJECTION_REFUSAL.test(
+        "if (membership.get('orgSuspended') === true) {",
+      ),
+    ).toBe(true)
+    // The repaired shape: the projection still gates, but the ACTIVENESS of
+    // the carrier decides. Matching this would make the guard un-satisfiable
+    // by anything except deleting the disagreement rule.
+    expect(
+      BARE_PROJECTION_REFUSAL.test(
+        'if (member.orgSuspended === true && !isLockdownActive(x, Date.now())) {',
+      ),
+    ).toBe(false)
+    // Nor the `org:` argument the verdict is handed, which every one of
+    // these routes still computes from the same projection.
+    expect(
+      BARE_PROJECTION_REFUSAL.test(
+        'member.orgSuspended === true ? await getOrgDoc(orgId) : undefined',
+      ),
+    ).toBe(false)
+  })
+
+  it('finds none on any route that declares a read', () => {
+    const files = [...new Set(DECLARED.map((entry) => entry.file))].sort()
+    // Non-vacuous: the declared set is what makes this assertion mean
+    // anything, and it is discovered rather than listed.
+    expect(files.length).toBeGreaterThan(0)
+    const undone = files.filter((file) =>
+      BARE_PROJECTION_REFUSAL.test(read(resolve(REPO_ROOT, file))),
+    )
+    expect(undone).toEqual([])
+  })
+
+  it('leaves the same line alone on a route that declares no read', () => {
+    // The recorded NEGATIVE result (AGL-1790). `resources/erase` carries a
+    // byte-identical refusal and is CORRECT: an erase is a write, the
+    // verdict refuses it under either mode, and the bare line is only ever
+    // reached on a projection/carrier disagreement — where refusing is the
+    // rule, not the bug. The guard above is scoped to read-declaring routes
+    // for exactly this reason, and this pins that scoping so a later sweep
+    // does not "finish the job" by relaxing a write.
+    const source = read(
+      resolve(REPO_ROOT, 'apps/console/app/api/resources/erase/route.ts'),
+    )
+    expect(source).toMatch(BARE_PROJECTION_REFUSAL)
+    expect(declaresRead(source)).toBe(false)
   })
 })

@@ -91,17 +91,24 @@ reason written next to it.
 Anything not declared **refuses**, deliberately: a chokepoint nobody has
 audited is treated as a write, because an over-refused read costs a customer
 some friction and an under-refused write costs the data the freeze exists to
-protect. Two consequences worth knowing before a customer reports them:
+protect. One consequence worth knowing before a customer reports it:
 
 - the **tenant edit bar** stops appearing on published sites for the locked
   workspace. That is intended — the bar leads to an editor whose saves the
-  freeze denies anyway;
-- the folder-sharing **preview** in the media library refuses along with the
-  cascade it previews.
+  freeze denies anyway.
 
-Both are recorded decisions rather than oversights. If you find another
+That is a recorded decision rather than an oversight. If you find another
 operation that only reads and still 423s during a window, it is worth filing —
 that is how the declared list grows.
+
+A declaration is usually per route, but it does not have to be. The media
+**folder-sharing preview** — the "also apply to the 47 files in this folder and
+its subfolders?" count the library quotes before a sharing change — is declared
+per **request**, because it shares a route with five actions that write and with
+the cascade it previews. During a read-only window that count still answers; the
+cascade it precedes, and every other folder operation, still refuses. An author
+therefore sees the size of the change they cannot yet make, which is the
+question they were actually asking.
 
 ### How fast read-only takes hold {#read-only-timing}
 
@@ -175,6 +182,56 @@ In the console, with the same lock armed:
 Re-run it after any change to the chokepoints. It needs the emulators, the e2e
 seed, and **port 4500 free** — the tenant only recognizes `localhost:4500`
 locally.
+
+#### The one row that is not a wire observation: "never revoked" {#read-only-revocation-evidence}
+
+Every other claim in the mode table above was forced on the wire. **"Member
+sessions — never revoked" was not, and this is what stands behind it instead**
+(AGL-1724).
+
+It resisted the harness for a structural reason worth writing down, because the
+same reason will defeat the next attempt: `lockdown-readonly-wire.mjs` arms its
+locks by **writing the `suspended*` carrier directly**, not by POSTing to
+`/api/admin/lockdown`. That is deliberate — it keeps the harness independent of
+a running console — but revocation lives in `applyOrgLockdown`, which a direct
+carrier write never reaches. A "the session still works" probe added to that
+harness as it stands would pass against a revocation path that had been deleted
+entirely. Forcing it for real needs the emulated console up, a super-staff
+token, a minted member session cookie held across the arming, and the paired
+`mode: 'full'` run to prove the probe can fail at all.
+
+What it rests on instead is `apps/console/specs/lockdown-revocation-wiring.spec
+.ts`, which drives the **real** `applyOrgLockdown` — the module the three other
+lockdown specs all mock away, and which until then had no test of its own. It
+pins both directions against the same reason (`security`, the reason that *does*
+revoke under a full lock, so the discrimination is on the mode): read-only
+revokes nothing, full revokes both members pool-aware, and neither ever revokes
+a staff account on the roster. Each assertion was confirmed to fail against a
+deliberately broken copy of the module.
+
+**And the reason a surviving session is safe rather than merely intended:** the
+write freeze is enforced in two places that have nothing to do with the session.
+A read-only lock writes `orgSuspended: true` onto every member doc exactly as a
+full lock does, and `orgNotSuspended()` in `cloud/firebase-firestore.rules`
+gates every client-direct write on it — besigner saves included. Admin-SDK
+writes are refused separately, at the wired chokepoints
+(`lockdown-423-coverage.spec.ts`). So a member who keeps browsing under
+read-only holds a **read** capability, not a write one, and revoking the session
+would buy no enforcement — it would only sign the workspace out during our
+maintenance window, which is the outcome the mode exists to avoid.
+
+**The corollary, and it has bitten once.** Because that projection is written
+for *both* modes, it answers "is this workspace locked at all" and cannot answer
+"does this lock refuse this request". A chokepoint that consults the projection
+*instead of* the verdict is therefore mode-blind, and it will refuse a read the
+verdict just passed. That is what 404'd every **private media preview** in the
+console under a read-only lock (AGL-1790): the route declared its read, the
+verdict honoured it, and a legacy line beside the verdict refused on the
+projection alone. The projection is still a fine *signal* — it is how these
+routes avoid an org-doc read on the happy path — and it still refuses when it
+disagrees with the workspace document, which is a stale projection rather than a
+mode. It is just never the answer. If a read 423s or 404s during a window and
+the mode table says it should work, this is the first shape to look for.
 
 ### A gentler lock never softens a stricter one
 

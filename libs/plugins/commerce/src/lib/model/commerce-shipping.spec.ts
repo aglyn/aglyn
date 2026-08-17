@@ -16,10 +16,14 @@
  */
 
 import {
+  CHECKOUT_SHIPPING_COUNTRIES,
   MAX_CHECKOUT_SHIPPING_OPTIONS,
+  normalizeCheckoutShippingCountry,
+  planCheckoutShipping,
   resolveCheckoutShippingOptions,
   resolveShippingRates,
   type ShippingSettings,
+  summarizeShippingCoverage,
 } from './commerce-shipping'
 
 const settings: ShippingSettings = {
@@ -108,10 +112,9 @@ describe('resolveShippingRates', () => {
 })
 
 /**
- * The Stripe Checkout adapter (AGL-1707). The session is created before the
- * shopper has an address, so these are the union over every destination the
- * cart collects — see the doc comment on the function for why that trade is
- * the one taken.
+ * The Stripe Checkout adapter (AGL-1707): the rates for a GIVEN set of
+ * destinations, unioned. Honest only over destinations the session is also
+ * restricted to, which is `planCheckoutShipping`'s job below.
  */
 describe('resolveCheckoutShippingOptions', () => {
   const countries = ['US', 'CA', 'GB', 'AU', 'DE', 'FR']
@@ -240,5 +243,315 @@ describe('resolveCheckoutShippingOptions', () => {
     expect(options.map((option) => option.amountCents)).toEqual([
       100, 200, 300, 400, 500,
     ])
+  })
+})
+
+/**
+ * Which destinations one session may serve, and at which rates (AGL-1721).
+ *
+ * THE PROPERTY UNDER TEST IS A PAIRING, not a filter: every option returned
+ * has to be valid for every country returned. Stripe charges whichever
+ * `shipping_options` entry the shopper picks and never compares it to the
+ * address — a `shipping_rate_data` has no country — so a plan that narrowed
+ * only the rates would still let a French address take a US rate.
+ */
+describe('planCheckoutShipping', () => {
+  const cart = { subtotalCents: 2000, totalGrams: 400 }
+
+  /** The invariant, checked directly rather than assumed. */
+  function everyOptionServesEveryCountry(
+    settings: ShippingSettings | undefined,
+    plan: ReturnType<typeof planCheckoutShipping>,
+  ) {
+    return plan.countries.every((country) => {
+      const reachable = new Set(
+        resolveCheckoutShippingOptions(settings, [country], cart).map(
+          (option) => `${option.rateId}:${option.amountCents}`,
+        ),
+      )
+      return plan.options.every((option) =>
+        reachable.has(`${option.rateId}:${option.amountCents}`),
+      )
+    })
+  }
+
+  it('refuses rather than union when the rates differ by destination', () => {
+    // The AGL-1721 configuration: US at 799, rest-of-world at 2999. The old
+    // adapter returned both for a session that accepted either address.
+    const plan = planCheckoutShipping(settings, cart)
+    expect(plan.refusal).toBe('destination-required')
+    expect(plan.options).toEqual([])
+    expect(everyOptionServesEveryCountry(settings, plan)).toBe(true)
+  })
+
+  it('pairs a declared destination with a session restricted to it', () => {
+    const us = planCheckoutShipping(settings, cart, 'US')
+    expect(us.refusal).toBeUndefined()
+    expect(us.countries).toEqual(['US'])
+    expect(us.options.map((option) => option.rateId)).toEqual([
+      'wt',
+      'free50',
+      'std',
+    ])
+    expect(everyOptionServesEveryCountry(settings, us)).toBe(true)
+
+    const fr = planCheckoutShipping(settings, cart, 'fr')
+    expect(fr.countries).toEqual(['FR'])
+    expect(fr.options.map((option) => option.rateId)).toEqual(['intl'])
+    expect(everyOptionServesEveryCountry(settings, fr)).toBe(true)
+  })
+
+  it('keeps every collectable country when one rate set serves them all', () => {
+    // The configuration AGL-1721 calls invisible — a single '*' zone — plus
+    // the merchant who configured nothing. Neither may be asked anything, and
+    // the second must keep producing a session with no shipping on it at all.
+    const worldOnly: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+      rates: [
+        {
+          id: 'flat',
+          zoneId: 'world',
+          name: 'Standard',
+          kind: 'flat',
+          amountCents: 500,
+        },
+      ],
+    }
+    const wide = planCheckoutShipping(worldOnly, cart)
+    expect(wide.refusal).toBeUndefined()
+    expect(wide.countries).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(wide.options.map((option) => option.rateId)).toEqual(['flat'])
+    expect(everyOptionServesEveryCountry(worldOnly, wide)).toBe(true)
+
+    for (const empty of [undefined, {}, { zones: [], rates: [] }]) {
+      const plan = planCheckoutShipping(empty, cart)
+      expect(plan.refusal).toBeUndefined()
+      expect(plan.options).toEqual([])
+      expect(plan.countries).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    }
+  })
+
+  it('refuses a destination the merchant prices no rate for', () => {
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: [
+        {
+          id: 'std',
+          zoneId: 'us',
+          name: 'Standard',
+          kind: 'flat',
+          amountCents: 799,
+        },
+      ],
+    }
+    expect(planCheckoutShipping(usOnly, cart, 'FR').refusal).toBe(
+      'destination-unserved',
+    )
+    // …but a merchant who prices NOTHING anywhere is refusing nobody: that
+    // store charges no shipping and has to keep completing.
+    expect(planCheckoutShipping({}, cart, 'FR')).toEqual({
+      countries: [...CHECKOUT_SHIPPING_COUNTRIES],
+      options: [],
+    })
+  })
+
+  it('treats a destination it cannot collect an address for as undeclared', () => {
+    // Not an error: a country outside the collectable list cannot be entered
+    // at Stripe either, so it falls through to the ambiguity question rather
+    // than to a session narrowed to somewhere unreachable.
+    for (const value of [
+      'JP',
+      '',
+      '  ',
+      'USA',
+      null,
+      42,
+      ['US'],
+      { code: 'US' },
+    ]) {
+      expect(normalizeCheckoutShippingCountry(value)).toBeUndefined()
+      expect(planCheckoutShipping(settings, cart, value).refusal).toBe(
+        'destination-required',
+      )
+    }
+    expect(normalizeCheckoutShippingCountry(' us ')).toBe('US')
+  })
+
+  it('does not ask over a difference past Stripe’s cap', () => {
+    // Both zones offer the same cheapest five; they diverge only in rates the
+    // session could never carry. Asking the shopper there would cost a sale
+    // to settle a question with no visible answer.
+    const deep: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        ...Array.from({ length: 6 }, (_unused, index) => ({
+          id: `shared${index}`,
+          zoneId: 'us',
+          name: `Shared ${index}`,
+          kind: 'flat' as const,
+          amountCents: (index + 1) * 100,
+        })),
+        ...Array.from({ length: 6 }, (_unused, index) => ({
+          id: `shared${index}`,
+          zoneId: 'world',
+          name: `Shared ${index}`,
+          kind: 'flat' as const,
+          amountCents: (index + 1) * 100,
+        })),
+        {
+          id: 'usDeep',
+          zoneId: 'us',
+          name: 'Freight',
+          kind: 'flat',
+          amountCents: 90000,
+        },
+      ],
+    }
+    const plan = planCheckoutShipping(deep, cart)
+    expect(plan.refusal).toBeUndefined()
+    expect(plan.options).toHaveLength(MAX_CHECKOUT_SHIPPING_OPTIONS)
+    expect(everyOptionServesEveryCountry(deep, plan)).toBe(true)
+  })
+})
+
+/**
+ * The console's answer to "which destinations do my zones refuse?"
+ * (AGL-1791).
+ *
+ * The pairing to hold is with `planCheckoutShipping`: a destination this
+ * reports unserved must be one the checkout actually refuses, and a merchant
+ * it stays quiet about must be one the checkout serves. The two are asserted
+ * against each other rather than separately, because the expensive mistake
+ * here is not a wrong list — it is warning a store that is fine, which is
+ * exactly what a bare served/unserved partition would do to every merchant
+ * who ships nothing at all.
+ */
+describe('summarizeShippingCoverage', () => {
+  const cart = { subtotalCents: 0, totalGrams: 0 }
+
+  /** Every destination named as refused is one the checkout refuses. */
+  function refusalsAgree(settings: ShippingSettings | undefined) {
+    const coverage = summarizeShippingCoverage(settings)
+    return CHECKOUT_SHIPPING_COUNTRIES.every((country) => {
+      const refused =
+        planCheckoutShipping(settings, cart, country).refusal ===
+        'destination-unserved'
+      return refused === coverage.unserved.includes(country)
+    })
+  }
+
+  it('names the destinations no rate reaches', () => {
+    // A US zone and nothing else: the four the merchant priced no rate for
+    // are the four AGL-1721 now turns away at checkout.
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US', 'CA'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(usOnly)
+    expect(coverage.served).toEqual(['US', 'CA'])
+    expect(coverage.unserved).toEqual(['GB', 'AU', 'DE', 'FR'])
+    expect(coverage.shipsNowhere).toBe(false)
+    expect(coverage.hasRestOfWorldZone).toBe(false)
+    expect(refusalsAgree(usOnly)).toBe(true)
+  })
+
+  it('reports no gap for a merchant who ships nowhere', () => {
+    // The case a bare partition gets wrong: all six resolve to nothing, and
+    // none of them is refused — this store charges no shipping and always
+    // has. Warning here would nag every merchant selling downloads.
+    for (const nothing of [
+      undefined,
+      {},
+      { zones: [{ id: 'us', name: 'US', countries: ['US'] }] },
+    ] as (ShippingSettings | undefined)[]) {
+      const coverage = summarizeShippingCoverage(nothing)
+      expect(coverage.served).toEqual([])
+      expect(coverage.unserved).toEqual([])
+      expect(coverage.shipsNowhere).toBe(true)
+      expect(coverage.asksDestination).toBe(false)
+      expect(refusalsAgree(nothing)).toBe(true)
+    }
+  })
+
+  it('reports a rest-of-world zone as complete coverage', () => {
+    const world: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+      rates: [
+        { id: 'any', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(world)
+    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.unserved).toEqual([])
+    expect(coverage.asksDestination).toBe(false)
+    expect(coverage.hasRestOfWorldZone).toBe(true)
+    expect(refusalsAgree(world)).toBe(true)
+  })
+
+  it('counts local pickup as reaching every destination', () => {
+    // `resolveShippingRates` appends pickup whatever the destination, so a
+    // merchant offering it refuses nobody — the checkout agrees, and the
+    // card must not claim a gap the shopper would not hit.
+    const pickup: ShippingSettings = { localPickup: true }
+    const coverage = summarizeShippingCoverage(pickup)
+    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.unserved).toEqual([])
+    expect(refusalsAgree(pickup)).toBe(true)
+  })
+
+  it('sees a specific zone with no rates hide the rest-of-world zone', () => {
+    // The gap a merchant is least likely to spot: naming Europe and pricing
+    // nothing on it does not fall back to '*', because a matching specific
+    // zone suppresses rest-of-world. The two countries have a zone AND a '*'
+    // fallback and are still refused.
+    const hidden: ShippingSettings = {
+      zones: [
+        { id: 'eu', name: 'Europe', countries: ['DE', 'FR'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'any', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(hidden)
+    expect(coverage.unserved).toEqual(['DE', 'FR'])
+    expect(coverage.hasRestOfWorldZone).toBe(true)
+    expect(refusalsAgree(hidden)).toBe(true)
+  })
+
+  it('counts a row Stripe would reject as the nothing it resolves to', () => {
+    // `resolveCheckoutShippingOptions` drops a blank name silently, so the
+    // merchant has a rate on screen and no rate at checkout.
+    const blank: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+        { id: 'oops', zoneId: 'world', name: '', kind: 'flat', amountCents: 2999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(blank)
+    expect(coverage.served).toEqual(['US'])
+    expect(coverage.unserved).toEqual(['CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(refusalsAgree(blank)).toBe(true)
+  })
+
+  it('flags the checkout step that rates differing by zone add', () => {
+    // The shared fixture is the AGL-1721 layout: US at 799, rest of world at
+    // 2999. Nobody is refused, so there is no warning to show — but every
+    // shopper is now asked a question the merchant never chose to ask.
+    const coverage = summarizeShippingCoverage(settings)
+    expect(coverage.unserved).toEqual([])
+    expect(coverage.asksDestination).toBe(true)
+    expect(planCheckoutShipping(settings, cart).refusal).toBe(
+      'destination-required',
+    )
   })
 })

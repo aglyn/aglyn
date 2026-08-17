@@ -21,6 +21,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -78,19 +79,65 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const before = (await hostRef.get()).get('subdomain') ?? null
-    await hostRef.set(
-      { subdomain, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    )
+    // THE EXISTENCE CHECK (AGL-1763). `hostId` is body-supplied and was only
+    // ever checked non-empty; this read was already here for the audit's
+    // `before` value and simply never asked `.exists` — the same one-line-away
+    // shape AGL-1760 fixed. It is the guard now as well, so the cost is
+    // unchanged.
+    //
+    // Refusing is right and nothing is discarded: this is a staff retarget, no
+    // money and no prior work hang off it, and the operator fixes a mistyped id
+    // by retyping it. Creating instead was actively harmful and SELF-POISONING,
+    // which is what makes this worth more than a tidy-up. A merge-set minted
+    // `hosts/{typo}` carrying `subdomain` and `updatedAt` and nothing else —
+    // no `orgId`, no `displayName`, so invisible to every console list, which
+    // scopes by `orgId`. But the uniqueness query above filters on `subdomain`
+    // ALONE, so the phantom matches it. The next attempt to give that
+    // subdomain to the host that should have had it is refused 409 "That
+    // subdomain is taken" by a document no surface can show and no operator
+    // can find — a failure that surfaces far from its cause, and only ever
+    // for the one subdomain that was fat-fingered.
+    const hostSnapshot = await hostRef.get()
+    if (!hostSnapshot.exists) {
+      return Response.json({ error: 'No such site' }, { status: 404 })
+    }
+    const before = hostSnapshot.get('subdomain') ?? null
+    // SECOND LINE OF DEFENCE for the window the check cannot close — a site
+    // erased between the read and the write. `update()` rejects on a missing
+    // document where a merge-set creates one.
+    const applied = await updateExisting(hostRef, {
+      subdomain,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    if (!applied) {
+      return Response.json({ error: 'No such site' }, { status: 404 })
+    }
     // Keep the routing mirror in step (AGL-628). `registerOrgHost` seeds
     // hostIndex.subdomain on create and /api/hosts/rename maintains it, but
     // this staff path never did — leaving a stale subdomain behind that
     // cross-org host resolution would then follow to the wrong site.
+    //
+    // A DELIBERATE, COMPLETE create rather than the `{ subdomain }` merge-set
+    // it replaces, and the difference is not the phantom hostId — the guard
+    // above already settled that. `hostIndex` is a pure projection of the host
+    // doc, so re-deriving it for a host proven to exist is legitimate; a
+    // `{ subdomain }`-only row is not. `orgId` is the field every reader wants
+    // — `resolveOrgIdForHost` returns null without it, and null is the
+    // pre-billing FAIL-OPEN (every feature on), so a subdomain-only index row
+    // would hand a paid host an unmetered one. The host snapshot is in hand,
+    // so both fields are written together.
     await firestore
       .collection('hostIndex')
       .doc(hostId)
-      .set({ subdomain }, { merge: true })
+      .set(
+        {
+          subdomain,
+          ...(hostSnapshot.get('orgId')
+            ? { orgId: hostSnapshot.get('orgId') }
+            : {}),
+        },
+        { merge: true },
+      )
     await firestore.collection('adminAudit').add({
       actorUid: decoded.uid,
       action: 'host.set-subdomain',

@@ -166,6 +166,13 @@ The **Products** hub's **Orders** tab lists every sale with product, period,
 status, and channel filters plus **Export CSV** and **Draft order** (build an
 order by hand and send a payment link).
 
+**Export CSV** writes the orders currently shown — the filters apply — as
+`orders.csv`, one row per order: `date`, `product`, `amountUsd`, `feeUsd`,
+`customerEmail`, `coupon`, `orderId`, `status`, `channel`, `refundedUsd`,
+`netUsd`. `amountUsd` is the gross charge, so subtract `refundedUsd` (or read
+`netUsd`) when reconciling against a Stripe payout. Orders with several line
+items name the first and count the rest, e.g. `Blue Mug +2 more`.
+
 ![The Orders tab with seeded orders showing order numbers, status chips, totals, and filters](/img/guides/commerce-orders-tab.png)
 
 Open an order for the detail dialog — customer, line items, totals, timeline,
@@ -193,9 +200,21 @@ Active subscriptions are recorded per site and surface in two places:
   [Customer account block](member-accounts.md#2-design-an-account-page)'s
   **Subscriptions** section has a **Manage** button that opens the **Stripe
   Billing Portal** (update card, cancel, see invoices).
-- **You** see each member's subscriptions (with renewal dates) in the member
-  drawer on the site's **Users** page, and managers get a *New subscriber*
-  notification on each signup.
+- **You** see each member's subscriptions in the member drawer on the site's
+  **Users** page — what they subscribed to, the amount and interval, and the
+  renewal date — and managers get a *New subscriber* notification carrying the
+  amount on each signup, then a *Subscription renewed* notification carrying
+  the amount on every cycle after it.
+
+A subscription is **not** an order, by design: it does not appear in
+**Orders**, in the analytics card or in the orders CSV, and it does not
+decrement stock. Those surfaces are for one-time sales. What the subscriber
+pays is recorded on the subscription itself — **each paid invoice**, its
+period and its amount included, so a renewal is a record you hold rather than
+one only Stripe holds. The amount shown follows the **latest** cycle, so a
+price change, a tax change or a trial converting to a paid cycle is reflected
+rather than frozen at what the first charge was. Stripe keeps its own copy of
+every invoice, reachable from the Billing Portal.
 
 An active subscription is also what
 [members-only content](../workspace-and-billing/teams-and-roles/members-only.md)

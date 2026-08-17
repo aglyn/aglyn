@@ -26,6 +26,7 @@ import {
   filterEnabledPluginsByReleaseFlags,
   getHostDisabledPlugins,
   getOrgForHost,
+  visitorWriteRateLimitRefusal,
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
@@ -143,6 +144,32 @@ async function dispatch(
 
   const route = resolvePluginApiRoute(path)
   if (!route) return Response.json({ error: 'Not found' }, { status: 404 })
+
+  // Visitor-write rate limit (AGL-1770). Until this, the dispatcher applied
+  // NO rate limit of any kind to any visitor-facing write, so an
+  // unauthenticated `POST /api/commerce/cart` minted a Firestore document per
+  // request in the merchant's own data with nothing stopping a loop. AGL-1769
+  // closed the shape of that write and was explicit that it did not bound the
+  // quantity; this is the other half.
+  //
+  // Placed AFTER route resolution on purpose. Limiting earlier would make an
+  // unregistered path — which 404s for free today — cost a Firestore
+  // transaction, handing an attacker a cheaper amplification than the one
+  // being closed. It follows the lockdown gate for the same reason: a paused
+  // site is refused without spending a transaction.
+  //
+  // Deliberately NOT nested in `if (hostId)`. The enablement gate's
+  // `if (resolved && …)` was named in AGL-1769 as an existing hole, and a
+  // limiter a caller disables by declining to name a site is not a limiter;
+  // host-less writes share one bucket per IP instead. Reads, machine
+  // surfaces, the ceiling and the key are all argued at the policy module.
+  const limited = await visitorWriteRateLimitRefusal({
+    path,
+    hostId,
+    request,
+  })
+  if (limited) return limited
+
   return runLegacyHandler(route, request, { pluginApi: pluginApi ?? [] })
 }
 

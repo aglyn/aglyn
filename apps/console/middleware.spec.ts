@@ -330,11 +330,14 @@ describe('custom console domain gate', () => {
  * it detected violations and told nobody — which is why AGL-523's first
  * "before flipping" item, reviewing the violations, was never done.
  *
- * These assert the wiring end to end, because every part of it fails SILENTLY:
- * a `report-to` group with no `Reporting-Endpoints` header is ignored, a
- * missing `report-uri` loses the browsers that only speak the old directive,
- * and either way the symptom is an empty log that reads exactly like "no
- * violations" — the same false all-clear the endpoint exists to end.
+ * These assert the wiring end to end, because every part of it fails SILENTLY,
+ * and one part fails worse than it looks (AGL-1788). A `report-to` group with
+ * no `Reporting-Endpoints` header does not merely go unused: its presence
+ * suppresses `report-uri`, so the policy delivers nothing to ANY browser —
+ * measured in Chrome and Safari, not inferred. A missing `report-uri` loses
+ * the browsers that only speak the old directive. Either way the symptom is an
+ * empty log that reads exactly like "no violations" — the same false all-clear
+ * the endpoint exists to end.
  */
 describe('CSP violation reporting (AGL-523)', () => {
   const REPORT_PATH = '/api/csp-report'
@@ -349,10 +352,87 @@ describe('CSP violation reporting (AGL-523)', () => {
   it('sends BOTH directives on the enforcing policy', async () => {
     const response = await middleware(request('app.aglyn.com'))
     const policy = response.headers.get('Content-Security-Policy')
-    // Both, not either: `report-uri` is deprecated but is what Safari and
-    // older Chrome actually send, and `report-to` is what the modern ones use.
+    // Both over https, where both work: Chrome delivers through the Reporting
+    // API and Safari posts to the `report-uri` path. Not a fallback pair —
+    // see the http case below for what `report-to` actually does to
+    // `report-uri` (AGL-1788).
     expect(policy).toContain(`report-uri ${REPORT_PATH}`)
     expect(policy).toContain('report-to csp')
+  })
+
+  /**
+   * The http branch (AGL-1788).
+   *
+   * Chrome refuses a `Reporting-Endpoints` header on a non-secure transport,
+   * and `report-to` suppresses `report-uri` whether or not its group resolves
+   * — so the pair we ship reports NOTHING over `http://localhost`. Measured,
+   * one violation per case, Chrome 152 and Safari 26. Dropping `report-to`
+   * there is what makes a CSP report visible while developing at all.
+   *
+   * Production is https, so none of this changes what production sends; the
+   * https tests above are the ones that pin that.
+   */
+  describe('over a non-secure transport', () => {
+    const httpRequest = (host: string) =>
+      new NextRequest(`http://${host}/signin`, {
+        headers: { host },
+      })
+
+    it('drops report-to rather than letting it suppress report-uri', async () => {
+      const response = await middleware(httpRequest('app.aglyn.com'))
+      const policy = response.headers.get('Content-Security-Policy')
+      expect(policy).toContain(`report-uri ${REPORT_PATH}`)
+      expect(policy).not.toContain('report-to')
+    })
+
+    it('drops the Reporting-Endpoints header with it', async () => {
+      // A `Reporting-Endpoints` header without `report-to` is inert, and
+      // `report-to` without the header is the total-silence case. They move
+      // together or not at all.
+      const response = await middleware(httpRequest('app.aglyn.com'))
+      expect(response.headers.get('Reporting-Endpoints')).toBeNull()
+    })
+
+    it('also drops it from the report-only policy', async () => {
+      // The report-only header is the one AGL-1702 and AGL-1726 are gated on,
+      // so it is the one where silence is most expensive.
+      const response = await middleware(httpRequest('app.aglyn.com'))
+      const policy = response.headers.get(
+        'Content-Security-Policy-Report-Only',
+      )
+      expect(policy).toContain(`report-uri ${REPORT_PATH}`)
+      expect(policy).not.toContain('report-to')
+    })
+
+    it('trusts x-forwarded-proto over the request URL', async () => {
+      // Vercel terminates TLS ahead of the function, so `nextUrl.protocol` can
+      // read `http:` on a request the browser made over https. Reading the URL
+      // alone would strip the modern channel from every production response.
+      const response = await middleware(
+        new NextRequest('http://app.aglyn.com/signin', {
+          headers: { host: 'app.aglyn.com', 'x-forwarded-proto': 'https' },
+        }),
+      )
+      expect(response.headers.get('Content-Security-Policy')).toContain(
+        'report-to csp',
+      )
+      expect(response.headers.get('Reporting-Endpoints')).toBe(
+        `csp="${REPORT_PATH}"`,
+      )
+    })
+
+    it('reads only the client-facing hop of a chained x-forwarded-proto', async () => {
+      // Proxies append, so the header is a list and the FIRST entry is the one
+      // the browser saw. Reading the last would call an https request http.
+      const response = await middleware(
+        new NextRequest('http://app.aglyn.com/signin', {
+          headers: { host: 'app.aglyn.com', 'x-forwarded-proto': 'https,http' },
+        }),
+      )
+      expect(response.headers.get('Content-Security-Policy')).toContain(
+        'report-to csp',
+      )
+    })
   })
 
   it('enforces script-src with a nonce by DEFAULT, with no opt-in', async () => {
@@ -455,25 +535,56 @@ describe('CSP violation reporting (AGL-523)', () => {
     ).not.toHaveLength(0)
   })
 
-  it('keeps script-src, a nonce and strict-dynamic OUT of the report-only policy', async () => {
-    // Defence in depth behind the two clauses above, and the same narrowing
-    // AGL-1703 made on the tenant side, so one invariant covers both apps.
-    // Even on a hypothetical response where the enforcing header went missing,
-    // a report-only policy carrying no `script-src` and no `nonce-` cannot
-    // hand Next a WRONG nonce — the worst it can do is hand it none.
+  it('never lets the report-only policy carry a DIFFERENT nonce, or strict-dynamic', async () => {
+    // Defence in depth behind the two clauses above. This used to assert that
+    // the report-only header carried no `script-src` and no `nonce-` at all,
+    // which was right while `img-src` was the only thing in it — AGL-1785 added
+    // a report-only `script-src` to measure what the enforcing policy's bare
+    // `https:` is covering, and that directive is worthless without a nonce.
     //
-    // The mechanical reason a report-only `img-src` is safe where AGL-1228's
-    // report-only `script-src` was not: a nonce is per-request, so it can
-    // never agree with cached bytes, while an `img-src` is the same string on
-    // every response and agrees with them by construction.
+    // So the invariant is narrowed rather than dropped, and what replaces it is
+    // STRONGER than what it removes. The hazard was never "a nonce is present";
+    // it was "Next reads a nonce that does not match the rendered bytes"
+    // (AGL-523: every script became `nonce="$undefined"`). Forbidding the
+    // mechanism forbade one way of reaching that. Requiring every nonce in this
+    // header to be the ENFORCING one forbids the outcome directly — including
+    // the specific mistake of minting a second `randomUUID()` for the
+    // report-only directive, which would report every inline Next script on
+    // every page load and read as an all-clear the moment anyone stopped
+    // looking.
+    //
+    // Two things carry the rest of the weight, and neither is asserted here:
+    // the test above proves this header never ships without an enforcing one
+    // carrying `script-src`, so the `||` always short-circuits before this
+    // string is consulted; and console responses are uncached (`no-store`), so
+    // a per-request nonce agrees with the bytes — measured, and structurally
+    // guaranteed by the ENFORCING policy already depending on it.
+    //
+    // The tenant keeps the absolute version of this invariant in
+    // `apps/tenant/specs/csp-no-script-src.spec.ts`, and must: its pages ARE
+    // ISR-cached, so a per-request nonce there can never agree with the bytes
+    // (AGL-1228). The two apps genuinely differ; one invariant no longer covers
+    // both.
     const response = await middleware(request('app.aglyn.com'))
     const reportOnly =
       response.headers.get('Content-Security-Policy-Report-Only') ?? ''
-    expect(reportOnly).not.toContain('script-src')
-    expect(reportOnly).not.toContain('nonce-')
+    const enforced = response.headers.get('Content-Security-Policy') ?? ''
     expect(reportOnly).not.toContain('strict-dynamic')
-    // CONTROL — see above: all three pass against a missing header.
+    const enforcedNonce = /'nonce-([a-f0-9]{32})'/.exec(enforced)?.[1]
+    expect(enforcedNonce).toBeTruthy()
+    const reportedNonces = [
+      ...reportOnly.matchAll(/'nonce-([a-f0-9]{32})'/g),
+    ].map((match) => match[1])
+    // Not `toContain`: EVERY nonce in the header has to be the enforcing one,
+    // so a second directive quietly acquiring its own fails this.
+    for (const nonce of reportedNonces) expect(nonce).toBe(enforcedNonce)
+    // CONTROLS. Every assertion above passes vacuously against a header that
+    // stopped shipping, or a `script-src` that quietly lost its nonce — and
+    // "the measurement quietly stopped" is the failure AGL-1685 exists to
+    // avoid.
     expect(reportOnly).toContain('img-src')
+    expect(reportOnly).toContain('script-src')
+    expect(reportedNonces).toHaveLength(1)
   })
 
   it('does not honour the retired ?csp= opt-in', async () => {

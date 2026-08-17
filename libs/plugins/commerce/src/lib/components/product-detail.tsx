@@ -127,8 +127,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
     const [activeImage, setActiveImage] = useState(0)
-    const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
+    const [status, setStatus] = useState<'idle' | 'sending' | 'error' | 'ask'>(
+      'idle',
+    )
     const [message, setMessage] = useState('')
+    // Buy-now's half of AGL-1721: asked only when the server refuses to price
+    // shipping without a destination, so a digital product, a subscription, or
+    // a merchant whose rates are the same everywhere never shows it. `null` is
+    // "not asked" — the field appearing is the server's answer, not a guess.
+    const [shipTo, setShipTo] = useState('')
+    const [shipCountries, setShipCountries] = useState<string[] | null>(null)
     const [added, setAdded] = useState(false)
     const [wishlisted, setWishlisted] = useState(false)
     const [notifyEmail, setNotifyEmail] = useState('')
@@ -242,11 +250,27 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             // Billing choice (AGL-545): the server re-validates against
             // the product doc, so this is a request, not an instruction.
             ...(resolved.subscriptionOptional ? { billing } : {}),
+            // Likewise a request (AGL-1721): the server resolves this
+            // country's rates AND restricts the session to addresses in it,
+            // so naming a cheap zone here cannot ship a parcel anywhere else.
+            ...(shipTo ? { shippingCountry: shipTo } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
         if (response.ok && payload?.url) {
           window.location.assign(payload.url)
+          return
+        }
+        if (payload?.needsShippingCountry) {
+          setShipCountries(
+            (payload.shippingCountries as string[] | undefined)?.length
+              ? (payload.shippingCountries as string[])
+              : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+          )
+          setMessage(String(payload?.error ?? ''))
+          // An unserved destination is a refusal and reads as one; being
+          // asked the first time is not.
+          setStatus(shipTo ? 'error' : 'ask')
           return
         }
         setMessage(String(payload?.error ?? ''))
@@ -496,7 +520,13 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               variant="contained"
               color="primary"
               size="large"
-              disabled={!hostId || status === 'sending' || variant?.soldOut}
+              disabled={
+                !hostId ||
+                status === 'sending' ||
+                variant?.soldOut ||
+                // Asked but unanswered: the server would only refuse again.
+                (shipCountries !== null && !shipTo)
+              }
               onClick={handleBuy}
               sx={{ flex: 1 }}
             >
@@ -507,6 +537,29 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                   : buyLabel || (subscribing ? 'Subscribe' : 'Buy now')}
             </Button>
           </Box>
+          {shipCountries ? (
+            <TextField
+              select
+              label="Ship to"
+              value={shipTo}
+              onChange={(event) => setShipTo(event.target.value)}
+              size="small"
+              fullWidth
+              helperText="Shipping rates depend on where this is going"
+              sx={{ mb: 2 }}
+            >
+              {shipCountries.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
+          {status === 'ask' ? (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {message}
+            </Alert>
+          ) : null}
           {status === 'error' ? (
             <Alert severity="error" sx={{ mb: 2 }}>
               {message || 'Checkout is unavailable right now.'}

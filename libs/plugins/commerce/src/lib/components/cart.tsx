@@ -20,6 +20,7 @@ import {
   buildBeginCheckoutParams,
   trackEvent,
 } from '@aglyn/aglyn/app-utils/analytics-events'
+import * as CommerceModel from '../model'
 import { mdiCartOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Badge from '@mui/material/Badge'
@@ -29,6 +30,7 @@ import Checkbox from '@mui/material/Checkbox'
 import Drawer from '@mui/material/Drawer'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
+import MenuItem from '@mui/material/MenuItem'
 import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -86,11 +88,19 @@ function CartLines(props: {
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
   const [giftCard, setGiftCard] = useState('')
+  // Where the parcel is going (AGL-1721). Asked ONLY when the server says it
+  // cannot price shipping without it — a merchant with one zone, one
+  // rest-of-world zone, or no shipping at all never sees this field, which is
+  // the common configuration. `null` is "not asked", so the field appearing is
+  // itself the server's answer rather than a guess made here.
+  const [shipTo, setShipTo] = useState('')
+  const [shipCountries, setShipCountries] = useState<string[] | null>(null)
   // `paused` is its own state, not an `error` with gentler words (AGL-1511):
   // the two need different severities, and a shopper told in red that
-  // checkout failed does not read the sentence explaining it did not.
+  // checkout failed does not read the sentence explaining it did not. `ask` is
+  // the same argument again: being asked for a destination is not a failure.
   const [status, setStatus] = useState<
-    'idle' | 'sending' | 'error' | 'paused'
+    'idle' | 'sending' | 'error' | 'paused' | 'ask'
   >('idle')
   const [message, setMessage] = useState('')
 
@@ -108,6 +118,11 @@ function CartLines(props: {
           ...(optIn ? { marketingOptIn: true } : {}),
           ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
           ...(giftCard.trim() ? { giftCardCode: giftCard.trim() } : {}),
+          // A request, never an instruction: the server resolves the rates
+          // for this country AND restricts the session's collectable
+          // addresses to it, so declaring one cannot buy a cheaper zone's
+          // rate than the address the shopper then enters (AGL-1721).
+          ...(shipTo ? { shippingCountry: shipTo } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -151,6 +166,21 @@ function CartLines(props: {
         setStatus('paused')
         return
       }
+      // The merchant's rates differ by destination, so the server will not
+      // price this cart until it knows one (AGL-1721). Reveal the field and
+      // let the shopper answer; a store that never sends this never shows it.
+      if (payload?.needsShippingCountry) {
+        setShipCountries(
+          (payload.shippingCountries as string[] | undefined)?.length
+            ? (payload.shippingCountries as string[])
+            : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        )
+        setMessage(String(payload?.error ?? ''))
+        // An unserved destination is a real refusal and reads as one; being
+        // asked the first time is not.
+        setStatus(shipTo ? 'error' : 'ask')
+        return
+      }
       setMessage(String(payload?.error ?? ''))
       setStatus('error')
     } catch {
@@ -162,7 +192,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, status, siteFetch])
+  }, [hostId, cart, coupon, email, optIn, giftCard, shipTo, status, siteFetch])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -289,7 +319,25 @@ function CartLines(props: {
           />
         </>
       ) : null}
-      {status === 'paused' ? <Alert severity="info">{message}</Alert> : null}
+      {shipCountries ? (
+        <TextField
+          select
+          label="Ship to"
+          value={shipTo}
+          onChange={(event) => setShipTo(event.target.value)}
+          size="small"
+          helperText="Shipping rates depend on where this is going"
+        >
+          {shipCountries.map((code) => (
+            <MenuItem key={code} value={code}>
+              {CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code}
+            </MenuItem>
+          ))}
+        </TextField>
+      ) : null}
+      {status === 'paused' || status === 'ask' ? (
+        <Alert severity="info">{message}</Alert>
+      ) : null}
       {status === 'error' ? (
         <Alert severity="error">
           {message || 'Checkout is unavailable right now.'}
@@ -299,7 +347,10 @@ function CartLines(props: {
         variant="contained"
         color="primary"
         disabled={
-          status === 'sending' || cart.lines.every((line) => line.unavailable)
+          status === 'sending' ||
+          cart.lines.every((line) => line.unavailable) ||
+          // Asked but unanswered: the server would only refuse again.
+          (shipCountries !== null && !shipTo)
         }
         onClick={handleCheckout}
       >

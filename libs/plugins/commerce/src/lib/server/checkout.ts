@@ -87,6 +87,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // Inventory (AGL-281): variant-aware, honoring the product's oversell
     // policy (backorder products keep selling at zero). Enforced here (the
     // block's display is cosmetic) and decremented by the webhook.
+    //
+    // DELIBERATELY UNCHANGED for subscription sessions (AGL-1744), which this
+    // gate also covers and which nothing ever decrements — not the initial
+    // charge (AGL-1732) and not a renewal (AGL-1743). So on a
+    // subscription-only product the gate is permanently satisfied and one
+    // unit sells unlimited subscriptions. The fix went to the CONSOLE, which
+    // stops inviting the number (`stockTrackingApplies`), rather than here,
+    // for two reasons: this gate is the one shared by every other purchase
+    // path, and skipping it for subscription mode would silently RESUME
+    // selling for any merchant who set 0 to stop new subscribers — a lever
+    // that works today, on production data nobody has read. Whether to drop
+    // the gate for subscription mode, or decrement per renewal once AGL-1743
+    // lands, is the open product decision; both are recorded there.
     if (!CommerceModel.canPurchase(lifted, variant.id, quantity)) {
       return res.status(409).json({ error: 'Sold out' })
     }
@@ -227,12 +240,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //     `liftLegacyProduct` only defaults the field on docs it synthesizes
     //     variants for, so a part-migrated doc can reach here without one, and
     //     the two reads must not disagree about what that doc is.
-    //   - ONE-TIME SALES ONLY. A subscription session goes to the webhook's
-    //     `commerce-subscription` branch, which writes a subscription doc and
-    //     never touches `total_details` — so shipping charged there would be
-    //     real money recorded NOWHERE, a strictly worse version of the
-    //     AGL-1698 hazard that orders the whole batch. Recurring shipping is
-    //     also a merchant decision the rate editor does not currently ask.
+    //   - ONE-TIME SALES ONLY. Originally because the webhook's
+    //     `commerce-subscription` branch never touched `total_details`, so
+    //     shipping charged there would have been real money recorded NOWHERE.
+    //     Both halves of that are now closed: AGL-1732 decomposed the initial
+    //     charge onto the subscription document, `amount_shipping` included,
+    //     and AGL-1743 records every renewal invoice — `shipping_cost` read
+    //     the same way — so a recurring shipping charge would now land.
+    //
+    //     What remains is the PRODUCT question, and only it: a rate editor
+    //     written for one-time orders never asks the merchant whether a rate
+    //     should be re-charged every cycle, and Stripe bills a subscription's
+    //     one-time line items on the FIRST invoice only, so a shipping rate
+    //     added as a session line item would be charged once and then silently
+    //     stop. Answering that is AGL-1720's revisit, not wiring.
     //
     // Weight is per unit TIMES the quantity bought. `weightGrams` alone would
     // quote the lightest tier on a multi-unit order — the same under-collection
@@ -241,21 +262,49 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     //
     // The subtotal fed to the resolver is the PRE-discount list total, matching
     // the cart's, so "free over $50" means what the shopper saw it mean.
+    //
+    // WHICH DESTINATIONS the session may serve is decided with the rates and
+    // not after them (AGL-1721): a session that declared every zone's rates
+    // while accepting an address in any country let a shopper pick a domestic
+    // rate for an international parcel, and Stripe re-checks nothing — a
+    // `shipping_rate_data` carries no country. `planCheckoutShipping` pairs
+    // the two lists, and refuses rather than guessing.
     const shippingSettings = storeSettings.get('shipping') as
       | CommerceModel.ShippingSettings
       | undefined
-    const shippingOptions =
+    const shipsPhysically =
       (lifted.type ?? 'physical') === 'physical' && !isSubscription
-        ? CommerceModel.resolveCheckoutShippingOptions(
-            shippingSettings,
-            CommerceModel.CHECKOUT_SHIPPING_COUNTRIES,
-            {
-              subtotalCents: listUnitAmountCents * quantity,
-              totalGrams:
-                Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
-            },
-          )
-        : []
+    const shippingPlan = shipsPhysically
+      ? CommerceModel.planCheckoutShipping(
+          shippingSettings,
+          {
+            subtotalCents: listUnitAmountCents * quantity,
+            totalGrams:
+              Math.max(0, Number(variant.weightGrams ?? 0)) * quantity,
+          },
+          body.shippingCountry,
+        )
+      : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
+    if (shippingPlan.refusal === 'destination-required') {
+      return res.status(400).json({
+        error: 'Choose where you’re shipping to.',
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
+    if (shippingPlan.refusal === 'destination-unserved') {
+      const declared = CommerceModel.normalizeCheckoutShippingCountry(
+        body.shippingCountry,
+      )
+      return res.status(409).json({
+        error: `This store does not ship to ${
+          CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[declared as string] ??
+          'that country'
+        }.`,
+        needsShippingCountry: true,
+        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+      })
+    }
 
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is
@@ -355,9 +404,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // to the one this handler built before shipping existed on it. Buy-now has
     // never collected an address, so declaring one unconditionally would put a
     // shipping form in front of every shopper on a store that charges none.
-    if (shippingOptions.length > 0) {
-      CommerceModel.appendShippingAddressCollectionParams(params)
-      CommerceModel.appendCheckoutShippingParams(params, shippingOptions)
+    if (shippingPlan.options.length > 0) {
+      CommerceModel.appendShippingAddressCollectionParams(
+        params,
+        shippingPlan.countries,
+      )
+      CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
     }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',

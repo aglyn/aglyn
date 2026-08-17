@@ -81,3 +81,44 @@ export function normalizeNotificationLink(
 
   return link
 }
+
+/**
+ * Which org slug a notification's link should be rewritten against
+ * (AGL-1773).
+ *
+ * Both notification surfaces used to inline this as
+ * `notification.orgId ? slugByOrgId.get(...) : null ?? currentOrgSlug`, and
+ * host notifications carry no `orgId` — so the fallback always won and every
+ * host link was rewritten against whatever workspace the reader had open. A
+ * manager in two workspaces got `/{wrong-org}/hosts/{subdomain}/…`, which
+ * `HostGuard` 404s: it resolves subdomains inside the current org only.
+ *
+ * Three sources, most specific first:
+ * 1. the notification's own `orgId` — stamped by the emitter;
+ * 2. `hostIndex.orgId` for its host — resolved at follow time, so it repairs
+ *    notifications written before the emitters stamped anything;
+ * 3. the open workspace — right for the single-workspace majority, and no
+ *    worse than the stored link when it is wrong.
+ *
+ * (1) and (2) are both mapped through `slugForOrgId`, which only knows orgs
+ * the reader belongs to: an id that resolves to no slug falls through rather
+ * than being spliced into a path as an id.
+ */
+export function resolveNotificationOrgSlug(
+  notification: { orgId?: string | null },
+  context: {
+    /** Slug of an org the signed-in user belongs to, or undefined. */
+    slugForOrgId: (orgId: string) => string | undefined
+    /** `hostIndex.orgId` for the notification's host, once resolved. */
+    indexedOrgId?: string | null
+    /** The workspace currently open in the console. */
+    currentOrgSlug?: string | null
+  },
+): string | undefined {
+  const { slugForOrgId, indexedOrgId, currentOrgSlug } = context
+  const stamped = notification.orgId
+    ? slugForOrgId(notification.orgId)
+    : undefined
+  const indexed = indexedOrgId ? slugForOrgId(indexedOrgId) : undefined
+  return stamped ?? indexed ?? currentOrgSlug ?? undefined
+}

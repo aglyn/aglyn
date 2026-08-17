@@ -79,6 +79,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 const limitSpy = jest.fn((value: number) => value)
 const countSpy = jest.fn(async (name: string) => {
+  // A server aggregate is a NETWORK round-trip: its answer cannot land in the
+  // same drain as the mount that asked for it. Resolving it there was the
+  // fixture's own fiction, and it is what let a settle helper that flushed a
+  // fixed number of microtasks look correct (AGL-1756/AGL-1758).
+  //
+  // TWO macrotasks, not the one AGL-1756's sibling needed, and the difference
+  // is measured rather than guessed: `await act(async () => …)` resolves
+  // through React's `enqueueTask` (`setImmediate`, else a `MessageChannel`),
+  // so the old helper's own settle already yielded to the task queue once and
+  // a single-macrotask aggregate still slipped in under it — all five cases
+  // passed. Two is the first schedule it cannot beat, and it is still orders
+  // of magnitude cheaper than any real `getCountFromServer`. Any tick-counting
+  // settle now fails deterministically instead of only under a loaded worker.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
   if (aggregate.count == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
@@ -117,50 +132,77 @@ beforeEach(() => {
 })
 
 /**
- * The aggregate has answered AND its answer has reached state. The call
- * count lands on mount while the resolution is still a microtask.
+ * Wait until the card is SHOWING `count` — the aggregate's answer has not
+ * merely resolved, it has reached a render and is the number the caption
+ * quotes and the gate is computed from (they are the same `locationCount`).
+ *
+ * This replaces a helper that waited for `countSpy` to have been CALLED and
+ * then flushed a fixed two microtasks, assuming the answer had arrived
+ * (AGL-1758, the byte-identical helper AGL-1756 removed from the products
+ * sibling). On any promise chain longer than those two ticks it returned
+ * early, the click read the `limit(25)` fallback of 25 — UNDER agency's band
+ * of 50 — so nothing was refused, and the trailing `waitFor` spent RTL's
+ * 1,000ms default before reporting a value mismatch that reads as a timeout.
+ *
+ * A tick budget cannot be made large enough, only large enough for today's
+ * promise chain, so the condition replaces it rather than widening it.
+ *
+ * Unlike the products hub, this card needs NO mock seam to observe it: the
+ * caption renders `${locationCount}/${quota.limit}`, so 60 and 25 print
+ * different strings and the rendered consequence IS the condition.
  */
-const settled = async () => {
+const showingCount = async (count: number) => {
+  await waitFor(() =>
+    expect(
+      screen.queryByText(`${count}/50 locations on your plan`),
+    ).not.toBeNull(),
+  )
+}
+
+/**
+ * The DENIED case has no `showingCount` signal to wait for: its fallback is
+ * also the value the FIRST render used, so `showingCount(ROWS)` would be
+ * satisfied before the read had failed — passing while proving nothing.
+ * Await the very promise the card awaited instead. Settled is settled; no
+ * tick count is involved either way.
+ */
+const readRejected = async () => {
   await waitFor(() => expect(countSpy).toHaveBeenCalled())
   await act(async () => {
-    await Promise.resolve()
-    await Promise.resolve()
+    await countSpy.mock.results[0].value.catch(() => undefined)
   })
 }
 
 describe('the inventory-locations cap is a server aggregate (AGL-1716)', () => {
   it('reads the site total in the caption, not the loaded rows', async () => {
     render(<LocationsCard hostId="host-1" />)
-    await settled()
-
     // Before the fix this read "25/50 locations on your plan" — the cap
     // presented as the site's usage, on the line whose job is saying where
     // the site sits in its band. Sixty warehouses against fifty is over,
     // and the window could not say so at any count.
-    await waitFor(() =>
-      expect(
-        screen.queryByText('60/50 locations on your plan'),
-      ).not.toBeNull(),
-    )
+    await showingCount(SERVER_LOCATIONS)
+
     expect(screen.queryByText('25/50 locations on your plan')).toBeNull()
   })
 
   it('refuses Add over the band the loaded window hid', async () => {
     render(<LocationsCard hostId="host-1" />)
-    await settled()
+    await showingCount(SERVER_LOCATIONS)
 
     fireEvent.change(screen.getByLabelText(/New location/), {
       target: { value: 'Overflow depot' },
     })
     fireEvent.click(screen.getByText('Add'))
 
-    await waitFor(() =>
-      expect(
-        enqueueSnackbar.mock.calls.some((call) =>
-          String(call[0]).includes('Your plan includes 50 locations'),
-        ),
-      ).toBe(true),
-    )
+    // Asserted directly, not inside a `waitFor`: `handleAdd` enqueues before
+    // it awaits anything, so there is nothing here to wait FOR. A budget
+    // around a synchronous assertion only decides how long a real failure
+    // takes to report.
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Your plan includes 50 locations'),
+      ),
+    ).toBe(true)
     // The API would have refused it anyway; the point is that the card
     // stopped promising otherwise first.
     expect(mockCreateResource).not.toHaveBeenCalled()
@@ -168,7 +210,7 @@ describe('the inventory-locations cap is a server aggregate (AGL-1716)', () => {
 
   it('keeps the list capped and reads the count once, from locations', async () => {
     render(<LocationsCard hostId="host-1" />)
-    await settled()
+    await showingCount(SERVER_LOCATIONS)
 
     expect(limitSpy).toHaveBeenCalledWith(25)
     expect(countSpy).toHaveBeenCalledTimes(1)
@@ -177,7 +219,7 @@ describe('the inventory-locations cap is a server aggregate (AGL-1716)', () => {
 
   it('re-reads the count after a HARD delete frees a slot', async () => {
     render(<LocationsCard hostId="host-1" />)
-    await settled()
+    await showingCount(SERVER_LOCATIONS)
     countSpy.mockClear()
 
     // Unlike every other card in this sweep, locations are hard-deleted, so
@@ -191,7 +233,7 @@ describe('the inventory-locations cap is a server aggregate (AGL-1716)', () => {
   it('falls back to the loaded rows, never to zero, when the read fails', async () => {
     aggregate.count = null
     render(<LocationsCard hostId="host-1" />)
-    await settled()
+    await readRejected()
 
     // The 25 known rows stand in — a lower bound, and this card's prior
     // behaviour. A defaulted 0 would print "0/50" on a site with sixty

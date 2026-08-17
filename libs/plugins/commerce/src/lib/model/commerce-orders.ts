@@ -94,6 +94,44 @@ export interface OrderFulfillment {
   atMs: number
 }
 
+/**
+ * A card dispute against this order's charge (AGL-1787).
+ *
+ * The DISTINCTION a chargeback carries, kept off `status` on purpose. A lost
+ * dispute leaves the order `refunded` — that is what every reader of the status
+ * already means by it, and five entitlement gates (`gate.ts`, `download.ts`,
+ * `reviews.ts`, `membership-account.ts` and the glance card) match on the
+ * literal `'refunded'`, so a new terminal status would have left the shopper
+ * their digital downloads and their verified-purchase review. That is AGL-1546
+ * reproduced on the tenant side, and the reason this record sits BESIDE the
+ * status rather than replacing it: the money question is answered by `status`
+ * and `refundedCents`, the "by what door" question by this.
+ *
+ * Written whole rather than merged into, so a second dispute on the same charge
+ * cannot inherit the previous one's `outcome` — see the handler.
+ */
+export interface OrderDispute {
+  /** Stripe dispute id (`dp_…`). */
+  id: string
+  /** Stripe's dispute status verbatim, e.g. `needs_response`, `lost`. */
+  status: string
+  /** Stripe's reason code, e.g. `fraudulent`, `product_not_received`. */
+  reason?: string
+  /** Disputed cents — a partial dispute is less than the order total. */
+  amountCents: number
+  openedAtMs: number
+  /** Evidence deadline, when Stripe supplied one. */
+  evidenceDueByMs?: number
+  closedAtMs?: number
+  /** `won` | `lost` | `warning_closed`, set once the dispute closes. */
+  outcome?: string
+  /**
+   * Cents this dispute actually reversed on the order — a LOST dispute only,
+   * and capped against what was left, so it is not always `amountCents`.
+   */
+  reversedCents?: number
+}
+
 /** `hosts/{hostId}/orders/{id}` doc. */
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
@@ -118,6 +156,8 @@ export interface HostOrder {
   /** Draft orders (AGL-287): the link sent to the buyer. */
   paymentLinkUrl?: string
   refundedCents?: number
+  /** The card dispute against this charge, open or settled (AGL-1787). */
+  dispute?: OrderDispute
   createdAtMs?: number
   // Legacy Commerce Starter fields (AGL-90) kept readable.
   productId?: string
@@ -350,6 +390,15 @@ export interface BuyNowProductSnapshot {
  *
  * The pre-fix record for the same purchase: `1 × 29228`, tax 0, discount 0 —
  * which also sums to 29228.
+ *
+ * ## Also the subscription sale record (AGL-1732)
+ *
+ * `checkout.ts` builds a subscription session with the same function and the
+ * same metadata snapshot — only `mode` differs — so the initial charge of a
+ * storefront subscription decomposes identically. The webhook's
+ * `commerce-subscription` branch stores the result on the subscription
+ * document rather than as an order; the arithmetic is the same either way,
+ * which is why it lives here and is not duplicated there.
  */
 export function computeBuyNowOrder(
   session: BuyNowSessionSource | null | undefined,
@@ -399,6 +448,207 @@ export function computeBuyNowOrder(
   }
 }
 
+/** One line on a Stripe invoice, structurally typed like the session above. */
+export interface SubscriptionInvoiceLine {
+  /** The line total in cents, after any line-level discount, excluding tax. */
+  amount?: unknown
+  quantity?: unknown
+  description?: unknown
+  /** True on the credit/charge pair a mid-cycle plan switch generates. */
+  proration?: unknown
+  price?: {
+    unit_amount?: unknown
+    recurring?: { interval?: unknown } | null
+  } | null
+}
+
+/**
+ * The paid-invoice fields a renewal's totals are built from (AGL-1743).
+ *
+ * ## An invoice is not a Checkout Session
+ *
+ * This was checked field by field rather than assumed, and the two objects
+ * agree on almost nothing:
+ *
+ * - **There is no `total_details` on an invoice at all.** That object is a
+ *   Checkout Session field. `computeCheckoutSessionTotals` cannot be handed an
+ *   invoice — every part would read 0 and the whole renewal would decompose to
+ *   `amount_total` with nothing in it, which is exactly the AGL-1711 failure
+ *   shape (internally consistent, individually wrong).
+ * - **Tax** is `tax` (a scalar) on the API versions this repo pins, and
+ *   `total_taxes[]` on newer ones, where the scalar was removed. Both are read,
+ *   the scalar preferred, because a webhook endpoint's version is dashboard
+ *   configuration this repo cannot see.
+ * - **Discount** is `total_discount_amounts[]`, an array of per-discount
+ *   amounts, not a single `amount_discount`.
+ * - **Shipping** is `shipping_cost.amount_total` — note AGL-1698 preferred
+ *   `total_details.amount_shipping` over exactly this field ON A SESSION,
+ *   because there it is null unless a rate was chosen. On an invoice it is the
+ *   only form there is.
+ * - **The fee** is a real field here: a subscription carries
+ *   `application_fee_percent`, so every invoice reports the resulting
+ *   `application_fee_amount`. The session path has to read it out of metadata.
+ * - **What was bought** is `lines.data[]` rather than the session's metadata
+ *   snapshot — `checkout.ts` puts only `type`, `hostId` and `productId` on
+ *   `subscription_data[metadata]`, so the quantity and unit price of a renewal
+ *   have to come from the invoice itself.
+ *
+ * The arithmetic is still the shared one: the fields above are mapped onto the
+ * session shape and handed to `computeCheckoutSessionTotals`, so a renewal and
+ * a sale clamp, sum and reconcile identically.
+ */
+export interface SubscriptionInvoiceSource {
+  /** What actually arrived — the figure this records as collected. */
+  amount_paid?: unknown
+  total?: unknown
+  subtotal?: unknown
+  /** Total tax; removed in favor of `total_taxes` on newer API versions. */
+  tax?: unknown
+  total_taxes?: readonly { amount?: unknown }[] | null
+  total_tax_amounts?: readonly { amount?: unknown }[] | null
+  total_discount_amounts?: readonly { amount?: unknown }[] | null
+  shipping_cost?: { amount_total?: unknown } | null
+  application_fee_amount?: unknown
+  lines?: { data?: readonly SubscriptionInvoiceLine[] | null } | null
+}
+
+/** Sum of an `[{ amount }]` list, ignoring anything unreadable. */
+function sumAmounts(list: readonly { amount?: unknown }[] | null | undefined) {
+  return (list ?? []).reduce((sum, entry) => {
+    const amount = Number(entry?.amount ?? 0)
+    return sum + (Number.isFinite(amount) ? amount : 0)
+  }, 0)
+}
+
+/** `price.recurring.interval` when it is one we sell, else undefined. */
+function lineInterval(
+  line: SubscriptionInvoiceLine | null | undefined,
+): 'month' | 'year' | undefined {
+  const interval = line?.price?.recurring?.interval
+  return interval === 'month' || interval === 'year' ? interval : undefined
+}
+
+/**
+ * The line that describes the SUBSCRIPTION being billed.
+ *
+ * `lines.data[0]` is not it, for the AGL-1640 reason: a mid-cycle plan switch
+ * invoices the proration against the OLD price ahead of the new plan, and an
+ * invoice also carries one-off items and credits, any of which can sort first.
+ * Prefer a non-proration line stating a cadence; fall back to a proration one,
+ * since Stripe requires every recurring item on one subscription to share a
+ * cadence; fall back to the first line so a renewal still records a name.
+ */
+export function selectSubscriptionInvoiceLine(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): SubscriptionInvoiceLine | undefined {
+  const lines = invoice?.lines?.data ?? []
+  return (
+    lines.find((line) => !line?.proration && lineInterval(line)) ??
+    lines.find((line) => lineInterval(line)) ??
+    lines[0]
+  )
+}
+
+/**
+ * The cadence a paid invoice was billed on, or undefined when it does not say.
+ *
+ * Never guessed — the same three-state discipline as `billingIntervalFromInvoice`
+ * (AGL-1640). Storing `month` for an invoice that did not state one would make
+ * the merchant's own record of what a subscriber pays wrong in the one way that
+ * cannot be spotted by looking at it.
+ */
+export function subscriptionInvoiceInterval(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): 'month' | 'year' | undefined {
+  return lineInterval(selectSubscriptionInvoiceLine(invoice))
+}
+
+/**
+ * The stored line items and totals for one paid subscription invoice
+ * (AGL-1743) — a renewal, or the opening cycle.
+ *
+ * `snapshot` supplies the product identity, taken from what the sale already
+ * recorded rather than re-derived: an invoice line knows a description and a
+ * price, not a productId, a variant or a SKU. It is applied to the
+ * subscription's own line only; a proration or one-off line on the same invoice
+ * keeps Stripe's description and carries no product identity, because it is not
+ * a sale of that product.
+ *
+ * `totalCents` is Stripe's `amount_paid` verbatim, for the AGL-1698 reason —
+ * our sum is priced from lines we did not authorize and must never become the
+ * stored truth. Where a customer credit balance covers part of an invoice the
+ * parts will therefore exceed the collected total; the collected figure is the
+ * one that matters and the invoice's own `total` is stored beside it.
+ */
+export function computeSubscriptionInvoiceOrder(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+  snapshot: BuyNowProductSnapshot & { productId: string; variantId?: string },
+): { lineItems: OrderLineItem[]; totals: OrderTotals } {
+  const subscriptionLine = selectSubscriptionInvoiceLine(invoice)
+  const lineItems: OrderLineItem[] = []
+  for (const line of invoice?.lines?.data ?? []) {
+    const amount = Math.round(Number(line?.amount ?? 0))
+    // A credit line (negative proration) is not a sale of anything, and
+    // `computeOrderTotals` floors a line at 0 rather than subtracting it.
+    // Stripe's own collected total still carries its effect.
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    const rawQuantity = Math.round(Number(line?.quantity ?? 1))
+    const quantity =
+      Number.isFinite(rawQuantity) && rawQuantity > 0 ? rawQuantity : 1
+    // The list unit price, except on a proration line, where `unit_amount` is
+    // the full price and `amount` is only the fraction being billed.
+    const listUnit = Math.round(Number(line?.price?.unit_amount ?? 0))
+    const unitAmountCents =
+      !line?.proration && Number.isFinite(listUnit) && listUnit > 0
+        ? listUnit
+        : Math.max(0, Math.round(amount / quantity))
+    const isSubscriptionLine = line === subscriptionLine
+    lineItems.push({
+      productId: isSubscriptionLine ? snapshot.productId : '',
+      ...(isSubscriptionLine && snapshot.variantId
+        ? { variantId: snapshot.variantId }
+        : {}),
+      name: isSubscriptionLine
+        ? snapshot.name
+        : String(line?.description ?? 'Adjustment').slice(0, 200),
+      ...(isSubscriptionLine && snapshot.variantLabel
+        ? { variantLabel: snapshot.variantLabel }
+        : {}),
+      ...(isSubscriptionLine && snapshot.sku ? { sku: snapshot.sku } : {}),
+      ...(isSubscriptionLine && snapshot.productType
+        ? { productType: snapshot.productType }
+        : {}),
+      ...(isSubscriptionLine && snapshot.supplierId
+        ? { supplierId: snapshot.supplierId }
+        : {}),
+      quantity,
+      unitAmountCents,
+    })
+  }
+  const scalarTax = Number(invoice?.tax ?? NaN)
+  const taxCents =
+    Number.isFinite(scalarTax) && scalarTax > 0
+      ? scalarTax
+      : // `total_taxes` replaced `total_tax_amounts`, which replaced the
+        // scalar; they do not coexist, so this cannot double-count.
+        sumAmounts(invoice?.total_taxes ?? invoice?.total_tax_amounts)
+  return {
+    lineItems,
+    totals: computeCheckoutSessionTotals(
+      lineItems,
+      {
+        amount_total: invoice?.amount_paid,
+        total_details: {
+          amount_tax: taxCents,
+          amount_shipping: metadataCents(invoice?.shipping_cost?.amount_total),
+          amount_discount: sumAmounts(invoice?.total_discount_amounts),
+        },
+      },
+      { feeCents: metadataCents(invoice?.application_fee_amount) },
+    ),
+  }
+}
+
 /** Display form: `#1042`; falls back to a doc-id stub for legacy rows. */
 export function formatOrderNumber(order: Pick<HostOrder, 'number'>, docId?: string): string {
   if (order.number != null) return `#${order.number}`
@@ -437,6 +687,139 @@ export function liftLegacyOrder(raw: Partial<HostOrder>): HostOrder {
       totalCents: amountCents,
     },
   }
+}
+
+/**
+ * An orders-console row: the stored doc plus the Firestore id the collection
+ * hook attaches. `createdAt` is typed structurally rather than against the
+ * Firestore SDK — this module is pure and installs no client.
+ */
+export interface OrderExportRow extends Partial<HostOrder> {
+  $id?: string
+  createdAt?: { toDate?: () => Date } | null
+}
+
+/**
+ * Does this order contain `productId`?
+ *
+ * Line items first, legacy flat `productId` as the fallback — the same test
+ * `gate.ts`, `download.ts` and `reviews.ts` already apply. Only the two
+ * buy-now-shaped Stripe paths ever write the flat field, so a legacy-only
+ * check silently excludes every cart, POS and draft order.
+ */
+export function orderContainsProduct(
+  order: Partial<HostOrder>,
+  productId: string,
+): boolean {
+  return (
+    (order.lineItems ?? []).some((line) => line.productId === productId) ||
+    order.productId === productId
+  )
+}
+
+/** `12345` -> `123.45`, the CSV's money format. */
+function usd(cents: number): string {
+  return (cents / 100).toFixed(2)
+}
+
+/**
+ * Header for {@link buildOrdersCsv}. The original seven columns (AGL-96) keep
+ * their names AND their positions, so a saved import mapping — by name or by
+ * index — still resolves; the four reconciliation columns are appended.
+ */
+export const ORDERS_CSV_HEADER =
+  'date,product,amountUsd,feeUsd,customerEmail,coupon,orderId,' +
+  'status,channel,refundedUsd,netUsd'
+
+/**
+ * The orders console's `orders.csv` (AGL-1747).
+ *
+ * ## What was wrong
+ *
+ * The export read `amountCents`, `feeCents` and `productId` — the legacy
+ * Commerce Starter flat fields (AGL-90) — and nothing else. Checked writer by
+ * writer, only the two buy-now-shaped Stripe paths write them:
+ *
+ * | Order path | `amountCents` | `productId` |
+ * | -- | -- | -- |
+ * | buy-now (`commerce-order`, `billing-webhook.ts`) | yes | yes |
+ * | cart (`commerce-cart`, `billing-webhook.ts`) | yes | **no** |
+ * | POS cash and POS card (`pos-order.ts`) | **no** | **no** |
+ * | draft (`draft-order.ts`, paid by `commerce-draft`) | **no** | **no** |
+ *
+ * So every POS and draft order exported as `$0.00` and every cart order
+ * exported with a blank product, each beside a plausible date, email and order
+ * id — nothing in the file signals that the number is missing rather than
+ * genuinely zero. The console screen was right the whole time: the table row
+ * beside the export button, the detail dialog, the analytics card and lifetime
+ * purchases all read `totals` with the flat field only as a fallback. The
+ * export was the sole reader that had the precedence backwards, and a CSV is
+ * the artefact that reaches a bookkeeper.
+ *
+ * ## What "correct" means
+ *
+ * Per AGL-1711's lesson, the useful test is not "do the parts sum" but "does
+ * each column match what was actually charged" — a total-only assertion passes
+ * against a row whose every component is wrong. The spec therefore pins each
+ * cell of a worked example individually.
+ *
+ * ## Refunds
+ *
+ * `amountUsd` stays gross, which is what it has always meant, and the appended
+ * `refundedUsd`/`netUsd` carry the rest. A refunded order previously exported
+ * at its gross with nothing beside it to say so — the same class of error, in
+ * that the file understated nothing but overstated revenue.
+ */
+export function buildOrdersCsv(
+  orders: OrderExportRow[],
+  productNames: Record<string, string> = {},
+): string {
+  const escape = (cell: string) =>
+    /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
+  return [
+    ORDERS_CSV_HEADER,
+    ...orders.map((order) => {
+      const lifted = liftLegacyOrder(order)
+      // The STORED line items, not the lifted ones: `liftLegacyOrder` gives a
+      // legacy flat row a synthetic line named "Product", which would shadow
+      // the real name the `productNames` lookup still recovers for those rows.
+      const lineItems = order.lineItems ?? []
+      // A cart order has several lines and no single product; name the first
+      // and count the rest, the way the table row renders it. `serverTimestamp`
+      // reads back null until the write lands, so `createdAtMs` — which every
+      // modern writer sets alongside it — covers the local snapshot.
+      const date =
+        order.createdAt?.toDate?.() ??
+        (order.createdAtMs ? new Date(order.createdAtMs) : null)
+      const product =
+        lineItems[0]?.name ??
+        productNames[order.productId ?? ''] ??
+        order.productId ??
+        ''
+      const totalCents = Number(
+        lifted.totals?.totalCents ?? order.amountCents ?? 0,
+      )
+      const feeCents = Number(lifted.totals?.feeCents ?? order.feeCents ?? 0)
+      const refundedCents = Number(order.refundedCents ?? 0)
+      return [
+        date ? date.toISOString() : '',
+        lineItems.length > 1
+          ? `${product} +${lineItems.length - 1} more`
+          : product,
+        usd(totalCents),
+        usd(feeCents),
+        order.customerEmail ?? '',
+        order.couponCode ?? '',
+        order.$id ?? '',
+        lifted.status,
+        lifted.channel ?? 'online',
+        usd(refundedCents),
+        usd(totalCents - refundedCents),
+      ]
+        .map((cell) => escape(String(cell)))
+        .join(',')
+    }),
+  ].join('\n')
 }
 
 /** Appends a timeline event immutably (webhook + console share this). */
