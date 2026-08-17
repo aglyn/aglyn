@@ -57,6 +57,7 @@ const CONTEXT_RESPONSE = {
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
   inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
   ordersUrl: null,
+  accountUrl: `${CONSOLE_ORIGIN}/manage/user`,
 }
 
 function storeToken(): void {
@@ -170,6 +171,23 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     // ordersUrl is null — the link must not render at all.
     expect(screen.queryByText('Orders')).toBeNull()
     expect(screen.getByText('editor@aglyn.com')).toBeTruthy()
+  })
+
+  it('links the connected-as identity to the console account page, in a new tab', async () => {
+    await renderReadyBar()
+    const identity = linkByText('editor@aglyn.com')
+    expect(identity.href).toBe(`${CONSOLE_ORIGIN}/manage/user`)
+    expect(identity.target).toBe('_blank')
+    // Disconnect stays a separate control — a button, not part of the link.
+    const disconnect = screen.getByText('Disconnect')
+    expect(disconnect.tagName).toBe('BUTTON')
+    expect(disconnect.closest('a')).toBeNull()
+  })
+
+  it('falls back to a plain identity span when the server sends no accountUrl', async () => {
+    await renderReadyBar({ accountUrl: null })
+    const identity = screen.getByText('editor@aglyn.com')
+    expect(identity.closest('a')).toBeNull()
   })
 
   it('hides the draft flag when the server says false', async () => {

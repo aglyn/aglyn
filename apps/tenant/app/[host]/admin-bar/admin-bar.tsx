@@ -80,6 +80,8 @@ interface EditContext {
   screensUrl?: string | null
   inboxUrl?: string | null
   ordersUrl?: string | null
+  /** The console's user-level account page (`/manage/user`) — no org slug. */
+  accountUrl?: string | null
 }
 
 type Phase =
@@ -197,6 +199,19 @@ const identityStyle: React.CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   maxWidth: 180,
+}
+
+/**
+ * The clickable connected-as identity (AGL-1829 follow-on): same quiet grey
+ * as the plain span so it reads as identity first, but underlined so it is
+ * discoverably a link — to the console's account page, NOT any org surface,
+ * and visually distinct from the bordered Disconnect button beside it.
+ */
+const identityLinkStyle: React.CSSProperties = {
+  ...identityStyle,
+  textDecoration: 'underline',
+  textDecorationColor: 'rgba(139,148,163,0.6)',
+  textUnderlineOffset: 3,
 }
 
 const barButtonStyle: React.CSSProperties = {
@@ -560,9 +575,21 @@ export default function AdminBar({
         </a>
       ) : null}
       {identity ? (
-        <span style={identityStyle} title={`Connected as ${identity}`}>
-          {identity}
-        </span>
+        context?.accountUrl ? (
+          <a
+            style={identityLinkStyle}
+            href={context.accountUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={`Connected as ${identity} — open your account settings`}
+          >
+            {identity}
+          </a>
+        ) : (
+          <span style={identityStyle} title={`Connected as ${identity}`}>
+            {identity}
+          </span>
+        )
       ) : null}
       <button
         type="button"
