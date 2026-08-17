@@ -17,69 +17,48 @@
 'use client'
 
 /**
- * DISABLED FILES — the staff form for asset quarantine (AGL-1687).
+ * DISABLED FILES — the staff form and deny-list table for asset quarantine.
  *
- * AGL-1512 shipped the enforcement, AGL-1613 the ingestion gate and AGL-1612
- * the red `Disabled` badge in the DAM. Setting and lifting one stayed a curl
- * against `/api/admin/media-quarantine` with a bearer token, which is a fine
- * runbook and a bad incident tool: the operator has to transcribe a digest
- * and a scope segment, choose between two digest fields correctly (AGL-1631
- * exists because the runbook named the wrong one), and then believe the
- * result.
+ * A staff-gated DESTRUCTIVE surface: looking a file up is open to every
+ * staff role, but setting or lifting a quarantine needs the `super` role, on
+ * the page and in the route. How the arc got here — AGL-1512/1613/1612, the
+ * curl-only era and the wrong-digest incident that ended it — is narrated in
+ * the quarantine runbook (docs: Staff console → Lockdown, "Asset
+ * quarantine"), not here.
  *
- * So this page never asks for a key. It asks for **the file** — a workspace
- * or site id and a media id, both readable off the CDN URL in the report
- * that started the incident — and the route derives every key from the
- * document. See `by: "media"` in `/api/admin/media-quarantine` for the three
- * transcription failures that removes.
+ * The FORM half asks for **the file** — a workspace or site id and a media
+ * id, both readable off the CDN URL — never for a digest: the route derives
+ * every key from the document (`by: "media"` in
+ * `/api/admin/media-quarantine`). The TABLE half renders the whole deny
+ * list, one row per KEY, for the cap-full case where the remedy is
+ * "release stale entries" and you cannot release what you cannot enumerate.
  *
- * ## What the page refuses to do
+ * ## Invariants this component must not break
  *
- * **Claim a state it has not read back.** Every action re-reads the deny
- * list and renders the server's answer, and a write that returns while the
- * state disagrees is reported as NOT CONFIRMED rather than as success — the
- * AGL-1571 discipline the Lockdown page states at length, for the same
- * reason: the dangerous half is a *lift* you believe happened.
+ * **Never claim a state it has not read back.** Every action re-reads the
+ * deny list and renders the server's answer, and a write that returns while
+ * the state disagrees is reported as NOT CONFIRMED rather than as success —
+ * the same read-back discipline the Lockdown page states at length, because
+ * the dangerous half is a *lift* you believe happened.
  *
- * **Hide the reach of the key it is about to write.** A digest key covers
- * every copy of those bytes in every workspace; a per-asset key covers one
- * document. Which one is being written is on screen before the button is
- * pressed, because "I disabled one customer's file" and "I disabled that
+ * **The reach of the key about to be written stays on screen.** A digest key
+ * covers every copy of those bytes in every workspace; a per-asset key
+ * covers one document. "I disabled one customer's file" and "I disabled that
  * stock photo everywhere" are different actions with the same button.
  *
- * **Pretend the cap is not there.** `MEDIA_QUARANTINE_MAX_ENTRIES` is a hard
+ * **A table row releases as a KEY, not a file.** Release posts `by: "key"`
+ * and clears that one entry. Media mode's "clear every key that could refuse
+ * this file" is correct there and wrong here: the entry may cover a document
+ * that has since been deleted, and a hash key covers files in workspaces
+ * this row knows nothing about.
+ *
+ * **The cap is never hidden.** `MEDIA_QUARANTINE_MAX_ENTRIES` is a hard
  * refusal at 2000, and the failure mode of a full list is "a takedown
- * silently did not land". The count rides on every answer.
- *
- * ## THE WHOLE DENY LIST (AGL-1700)
- *
- * Everything above is per-FILE: you name a file and learn what refuses it.
- * That is the right shape for an incident that starts with a report, and the
- * wrong shape for the one situation the 2000-entry cap exists for — the list
- * is full, the next takedown is refused with a 409, and the remedy is
- * "release stale entries". You cannot release what you cannot enumerate, and
- * the only route to a stale entry used to be knowing a media id it covers,
- * which for a hash-keyed entry set months ago is exactly what nobody
- * remembers.
- *
- * So the second half of the page is the index document as a TABLE, over the
- * `GET` that has returned `records` since AGL-1512 and that nothing had ever
- * rendered. Three things it is careful about:
- *
- * **A row is a KEY, not a file.** Release posts `by: "key"` and clears that
- * one entry. Media mode's "clear every key that could refuse this file" is
- * correct there and wrong here: the entry may cover a document that has since
- * been deleted, and a hash key covers files in workspaces this row knows
- * nothing about.
- *
- * **Oldest first**, because the whole point is finding what has been sitting
- * there. An entry with no `atMs` at all predates the field and sorts first.
- *
- * **Expired-but-unreleased rows are called out.** `isMediaQuarantineActive`
- * stops enforcing the moment `untilMs` passes, with no write — so those rows
- * refuse nothing and still consume the cap. They are the safest thing to
- * clear first, and nothing else on the platform would ever have told you they
- * were there.
+ * silently did not land" — the count rides on every answer. The table sorts
+ * oldest first (a row with no `atMs` predates the field and sorts first) and
+ * calls out expired-but-unreleased rows: `isMediaQuarantineActive` stops
+ * enforcing the moment `untilMs` passes, with no write, so those rows refuse
+ * nothing, still consume the cap, and are the safest thing to clear.
  */
 
 import {

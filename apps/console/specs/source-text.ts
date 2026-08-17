@@ -76,7 +76,9 @@ const LINE_COMMENT = /(^|[^:])\/\/.*$/gm
  *   header on `app/(app)/admin/media-quarantine/page.tsx` — 71% longer than
  *   the previous record, and a perfectly well-formed docblock. The bound
  *   caught it and reported a regex mis-read that had not happened, taking
- *   `page-title.spec.ts` down with it.
+ *   `page-title.spec.ts` down with it. (AGL-1741 later moved that header's
+ *   history into the quarantine runbook, cutting it to ~2,500 characters —
+ *   the bound stays where AGL-1739 put it, calibrated for headers that size.)
  *
  * The margin that matters is the one BELOW: the `accept="image/*"` hole this
  * exists to catch measures 18,010 characters today (16,383 when the bound was
