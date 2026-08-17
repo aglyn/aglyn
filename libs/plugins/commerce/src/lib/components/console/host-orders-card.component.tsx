@@ -36,7 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import OrderDetailDialog, {
@@ -177,15 +177,46 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     URL.revokeObjectURL(url)
   }, [visibleOrders, productNames])
 
+  /**
+   * Idempotency key for ONE draft attempt (AGL-1697).
+   *
+   * Minted lazily on the first create click, NOT per call — two clicks (or a
+   * click retried after a lost response) must present ONE key so the server
+   * replays the original payment link instead of minting a second order.
+   * Retired whenever a content field changes: an edited draft is a different
+   * order, and replaying the old one against it would hand the merchant a
+   * link priced for fields they no longer see. Answering the shipping-country
+   * ask also retires it, which is safe — that refusal is served before the
+   * server takes the claim, so the first key was never spent.
+   */
+  const draftAttemptKey = useRef('')
+  useEffect(() => {
+    draftAttemptKey.current = ''
+  }, [
+    draft?.productId,
+    draft?.variantId,
+    draft?.quantity,
+    draft?.email,
+    draft?.shipTo,
+  ])
+
   const handleDraftCreate = useCallback(async () => {
     if (!draft?.productId) return
     setDraft((prev) => (prev ? { ...prev, busy: true } : prev))
     try {
+      if (!draftAttemptKey.current) {
+        draftAttemptKey.current =
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/commerce/draft-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // Stable across a retry of THIS attempt (AGL-1697), so a
+          // double-click cannot mint two live payment links.
+          'Idempotency-Key': draftAttemptKey.current,
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({

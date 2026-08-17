@@ -18,7 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  claimAttempt,
+  Route,
+  type AttemptClaim,
+  type PluginApiHandler,
+} from '@aglyn/aglyn/server'
 
 /**
  * Draft orders (AGL-287, Shopify parity): a manager builds an order in
@@ -47,10 +53,17 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
   const variantId = String(body.variantId ?? '')
   const quantity = Math.max(1, Math.min(99, Math.round(Number(body.quantity ?? 1))))
   const email = String(body.email ?? '').trim()
+  // One draft attempt, minted by the console dialog (AGL-1697). Node
+  // lowercases incoming headers, but read both spellings — the plugin API
+  // request type makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
   if (!hostId || !productId) {
     return res.status(400).json({ error: 'Missing hostId or productId' })
   }
 
+  let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
@@ -193,6 +206,25 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       })
     }
 
+    // Point of no return (AGL-1697): everything past here writes an order and
+    // mints a live payment link. Every deterministic refusal — unknown
+    // product, payments not set up, the shipping-destination ask — sits above
+    // this line, so none of them burns the key: the merchant fixes the input
+    // and presses the same button. Before the claim, a double-submit minted a
+    // SECOND order doc, burned a second sequential number, and returned two
+    // live payment links bound to different orders, both payable.
+    const claimed = await claimAttempt(firestore, {
+      kind: 'commerce-draft',
+      scopeId: hostId,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+      busyMessage: 'This draft order is already being created',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+
     // Order doc first (transactional number), then the payment link.
     const orderRef = hostRef.collection('orders').doc()
     const counterRef = hostRef.collection('counters').doc('orders')
@@ -261,6 +293,11 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // The half that is a live payment link (AGL-1697). Stripe replays
+          // the existing session for a repeated key instead of opening a
+          // second one on the merchant's account, which covers the window
+          // where our claim is written but the response never arrives.
+          ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
         },
         body: params.toString(),
       },
@@ -273,15 +310,26 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     if (!response.ok || !session.url) {
       console.error('Stripe draft-order error', session.error)
       await orderRef.delete().catch(() => undefined)
+      // The draft did not happen — hand the key back rather than locking this
+      // dialog out over one flaky moment. The retry re-derives the SAME
+      // digest, so if Stripe did create the session it replays it.
+      await claim.release()
       return res.status(502).json({ error: 'Payment link creation failed' })
     }
     await orderRef.set(
       { checkoutSessionId: session.id, paymentLinkUrl: session.url },
       { merge: true },
     )
-    return res.status(200).json({ orderId: orderRef.id, url: session.url })
+    const payload = { orderId: orderRef.id, url: session.url }
+    await claim.record(200, payload)
+    return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691's rule). The order write may or may not have landed; the
+    // merchant reconciles from the orders list, the same position they were
+    // in before this endpoint had a claim at all.
+    await claim?.release()
     return res.status(500).json({ error: 'Draft order failed' })
   }
 }
