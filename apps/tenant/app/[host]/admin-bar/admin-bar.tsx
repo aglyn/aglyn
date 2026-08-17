@@ -145,8 +145,12 @@ export const BAR_HEIGHT_MOBILE = 44
 export const MOBILE_BREAKPOINT = 640
 
 const BAR_CSS = `
-.aglyn-admin-bar{height:${BAR_HEIGHT}px;gap:14px;padding:0 12px;}
+.aglyn-admin-bar{height:${BAR_HEIGHT}px;gap:12px;padding:0 12px;}
 .aglyn-admin-bar .aglyn-ab-site{overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+.aglyn-admin-bar a:hover{color:#fff;}
+.aglyn-admin-bar .aglyn-ab-user:hover,.aglyn-admin-bar .aglyn-ab-icon-btn:hover{background:rgba(255,255,255,0.1);}
+.aglyn-admin-bar .aglyn-ab-menu a:hover,.aglyn-admin-bar .aglyn-ab-menu button:hover{background:rgba(255,255,255,0.08);color:#f5f7fa;}
+.aglyn-admin-bar a:focus-visible,.aglyn-admin-bar button:focus-visible{outline:2px solid #8ecbff;outline-offset:1px;border-radius:4px;}
 .aglyn-ab-mobile{display:none !important;}
 @media (max-width:${MOBILE_BREAKPOINT - 1}px){
   .aglyn-admin-bar{height:${BAR_HEIGHT_MOBILE}px;gap:8px;padding:0 8px;}
@@ -169,7 +173,9 @@ const barStyle: React.CSSProperties = {
   background: '#111826',
   color: '#f5f7fa',
   fontFamily: 'system-ui, sans-serif',
-  fontSize: 13,
+  // 12px platform-chrome type throughout the bar; the dropdowns bump it
+  // for their taller touch rows.
+  fontSize: 12,
   zIndex: 2147483000,
   boxShadow: '0 1px 6px rgba(0,0,0,0.35)',
 }
@@ -258,30 +264,39 @@ const identityStyle: React.CSSProperties = {
 }
 
 /**
- * The clickable connected-as identity (AGL-1829 follow-on): same quiet grey
- * as the plain span so it reads as identity first, but underlined so it is
- * discoverably a link — to the console's account page, NOT any org surface,
- * and visually distinct from the bordered Disconnect button beside it.
+ * The connected-as identity as a USER MENU trigger (AGL-1829 follow-on):
+ * avatar initial + email + caret, opening the account dropdown. Quiet grey
+ * like the old identity span so it still reads as identity first; the
+ * hover/focus background (BAR_CSS) is what says "button".
  */
-const identityLinkStyle: React.CSSProperties = {
-  ...identityStyle,
-  textDecoration: 'underline',
-  textDecorationColor: 'rgba(139,148,163,0.6)',
-  textUnderlineOffset: 3,
-}
-
-const barButtonStyle: React.CSSProperties = {
+const userButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 7,
   background: 'none',
-  border: '1px solid rgba(245,247,250,0.35)',
-  borderRadius: 5,
-  color: '#f5f7fa',
+  border: 'none',
+  borderRadius: 6,
+  color: '#c3ccd9',
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 12,
-  fontWeight: 600,
-  lineHeight: '20px',
-  padding: '1px 8px',
+  padding: '3px 6px',
   whiteSpace: 'nowrap',
+}
+
+const avatarStyle: React.CSSProperties = {
+  width: 20,
+  height: 20,
+  borderRadius: '50%',
+  background: '#46536a',
+  color: '#f5f7fa',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  flexShrink: 0,
 }
 
 /** The phone-width ⋯ dropdown: dark like the bar, every row ≥40px tall. */
@@ -359,6 +374,13 @@ export default function AdminBar({
   // The phone-width ⋯ menu (AGL-1829 mobile pass). Unmounted while closed,
   // so desktop assertions and screen readers never meet duplicate links.
   const [menuOpen, setMenuOpen] = useState(false)
+  // The desktop user menu (AGL-1829 follow-on): account settings, the host
+  // dashboard and Disconnect behind the connected-as identity. Below the
+  // phone breakpoint this trigger hides and the ⋯ menu carries the same
+  // rows instead — two dropdowns competing for a 44px bar is chrome noise.
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userButtonRef = useRef<HTMLButtonElement | null>(null)
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
   const tokenRef = useRef<StoredEditToken | null>(null)
   const pathRef = useRef<string>('')
@@ -584,6 +606,33 @@ export default function AdminBar({
       })
     }
   }, [phase])
+
+  // Menu dismissal (AGL-1829 follow-on): Escape closes an open dropdown
+  // and returns focus to its trigger — a menu that strands keyboard focus
+  // is a trap on someone else's website — and a pointer press anywhere
+  // outside the bar closes them too. Listeners exist only while a menu is
+  // open; the closed bar adds nothing to the page.
+  useEffect(() => {
+    if (!menuOpen && !userMenuOpen) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (userMenuOpen) userButtonRef.current?.focus()
+      else moreButtonRef.current?.focus()
+      setMenuOpen(false)
+      setUserMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (barRef.current?.contains(event.target as Node)) return
+      setMenuOpen(false)
+      setUserMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [menuOpen, userMenuOpen])
 
   const connect = useCallback(() => {
     setPhase('connecting')
@@ -815,40 +864,40 @@ export default function AdminBar({
           Orders
         </a>
       ) : null}
-      {identity ? (
-        context?.accountUrl ? (
-          <a
-            className="aglyn-ab-desktop"
-            style={identityLinkStyle}
-            href={context.accountUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={`Connected as ${identity} — open your account settings`}
-          >
-            {identity}
-          </a>
-        ) : (
-          <span
-            className="aglyn-ab-desktop"
-            style={identityStyle}
-            title={`Connected as ${identity}`}
-          >
-            {identity}
-          </span>
-        )
-      ) : null}
       <button
+        ref={userButtonRef}
         type="button"
-        onClick={disconnect}
-        className="aglyn-ab-desktop"
-        style={barButtonStyle}
-        title="Disconnect edit access in this browser (Cmd/Ctrl+Shift+E reconnects)"
+        onClick={() => {
+          setUserMenuOpen((open) => !open)
+          setMenuOpen(false)
+        }}
+        className="aglyn-ab-desktop aglyn-ab-user"
+        style={userButtonStyle}
+        aria-haspopup="menu"
+        aria-expanded={userMenuOpen}
+        aria-label={
+          identity ? `Account menu — connected as ${identity}` : 'Account menu'
+        }
+        title={identity ? `Connected as ${identity}` : undefined}
+        data-aglyn-user-menu=""
       >
-        Disconnect
+        <span aria-hidden="true" style={avatarStyle}>
+          {identity?.[0] ?? '•'}
+        </span>
+        <span style={{ ...identityStyle, maxWidth: 160 }}>
+          {identity ?? 'Account'}
+        </span>
+        <span aria-hidden="true" style={{ fontSize: 8, color: '#8b94a3' }}>
+          ▼
+        </span>
       </button>
       <button
+        ref={moreButtonRef}
         type="button"
-        onClick={() => setMenuOpen((open) => !open)}
+        onClick={() => {
+          setMenuOpen((open) => !open)
+          setUserMenuOpen(false)
+        }}
         className="aglyn-ab-mobile aglyn-ab-icon-btn"
         aria-label="More admin bar options"
         aria-haspopup="menu"
@@ -883,9 +932,68 @@ export default function AdminBar({
       >
         ×
       </button>
+      {userMenuOpen ? (
+        <div
+          className="aglyn-ab-desktop aglyn-ab-menu"
+          role="menu"
+          aria-label="Account menu"
+          style={{
+            ...menuStyle,
+            fontSize: 13,
+            // Sits just under the bar at whatever height it rendered —
+            // measured, like the page offset, never assumed.
+            top: (barRef.current?.offsetHeight || BAR_HEIGHT) + 4,
+          }}
+        >
+          {identity ? (
+            <span
+              style={{
+                ...menuItemStyle,
+                color: '#8b94a3',
+                cursor: 'default',
+                fontSize: 12,
+              }}
+              title={`Connected as ${identity}`}
+            >
+              {identity}
+            </span>
+          ) : null}
+          {context?.accountUrl ? (
+            <a
+              role="menuitem"
+              style={{ ...menuItemStyle, fontSize: 13 }}
+              href={context.accountUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setUserMenuOpen(false)}
+            >
+              Account settings
+            </a>
+          ) : null}
+          <a
+            role="menuitem"
+            style={{ ...menuItemStyle, fontSize: 13 }}
+            href={context?.consoleUrl ?? consoleOrigin}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setUserMenuOpen(false)}
+          >
+            Site dashboard
+          </a>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={disconnect}
+            style={{ ...menuItemStyle, fontSize: 13 }}
+            title="Disconnect edit access in this browser (Cmd/Ctrl+Shift+E reconnects)"
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : null}
       {menuOpen ? (
         <div
-          className="aglyn-ab-mobile"
+          className="aglyn-ab-mobile aglyn-ab-menu"
           role="menu"
           aria-label="Admin bar menu"
           style={{

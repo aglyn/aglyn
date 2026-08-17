@@ -165,16 +165,18 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
         ),
       ).toBe(true)
     }
+    // The user-menu trigger (identity + account rows) is desktop-only; the
+    // ⋯ menu carries the same rows below the breakpoint instead — two
+    // dropdowns competing for a 44px bar would be chrome noise.
     expect(
       within(bar)
-        .getByText('editor@aglyn.com')
+        .getByRole('button', {
+          name: 'Account menu — connected as editor@aglyn.com',
+        })
         .classList.contains('aglyn-ab-desktop'),
     ).toBe(true)
-    expect(
-      within(bar)
-        .getByText('Disconnect')
-        .classList.contains('aglyn-ab-desktop'),
-    ).toBe(true)
+    // Disconnect lives only inside the menus now.
+    expect(within(bar).queryByText('Disconnect')).toBeNull()
     // The ⋯ trigger is the mobile-only counterpart.
     const more = within(bar).getByLabelText('More admin bar options')
     expect(more.classList.contains('aglyn-ab-mobile')).toBe(true)
