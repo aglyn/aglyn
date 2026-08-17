@@ -85,6 +85,14 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     variantId: string
     quantity: string
     email: string
+    /** Destination the merchant declared, once they have been asked. */
+    shipTo?: string
+    /**
+     * Revealed only when the server refuses for want of a destination
+     * (AGL-1792). A merchant whose rates are the same everywhere — or who
+     * configured none — is never asked and never sees this field.
+     */
+    shipCountries?: string[]
     busy?: boolean
   } | null>(null)
   const { data: user } = useUser()
@@ -138,10 +146,33 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
           variantId: draft.variantId || undefined,
           quantity: Number(draft.quantity) || 1,
           email: draft.email || undefined,
+          // A request, never an instruction: the server resolves the rates for
+          // this country AND restricts the payment link's collectable
+          // addresses to it, so declaring one cannot buy a cheaper zone's rate
+          // than the address the buyer then enters (AGL-1721).
+          ...(draft.shipTo ? { shippingCountry: draft.shipTo } : {}),
         }),
       })
       const payload = await response.json()
       if (!response.ok) {
+        // The merchant's rates differ by destination, so the server will not
+        // price this order until it knows one (AGL-1792). Reveal the field and
+        // let them answer; a store whose rates are the same everywhere, or
+        // which configured none, never sends this and never shows it.
+        if (payload?.needsShippingCountry) {
+          setDraft((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  shipCountries: (
+                    payload.shippingCountries as string[] | undefined
+                  )?.length
+                    ? (payload.shippingCountries as string[])
+                    : [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+                }
+              : prev,
+          )
+        }
         return void enqueueSnackbar(payload?.error ?? 'Draft order failed', {
           variant: 'error',
           allowDuplicate: true,
@@ -366,13 +397,42 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             }
             size="small"
           />
+          {draft?.shipCountries?.length ? (
+            <TextField
+              label="Ships to"
+              value={draft?.shipTo ?? ''}
+              onChange={(event) =>
+                setDraft((prev) =>
+                  prev ? { ...prev, shipTo: event.target.value } : prev,
+                )
+              }
+              size="small"
+              select
+              helperText={
+                'This store’s shipping rates differ by destination, so the ' +
+                'payment link has to be priced for one.'
+              }
+            >
+              {draft.shipCountries.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.productId || draft?.busy}
+            disabled={
+              !draft?.productId ||
+              draft?.busy ||
+              // Once asked, the answer is required: retrying without one is
+              // refused again, so the button would only look broken.
+              Boolean(draft?.shipCountries?.length && !draft?.shipTo)
+            }
             onClick={handleDraftCreate}
           >
             {'Create & copy link'}
