@@ -376,6 +376,103 @@ describe('the buy-now crossing alert (AGL-1826 pins)', () => {
   })
 })
 
+/**
+ * Two cart lines of one product (AGL-1830) — the AGL-1828 defect in the cart
+ * branch, pinned on this file's harness because the alert is the second
+ * casualty. `lineKey` merges on product+variant, so two VARIANTS of one
+ * product are two cart lines; the loop read both from a never-updated
+ * `productsById`, so the second line's merge-set erased the first line's
+ * decrement while the ledger recorded both, and a crossing spread across the
+ * two lines was invisible to the stale pre/post pair.
+ *
+ * The box now has two tracked variants and nothing coincides (AGL-1711):
+ *
+ *   large 10, sold 3   =  7
+ *   small  6, sold 2   =  4
+ *   flat  16           = 11
+ */
+describe('two cart lines of one product (AGL-1830)', () => {
+  /** product-1 with TWO tracked variants, threshold optional per case. */
+  function trackTwoVariantBox(lowStockThreshold?: number) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      ...(lowStockThreshold != null ? { lowStockThreshold } : {}),
+      variants: [
+        { id: 'large', priceUsd: 15, sku: 'BOX-L', inventory: 10 },
+        { id: 'small', priceUsd: 8, sku: 'BOX-S', inventory: 6 },
+      ],
+    })
+  }
+
+  function boxVariant(id: string) {
+    const product = docs.get('hosts/host-1/products/product-1') as any
+    return product.variants.find((variant: any) => variant.id === id)
+  }
+
+  beforeEach(() => {
+    trackTwoVariantBox()
+    docs.set('hosts/host-1/carts/cart-1', {
+      lines: [
+        { productId: 'product-1', variantId: 'large', quantity: 3 },
+        { productId: 'product-1', variantId: 'small', quantity: 2 },
+      ],
+    })
+  })
+
+  /**
+   * THE DEFECT: before the fix the small line recomputed from the product as
+   * first read, so its write landed large back at 10 — the sale's three
+   * large boxes returned to the shelf on paper, and the flat total read 14.
+   */
+  it('folds two variant lines of one product into one final count', async () => {
+    await deliver(CART_SESSION)
+    expect(boxVariant('large').inventory).toBe(7)
+    expect(boxVariant('small').inventory).toBe(4)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).inventory,
+    ).toBe(11)
+  })
+
+  /**
+   * The ledger was never the broken half — both rows landed while the count
+   * kept only the last. Pinned so the fix is measured as the count agreeing
+   * with the history, not the history shrinking to match (AGL-1807).
+   */
+  it('logs both sale rows, agreeing with the folded count', async () => {
+    await deliver(CART_SESSION)
+    const rows = childPaths('hosts/host-1/inventoryAdjustments')
+      .map((path) => docs.get(path) as any)
+      .filter((row) => row.productId === 'product-1')
+    expect(rows.map((row) => [row.variantId, row.delta])).toEqual([
+      ['large', -3],
+      ['small', -2],
+    ])
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).inventory,
+    ).toBe(11)
+  })
+
+  /**
+   * The alert casualty: a crossing SPREAD across the two lines (16 becomes 13
+   * becomes 11 against a threshold of 12) breaches on the second line only —
+   * the stale pair saw 16-to-13 and 16-to-14, neither low, and stayed silent.
+   */
+  it('fires the crossing alert once, on the line that breaches', async () => {
+    trackTwoVariantBox(12)
+    await deliver(CART_SESSION)
+    expect(lowStockAlerts()).toEqual([
+      {
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'Low stock — Monthly box',
+        body: '11 left across tracked variants',
+        link: '/host-1/products',
+      },
+    ])
+  })
+})
+
 /** localhost carries the LIVE Stripe key: no path here may reach out. */
 it('makes no outbound request', async () => {
   await deliver(CART_SESSION)

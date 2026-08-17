@@ -1363,6 +1363,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             variantId,
             -line.quantity,
           )
+          // Two lines of one product must COMPOUND (AGL-1830): a cart holds
+          // two VARIANTS of one product as two lines (`lineKey` merges on
+          // product+variant), and recomputing each from the product as first
+          // read would erase this decrement when the sibling line's merge-set
+          // landed, while the ledger below recorded both. Same carry-forward
+          // as the POS loops (AGL-1825/AGL-1828); the gift-card pass below
+          // reads only the `giftCard` flag, which the swap preserves.
+          const updated = { ...product, variants }
+          productsById.set(line.productId, updated)
           await hostRef
             .collection('products')
             .doc(line.productId)
@@ -1387,14 +1396,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             .catch(() => undefined)
           // Low-stock crossing alert (AGL-1826): the cart — the channel that
           // sells MORE units per order than the buy-now button — used to
-          // cross the threshold silently. Same check, per product; the
-          // `created` guard above bounds it on redelivery. Fires per crossing
-          // line, which for a multi-product basket is one nudge per product
-          // that breached.
-          alertLowStockCrossing(String(hostId), product, {
-            ...product,
-            variants,
-          })
+          // cross the threshold silently. Same check, per product, on the
+          // compounded pair; the `created` guard above bounds it on
+          // redelivery. Fires per crossing line, which for a multi-product
+          // basket is one nudge per product that breached.
+          alertLowStockCrossing(String(hostId), product, updated)
         }
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
