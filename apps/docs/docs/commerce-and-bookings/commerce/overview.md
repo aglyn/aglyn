@@ -91,6 +91,13 @@ another zone, so the zones you save decide what checkout can do:
   single zone, or a single rest-of-world zone, asks the shopper nothing.
 - **No rates at all is a valid setup**, not a gap: the store charges no
   shipping and refuses nobody.
+- **Payment links price a parcel too.** A draft order you invoice a customer
+  for charges the same rates, collects the same address, and asks you the same
+  "Ships to" question in the draft dialog when your rates differ by
+  destination.
+- **In-person sales charge no shipping.** A register has no destination to
+  price against — cash, card and room-folio sales all settle at the counter —
+  so a POS sale is items and tax. Raise a draft order for anything you post.
 
 A zone that names a country **hides the rest-of-world zone for it** — so a
 "Europe" zone with no rates on it refuses Europe even when a `*` zone exists.

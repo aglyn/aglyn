@@ -29,8 +29,18 @@
  * model with no production call site at all — the doc comment here claimed the
  * cart estimator, checkout and POS pickup used it, and none of them did, so
  * nothing ever read the settings a merchant saved and no shipping was ever
- * charged. Cart checkout calls it (AGL-1707) and buy-now calls it for physical
- * one-time products (AGL-1720). Draft orders and POS still do not.
+ * charged. Cart checkout calls it (AGL-1707), buy-now calls it for physical
+ * one-time products (AGL-1720), and a draft order's payment link calls it for
+ * physical products (AGL-1792).
+ *
+ * POS DOES NOT, AND SHOULD NOT (AGL-1792). A register has no destination
+ * anywhere in it — no address field, no delivery choice — and all three
+ * tenders settle at the counter: cash, a card QR the customer scans while
+ * standing there, and a room folio collected at check-out. There is nothing to
+ * price a parcel against, so the only rate POS could resolve is the free
+ * `Local pickup` one this module appends, which is 0¢ and would add a step to
+ * a register flow in exchange for nothing. A POS sale that must be shipped is
+ * a draft order.
  */
 
 export interface ShippingZone {
