@@ -136,13 +136,25 @@ const auditPayload = (index = 0) =>
     ref.path.startsWith('adminAudit'),
   )[index] as unknown as [{ path: string }, Record<string, any>]
 
+/**
+ * The override POSTs the console made, body parsed. Both staff writes are
+ * routes now — suspension since AGL-1505, override since AGL-1786 — so the
+ * assertions read requests, and the Firestore doubles are pure tripwires for
+ * either coming back as a client write.
+ */
+const overrideRequests = () =>
+  ((global.fetch as jest.Mock).mock.calls as Array<[string, any]>)
+    .filter(([url]) => url === '/api/admin/org-override')
+    .map(([, init]) => ({ init, body: JSON.parse(init.body) }))
+
 describe('StaffOrgActions (AGL-939)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockBatchWrites.length = 0
     global.fetch = jest.fn(async () => ({
       ok: true,
-      json: async () => ({}),
+      status: 200,
+      json: async () => ({ ok: true, written: true }),
     })) as unknown as typeof fetch
   })
 
@@ -333,32 +345,31 @@ describe('StaffOrgActions (AGL-939)', () => {
     )
     fireEvent.click(within(dialog).getByText('Save (audited)'))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
-    const [target, write] = setDocPayload()
-    expect(target.path).toBe('orgs/org-1')
-    expect(write['plan']).toBe('pro')
-    expect((write['entitlements'] as any).hostLimit).toBe(5)
-    const [, audit] = auditPayload()
-    expect(audit.action).toBe('org.override')
-    expect(audit.actorUid).toBe('staff-1')
-    // WHO and WHY, not just who (AGL-1652). The note is an explicit null,
-    // never a dropped key — Firestore rejects `undefined`, and an absent
-    // key would read as a row written before the field existed.
-    expect(audit.reason).toBe('enterprise')
-    expect(audit.note).toBeNull()
-    // `releaseFlags` joined the audited before-state in AGL-1635; an org
-    // with no per-org release override records an explicit null rather than
-    // omitting the key, so a reader can tell "none set" from "not recorded".
-    expect(audit.before).toEqual({
-      plan: 'pro',
-      entitlements: { hostLimit: 5 },
-      releaseFlags: null,
-    })
-    // The audit row records resulting STATE — no delete sentinels.
-    expect(audit.after.plan).toBe('pro')
-    expect(audit.after.entitlements.hostLimit).toBe(5)
-    expect(Object.values(audit.after.entitlements.features)).not.toContain(
-      '__DELETE__',
-    )
+    // The override is a ROUTE since AGL-1786 — the org document and its
+    // audit row are both written there, in one Admin SDK batch
+    // (specs/org-override-route.spec.ts). What AGL-939 pins here is that the
+    // surface asks for the right change and writes nothing itself.
+    const request = overrideRequests()[0]
+    expect(request.init.method).toBe('POST')
+    expect(request.init.headers.Authorization).toBe('Bearer tok')
+    expect(request.body.orgId).toBe('org-1')
+    expect(request.body.plan).toBe('pro')
+    expect(request.body.quotas.hostLimit).toBe(5)
+    // WHO comes from the verified token server-side; WHY comes from here
+    // (AGL-1652). The note is an explicit null, never a dropped key — the
+    // route writes it straight onto the row and Firestore rejects
+    // `undefined`, while an absent key would read as a row written before
+    // the field existed.
+    expect(request.body.reason).toBe('enterprise')
+    expect(request.body.note).toBeNull()
+    // INTENT, not a payload: `deleteField()` has no JSON form, so inherit is
+    // expressed by absence and the route mints the sentinel (AGL-1109).
+    expect(JSON.stringify(request.body)).not.toContain('__DELETE__')
+    expect(request.body.features).toEqual({})
+    // Tripwires: neither document may be written from the client any more.
+    expect(mockBatchWrites).toEqual([])
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockAddDoc).not.toHaveBeenCalled()
   })
 
   it('renders disabled actions for a null org instead of crashing', () => {

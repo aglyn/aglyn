@@ -16,8 +16,8 @@
  */
 
 /**
- * AGL-1784: a staff org override and its audit row cannot land separately,
- * and a failure has to say which of them did.
+ * AGL-1784/1786: a staff org override and its audit row cannot land
+ * separately, and a failure has to say which of them did.
  *
  * The override used to be two sequential awaits in one `try` — the org
  * document, then the `adminAudit` row. A failure on the second (a rules
@@ -30,23 +30,34 @@
  *
  * Two halves, and the second does not come free with the first: an atomic
  * write fixes the STATE, but the message is still whatever the catch says.
- * Every case here asserts both — what reached Firestore, and what the
+ * Every case here asserts both — what left the browser, and what the
  * operator was told.
  *
- * THE FIRESTORE DOUBLE BELOW IS THE LOAD-BEARING PART, in two ways.
+ * THE OVERRIDE IS NOW A ROUTE (AGL-1786), so its half of this file changed
+ * shape. `/api/admin/org-override` holds the atomicity (one Admin SDK batch,
+ * covered in specs/org-override-route.spec.ts) and the reason gate; what is
+ * asserted HERE is the two things only the client can get wrong:
  *
- * It models atomicity: a batch stages writes and applies them only when
- * `commit()` resolves, and a rejected commit applies NONE of them. A double
- * that recorded each `set()` as it was staged, or that let a failed commit
- * leave its earlier writes behind, would pass against the very component
- * this file exists to catch.
+ *  - it must not write either document itself. The Firestore doubles stay,
+ *    and for the override path they are pure TRIPWIRES: any batch, `setDoc`
+ *    or `addDoc` on the override path is a return to the client write.
+ *  - THE MESSAGE MUST STILL MATCH WHAT HAPPENED, and a route makes that
+ *    harder rather than easier. A rejected client commit PROVED nothing was
+ *    written; a request that dies in the network proves nothing at all. So
+ *    "the organization is unchanged" is claimed only on an explicit
+ *    `written: false` from the route, and each of the four other failure
+ *    shapes — token refresh, transport, a body without the field, a refusal
+ *    that carries it — has its own case below asserting it says something
+ *    true.
  *
- * And it injects ONE FAULT, `mockAuditRefused` — the `adminAudit` write is
- * denied — rather than a fault peculiar to batches. The same fault reaches
- * an un-batched `setDoc`-then-`addDoc` component, where it leaves the org
- * document applied and no audit row, so these cases fail against that shape
- * by naming the defect (`orgWrites()` is not empty) instead of merely
- * finding no batch to break.
+ * ERASURE IS STILL A CLIENT BATCH, and its cases are unchanged. The
+ * Firestore double models atomicity for them: a batch stages writes and
+ * applies them only when `commit()` resolves, and a rejected commit applies
+ * NONE of them. A double that recorded each `set()` as it was staged would
+ * pass against the very split write this replaced. The fault injected,
+ * `mockAuditRefused`, is stated on the COLLECTION rather than on the batch,
+ * so it reaches an un-batched `setDoc`-then-`addDoc` shape too — where it
+ * leaves the flag applied and no audit row.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -201,64 +212,98 @@ const openOverrideWithReason = async (): Promise<HTMLElement> => {
   return dialog
 }
 
+/**
+ * What `/api/admin/org-override` answers with. Swapped per case so each of
+ * the FIVE distinguishable failure shapes can be produced exactly:
+ * a token refresh that throws, a transport failure, a refusal that carries
+ * `written: false`, a response that carries no such field, and success.
+ */
+let mockOverrideResponse: () => Promise<{
+  ok: boolean
+  status: number
+  json: () => Promise<any>
+}> = async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })
+
+/** Every fetch the component made: `[url, init]`. */
+const mockFetches: Array<[string, any]> = []
+
+const overrideCalls = () =>
+  mockFetches.filter(([url]) => url === '/api/admin/org-override')
+/** The JSON body of the single override POST. */
+const overrideBody = () => JSON.parse(overrideCalls()[0][1].body)
+
 beforeEach(() => {
   mockApplied.length = 0
   mockDirect.length = 0
   mockCommits.length = 0
   mockSnacks.length = 0
+  mockFetches.length = 0
   mockAuditRefused = false
   mockGetIdToken = async () => 'tok'
   mockConfirmResult = async () => undefined
-  global.fetch = jest.fn(async () => ({
+  mockOverrideResponse = async () => ({
     ok: true,
-    json: async () => ({}),
-  })) as unknown as typeof fetch
+    status: 200,
+    json: async () => ({ ok: true, written: true }),
+  })
+  global.fetch = jest.fn(async (url: string, init: any) => {
+    mockFetches.push([String(url), init])
+    if (String(url) === '/api/admin/org-override') {
+      return mockOverrideResponse()
+    }
+    return { ok: true, status: 200, json: async () => ({}) }
+  }) as unknown as typeof fetch
 })
 
-describe('staff org override — the org doc and its audit row are one write', () => {
-  it('commits BOTH documents in a single batch, never as two writes', async () => {
+describe('staff org override — the write is the route, and nothing else', () => {
+  it('POSTs the override and writes NOTHING from the client', async () => {
     render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
     const dialog = await openOverrideWithReason()
     fireEvent.click(within(dialog).getByText('Save (audited)'))
 
-    await waitFor(() => expect(auditRows()).toHaveLength(1))
-    expect(orgWrites()).toHaveLength(1)
-    // One commit, and both writes staged on the SAME batch. Two batches
-    // committed back to back would be the same bug wearing the new API.
-    expect(mockCommits).toHaveLength(1)
-    expect(auditRows()[0].batch).toBe(orgWrites()[0].batch)
-    // And nothing went around the batch.
+    await waitFor(() => expect(overrideCalls()).toHaveLength(1))
+    const [, init] = overrideCalls()[0]
+    expect(init.method).toBe('POST')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    // The three tripwires together: no batch, no `setDoc`, no `addDoc`. The
+    // reason gate is only a boundary while the client is not also a writer —
+    // a component that posted AND wrote would leave the un-audited path open
+    // beside the audited one.
+    expect(mockCommits).toEqual([])
+    expect(mockApplied).toEqual([])
     expect(mockDirect).toEqual([])
-    // The AGL-201/1652 contract is unchanged by the batching: the org write
-    // is still a merge, and the row still carries actor, action and reason.
-    expect(orgWrites()[0].options).toEqual({ merge: true })
-    expect(auditRows()[0].data.action).toBe('org.override')
-    expect(auditRows()[0].data.actorUid).toBe('staff-1')
-    expect(auditRows()[0].data.reason).toBe('enterprise')
-    expect(auditRows()[0].data.note).toBeNull()
-    // Firestore rejects `undefined`; an explicit null is the contract.
-    expect(Object.values(auditRows()[0].data)).not.toContain(undefined)
   })
 
-  it('a refused commit leaves the ORG DOCUMENT untouched, not just the row', async () => {
-    // The defect exactly: the audit row is the write that fails, and the
-    // override has already landed by then.
-    mockAuditRefused = true
+  it('sends INTENT, never a payload — a sentinel cannot cross JSON', async () => {
+    // The sharpest trap in the migration (AGL-1109/1786). `deleteField()` is
+    // the sentinel "inherit" needs under `{ merge: true }`, and it has no
+    // JSON form: serialised it arrives as `{}`, which a merge ignores, so a
+    // posted payload would silently restore the very no-op the sentinel
+    // exists to prevent. Absence is the inherit signal; the route expands it.
     render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
     const dialog = await openOverrideWithReason()
     fireEvent.click(within(dialog).getByText('Save (audited)'))
 
-    await waitFor(() => expect(errorSnacks()).toHaveLength(1))
-    // THE defect, asserted first so a regression reads as "the override
-    // landed anyway" rather than as some downstream bookkeeping difference.
-    expect(orgWrites()).toEqual([])
-    expect(auditRows()).toEqual([])
-    expect(mockCommits).toHaveLength(1)
-    expect(mockDirect).toEqual([])
+    await waitFor(() => expect(overrideCalls()).toHaveLength(1))
+    const body = overrideBody()
+    // The double renders `deleteField()` as the string `__DELETE__`, so a
+    // component that built the payload here would be visible in the wire
+    // body — as that string, or as the `{}` a real sentinel serialises to.
+    expect(JSON.stringify(body)).not.toContain('__DELETE__')
+    // Untouched flags are ABSENT, not `{}` and not `null`.
+    expect(body.features).toEqual({})
+    expect(body.releaseFlags).toEqual({})
+    expect(body.orgId).toBe('org-1')
+    expect(body.reason).toBe('enterprise')
+    expect(body.note).toBeNull()
   })
 
-  it('says the organization is unchanged, rather than only that a write failed', async () => {
-    mockAuditRefused = true
+  it('says the organization is unchanged ONLY on the route’s own written:false', async () => {
+    mockOverrideResponse = async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Staff only', written: false }),
+    })
     const onChanged = jest.fn()
     render(<StaffOrgActions org={ORG} onChanged={onChanged} />)
     const dialog = await openOverrideWithReason()
@@ -268,18 +313,77 @@ describe('staff org override — the org doc and its audit row are one write', (
     const message = errorSnacks()[0].message
     // "Write failed" was true of the write and silent about the org, which
     // an operator reads as "nothing happened" — the one thing it could not
-    // promise. The message has to state the outcome it now can promise.
+    // promise. Here it can, because the route said so.
     expect(message).toMatch(/nothing was written/i)
     expect(message).toMatch(/unchanged/i)
-    expect(message).not.toMatch(/^Write failed/)
-    // No success claim alongside it, and the dialog stays open so the
-    // operator can retry from the values they entered.
+    expect(message).toMatch(/safe to retry/i)
+    // And it repeats what the route refused it for, or the operator has to
+    // guess which of six validations they tripped.
+    expect(message).toContain('Staff only')
     expect(mockSnacks.some((snack) => snack.variant === 'success')).toBe(false)
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(onChanged).not.toHaveBeenCalled()
   })
 
-  it('reports success only after the commit resolves', async () => {
+  it('refuses to claim "unchanged" for a failure that never reached the route', async () => {
+    // THE COST OF THE ROUTE, asserted rather than assumed. A gateway 502, an
+    // HTML error page, a proxy timeout: the request may well have committed.
+    // A client batch could promise otherwise; this cannot, and AGL-1784's
+    // lesson is that the harm was the RETRY a wrong "nothing happened"
+    // invited, not the failure itself.
+    mockOverrideResponse = async () => ({
+      ok: false,
+      status: 502,
+      json: async () => ({}),
+    })
+    const onChanged = jest.fn()
+    render(<StaffOrgActions org={ORG} onChanged={onChanged} />)
+    const dialog = await openOverrideWithReason()
+    fireEvent.click(within(dialog).getByText('Save (audited)'))
+
+    await waitFor(() => expect(errorSnacks()).toHaveLength(1))
+    const message = errorSnacks()[0].message
+    expect(message).toMatch(/not known/i)
+    expect(message).not.toMatch(/safe to retry/i)
+    expect(message).not.toMatch(/nothing was written/i)
+    // It has to say what to DO, or "unknown" is just an apology.
+    expect(message).toMatch(/audit/i)
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('says the same about a request that never got an answer at all', async () => {
+    mockOverrideResponse = async () => {
+      throw new TypeError('Failed to fetch')
+    }
+    render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
+    const dialog = await openOverrideWithReason()
+    fireEvent.click(within(dialog).getByText('Save (audited)'))
+
+    await waitFor(() => expect(errorSnacks()).toHaveLength(1))
+    expect(errorSnacks()[0].message).toMatch(/not known/i)
+    expect(errorSnacks()[0].message).not.toMatch(/safe to retry/i)
+  })
+
+  it('a failed token refresh IS "nothing was sent" — it never left the browser', async () => {
+    // The distinction the route makes possible and a single `try` would
+    // destroy: this one really is safe to retry, and saying "unknown" here
+    // would send an operator to check an audit log for a request that was
+    // never made.
+    mockGetIdToken = async () => {
+      throw new Error('token refresh failed')
+    }
+    render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
+    const dialog = await openOverrideWithReason()
+    fireEvent.click(within(dialog).getByText('Save (audited)'))
+
+    await waitFor(() => expect(errorSnacks()).toHaveLength(1))
+    expect(errorSnacks()[0].message).toMatch(/nothing was sent/i)
+    expect(errorSnacks()[0].message).toMatch(/safe to retry/i)
+    expect(overrideCalls()).toEqual([])
+  })
+
+  it('reports success only after the route answers OK', async () => {
     const onChanged = jest.fn()
     render(<StaffOrgActions org={ORG} onChanged={onChanged} />)
     const dialog = await openOverrideWithReason()
@@ -288,7 +392,24 @@ describe('staff org override — the org doc and its audit row are one write', (
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
     expect(lastMessage()).toBe('Organization updated (audited)')
     expect(errorSnacks()).toEqual([])
-    expect(auditRows()).toHaveLength(1)
+    expect(overrideCalls()).toHaveLength(1)
+  })
+
+  it('makes no request at all for a reasonless override', async () => {
+    // The gate that DECIDES is the route (specs/org-override-route.spec.ts);
+    // the dialog keeps its own so the operator gets an answer about the
+    // field in front of them rather than a round trip. Asserted as "nothing
+    // was sent" rather than as a disabled attribute — a Save that posted and
+    // was refused would still be a regression of the local gate.
+    render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Override' }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(within(dialog).getByText('Save (audited)'))
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    expect(overrideCalls()).toEqual([])
+    expect(mockApplied).toEqual([])
+    expect(mockSnacks.some((snack) => snack.variant === 'success')).toBe(false)
   })
 })
 

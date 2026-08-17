@@ -16,19 +16,28 @@
  */
 
 /**
- * AGL-1652: a staff org override may not reach the org document without a
- * reason on its audit row.
+ * AGL-1652/1786: a staff org override may not reach the org document without
+ * a reason on its audit row.
  *
- * Every case asserts the two WRITES — the org doc and the audit row — not
- * the disabled attribute on a button. The button is a hint an operator can
- * be shown; the writes are what a billing dispute reads six months later,
+ * Every case asserts what LEAVES THE BROWSER, not the disabled attribute on
+ * a button. The button is a hint an operator can be shown; the request is
+ * what eventually becomes the row a billing dispute reads six months later,
  * and a reason enforced only by a disabled button would be one browser
  * console away from an override nobody can explain.
  *
- * The pairing matters: "no audit row was written" would also pass on a
- * component that crashed on open, so each refusal case is paired with the
- * positive one that proves the same click DOES write once the reason is
- * given.
+ * That last sentence used to be the honest LIMIT of this file: the write was
+ * a client batch, so the gate was the dialog and this suite could only pin
+ * the dialog. Since AGL-1786 the write is `/api/admin/org-override`, and the
+ * same `normalizeOrgOverrideReason` runs there — a reasonless request is
+ * refused by the ROUTE, asserted in specs/org-override-route.spec.ts, which
+ * is where the audit row's own `reason`/`note` are now checked too. What
+ * stays here is the dialog's half: the vocabulary it offers, that Save
+ * refuses to SEND without one, and that the code and note it does send are
+ * the ones chosen.
+ *
+ * The pairing matters: "nothing was sent" would also pass on a component
+ * that crashed on open, so each refusal case is paired with the positive one
+ * that proves the same click DOES send once the reason is given.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -136,22 +145,39 @@ const auditRows = () =>
 /** The org-document writes that actually landed. */
 const orgWrites = () => mockWrites.filter(([path]) => path === 'orgs/org-1')
 
+/** Override requests the component sent, newest last. */
+const mockOverridePosts: any[] = []
+/**
+ * The bodies of the override POSTs — what the gate actually lets out. The
+ * org document and its audit row are written from these by the route, not by
+ * this component, so a client-side write of either is a regression that
+ * `orgWrites()`/`auditRows()` catch as tripwires.
+ */
+const overrideBodies = () =>
+  mockOverridePosts.map((init) => JSON.parse(init.body))
+
 beforeEach(() => {
   mockWrites.length = 0
   mockDirectWrites.length = 0
   mockSnacks.length = 0
+  mockOverridePosts.length = 0
   mockAutoId = 0
+  global.fetch = jest.fn(async (url: string, init: any) => {
+    if (String(url) === '/api/admin/org-override') mockOverridePosts.push(init)
+    return { ok: true, status: 200, json: async () => ({ ok: true, written: true }) }
+  }) as unknown as typeof fetch
 })
 
 describe('staff org override — the reason gate', () => {
-  it('refuses to write the override at all with no reason chosen', () => {
+  it('sends no override request at all with no reason chosen', () => {
     render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
     openOverride()
     clickSave()
 
-    // Not just "no audit row" — the ORG DOCUMENT must be untouched too. An
-    // override that landed and then failed to be audited is the worse half
-    // of this bug, not a partial fix of it.
+    // Not just "no audit row" — nothing may leave for the org document
+    // either. An override that landed and then failed to be audited is the
+    // worse half of this bug, not a partial fix of it.
+    expect(mockOverridePosts).toHaveLength(0)
     expect(orgWrites()).toHaveLength(0)
     expect(auditRows()).toHaveLength(0)
   })
@@ -170,25 +196,25 @@ describe('staff org override — the reason gate', () => {
     expect(within(dialog).getByText(/append-only/i)).toBeTruthy()
   })
 
-  it('writes the reason code onto the audit row once one is chosen', async () => {
+  it('sends the reason code once one is chosen', async () => {
     render(<StaffOrgActions org={ORG} onChanged={jest.fn()} />)
     openOverride()
     chooseOption('Reason', 'Negotiated enterprise or custom contract')
     clickSave()
 
-    await waitFor(() => expect(auditRows()).toHaveLength(1))
-    const row = auditRows()[0]
-    expect(row['action']).toBe('org.override')
-    expect(row['reason']).toBe('enterprise')
-    // Explicit null, never undefined — Firestore rejects `undefined`, and a
-    // dropped key reads as a row that predates the field.
-    expect(row).toHaveProperty('note', null)
-    expect(Object.values(row)).not.toContain(undefined)
-    // The before/after contract AGL-201 established is untouched.
-    expect(row).toHaveProperty('before')
-    expect(row).toHaveProperty('after')
-    expect(orgWrites()).toHaveLength(1)
-    // Both came out of the batch (AGL-1784); neither went around it.
+    await waitFor(() => expect(mockOverridePosts).toHaveLength(1))
+    const body = overrideBodies()[0]
+    expect(body['reason']).toBe('enterprise')
+    // Explicit null, never undefined — the route writes this straight onto
+    // the row, Firestore rejects `undefined`, and a dropped key reads as a
+    // row that predates the field.
+    expect(body).toHaveProperty('note', null)
+    expect(Object.values(body)).not.toContain(undefined)
+    // It names the org it is about, and nothing is written from here: the
+    // org document and the audit row are both the route's (AGL-1786).
+    expect(body['orgId']).toBe('org-1')
+    expect(orgWrites()).toHaveLength(0)
+    expect(auditRows()).toHaveLength(0)
     expect(mockDirectWrites).toEqual([])
   })
 
@@ -202,9 +228,10 @@ describe('staff org override — the reason gate', () => {
     )
     clickSave()
 
-    await waitFor(() => expect(auditRows()).toHaveLength(1))
-    expect(auditRows()[0]['reason']).toBe('support')
-    expect(auditRows()[0]['note']).toBe('ticket 4471 — refunded SLA breach')
+    await waitFor(() => expect(mockOverridePosts).toHaveLength(1))
+    expect(overrideBodies()[0]['reason']).toBe('support')
+    // Trimmed by the shared normalizer, the same one the route re-runs.
+    expect(overrideBodies()[0]['note']).toBe('ticket 4471 — refunded SLA breach')
   })
 
   it('refuses "other" until the note explains it, then accepts', async () => {
@@ -214,16 +241,16 @@ describe('staff org override — the reason gate', () => {
     clickSave()
     // `other` is the one code that means nothing by itself, so choosing it
     // must not be a cheaper way to satisfy the gate than the real codes.
+    expect(mockOverridePosts).toHaveLength(0)
     expect(orgWrites()).toHaveLength(0)
-    expect(auditRows()).toHaveLength(0)
 
     fireEvent.change(screen.getByLabelText(/Note \(required/), {
       target: { value: 'legacy 2024 contract terms' },
     })
     clickSave()
-    await waitFor(() => expect(auditRows()).toHaveLength(1))
-    expect(auditRows()[0]['reason']).toBe('other')
-    expect(auditRows()[0]['note']).toBe('legacy 2024 contract terms')
+    await waitFor(() => expect(mockOverridePosts).toHaveLength(1))
+    expect(overrideBodies()[0]['reason']).toBe('other')
+    expect(overrideBodies()[0]['note']).toBe('legacy 2024 contract terms')
   })
 
   it('does not carry a reason over into the next override', async () => {
@@ -231,7 +258,7 @@ describe('staff org override — the reason gate', () => {
     openOverride()
     chooseOption('Reason', 'Correcting an earlier mistake')
     clickSave()
-    await waitFor(() => expect(auditRows()).toHaveLength(1))
+    await waitFor(() => expect(mockOverridePosts).toHaveLength(1))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
     // Reopening must not present the previous reason as this one's — an
@@ -244,7 +271,6 @@ describe('staff org override — the reason gate', () => {
     ).not.toContain('Correcting')
     expect(saveButton().disabled).toBe(true)
     clickSave()
-    expect(auditRows()).toHaveLength(1)
-    expect(orgWrites()).toHaveLength(1)
+    expect(mockOverridePosts).toHaveLength(1)
   })
 })
