@@ -81,8 +81,8 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 5000))
   }
 
-  // Same credential shape as every other script here (backfill-contacts,
-  // audit-staff-claims, …), so one `--env-file` works for all of them.
+  // Same credential shape as every other script here (audit-staff-claims,
+  // the backfills/ scripts, …), so one `--env-file` works for all of them.
   if (!getApps().length) {
     const projectId = process.env.FIREBASE_PROJECT_ID
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
