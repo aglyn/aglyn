@@ -143,6 +143,29 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: `Orders in "${order.status}" cannot refund` })
     }
+    // A refund does not withdraw a dispute (AGL-1809). While a chargeback is
+    // formally open the bank has already pulled the disputed funds, Stripe's
+    // refund API refuses the charge (`charge_disputed`), and a refund that did
+    // go through would pay the shopper twice — the merchant loses the refund
+    // AND the dispute plus its fee. Refused HERE, before the claim and the
+    // reservation, so a refusal burns no idempotency key and strands nothing:
+    // no state has been written yet (AGL-1754's contract). An open INQUIRY
+    // (`warning_*`) deliberately passes — no funds have moved and Stripe names
+    // a full refund as the way to resolve one before it escalates — and the
+    // status guard above already turns away a LOST dispute, which parked the
+    // order in `refunded`. This reads the pre-transaction snapshot; a dispute
+    // webhook racing this exact request is caught by the `charge_disputed`
+    // mapping on the Stripe response below.
+    if (CommerceModel.orderDisputeBlocksRefund(order)) {
+      return res.status(409).json({
+        error:
+          'A chargeback is open on this order, so it was not refunded. ' +
+          'Refunding would not withdraw the dispute — the bank has already ' +
+          'taken the disputed amount, and a refund on top of it would pay ' +
+          'the shopper twice. Respond to the dispute or accept it in the ' +
+          'Stripe dashboard; refund any remainder once it settles.',
+      })
+    }
     const paymentIntentId =
       order.paymentIntentId ??
       // Legacy rows stored the checkout session as the doc id; resolve
@@ -292,6 +315,24 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         })
         .catch(() => undefined)
       await claim?.release()
+      // Stripe refusing BECAUSE OF A DISPUTE is the guard above arriving by
+      // the other door — our order document simply didn't know yet (webhook
+      // lag, or an order from before disputes were subscribed at all). Same
+      // answer, same accuracy: a 409 naming the dispute, not a 502 reading
+      // "The charge you're attempting to refund has been charged back", which
+      // an admin has no reason to connect to the Refund button they pressed.
+      const stripeCode = String(refund?.error?.code ?? '')
+      if (
+        stripeCode === 'charge_disputed' ||
+        stripeCode === 'refund_disputed_payment'
+      ) {
+        return res.status(409).json({
+          error:
+            'Stripe refused this refund because the charge is disputed. ' +
+            'Respond to the dispute or accept it in the Stripe dashboard; ' +
+            'refund any remainder once it settles.',
+        })
+      }
       return res
         .status(502)
         .json({ error: refund?.error?.message ?? 'Refund failed' })

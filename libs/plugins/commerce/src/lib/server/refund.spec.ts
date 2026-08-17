@@ -268,7 +268,7 @@ const refundCalls: StripeRefundCall[] = []
 const refundsByKey = new Map<string, any>()
 let refundCounter = 0
 /** Set by a test to make the next refund call fail or throw. */
-let nextRefundOutcome: 'ok' | 'rejected' | 'throws' = 'ok'
+let nextRefundOutcome: 'ok' | 'rejected' | 'disputed' | 'throws' = 'ok'
 
 const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   const target = String(url)
@@ -296,6 +296,20 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
     return {
       ok: false,
       json: async () => ({ error: { message: 'charge already refunded' } }),
+    }
+  }
+  // Stripe's refusal on a disputed charge (AGL-1809): HTTP 400, error code
+  // `charge_disputed`, message verbatim from the error-code table.
+  if (outcome === 'disputed') {
+    return {
+      ok: false,
+      json: async () => ({
+        error: {
+          code: 'charge_disputed',
+          message:
+            "The charge you're attempting to refund has been charged back.",
+        },
+      }),
     }
   }
   // Stripe replays a prior refund for a repeated key rather than issuing a
@@ -1055,5 +1069,218 @@ describe('refund and the shelf (AGL-1797)', () => {
     expect(storedOrder().status).toBe('refunded')
     expect(storedContact().refundedCents).toBe(5000)
     expect(storedContact().ltvCents).toBe(7400)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A refund alongside an open dispute (AGL-1809).
+ *
+ * Refunding a charge in Stripe does NOT withdraw the shopper's dispute. Once a
+ * chargeback is formally open the bank has already pulled the disputed funds,
+ * so a refund that also went through would pay the shopper twice — and Stripe
+ * itself refuses the call with `charge_disputed`. Before the fix `refund.ts`
+ * mentioned disputes nowhere: `canTransitionOrder('paid', 'refunded')` is
+ * true, and an order with an open dispute is exactly a `paid` order, so the
+ * console's "Chargeback open" badge (AGL-1796) sat beside a live Refund
+ * button with nothing between them.
+ *
+ * The dispute records here mirror the two shapes `billing-webhook.ts` writes
+ * (pinned in `billing-webhook-dispute.spec.ts`): `created` writes
+ * `{id, status, reason?, amountCents, openedAtMs, evidenceDueByMs?}`, and
+ * `closed` overwrites `status` and adds `outcome`/`closedAtMs`/
+ * `reversedCents`. Note every settled record still carries `evidenceDueByMs`
+ * — Stripe sends the deadline on the `closed` event too — which is why the
+ * fixtures keep it and why open-ness is `orderHasOpenDispute`, never a
+ * deadline test.
+ */
+describe('refund and an open dispute (AGL-1809)', () => {
+  const openDispute = {
+    id: 'dp_1TESTblock',
+    status: 'needs_response',
+    reason: 'product_not_received',
+    amountCents: 5000,
+    openedAtMs: Date.UTC(2026, 7, 10),
+    evidenceDueByMs: Date.UTC(2026, 7, 24),
+  }
+
+  function orderWithDispute(dispute: Record<string, unknown>) {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...storedOrder(),
+      dispute,
+    })
+  }
+
+  /**
+   * THE DEFECT. A formally open dispute must refuse BEFORE anything is
+   * written: no Stripe call, no reservation, no claim, no contact write. A
+   * refusal that had already reserved or claimed would violate AGL-1754's
+   * contract by stranding state for money that never moved.
+   */
+  it('refuses to refund while a chargeback is formally open', async () => {
+    orderWithDispute(openDispute)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('chargeback is open')
+    // Nothing moved and nothing was written anywhere.
+    expect(refundCalls).toHaveLength(0)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+    expect(storedOrder().status).toBe('paid')
+    expect(childPaths('apiIdempotency')).toHaveLength(0)
+    expect(storedContact().refundedCents).toBeUndefined()
+    expect(storedOrder().restockCheck).toBeUndefined()
+  })
+
+  it('refuses while the dispute is under review too', async () => {
+    orderWithDispute({ ...openDispute, status: 'under_review' })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(refundCalls).toHaveLength(0)
+  })
+
+  /**
+   * The refusal must not strand the attempt: once the dispute settles in the
+   * merchant's favour, the SAME key refunds normally — proof the 409 burned
+   * no claim.
+   */
+  it('lets the same attempt through once the dispute is won', async () => {
+    orderWithDispute(openDispute)
+    const refused = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(refused.status).toBe(409)
+
+    orderWithDispute({
+      ...openDispute,
+      status: 'won',
+      outcome: 'won',
+      closedAtMs: Date.UTC(2026, 7, 20),
+      reversedCents: 0,
+    })
+    const retry = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(retry.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+    expect(storedOrder().refundedCents).toBe(5000)
+    expect(storedOrder().status).toBe('refunded')
+  })
+
+  /**
+   * An INQUIRY is the deliberate exception. No funds have moved in that
+   * phase, Stripe permits the refund, and its docs name a full refund as the
+   * way to resolve an inquiry before it escalates to an unwinnable
+   * chargeback — a guard that blocked these would forbid the recommended
+   * exit while the window is days long.
+   */
+  it('permits a refund during an open inquiry', async () => {
+    orderWithDispute({ ...openDispute, status: 'warning_needs_response' })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+    expect(storedOrder().refundedCents).toBe(5000)
+    expect(storedOrder().status).toBe('refunded')
+    expect(storedContact().refundedCents).toBe(5000)
+  })
+
+  it('permits a refund while inquiry evidence is under review', async () => {
+    orderWithDispute({ ...openDispute, status: 'warning_under_review' })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+  })
+
+  /** A closed inquiry is over; the charge is an ordinary refundable charge. */
+  it('permits a refund after an inquiry closes without escalating', async () => {
+    orderWithDispute({
+      ...openDispute,
+      status: 'warning_closed',
+      outcome: 'warning_closed',
+      closedAtMs: Date.UTC(2026, 7, 20),
+      reversedCents: 0,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(refundCalls).toHaveLength(1)
+  })
+
+  /** On the question of paying twice, an unknown open status fails closed. */
+  it('fails closed on an open dispute in an unrecognised status', async () => {
+    orderWithDispute({ ...openDispute, status: 'prearbitration' })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(refundCalls).toHaveLength(0)
+  })
+
+  /**
+   * Ordering: the replay short-circuit still answers FIRST. A partial that
+   * settled before the dispute opened must replay its recorded 200 when
+   * retried — answering "a chargeback is open" about money that moved before
+   * the dispute existed would send the admin to reconcile a refund that is
+   * fine. Same reasoning the file header gives for the status guard.
+   */
+  it('replays a refund that settled before the dispute opened', async () => {
+    const first = await post(
+      { amountCents: 1500 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+    expect(first.status).toBe(200)
+    orderWithDispute(openDispute)
+
+    const retry = await post(
+      { amountCents: 1500 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+
+    expect(retry.status).toBe(200)
+    expect(retry.body).toMatchObject({ refundedCents: 1500 })
+    expect(refundCalls).toHaveLength(1)
+    // A genuinely NEW attempt is refused — only the settled one replays.
+    const fresh = await post(
+      { amountCents: 1000 },
+      { 'idempotency-key': 'attempt-b' },
+    )
+    expect(fresh.status).toBe(409)
+    expect(refundCalls).toHaveLength(1)
+  })
+
+  /**
+   * The backstop for the guard's blind spot: Stripe knows about a dispute our
+   * order document does not (webhook lag, or an order disputed before
+   * `charge.dispute.*` was subscribed at all). Stripe answers HTTP 400 with
+   * `charge_disputed`, and the admin must be told a dispute refused the
+   * refund — not handed a 502 reading "has been charged back" with no
+   * connection to the button they pressed. Money-wise it is the ordinary
+   * rejected path: Stripe said no, so the reservation comes back and the key
+   * is not burned.
+   */
+  it('reports Stripe refusing a disputed charge as the dispute, accurately', async () => {
+    nextRefundOutcome = 'disputed'
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('disputed')
+    // Stripe was asked once and said no; the rollback and release ran.
+    expect(refundCalls).toHaveLength(1)
+    expect(storedOrder().refundedCents ?? 0).toBe(0)
+    expect(storedOrder().status).toBe('paid')
+    expect(storedContact().refundedCents).toBeUndefined()
+
+    // The key was not burned: the dispute settles at Stripe's end, and the
+    // same attempt refunds.
+    const retry = await post({}, { 'idempotency-key': 'attempt-a' })
+    expect(retry.status).toBe(200)
+    expect(storedOrder().refundedCents).toBe(5000)
   })
 })

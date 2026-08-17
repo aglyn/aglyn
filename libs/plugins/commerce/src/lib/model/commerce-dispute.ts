@@ -80,6 +80,47 @@ export function orderHasOpenDispute(
   return isOrderDisputeOpen(order?.dispute)
 }
 
+/**
+ * The OPEN statuses that belong to an INQUIRY — the pre-dispute phase, where
+ * no chargeback exists yet and no funds have been pulled.
+ *
+ * An explicit list rather than a "starts with warning" test, for the same
+ * reason as `SETTLED_DISPUTE_STATUSES` above: `warning_closed` also starts
+ * with `warning`, and an unknown future status must not be mistaken for a
+ * refundable inquiry by its prefix.
+ */
+const OPEN_INQUIRY_STATUSES = new Set([
+  'warning_needs_response',
+  'warning_under_review',
+])
+
+/**
+ * Whether a refund on this order must be REFUSED because of its dispute
+ * (AGL-1809).
+ *
+ * Not the same question as `orderHasOpenDispute`, and the difference is the
+ * whole decision. A formal open dispute (`needs_response`, `under_review`)
+ * means the bank has already pulled the disputed funds and Stripe's refund
+ * API refuses the charge outright (`charge_disputed` — "The charge you're
+ * attempting to refund has been charged back"); a refund alongside it would
+ * pay the shopper twice, once by the refund and once by the chargeback. An
+ * open INQUIRY is the opposite case: no money has moved, Stripe permits the
+ * refund, and its docs name "issuing a full refund" as the way to resolve an
+ * inquiry before it escalates — refusing that would forbid the recommended
+ * exit. Settled disputes refuse nothing here: a lost one already moved the
+ * order to `refunded` (the status guard's job), and a won or closed one left
+ * the charge refundable again.
+ *
+ * An open dispute whose status is unrecognised blocks — on a question of
+ * sending money twice, an unknown state fails closed.
+ */
+export function orderDisputeBlocksRefund(
+  order: Pick<HostOrder, 'dispute'>,
+): boolean {
+  if (!orderHasOpenDispute(order)) return false
+  return !OPEN_INQUIRY_STATUSES.has(String(order.dispute?.status ?? ''))
+}
+
 /** What the console renders beside an order's status when a dispute exists. */
 export interface OrderDisputeBadge {
   tone: OrderDisputeTone

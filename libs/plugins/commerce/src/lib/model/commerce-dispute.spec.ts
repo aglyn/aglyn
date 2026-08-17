@@ -34,6 +34,7 @@
 import {
   describeOrderDispute,
   isOrderDisputeOpen,
+  orderDisputeBlocksRefund,
   orderHasOpenDispute,
   splitOrderReversal,
   summariseOpenDisputes,
@@ -121,6 +122,73 @@ describe('isOrderDisputeOpen (AGL-1796)', () => {
     expect(orderHasOpenDispute({})).toBe(false)
     expect(orderHasOpenDispute({ dispute: opened })).toBe(true)
     expect(orderHasOpenDispute({ dispute: lost })).toBe(false)
+  })
+})
+
+describe('orderDisputeBlocksRefund (AGL-1809)', () => {
+  it('blocks a refund while a chargeback is formally open', () => {
+    // The bank has the funds and Stripe's refund API would answer
+    // `charge_disputed`; a refund that went through would pay twice.
+    expect(orderDisputeBlocksRefund({ dispute: opened })).toBe(true)
+    expect(
+      orderDisputeBlocksRefund({
+        dispute: { ...opened, status: 'under_review' },
+      }),
+    ).toBe(true)
+  })
+
+  it('does not block a refund during an open inquiry', () => {
+    // The OPPOSITE of a formal dispute: no funds have moved, and Stripe's own
+    // docs name "issuing a full refund" as the way to resolve an inquiry
+    // before it escalates. Blocking these would forbid the recommended exit.
+    for (const status of ['warning_needs_response', 'warning_under_review']) {
+      expect(
+        `${status}: ${orderDisputeBlocksRefund({
+          dispute: { ...opened, status },
+        })}`,
+      ).toBe(`${status}: false`)
+    }
+  })
+
+  it('does not block once the dispute has settled', () => {
+    // A won or closed dispute leaves the charge refundable again; a LOST one
+    // is the status guard's business (the order is already `refunded`), not
+    // this predicate's.
+    expect(orderDisputeBlocksRefund({ dispute: won })).toBe(false)
+    expect(orderDisputeBlocksRefund({ dispute: lost })).toBe(false)
+    expect(
+      orderDisputeBlocksRefund({
+        dispute: {
+          ...opened,
+          status: 'warning_closed',
+          outcome: 'warning_closed',
+          closedAtMs: CLOSED_AT,
+          reversedCents: 0,
+        },
+      }),
+    ).toBe(false)
+  })
+
+  it('does not block an order with no dispute at all', () => {
+    expect(orderDisputeBlocksRefund({})).toBe(false)
+    expect(orderDisputeBlocksRefund({ dispute: undefined })).toBe(false)
+  })
+
+  it('fails closed on an open dispute in an unrecognised status', () => {
+    // A status this code has never seen, still open by every signal. On the
+    // question of sending money twice, unknown blocks — and a "starts with
+    // warning" shortcut would have waved through a future `warning_*` state
+    // that is not one of the two known-refundable inquiry phases.
+    expect(
+      orderDisputeBlocksRefund({
+        dispute: { ...opened, status: 'prearbitration' },
+      }),
+    ).toBe(true)
+    expect(
+      orderDisputeBlocksRefund({
+        dispute: { ...opened, status: 'warning_escalating' },
+      }),
+    ).toBe(true)
   })
 })
 
