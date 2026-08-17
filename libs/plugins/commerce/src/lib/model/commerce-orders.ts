@@ -139,6 +139,20 @@ export interface OrderDispute {
    * and capped against what was left, so it is not always `amountCents`.
    */
   reversedCents?: number
+  /**
+   * Stripe transfer-reversal id (`trr_…`) that pulled the seller's share back
+   * from the connected account (AGL-1794) — set only when a reversal was
+   * actually created or found already sitting on the transfer.
+   */
+  transferReversalId?: string
+  /**
+   * Cents pulled back from the CONNECTED account for this lost dispute
+   * (AGL-1794). Its presence — 0 included — is the settle marker for the
+   * reversal step: 0 means the step ran and found nothing to reverse (no
+   * transfer on the charge, or a transfer with nothing left), recorded so a
+   * redelivery does not retry a failure no redelivery can fix.
+   */
+  reversedTransferCents?: number
 }
 
 /**

@@ -44,7 +44,11 @@ import { commerceBillingWebhookHandler } from './billing-webhook'
  * depends on: a read and the write derived from it cannot interleave.
  *
  * No Stripe path is exercised — localhost carries the LIVE secret key.
- * `global.fetch` is replaced and asserted unused on every case.
+ * `global.fetch` is replaced everywhere: asserted UNUSED on every case except
+ * the AGL-1794 seller-share reversal tests, which stub it by exact URL and
+ * assert the reversal POST by shape. `STRIPE_SECRET_KEY` is DELETED for the
+ * suite (the root .env leaks into jest, and it holds the live key) and the
+ * reversal tests set a throwaway.
  */
 
 // ---------------------------------------------------------------------------
@@ -316,9 +320,46 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async () => undefined,
 }))
 
-const fetchMock = jest.fn(async (url: any) => {
-  throw new Error(`Unexpected fetch to ${String(url)}`)
-})
+const fetchMock: jest.Mock<Promise<any>, [any, any?]> = jest.fn(
+  async (url: any) => {
+    throw new Error(`Unexpected fetch to ${String(url)}`)
+  },
+)
+
+// ---------------------------------------------------------------------------
+// The Stripe double (AGL-1794)
+// ---------------------------------------------------------------------------
+
+/**
+ * The seller-share reversal is the ONE Stripe write this handler makes. Its
+ * tests stub `fetch` by EXACT URL — a GET of the charge, a GET of the
+ * transfer, a POST of the reversal — so a call to anything unexpected still
+ * throws, and the afterEach guard pins that every call a test allowed went to
+ * the double and nowhere else. Every test that does not call `stubStripe`
+ * keeps the original guarantee: fetch was never called at all.
+ */
+let stripeStubbed = false
+let stripeCalls: Array<{ url: string; init?: any }> = []
+
+function stubStripe(
+  routes: Record<string, { status?: number; body?: any }>,
+): void {
+  stripeStubbed = true
+  fetchMock.mockImplementation(async (url: any, init?: any) => {
+    stripeCalls.push({ url: String(url), init })
+    const route = routes[String(url)]
+    if (!route) throw new Error(`Unexpected fetch to ${String(url)}`)
+    const status = route.status ?? 200
+    return {
+      ok: status < 400,
+      status,
+      json: async () => route.body ?? null,
+    }
+  })
+}
+
+const reversalPosts = () =>
+  stripeCalls.filter((call) => call.init?.method === 'POST')
 
 // ---------------------------------------------------------------------------
 // The events
@@ -381,8 +422,16 @@ function expectNothingSwallowed() {
 
 let consoleError: jest.SpyInstance
 
+/** May be the LIVE key (the root .env leaks into jest): restore, never log. */
+const ORIGINAL_STRIPE_KEY = process.env.STRIPE_SECRET_KEY
+
 beforeAll(() => {
   ;(global as any).fetch = fetchMock
+})
+
+afterAll(() => {
+  if (ORIGINAL_STRIPE_KEY === undefined) delete process.env.STRIPE_SECRET_KEY
+  else process.env.STRIPE_SECRET_KEY = ORIGINAL_STRIPE_KEY
 })
 
 beforeEach(() => {
@@ -391,7 +440,16 @@ beforeEach(() => {
   collectionGroupFailure = null
   deleteOrderDuringQuery = false
   transactionQueue = Promise.resolve()
-  fetchMock.mockClear()
+  // The suite's default: NO key, so every pre-AGL-1794 case runs exactly as
+  // it always did — the reversal step refuses before any fetch. The reversal
+  // describe sets its own throwaway.
+  delete process.env.STRIPE_SECRET_KEY
+  stripeStubbed = false
+  stripeCalls = []
+  fetchMock.mockReset()
+  fetchMock.mockImplementation(async (url: any) => {
+    throw new Error(`Unexpected fetch to ${String(url)}`)
+  })
   consoleError = jest
     .spyOn(console, 'error')
     .mockImplementation(() => undefined)
@@ -448,7 +506,15 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  expect(fetchMock).not.toHaveBeenCalled()
+  if (stripeStubbed) {
+    // Everything the test allowed went to the DOUBLE, and only to Stripe's
+    // own API — nothing real is reachable from here.
+    for (const call of stripeCalls) {
+      expect(call.url.startsWith('https://api.stripe.com/v1/')).toBe(true)
+    }
+  } else {
+    expect(fetchMock).not.toHaveBeenCalled()
+  }
   jest.restoreAllMocks()
 })
 
@@ -992,5 +1058,294 @@ describe('the stock a chargeback left off the shelf (AGL-1797)', () => {
     expect(contact().refundedCents).toBe(DISPUTE_CENTS)
     expect(contact().ltvCents).toBe(9100)
     expectNothingSwallowed()
+  })
+})
+
+/**
+ * The platform's side of the money (AGL-1794).
+ *
+ * On a destination charge a lost dispute debits AGLYN's balance while the
+ * merchant keeps the transfer. The decision: the merchant eats their share —
+ * a transfer reversal for the portion that was actually transferred, never
+ * the application fee's — and the platform eats Stripe's dispute fee as the
+ * cost of owning the payment relationship.
+ *
+ * The transfer is 5580 of the 6200 charge (a 620 application fee), so no
+ * correct assertion can coincide with the dispute amount, the order total or
+ * any other figure in this file (AGL-1711).
+ */
+describe('the seller share of a lost dispute (AGL-1794)', () => {
+  const TRANSFER_CENTS = 5580
+  const CHARGE_URL = 'https://api.stripe.com/v1/charges/ch_1'
+  const TRANSFER_URL = 'https://api.stripe.com/v1/transfers/tr_1'
+  const REVERSAL_URL = 'https://api.stripe.com/v1/transfers/tr_1/reversals'
+
+  /** The happy path's three stops, each overridable per test. */
+  function happyStripe(
+    overrides: {
+      transfer?: Record<string, any>
+      reversal?: { status?: number; body?: any }
+    } = {},
+  ): void {
+    stubStripe({
+      [CHARGE_URL]: {
+        body: { id: 'ch_1', amount: ORDER_TOTAL_CENTS, transfer: 'tr_1' },
+      },
+      [TRANSFER_URL]: {
+        body: {
+          id: 'tr_1',
+          amount: TRANSFER_CENTS,
+          amount_reversed: 0,
+          reversals: { data: [] },
+          ...overrides.transfer,
+        },
+      },
+      [REVERSAL_URL]: overrides.reversal ?? {
+        body: {
+          id: 'trr_1',
+          object: 'transfer_reversal',
+          amount: TRANSFER_CENTS,
+        },
+      },
+    })
+  }
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_double_1794'
+  })
+
+  /** THE DECISION, as a wire shape: the merchant's share leaves their account. */
+  it('pulls the seller share back from the connected account on a loss', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reversalPosts()).toHaveLength(1)
+    const post = reversalPosts()[0]
+    expect(post.url).toBe(REVERSAL_URL)
+    const body = new URLSearchParams(String(post.init.body))
+    // The TRANSFERRED portion, not the disputed 6200: the application fee's
+    // 620 was never the merchant's, so it is not pulled back from them.
+    expect(body.get('amount')).toBe(String(TRANSFER_CENTS))
+    // The metadata is the crash-window backstop's join key.
+    expect(body.get('metadata[disputeId]')).toBe('dp_1')
+    expect(body.get('metadata[orderId]')).toBe('order-1')
+    expect(post.init.headers['Idempotency-Key']).toBe('dispute-reversal-dp_1')
+    // Every call carried the throwaway key — and only the throwaway key.
+    for (const call of stripeCalls) {
+      expect(call.init.headers['Authorization']).toBe('Bearer sk_double_1794')
+    }
+    expect(order().dispute.transferReversalId).toBe('trr_1')
+    expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
+  })
+
+  /** The wording the merchant reads — honest about which door and whose share. */
+  it('stamps the timeline in words the merchant can read', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(disputeEvents().at(-1).detail).toBe(
+      '$55.80 seller share reversed for lost dispute',
+    )
+  })
+
+  /**
+   * The proportion follows the order's OWN reversal, which `refund.ts`'s cap
+   * already bounded: a $17.00 refund left 4500 to charge back, and the
+   * merchant's share of that is 4500 × 5580 ÷ 6200 = 4050.
+   */
+  it('reverses proportionally when a partial refund left less behind', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order(),
+      refundedCents: 1700,
+    })
+    happyStripe({ reversal: { body: { id: 'trr_1', amount: 4050 } } })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const body = new URLSearchParams(String(reversalPosts()[0].init.body))
+    expect(body.get('amount')).toBe('4050')
+    expect(order().dispute.reversedTransferCents).toBe(4050)
+  })
+
+  /** NEVER MORE: the transfer's remainder caps the share. */
+  it('never reverses more than the transfer has left', async () => {
+    happyStripe({
+      transfer: { amount_reversed: 5000 },
+      reversal: { body: { id: 'trr_1', amount: 580 } },
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const body = new URLSearchParams(String(reversalPosts()[0].init.body))
+    expect(body.get('amount')).toBe('580')
+    expect(order().dispute.reversedTransferCents).toBe(580)
+  })
+
+  /**
+   * THE GUARD, proven from the redelivery side: `reversedTransferCents` on
+   * the order's dispute record settles the step, so the second delivery makes
+   * no Stripe call at all.
+   */
+  it('does not double-reverse on a redelivered closed', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reversalPosts()).toHaveLength(1)
+    expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
+  })
+
+  /**
+   * THE GUARD's backstop, proven from the crash side: the POST landed on a
+   * previous delivery and the process died before the record wrote, so the
+   * marker is unset — and the reversal is FOUND on the transfer, adopted,
+   * never created twice.
+   */
+  it('adopts a reversal that landed before the record could be written', async () => {
+    happyStripe({
+      transfer: {
+        amount_reversed: TRANSFER_CENTS,
+        reversals: {
+          data: [
+            {
+              id: 'trr_9',
+              amount: TRANSFER_CENTS,
+              metadata: { disputeId: 'dp_1' },
+            },
+          ],
+        },
+      },
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reversalPosts()).toHaveLength(0)
+    expect(order().dispute.transferReversalId).toBe('trr_9')
+    expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
+    expect(disputeEvents().at(-1).detail).toContain('seller share reversed')
+  })
+
+  /** …and the join is the dispute id, not "any reversal that exists". */
+  it('does not adopt another dispute reversal', async () => {
+    happyStripe({
+      transfer: {
+        amount_reversed: 100,
+        reversals: {
+          data: [{ id: 'trr_8', amount: 100, metadata: { disputeId: 'dp_0' } }],
+        },
+      },
+      reversal: { body: { id: 'trr_1', amount: 5480 } },
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const body = new URLSearchParams(String(reversalPosts()[0].init.body))
+    // Capped by the 5480 the transfer has left, not the full 5580 share.
+    expect(body.get('amount')).toBe('5480')
+    expect(order().dispute.transferReversalId).toBe('trr_1')
+  })
+
+  /**
+   * A transfer with nothing left is a failure no redelivery can fix: logged,
+   * recorded as 0 so the step never retries, and NOT thrown (AGL-1743).
+   */
+  it('records nothing left when the transfer is already fully reversed', async () => {
+    happyStripe({ transfer: { amount_reversed: TRANSFER_CENTS } })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).resolves.toBeUndefined()
+    expect(reversalPosts()).toHaveLength(0)
+    expect(order().dispute.reversedTransferCents).toBe(0)
+    expect(order().dispute.transferReversalId).toBeUndefined()
+    expect(disputeEvents().at(-1).detail).toContain('nothing left to pull back')
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('nothing left to reverse'),
+      expect.anything(),
+    )
+  })
+
+  /** Same rule for a charge Stripe holds no transfer on. */
+  it('records no transfer to reverse when the charge has none', async () => {
+    stubStripe({
+      [CHARGE_URL]: { body: { id: 'ch_1', amount: ORDER_TOTAL_CENTS } },
+    })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).resolves.toBeUndefined()
+    expect(reversalPosts()).toHaveLength(0)
+    expect(order().dispute.reversedTransferCents).toBe(0)
+    expect(disputeEvents().at(-1).detail).toContain('no transfer on the charge')
+  })
+
+  /** And for Stripe refusing the reversal itself. */
+  it('records a refused reversal rather than retrying it forever', async () => {
+    happyStripe({
+      reversal: { status: 400, body: { error: { message: 'no' } } },
+    })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).resolves.toBeUndefined()
+    expect(order().dispute.reversedTransferCents).toBe(0)
+    expect(order().dispute.transferReversalId).toBeUndefined()
+    expect(disputeEvents().at(-1).detail).toContain('Stripe refused')
+  })
+
+  /**
+   * A TRANSIENT failure throws on purpose — the marker stays unset, so the
+   * 500 Stripe answers with a redelivery, and the redelivery IS the retry.
+   */
+  it('throws on a transient Stripe failure, so Stripe redelivers', async () => {
+    stubStripe({
+      [CHARGE_URL]: { status: 500, body: { error: { message: 'flaky' } } },
+    })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).rejects.toThrow('Stripe charge read failed')
+    expect(order().dispute.reversedTransferCents).toBeUndefined()
+  })
+
+  /**
+   * …and the redelivery completes the reversal WITHOUT doubling anything the
+   * first delivery already did — the reason the reversal step runs outside
+   * the settle's `recorded` guard and re-reads the order itself.
+   */
+  it('completes on the redelivery after a transient failure, once', async () => {
+    stubStripe({
+      [CHARGE_URL]: { status: 500, body: { error: { message: 'flaky' } } },
+    })
+    await expect(
+      deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
+    ).rejects.toThrow()
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reversalPosts()).toHaveLength(1)
+    expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
+    // The settle was idle on the redelivery: one notice, one contact write.
+    expect(managerNotices).toHaveLength(1)
+    expect(contact().refundedCents).toBe(DISPUTE_CENTS)
+    expect(contact().refundedOrdersCount).toBe(1)
+  })
+
+  /**
+   * An order the merchant already refunded in full reversed nothing here, and
+   * `refund.ts` sent `reverse_transfer=true` when it did — the seller's share
+   * already went back by the refund door, so this one makes NO Stripe call.
+   */
+  it('makes no Stripe call when the order had nothing left to reverse', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order(),
+      status: 'refunded',
+      refundedCents: ORDER_TOTAL_CENTS,
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(order().dispute.reversedTransferCents).toBeUndefined()
+  })
+
+  /** A WON dispute reverses nothing anywhere — no call, no marker. */
+  it('makes no Stripe call on a won dispute', async () => {
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(order().dispute.reversedTransferCents).toBeUndefined()
+  })
+
+  /** Config missing is logged and left retryable, never thrown. */
+  it('makes no reversal without a secret key', async () => {
+    delete process.env.STRIPE_SECRET_KEY
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(order().dispute.reversedTransferCents).toBeUndefined()
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('STRIPE_SECRET_KEY'),
+    )
   })
 })
