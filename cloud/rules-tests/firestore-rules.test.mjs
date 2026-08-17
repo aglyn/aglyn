@@ -3890,4 +3890,166 @@ describe('the vestigial billing trio and the identity quartet are Admin-SDK-only
   })
 })
 
+/**
+ * AGL-1827: an order's `status` is server-owned — no client writes it at all.
+ *
+ * Every status transition goes through an Admin-SDK route that re-asks
+ * `ORDER_TRANSITIONS` inside the transaction that writes it: cancel
+ * (AGL-1808/1818), fulfil and mark-delivered (AGL-1819), refund, the supplier
+ * update and the webhook paths. A client `status` write is therefore by
+ * definition a bypass of that guard — the stale-dialog hole those routes
+ * closed, reopened one SDK level down.
+ *
+ * What legitimately stays client-side, swept repo-wide before narrowing: the
+ * order-detail dialog's note (`timeline` only, pinned to exactly that key by
+ * `order-fulfill-wiring.spec.tsx`) and its restock answer (`restockCheck` +
+ * `timeline` via a guarded transaction, AGL-1806). Nothing else in the repo
+ * writes `hosts/{hostId}/orders/*` from the Web SDK — every other reference
+ * is a read. No client path CREATES an order (checkout, POS, draft and the
+ * webhook are all Admin-SDK routes) and none deletes one, so both are closed
+ * too: a create writes `status` free-hand, and delete-and-recreate would
+ * re-mint the document with any status at all.
+ */
+describe('an order status is Admin-SDK-only — notes and restock answers stay client-side (AGL-1827)', () => {
+  const ORDER = 'order-1827'
+  const FLAGGED_AT = 1_755_000_000_000
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'orders', ORDER), {
+        status: 'paid',
+        email: 'buyer@x.z',
+        totals: { totalCents: 4200 },
+        timeline: [
+          { type: 'status', message: 'paid', atMs: FLAGGED_AT - 1000 },
+        ],
+        restockCheck: { flaggedAtMs: FLAGGED_AT, quantity: 1 },
+      })
+    })
+  })
+
+  it('no client moves a status — admin, editor, or bundled with a note', async () => {
+    // The dialog's old handleFulfill/mark-delivered shapes, exactly as they
+    // wrote before AGL-1819 moved them into the route.
+    await mustDeny(
+      'the site ADMIN writing status: fulfilled',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        status: 'fulfilled',
+        fulfillments: [{ id: 'f1', carrier: 'UPS', number: '1Z' }],
+      }),
+    )
+    await mustDeny(
+      'the EDITOR writing status: delivered',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        status: 'delivered',
+      }),
+    )
+    // A status riding along with the write the rule permits is still a
+    // status write — the exact smuggle the dialog's own spec pins against.
+    await mustDeny(
+      'a status smuggled in with a timeline note',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        status: 'cancelled',
+        timeline: [{ type: 'note', message: 'and also cancelled', atMs: 1 }],
+      }),
+    )
+  })
+
+  it('no client creates or deletes an order', async () => {
+    await mustDeny(
+      'the EDITOR minting an order with a chosen status',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', 'minted'), {
+        status: 'fulfilled',
+        totals: { totalCents: 0 },
+      }),
+    )
+    await mustDeny(
+      'the site ADMIN deleting an order (the recreate laundering half)',
+      deleteDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER)),
+    )
+  })
+
+  it('the note and the restock answer — the two real client writers — still land', async () => {
+    // handleNote: `timeline` alone, the shape order-fulfill-wiring.spec.tsx
+    // pins on the dialog side.
+    await mustAllow(
+      "the dialog's timeline-only note",
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        timeline: [
+          { type: 'status', message: 'paid', atMs: FLAGGED_AT - 1000 },
+          { type: 'note', message: 'called the buyer', atMs: FLAGGED_AT + 1 },
+        ],
+      }),
+    )
+    // handleRestockAnswer: restockCheck + timeline via a TRANSACTION, as the
+    // dialog does it (AGL-1806) — the emulator runs rules against
+    // transactional updates too, so this is the real shape, not a stand-in.
+    const ownerDb = authed(OWNER)
+    await mustAllow(
+      "the dialog's restock answer transaction",
+      runTransaction(ownerDb, async (transaction) => {
+        const reference = doc(ownerDb, 'hosts', HOST, 'orders', ORDER)
+        const snapshot = await transaction.get(reference)
+        const current = snapshot.data()
+        transaction.update(reference, {
+          restockCheck: {
+            ...current.restockCheck,
+            resolution: 'restocked',
+            resolvedAtMs: FLAGGED_AT + 2,
+            resolvedBy: OWNER,
+          },
+          timeline: [
+            ...current.timeline,
+            {
+              type: 'restock-check',
+              message: 'answered — restocked',
+              atMs: FLAGGED_AT + 2,
+            },
+          ],
+        })
+      }),
+    )
+  })
+
+  it('naming status without CHANGING it is still not a change', async () => {
+    // The AGL-1795/1813/1824 property, held here too: the key-diff is on
+    // VALUES, so a patch that spells out `status: 'paid'` unchanged — a
+    // whole-object write shape — is not refused for naming it.
+    await mustAllow(
+      'a patch naming the unchanged status',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        status: 'paid',
+        timeline: [
+          { type: 'status', message: 'paid', atMs: FLAGGED_AT - 1000 },
+          { type: 'note', message: 'no move', atMs: FLAGGED_AT + 3 },
+        ],
+      }),
+    )
+  })
+
+  it('staff and the Admin SDK are untouched — the routes still transition', async () => {
+    // Staff parity with the catch-all this replaces: `isStaff()` led every
+    // one of its allows, so the dedicated block keeps it. Narrowing staff
+    // would be a different decision than AGL-1827 records.
+    await mustAllow(
+      'a staff client status write (parity with the old catch-all)',
+      updateDoc(
+        doc(authed(STAFF, { staff: true }), 'hosts', HOST, 'orders', ORDER),
+        { status: 'refunded' },
+      ),
+    )
+    // The positive control: cancel/fulfill/refund/supplier/webhook all write
+    // through the Admin SDK, which rules never see.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'orders', ORDER),
+        { status: 'fulfilled' },
+        { merge: true },
+      )
+    })
+    const snapshot = await getDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER))
+    assert.equal(snapshot.data().status, 'fulfilled')
+  })
+})
+
 assert.ok(true)
