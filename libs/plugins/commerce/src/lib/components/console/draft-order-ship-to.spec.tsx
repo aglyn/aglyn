@@ -54,9 +54,10 @@ const PRODUCT = {
 }
 
 /**
- * One existing order. The card renders its filters and the "Draft order"
- * button only when the list is non-empty, so a host with no orders at all
- * cannot reach this dialog — a separate defect, not this one's to fix.
+ * One existing order, so this spec exercises the dialog from the toolbar
+ * trigger. The card's filters are still list-only, but the "Draft order"
+ * button is no longer — a store with none reaches the same dialog from the
+ * empty state (AGL-1805, pinned in `orders-empty-state.spec.tsx`).
  */
 const ORDER = {
   $id: 'order-1',

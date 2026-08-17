@@ -240,12 +240,57 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   const selectedOrder =
     (orderDocs ?? []).find((order: any) => order.$id === selectedId) ?? null
 
+  /**
+   * Shared by the two triggers (AGL-1805) so the empty state and the toolbar
+   * cannot drift into opening the dialog with different starting fields.
+   */
+  const openDraft = useCallback(
+    () => setDraft({ productId: '', variantId: '', quantity: '1', email: '' }),
+    [],
+  )
+
+  /** What the draft dialog can actually offer. */
+  const selectableProducts = useMemo(
+    () => (productDocs ?? []).filter((product: any) => !product.deletedAt),
+    [productDocs],
+  )
+
   return (
     <CardDisplay header={'Orders'} contentGutterX contentGutterY>
       {orders.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {'No orders yet — sales from Product blocks appear here.'}
-        </Typography>
+        /*
+         * An invitation, not a report (AGL-1805). The "Draft order" button
+         * used to live in the other arm of this ternary, so the one state a
+         * draft order exists for — no sales yet, invoice the customer you
+         * already have — was the only state that could not reach it, and
+         * every other route into the dialog needs an order to exist first.
+         *
+         * The filters stay behind deliberately: they belong to a list with
+         * rows in it. Export CSV likewise — a header-only file is not
+         * something a merchant on day one is looking for.
+         */
+        <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+          <Typography variant="body2" color="text.secondary">
+            {
+              'No orders yet. Storefront sales, POS sales and draft orders ' +
+              'all appear here as they come in.'
+            }
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {
+              'Selling to someone directly? Draft their order and send them ' +
+              'a payment link.'
+            }
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            onClick={openDraft}
+          >
+            {'Draft order'}
+          </Button>
+        </Stack>
       ) : (
         <Stack spacing={1}>
           {openDisputes.count > 0 ? (
@@ -354,9 +399,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               size="small"
               variant="contained"
               color="primary"
-              onClick={() =>
-                setDraft({ productId: '', variantId: '', quantity: '1', email: '' })
-              }
+              onClick={openDraft}
             >
               {'Draft order'}
             </Button>
@@ -455,14 +498,23 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             size="small"
             select
             sx={{ mt: 1 }}
+            /*
+             * The second dead end behind the first (AGL-1805): a store with
+             * no orders may have no products either, and a draft order is
+             * composed from one — so "Create & copy link" stays disabled. Say
+             * why, rather than opening an empty menu onto nothing.
+             */
+            helperText={
+              selectableProducts.length === 0
+                ? 'Add a product to this store first — a draft order is built from one.'
+                : undefined
+            }
           >
-            {(productDocs ?? [])
-              .filter((product: any) => !product.deletedAt)
-              .map((product: any) => (
-                <MenuItem key={product.$id} value={product.$id}>
-                  {product.name ?? product.$id}
-                </MenuItem>
-              ))}
+            {selectableProducts.map((product: any) => (
+              <MenuItem key={product.$id} value={product.$id}>
+                {product.name ?? product.$id}
+              </MenuItem>
+            ))}
           </TextField>
           {(() => {
             const product = (productDocs ?? []).find(
