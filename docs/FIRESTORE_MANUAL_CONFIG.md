@@ -36,6 +36,18 @@ a **Timestamp** field (not a number/ms). Deletion is best-effort within ~72h of
 expiry, so application logic must still treat expired docs as stale — TTL is
 cleanup, not a correctness guarantee.
 
+⚠️ **Enabling TTL is a gcloud action, but the field it creates is still a
+`fieldOverrides` entry — so it MUST also be written into
+`firebase-firestore.indexes.json` (AGL-1793).** Enabling TTL gives the field an
+explicit index config, which makes it an override in the project; and this file's
+own rule above is that an index deploy **deletes any override not in the repo
+file**. So a TTL field that lives only in gcloud is armed to be destroyed by the
+next unrelated index deploy. That is not hypothetical — `mediaTombstones.expiresAt`
+was applied here in AGL-1467 and never added to the file, and sat that way until
+AGL-1793 diffed the live project. `firebase firestore:indexes` round-trips the
+flag as `"ttl": true`, which is exactly the form to paste in. **Add the row to the
+table below AND the `fieldOverrides` entry, in the same change.**
+
 | collectionGroup | field | why |
 |---|---|---|
 | `rateLimits` | `expiresAt` | ephemeral rate-limit windows (AGL-794/795); expired windows should be reaped, not accumulate |
