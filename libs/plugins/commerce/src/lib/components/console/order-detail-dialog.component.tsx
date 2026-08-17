@@ -127,8 +127,25 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     enqueueSnackbar('Order fulfilled', { variant: 'success', persist: false })
   }, [order, tracking, write, enqueueSnackbar])
 
+  /**
+   * Cancel goes through `/api/commerce/cancel-order` (AGL-1818), not a client
+   * write. The status flip and the stock release are one transaction there,
+   * and the route re-asks `canTransitionOrder` under the same lock — the
+   * `can('cancelled')` gate below only decides whether to RENDER the button,
+   * so a dialog held open while the order ships in another tab used to write
+   * `cancelled` straight onto a `fulfilled` order. Now that race comes back
+   * as a 409 carrying the state that refused it.
+   *
+   * The messages follow the AGL-1784/1786 contract — say what happened:
+   * a 409 is the guard refusing, not the cancel machinery failing; the
+   * route's own 500 is a rolled-back transaction (nothing landed, retry is
+   * safe and correct); an answer with no JSON word from the handler, or no
+   * answer at all, is NOT KNOWN — never "nothing happened". A retry is safe
+   * in every case because the route cancels once: a second cancel finds
+   * `cancelled` and returns success without touching stock.
+   */
   const handleCancel = useCallback(async () => {
-    if (!order) return
+    if (!order || !orderId) return
     const confirmed = await confirm({
       title: 'Cancel this order?',
       description:
@@ -139,11 +156,82 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await write({
-      status: 'cancelled',
-      timeline: CommerceModel.appendOrderEvent(order, 'cancelled'),
-    })
-  }, [order, confirm, write])
+    setBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      let response: Response
+      try {
+        response = await fetch('/api/commerce/cancel-order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ hostId, orderId }),
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar(
+          'The request did not complete, so it is NOT known whether the ' +
+            'order was cancelled. Reopen the order to check — retrying is ' +
+            'safe, the server cancels once.',
+          { variant: 'error', allowDuplicate: true },
+        )
+        return
+      }
+      const payload: any = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (response.status === 409) {
+          // The transition guard refusing: the order moved on (shipped,
+          // refunded) while this dialog was open. The route's message names
+          // the state that refused it, and nothing was written.
+          enqueueSnackbar(
+            payload?.error ?? 'This order can no longer be cancelled',
+            {
+              variant: 'warning',
+              allowDuplicate: true,
+            },
+          )
+        } else if (payload?.error && response.status < 500) {
+          // A refusal that wrote nothing — session, role, or an order that
+          // is not there. The route's own word, verbatim.
+          enqueueSnackbar(payload.error, {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        } else if (payload?.error) {
+          // The route's 500 is a rolled-back transaction: nothing landed and
+          // the order is still open. Only the handler's own JSON word
+          // licenses saying so.
+          enqueueSnackbar(
+            `${payload.error} — nothing changed, the order is still open. Retrying is safe.`,
+            { variant: 'error', allowDuplicate: true },
+          )
+        } else {
+          // No JSON word from the handler (a gateway page, a proxy timeout):
+          // whether the cancel landed is NOT known.
+          enqueueSnackbar(
+            `The cancel failed (${response.status}) and it is NOT known ` +
+              'whether it landed. Reopen the order to check — retrying is ' +
+              'safe, the server cancels once.',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        return
+      }
+      const units = Number(payload?.units ?? 0)
+      enqueueSnackbar(
+        payload?.alreadyCancelled
+          ? 'Order was already cancelled'
+          : units > 0
+            ? `Order cancelled — ${units} ${units === 1 ? 'unit' : 'units'} returned to stock`
+            : 'Order cancelled',
+        { variant: 'success', persist: false },
+      )
+    } finally {
+      setBusy(false)
+    }
+  }, [order, orderId, user, hostId, confirm, enqueueSnackbar])
 
   /**
    * Idempotency key for ONE refund attempt (AGL-1696), the same shape the POS
@@ -418,7 +506,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
       <DialogActions>
         <Button onClick={handlePackingSlip}>{'Packing slip'}</Button>
         {can('cancelled') ? (
-          <Button color="error" onClick={handleCancel}>
+          <Button color="error" disabled={busy} onClick={handleCancel}>
             {'Cancel order'}
           </Button>
         ) : null}

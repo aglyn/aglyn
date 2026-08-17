@@ -83,11 +83,11 @@ import { resolveTrackedRestockLines } from './restock-flag'
  * increments of the same units is the failure mode this shape exists to
  * prevent, and it is measured rather than asserted (`cancel-order.spec.ts`).
  *
- * NOT YET REACHED FROM THE CONSOLE (AGL-1818). `order-detail-dialog`'s
- * `handleCancel` still writes `status: 'cancelled'` with a client `updateDoc`,
- * and that file belonged to a concurrent agent (AGL-1806) when this was
- * written — so the swap is filed rather than smuggled into their working tree.
- * Until it lands this route answers nobody and the stock bug is still live.
+ * REACHED FROM THE CONSOLE since AGL-1818: `order-detail-dialog`'s
+ * `handleCancel` POSTs here with the console id token, and the client
+ * `updateDoc` cancel it replaced is gone. (The wiring landed separately from
+ * the route because the dialog belonged to a concurrent agent, AGL-1806,
+ * when the route was written.)
  */
 export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
