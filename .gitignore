@@ -71,6 +71,10 @@ vite.config.*.timestamp*
 .nx/self-healing
 .vercel
 
+# `nx graph --file` dumps: point-in-time artifacts with no reader in the
+# repo; a committed one rots into a stale project list (AGL-1834).
+/project-graph.json
+
 # Transient scratch dir written while uploading to the DAM; never source.
 .dam-upload-tmp/
 
