@@ -16,7 +16,6 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -79,8 +78,9 @@ const usd = (cents: number | undefined) =>
 
 /**
  * Order detail (AGL-287): timeline, line items, totals, and the actions
- * the status machine allows — fulfill with tracking, refund (admin,
- * server API), cancel, notes, printable packing slip.
+ * the status machine allows — fulfill with tracking, refund, cancel, mark
+ * delivered (each a server route that re-asks the transition under the
+ * write), notes, printable packing slip.
  */
 export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const { hostId, order: rawOrder, onClose } = props
@@ -95,6 +95,15 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   const order = rawOrder ? CommerceModel.liftLegacyOrder(rawOrder) : null
   const orderId = rawOrder?.$id
 
+  /**
+   * The one client write left in this dialog, and it is timeline-only ON
+   * PURPOSE: notes carry no status, so `ORDER_TRANSITIONS` has nothing to say
+   * about them and they stay out of the server routes' way. Every status
+   * write goes through a route that re-asks the transition under the write —
+   * cancel (AGL-1818), fulfil and mark-delivered (AGL-1819), refund
+   * (AGL-1696). The moment a status rides along with a note, it must move
+   * too; `order-fulfill-wiring.spec.tsx` pins the patch to `timeline` alone.
+   */
   const write = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!orderId) return
@@ -103,29 +112,139 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     [firestore, hostId, orderId],
   )
 
+  /**
+   * Fulfil and mark-delivered go through `/api/commerce/fulfill-order`
+   * (AGL-1819), not a client write — the same stale-dialog hole the cancel
+   * swap (AGL-1818) closed: `can(…)` below only decides whether to RENDER
+   * the buttons, so a dialog held open while the order was refunded in
+   * another tab used to write `fulfilled` straight onto it. The route
+   * re-asks `canTransitionOrder` inside the transaction that writes the
+   * status, and that race now comes back as a 409 carrying the state that
+   * refused.
+   *
+   * The messages follow the AGL-1784/1786 contract — say what happened: a
+   * 409 is the guard refusing, not the machinery failing; the route's own
+   * 500 is a rolled-back transaction (nothing landed, retry is safe and
+   * correct); an answer with no JSON word from the handler, or no answer at
+   * all, is NOT KNOWN — never "nothing happened". A retry is safe in every
+   * case because the route writes once: a repeat finds the order already in
+   * the target status and returns `already` without appending a second copy
+   * of the same fulfillment.
+   */
+  const transition = useCallback(
+    async (
+      to: 'fulfilled' | 'delivered',
+      extra: Record<string, string>,
+      copy: { done: string; already: string; subject: string; action: string },
+    ) => {
+      if (!orderId) return false
+      setBusy(true)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        let response: Response
+        try {
+          response = await fetch('/api/commerce/fulfill-order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ hostId, orderId, to, ...extra }),
+          })
+        } catch (error) {
+          console.error(error)
+          enqueueSnackbar(
+            `The request did not complete, so it is NOT known whether ${copy.subject}. ` +
+              'Reopen the order to check — retrying is safe, the server ' +
+              'writes it once.',
+            { variant: 'error', allowDuplicate: true },
+          )
+          return false
+        }
+        const payload: any = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          if (response.status === 409) {
+            // The transition guard refusing: the order moved on (refunded,
+            // cancelled) while this dialog was open. The route's message
+            // names the state that refused it, and nothing was written.
+            enqueueSnackbar(
+              payload?.error ?? `This order can no longer be ${to}`,
+              {
+                variant: 'warning',
+                allowDuplicate: true,
+              },
+            )
+          } else if (payload?.error && response.status < 500) {
+            // A refusal that wrote nothing — session, role, or an order that
+            // is not there. The route's own word, verbatim.
+            enqueueSnackbar(payload.error, {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+          } else if (payload?.error) {
+            // The route's 500 is a rolled-back transaction: nothing landed.
+            // Only the handler's own JSON word licenses saying so.
+            enqueueSnackbar(
+              `${payload.error} — nothing changed, the order is as it was. Retrying is safe.`,
+              { variant: 'error', allowDuplicate: true },
+            )
+          } else {
+            // No JSON word from the handler (a gateway page, a proxy
+            // timeout): whether the write landed is NOT known.
+            enqueueSnackbar(
+              `The ${copy.action} failed (${response.status}) and it is NOT ` +
+                'known whether it landed. Reopen the order to check — ' +
+                'retrying is safe, the server writes it once.',
+              { variant: 'error', allowDuplicate: true },
+            )
+          }
+          return false
+        }
+        enqueueSnackbar(payload?.already ? copy.already : copy.done, {
+          variant: 'success',
+          persist: false,
+        })
+        return true
+      } finally {
+        setBusy(false)
+      }
+    },
+    [orderId, user, hostId, enqueueSnackbar],
+  )
+
   const handleFulfill = useCallback(async () => {
     if (!order || !tracking) return
-    const fulfillment: CommerceModel.OrderFulfillment = {
-      id: Aglyn.createResourceUid(),
-      lineItemIds: (order.lineItems ?? []).map((_line, index) => index),
-      ...(tracking.carrier ? { carrier: tracking.carrier } : {}),
-      ...(tracking.number ? { trackingNumber: tracking.number } : {}),
-      atMs: Date.now(),
-    }
-    await write({
-      status: 'fulfilled',
-      fulfillments: [...(order.fulfillments ?? []), fulfillment],
-      timeline: CommerceModel.appendOrderEvent(
-        order,
-        'fulfilled',
-        tracking.number
-          ? `${tracking.carrier || 'Shipped'} ${tracking.number}`
-          : 'Fulfilled',
-      ),
-    })
-    setTracking(null)
-    enqueueSnackbar('Order fulfilled', { variant: 'success', persist: false })
-  }, [order, tracking, write, enqueueSnackbar])
+    const done = await transition(
+      'fulfilled',
+      {
+        ...(tracking.carrier ? { carrier: tracking.carrier } : {}),
+        ...(tracking.number ? { trackingNumber: tracking.number } : {}),
+      },
+      {
+        done: 'Order fulfilled',
+        already: 'Order was already fulfilled',
+        subject: 'the order was fulfilled',
+        action: 'fulfillment',
+      },
+    )
+    // The refused or unknown case keeps the form open — there is nothing to
+    // celebrate, and the tracking is not yet recorded anywhere.
+    if (done) setTracking(null)
+  }, [order, tracking, transition])
+
+  const handleDelivered = useCallback(async () => {
+    if (!order) return
+    await transition(
+      'delivered',
+      {},
+      {
+        done: 'Order marked delivered',
+        already: 'Order was already marked delivered',
+        subject: 'the order was marked delivered',
+        action: 'delivery update',
+      },
+    )
+  }, [order, transition])
 
   /**
    * Cancel goes through `/api/commerce/cancel-order` (AGL-1818), not a client
@@ -657,7 +776,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
               size="small"
               sx={{ flex: 1 }}
             />
-            <Button size="small" variant="contained" color="primary" onClick={handleFulfill}>
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              disabled={busy}
+              onClick={handleFulfill}
+            >
               {'Fulfill'}
             </Button>
           </Stack>
@@ -725,14 +850,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           </Button>
         ) : null}
         {can('delivered') ? (
-          <Button
-            onClick={() =>
-              write({
-                status: 'delivered',
-                timeline: CommerceModel.appendOrderEvent(order, 'delivered'),
-              })
-            }
-          >
+          <Button disabled={busy} onClick={handleDelivered}>
             {'Mark delivered'}
           </Button>
         ) : null}
