@@ -21,6 +21,11 @@
  * limitations under the License.
  */
 
+// This spec has no imports (everything arrives via jest.mock factories and
+// globals), so without an export TypeScript treats it as a GLOBAL SCRIPT and
+// its top-level consts collide with sibling module specs (TS2451, AGL-1841).
+export {}
+
 /**
  * /api/admin/users/detail — the phone disclosure (AGL-1569), driven
  * in-process. Firestore, the auth-pool lookup and token verification are

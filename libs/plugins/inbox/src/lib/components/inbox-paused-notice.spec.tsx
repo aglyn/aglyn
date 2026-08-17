@@ -42,8 +42,15 @@ import { InboxConsolePage } from './inbox-console-page'
 /** The month key the submit route writes, derived exactly as it derives it. */
 const MONTH = new Date().toISOString().slice(0, 7)
 
-/** Mutable so each case picks what `counters/formSubmissionsRefused` holds. */
-let refusedCounter: Record<string, unknown> | undefined
+/**
+ * Mutable per-case contents of the `counters/*` documents, keyed by doc id.
+ * The page reads TWO of them now (`formSubmissionsRefused`,
+ * `formSubmissionsSpam`), so the mock routes each hook by the document its
+ * factory addresses, exactly as Firestore would — a single shared blob
+ * would hand the spam notice the refusal counter and pass on data the real
+ * reads can never produce.
+ */
+let counters: Record<string, Record<string, unknown> | undefined>
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -52,8 +59,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  useFirestoreDoc: () => ({
-    data: refusedCounter,
+  useFirestoreDoc: (ref: () => string) => ({
+    data: counters[ref()],
     status: 'success',
     fromCache: false,
   }),
@@ -64,7 +71,9 @@ jest.mock('firebase/firestore', () => ({
     segments[segments.length - 1],
   query: (name: string) => name,
   limit: () => undefined,
-  doc: () => ({}),
+  // The doc id — the last path segment — is what the useFirestoreDoc mock
+  // above routes on.
+  doc: (_db: unknown, ...segments: string[]) => segments[segments.length - 1],
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
@@ -93,12 +102,16 @@ const renderPage = () =>
   render(<InboxConsolePage hostId="host-1" entitled />)
 
 beforeEach(() => {
-  refusedCounter = undefined
+  counters = {}
 })
 
 describe('AGL-1666 · the inbox says when a form is paused', () => {
   it('shows the count, the ceiling and the reset date', () => {
-    refusedCounter = { [MONTH]: 412, ceiling: 5000, lastRefusedAtMs: 1 }
+    counters.formSubmissionsRefused = {
+      [MONTH]: 412,
+      ceiling: 5000,
+      lastRefusedAtMs: 1,
+    }
     const { container } = renderPage()
     const text = container.textContent ?? ''
     expect(text).toContain('Form submissions are paused')
@@ -111,7 +124,7 @@ describe('AGL-1666 · the inbox says when a form is paused', () => {
   })
 
   it('renders it as a warning, above the tabs, where arriving lands', () => {
-    refusedCounter = { [MONTH]: 412, ceiling: 5000 }
+    counters.formSubmissionsRefused = { [MONTH]: 412, ceiling: 5000 }
     const { container } = renderPage()
     const alert = container.querySelector('[role="alert"]')
     expect(alert).not.toBeNull()
@@ -122,7 +135,7 @@ describe('AGL-1666 · the inbox says when a form is paused', () => {
   })
 
   it('shows nothing when the site has never been refused', () => {
-    refusedCounter = undefined
+    counters = {}
     const { container } = renderPage()
     expect(container.querySelector('[role="alert"]')).toBeNull()
     expect(container.textContent).not.toContain('paused')
@@ -133,7 +146,64 @@ describe('AGL-1666 · the inbox says when a form is paused', () => {
     // last month's key survive. A banner keyed on the document's existence
     // would be there forever, and an owner learns to ignore it long before
     // the month it matters.
-    refusedCounter = { '2020-01': 9999, ceiling: 5000, lastRefusedAtMs: 1 }
+    counters.formSubmissionsRefused = {
+      '2020-01': 9999,
+      ceiling: 5000,
+      lastRefusedAtMs: 1,
+    }
+    const { container } = renderPage()
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+})
+
+/**
+ * AGL-1836: the honeypot catch count from `counters/formSubmissionsSpam`
+ * (written by `9db4f322a`), rendered beside the paused notice. The staff org
+ * page has carried this number per host since AGL-1831; this is the owner's
+ * copy of it, and the assertions pin the two things that make it reassurance
+ * rather than alarm: `severity="info"` — not the warning the refusal notice
+ * uses — and the shared caught-and-dropped / nothing-stored-or-billed
+ * sentence. Render-nothing-below-one-hit holds here too, against both an
+ * absent document and a stale one from an earlier month.
+ */
+describe('AGL-1836 · the inbox shows the honeypot catch count', () => {
+  it('shows the caught-and-dropped count as an info notice, not a warning', () => {
+    counters.formSubmissionsSpam = { [MONTH]: 7, lastSpamAtMs: 1 }
+    const { container } = renderPage()
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert).not.toBeNull()
+    expect(alert?.className).toContain('Info')
+    expect(alert?.className).not.toContain('Warning')
+    expect(alert?.textContent).toContain(
+      '7 bot submissions were caught and dropped by the honeypot this ' +
+        'month — nothing was stored or billed.',
+    )
+    // The honeypot working is not the form being paused.
+    expect(container.textContent).not.toContain('paused')
+  })
+
+  it('uses the singular for one catch', () => {
+    counters.formSubmissionsSpam = { [MONTH]: 1, lastSpamAtMs: 1 }
+    const { container } = renderPage()
+    expect(container.textContent).toContain('1 bot submission was caught')
+  })
+
+  it('renders both notices when a site is refusing AND catching bots', () => {
+    counters.formSubmissionsRefused = { [MONTH]: 412, ceiling: 5000 }
+    counters.formSubmissionsSpam = { [MONTH]: 3 }
+    const { container } = renderPage()
+    const text = container.textContent ?? ''
+    expect(text).toContain('Form submissions are paused')
+    expect(text).toContain('3 bot submissions were caught and dropped')
+    // Each under its own severity: the refusal warns, the catch reassures.
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(2)
+  })
+
+  it('shows nothing in a clean month, on a site hit in an earlier one', () => {
+    // Same permanence trap as the refusal counter: the document keeps last
+    // month's key and `lastSpamAtMs` forever, so a banner keyed on its
+    // existence would never come down.
+    counters.formSubmissionsSpam = { '2020-01': 9999, lastSpamAtMs: 1 }
     const { container } = renderPage()
     expect(container.querySelector('[role="alert"]')).toBeNull()
   })
