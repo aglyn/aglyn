@@ -128,7 +128,7 @@ jest.mock('@aglyn/tenant-runtime', () => ({
 // every import, so the route under test resolves the fakes above.
 import { POST } from '../app/api/forms/submit/route'
 
-const submit = () =>
+const submit = (overrides: Record<string, unknown> = {}) =>
   POST(
     new Request('https://site.example/api/forms/submit', {
       method: 'POST',
@@ -141,12 +141,14 @@ const submit = () =>
         formName: 'Contact',
         path: '/contact',
         fields: { email: 'visitor@example.com', message: 'hello' },
+        ...overrides,
       }),
     }),
   ) as Promise<Response>
 
 const counterPath = `hosts/${HOST_ID}/counters/formSubmissions`
 const refusedPath = `hosts/${HOST_ID}/counters/formSubmissionsRefused`
+const spamPath = `hosts/${HOST_ID}/counters/formSubmissionsSpam`
 const billedThisMonth = () => Number(mockStore[counterPath]?.[MONTH] ?? 0)
 
 beforeEach(() => {
@@ -247,6 +249,59 @@ describe('form submission abuse ceiling (AGL-1655)', () => {
     expect(walled.status).toBe(429)
     expect((await walled.json()).code).toBeUndefined()
     expect(mockStore[refusedPath]).toBeUndefined()
+  })
+})
+
+/**
+ * Honeypot instrumentation (AGL-1664).
+ *
+ * AGL-1664's decision — attestation or not — asked to be made on a MEASURED
+ * bot rate, and the honeypot was the instrument it named. But the honeypot
+ * path returned fake success and recorded nothing, so the bot rate it was
+ * supposed to measure did not exist anywhere. These cases pin the fix: a hit
+ * increments `counters/formSubmissionsSpam` (same per-month shape as
+ * `formSubmissionsRefused`) and everything else about the path — the fake
+ * success, the untouched billable counter, the silence toward managers —
+ * stays exactly as it was.
+ */
+describe('AGL-1664 · honeypot hits are counted, not just dropped', () => {
+  it('counts the hit per month and still pretends success', async () => {
+    const response = await submit({ website: 'https://spam.example' })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ received: true })
+
+    // THE measurement: the hit left a per-host, per-month trace.
+    expect(mockStore[spamPath][MONTH]).toBe(1)
+    expect(typeof mockStore[spamPath].lastSpamAtMs).toBe('number')
+
+    // And ONLY a trace — nothing stored, nothing billed, nobody notified.
+    // The billable counter is the AGL-1655 invariant; the notification
+    // silence is what keeps a flood of honeypot hits from becoming a flood
+    // of alerts.
+    expect(mockAddedSubmissions).toHaveLength(0)
+    expect(billedThisMonth()).toBe(0)
+    expect(mockNotifications).toHaveLength(0)
+
+    await submit({ website: 'more spam' })
+    expect(mockStore[spamPath][MONTH]).toBe(2)
+  })
+
+  it('writes nothing for an unknown or unusable host id', async () => {
+    // An attacker spraying invented host ids must not be able to create
+    // orphan counter documents under hosts that do not exist.
+    const unknown = await submit({
+      hostId: 'no-such-host',
+      website: 'spam',
+    })
+    expect(unknown.status).toBe(200)
+    expect(mockStore['hosts/no-such-host/counters/formSubmissionsSpam']).toBe(
+      undefined,
+    )
+
+    // A missing host id has nowhere to count; the fake success still holds.
+    const missing = await submit({ hostId: undefined, website: 'spam' })
+    expect(missing.status).toBe(200)
+    expect(await missing.json()).toEqual({ received: true })
   })
 })
 

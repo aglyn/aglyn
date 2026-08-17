@@ -125,6 +125,54 @@ async function recordAbuseCeilingTrip(
 }
 
 /**
+ * Count a honeypot hit so the bot rate is a NUMBER, not a guess (AGL-1664).
+ *
+ * The attestation decision (App Check / CAPTCHA / neither) asked to be made
+ * on a measured per-host bot rate, and the honeypot was the instrument named
+ * for it — but a hit used to return fake success and record nothing, so the
+ * number it was supposed to produce did not exist. This writes the same
+ * counters-document shape `formSubmissionsRefused` uses (per-month key,
+ * client-unwritable, AGL-1367), keyed per host because "which site is the
+ * bot filling in" is the decision input.
+ *
+ * The host-existence read is the orphan guard: this path runs BEFORE the
+ * route's shape validation, and an attacker spraying invented host ids must
+ * not mint counter documents under hosts that do not exist. Cost per hit is
+ * one read + one write — the same order the legitimate path already pays the
+ * rate limiter — where the old path cost nothing; that is the price of the
+ * measurement, paid only on requests that self-identified as bots.
+ *
+ * No notification, ever: honeypot hits are routine background noise, and a
+ * flood of them delivered as alerts would be the flood again (the
+ * `formSubmissionsPaused` lesson). Best-effort for the same reason the
+ * refusal bookkeeping is — a bookkeeping failure must not turn a dropped bot
+ * request into a 500 retry invitation.
+ */
+async function recordHoneypotHit(hostId: unknown): Promise<void> {
+  try {
+    if (typeof hostId !== 'string' || !hostId || hostId.length > 128) return
+    const hostRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+    if (!(await hostRef.get()).exists) return
+    await hostRef
+      .collection('counters')
+      .doc('formSubmissionsSpam')
+      .set(
+        {
+          [Aglyn.submissionMonthKey()]: FieldValue.increment(1),
+          lastSpamAtMs: Date.now(),
+        },
+        { merge: true },
+      )
+  } catch (error) {
+    console.error('honeypot bookkeeping failed', error)
+  }
+}
+
+/**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
  * drops honeypot hits silently, applies the plan's monthly submission quota
  * via a per-month counter — a hard wall on free, a meter on plans that carry
@@ -142,8 +190,10 @@ export async function POST(request: Request): Promise<Response> {
   const { hostId, formName, dataset, datasetId, fieldMap, path, fields, website } =
     payload
 
-  // Honeypot filled → pretend success so bots learn nothing.
+  // Honeypot filled → pretend success so bots learn nothing, counted so the
+  // owner of the attestation decision learns something (AGL-1664).
   if (typeof website === 'string' && website.trim()) {
+    await recordHoneypotHit(hostId)
     return json({ received: true })
   }
   if (
