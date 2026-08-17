@@ -165,6 +165,10 @@ async function handler(request: Request): Promise<Response> {
         expiresAtMs,
         origins,
         siteName: (host.get('displayName') as string | undefined) ?? subdomain,
+        // Display hint for the bar's "connected as" affordance (AGL-1829).
+        // Goes only to the verified caller about themselves, and onward only
+        // inside the origin-checked postMessage payload — never in the token.
+        userEmail: typeof decoded.email === 'string' ? decoded.email : undefined,
       },
       { status: 200 },
     )

@@ -26,6 +26,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
 import ConsoleBrandingEffects from '../components/console-branding-effects.component'
+import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 import OsfaTooltip from '../components/osfa-tooltip'
@@ -48,6 +49,10 @@ const ThemeStack = withThemeCssVarProvider(
           primary color for a white-label-entitled org. Inside FirebaseAppLayout
           so the org scope + Firestore contexts it reads are available. */}
       <ConsoleBrandingEffects />
+      {/* Editor-presence hint for the tenant admin bar (AGL-1829): keeps the
+          registrable-domain `aglyn_editor` cookie in step with the session.
+          Inside FirebaseAppLayout for the auth context; renders nothing. */}
+      <EditorHintCookie />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
           <SnackbarProvider>
