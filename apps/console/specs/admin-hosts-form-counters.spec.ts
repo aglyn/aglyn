@@ -25,7 +25,9 @@
  * Sites card, and that projection used to be identity-only — so a support
  * conversation about "my form stopped working" still started with a raw
  * Firestore read of `hosts/{id}/counters/formSubmissionsRefused`. The route
- * now joins that counter per host for the org-narrowed case.
+ * now joins that counter per host for the org-narrowed case — and, with it,
+ * the honeypot spam counter `formSubmissionsSpam` (AGL-1831) that `9db4f322a`
+ * made the revisit trigger for the App Check / CAPTCHA decision.
  *
  * The load-bearing assertions:
  *
@@ -129,7 +131,7 @@ const staffToken = () =>
 describe('/api/admin/hosts form counters (AGL-1681)', () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it('joins this month’s refusal count and ceiling per host when orgId narrows the list', async () => {
+  it('joins this month’s refusal, ceiling and spam counts per host when orgId narrows the list', async () => {
     staffToken()
     mockListGet.mockResolvedValueOnce({
       docs: [
@@ -138,36 +140,55 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
       ],
     })
     const month = submissionMonthKey()
-    mockGetAll.mockResolvedValueOnce([
-      // host-a tripped the ceiling this month.
-      {
+    // The route asks for BOTH counter documents per host in one getAll, so
+    // the double answers by path — an index-shaped double would keep passing
+    // if the route's interleaving drifted from its own expectations.
+    const byPath: Record<string, { exists: boolean; get: (k: string) => unknown }> = {
+      // host-a tripped the ceiling this month AND its honeypot caught bots
+      // (AGL-1831, written by 9db4f322a).
+      'hosts/host-a/counters/formSubmissionsRefused': {
         exists: true,
         get: (key: string) =>
           ({ [month]: 12, ceiling: 500, lastRefusedAtMs: 1 })[key],
       },
-      // host-b has never tripped it — no counter document at all.
-      { exists: false, get: () => undefined },
-    ])
+      'hosts/host-a/counters/formSubmissionsSpam': {
+        exists: true,
+        get: (key: string) => ({ [month]: 7, lastSpamAtMs: 2 })[key],
+      },
+      // host-b has never tripped either — no counter documents at all.
+    }
+    mockGetAll.mockImplementationOnce((...refs: Array<{ __counterPath: string }>) =>
+      Promise.resolve(
+        refs.map(
+          (ref) =>
+            byPath[ref.__counterPath] ?? { exists: false, get: () => undefined },
+        ),
+      ),
+    )
     const payload = await (await get({ orgId: 'org-1' })).json()
     expect(payload.hosts).toHaveLength(2)
     expect(payload.hosts[0].forms).toEqual({
       month,
       refused: 12,
       ceiling: 500,
+      spam: 7,
     })
-    // A missing counter document is a real zero, not an absent field.
+    // Missing counter documents are real zeros, not absent fields.
     expect(payload.hosts[1].forms).toEqual({
       month,
       refused: 0,
       ceiling: null,
+      spam: 0,
     })
-    // The join read the refusal counter document, per host, in ONE getAll.
+    // Both counter documents, per host, in ONE getAll.
     expect(mockGetAll).toHaveBeenCalledTimes(1)
     const refs = mockGetAll.mock.calls[0]
     expect(refs).toEqual(
       expect.arrayContaining([
         { __counterPath: 'hosts/host-a/counters/formSubmissionsRefused' },
+        { __counterPath: 'hosts/host-a/counters/formSubmissionsSpam' },
         { __counterPath: 'hosts/host-b/counters/formSubmissionsRefused' },
+        { __counterPath: 'hosts/host-b/counters/formSubmissionsSpam' },
       ]),
     )
   })
@@ -180,18 +201,31 @@ describe('/api/admin/hosts form counters (AGL-1681)', () => {
     mockListGet.mockResolvedValueOnce({
       docs: [hostDoc('host-a', { orgId: 'org-1' })],
     })
-    mockGetAll.mockResolvedValueOnce([
-      {
+    const byPath: Record<string, { exists: boolean; get: (k: string) => unknown }> = {
+      'hosts/host-a/counters/formSubmissionsRefused': {
         exists: true,
         get: (key: string) =>
           ({ '2020-01': 44, ceiling: 500, lastRefusedAtMs: 1 })[key],
       },
-    ])
+      'hosts/host-a/counters/formSubmissionsSpam': {
+        exists: true,
+        get: (key: string) => ({ '2020-01': 9, lastSpamAtMs: 1 })[key],
+      },
+    }
+    mockGetAll.mockImplementationOnce((...refs: Array<{ __counterPath: string }>) =>
+      Promise.resolve(
+        refs.map(
+          (ref) =>
+            byPath[ref.__counterPath] ?? { exists: false, get: () => undefined },
+        ),
+      ),
+    )
     const payload = await (await get({ orgId: 'org-1' })).json()
     expect(payload.hosts[0].forms).toEqual({
       month: submissionMonthKey(),
       refused: 0,
       ceiling: 500,
+      spam: 0,
     })
   })
 

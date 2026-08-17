@@ -104,24 +104,36 @@ async function handler(request: Request): Promise<Response> {
      * warning). The counter document persists from its first trip forever,
      * so only the CURRENT month's key means "refusing now"; `ceiling` is a
      * plain field and rides along whenever recorded.
+     *
+     * `formSubmissionsSpam` (AGL-1831, written by 9db4f322a) rides in the
+     * same getAll: the month's honeypot catches, the number the AGL-1664
+     * assessment set its App Check / CAPTCHA revisit trigger on ("spam >
+     * ~20% of submissions on any paying host"). Until this join it was
+     * readable only via an admin-SDK probe.
      */
     const monthKey = submissionMonthKey()
     const formsByHostId = new Map<
       string,
-      { month: string; refused: number; ceiling: number | null }
+      { month: string; refused: number; ceiling: number | null; spam: number }
     >()
     if (orgId && pageDocs.length > 0) {
-      const refusedSnaps = await db.getAll(
-        ...pageDocs.map((docSnap) =>
+      const counterSnaps = await db.getAll(
+        ...pageDocs.flatMap((docSnap) => [
           docSnap.ref.collection('counters').doc('formSubmissionsRefused'),
-        ),
+          docSnap.ref.collection('counters').doc('formSubmissionsSpam'),
+        ]),
       )
-      refusedSnaps.forEach((snap, index) => {
-        const ceiling = snap.exists ? snap.get('ceiling') : null
-        formsByHostId.set(pageDocs[index].id, {
+      pageDocs.forEach((docSnap, index) => {
+        const refusedSnap = counterSnaps[index * 2]
+        const spamSnap = counterSnaps[index * 2 + 1]
+        const ceiling = refusedSnap?.exists ? refusedSnap.get('ceiling') : null
+        formsByHostId.set(docSnap.id, {
           month: monthKey,
-          refused: snap.exists ? Number(snap.get(monthKey) ?? 0) : 0,
+          refused: refusedSnap?.exists
+            ? Number(refusedSnap.get(monthKey) ?? 0)
+            : 0,
           ceiling: typeof ceiling === 'number' ? ceiling : null,
+          spam: spamSnap?.exists ? Number(spamSnap.get(monthKey) ?? 0) : 0,
         })
       })
     }

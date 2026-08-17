@@ -77,3 +77,61 @@ describe('StaffHostFormCountersChips (AGL-1681)', () => {
     expect(queryByLabelText(/ceiling/)).toBeNull()
   })
 })
+
+/**
+ * AGL-1831: the honeypot spam counter (`formSubmissionsSpam`, written by
+ * `9db4f322a`) beside the refusal flag — the number the AGL-1664 assessment
+ * set its App Check / CAPTCHA revisit trigger on. Same render-nothing rule
+ * below one hit, and the copy says the honeypot is WORKING ("caught and
+ * dropped … nothing was stored or billed"), not that something is wrong.
+ */
+describe('StaffHostFormCountersChips spam counter (AGL-1831)', () => {
+  it('renders the month’s bot catches for a host with no refusals', () => {
+    const { getByText, queryByText } = render(
+      <StaffHostFormCountersChips
+        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 7 }}
+      />,
+    )
+    expect(getByText('7 bot hits caught')).toBeTruthy()
+    expect(queryByText(/refused/)).toBeNull()
+  })
+
+  it('renders both chips when a host is refusing AND catching bots', () => {
+    const { getByText } = render(
+      <StaffHostFormCountersChips
+        forms={{ month: '2026-08', refused: 12, ceiling: 500, spam: 3 }}
+      />,
+    )
+    expect(getByText('forms paused · 12 refused')).toBeTruthy()
+    expect(getByText('3 bot hits caught')).toBeTruthy()
+  })
+
+  it('says caught-and-dropped, stored-nothing, billed-nothing in the tooltip', () => {
+    const { getByLabelText } = render(
+      <StaffHostFormCountersChips
+        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 2 }}
+      />,
+    )
+    expect(
+      getByLabelText(/caught and dropped.*nothing was stored or billed/),
+    ).toBeTruthy()
+  })
+
+  it('renders nothing below one hit — a reassuring zero is noise', () => {
+    const { container } = render(
+      <StaffHostFormCountersChips
+        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 0 }}
+      />,
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('uses the singular for one catch', () => {
+    const { getByText } = render(
+      <StaffHostFormCountersChips
+        forms={{ month: '2026-08', refused: 0, ceiling: null, spam: 1 }}
+      />,
+    )
+    expect(getByText('1 bot hit caught')).toBeTruthy()
+  })
+})
