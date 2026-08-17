@@ -445,6 +445,27 @@ describe('style field groups (AGL-540/587)', () => {
           'Inherited keeps the fill the component paints',
         )
       })
+
+      it('warns about the off-site url() egress in BOTH panel variants (AGL-1737)', () => {
+        // The "warn" half of AGL-1725's warn-and-disclose: the control's
+        // Custom CSS mode holds a raw url(), and the description is where
+        // the author learns what that url() does. Same voice as the Custom
+        // HTML `css` attribute; hosts are deliberately not blocked, so the
+        // wording is the control.
+        const fill = (opts?: { isInstanceOverride?: boolean }) =>
+          buildStyleFieldGroups(['#123456'], opts)
+            .find((group) => group.$id === 'colors')!
+            .fields.find((candidate) => candidate.name === 'backgroundImage') as any
+        for (const variant of [fill(), fill({ isInstanceOverride: true })]) {
+          expect(variant.description).toContain(
+            'makes every visitor’s browser contact that host',
+          )
+          expect(variant.description).toContain('IP address')
+          expect(variant.description).toContain(
+            'Insecure http:// URLs are not loaded',
+          )
+        }
+      })
     })
   })
 

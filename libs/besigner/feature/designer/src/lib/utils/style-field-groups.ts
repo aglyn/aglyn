@@ -222,6 +222,23 @@ const selectField = (
   ],
 })
 
+/**
+ * The `url()` egress warning, appended to the Background Fill description
+ * (AGL-1737) — the "warn" half of AGL-1725's warn-and-disclose decision,
+ * reaching the Styles panel at last. The control's Custom CSS mode holds a
+ * non-gradient value (`url(…)`) as a raw string, so an author can type an
+ * off-site image here; the wording mirrors the Custom HTML component's
+ * `css` attribute so the same egress reads the same way everywhere the
+ * author can create it. Hosts are deliberately NOT blocked — the site
+ * owner is the controller for their own visitors (see `author-css.ts`) —
+ * which is exactly why the author has to be told what the url() does.
+ */
+const BACKGROUND_FILL_URL_EGRESS =
+  ' Custom CSS here can also hold an image url() — one pointing off ' +
+  'your site makes every visitor’s browser contact that host, which ' +
+  'sees their IP address and which page they are on. Insecure http:// ' +
+  'URLs are not loaded.'
+
 /** Panel context a few fields word themselves against (AGL-1338). */
 export interface StyleFieldGroupOptions {
   /**
@@ -348,15 +365,16 @@ function styleFieldGroups(
           component: FieldComponentType.CSS_GRADIENT,
           name: 'backgroundImage',
           label: 'Background Fill',
-          description: options?.isInstanceOverride
-            ? 'Inherited keeps the fill the component paints. Solid ' +
-              'replaces it with the Background Color above — that is how ' +
-              'one placement drops a gradient the component sets. A ' +
-              'gradient here paints this instance only.'
-            : 'Solid paints no image and lets the Background Color above ' +
-              'show. A gradient paints over it — set the angle and the ' +
-              'color stops, and bind any stop to a theme color so it ' +
-              'follows the palette.',
+          description:
+            (options?.isInstanceOverride
+              ? 'Inherited keeps the fill the component paints. Solid ' +
+                'replaces it with the Background Color above — that is how ' +
+                'one placement drops a gradient the component sets. A ' +
+                'gradient here paints this instance only.'
+              : 'Solid paints no image and lets the Background Color above ' +
+                'show. A gradient paints over it — set the angle and the ' +
+                'color stops, and bind any stop to a theme color so it ' +
+                'follows the palette.') + BACKGROUND_FILL_URL_EGRESS,
           // On an instance the unset state is not "nothing", it is "the
           // component's fill" — and saying so is half the AGL-1338 fix:
           // the control read as already-Solid, so choosing Solid changed

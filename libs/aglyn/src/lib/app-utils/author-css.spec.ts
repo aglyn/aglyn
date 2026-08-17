@@ -16,6 +16,8 @@
  */
 
 import {
+  collectThirdPartyAuthorCssUrlHosts,
+  collectThirdPartyAuthorSxUrlHosts,
   INERT_CSS_URL,
   isRefusedAuthorCssUrl,
   isRefusedAuthorImageSrc,
@@ -142,6 +144,124 @@ describe('sanitizeAuthorCss (AGL-1725)', () => {
       '.a{background:url(https://ok.example/a.png)}' +
         `.b{background:url(${INERT_CSS_URL})}`,
     )
+  })
+})
+
+describe('collectThirdPartyAuthorCssUrlHosts (AGL-1737)', () => {
+  it('names an off-site https host back to the author', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        '.hero{background-image:url(https://images.example/bg.jpg)}',
+      ),
+    ).toEqual(['images.example'])
+  })
+
+  it('lowercases, dedupes, and keeps first-appearance order', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        '.a{background:url(https://CDN.Example/a.png)}' +
+          '.b{background:url(https://cdn.example/b.png)}' +
+          '.c{background:url(https://other.example/c.png)}',
+      ),
+    ).toEqual(['cdn.example', 'other.example'])
+  })
+
+  it('does not name our own hosts — the first-party set media-ref keeps', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        [
+          'a{background:url(https://my-site.aglyn.app/x.png)}',
+          'b{background:url(https://cdn.aglyn.com/y.png)}',
+          'c{background:url(https://firebasestorage.googleapis.com/v0/b/x/o/y)}',
+          'd{background:url(https://localhost/z.png)}',
+        ].join(''),
+      ),
+    ).toEqual([])
+  })
+
+  it('does not name a refused scheme — it never loads, so it is not an egress', () => {
+    // sanitizeAuthorCss rewrites these to about:invalid at render; a caption
+    // claiming the host "will be contacted" would be false.
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        'a{background:url(http://tracker.example/p.png)}' +
+          'b{background:url(javascript:alert(1))}',
+      ),
+    ).toEqual([])
+  })
+
+  it('collects a protocol-relative host — it loads over the page https', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts('a{background:url(//images.example/bg.jpg)}'),
+    ).toEqual(['images.example'])
+  })
+
+  it('handles both quoting styles', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        'a{background:url("https://a.example/x.png")}' +
+          "b{background:url('https://b.example/y.png')}",
+      ),
+    ).toEqual(['a.example', 'b.example'])
+  })
+
+  it('ignores inert and same-origin forms', () => {
+    expect(
+      collectThirdPartyAuthorCssUrlHosts(
+        [
+          'a{background:url(data:image/png;base64,AAAA)}',
+          'b{background:url(/api/media/cdn/site/abc)}',
+          'c{background:url(./local.png)}',
+          'd{background:url(#gradient-def)}',
+          'e{background:url()}',
+        ].join(''),
+      ),
+    ).toEqual([])
+    expect(collectThirdPartyAuthorCssUrlHosts('')).toEqual([])
+    expect(collectThirdPartyAuthorCssUrlHosts('.hero{color:red}')).toEqual([])
+  })
+})
+
+describe('collectThirdPartyAuthorSxUrlHosts (AGL-1737)', () => {
+  it('finds hosts across nested selectors, media queries and arrays', () => {
+    expect(
+      collectThirdPartyAuthorSxUrlHosts([
+        { backgroundImage: 'url(https://a.example/x.png)' },
+        {
+          '&:hover': { background: 'url(https://b.example/h.png)' },
+          '@media (max-width:599.95px)': {
+            backgroundImage: [
+              'url(https://a.example/x.png)',
+              'url(https://c.example/m.png)',
+            ],
+          },
+        },
+      ]),
+    ).toEqual(['a.example', 'b.example', 'c.example'])
+  })
+
+  it('returns nothing for first-party, refused, or url-free styles', () => {
+    expect(
+      collectThirdPartyAuthorSxUrlHosts({
+        backgroundImage: 'url(https://my-site.aglyn.app/x.png)',
+        '&:hover': { background: 'url(http://tracker.example/p.png)' },
+        color: 'red',
+        p: 3,
+      }),
+    ).toEqual([])
+  })
+
+  it('tolerates non-string leaves, undefined and null', () => {
+    // `m` needs the annotation for the same TS7018 reason as the
+    // sanitizeAuthorSx spec above; the fn's return type for TS7011.
+    const sx: { p: number; m: string | null; fn: () => number } = {
+      p: 3,
+      m: null,
+      fn: () => 0,
+    }
+    expect(collectThirdPartyAuthorSxUrlHosts(sx)).toEqual([])
+    expect(collectThirdPartyAuthorSxUrlHosts(undefined)).toEqual([])
+    expect(collectThirdPartyAuthorSxUrlHosts(null)).toEqual([])
   })
 })
 

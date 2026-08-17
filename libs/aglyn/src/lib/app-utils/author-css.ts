@@ -54,6 +54,8 @@
  * rule reaching the two CSS surfaces.
  */
 
+import { isFirstPartyHost } from './media-ref'
+
 /**
  * The CSS-spec URL guaranteed never to load, used as the replacement.
  *
@@ -177,6 +179,88 @@ export function sanitizeAuthorCss(css: string): string {
     },
   )
   return changed ? next : css
+}
+
+/**
+ * The third-party hosts a stylesheet's `url()` tokens would make a
+ * visitor's browser contact (AGL-1737).
+ *
+ * This is the WARN half of AGL-1725's warn-and-disclose decision, for the
+ * Styles panel: the scheme filter above ships, the host is deliberately not
+ * restricted, and that decision is only honest if the author is told what
+ * the `url()` they typed will do. This helper feeds a passive caption in
+ * the panel — it never blocks, rewrites, or validates anything.
+ *
+ * What is collected: the hostname of every `https:` (and protocol-relative,
+ * which resolves against the https document) `url()` target that is not one
+ * of OUR hosts — `isFirstPartyHost` is the same first-party set `media-ref`
+ * keeps in sync with `security-origins.js`. What is deliberately not:
+ *
+ * - refused schemes (`http:`, `javascript:`, …) — {@link sanitizeAuthorCss}
+ *   rewrites them to {@link INERT_CSS_URL} at render, so they contact
+ *   nobody and naming them as an egress would be false;
+ * - `data:` / `blob:` / relative forms — no request leaves the machine, or
+ *   it stays on the author's own origin.
+ *
+ * Hostnames are lowercased, deduped, and returned in first-appearance
+ * order, ready to be named back to the author verbatim.
+ */
+export function collectThirdPartyAuthorCssUrlHosts(css: string): string[] {
+  if (!css || !css.includes('url(')) return []
+  const hosts: string[] = []
+  const seen = new Set<string>()
+  for (const match of css.matchAll(CSS_URL_TOKEN)) {
+    const target = (match[1] ?? match[2] ?? match[3] ?? '').trim()
+    if (!target || isRefusedAuthorCssUrl(target)) continue
+    let hostname: string
+    try {
+      // Protocol-relative inherits the published page's https.
+      hostname = new URL(
+        target.startsWith('//') ? `https:${target}` : target,
+      ).hostname
+    } catch {
+      continue // relative path — same-origin, no third party
+    }
+    // `data:`/`blob:` parse with an empty hostname; nothing to name.
+    if (!hostname) continue
+    const lower = hostname.toLowerCase()
+    if (isFirstPartyHost(lower) || seen.has(lower)) continue
+    seen.add(lower)
+    hosts.push(lower)
+  }
+  return hosts
+}
+
+/**
+ * {@link collectThirdPartyAuthorCssUrlHosts} over an `sx` object — the
+ * shape the Styles panel's builder and JSON tabs hold (AGL-1737). Walks
+ * arrays and nested records exactly as {@link sanitizeAuthorSx} does and
+ * unions the hosts found in string leaves, preserving first-appearance
+ * order across the whole document.
+ */
+export function collectThirdPartyAuthorSxUrlHosts(sx: unknown): string[] {
+  const hosts: string[] = []
+  const seen = new Set<string>()
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      for (const hostname of collectThirdPartyAuthorCssUrlHosts(value)) {
+        if (seen.has(hostname)) continue
+        seen.add(hostname)
+        hosts.push(hostname)
+      }
+      return
+    }
+    if (!value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry)
+      return
+    }
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      visit((value as Record<string, unknown>)[key])
+    }
+  }
+  visit(sx)
+  return hosts
 }
 
 /**

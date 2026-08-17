@@ -147,6 +147,31 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, node?.$id, target.overrideKey])
 
+  // Passive off-site url() hint (AGL-1737) — the "warn" half of AGL-1725's
+  // warn-and-disclose, for the panel with no per-field description to carry
+  // it. Names the hosts a url() in the CURRENT value would make every
+  // visitor's browser contact: the live draft in the CSS and JSON modes
+  // (ahead of Apply, so the author reads it while typing), the committed sx
+  // in the builder (whose rows write live). A caption and nothing more — it
+  // never blocks a value, and it deliberately does not touch how or when
+  // this form commits (an attribute panel edit commits on blur, and that
+  // behavior is load-bearing).
+  const thirdPartyHosts = useMemo<string[]>(() => {
+    if (mode === 'css') return Aglyn.collectThirdPartyAuthorCssUrlHosts(cssDraft)
+    if (mode === 'json') {
+      try {
+        return Aglyn.collectThirdPartyAuthorSxUrlHosts(
+          JSON.parse(jsonDraft || '{}'),
+        )
+      } catch {
+        // Mid-edit JSON — scan the raw text so the hint tracks typing.
+        return Aglyn.collectThirdPartyAuthorCssUrlHosts(jsonDraft)
+      }
+    }
+    return Aglyn.collectThirdPartyAuthorSxUrlHosts(nodeSx)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, cssDraft, jsonDraft, JSON.stringify(nodeSx)])
+
   const writeProperty = useCallback(
     (property: string, value: string | undefined) => {
       if (!node || !property) return
@@ -347,6 +372,18 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
             {'Apply JSS'}
           </Button>
         </Stack>
+      ) : null}
+
+      {thirdPartyHosts.length ? (
+        // Same voice as the Custom HTML `css` description (AGL-1737), with
+        // the host named back so the consequence is attached to the value
+        // the author typed rather than left as general prose.
+        <Typography variant="caption" color="text.secondary">
+          {'A url() here points off your site — every visitor’s browser ' +
+            `will contact ${thirdPartyHosts.join(', ')}, disclosing their ` +
+            'IP address and which page they are on. Insecure http:// URLs ' +
+            'are not loaded.'}
+        </Typography>
       ) : null}
     </Stack>
   )
