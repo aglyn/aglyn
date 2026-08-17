@@ -235,6 +235,18 @@ const RENEWAL_INVOICE = {
   status_transitions: { paid_at: 1800000005 },
   customer_email: 'boxer@example.com',
   customer_name: 'Bea Oxer',
+  payment_intent: 'pi_2',
+  // An invoice's shipping block — NOT a session's `shipping_details`.
+  customer_shipping: {
+    name: 'Bea Oxer',
+    address: {
+      line1: '1 Box Lane',
+      city: 'Boxville',
+      state: 'TX',
+      postal_code: '75001',
+      country: 'US',
+    },
+  },
   lines: {
     data: [
       {
@@ -442,18 +454,244 @@ describe('storefront subscription renewals (AGL-1743)', () => {
   })
 
   /**
-   * Product intent, pinned. Subscriptions are deliberately NOT orders — the
-   * merchant docs say so, the console keeps Orders and Subscriptions apart,
-   * and the tenant account page renders them separately. Whether a PHYSICAL
-   * renewal should also produce a fulfilment artifact is the open product
-   * question (AGL-1743 §1); until it is answered, a renewal must not start
-   * manufacturing order rows in tables and revenue charts that would then
-   * need unpicking.
+   * AGL-1750 answered AGL-1743's open question §1: a PHYSICAL cycle is a
+   * shipment obligation, and the invoice record is a receipt, not a work
+   * order. Each paid invoice of a physical subscription mints one order —
+   * `paid` and unfulfilled, so it enters the same pick/pack flow as any
+   * one-time sale — keyed on the invoice id (the order's doc id) so the
+   * transaction's redelivery guard covers it.
    */
-  it('creates no order document', async () => {
+  it('mints an order for a physical cycle, on the subscription channel', async () => {
     await deliver(RENEWAL_INVOICE)
+
+    const order = docs.get('hosts/host-1/orders/in_2') as any
+    expect(order).toBeDefined()
+    expect(order.status).toBe('paid')
+    // §2 answered too: its own channel, never folded into `online`, which
+    // would silently rewrite every merchant's existing channel split.
+    expect(order.channel).toBe('subscription')
+    // Unfulfilled — no fulfillments yet, so the Orders tab offers Fulfill.
+    expect(order.fulfillments).toBeUndefined()
+    // A real sequential order number, from the same counter as every other
+    // channel.
+    expect(order.number).toBe(1)
+    expect(docs.get('hosts/host-1/counters/orders')).toEqual({ next: 2 })
+    // The join back to the cycle it fulfils.
+    expect(order.subscriptionId).toBe('sub_1')
+    expect(order.invoiceId).toBe('in_2')
+    expect(order.customerEmail).toBe('boxer@example.com')
+    expect(order.customerName).toBe('Bea Oxer')
+    expect(order.paymentIntentId).toBe('pi_2')
+    // Dated when the cycle was PAID, not when the event was processed.
+    expect(order.createdAtMs).toBe(1800000005000)
+    expect(order.timeline).toEqual([
+      { atMs: 1800000005000, event: 'paid' },
+    ])
+  })
+
+  it('prices the order from the invoice decomposition', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    const order = docs.get('hosts/host-1/orders/in_2') as any
+    expect(order.lineItems).toHaveLength(1)
+    expect(order.lineItems[0]).toMatchObject({
+      productId: 'product-1',
+      variantId: 'large',
+      name: 'Monthly box',
+      sku: 'BOX-L',
+      productType: 'physical',
+      quantity: 2,
+      unitAmountCents: 5000,
+    })
+    expect(order.totals.itemsCents).toBe(10000)
+    expect(order.totals.discountCents).toBe(1000)
+    expect(order.totals.totalCents).toBe(9000)
+    expect(order.amountCents).toBe(9000)
+    expect(order.feeCents).toBe(180)
+    // The session identity belongs to AGL-1732's sale record, and
+    // `order-analytics.ts` resolves the opening purchase through the
+    // SUBSCRIPTION's copy of it — an order repeating it would double the
+    // answer.
+    expect(order.checkoutSessionId).toBeUndefined()
+  })
+
+  it('ships to the invoice customer_shipping, which is not a session field', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    expect((docs.get('hosts/host-1/orders/in_2') as any).shippingAddress)
+      .toEqual({
+        name: 'Bea Oxer',
+        line1: '1 Box Lane',
+        city: 'Boxville',
+        state: 'TX',
+        postalCode: '75001',
+        country: 'US',
+      })
+  })
+
+  it('neither double-creates nor re-numbers the order on redelivery', async () => {
+    await deliver(RENEWAL_INVOICE)
+    await deliver(RENEWAL_INVOICE, 'invoice.paid')
+
+    expect(orderDocs()).toHaveLength(1)
+    expect(docs.get('hosts/host-1/counters/orders')).toEqual({ next: 2 })
+  })
+
+  /**
+   * The opening cycle's box ships like any other, so it mints an order too —
+   * while its contact/notification fan-out stays with AGL-1732's
+   * `checkout.session.completed` branch, exactly as before.
+   */
+  it('mints an order for the opening cycle of a physical subscription', async () => {
+    await deliver({
+      ...RENEWAL_INVOICE,
+      id: 'in_1',
+      billing_reason: 'subscription_create',
+      amount_paid: 9825,
+      total: 9825,
+      tax: 825,
+    })
+
+    const order = docs.get('hosts/host-1/orders/in_1') as any
+    expect(order).toBeDefined()
+    expect(order.channel).toBe('subscription')
+    expect(order.status).toBe('paid')
+    expect(contactUpserts).toHaveLength(0)
+    expect(notifications).toHaveLength(0)
+  })
+
+  /**
+   * A trial's opening invoice is $0 with NO lines — nothing ships until the
+   * trial converts, and the conversion's own `subscription_cycle` invoice
+   * lists the product and mints the order. A 100%-off cycle is different:
+   * Stripe discounts at the INVOICE level, so its line survives and its box
+   * still ships (as a $0 order).
+   */
+  it('mints no order for a $0 trial opening with no lines', async () => {
+    await deliver({
+      ...RENEWAL_INVOICE,
+      id: 'in_trial',
+      billing_reason: 'subscription_create',
+      amount_paid: 0,
+      total: 0,
+      subtotal: 0,
+      lines: { data: [] },
+    })
     expect(orderDocs()).toHaveLength(0)
     expect(docs.has('hosts/host-1/counters/orders')).toBe(false)
+  })
+
+  /**
+   * The other half of the AGL-1750 decision, pinned: a DIGITAL (or service)
+   * subscription still produces NO order — nothing ships, so AGL-1732's "a
+   * subscription is not an order" stands for it, and the merchant's order
+   * sequence must not advance.
+   */
+  it('creates no order for a digital subscription cycle', async () => {
+    docs.set('hosts/host-1/subscriptions/sub_1', {
+      ...SOLD_SUBSCRIPTION,
+      lineItems: [
+        { ...SOLD_SUBSCRIPTION.lineItems[0], productType: 'digital' },
+      ],
+    })
+    await deliver(RENEWAL_INVOICE)
+
+    expect(orderDocs()).toHaveLength(0)
+    expect(docs.has('hosts/host-1/counters/orders')).toBe(false)
+    // The money is still recorded — the ledger and roll-up are unconditional.
+    expect(invoiceDocs()).toHaveLength(1)
+    expect(storedSubscription().paidCents).toBe(9000)
+  })
+
+  /**
+   * Inventory per cycle (AGL-1750): the box that ships this cycle comes off
+   * the shelf this cycle — the exact decrement AGL-1744 said could not exist
+   * while renewals were recorded nowhere. Tracked variants only, one ledger
+   * row joined to the order, behind the same redelivery guard.
+   */
+  it('decrements the tracked variant by the cycle quantity, with a ledger row', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      subscription: { interval: 'month' },
+      variants: [
+        {
+          id: 'large',
+          priceUsd: 50,
+          sku: 'BOX-L',
+          options: { size: 'Large' },
+          inventory: 5,
+        },
+      ],
+    })
+    await deliver(RENEWAL_INVOICE)
+
+    const product = docs.get('hosts/host-1/products/product-1') as any
+    expect(product.variants[0].inventory).toBe(3)
+    expect(product.inventory).toBe(3)
+    const ledger = [...docs.entries()]
+      .filter(([path]) => path.includes('/inventoryAdjustments/'))
+      .map(([, row]) => row)
+    expect(ledger).toHaveLength(1)
+    expect(ledger[0]).toMatchObject({
+      productId: 'product-1',
+      variantId: 'large',
+      delta: -2,
+      reason: 'sale',
+      orderId: 'in_2',
+    })
+  })
+
+  it('decrements once however many times Stripe delivers', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      subscription: { interval: 'month' },
+      variants: [{ id: 'large', priceUsd: 50, inventory: 5 }],
+    })
+    await deliver(RENEWAL_INVOICE)
+    await deliver(RENEWAL_INVOICE, 'invoice.paid')
+
+    const product = docs.get('hosts/host-1/products/product-1') as any
+    expect(product.variants[0].inventory).toBe(3)
+    expect(
+      [...docs.keys()].filter((path) =>
+        path.includes('/inventoryAdjustments/'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('leaves an untracked variant alone, order minted regardless', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    expect(orderDocs()).toHaveLength(1)
+    expect(
+      [...docs.keys()].some((path) => path.includes('/inventoryAdjustments/')),
+    ).toBe(false)
+    const product = docs.get('hosts/host-1/products/product-1') as any
+    expect(product.inventory).toBeUndefined()
+  })
+
+  /**
+   * The AGL-1826 rule reaches cycles: every stock decrement fires the
+   * crossing check, so a subscription that eats the last comfortable units
+   * nudges the merchant exactly like a cart sale would.
+   */
+  it('alerts the low-stock crossing a cycle causes', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      subscription: { interval: 'month' },
+      lowStockThreshold: 3,
+      variants: [{ id: 'large', priceUsd: 50, inventory: 4 }],
+    })
+    await deliver(RENEWAL_INVOICE)
+
+    const lowStock = notifications.filter(
+      (notification) => notification.type === 'content.lowStock',
+    )
+    expect(lowStock).toHaveLength(1)
+    expect(lowStock[0].title).toBe('Low stock — Monthly box')
   })
 
   /**
@@ -825,18 +1063,33 @@ describe('a renewal whose subscription was never recorded (AGL-1763)', () => {
     expect((invoiceDocs()[0] as any).paidCents).toBe(9000)
     const stored = storedSubscription()
     expect(stored.paidCents).toBe(9000)
-    // Nothing is invented: no product was named, so none is claimed.
+    // Nothing is invented: no product was named, so none is claimed — and
+    // no TYPE either (AGL-1837): the `{ name: 'Subscription' }` placeholder
+    // must not be lifted into a claimed `physical`, which since AGL-1750
+    // would manufacture a fulfilment order for a product Aglyn never read.
     expect(stored.productId).toBeUndefined()
     expect(stored.lineItems[0].name).toBe('Subscription')
+    expect(stored.lineItems[0].productType).toBeUndefined()
+    expect(orderDocs()).toHaveLength(0)
     // The identity that IS knowable still lands, so the subscriber can still
     // be found and can still reach the portal.
     expect(stored.customerEmail).toBe('boxer@example.com')
     expect(stored.stripeCustomerId).toBe('cus_1')
   })
 
-  it('creates no order document, exactly as a recorded renewal does not', async () => {
+  /**
+   * The product document names its type, and the fallback read it — so the
+   * reconstruction's cycle mints the same fulfilment order a recorded
+   * renewal's does (AGL-1750). This population is EXACTLY the physical box
+   * whose shipments were invisible.
+   */
+  it('mints the order from the product document the fallback read', async () => {
     await deliver(RENEWAL_INVOICE)
-    expect(orderDocs()).toHaveLength(0)
+
+    const order = docs.get('hosts/host-1/orders/in_2') as any
+    expect(order).toBeDefined()
+    expect(order.channel).toBe('subscription')
+    expect(order.lineItems[0].productType).toBe('physical')
   })
 
   it('never calls Stripe', async () => {

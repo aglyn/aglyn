@@ -646,23 +646,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     // not on the contact's `ltvCents`, not on the subscription document, whose
     // `totals` stayed frozen at the opening charge however the real one moved.
     //
-    // ## What a renewal produces, and what it deliberately does not
+    // ## What a cycle produces (AGL-1750 answered AGL-1743's open question)
     //
-    // It does NOT produce an order. Subscriptions are not orders in this
-    // product — the merchant docs say so, the console keeps Orders and
-    // Subscriptions apart, the tenant account page renders them separately —
-    // and AGL-1732 established that on three independent sources. Whether a
-    // PHYSICAL subscription's renewal should ALSO produce a fulfilment
-    // artifact to pick, pack and label against is a genuine open question
-    // (AGL-1743 §1) that carries a channel decision with it (§2), and guessing
-    // it wrong writes rows into merchant-facing tables and revenue charts that
-    // would then need unpicking.
+    // Every paid invoice is recorded as its own document under the
+    // subscription — the ledger this product was missing — and rolled up onto
+    // the subscription itself, which is the record the member drawer reads.
     //
-    // What is unambiguous is that the money must be RECOVERABLE: which cycle
-    // was paid, when, by whom, for what, and for how much. So each paid
-    // invoice is recorded as its own document under the subscription — the
-    // ledger this product was missing — and rolled up onto the subscription
-    // itself, which is the record the member drawer already reads.
+    // A PHYSICAL subscription's cycle ALSO mints an order, on channel
+    // `subscription` (AGL-1750). A monthly box is a shipment obligation, and
+    // an invoice record is a receipt, not a work order: with no order there
+    // is nothing to pick, pack, print a label against or mark fulfilled, and
+    // recurring revenue is invisible to every surface that reads `orders`.
+    // The opening cycle mints one too — its box ships like any other — while
+    // its contact/notification fan-out stays with AGL-1732's branch. Digital
+    // and service subscriptions still produce NO order: nothing ships, so
+    // AGL-1732's "a subscription is not an order" stands for them, on the
+    // same three sources (merchant docs, console separation, account page).
     //
     // ## Both invoice events, one record
     //
@@ -768,7 +767,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ? { variantLabel: variantOptions.join(' / ') }
               : {}),
             ...(variant?.sku ? { sku: variant.sku } : {}),
-            ...(lifted.type ? { productType: lifted.type } : {}),
+            // Only a product Aglyn has actually seen states a type.
+            // `liftLegacyProduct` defaults an absent `type` to `physical`,
+            // which is right for a real legacy doc and a FABRICATION for the
+            // `{ name: 'Subscription' }` placeholder — and now that `physical`
+            // mints orders and decrements stock (AGL-1750), a guessed type
+            // would manufacture fulfilment work for a product that may not
+            // ship (AGL-1837).
+            ...(productSnapshot?.exists && lifted.type
+              ? { productType: lifted.type }
+              : {}),
           }
         }
         const { lineItems: invoiceLineItems, totals: invoiceTotals } =
@@ -789,6 +797,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const periodEndMs = object?.period_end
           ? Number(object.period_end) * 1000
           : null
+        // A physical cycle's fulfilment artifact (AGL-1750). The order's doc
+        // id IS the invoice id, so the invoice-existence guard inside the
+        // transaction below covers it too and a Stripe redelivery cannot
+        // double-create (`in_…` never matches the reserved `__.*__` pattern).
+        // Gated on a KNOWN physical type: `snapshot.productType` comes from
+        // the recorded sale line or a product document actually read, never
+        // from a default — a guessed type would manufacture shipment work.
+        // Gated on the invoice actually BILLING the product too: a trial's
+        // opening invoice is $0 with no lines — nothing ships until the trial
+        // converts — whereas a 100%-off cycle still lists the product line
+        // (Stripe discounts at the invoice level), and its box still ships.
+        const cycleLine = invoiceLineItems.find(
+          (line) => line.productId === productId,
+        )
+        const shipsPhysically =
+          snapshot.productType === 'physical' &&
+          Boolean(productId) &&
+          Boolean(cycleLine)
+        const orderRef = hostRef.collection('orders').doc(invoiceId)
+        const counterRef = hostRef.collection('counters').doc('orders')
+        // An invoice's shipping block is `customer_shipping` — it is NOT a
+        // session's `shipping_details`, and an invoice has no
+        // `customer_details` either. Fall back to the billing
+        // `customer_address` + `customer_name` pair, the same
+        // shipping-else-billing fallback the cart branch takes.
+        const invoiceShipping = object?.customer_shipping?.address
+          ? object.customer_shipping
+          : object?.customer_address
+            ? { name: object?.customer_name, address: object.customer_address }
+            : null
         // Hoisted alongside `periodEndMs` (AGL-1763): the reconstruction below
         // dates the record from it, so the two must not drift.
         const periodStartMs = object?.period_start
@@ -809,6 +847,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const existingInvoice = await transaction.get(invoiceRef)
           if (existingInvoice.exists) return false
           const currentSubscription = await transaction.get(subscriptionRef)
+          // Read (Firestore transactions read before they write) only when a
+          // number will actually be allocated — a digital cycle must not
+          // advance the merchant's order sequence.
+          const orderCounter = shipsPhysically
+            ? await transaction.get(counterRef)
+            : null
           transaction.set(invoiceRef, {
             invoiceId,
             subscriptionId,
@@ -924,16 +968,125 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 },
             { merge: true },
           )
+          // The order itself (AGL-1750): `paid` and unfulfilled, so it enters
+          // the same fulfilment flow as any one-time sale. Channel
+          // `subscription`, not `online` — folding cycles into `online` would
+          // silently rewrite every existing merchant's channel split.
+          // Deliberately NO `checkoutSessionId`: that identity belongs to
+          // AGL-1732's opening sale record, and `order-analytics.ts` resolves
+          // the opening purchase through the SUBSCRIPTION's copy of it;
+          // repeating it on an order would double the answer. `createdAtMs`
+          // is when the cycle was PAID — dating a redelivered cycle "now"
+          // would file it under the wrong day in every orders view.
+          if (shipsPhysically) {
+            const orderNumber = Number(orderCounter?.get('next') ?? 1)
+            transaction.set(counterRef, { next: orderNumber + 1 }, { merge: true })
+            transaction.set(orderRef, {
+              number: orderNumber,
+              status: 'paid',
+              channel: 'subscription',
+              lineItems: invoiceLineItems,
+              totals: invoiceTotals,
+              timeline: [{ atMs: paidAtMs, event: 'paid' }],
+              paymentIntentId: String(object?.payment_intent ?? '') || null,
+              subscriptionId,
+              invoiceId,
+              customerName:
+                object?.customer_name ??
+                currentSubscription.get('customerName') ??
+                null,
+              customerEmail:
+                object?.customer_email ??
+                currentSubscription.get('customerEmail') ??
+                null,
+              ...(invoiceShipping?.address
+                ? {
+                    shippingAddress: {
+                      name: invoiceShipping?.name ?? undefined,
+                      line1: invoiceShipping.address.line1 ?? undefined,
+                      line2: invoiceShipping.address.line2 ?? undefined,
+                      city: invoiceShipping.address.city ?? undefined,
+                      state: invoiceShipping.address.state ?? undefined,
+                      postalCode:
+                        invoiceShipping.address.postal_code ?? undefined,
+                      country: invoiceShipping.address.country ?? undefined,
+                    },
+                  }
+                : {}),
+              amountCents: paidCents,
+              feeCents: Number(invoiceTotals.feeCents ?? 0),
+              createdAtMs: paidAtMs,
+              createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            })
+          }
           return true
         })
         if (!recorded) return
+        // Inventory per cycle (AGL-1750, the AGL-281 semantics): the box that
+        // ships this cycle comes off the shelf this cycle. Mirrors the cart
+        // loop — tracked variants only, ledger row with `reason: 'sale'`
+        // joined to the order, and the low-stock crossing alert — and sits
+        // behind the transaction's invoice-id guard exactly as the cart's
+        // decrement sits behind its `created` guard, so a redelivery never
+        // decrements twice. One product per subscription, so no sibling-line
+        // carry-forward (AGL-1830) is needed here.
+        if (shipsPhysically) {
+          const stockSnapshot = await hostRef
+            .collection('products')
+            .doc(productId)
+            .get()
+            .catch(() => null)
+          if (stockSnapshot?.exists) {
+            const stocked = CommerceModel.liftLegacyProduct(
+              stockSnapshot.data() as any,
+            )
+            const stockVariantId =
+              snapshot.variantId ?? stocked.variants[0]?.id
+            const tracked = stocked.variants.some(
+              (variant) =>
+                variant.id === stockVariantId && variant.inventory != null,
+            )
+            if (stockVariantId && tracked) {
+              const cycleQuantity = cycleLine?.quantity ?? 1
+              const variants = CommerceModel.adjustVariantInventory(
+                stocked,
+                stockVariantId,
+                -cycleQuantity,
+              )
+              const updated = { ...stocked, variants }
+              await hostRef
+                .collection('products')
+                .doc(productId)
+                .set(
+                  {
+                    variants,
+                    inventory: CommerceModel.productInventory({ variants }),
+                  },
+                  { merge: true },
+                )
+                .catch(() => undefined)
+              await hostRef
+                .collection('inventoryAdjustments')
+                .add({
+                  productId,
+                  variantId: stockVariantId,
+                  delta: -cycleQuantity,
+                  reason: 'sale',
+                  orderId: invoiceId,
+                  atMs: Date.now(),
+                } satisfies CommerceModel.InventoryAdjustment)
+                .catch(() => undefined)
+              alertLowStockCrossing(invoiceHostId, stocked, updated)
+            }
+          }
+        }
         if (!isOpeningInvoice && paidCents > 0) {
           const renewalEmail =
             object?.customer_email ?? soldSnapshot.get('customerEmail') ?? null
-          // The console has no Subscriptions tab, so until the order question
-          // is answered this notification is the only place a merchant learns
-          // that the money arrived at all — and, for a physical box, the only
-          // signal that something is due to ship.
+          // A physical cycle now lands in Orders (AGL-1750), but the console
+          // still has no Subscriptions tab, so for a digital or service
+          // subscription this notification remains the only place a merchant
+          // learns the money arrived at all.
           void notifyHostManagers(invoiceHostId, {
             type: 'content.order',
             title: `Subscription renewed — $${(paidCents / 100).toFixed(2)}${

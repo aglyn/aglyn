@@ -394,32 +394,43 @@ describe('resolveCheckoutBillingMode (AGL-545)', () => {
 })
 
 /**
- * Stock tracking is inert on a subscription-only product: nothing decrements
- * it on the initial charge (AGL-1732) or on a renewal (AGL-1743), so the
- * console must stop offering the number rather than maintain a false one.
+ * Stock tracking is inert on a DIGITAL or SERVICE subscription-only product:
+ * nothing decrements it on the initial charge (AGL-1732) or on any renewal,
+ * so the console must stop offering the number rather than maintain a false
+ * one (AGL-1744). A PHYSICAL subscription's cycles decrement since AGL-1750 —
+ * each paid invoice mints an order and takes the box off the shelf — so
+ * `type` became an input where AGL-1744 deliberately kept it out.
  *
  * Each case is asserted individually — a single `toBe(false)` on the
  * subscription-only shape would pass against a predicate that returned
  * `!product.subscription`, which is the wrong answer for "Both".
  */
-describe('stockTrackingApplies (AGL-1744)', () => {
+describe('stockTrackingApplies (AGL-1744, AGL-1750)', () => {
   const monthly = { interval: 'month' } as const
 
   it('applies to a plain one-time product', () => {
-    expect(stockTrackingApplies({})).toBe(true)
+    expect(stockTrackingApplies(product())).toBe(true)
+    expect(stockTrackingApplies(product({ type: 'digital' }))).toBe(true)
   })
 
-  it('does NOT apply to a subscription-only product', () => {
-    expect(stockTrackingApplies({ subscription: monthly })).toBe(false)
-    expect(stockTrackingApplies({ subscription: { interval: 'year' } })).toBe(
-      false,
-    )
+  it('does NOT apply to a digital or service subscription-only product', () => {
+    expect(
+      stockTrackingApplies(product({ type: 'digital', subscription: monthly })),
+    ).toBe(false)
+    expect(
+      stockTrackingApplies(
+        product({ type: 'service', subscription: { interval: 'year' } }),
+      ),
+    ).toBe(false)
     // Explicitly false is still subscription-only, not "Both".
     expect(
-      stockTrackingApplies({
-        subscription: monthly,
-        subscriptionOptional: false,
-      }),
+      stockTrackingApplies(
+        product({
+          type: 'digital',
+          subscription: monthly,
+          subscriptionOptional: false,
+        }),
+      ),
     ).toBe(false)
   })
 
@@ -430,25 +441,35 @@ describe('stockTrackingApplies (AGL-1744)', () => {
    * tracking here would delete a control that works.
    */
   it('DOES apply to a subscriptionOptional ("Both") product', () => {
+    // Digital, so it is the "Both" half granting tracking here, never the
+    // AGL-1750 physical rule.
     expect(
-      stockTrackingApplies({
-        subscription: monthly,
-        subscriptionOptional: true,
-      }),
+      stockTrackingApplies(
+        product({
+          type: 'digital',
+          subscription: monthly,
+          subscriptionOptional: true,
+        }),
+      ),
     ).toBe(true)
   })
 
-  it('is not fooled by product type — a physical box is no truer', () => {
-    // `type` is deliberately not an input: a physical subscription wants a
-    // per-renewal decrement, which AGL-1743 blocks.
+  /**
+   * AGL-1750: each paid cycle of a physical subscription mints an order and
+   * decrements the variant, so the number the merchant sets is kept true —
+   * the exact condition AGL-1744 said would relax this predicate.
+   */
+  it('DOES apply to a physical subscription-only product', () => {
     expect(
       stockTrackingApplies(
         product({ type: 'physical', subscription: monthly }),
       ),
-    ).toBe(false)
+    ).toBe(true)
     expect(
-      stockTrackingApplies(product({ type: 'digital', subscription: monthly })),
-    ).toBe(false)
+      stockTrackingApplies(
+        product({ type: 'physical', subscription: { interval: 'year' } }),
+      ),
+    ).toBe(true)
   })
 
   /**

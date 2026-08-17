@@ -379,6 +379,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               <MenuItem value="online">{'Online'}</MenuItem>
               <MenuItem value="pos">{'POS'}</MenuItem>
               <MenuItem value="draft">{'Draft'}</MenuItem>
+              <MenuItem value="subscription">{'Subscription'}</MenuItem>
             </TextField>
             <TextField
               select

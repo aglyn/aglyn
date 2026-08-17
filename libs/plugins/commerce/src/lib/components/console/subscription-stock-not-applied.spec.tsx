@@ -16,15 +16,15 @@
  */
 
 /**
- * A subscription-only product must not invite a stock number the system
- * never keeps true (AGL-1744).
+ * A DIGITAL or SERVICE subscription-only product must not invite a stock
+ * number the system never keeps true (AGL-1744, narrowed by AGL-1750).
  *
  * `canPurchase` gates every checkout on stock, subscription sessions
- * included, and NOTHING decrements for a subscription — not the initial
- * charge (AGL-1732 records money on the subscription doc and deliberately
- * writes no order and no `inventoryAdjustments` row) and not a renewal
- * (`invoice.payment_succeeded` is unhandled repo-wide, AGL-1743). One unit
- * of stock therefore sells unlimited subscriptions.
+ * included, and nothing decrements for a digital or service subscription —
+ * not the initial charge and not any renewal — so one unit of stock sells
+ * unlimited subscriptions there. A PHYSICAL subscription is different since
+ * AGL-1750: every paid cycle mints an order and decrements the variant, so
+ * its stock field stays live and its number is kept true.
  *
  * The fix is in the console, and the load-bearing part of it is what does
  * NOT happen: a merchant who already set stock must not silently lose it.
@@ -32,10 +32,11 @@
  * the disabled attribute — a fix that hid the input while dropping the value
  * on save would pass a UI-only assertion and destroy merchant configuration.
  *
- * The two halves that must keep working are asserted alongside:
+ * The halves that must keep working are asserted alongside:
  * `subscriptionOptional` ("Both") products still track stock, because their
- * one-time path genuinely decrements; and a save of a subscription-only
- * product carries the untouched stock through.
+ * one-time path genuinely decrements; a PHYSICAL subscription-only product
+ * tracks (AGL-1750); and a save of a withdrawn product carries the untouched
+ * stock through.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -43,13 +44,16 @@ import { setDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import ProductEditorDialog from './product-editor-dialog.component'
 
-/** A subscription-only monthly box whose merchant set stock of 7. */
+/**
+ * A DIGITAL subscription-only feed whose merchant set stock of 7 — the shape
+ * that still has no decrementing path anywhere (AGL-1750 left it withdrawn).
+ */
 const SUBSCRIPTION_ONLY = {
   $id: 'prod-sub',
-  name: 'Coffee box',
-  slug: 'coffee-box',
+  name: 'Coffee club feed',
+  slug: 'coffee-club-feed',
   status: 'active',
-  type: 'physical',
+  type: 'digital',
   subscription: { interval: 'month' },
   lowStockThreshold: 2,
   variants: [{ id: 'v1', priceUsd: 25, inventory: 7 }],
@@ -60,6 +64,21 @@ const BOTH = {
   ...SUBSCRIPTION_ONLY,
   $id: 'prod-both',
   subscriptionOptional: true,
+}
+
+/**
+ * A PHYSICAL monthly box: since AGL-1750 each paid cycle mints an order and
+ * decrements the variant, so tracking applies again.
+ */
+const PHYSICAL_SUBSCRIPTION = {
+  $id: 'prod-box',
+  name: 'Coffee box',
+  slug: 'coffee-box',
+  status: 'active',
+  type: 'physical',
+  subscription: { interval: 'month' },
+  lowStockThreshold: 2,
+  variants: [{ id: 'v1', priceUsd: 25, inventory: 7 }],
 }
 
 /** A plain one-time product — the untouched control. */
@@ -74,7 +93,7 @@ const ONE_TIME = {
 
 const collections: Record<string, Array<Record<string, unknown>>> = {
   productCategories: [],
-  products: [SUBSCRIPTION_ONLY, BOTH, ONE_TIME],
+  products: [SUBSCRIPTION_ONLY, BOTH, PHYSICAL_SUBSCRIPTION, ONE_TIME],
   suppliers: [],
   locations: [],
 }
@@ -155,7 +174,7 @@ describe('subscription-only products (AGL-1744)', () => {
 
     expect(stockField().disabled).toBe(true)
     expect(
-      screen.getByText(/not tracked on a subscription-only product/i),
+      screen.getByText(/not tracked on a digital or service subscription/i),
     ).not.toBeNull()
     expect(lowStockField().disabled).toBe(true)
   })
@@ -234,6 +253,23 @@ describe('products whose stock still means something (AGL-1744)', () => {
    */
   it('leaves a subscriptionOptional ("Both") product fully editable', () => {
     open(BOTH)
+
+    expect(stockField().disabled).toBe(false)
+    expect(lowStockField().disabled).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(
+      screen.getByText(/Blank stock = untracked; 0 shows sold out/),
+    ).not.toBeNull()
+  })
+
+  /**
+   * AGL-1750: each paid cycle of a physical subscription mints an order and
+   * decrements the variant — the number moves as the boxes ship, so the
+   * editor offers it again. `BOTH` above is digital, so it is genuinely the
+   * "Both" half granting that one and the TYPE granting this one.
+   */
+  it('leaves a PHYSICAL subscription-only product fully editable (AGL-1750)', () => {
+    open(PHYSICAL_SUBSCRIPTION)
 
     expect(stockField().disabled).toBe(false)
     expect(lowStockField().disabled).toBe(false)

@@ -206,15 +206,25 @@ Active subscriptions are recorded per site and surface in two places:
   amount on each signup, then a *Subscription renewed* notification carrying
   the amount on every cycle after it.
 
-A subscription is **not** an order, by design: it does not appear in
-**Orders**, in the analytics card or in the orders CSV, and it does not
-decrement stock. Those surfaces are for one-time sales. What the subscriber
-pays is recorded on the subscription itself — **each paid invoice**, its
-period and its amount included, so a renewal is a record you hold rather than
-one only Stripe holds. The amount shown follows the **latest** cycle, so a
-price change, a tax change or a trial converting to a paid cycle is reflected
-rather than frozen at what the first charge was. Stripe keeps its own copy of
-every invoice, reachable from the Billing Portal.
+What a subscription puts in **Orders** depends on the product's **Type**:
+
+- A **physical** subscription creates one order per paid cycle — the first
+  charge included — on the **Subscription** channel, so every box has
+  something to fulfill, pack and label against, and recurring revenue shows
+  up in the Orders tab, the analytics card and the orders CSV alongside
+  one-time sales. Each cycle's order also decrements the variant's stock (if
+  tracked) and can trigger the low-stock alert.
+- A **digital** or **service** subscription is **not** an order, by design:
+  it does not appear in **Orders**, in the analytics card or in the orders
+  CSV, and it does not decrement stock — there is nothing to ship.
+
+Either way, what the subscriber pays is recorded on the subscription itself —
+**each paid invoice**, its period and its amount included, so a renewal is a
+record you hold rather than one only Stripe holds. The amount shown follows
+the **latest** cycle, so a price change, a tax change or a trial converting
+to a paid cycle is reflected rather than frozen at what the first charge was.
+Stripe keeps its own copy of every invoice, reachable from the Billing
+Portal.
 
 An active subscription is also what
 [members-only content](../workspace-and-billing/teams-and-roles/members-only.md)
