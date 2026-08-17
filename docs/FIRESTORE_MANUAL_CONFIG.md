@@ -24,8 +24,31 @@ indexes and `fieldOverrides` alike). `firestore:rules` replaces the ruleset from
 - Security rules → `firebase-firestore.rules`
 
 **Always diff BOTH `indexes` and `fieldOverrides` against the live project before
-an index deploy** (`firebase firestore:indexes`, and the Admin `fields` API for
-overrides).
+an index deploy.** That diff is now a command (AGL-1804):
+
+```sh
+npm run check:index-drift          # read-only; exit 0 clean, 1 drift, 2 cannot-check
+```
+
+It runs daily and on every push touching the index file
+(`.github/workflows/index-drift.yml`), and separates the two directions because
+they need **opposite** responses:
+
+- **PROD-ONLY** — live, not in the file. **Do not deploy**: the deploy would
+  delete it. Copy the live entry into the file first;
+  `firebase firestore:indexes --project aglyn-main` prints it in this file's own
+  shape. This is the AGL-866 / AGL-1801 direction, and the damage is caused by
+  the deploy, not by the mismatch.
+- **FILE-ONLY** — in the file, not deployed. The deploy is owed, and until it
+  runs every query needing that index throws `FAILED_PRECONDITION` (AGL-1793 /
+  AGL-1802: three crons that had never run). Re-run the check afterwards —
+  index builds are async, and "deployed" is not "ready".
+
+⚠️ **A green run means the project matches the file. It does NOT mean every
+query is served.** A composite index is not a prefix substitute: `bookings`
+carried a COLLECTION_GROUP `status + expiresAtMs` index and still could not
+serve a `startsAtMs`-only query (AGL-1802). Per-query coverage is the job of the
+`*-indexes.spec.ts` guards, and of AGL-1814.
 
 ## What `firebase deploy` does NOT manage (documented + applied here)
 
@@ -47,6 +70,18 @@ was applied here in AGL-1467 and never added to the file, and sat that way until
 AGL-1793 diffed the live project. `firebase firestore:indexes` round-trips the
 flag as `"ttl": true`, which is exactly the form to paste in. **Add the row to the
 table below AND the `fieldOverrides` entry, in the same change.**
+`npm run check:index-drift` treats TTL as deploy-managed for this reason and
+reports a live-but-unfiled TTL policy as **PROD-ONLY**, i.e. as about to be
+deleted.
+
+⚠️ **A TTL policy is invisible to the obvious Admin-API query.** `ListFields`
+only returns explicitly-configured fields, and the documented filter for that is
+`indexConfig.usesAncestorConfig=false` — but a TTL field reports
+`usesAncestorConfig: **true**` (it inherits the database default index config;
+both of ours do). Measured on `aglyn-main`: that filter returns 15 fields, the
+`... OR ttlConfig:*` form returns 17. A checker built on the narrow filter does
+not merely miss the TTL policies — it files them under FILE-ONLY and advises
+running the deploy, which is the one action that can destroy them.
 
 | collectionGroup | field | why |
 |---|---|---|

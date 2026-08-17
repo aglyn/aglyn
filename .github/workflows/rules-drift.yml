@@ -137,6 +137,14 @@ jobs:
       # tools/ is not an nx project, so `nx affected` cannot reach it.
       - run: npm run test:rules-drift
 
+      # The index checker's self-test, run here as well as in index-drift.yml
+      # for the same AGL-1778 reason and in the same direction: asserted only
+      # from inside the workflow it guards, "the workflow runs the self-test"
+      # is circular — deleting the step deletes the check on the deletion. The
+      # second home has to be a workflow that ACTUALLY RUNS, which nx-ci.yml
+      # (disabled_manually) does not.
+      - run: npm run test:index-drift
+
       - name: Diff live rules against the promoted baseline
         env:
           # The promoted SHA is what the deploy script was pinned to, so it is
