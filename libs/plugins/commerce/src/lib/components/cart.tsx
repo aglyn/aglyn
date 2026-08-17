@@ -103,6 +103,60 @@ function CartLines(props: {
     'idle' | 'sending' | 'error' | 'paused' | 'ask'
   >('idle')
   const [message, setMessage] = useState('')
+  /**
+   * In-progress quantity edits, keyed by line, as the raw field text
+   * (AGL-1772). The field used to POST /api/commerce/cart on every
+   * keystroke — typing "100" was three Firestore writes, and clearing the
+   * field to retype passed through `""` → 0, which is the REMOVE path, so a
+   * select-all-and-retype could delete the line mid-edit (and the response
+   * replacing `cart` state then fought the input).
+   *
+   * The repo convention for quantity inputs is local state committed on an
+   * explicit settle — the PDP's Qty field (product-detail.tsx) holds
+   * `useState` and sends nothing until the buy click, and besigner
+   * attributes commit on blur. So: keystrokes only edit the draft; blur or
+   * Enter commits ONE write; an empty or unparsable draft is a pending
+   * state that reverts to the server's quantity, never a 0-as-remove. A
+   * genuine remove still works both ways — the ✕ button, and typing an
+   * actual 0 then leaving the field.
+   */
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>(
+    {},
+  )
+  const lineKey = (line: CartLineView) =>
+    `${line.productId}:${line.variantId ?? ''}`
+  const commitQuantity = (line: CartLineView) => {
+    const key = lineKey(line)
+    const draft = quantityDrafts[key]
+    if (draft === undefined) return
+    // Drops the draft, but only if it is still THIS one — a keystroke that
+    // lands while the write is in flight starts a new edit, and clearing it
+    // here would erase what the shopper is typing.
+    const settle = () =>
+      setQuantityDrafts((drafts) => {
+        if (drafts[key] !== draft) return drafts
+        const { [key]: _settled, ...rest } = drafts
+        return rest
+      })
+    // `Number('')` is 0 — exactly the misreading that turned a cleared
+    // field into a remove. Empty means "no answer": show the server's
+    // quantity again and write nothing. NaN (letters) reverts the same way.
+    if (draft.trim() === '') return settle()
+    const parsed = Math.round(Number(draft))
+    if (!Number.isFinite(parsed)) return settle()
+    const quantity = Math.max(0, parsed)
+    // A settled value equal to the server's is not an edit.
+    if (quantity === line.quantity) return settle()
+    // The draft keeps rendering until the response lands, so the field does
+    // not flash the superseded quantity during the round-trip; the server's
+    // answer (via the replaced `cart`) takes over when it arrives.
+    void onMutate({
+      action: 'set',
+      productId: line.productId,
+      variantId: line.variantId,
+      quantity,
+    }).finally(settle)
+  }
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -242,18 +296,17 @@ function CartLines(props: {
             </Typography>
           </Box>
           <TextField
-            value={line.quantity}
+            value={quantityDrafts[lineKey(line)] ?? line.quantity}
             onChange={(event) =>
-              void onMutate({
-                action: 'set',
-                productId: line.productId,
-                variantId: line.variantId,
-                quantity: Math.max(
-                  0,
-                  Math.round(Number(event.target.value)) || 0,
-                ),
-              })
+              setQuantityDrafts((drafts) => ({
+                ...drafts,
+                [lineKey(line)]: event.target.value,
+              }))
             }
+            onBlur={() => commitQuantity(line)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitQuantity(line)
+            }}
             size="small"
             sx={{ width: 60 }}
             slotProps={{ htmlInput: { inputMode: 'numeric' } }}
