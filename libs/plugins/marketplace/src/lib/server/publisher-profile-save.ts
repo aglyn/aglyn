@@ -18,6 +18,8 @@
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  PUBLISHER_AGREEMENT_BYTES,
+  PUBLISHER_AGREEMENT_SHA256,
   PUBLISHER_AGREEMENT_UNAVAILABLE_NOTICE,
   PUBLISHER_AGREEMENT_VERSION,
   publisherAgreementIsPublished,
@@ -97,6 +99,13 @@ const acceptPublisherAgreement: PluginApiHandler = async (req, res) => {
         {
           publisherAgreement: {
             version: PUBLISHER_AGREEMENT_VERSION,
+            // The snapshot pin (AGL-1678): the version is a label we control
+            // and can reuse, so the record also carries the sha256 and byte
+            // length of the archived snapshot of the text the publisher was
+            // shown — self-contained evidence of content, same machinery as
+            // the signup clickwrap (AGL-1497).
+            sha256: PUBLISHER_AGREEMENT_SHA256,
+            bytes: PUBLISHER_AGREEMENT_BYTES,
             // A uid, not the org: "this organization agreed" is not a fact
             // anybody can be held to. A named person on a date is.
             acceptedBy: decoded.uid,

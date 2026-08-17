@@ -145,6 +145,27 @@ describe('accepting the publisher agreement (AGL-1660)', () => {
     })
   })
 
+  it('pins the acceptance to the bytes of the document, not just its label (AGL-1678)', async () => {
+    // A version string is a label we control and can reuse; the snapshot hash
+    // is what makes the record self-contained evidence of content. Same
+    // machinery as the signup clickwrap (AGL-1497): sha256 + byte length of
+    // the archived snapshot, written onto every acceptance record.
+    mockPublished.value = true
+    const res = makeRes()
+    await publisherProfileSaveHandler(acceptRequest(), res)
+    expect(res.statusCode).toBe(200)
+    expect(writes()).toHaveLength(1)
+    const recorded = (writes()[0] as {
+      publisherAgreement: { sha256?: unknown; bytes?: unknown }
+    }).publisherAgreement
+    expect(recorded.sha256).toBe(agreement.PUBLISHER_AGREEMENT_SHA256)
+    expect(recorded.bytes).toBe(agreement.PUBLISHER_AGREEMENT_BYTES)
+    // The manifest itself must be a real pin, not an empty default the
+    // assertion above would vacuously match.
+    expect(agreement.PUBLISHER_AGREEMENT_SHA256).toMatch(/^[0-9a-f]{64}$/)
+    expect(agreement.PUBLISHER_AGREEMENT_BYTES).toBeGreaterThan(0)
+  })
+
   it('follows the REAL published set, not just the stub', async () => {
     // The stub above proves the branch; this proves the branch is wired to
     // the actual constant. As of this commit the page does not exist, so the

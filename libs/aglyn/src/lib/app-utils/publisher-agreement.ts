@@ -55,6 +55,46 @@ export const PUBLISHER_AGREEMENT_VERSION = '2026-08-14.1'
 
 export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
 
+/**
+ * The snapshot pin for the version above (AGL-1678).
+ *
+ * A version string is a label we control and can reuse, so on its own it
+ * proves nothing about what a publisher actually read. These two values pin
+ * the archived snapshot at
+ * `legal/publisher-agreement/{PUBLISHER_AGREEMENT_VERSION}/marketplace-publisher-agreement.txt`
+ * (beside this module), captured FROM THE LIVE PAGE after publication — the
+ * same publication-first machinery as the signup clickwrap
+ * (`apps/console/constants/legal-documents.ts`, AGL-1497), and deliberately a
+ * PARALLEL manifest rather than an entry in `LEGAL_DOCUMENTS`: ToS §19.1 makes
+ * that set the entire signup agreement, and the publisher agreement is
+ * deliberately not part of it. Mixing them would widen what a signup
+ * acceptance covers.
+ *
+ * Both values go onto every acceptance record, so a record is self-contained
+ * evidence of content and later tampering with the archive is detectable
+ * rather than invisible. `publisher-agreement-version.spec.ts` re-hashes the
+ * snapshot, so one version string can never come to mean two different
+ * documents.
+ *
+ * Capture method (proven byte-for-byte against the clickwrap v4 hashes before
+ * this snapshot was taken): fetch the live page, walk its HTML text nodes
+ * skipping script/style, trim each, drop empties, take the document's content
+ * block (first line `Last updated: …` through its closing `© …` line,
+ * excluding site chrome and the table of contents), join with `\n`, and end
+ * with a trailing newline. UTF-8 throughout.
+ *
+ * TO PUBLISH A CHANGE: publish the besigner edit first, confirm the live page
+ * serves it, capture a new snapshot under the new version's directory, then
+ * bump `PUBLISHER_AGREEMENT_VERSION` and these two values together. Never
+ * hand-write a snapshot: it is evidence of what a publisher was shown, and a
+ * snapshot of unpublished text is a false record.
+ */
+export const PUBLISHER_AGREEMENT_SHA256 =
+  'cbf4afe0b5a1fb97a955f8c61c9e041d0a7bd4b115cc0d5270067cc9844d1885'
+
+/** Byte length of the same snapshot — a cheap second check on the content. */
+export const PUBLISHER_AGREEMENT_BYTES = 12083
+
 /** Canonical document, on the marketing domain beside the other terms. */
 export const PUBLISHER_AGREEMENT_URL =
   'https://aglyn.com/legal/marketplace-publisher-agreement'
@@ -151,9 +191,18 @@ export const PUBLISHER_AGREEMENT_POINTS: readonly {
   },
 ]
 
-/** A recorded acceptance: which version, by whom, when. */
+/**
+ * A recorded acceptance: which version, of which exact bytes, by whom, when.
+ *
+ * `sha256`/`bytes` (AGL-1678) pin the acceptance to the archived snapshot of
+ * the text the publisher was shown. Optional because records written before
+ * the pin existed carry only the version string — absence means "accepted
+ * before 2026-08-17", not "accepted nothing".
+ */
 export interface PublisherAgreementAcceptance {
   version?: string
+  sha256?: string
+  bytes?: number
   acceptedBy?: string
   acceptedAt?: unknown
 }

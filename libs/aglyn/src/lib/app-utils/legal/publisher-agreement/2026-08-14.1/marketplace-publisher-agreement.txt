@@ -1,0 +1,177 @@
+Last updated: August 14, 2026
+Agreement version: 2026-08-14.1
+This Marketplace Publisher Agreement (this "
+Agreement
+") governs your publication and distribution of plugins, components, layouts, templates, dataset schemas, email templates, and other artifacts (each, an "
+Artifact
+") through the Aglyn community marketplace (the "
+Marketplace
+") operated by
+Aglyn LLC
+, a Texas limited liability company ("
+Aglyn
+," "
+we
+," "
+us
+," or "
+our
+").
+This Agreement supplements and is incorporated into the
+Terms of Service
+, including Section 12.3 ("Marketplace & Templates"), and is subject to the
+Acceptable Use Policy
+and the
+End User Licence Agreement
+. If there is a conflict, the Terms of Service control unless this Agreement expressly states otherwise.
+The publishing party is an organization, not an individual.
+Acceptance is recorded for the Aglyn organization that owns the publisher profile ("
+you
+" or "
+Publisher
+"). The individual who accepts represents that they are authorized to bind that organization. Every member of the organization who is permitted to publish acts under this Agreement, whether or not they were the person who accepted it.
+By accepting this Agreement, and by publishing any Artifact, you agree to it.
+1. Pre-Release Program
+The Marketplace is
+pre-release and provided "AS IS" and "AS AVAILABLE."
+Listing rules, review criteria, fee structures, distribution mechanics, and the Marketplace itself may change or be discontinued at any time, with or without notice, as set out in Terms of Service Section 5.1.
+Do not build a business that depends on the Marketplace continuing to exist in its current form.
+2. Your Grant to Aglyn
+For each Artifact you submit, you grant Aglyn a
+worldwide, non-exclusive, royalty-free, sublicensable
+license, for the duration of the listing and for as long as any installation of it remains active, to:
+host, store, reproduce, and transmit
+the Artifact's bytes, including retaining immutable copies of every published version;
+analyze and statically verify
+the Artifact, including automated inspection of its code;
+distribute and sublicense
+the Artifact to organizations that install it, on the license terms you declare for it;
+reproduce and display
+your listing content — name, description, README, changelog, logo, screenshots, and links — in the Marketplace, in the console, in documentation, and in promotional material about the platform; and
+use your organization name and marks
+solely to identify you as the publisher of your Artifacts.
+You retain ownership of your Artifacts.
+This license survives removal of a listing to the extent necessary to continue serving installations that already exist
+, because installs pin a specific version and Aglyn cannot retroactively change code already running on a customer's site.
+3. What You Warrant About Each Version
+You represent and warrant,
+for each version you publish and as of the moment you publish it
+, that:
+(a) Rights.
+You own or have all rights necessary to publish, license, and distribute the Artifact and everything in it, including every third-party dependency, asset, font, and code sample.
+(b) Licensing.
+The license you declare is accurate, is compatible with every component of the Artifact, and permits the distribution described in Section 2. Open-source obligations of any included code are satisfied.
+(c) Provenance.
+Any repository URL you provide is public and contains the source corresponding to the bytes you uploaded.
+(d) Conduct.
+The Artifact does not contain malware, spyware, cryptominers, backdoors, undisclosed telemetry, or code designed to evade review, escape the sandbox, or circumvent quotas, entitlements, licensing, or billing.
+(e) Disclosure.
+The Artifact's documentation accurately describes what data it reads, stores, or transmits, and to where; and every network host it declares is one it actually requires.
+(f) Compliance.
+The Artifact and its listing comply with applicable law, the Acceptable Use Policy, and applicable export-control and sanctions requirements.
+(g) Data protection.
+If the Artifact processes personal data of an installing organization's end users, you do so only as described in your documentation, and you are independently responsible for your own compliance obligations as a controller or processor of that data.
+These warranties are made per version.
+Publishing a new version restates all of them for that version's bytes.
+4. Pre-Submission Statements
+Before a version enters the review queue you will be asked to confirm specific statements about it.
+Those confirmations are recorded with your identity, the date, and a cryptographic hash of the exact bytes they were made about.
+They are contractual representations under Section 3, not a formality, and a knowingly false confirmation is a material breach of this Agreement.
+5. Review, Sandboxing, and Signing
+5.1 Review is not approval of your code.
+Every version is reviewed before it can be installed. Review is a
+limited screening for platform safety and listing quality — not an audit, endorsement, certification, or guarantee
+that the Artifact is secure, correct, fit for any purpose, or free of defects or infringement. Installers rely on your Artifact at their own risk and yours, not ours.
+5.2 Review is per version.
+Approval of one version says nothing about any other version. A previously approved version continues to be installable while a newer one is in the queue.
+5.3 Sandboxing.
+Artifacts execute sandboxed by default. Elevated ("realm-trusted") execution requires a signature Aglyn issues at its sole discretion and
+may revoke at any time
+.
+5.4 We may decline.
+Aglyn may reject, delist, hide, or decline to review any submission for any reason or no reason, including reasons unrelated to the quality of your code.
+6. Immutability and Version Pinning
+Published artifact bytes are
+content-addressed and immutable
+. Installations pin a specific version and hash.
+You cannot alter, replace, or withdraw code that a customer has already installed
+— you can only publish a new version and let installers choose to upgrade. Plan accordingly: a mistake ships until someone updates.
+7. Suspension, Removal, and Emergency Revocation
+7.1 Ordinary removal.
+Either party may remove a listing from the Marketplace at any time. Removal stops new installations; it does not by itself stop existing ones.
+7.2 Emergency revocation.
+Where Aglyn believes in good faith that a version presents a security, legal, privacy, or safety risk,
+Aglyn may disable that version on every site where it is installed, immediately and without prior notice.
+You agree this capability is necessary to operate a platform that executes third-party code, and you will not challenge its exercise as a breach of this Agreement. We will make reasonable efforts to notify you promptly afterwards.
+7.3 Intellectual-property complaints.
+Listings are subject to the
+Copyright and DMCA Policy
+and to Aglyn's repeat-infringer policy.
+8. Paid Listings, Fees, and Payouts
+8.1 How a paid sale is processed.
+For paid Artifacts, you license the Artifact to the installing organization on the terms you declare for it.
+Aglyn operates the Marketplace and processes the purchase transaction on its own payment account
+, and is the merchant of record for that transaction with the installing organization. Your share of the sale is paid to your own connected
+Stripe Connect
+account by transfer. You are responsible for satisfying Stripe's identity, onboarding, and compliance requirements for that account, and your use of it is subject to Stripe's terms.
+8.2 Aglyn's fee.
+Aglyn takes a platform fee on each paid transaction, disclosed in the console at the time of listing.
+Fees may change at any time, with or without notice
+(Terms of Service Sections 5.1 and 4.7). Continuing to offer a paid listing after a change is acceptance of it.
+8.3 Taxes.
+Aglyn determines, collects, and remits sales, use, and similar transaction taxes on paid Marketplace sales
+, as the operator of the Marketplace. Those taxes are added to the listing price at checkout rather than taken out of it, and your share is calculated on the pre-tax price.
+You remain responsible for every other tax arising from your Marketplace income
+, including income, franchise, and self-employment taxes, and for any withholding, reporting, or registration obligations that apply to you or to payouts made to you. Nothing in this Agreement makes Aglyn responsible for your tax affairs.
+8.4 Refunds and chargebacks.
+You are responsible for refunds, chargebacks, and disputes on your sales. Aglyn may reverse or withhold amounts corresponding to refunded, disputed, or fraudulent transactions.
+8.5 Support.
+You are responsible for supporting your own Artifacts. Aglyn provides no support for third-party Artifacts and may direct installers to you.
+9. Indemnity
+You will
+defend, indemnify, and hold harmless
+Aglyn and its members, officers, employees, and agents from and against any claim, demand, loss, liability, damage, penalty, or expense (including reasonable attorneys' fees) arising out of or relating to: (a) your Artifacts or listing content; (b) any breach of this Agreement or of the warranties in Section 3; (c) any claim that an Artifact infringes or misappropriates a third party's intellectual property or other rights; (d) your handling of any personal data; or (e) any dispute between you and an installing organization or its end users.
+10. Disclaimers and Limitation of Liability
+The Marketplace is provided "AS IS" and "AS AVAILABLE."
+Aglyn makes no warranty that your Artifact will be reviewed, approved, listed, discovered, installed, or purchased, or that the Marketplace will generate any revenue.
+The limitations of liability in Terms of Service Section 15 apply to this Agreement in full.
+Without limiting them, Aglyn is not liable for lost sales, lost installs, lost data, reputational harm, or any consequence of delisting, revocation, review delay, or discontinuation of the Marketplace.
+11. Term, Termination, and Survival
+This Agreement begins when you accept it and continues until terminated.
+Either party may terminate at any time
+, with or without cause. On termination:
+your right to publish new versions ends immediately;
+Aglyn may delist your Artifacts;
+the license in Section 2 survives
+to the extent necessary to continue serving existing installations and to retain records of what was published; and
+Sections 3, 6, 7, 8.3–8.5, 9, 10, and 12 survive.
+Termination does not entitle you to a refund of any fee, nor relieve you of amounts owed.
+12. Changes to This Agreement
+Aglyn may revise this Agreement at any time by publishing a new
+Agreement version
+. A revision is not retroactive.
+You will be asked to accept the current version before your next publish, and you may not publish until you do.
+Prior acceptances are retained as a record of the terms each publication was made under; they are not silently carried forward across a version change.
+13. General
+13.1 Independent parties.
+Nothing here creates a partnership, joint venture, employment, or agency relationship. You are not Aglyn's agent and may not represent otherwise.
+13.2 No exclusivity.
+Nothing prevents Aglyn from developing, commissioning, or distributing artifacts that compete with yours.
+13.3 Governing law, venue, arbitration.
+Terms of Service Section 18 (arbitration and class-action waiver) and Section 19 (governing law —
+State of Texas
+; venue —
+Williamson County, Texas
+/ U.S. District Court for the Western District of Texas) apply to this Agreement.
+13.4 Assignment.
+You may not assign this Agreement without Aglyn's prior written consent, except to a successor to all or substantially all of your business that assumes it in full. Aglyn may assign freely.
+13.5 Entire agreement.
+This Agreement, together with the Terms of Service and the documents incorporated into it, is the entire agreement between the parties regarding the Marketplace.
+14. Contact
+Aglyn LLC
+(a Texas limited liability company)
+Legal:
+legal@aglyn.com
+General:
+info@aglyn.com
+© 2026 Aglyn LLC. All rights reserved.
