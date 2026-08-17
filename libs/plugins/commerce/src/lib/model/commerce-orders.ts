@@ -94,6 +94,44 @@ export interface OrderFulfillment {
   atMs: number
 }
 
+/**
+ * A card dispute against this order's charge (AGL-1787).
+ *
+ * The DISTINCTION a chargeback carries, kept off `status` on purpose. A lost
+ * dispute leaves the order `refunded` — that is what every reader of the status
+ * already means by it, and five entitlement gates (`gate.ts`, `download.ts`,
+ * `reviews.ts`, `membership-account.ts` and the glance card) match on the
+ * literal `'refunded'`, so a new terminal status would have left the shopper
+ * their digital downloads and their verified-purchase review. That is AGL-1546
+ * reproduced on the tenant side, and the reason this record sits BESIDE the
+ * status rather than replacing it: the money question is answered by `status`
+ * and `refundedCents`, the "by what door" question by this.
+ *
+ * Written whole rather than merged into, so a second dispute on the same charge
+ * cannot inherit the previous one's `outcome` — see the handler.
+ */
+export interface OrderDispute {
+  /** Stripe dispute id (`dp_…`). */
+  id: string
+  /** Stripe's dispute status verbatim, e.g. `needs_response`, `lost`. */
+  status: string
+  /** Stripe's reason code, e.g. `fraudulent`, `product_not_received`. */
+  reason?: string
+  /** Disputed cents — a partial dispute is less than the order total. */
+  amountCents: number
+  openedAtMs: number
+  /** Evidence deadline, when Stripe supplied one. */
+  evidenceDueByMs?: number
+  closedAtMs?: number
+  /** `won` | `lost` | `warning_closed`, set once the dispute closes. */
+  outcome?: string
+  /**
+   * Cents this dispute actually reversed on the order — a LOST dispute only,
+   * and capped against what was left, so it is not always `amountCents`.
+   */
+  reversedCents?: number
+}
+
 /** `hosts/{hostId}/orders/{id}` doc. */
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
@@ -118,6 +156,8 @@ export interface HostOrder {
   /** Draft orders (AGL-287): the link sent to the buyer. */
   paymentLinkUrl?: string
   refundedCents?: number
+  /** The card dispute against this charge, open or settled (AGL-1787). */
+  dispute?: OrderDispute
   createdAtMs?: number
   // Legacy Commerce Starter fields (AGL-90) kept readable.
   productId?: string

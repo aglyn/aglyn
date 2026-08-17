@@ -225,6 +225,14 @@ if (webhookUrl) {
       'invoice.finalized',
       'invoice.paid',
       'invoice.payment_failed',
+      // Card disputes (AGL-1787): `created` flags the order and warns the
+      // merchant while the evidence window is open; `closed` is the only one
+      // that moves money, and only when `status` is `lost`. Note this list is
+      // used ONLY when the endpoint is CREATED — an endpoint that already
+      // exists is left alone above, so adding an event here does not add it to
+      // the live endpoint. Do that in the dashboard.
+      'charge.dispute.created',
+      'charge.dispute.closed',
     ]
     if (DRY_RUN) {
       console.log(`! webhook endpoint for ${webhookUrl} MISSING (would be created)`)

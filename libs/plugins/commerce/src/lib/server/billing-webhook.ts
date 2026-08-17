@@ -33,6 +33,7 @@ import {
   sendEmail,
 } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
+import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 
 /**
@@ -151,6 +152,290 @@ async function redeemExistingOrRecord(
       }),
     })
     .catch(() => undefined)
+}
+
+/** gRPC `Status.FAILED_PRECONDITION` — Firestore's "this query needs an index". */
+const GRPC_FAILED_PRECONDITION = 9
+
+/**
+ * The order a card dispute is against (AGL-1787), or null.
+ *
+ * A dispute carries NO metadata — Stripe copies none from the session or the
+ * payment intent — so this branch cannot self-select on `object.metadata.type`
+ * the way every other section of this file does. The lookup IS the selection:
+ * the platform account also carries marketplace plugin purchases, Aglyn's own
+ * subscription billing and booking payments, and a dispute on any of those
+ * reaches this handler too. Finding no commerce order means the dispute is not
+ * commerce's, which is the COMMON case and must stay silent — an alert or a
+ * counter here would fire on every marketplace dispute AGL-1554 handles.
+ *
+ * `payment_intent` is the join, exactly as AGL-1546 joined `charge.refunded` to
+ * a marketplace purchase. It is used only as a query VALUE and never as a
+ * document id, so the reserved-id hazard (`__x__` earning `INVALID_ARGUMENT` at
+ * the service rather than throwing at `.doc()`) cannot arise here.
+ *
+ * TWO MATCHES REFUSE. A payment intent belongs to one charge and one order, so
+ * a second match is corrupt data; reversing an arbitrary one of them is a coin
+ * flip and reversing both double-counts. Refuse and log — the dispute is
+ * durable in Stripe and a human reconciles.
+ *
+ * The `collectionGroup` needs a COLLECTION_GROUP-scoped single-field index on
+ * `orders.paymentIntentId`, declared in `cloud/firebase-firestore.indexes.json`
+ * beside the `installs.listingId` one. Until that index deploys the query fails
+ * `FAILED_PRECONDITION`, which is caught here rather than thrown: a throw
+ * propagates through `runBillingWebhookHandlers` into a 500, and Stripe
+ * redelivers an event whose failure NO redelivery can fix — an infinite retry
+ * loop. Every other failure is transient and rethrows on purpose, because there
+ * a redelivery is exactly the right answer.
+ */
+async function findOrderForDispute(
+  paymentIntentId: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
+  const matches = await firebaseAdmin
+    .app()
+    .firestore()
+    .collectionGroup('orders')
+    .where('paymentIntentId', '==', paymentIntentId)
+    .limit(2)
+    .get()
+    .catch((error: { code?: number }) => {
+      if (error?.code !== GRPC_FAILED_PRECONDITION) throw error
+      console.error(
+        'Dispute lookup needs the collection-group index on ' +
+          'orders.paymentIntentId (AGL-1787)',
+        error,
+      )
+      return null
+    })
+  if (!matches || matches.empty) return null
+  if (matches.docs.length > 1) {
+    console.error(
+      'Dispute matched more than one order; reversing none',
+      paymentIntentId,
+    )
+    return null
+  }
+  return matches.docs[0]
+}
+
+/** The fields of a Stripe Dispute this handler reads. */
+interface StripeDispute {
+  id?: string
+  status?: string
+  reason?: string
+  /** Disputed cents, which can be less than the charge. */
+  amount?: number
+  /** Unix SECONDS, as every Stripe timestamp is. */
+  created?: number
+  payment_intent?: string
+  evidence_details?: { due_by?: number }
+}
+
+/** The dispute record this event describes, before any outcome is known. */
+function disputeFromEvent(dispute: StripeDispute): CommerceModel.OrderDispute {
+  const dueBy = Number(dispute?.evidence_details?.due_by ?? 0)
+  return {
+    id: String(dispute?.id ?? ''),
+    status: String(dispute?.status ?? ''),
+    ...(dispute?.reason ? { reason: String(dispute.reason) } : {}),
+    amountCents: Math.max(0, Math.round(Number(dispute?.amount ?? 0))),
+    openedAtMs: Number(dispute?.created ?? 0) * 1000 || Date.now(),
+    ...(dueBy > 0 ? { evidenceDueByMs: dueBy * 1000 } : {}),
+  }
+}
+
+/**
+ * `charge.dispute.created`: FLAG the order, reverse nothing (AGL-1787).
+ *
+ * A dispute can be WON, and this is the whole reason the reversal waits for
+ * `closed`. Nothing here un-writes: `recordContactRefund` is monotonic by
+ * construction (AGL-1754 chose counters over decrements precisely so a reader
+ * can never be handed a number that went backwards), so a reversal written on
+ * `created` and reversed again on a win would need a decrement the contact
+ * writer deliberately does not have. Waiting means a win has NOTHING to undo,
+ * which is a stronger guarantee than undoing correctly. AGL-1554 states the
+ * same rule for the marketplace side.
+ *
+ * What the merchant gets is the thing they actually need on day one: notice,
+ * with the evidence deadline, while there is still time to respond.
+ *
+ * The write is `update()` on the whole `dispute` field, not a merge into it.
+ * A merge recurses, so a SECOND dispute opened on the same charge after a win
+ * would inherit the first one's `outcome`, `closedAtMs` and `reversedCents` —
+ * an open dispute reading as already settled. `update()` replaces a nested map
+ * wholesale, which is the semantics this wants, and the transaction has just
+ * proven the document exists so it cannot `NOT_FOUND`.
+ */
+async function recordDisputeOpened(
+  snapshot: FirebaseFirestore.QueryDocumentSnapshot,
+  dispute: StripeDispute,
+): Promise<{ opened: boolean; record: CommerceModel.OrderDispute }> {
+  const record = disputeFromEvent(dispute)
+  const opened = await firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction) => {
+      const fresh = await transaction.get(snapshot.ref)
+      if (!fresh.exists) return false
+      const order = CommerceModel.liftLegacyOrder((fresh.data() ?? {}) as never)
+      // Once-only, keyed on the DOCUMENT, which is how every section of this
+      // file guards a redelivery ("idempotent by doc key") and how AGL-1754
+      // made its status flip observable exactly once. A claim in
+      // `apiIdempotency` would be worse here, not better: its key would have to
+      // be the Stripe event id, which never changes, so a process killed
+      // between the claim and the record would strand it and the redelivery —
+      // the only retry a webhook has — would be turned away forever. An HTTP
+      // caller escapes a stranded claim with a fresh key; a webhook cannot.
+      // Reading the order inside the transaction that writes it has no such
+      // window.
+      //
+      // Any stored record of THIS dispute means `created` already landed, or
+      // `closed` beat it here; a DIFFERENT id is a genuine second dispute on
+      // the same charge and does replace it.
+      if (order.dispute?.id === record.id) return false
+      const amount = `$${(record.amountCents / 100).toFixed(2)}`
+      transaction.update(snapshot.ref, {
+        dispute: record,
+        timeline: CommerceModel.appendOrderEvent(
+          order,
+          'dispute',
+          `Chargeback opened for ${amount}` +
+            (record.reason ? ` (${record.reason.replace(/_/g, ' ')})` : '') +
+            (record.evidenceDueByMs
+              ? ` — evidence due ${new Date(record.evidenceDueByMs)
+                  .toISOString()
+                  .slice(0, 10)}`
+              : ''),
+          record.openedAtMs,
+        ),
+      })
+      return true
+    })
+  return { opened, record }
+}
+
+/**
+ * `charge.dispute.closed`: the only event that moves money (AGL-1787).
+ *
+ * `status` is `won`, `lost` or `warning_closed`. Only `lost` reverses; the
+ * other two record the outcome and leave every figure alone, which costs
+ * nothing precisely because `created` reversed nothing.
+ *
+ * A LOSS IS RECORDED AS A REFUND, and that is the decision. Money reversed is
+ * money reversed whichever door it left by, so it lands in the fields AGL-1754
+ * built for it — `refundedCents` on the order, `refundedCents` /
+ * `refundedOrdersCount` / `lastRefundAtMs` on the contact — and the order
+ * reaches `refunded`. What the merchant sees as DIFFERENT is the wording: the
+ * order timeline says "charged back", the contact timeline says "charged back"
+ * (the `kind` parameter AGL-1754 shipped for exactly this handler), and the
+ * `dispute` record beside the status carries the reason, the amount and the
+ * outcome. The alternative — a `disputed` status — is measured in
+ * `OrderDispute`'s comment: it would have escaped five gates that match on
+ * `'refunded'` and left the shopper their downloads.
+ *
+ * THE CAP is `refund.ts`'s: this attempt against what is LEFT, never the order
+ * total. A merchant who already refunded half and then loses a dispute for the
+ * full amount reverses only the remaining half — the buyer cannot be given the
+ * same money twice, and Stripe's own dispute is against the net charge.
+ *
+ * THE STATUS FLIP asks `canTransitionOrder` rather than forcing `refunded`, so
+ * a cancelled order records the loss without the chargeback rewriting a
+ * terminal state the merchant chose. `closedTheOrder` then needs no separate
+ * `!== 'refunded'` test: an order already in `refunded` has no legal transition
+ * out of it, so `canTransitionOrder` is false and the flip is observable
+ * exactly once — the AGL-1754 finding that `fullyRefunded` is NOT a once-only
+ * signal, inherited rather than rediscovered. Two partial refunds settling
+ * either side of this dispute can all three compute "fully refunded"; only the
+ * transaction that reads the status it is about to write may increment.
+ *
+ * THE DISPUTE FEE (typically $15) is not recorded anywhere on the order. These
+ * are DESTINATION charges — `payment_intent_data[transfer_data][destination]`
+ * with no `on_behalf_of` — so the dispute and its fee are debited from the
+ * PLATFORM's balance, not the merchant's. It is not money the customer handed
+ * over and not money the merchant lost, so it belongs neither in `ltvCents` nor
+ * in the order's totals, and stamping Aglyn's cost onto a merchant-facing
+ * document would assert a loss they did not take. Whether the platform should
+ * RECOVER the principal by reversing the transfer is a real policy question
+ * with a merchant-agreement answer attached, and is filed rather than guessed.
+ */
+async function recordDisputeClosed(
+  snapshot: FirebaseFirestore.QueryDocumentSnapshot,
+  dispute: StripeDispute,
+): Promise<{
+  recorded: boolean
+  lost: boolean
+  reversedCents: number
+  closedTheOrder: boolean
+  customerEmail: unknown
+}> {
+  const event = disputeFromEvent(dispute)
+  const outcome = String(dispute?.status ?? '')
+  const lost = outcome === 'lost'
+  return firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction) => {
+      const idle = {
+        recorded: false,
+        lost,
+        reversedCents: 0,
+        closedTheOrder: false,
+        customerEmail: null as unknown,
+      }
+      const fresh = await transaction.get(snapshot.ref)
+      if (!fresh.exists) return idle
+      const order = CommerceModel.liftLegacyOrder((fresh.data() ?? {}) as never)
+      const stored = order.dispute
+      // Already settled: a plain redelivery of this same `closed`.
+      if (stored?.id === event.id && stored.closedAtMs) return idle
+      const totalCents =
+        order.totals?.totalCents ?? Number(order.amountCents ?? 0)
+      const alreadyReversed = Number(order.refundedCents ?? 0)
+      const reversedCents = lost
+        ? Math.max(0, Math.min(event.amountCents, totalCents - alreadyReversed))
+        : 0
+      const reversedTotal = alreadyReversed + reversedCents
+      const fullyReversed = reversedCents > 0 && reversedTotal >= totalCents
+      const closedTheOrder =
+        fullyReversed &&
+        CommerceModel.canTransitionOrder(order.status, 'refunded')
+      const closedAtMs = Date.now()
+      const amount = `$${(reversedCents / 100).toFixed(2)}`
+      transaction.update(snapshot.ref, {
+        ...(reversedCents > 0 ? { refundedCents: reversedTotal } : {}),
+        ...(closedTheOrder ? { status: 'refunded' } : {}),
+        dispute: {
+          ...event,
+          // The open time from the `created` this closes, when we saw it —
+          // `closed` can arrive without it (a lost event, or a subscription
+          // added late), and `disputeFromEvent` falls back to the dispute's
+          // own `created` for that case.
+          ...(stored?.id === event.id && stored.openedAtMs
+            ? { openedAtMs: stored.openedAtMs }
+            : {}),
+          status: outcome,
+          outcome,
+          closedAtMs,
+          reversedCents,
+        },
+        timeline: CommerceModel.appendOrderEvent(
+          order,
+          'dispute',
+          lost
+            ? `${amount} charged back (dispute lost)` +
+                (closedTheOrder ? ' (full)' : '')
+            : `Dispute ${outcome.replace(/_/g, ' ')} — no money reversed`,
+          closedAtMs,
+        ),
+      })
+      return {
+        recorded: true,
+        lost,
+        reversedCents,
+        closedTheOrder,
+        customerEmail: order.customerEmail,
+      }
+    })
 }
 
 /**
@@ -1721,4 +2006,91 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
+
+  // Card disputes against a merchant's store (AGL-1787).
+  //
+  // Commerce subscribed no `charge.dispute.*` event at all, so a shopper
+  // chargeback reversed NOTHING: the order stayed `paid`, `refundedCents`
+  // stayed 0 so the orders CSV reported the sale as kept (AGL-1747), the
+  // buyer's contact kept its full `ltvCents` with no reversal beside it
+  // (AGL-1754), the shopper kept every download and membership the five
+  // `'refunded'` gates would have withdrawn, and no manager was told a dispute
+  // existed while there was still time to answer it.
+  //
+  // TWO events, and only one of them touches money. `created` flags and
+  // notifies; `closed` settles, reversing only on `status: 'lost'`. The
+  // lifecycle's other events are deliberately NOT subscribed:
+  // `charge.dispute.funds_withdrawn` and `funds_reinstated` describe the
+  // PLATFORM's balance moving on a destination charge, not the merchant's, so
+  // stamping them on a merchant's order would assert a movement that did not
+  // happen in their account; `charge.dispute.updated` is evidence-submission
+  // churn with no ledger consequence.
+  //
+  // The endpoint must subscribe both events for any of this to run —
+  // `tools/scripts/setup-stripe.mjs` now creates them, and the EXISTING live
+  // endpoint needs them added by hand (that script never edits an endpoint it
+  // finds). AGL-1554 will add its own `closed` branch for the marketplace
+  // side; the two coexist because each self-selects by finding its own record.
+  if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
+    const dispute = (object ?? {}) as StripeDispute
+    const paymentIntentId = String(dispute.payment_intent ?? '')
+    const snapshot = paymentIntentId
+      ? await findOrderForDispute(paymentIntentId)
+      : null
+    // Not a commerce order: a marketplace, booking or platform-billing charge
+    // was disputed. Silence is the correct answer, see `findOrderForDispute`.
+    if (snapshot) {
+      const hostId = String(snapshot.ref.parent.parent?.id ?? '')
+      if (type === 'charge.dispute.created') {
+        const { opened, record } = await recordDisputeOpened(snapshot, dispute)
+        if (opened && hostId) {
+          // Time-critical — Stripe's evidence window is days, not weeks — so
+          // this is awaited rather than fired off with `void`: the handler is
+          // serverless and work left running past the response is work the
+          // container may be frozen before it finishes. `notifyHostManagers`
+          // never throws.
+          await notifyHostManagers(hostId, {
+            type: 'content.order',
+            title: `Chargeback opened — $${(record.amountCents / 100).toFixed(2)}`,
+            body:
+              `Order ${snapshot.id} was disputed` +
+              (record.reason ? ` (${record.reason.replace(/_/g, ' ')})` : '') +
+              (record.evidenceDueByMs
+                ? `. Evidence is due ${new Date(record.evidenceDueByMs)
+                    .toISOString()
+                    .slice(0, 10)}.`
+                : '. Respond in Stripe.'),
+            link: `/${hostId}/orders`,
+          })
+        }
+      } else {
+        const settled = await recordDisputeClosed(snapshot, dispute)
+        if (settled.recorded && hostId) {
+          await notifyHostManagers(hostId, {
+            type: 'content.order',
+            title: settled.lost
+              ? `Chargeback lost — $${(settled.reversedCents / 100).toFixed(2)} reversed`
+              : 'Chargeback resolved in your favor',
+            body: `Order ${snapshot.id}`,
+            link: `/${hostId}/orders`,
+          })
+          // The customer's side of the ledger (AGL-1754), through the same
+          // writer a refund uses and with `kind` set so the contact's timeline
+          // says "charged back". Skipped when nothing was reversed: a won
+          // dispute moved no money, and a lost one that found nothing left to
+          // reverse would otherwise record a $0 entry against the buyer.
+          if (settled.reversedCents > 0) {
+            await recordContactRefund({
+              hostId,
+              orderId: snapshot.id,
+              email: settled.customerEmail,
+              amountCents: settled.reversedCents,
+              closedTheOrder: settled.closedTheOrder,
+              kind: 'chargeback',
+            })
+          }
+        }
+      }
+    }
+  }
 }
