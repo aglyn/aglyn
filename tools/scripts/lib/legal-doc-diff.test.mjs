@@ -31,15 +31,20 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DOC_TO_SLUG,
+  collectTocFromMarkdownLite,
   compareLegalDocument,
   decodeHtmlEntities,
+  docMarkdownToMarkdownLite,
   docToBlockLines,
+  extractLiveTocAnchors,
   htmlToBlockLines,
   normalizeLegalLine,
   overallExitCode,
   parseGdocPointer,
+  renderTocPreview,
   sliceContentBlock,
   slugForPointerName,
+  slugifyHeadingMirror,
 } from './legal-doc-diff.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -269,6 +274,179 @@ describe('compareLegalDocument', () => {
     const { caveats } = compareLegalDocument(LIVE_HTML, 'just some text')
     assert.ok(caveats.some((c) => c.includes('Doc has no "Last updated:"')))
     assert.ok(caveats.some((c) => c.includes('Doc has no closing')))
+  })
+})
+
+// A Drive `text/markdown` export, shrunk to the shapes Google actually emits:
+// backslash-escaped punctuation, an H1 title above the content block, deep
+// and shallow headings, `*` bullets, underscore emphasis, a rule, a fence.
+const DOC_MARKDOWN = [
+  '# Example Policy',
+  '',
+  '**Last updated: August 5, 2026**',
+  '',
+  'This governs Aglyn\\-hosted services\\.',
+  '',
+  '---',
+  '',
+  '# 1. Scope',
+  '',
+  '* every __site__',
+  '+ every _workspace_',
+  '',
+  '#### Fine print',
+  '',
+  '1\\. first element',
+  '2) second element',
+  '',
+  '```',
+  '## not a heading, and \\- stays verbatim',
+  '```',
+  '',
+  '~~struck~~ text',
+  '',
+  '© 2026 Aglyn LLC. All rights reserved.',
+  '',
+  'Footer junk after the copyright line.',
+].join('\n')
+
+describe('docMarkdownToMarkdownLite', () => {
+  const { text, foundStart, foundEnd } = docMarkdownToMarkdownLite(DOC_MARKDOWN)
+
+  it('slices to the content block: Last updated through ©, title and footer out', () => {
+    assert.ok(foundStart && foundEnd)
+    assert.ok(text.startsWith('**Last updated: August 5, 2026**\n'))
+    assert.ok(text.endsWith('© 2026 Aglyn LLC. All rights reserved.\n'))
+    assert.ok(!text.includes('Example Policy'), 'the H1 title precedes the block')
+    assert.ok(!text.includes('Footer junk'))
+  })
+
+  it('unescapes Google backslash escapes — the dialect has none', () => {
+    assert.ok(text.includes('Aglyn-hosted services.'))
+    assert.ok(text.includes('1. first element'))
+    assert.ok(!/\\[-.]/.test(text.replace(/```[\s\S]*?```/, '')))
+  })
+
+  it('clamps headings to the dialect 2|3 (AGL-1082)', () => {
+    assert.ok(text.includes('\n## 1. Scope\n'), 'h1 must become h2')
+    assert.ok(text.includes('\n### Fine print\n'), 'h4 must become h3')
+    assert.ok(!/^# /m.test(text), 'no level-1 heading may survive')
+    assert.ok(!/^#{4,}/m.test(text), 'no level-4+ heading may survive')
+  })
+
+  it('folds bullets and underscore emphasis to the recognised forms', () => {
+    assert.ok(text.includes('- every **site**'))
+    assert.ok(text.includes('- every *workspace*'))
+    assert.ok(text.includes('2. second element'), '`n)` folds to `n.`')
+  })
+
+  it('drops rules and strikethrough markers, keeps the words', () => {
+    assert.ok(!/^---$/m.test(text))
+    assert.ok(text.includes('struck text'))
+    assert.ok(!text.includes('~~'))
+  })
+
+  it('passes fenced content through verbatim', () => {
+    assert.ok(text.includes('## not a heading, and \\- stays verbatim'))
+  })
+
+  it('preserves snake_case identifiers while folding emphasis', () => {
+    const out = docMarkdownToMarkdownLite(
+      'Last updated: now\n\nthe org_id and host_id fields\n\n© end\n',
+    )
+    assert.ok(out.text.includes('the org_id and host_id fields'))
+  })
+
+  it('degrades gracefully when the markers are missing', () => {
+    const out = docMarkdownToMarkdownLite('just a paragraph\n')
+    assert.equal(out.foundStart, false)
+    assert.equal(out.foundEnd, false)
+    assert.equal(out.text, 'just a paragraph\n')
+  })
+
+  it('accepts the italic © line a real Docs markdown export emits', () => {
+    // Measured on the EULA Doc, 2026-08-17: the export renders the closing
+    // line as `*© 2026 Aglyn LLC. All rights reserved.*`.
+    const out = docMarkdownToMarkdownLite(
+      'Last updated: now\n\nbody\n\n*© 2026 Aglyn LLC. All rights reserved.*\n\ntrailing junk\n',
+    )
+    assert.ok(out.foundEnd)
+    assert.ok(out.text.endsWith('All rights reserved.*\n'))
+    assert.ok(!out.text.includes('trailing junk'))
+  })
+})
+
+describe('slugifyHeadingMirror', () => {
+  // The tripwire for the mirror: this anchor was measured on the live site
+  // (aglyn.com/legal/eula, 2026-08-17). If libs/aglyn's slugifyHeading ever
+  // changes, regenerated TOCs will disagree with real pages and this test's
+  // premise — so the mirror and this pin must change with it.
+  it('matches an anchor the live site actually serves', () => {
+    assert.equal(slugifyHeadingMirror('1. Pre-Release Software'), '1-pre-release-software')
+  })
+
+  it('folds accents and falls back on all-punctuation headings', () => {
+    assert.equal(slugifyHeadingMirror('Résumé Review'), 'resume-review')
+    assert.equal(slugifyHeadingMirror('§§§'), 'section')
+  })
+})
+
+describe('collectTocFromMarkdownLite', () => {
+  it('collects ##/### with anchors, skipping fences, deduping repeats', () => {
+    const toc = collectTocFromMarkdownLite(
+      [
+        '## 1. Scope',
+        '### Notice',
+        '```',
+        '## fenced — not a heading',
+        '```',
+        '## Notice',
+        '## Notice',
+        'prose',
+      ].join('\n'),
+    )
+    assert.deepEqual(toc, [
+      { level: 2, text: '1. Scope', slug: '1-scope' },
+      { level: 3, text: 'Notice', slug: 'notice' },
+      { level: 2, text: 'Notice', slug: 'notice-2' },
+      { level: 2, text: 'Notice', slug: 'notice-3' },
+    ])
+  })
+
+  it('labels strip inline syntax the way the renderer does', () => {
+    const toc = collectTocFromMarkdownLite('## The **fine** [print](https://x.example)')
+    assert.equal(toc[0].text, 'The fine print')
+    assert.equal(toc[0].slug, 'the-fine-print')
+  })
+})
+
+describe('extractLiveTocAnchors + renderTocPreview', () => {
+  const liveHtml =
+    '<aside><a href="#1-scope">1. Scope</a><a href="#2-fees">2. Fees</a>' +
+    '<a href="#1-scope">dup</a></aside>'
+
+  it('extracts unique in-page anchors in order', () => {
+    assert.deepEqual(extractLiveTocAnchors(liveHtml), ['1-scope', '2-fees'])
+  })
+
+  it('reports unchanged anchors as unchanged', () => {
+    const lines = renderTocPreview(
+      [
+        { level: 2, text: '1. Scope', slug: '1-scope' },
+        { level: 2, text: '2. Fees', slug: '2-fees' },
+      ],
+      ['1-scope', '2-fees'],
+    )
+    assert.ok(lines.some((l) => l.includes('anchors: unchanged')))
+  })
+
+  it('names removed anchors — the inbound-link breakage — and added ones', () => {
+    const lines = renderTocPreview(
+      [{ level: 2, text: '1. Reach', slug: '1-reach' }],
+      ['1-scope'],
+    )
+    assert.ok(lines.some((l) => l.includes('REMOVED') && l.includes('#1-scope')))
+    assert.ok(lines.some((l) => l.includes('anchor added: #1-reach')))
   })
 })
 
