@@ -1690,6 +1690,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   { merge: true },
                 )
                 .catch(() => undefined)
+              // Adjustment ledger (AGL-1807): this was the one stock writer of
+              // four that moved the count and logged nothing, so a draft-link
+              // sale read as stock vanishing in the products hub's history —
+              // and the reason AGL-1797 could not derive its restock flag from
+              // this collection. Same shape and same swallowed failure as the
+              // cart and buy-now siblings; `orderId` is the ORDER doc id from
+              // the metadata, not `object.id` — unlike the siblings, this
+              // branch's session id names no order document.
+              await hostRef
+                .collection('inventoryAdjustments')
+                .add({
+                  productId: String(productId),
+                  variantId: soldVariantId,
+                  delta: -quantity,
+                  reason: 'sale',
+                  orderId: String(orderId),
+                  atMs: Date.now(),
+                } satisfies CommerceModel.InventoryAdjustment)
+                .catch(() => undefined)
             }
           }
         }

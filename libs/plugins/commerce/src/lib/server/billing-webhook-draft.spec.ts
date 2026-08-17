@@ -502,3 +502,91 @@ describe('paid draft order shipping (AGL-1792)', () => {
     ).toBe(7)
   })
 })
+
+/**
+ * The ledger row the decrement never wrote (AGL-1807).
+ *
+ * This branch was the one stock writer of four that moved the count and logged
+ * nothing: the cart loop, the buy-now branch and `pos-order.ts` all pair the
+ * variant decrement with an `inventoryAdjustments` row, so a draft-link sale
+ * was the only movement the products hub's stock history could not explain —
+ * and the reason AGL-1797's restock flag could not use the ledger as its
+ * source of truth.
+ */
+describe('paid draft order inventory ledger (AGL-1807)', () => {
+  function ledgerRows() {
+    return [...docs.entries()]
+      .filter(([path]) => path.startsWith('hosts/host-1/inventoryAdjustments/'))
+      .map(([, value]) => value)
+  }
+
+  /**
+   * THE DEFECT: before the fix this array was empty — the decrement two tests
+   * up landed with no history behind it. The shape matches the sibling
+   * writers' byte for byte, so `products-hub-card.component.tsx` renders it
+   * with no reader change.
+   */
+  it('logs the sale in the inventory ledger', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toEqual([
+      {
+        productId: 'product-1',
+        variantId: 'large',
+        delta: -3,
+        reason: 'sale',
+        orderId: 'order-1',
+        atMs: expect.any(Number),
+      },
+    ])
+  })
+
+  /**
+   * The row references the ORDER document. The siblings write
+   * `String(object.id)` because their order doc id IS the session id; here the
+   * draft was pre-created under `metadata.orderId`, and a row keyed to
+   * `cs_draft_1` would join to nothing — invisible next to the order, useless
+   * to AGL-1797's `where('orderId', '==', …)` shape.
+   */
+  it('references the order document, not the checkout session', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()[0]?.orderId).toBe('order-1')
+    expect(ledgerRows()[0]?.orderId).not.toBe('cs_draft_1')
+  })
+
+  /**
+   * `-quantity`, not `-1` — the AGL-1711 defect this same branch's neighbour
+   * had, pinned here so the ledger can never disagree with the decrement it
+   * explains.
+   */
+  it('logs the sold quantity, not one unit', async () => {
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()[0]?.delta).toBe(-3)
+  })
+
+  /** The redelivery guard covers the ledger exactly as it covers the count. */
+  it('logs once on a redelivered event', async () => {
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toHaveLength(1)
+  })
+
+  /**
+   * An untracked variant decrements nothing, so it must log nothing — a row
+   * for stock that did not move would corrupt the very history this fix
+   * completes (AGL-1797's argument, in the other direction). Passes before the
+   * fix too: it pins the row to the decrement's own guard.
+   */
+  it('logs nothing for an untracked variant', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      variants: [{ id: 'large', priceUsd: 15, sku: 'BOX-L' }],
+    })
+    await deliver(DRAFT_SESSION)
+    expect(ledgerRows()).toHaveLength(0)
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBeUndefined()
+  })
+})
