@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
+import { claimAttempt } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 
 /**
@@ -42,13 +43,52 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
   const checkOutDayMs = CommerceModel.toDayMs(Number(body.checkOutDayMs ?? 0))
   const guestName = String(body.guestName ?? '').trim().slice(0, 120)
   const guestEmail = String(body.guestEmail ?? '').trim().toLowerCase().slice(0, 120)
+  // One reservation attempt, minted by the widget (AGL-1697). Node lowercases
+  // incoming headers, but read both spellings — the plugin API request type
+  // makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
   if (!hostId || !resourceId || !checkInDayMs || !checkOutDayMs) {
     return res.status(400).json({ error: 'Missing reservation details' })
   }
 
+  let claim: AttemptClaim | null = null
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
+    // Owner + payment readiness, HOISTED above the claim (AGL-1697): both are
+    // deterministic refusals a merchant fixes out of band, and neither should
+    // burn the guest's attempt key.
+    const ownerOrg = await getOrgForHost(hostId)
+    const ownerId = ownerOrg?.org?.ownerUid
+    const ownerProfile = ownerId
+      ? await firestore.collection('profiles').doc(String(ownerId)).get()
+      : null
+    const accountId = ownerProfile?.get('stripeAccountId')
+    if (!accountId || !ownerProfile?.get('stripeChargesEnabled')) {
+      return res.status(409).json({ error: 'Payments are not set up yet' })
+    }
+
+    // The claim sits ABOVE the availability read, and that placement is the
+    // fix for this handler's particular lie (AGL-1697): a retried attempt used
+    // to collide with its OWN 30-minute pending hold and be told "Those dates
+    // just sold out" — about dates the guest was holding — where the correct
+    // answer was the original session URL. Replaying here means the retry
+    // never reaches the availability check at all. Every refusal below the
+    // claim releases it, because each is deterministic and retryable.
+    const claimed = await claimAttempt(firestore, {
+      kind: 'commerce-reserve',
+      scopeId: hostId,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+      busyMessage: 'This reservation is already being processed',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+
     const [resourceSnapshot, reservationsSnapshot] = await Promise.all([
       hostRef.collection('resources').doc(resourceId).get(),
       hostRef
@@ -58,7 +98,10 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
         .get(),
     ])
     const resource = resourceSnapshot.data() as CommerceModel.HostResource | undefined
-    if (!resource) return res.status(404).json({ error: 'Unknown resource' })
+    if (!resource) {
+      await claim.release()
+      return res.status(404).json({ error: 'Unknown resource' })
+    }
 
     // Pending holds block for 30 minutes only, so abandoned checkouts
     // release the dates.
@@ -78,6 +121,10 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     if (
       !CommerceModel.isRangeAvailable(resource, live, checkInDayMs, checkOutDayMs)
     ) {
+      // A GENUINE sold-out (a keyed retry replayed before reaching here). The
+      // guest picks other dates or the blocking stay is cancelled; either way
+      // the key must survive the refusal.
+      await claim.release()
       return res.status(409).json({ error: 'Those dates just sold out' })
     }
     const quote = CommerceModel.computeReservationQuote(
@@ -85,17 +132,11 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       checkInDayMs,
       checkOutDayMs,
     )
-    if (quote.problem) return res.status(400).json({ error: quote.problem })
-
-    const ownerOrg = await getOrgForHost(hostId)
-    const ownerId = ownerOrg?.org?.ownerUid
-    const ownerProfile = ownerId
-      ? await firestore.collection('profiles').doc(String(ownerId)).get()
-      : null
-    const accountId = ownerProfile?.get('stripeAccountId')
-    if (!accountId || !ownerProfile?.get('stripeChargesEnabled')) {
-      return res.status(409).json({ error: 'Payments are not set up yet' })
+    if (quote.problem) {
+      await claim.release()
+      return res.status(400).json({ error: quote.problem })
     }
+
     const feePct = Aglyn.resolveTransactionFeePct(
       ownerOrg?.org as any,
       'service',
@@ -154,6 +195,11 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // The half that costs real money (AGL-1697). Stripe replays the
+          // existing session for a repeated key instead of opening a second
+          // one, covering the window where the claim is written but the
+          // response never arrives.
+          ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
         },
         body: params.toString(),
       },
@@ -162,11 +208,21 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     if (!response.ok || !session.url) {
       console.error('Stripe reservation error', session.error)
       await reservationRef.delete().catch(() => undefined)
+      // The hold is rolled back, so the key must come back too — the guest
+      // presses the same button and the retry re-derives the same digest,
+      // which Stripe replays if the session did get created.
+      await claim.release()
       return res.status(502).json({ error: 'Payment setup failed' })
     }
-    return res.status(200).json({ url: session.url })
+    const payload = { url: session.url }
+    await claim.record(200, payload)
+    return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691's rule): the hold may or may not have landed, and it expires
+    // in 30 minutes either way.
+    await claim?.release()
     return res.status(500).json({ error: 'Reservation failed' })
   }
 }
