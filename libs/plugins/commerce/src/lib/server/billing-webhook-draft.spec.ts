@@ -848,3 +848,191 @@ describe('POS card sale stock (AGL-1825)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The low-stock crossing alert on this branch's two tenants (AGL-1826).
+ *
+ * THE DEFECT. Only buy-now followed its decrement with the AGL-281 crossing
+ * check, so a payment-link sale — and a POS card sale, which completes through
+ * this same branch — sold a product down to its threshold in silence while the
+ * storefront button notified every manager. The shared `alertLowStockCrossing`
+ * now sits beside both of this branch's decrements, fed the pre/post pair each
+ * caller just computed.
+ *
+ * `notifications` also carries this branch's `content.order` "Draft order
+ * paid" nudge, so every case filters to `content.lowStock`.
+ */
+describe('low-stock crossing alerts (AGL-1826)', () => {
+  const lowStockAlerts = () =>
+    notifications.filter(
+      (notification) => notification.type === 'content.lowStock',
+    )
+
+  /** product-1 at 10 with a threshold of 8: selling 3 crosses to 7. */
+  function trackProductOne(lowStockThreshold: number | undefined) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly box',
+      type: 'physical',
+      ...(lowStockThreshold != null ? { lowStockThreshold } : {}),
+      variants: [{ id: 'large', priceUsd: 15, sku: 'BOX-L', inventory: 10 }],
+    })
+  }
+
+  /**
+   * THE DEFECT, draft-link shape: before the fix this array was empty on the
+   * exact decrement (10 - 3 = 7, at the threshold of 8) that alerts from the buy-now button.
+   */
+  it('alerts when a draft-link sale crosses the threshold', async () => {
+    trackProductOne(8)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toEqual([
+      {
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'Low stock — Monthly box',
+        body: '7 left across tracked variants',
+        link: '/host-1/products',
+      },
+    ])
+  })
+
+  /** The pending-to-paid flip bounds the alert as it bounds the count. */
+  it('alerts once on a redelivered draft event', async () => {
+    trackProductOne(8)
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(1)
+  })
+
+  /**
+   * One nudge per breach, not one per order after it — the buy-now dedupe,
+   * preserved verbatim. Holds either side of the fix.
+   */
+  it('does not re-alert a product already below its threshold', async () => {
+    trackProductOne(20)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /** No threshold configured means no alert, ever. Holds either side. */
+  it('does not alert a product with no threshold', async () => {
+    trackProductOne(undefined)
+    await deliver(DRAFT_SESSION)
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /**
+   * The POS card tenant of this branch. The beanie's tracked total walks
+   * 13 down to 11 (wool line) down to 10 (cotton line): the compounded pair
+   * from the AGL-1825 loop means the crossing lands on the line that actually
+   * breaches, exactly once.
+   */
+  describe('for a POS card sale', () => {
+    const POS_LOW_ORDER = {
+      number: 13,
+      status: 'pending',
+      channel: 'pos',
+      registerId: 'register-1',
+      lineItems: [
+        {
+          productId: 'product-2',
+          variantId: 'wool',
+          name: 'Beanie',
+          productType: 'physical',
+          quantity: 2,
+          unitAmountCents: 2200,
+        },
+        {
+          productId: 'product-2',
+          variantId: 'cotton',
+          name: 'Beanie',
+          productType: 'physical',
+          quantity: 1,
+          unitAmountCents: 1800,
+        },
+      ],
+      totals: {
+        itemsCents: 6200,
+        shippingCents: 0,
+        taxCents: 0,
+        discountCents: 0,
+        feeCents: 0,
+        totalCents: 6200,
+      },
+      customerEmail: null,
+      timeline: [{ atMs: 2000, event: 'pos-card-pending' }],
+      createdAtMs: 2000,
+    }
+
+    const POS_LOW_SESSION = {
+      id: 'cs_pos_low',
+      payment_status: 'paid',
+      payment_intent: 'pi_pos_low',
+      amount_total: 6200,
+      customer_details: null,
+      metadata: {
+        type: 'commerce-draft',
+        hostId: 'host-1',
+        orderId: 'order-pos-low',
+      },
+    }
+
+    function trackBeanie(lowStockThreshold: number) {
+      docs.set('hosts/host-1/products/product-2', {
+        name: 'Beanie',
+        type: 'physical',
+        lowStockThreshold,
+        variants: [
+          { id: 'wool', priceUsd: 22, inventory: 9 },
+          { id: 'cotton', priceUsd: 18, inventory: 4 },
+        ],
+      })
+    }
+
+    beforeEach(() => {
+      docs.set('hosts/host-1/orders/order-pos-low', { ...POS_LOW_ORDER })
+    })
+
+    /**
+     * THE DEFECT, register shape: the channel most likely to be selling the
+     * last few units of shelf stock crossed silently. Threshold 10 is
+     * breached by the SECOND line (11 becomes 10), so the single alert also
+     * pins that sibling lines compound before the check runs.
+     */
+    it('alerts once, on the line that breaches', async () => {
+      trackBeanie(10)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toEqual([
+        {
+          hostId: 'host-1',
+          type: 'content.lowStock',
+          title: 'Low stock — Beanie',
+          body: '10 left across tracked variants',
+          link: '/host-1/products',
+        },
+      ])
+    })
+
+    /**
+     * Threshold 11 is breached by the FIRST line (13 becomes 11) and the
+     * second line starts already-low — the crossing fires there and only
+     * there. Paired with the threshold-10 case above, which a stale
+     * read-once pair would MISS entirely (13 to 11 and 13 to 12, neither
+     * low), the two pin that the check consumes the compounded pair.
+     */
+    it('alerts on the first line when that is the crossing one', async () => {
+      trackBeanie(11)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toHaveLength(1)
+      expect(lowStockAlerts()[0].body).toBe('11 left across tracked variants')
+    })
+
+    /** The pending-to-paid flip bounds the register's alert too. */
+    it('alerts once on a redelivered card event', async () => {
+      trackBeanie(10)
+      await deliver(POS_LOW_SESSION)
+      await deliver(POS_LOW_SESSION)
+      expect(lowStockAlerts()).toHaveLength(1)
+    })
+  })
+})

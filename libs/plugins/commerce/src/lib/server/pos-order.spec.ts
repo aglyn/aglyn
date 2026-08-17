@@ -148,6 +148,8 @@ const fakeFirestore = {
 
 /** Every `upsertHostContact` call the handler made, options verbatim (AGL-1748). */
 const contactUpserts: any[] = []
+/** Every manager notification the handler fired (AGL-1826). */
+const notifications: any[] = []
 
 const mockVerifyIdToken = jest.fn(async () => ({ uid: 'cashier-1' }))
 const mockOrg: any = {
@@ -174,6 +176,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   getOrgForHost: async () => mockOrg,
+  notifyHostManagers: async (hostId: string, notification: any) => {
+    notifications.push({ hostId, ...notification })
+  },
   upsertHostContact: async (options: any) => {
     contactUpserts.push(options)
   },
@@ -289,6 +294,7 @@ beforeAll(() => {
 beforeEach(() => {
   docs.clear()
   contactUpserts.length = 0
+  notifications.length = 0
   stripeCalls.length = 0
   stripeSessionsByKey.clear()
   autoIdCounter = 0
@@ -1238,5 +1244,151 @@ describe('POS cash sale with two lines of one product (AGL-1828)', () => {
       (docs.get('hosts/host-1/products/product-5') as any).variants[0]
         .inventory,
     ).toBe(7)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The low-stock crossing alert at the register (AGL-1826).
+ *
+ * THE DEFECT. Only the buy-now branch of `billing-webhook.ts` followed its
+ * decrement with the AGL-281 crossing check, so whether a merchant was told
+ * they were running out depended on which door the sale came through — and the
+ * register, the channel most likely to be selling down the last few units of
+ * physical shelf stock, crossed in silence. The shared
+ * `alertLowStockCrossing` now sits beside this loop's decrement too, fed the
+ * pre/post pair the loop just computed (never a re-read).
+ */
+describe('POS low-stock crossing alert (AGL-1826)', () => {
+  const lowStockAlerts = () =>
+    notifications.filter(
+      (notification) => notification.type === 'content.lowStock',
+    )
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 8,
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    docs.set('hosts/host-1/products/product-7', {
+      name: 'Beanie',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 10,
+      variants: [
+        { id: 'wool', priceUsd: 22, inventory: 9 },
+        { id: 'cotton', priceUsd: 18, inventory: 4 },
+      ],
+    })
+  })
+
+  /**
+   * THE DEFECT: before the fix this array was empty — the same basket bought
+   * through the storefront's buy-now button notified every manager.
+   */
+  it('alerts when a cash sale crosses the threshold', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-a' },
+    )
+    expect(lowStockAlerts()).toEqual([
+      {
+        hostId: 'host-1',
+        type: 'content.lowStock',
+        title: 'Low stock — Candle',
+        body: '7 left across tracked variants',
+        link: '/host-1/products',
+      },
+    ])
+  })
+
+  /**
+   * Two lines of one product cross ONCE, on the line that breaches — the
+   * AGL-1828 carry-forward is what makes the second line's `lifted` the first
+   * line's `updated` (13 becomes 11 becomes 10, crossing the threshold of 10
+   * on the cotton line), so this can neither double-fire nor miss.
+   */
+  it('fires once for two lines of one product, on the breaching line', async () => {
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 10000,
+        lines: [
+          { productId: 'product-7', variantId: 'wool', quantity: 2 },
+          { productId: 'product-7', variantId: 'cotton', quantity: 1 },
+        ],
+      },
+      { 'idempotency-key': 'low-b' },
+    )
+    expect(lowStockAlerts()).toHaveLength(1)
+    expect(lowStockAlerts()[0].title).toBe('Low stock — Beanie')
+    expect(lowStockAlerts()[0].body).toBe('10 left across tracked variants')
+  })
+
+  /**
+   * One nudge per threshold breach, not one per order after it — the buy-now
+   * branch's own dedupe, preserved verbatim. Holds either side of the fix.
+   */
+  it('does not re-alert a product already below its threshold', async () => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      lowStockThreshold: 20,
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-c' },
+    )
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /** No threshold configured means no alert, ever. Holds either side. */
+  it('does not alert a product with no threshold', async () => {
+    docs.set('hosts/host-1/products/product-6', {
+      name: 'Candle',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 12, inventory: 10 }],
+    })
+    await post(
+      {
+        payment: 'cash',
+        cashReceivedCents: 5000,
+        lines: [{ productId: 'product-6', quantity: 3 }],
+      },
+      { 'idempotency-key': 'low-d' },
+    )
+    expect(lowStockAlerts()).toHaveLength(0)
+  })
+
+  /**
+   * A replayed settlement never reaches the loop — the `claimAttempt` above
+   * it is the redelivery guard the webhook branches get from their `created`
+   * transactions, so the crossing is computed once and alerted once.
+   */
+  it('alerts once for a replayed settlement', async () => {
+    const body = {
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [{ productId: 'product-6', quantity: 3 }],
+    }
+    await post(body, { 'idempotency-key': 'low-e' })
+    await post(body, { 'idempotency-key': 'low-e' })
+    expect(orderDocs()).toHaveLength(1)
+    expect(lowStockAlerts()).toHaveLength(1)
   })
 })

@@ -35,6 +35,7 @@ import {
 import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
+import { alertLowStockCrossing } from './low-stock'
 import { flagOrderRestock } from './restock-flag'
 
 /**
@@ -1384,6 +1385,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               atMs: Date.now(),
             } satisfies CommerceModel.InventoryAdjustment)
             .catch(() => undefined)
+          // Low-stock crossing alert (AGL-1826): the cart — the channel that
+          // sells MORE units per order than the buy-now button — used to
+          // cross the threshold silently. Same check, per product; the
+          // `created` guard above bounds it on redelivery. Fires per crossing
+          // line, which for a multi-product basket is one nudge per product
+          // that breached.
+          alertLowStockCrossing(String(hostId), product, {
+            ...product,
+            variants,
+          })
         }
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
@@ -1709,6 +1720,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   atMs: Date.now(),
                 } satisfies CommerceModel.InventoryAdjustment)
                 .catch(() => undefined)
+              // Low-stock crossing alert (AGL-1826): a merchant-sent payment
+              // link used to sell a product down to its threshold in
+              // silence. The `pending` -> `paid` flip bounds redelivery.
+              alertLowStockCrossing(String(hostId), lifted, {
+                ...lifted,
+                variants,
+              })
             }
           } else {
             // POS card sale (AGL-1825). This branch's other tenant: the
@@ -1775,7 +1793,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // from these variants, not from the product as first read —
               // recomputing from the original would erase this decrement
               // when the sibling line's write landed.
-              paidProducts.set(lineProductId, { ...lineProduct, variants })
+              const updated = { ...lineProduct, variants }
+              paidProducts.set(lineProductId, updated)
               await hostRef
                 .collection('products')
                 .doc(lineProductId)
@@ -1806,6 +1825,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   atMs: Date.now(),
                 } satisfies CommerceModel.InventoryAdjustment)
                 .catch(() => undefined)
+              // Low-stock crossing alert (AGL-1826): the register is the
+              // channel most likely to be selling down the last few units of
+              // physical shelf stock, and crossed in silence. The compounded
+              // pair means two lines of one product cross exactly once, on
+              // the line that breaches; the `pending` -> `paid` flip bounds
+              // redelivery.
+              alertLowStockCrossing(String(hostId), lineProduct, updated)
             }
           }
         }
@@ -2068,18 +2094,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               .catch(() => undefined)
             // Low-stock alert (AGL-281): fires on the crossing sale only,
             // so managers get one nudge per threshold breach, not one per
-            // order after it.
-            if (
-              CommerceModel.isLowStock(updated) &&
-              !CommerceModel.isLowStock(lifted)
-            ) {
-              void notifyHostManagers(String(hostId), {
-                type: 'content.lowStock',
-                title: `Low stock — ${updated.name}`,
-                body: `${CommerceModel.productInventory(updated) ?? 0} left across tracked variants`,
-                link: `/${hostId}/products`,
-              })
-            }
+            // order after it. The check lived inline here — the one branch
+            // of four that had it — until AGL-1826 extracted it to sit
+            // beside every decrement; semantics unchanged.
+            alertLowStockCrossing(String(hostId), lifted, updated)
           }
         }
         if (couponCode) {
