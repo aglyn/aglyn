@@ -17,11 +17,13 @@
 
 import {
   buildRoute,
+  claimAttempt,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
   isReleaseFlagOn,
   pluginRequestFromWeb,
   Route,
+  type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
 import {
@@ -108,7 +110,16 @@ async function handler(request: Request): Promise<Response> {
     ? authorization.slice('Bearer '.length)
     : undefined
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  // One upgrade attempt, minted by the Billing page (AGL-1697). The
+  // subscription_exists guard below covers the SEQUENTIAL duplicate — once
+  // the webhook has mirrored a first subscription. This key covers the window
+  // before any subscription exists, where a double-click or a lost response
+  // used to open two sessions that could both complete.
+  const idempotencyKey = String(
+    headers['idempotency-key'] ?? headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
 
+  let claim: AttemptClaim | null = null
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
@@ -359,11 +370,35 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
+    // Point of no return (AGL-1697): the only thing left is the session
+    // itself. Every refusal — lockdown, membership, permission, the
+    // subscription_exists guard — sits above this line, so none of them burns
+    // the key; a churned org that is refused today pays with the same button
+    // tomorrow.
+    const claimed = await claimAttempt(firebaseAdmin.app().firestore(), {
+      kind: 'console-checkout',
+      scopeId: orgId,
+      orgId,
+      key: idempotencyKey,
+      busyMessage: 'This checkout is already being processed',
+    })
+    if ('replay' in claimed) {
+      return Response.json(claimed.replay.body as object, {
+        status: claimed.replay.status,
+      })
+    }
+    claim = claimed.claim
+
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${secretKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
+        // The half that is a recurring charge (AGL-1697): Stripe replays the
+        // existing session for a repeated key instead of opening a second
+        // subscription checkout, covering the window where the claim is
+        // written but the response never arrives.
+        ...(claim.stripeKey ? { 'Idempotency-Key': claim.stripeKey } : {}),
       },
       body: params.toString(),
     })
@@ -378,6 +413,11 @@ async function handler(request: Request): Promise<Response> {
     const token = embedded ? session.client_secret : session.url
     if (!response.ok || !token) {
       console.error('Stripe checkout error', session.error)
+      // Stripe answered, so nothing needs reconciling — hand the key back and
+      // let the same button work once the config or the network does. The
+      // retry re-derives the same digest, so a session that DID get created
+      // replays rather than doubling.
+      await claim.release()
       // A price id that is SET but does not exist in this Stripe mode is a
       // configuration fault, not a Stripe outage, and it used to read as
       // "Stripe checkout failed" (AGL-1137). The guard above only catches an
@@ -395,12 +435,15 @@ async function handler(request: Request): Promise<Response> {
     }
     // Never both: the client picks its path by which key is present, so
     // returning one shape per mode keeps that unambiguous.
-    return Response.json(
-      embedded ? { clientSecret: token } : { url: token },
-      { status: 200 },
-    )
+    const payload = embedded ? { clientSecret: token } : { url: token }
+    await claim.record(200, payload)
+    return Response.json(payload, { status: 200 })
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691's rule): no local writes happened, and a session Stripe did
+    // create replays under the re-derived digest.
+    await claim?.release()
     return Response.json({ error: 'Checkout failed' }, { status: 500 })
   }
 }
