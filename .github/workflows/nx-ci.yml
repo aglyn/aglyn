@@ -168,7 +168,7 @@ jobs:
       # overstates MRR 4x. The spec scans apps/** and libs/**, which makes its
       # invalidating input ANY project rather than the console it happens to
       # live in. Affected-scoping it is wrong for the same reason as the three
-      # steps above: a new MRR surface landing in apps/www would not mark
+      # steps above: a new MRR surface landing in apps/tenant would not mark
       # console affected, and the guard would sit out the one commit it exists
       # to catch.
       - run: npx jest --config apps/console/jest.config.ts --rootDir apps/console --testPathPatterns revenue-truth

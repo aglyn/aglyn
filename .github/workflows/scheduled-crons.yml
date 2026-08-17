@@ -1,10 +1,10 @@
 name: Scheduled console crons
 
-# Drives the console's scheduled routes (AGL-490). The console, tenant, and
-# www Vercel projects all deploy from the repo root, so a shared /vercel.json
-# crons block would fire on all three (the console-only paths 404 on the
-# others). Instead we POST the console's production URL directly, scoped to
-# just the console, using the routes' x-cron-secret auth path.
+# Drives the console's scheduled routes (AGL-490). The console and tenant
+# Vercel projects both deploy from the repo root, so a shared /vercel.json
+# crons block would fire on both (the console-only paths 404 on the other).
+# Instead we POST the console's production URL directly, scoped to just the
+# console, using the routes' x-cron-secret auth path.
 #
 # Requires:
 #   - secret  CRON_SECRET       — same value as the console Vercel env var

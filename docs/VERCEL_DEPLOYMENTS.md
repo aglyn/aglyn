@@ -30,8 +30,8 @@ The canonical `.vercel.app` alias is deployment-protected (it redirects to Verce
 to. Probe the custom domain, never the canonical one.
 
 `www-aglyn-io` still exists as a Vercel project but serves **no domain**, and none of its 25 newest
-production deployments is Ready — every one is Canceled, the oldest 12 days old. `apps/www` is
-likewise deprecated — build nothing there — though the directory has not been deleted from the repo.
+production deployments is Ready — every one is Canceled. The `apps/www` app it deployed was deleted
+from the repo entirely (AGL-1676); deleting the Vercel project itself is a console action for Zach.
 
 ## Only the `production` branch deploys (AGL-522)
 

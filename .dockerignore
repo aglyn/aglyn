@@ -25,4 +25,3 @@ tmp
 .idea
 .vscode
 apps/docs/build
-apps/www/.next

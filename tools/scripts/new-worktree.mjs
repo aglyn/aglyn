@@ -68,7 +68,7 @@ if (!name) {
 const worktree = resolve(repoRoot, '..', `aglyn-wt-${name}`)
 
 /** Default dev ports, so a worktree never collides with the main checkout. */
-const DEFAULT_PORTS = { console: 4300, tenant: 4600, www: 4700 }
+const DEFAULT_PORTS = { console: 4300, tenant: 4600 }
 const port = Number(flag('port') ?? DEFAULT_PORTS[app] ?? 4300)
 
 function run(command, commandArgs, options = {}) {
@@ -128,7 +128,6 @@ const ENV_FILES = [
   'apps/console/.env.local',
   'apps/console/.env.development.local',
   'apps/tenant/.env.local',
-  'apps/www/.env.local',
 ]
 let copied = 0
 for (const relative of ENV_FILES) {

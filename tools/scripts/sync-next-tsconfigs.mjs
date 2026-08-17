@@ -58,7 +58,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(fileURLToPath(import.meta.url), '..', '..', '..')
-const NEXT_APPS = ['console', 'tenant', 'www']
+const NEXT_APPS = ['console', 'tenant']
 
 // tsconfig.base.json has no comments; plain JSON.parse is safe.
 const base = JSON.parse(readFileSync(join(root, 'tsconfig.base.json'), 'utf8'))
