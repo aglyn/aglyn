@@ -35,6 +35,7 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
+import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
 // specced per branch, because a wrong `billing_interval` is indistinguishable
 // from a right one in every report that reads it.
@@ -512,6 +513,42 @@ async function handler(request: Request): Promise<Response> {
           // Fire-and-forget and never allowed to throw — a throw here would
           // un-claim the Stripe event and cause a redelivery, turning a missed
           // analytics hit into a repeated billing side effect.
+          // The filable tax record (AGL-1811): gross / tax / net /
+          // jurisdiction per transaction, keyed by INVOICE id so a Stripe
+          // redelivery restamps one document rather than duplicating a row —
+          // the Texas return is the sum of these.
+          //
+          // `invoice.paid` is the one event authoritative for EVERY charge
+          // on Aglyn's own account — initial subscribe, renewal, proration,
+          // add-on change, enterprise net-30 — which is why the session's
+          // `checkout.session.completed` is deliberately NOT a second
+          // source: a subscription checkout always produces an invoice, and
+          // recording both would count the sale twice.
+          //
+          // Scoped to this branch because `findOrgIdByStripeCustomer`
+          // resolving IS the "whose charge is this" test: the index is
+          // stamped only by `writeOrgBilling`, so a tenant shopper's or
+          // marketplace buyer's invoice — same endpoint, same event type —
+          // never lands here. AWAITED, unlike the cosmetic writes around
+          // it: a lost row here is a wrong tax return, and the doc id makes
+          // the redelivery this may cause converge instead of duplicate.
+          if (type === 'invoice.paid') {
+            const revenue = platformInvoiceRevenue(object)
+            if (revenue) {
+              const { invoiceId, ...recorded } = revenue
+              await firebaseAdmin
+                .app()
+                .firestore()
+                .collection('platformRevenue')
+                .doc(invoiceId)
+                .set({
+                  ...recorded,
+                  orgId,
+                  recordedAt:
+                    firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+                })
+            }
+          }
           if (type === 'invoice.paid') {
             const paidCents = Number(object?.amount_paid ?? amount)
             // The line that describes the SUBSCRIPTION, not whatever sorted
