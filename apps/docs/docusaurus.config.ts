@@ -34,6 +34,13 @@ const config: Config = {
     locales: ['en'],
   },
 
+  // First-party error beacon (AGL-1646): uncaught JS errors on the docs —
+  // the surface that IS the activation path — post to the console's
+  // existing collector. Standalone copy of the lib beacon's wire format
+  // (this app cannot import libs/ — AGL-1595); armed in production builds
+  // only, PII-free by construction. See src/error-beacon.ts.
+  clientModules: ['./src/error-beacon.ts'],
+
   presets: [
     [
       'classic',
