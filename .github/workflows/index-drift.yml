@@ -134,6 +134,13 @@ jobs:
       # deleting the step would delete the check on the deletion.
       - run: npm run test:index-drift
 
+      # The RULES checker's self-test, for the same reason in the other
+      # direction (AGL-1816). AGL-1778 gave it a second home in nx-ci.yml —
+      # which is `disabled_manually` and runs on no runner, so that redundancy
+      # existed only as text. rules-drift.yml and this workflow now each run
+      # both self-tests, and both of them actually execute.
+      - run: npm run test:rules-drift
+
       - name: Diff the live index config against the repo file
         env:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
