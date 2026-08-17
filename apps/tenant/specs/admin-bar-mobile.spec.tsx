@@ -69,6 +69,9 @@ const CONTEXT_RESPONSE = {
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
   inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
   ordersUrl: null,
+  analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
+  viewsToday: 128,
+  screenViewsToday: 12,
   accountUrl: `${CONSOLE_ORIGIN}/manage/user`,
 }
 
@@ -148,7 +151,13 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
         .classList.contains('aglyn-ab-desktop'),
     ).toBe(false)
     // Everything else does.
-    for (const text of ['About', 'Draft changes', 'Screens', 'Inbox']) {
+    for (const text of [
+      'About',
+      'Draft changes',
+      'Screens',
+      'Inbox',
+      '128 views today · 12 on this page',
+    ]) {
       const element = within(bar).getByText(text)
       expect(
         (element.closest('.aglyn-ab-desktop') ?? element).classList.contains(
@@ -192,6 +201,14 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
     ).toBe(CONTEXT_RESPONSE.inboxUrl)
     // ordersUrl is null — absent from the menu like the bar.
     expect(within(menu).queryByText('Orders')).toBeNull()
+    // The analytics row carries the stat cluster into the collapsed menu.
+    expect(
+      (
+        within(menu).getByText(
+          'Analytics · 128 views today · 12 on this page',
+        ) as HTMLAnchorElement
+      ).href,
+    ).toBe(CONTEXT_RESPONSE.analyticsUrl)
     const account = within(menu).getByText(
       'editor@aglyn.com',
     ) as HTMLAnchorElement

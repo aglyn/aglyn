@@ -17,6 +17,7 @@
 
 import {
   buildRoute,
+  checkEntitlement,
   findScreenIdByRoutePath,
   resolveHostEnabledPlugins,
   Route,
@@ -170,12 +171,23 @@ export async function POST(request: Request): Promise<Response> {
     // the subdomain; HostIdProvider resolves it back to the doc id).
     let orgSlug: string | undefined
     let enabledPlugins: string[] = []
+    let screenAnalyticsEntitled = false
     if (hostDoc.orgId) {
       const orgSnapshot = await firestore
         .collection('orgs')
         .doc(hostDoc.orgId)
         .get()
       orgSlug = orgSnapshot.get('slug') as string | undefined
+      // The per-screen stat below is a PAID surface (`screenAnalytics`,
+      // Pro+ — AGL-150 decision: data is always collected, DISPLAY is what
+      // the entitlement gates). Resolved through the same entitlement
+      // resolver the console card uses, off the org doc already read for
+      // the slug — a bar showing per-screen numbers to a Free org would be
+      // a free window onto a paid feature.
+      screenAnalyticsEntitled = checkEntitlement(
+        orgSnapshot.data() as Parameters<typeof checkEntitlement>[0],
+        'screenAnalytics',
+      )
       // Quick links are gated on the HOST's effective plugin set (AGL-1829):
       // the org switchboard minus the per-site deny-list (AGL-1014) minus
       // flagged-off plugins (AGL-422). Rides the org read already paid for
@@ -233,6 +245,54 @@ export async function POST(request: Request): Promise<Response> {
           })}?tab=orders`
         : null
 
+    // Analytics on the bar (AGL-1829 follow-on — "make analytics appear").
+    // The console's full surface is one click away; the bar itself carries
+    // today's first-party pageview counters from the AGL-82 beacon's day
+    // docs. One or two small reads HERE, on the editor-only edit-context
+    // call — anonymous renders still pay nothing. Best-effort: a failed
+    // read yields null ("no verdict"), never a fabricated zero; a MISSING
+    // day doc genuinely means zero views today, which the bar may say.
+    const analyticsUrl = canLink
+      ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_ANALYTICS, {
+          orgSlug: orgSlug as string,
+          host: hostDoc.subdomain as string,
+        })}`
+      : null
+    const todayId = new Date().toISOString().slice(0, 10)
+    let viewsToday: number | null = null
+    try {
+      const daySnapshot = await firestore
+        .collection('hosts')
+        .doc(claims.hostId)
+        .collection('analytics')
+        .doc(todayId)
+        .get()
+      viewsToday = daySnapshot.exists
+        ? Number(daySnapshot.get('total') ?? 0)
+        : 0
+    } catch {
+      viewsToday = null
+    }
+    // Per-screen views ride the AGL-151 attribution docs, and render ONLY
+    // for orgs entitled to the paid per-screen surface — see the
+    // entitlement note above. Unentitled orgs never pay this read either.
+    let screenViewsToday: number | null = null
+    if (screenId && screenAnalyticsEntitled) {
+      try {
+        const screenDaySnapshot = await firestore
+          .collection('hosts')
+          .doc(claims.hostId)
+          .collection('screenAnalytics')
+          .doc(`${screenId}:${todayId}`)
+          .get()
+        screenViewsToday = screenDaySnapshot.exists
+          ? Number(screenDaySnapshot.get('total') ?? 0)
+          : 0
+      } catch {
+        screenViewsToday = null
+      }
+    }
+
     // The connected-as identity's destination (AGL-1829 follow-on): the
     // console's user-level account page. `/manage/user` is deliberately NOT
     // org-scoped (see the Route enum's header note), so it needs no slug —
@@ -256,6 +316,11 @@ export async function POST(request: Request): Promise<Response> {
         screensUrl,
         inboxUrl,
         ordersUrl,
+        analyticsUrl,
+        // Today's pageview counters (site-wide; per-screen only when the
+        // org's plan carries the paid per-screen surface). null = unknown.
+        viewsToday,
+        screenViewsToday,
         accountUrl,
         expiresAtMs: claims.exp,
       },

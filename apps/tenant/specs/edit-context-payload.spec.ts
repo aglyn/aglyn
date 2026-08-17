@@ -46,6 +46,13 @@ let mockOrgData: FakeDocData | null
 let mockLatestVersionId: string | null
 let mockVersionQueries: number
 let mockFlagFilter: (ids: readonly string[]) => string[]
+// The AGL-82 analytics day docs the stat cluster reads (AGL-1829 follow-on).
+let mockAnalyticsDayData: FakeDocData | null
+let mockAnalyticsDayThrow: boolean
+let mockAnalyticsDayId: string | undefined
+let mockScreenAnalyticsData: FakeDocData | null
+let mockScreenAnalyticsReads: number
+let mockScreenAnalyticsDocId: string | undefined
 
 function docSnapshot(data: FakeDocData | null) {
   return {
@@ -58,8 +65,65 @@ function docSnapshot(data: FakeDocData | null) {
 /**
  * Minimal Firestore double for the exact chains the route walks:
  * a host doc, its screen doc, the screen's versions orderBy+limit
- * query, and the org doc.
+ * query, the org doc, and the AGL-82 analytics day docs (host-wide and
+ * per-screen). Subcollections dispatch BY NAME so a new read the route
+ * grows cannot silently answer with the wrong document.
  */
+function hostSubcollection(sub: string) {
+  if (sub === 'screens') {
+    return {
+      withConverter: () => ({
+        doc: () => ({ get: async () => docSnapshot(mockScreenData) }),
+      }),
+      doc: () => ({
+        collection: (inner: string) => {
+          expect(inner).toBe('versions')
+          return {
+            orderBy: (field: string, direction: string) => ({
+              limit: (count: number) => ({
+                get: async () => {
+                  mockVersionQueries += 1
+                  expect(field).toBe('updatedAt')
+                  expect(direction).toBe('desc')
+                  expect(count).toBe(1)
+                  return {
+                    docs: mockLatestVersionId
+                      ? [{ id: mockLatestVersionId }]
+                      : [],
+                  }
+                },
+              }),
+            }),
+          }
+        },
+      }),
+    }
+  }
+  if (sub === 'analytics') {
+    return {
+      doc: (id: string) => ({
+        get: async () => {
+          if (mockAnalyticsDayThrow) throw new Error('unavailable')
+          mockAnalyticsDayId = id
+          return docSnapshot(mockAnalyticsDayData)
+        },
+      }),
+    }
+  }
+  if (sub === 'screenAnalytics') {
+    return {
+      doc: (id: string) => ({
+        get: async () => {
+          mockScreenAnalyticsReads += 1
+          mockScreenAnalyticsDocId = id
+          return docSnapshot(mockScreenAnalyticsData)
+        },
+      }),
+    }
+  }
+  throw new Error(`Unexpected host subcollection: ${sub}`)
+}
+
 function mockFirestore() {
   return {
     collection: (name: string) => ({
@@ -71,28 +135,7 @@ function mockFirestore() {
       }),
       doc: () => ({
         get: async () => docSnapshot(name === 'orgs' ? mockOrgData : mockHostData),
-        collection: () => ({
-          withConverter: () => ({
-            doc: () => ({ get: async () => docSnapshot(mockScreenData) }),
-          }),
-          doc: () => ({
-            collection: () => ({
-              orderBy: (field: string, direction: string) => ({
-                limit: (count: number) => ({
-                  get: async () => {
-                    mockVersionQueries += 1
-                    expect(field).toBe('updatedAt')
-                    expect(direction).toBe('desc')
-                    expect(count).toBe(1)
-                    return {
-                      docs: mockLatestVersionId ? [{ id: mockLatestVersionId }] : [],
-                    }
-                  },
-                }),
-              }),
-            }),
-          }),
-        }),
+        collection: hostSubcollection,
       }),
     }),
   }
@@ -144,6 +187,12 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     mockLatestVersionId = 'v-live'
     mockVersionQueries = 0
     mockFlagFilter = (ids) => [...ids]
+    mockAnalyticsDayData = { total: 128 }
+    mockAnalyticsDayThrow = false
+    mockAnalyticsDayId = undefined
+    mockScreenAnalyticsData = { total: 12 }
+    mockScreenAnalyticsReads = 0
+    mockScreenAnalyticsDocId = undefined
   })
 
   it('reports draft changes when a newer version than the live pointer exists', async () => {
@@ -191,6 +240,62 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     const payload = await (await POST(contextRequest())).json()
     expect(payload.ordersUrl).toBeNull()
     expect(payload.inboxUrl).not.toBeNull()
+  })
+
+  it('links the console analytics surface through the real route table', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.analyticsUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/analytics',
+    )
+  })
+
+  it("reports today's site pageviews from the AGL-82 day doc", async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBe(128)
+    // The doc read is TODAY's UTC day id — the live counter, not history.
+    expect(mockAnalyticsDayId).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  it('reports zero (not null) when no day doc exists yet', async () => {
+    mockAnalyticsDayData = null
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBe(0)
+  })
+
+  it('reports null — no verdict — when the day-doc read fails', async () => {
+    mockAnalyticsDayThrow = true
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBeNull()
+  })
+
+  it('withholds the per-screen stat AND its read from an unentitled org', async () => {
+    // The default org has no plan → free → no screenAnalytics entitlement.
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBeNull()
+    expect(mockScreenAnalyticsReads).toBe(0)
+  })
+
+  it('serves the per-screen stat to a Pro org from the AGL-151 doc', async () => {
+    mockOrgData = { ...mockOrgData, plan: 'pro' }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBe(12)
+    expect(mockScreenAnalyticsReads).toBe(1)
+    expect(mockScreenAnalyticsDocId).toBe(
+      `screen-1:${new Date().toISOString().slice(0, 10)}`,
+    )
+  })
+
+  it('downgrades the per-screen stat with a dead subscription, plan field intact', async () => {
+    // `org.plan` is NOT entitlement (AGL-247): a canceled subscription must
+    // read as free even while the stale plan field still says pro.
+    mockOrgData = {
+      ...mockOrgData,
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+    }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBeNull()
+    expect(mockScreenAnalyticsReads).toBe(0)
   })
 
   it('refuses a bad token with 401 before any read', async () => {

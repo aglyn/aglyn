@@ -90,6 +90,12 @@ interface EditContext {
   screensUrl?: string | null
   inboxUrl?: string | null
   ordersUrl?: string | null
+  /** The console's host analytics surface, server-built like every link. */
+  analyticsUrl?: string | null
+  /** Today's site-wide pageviews from the first-party beacon; null unknown. */
+  viewsToday?: number | null
+  /** Today's views of THIS screen — present only for Pro+ orgs (AGL-150). */
+  screenViewsToday?: number | null
   /** The console's user-level account page (`/manage/user`) — no org slug. */
   accountUrl?: string | null
 }
@@ -594,6 +600,22 @@ export default function AdminBar({
     setPhase('dismissed')
   }, [hostId])
 
+  // The compact stat cluster (AGL-1829 follow-on): today's first-party
+  // pageviews, straight off the edit-context payload — no client reads.
+  // null means "no verdict" (the read failed server-side), and the cluster
+  // then collapses to a plain Analytics link rather than inventing a zero;
+  // the per-screen figure appears only when the server sent one (Pro+).
+  const statsLabel =
+    context?.viewsToday != null
+      ? `${context.viewsToday.toLocaleString()} view${
+          context.viewsToday === 1 ? '' : 's'
+        } today${
+          context.screenViewsToday != null
+            ? ` · ${context.screenViewsToday.toLocaleString()} on this page`
+            : ''
+        }`
+      : null
+
   if (phase === 'dismissed' || phase === 'silent') return null
 
   if (phase === 'probing') {
@@ -700,6 +722,27 @@ export default function AdminBar({
         </a>
       ) : null}
       <span style={{ flex: 1, minWidth: 12 }} />
+      {context?.analyticsUrl ? (
+        <a
+          className="aglyn-ab-desktop"
+          style={quietLinkStyle}
+          href={context.analyticsUrl}
+          target="_blank"
+          rel="noreferrer"
+          title="Open this site's analytics"
+          data-aglyn-stats=""
+        >
+          {statsLabel ?? 'Analytics'}
+        </a>
+      ) : statsLabel ? (
+        <span
+          className="aglyn-ab-desktop"
+          style={{ ...quietLinkStyle, cursor: 'default' }}
+          data-aglyn-stats=""
+        >
+          {statsLabel}
+        </span>
+      ) : null}
       {context?.screensUrl ? (
         <a
           className="aglyn-ab-desktop"
@@ -847,6 +890,19 @@ export default function AdminBar({
               onClick={() => setMenuOpen(false)}
             >
               Orders
+            </a>
+          ) : null}
+          {context?.analyticsUrl ? (
+            <a
+              role="menuitem"
+              style={menuItemStyle}
+              href={context.analyticsUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={statsLabel ?? undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              {statsLabel ? `Analytics · ${statsLabel}` : 'Analytics'}
             </a>
           ) : null}
           {identity ? (

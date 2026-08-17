@@ -46,7 +46,9 @@ import {
 const HOST = 'host-1'
 const CONSOLE_ORIGIN = 'https://app.aglyn.com'
 
-const CONTEXT_RESPONSE = {
+// Loosely indexed so per-test overrides can null any field the payload
+// makes nullable (viewsToday, accountUrl, …) without fighting inference.
+const CONTEXT_RESPONSE: Record<string, unknown> = {
   siteName: 'Aglyn Marketing',
   screenId: 'screen-1',
   screenName: 'About',
@@ -57,6 +59,9 @@ const CONTEXT_RESPONSE = {
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
   inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
   ordersUrl: null,
+  analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
+  viewsToday: 128,
+  screenViewsToday: 12,
   accountUrl: `${CONSOLE_ORIGIN}/manage/user`,
 }
 
@@ -171,6 +176,26 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     // ordersUrl is null — the link must not render at all.
     expect(screen.queryByText('Orders')).toBeNull()
     expect(screen.getByText('editor@aglyn.com')).toBeTruthy()
+  })
+
+  it('shows the stat cluster and links it to the console analytics surface', async () => {
+    await renderReadyBar()
+    const stats = linkByText('128 views today · 12 on this page')
+    expect(stats.href).toBe(CONTEXT_RESPONSE.analyticsUrl)
+    expect(stats.target).toBe('_blank')
+  })
+
+  it('omits the per-screen figure when the server withheld it (not Pro)', async () => {
+    await renderReadyBar({ screenViewsToday: null })
+    expect(linkByText('128 views today')).toBeTruthy()
+    expect(screen.queryByText(/on this page/)).toBeNull()
+  })
+
+  it('collapses to a plain Analytics link when the server had no verdict', async () => {
+    // null is "the read failed", not zero — the bar must not invent a number.
+    await renderReadyBar({ viewsToday: null, screenViewsToday: null })
+    expect(linkByText('Analytics').href).toBe(CONTEXT_RESPONSE.analyticsUrl)
+    expect(screen.queryByText(/views today/)).toBeNull()
   })
 
   it('links the connected-as identity to the console account page, in a new tab', async () => {
