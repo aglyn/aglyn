@@ -26,6 +26,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
 import ConsoleBrandingEffects from '../components/console-branding-effects.component'
+import EditHintBounce from '../components/edit-hint-bounce.component'
 import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
@@ -53,6 +54,11 @@ const ThemeStack = withThemeCssVarProvider(
           registrable-domain `aglyn_editor` cookie in step with the session.
           Inside FirebaseAppLayout for the auth context; renders nothing. */}
       <EditorHintCookie />
+      {/* The `*.aglyn.app` half of that hint (AGL-1842): a throttled
+          login-time top-level bounce through the tenant app plants the hint
+          on the OTHER registrable domain, where cookies set here cannot
+          reach. Renders nothing. */}
+      <EditHintBounce />
       <LoadingLayoutAppComponent>
         <ConfirmationProviderComponent>
           <SnackbarProvider>
