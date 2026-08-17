@@ -36,14 +36,22 @@ import {
  *   server-side and resolves the screen serving the current path. Only THEN
  *   does the bar render — nothing on this page ever trusts a client-side
  *   claim of access.
- * - `autoConnect` (AGL-1829): the console's same-site presence hint armed
- *   us. A HIDDEN iframe loads the console's `/edit-access?silent=1`, which
- *   re-verifies the session and this host's edit permission first-party and
- *   postMessages back the same signed token the popup sends — checked
- *   against the ONE console origin this page was built with, exactly like
- *   the popup path. No popup, no gesture needed; if the console answers
- *   "no" (or nothing, within the timeout) the bar renders NOTHING — an
- *   auto-armed bar has no business showing UI to someone it can't verify.
+ * - `autoConnect` (AGL-1829/AGL-1842): the presence hint armed us. FIRST
+ *   the bar tries the same-site EXCHANGE (AGL-1842): a POST to this site's
+ *   own `/api/edit-access/exchange`, carrying the HttpOnly signed hint the
+ *   login-time bounce planted on `.aglyn.app` — the server verifies it and
+ *   re-authorizes this uid for THIS host with the same gate the console's
+ *   token mint applies, answering with the same signed token. That is the
+ *   only silent path that works on `*.aglyn.app`, where the console is
+ *   cross-site. A 401 (no such cookie — the `aglyn.com`/`aglyn.io`
+ *   marketing hosts, whose marker cookie has no signed sibling) falls back
+ *   to the AGL-1829 probe: a HIDDEN iframe loads the console's
+ *   `/edit-access?silent=1`, which re-verifies the session first-party and
+ *   postMessages back the token — checked against the ONE console origin
+ *   this page was built with, exactly like the popup path. A 403 is a
+ *   definitive "no rights here" and renders NOTHING, as does a probe that
+ *   answers "no" (or nothing, within the timeout) — an auto-armed bar has
+ *   no business showing UI to someone it can't verify.
  * - Manual arm without a token: the "Edit this site" pill; clicking it (a
  *   user gesture, so no popup blocker) opens the same page as a popup.
  *
@@ -88,6 +96,7 @@ interface EditContext {
 
 type Phase =
   | 'idle'
+  | 'exchanging'
   | 'probing'
   | 'connecting'
   | 'resolving'
@@ -330,7 +339,7 @@ export default function AdminBar({
   consoleOrigin,
   autoConnect = false,
 }: AdminBarProps) {
-  const [phase, setPhase] = useState<Phase>(autoConnect ? 'probing' : 'idle')
+  const [phase, setPhase] = useState<Phase>(autoConnect ? 'exchanging' : 'idle')
   const [context, setContext] = useState<EditContext | null>(null)
   const [identity, setIdentity] = useState<string | undefined>(undefined)
   // The phone-width ⋯ menu (AGL-1829 mobile pass). Unmounted while closed,
@@ -385,6 +394,61 @@ export default function AdminBar({
     const stored = readStoredEditToken(hostId)
     if (stored) void resolveContext(stored)
   }, [hostId, resolveContext])
+
+  // The same-site hint exchange (AGL-1842) — the auto path's first move.
+  // One POST to this site's OWN server; the HttpOnly hint cookie rides it
+  // automatically, so there is nothing for scripts to read or leak. Where
+  // it lands decides everything:
+  //   200 → the same stored-token flow as the popup/probe deliveries;
+  //   403 → a definitive no (known caller, no rights on this host, or a
+  //         disabled/removed account) — silence, no probe;
+  //   anything else (401 no cookie, 404 rollout skew, 5xx, network) → the
+  //         AGL-1829 iframe probe, which is the still-working path on the
+  //         same-site `aglyn.com`/`aglyn.io` marketing hosts.
+  useEffect(() => {
+    if (phase !== 'exchanging') return undefined
+    // A stored token is already being resolved by the effect above — the
+    // exchange would only race it for the same outcome.
+    if (readStoredEditToken(hostId)) return undefined
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch('/api/edit-access/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId }),
+        })
+        if (cancelled) return
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            token?: string
+            expiresAtMs?: number
+            siteName?: string
+            userEmail?: string
+          }
+          if (payload?.token) {
+            const stored: StoredEditToken = {
+              token: payload.token,
+              expiresAtMs: Number(payload.expiresAtMs) || Date.now(),
+              siteName: payload.siteName,
+              userEmail: payload.userEmail,
+            }
+            writeStoredEditToken(hostId, stored)
+            void resolveContext(stored)
+            return
+          }
+          setPhase('probing')
+          return
+        }
+        setPhase(response.status === 403 ? 'silent' : 'probing')
+      } catch {
+        if (!cancelled) setPhase('probing')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [phase, hostId, resolveContext])
 
   // The console's /edit-access page (popup or silent iframe) delivers the
   // token here. Origin-checked against the ONE console origin this page was
