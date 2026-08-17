@@ -21,6 +21,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { createHash } from 'crypto'
 import { recordContactRefund } from './contact-refund'
+import { flagOrderRestock } from './restock-flag'
 
 /**
  * A claim on one refund attempt (AGL-1696), the same primitive the POS sale
@@ -358,6 +359,15 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       amountCents: refundCents,
       closedTheOrder,
     })
+    // The shelf's side of the ledger (AGL-1797). The sale decremented variant
+    // inventory and nothing put it back, so a fully refunded order read one
+    // unit light forever. This FLAGS rather than releases — a refund with no
+    // return leaves the goods gone, and inventing stock the merchant does not
+    // have is worse than under-counting it — and the merchant answers from the
+    // stock adjustment they already have. Same placement and same swallow-all
+    // contract as the contact write above, for the same reason: the money has
+    // moved and the order records it, so nothing here may fail the refund.
+    await flagOrderRestock({ hostId, orderId, kind: 'refund', closedTheOrder })
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)

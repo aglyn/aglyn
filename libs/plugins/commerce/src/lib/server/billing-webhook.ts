@@ -35,6 +35,7 @@ import {
 import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
+import { flagOrderRestock } from './restock-flag'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -2146,6 +2147,20 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               amountCents: settled.reversedCents,
               closedTheOrder: settled.closedTheOrder,
               kind: 'chargeback',
+            })
+            // The shelf's side (AGL-1797), the SAME door the admin-initiated
+            // refund writes so the two cannot diverge the way the contact
+            // ledger did before AGL-1754. It flags rather than releases, and a
+            // chargeback is the clearest do-not-restock case there is — the
+            // shopper kept the item and took the money — so `kind` only changes
+            // the wording the merchant reads. A WON dispute never reaches here
+            // (`reversedCents` is 0), which is right: nothing was reversed, so
+            // nothing is missing from the shelf.
+            await flagOrderRestock({
+              hostId,
+              orderId: snapshot.id,
+              kind: 'chargeback',
+              closedTheOrder: settled.closedTheOrder,
             })
           }
         }

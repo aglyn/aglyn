@@ -205,6 +205,11 @@ const fakeFirestore = {
         set: (ref: any, value: any, options?: any) => {
           void ref.set(value, options)
         },
+        // The restock flag (AGL-1797) writes its record with `update()`, which
+        // replaces a nested map wholesale where a merge would recurse into it.
+        update: (ref: any, value: any) => {
+          void ref.update(value)
+        },
       })
     })
     // Keep the chain alive even when a body throws, or one rejection would
@@ -455,6 +460,15 @@ beforeEach(() => {
       feeCents: 0,
       totalCents: 5000,
     },
+  })
+  // The product the sale decremented (AGL-1797). Stocked at 9, which is not
+  // any other figure in this file, and the order line names no variant so the
+  // handler's first-variant fallback is the path under test.
+  docs.set('hosts/host-1/products/product-1', {
+    name: 'Chair',
+    type: 'physical',
+    status: 'active',
+    variants: [{ id: 'var-default', priceUsd: 50, inventory: 9 }],
   })
 })
 
@@ -918,5 +932,128 @@ describe('refund and lifetime value (AGL-1754)', () => {
 
     expect(storedContact().refundedCents).toBeUndefined()
     expect(unmatchedCounter().lastReason).toBe('no-contact')
+  })
+})
+
+/**
+ * The shelf's side of the ledger (AGL-1797). `refund.ts` moved the money,
+ * transitioned the order and appended the timeline, and touched no inventory —
+ * so an order refunded in full left the merchant's stock count permanently one
+ * lower than their shelf.
+ *
+ * These are WIRING cases: the writer's own behaviour is pinned in
+ * `restock-flag.spec.ts`, and what is measured here is that the door actually
+ * calls it, on the paths that moved money and on none of the paths that did
+ * not. The flag swallows its own failures, so every assertion is paired with
+ * `expectNothingFlagFailed` — otherwise a case could pass because the writer
+ * threw on its first line and was never heard from again.
+ */
+describe('refund and the shelf (AGL-1797)', () => {
+  function expectNothingFlagFailed() {
+    expect(consoleError).not.toHaveBeenCalledWith(
+      'flagOrderRestock failed',
+      expect.anything(),
+    )
+  }
+
+  it('flags the stock a full refund left off the shelf', async () => {
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expectNothingFlagFailed()
+    expect(storedOrder().restockCheck).toMatchObject({
+      kind: 'refund',
+      units: 1,
+      fullyReversed: true,
+      lines: [
+        { productId: 'product-1', variantId: 'var-default', quantity: 1 },
+      ],
+    })
+    // FLAGGED, NOT RELEASED — the whole decision. The goods may never have come
+    // back, so the count is exactly where the refund found it and the merchant
+    // is the one who answers.
+    expect(
+      docs.get('hosts/host-1/products/product-1').variants[0].inventory,
+    ).toBe(9)
+    // And no adjustment row: that ledger records stock that MOVED, and none did.
+    expect(
+      [...docs.keys()].filter((path) =>
+        path.startsWith('hosts/host-1/inventoryAdjustments'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  it('marks a partial refund as an upper bound, since it names no line', async () => {
+    // A refund is requested as an AMOUNT and records no line selection, so
+    // "$15 of a $50 order" cannot say which of the goods came back.
+    const result = await post(
+      { amountCents: 1500 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+
+    expect(result.status).toBe(200)
+    expectNothingFlagFailed()
+    expect(storedOrder().restockCheck).toMatchObject({
+      units: 1,
+      fullyReversed: false,
+    })
+  })
+
+  it('flags nothing when Stripe rejected the refund', async () => {
+    nextRefundOutcome = 'rejected'
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(502)
+    expect(storedOrder().restockCheck).toBeUndefined()
+  })
+
+  it('flags nothing when there is nothing left to refund', async () => {
+    await post({}, { 'idempotency-key': 'attempt-a' })
+    const flaggedAtMs = storedOrder().restockCheck.flaggedAtMs
+    const second = await post(
+      { amountCents: 500 },
+      { 'idempotency-key': 'attempt-b' },
+    )
+
+    expect(second.status).toBe(409)
+    // The first flag stands, untouched — not re-flagged by a refund of nothing.
+    expect(storedOrder().restockCheck.flaggedAtMs).toBe(flaggedAtMs)
+  })
+
+  it('says nothing at all when the merchant tracks no stock', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Chair',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'var-default', priceUsd: 50, inventory: null }],
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expectNothingFlagFailed()
+    // No prompt a merchant could not act on: nothing was ever decremented.
+    expect(storedOrder().restockCheck).toBeUndefined()
+    expect(
+      (storedOrder().timeline ?? []).some(
+        (event: any) => event.event === 'restock-check',
+      ),
+    ).toBe(false)
+  })
+
+  it('does not disturb the refund the flag rides behind', async () => {
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    // The money, the status and the contact are all exactly as AGL-1696 and
+    // AGL-1754 left them: this writer is additive or it is wrong.
+    expect(result.body).toMatchObject({
+      refundedCents: 5000,
+      fullyRefunded: true,
+    })
+    expect(refundCalls).toHaveLength(1)
+    expect(storedOrder().status).toBe('refunded')
+    expect(storedContact().refundedCents).toBe(5000)
+    expect(storedContact().ltvCents).toBe(7400)
   })
 })
