@@ -86,10 +86,12 @@ describe('console img-src, report-only (AGL-1685)', () => {
   })
 
   it('reports SOMEWHERE — both wire formats, as the enforcing policy does', async () => {
-    // The AGL-518 failure, pinned. `report-uri` is what Safari and older
-    // Chrome send; `report-to` is the modern one. Sending one alone loses a
-    // browser family, and sending neither loses everything while still looking
-    // like a measurement is underway.
+    // The AGL-518 failure, pinned. Both directives over https, where both
+    // deliver — Chrome through the Reporting API, Safari by posting to the
+    // `report-uri` path. NOT a fallback pair: `report-to` suppresses
+    // `report-uri`, so a `report-to` whose group cannot resolve loses
+    // everything, and sending neither loses everything while still looking like
+    // a measurement is underway (AGL-1788).
     const policy = await reportOnly()
     expect(policy).toContain('report-uri /api/csp-report')
     expect(policy).toContain('report-to csp')

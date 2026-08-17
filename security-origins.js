@@ -459,13 +459,113 @@ function tenantImgSrcDirective(isProduction) {
   return `img-src ${sources.join(' ')}`
 }
 
+/**
+ * Where violations are posted (AGL-523).
+ *
+ * Relative on purpose: it resolves against the document, so a tenant report
+ * lands on the customer's own domain rather than ours. Same-origin and outside
+ * both middlewares' matchers, so reporting cannot recurse through them.
+ */
+const CSP_REPORT_PATH = '/api/csp-report'
+
+/** The `Reporting-Endpoints` group name `report-to` resolves against. */
+const CSP_REPORT_GROUP = 'csp'
+
+/**
+ * The `report-uri` / `report-to` tail every policy in the repo ends with.
+ *
+ * ## `report-to` is NOT a fallback for `report-uri` — it REPLACES it
+ *
+ * The comment this replaces claimed the pair covered two browser families by
+ * redundancy, so that if one channel failed the other still delivered. That is
+ * not what browsers do, and the difference is the whole reason this function
+ * exists (AGL-1788). Measured in real browsers against real responses, one
+ * violation per case, a report-only `img-src 'self'` plus the reporting tail
+ * under test:
+ *
+ * | policy tail                                     | Chrome 152 | Safari 26 |
+ * | ----------------------------------------------- | ---------- | --------- |
+ * | `report-uri` alone                              | delivered  | delivered |
+ * | `report-uri` + `report-to`, over **https**      | delivered  | delivered |
+ * | `report-uri` + `report-to`, over **plain http** | **NOTHING**| delivered |
+ * | `report-to` with no `Reporting-Endpoints`       | **NOTHING**| **NOTHING**|
+ *
+ * Row four is the proof: adding `report-to` switches `report-uri` OFF even
+ * when the group resolves to nothing, so there is no second channel to fall
+ * back to. Row three is that rule biting — Chrome refuses a
+ * `Reporting-Endpoints` header on a non-secure transport, which leaves the
+ * group unresolvable and `report-uri` already suppressed.
+ *
+ * So the pair does cover both families, but only over https, and for a reason
+ * the old comment had backwards: Chrome delivers through the Reporting API
+ * (batched, `application/reports+json`) while Safari posts a single report to
+ * the `report-uri` path. Both shapes reach `parseCspReports`.
+ *
+ * ## Why the http branch is not merely a dev nicety
+ *
+ * Production is https, so production has always delivered — this does not fix
+ * a production outage. What it fixes is that on `http://localhost` the policy
+ * we ship reports NOTHING to anyone, so nobody can see a CSP report while
+ * developing, and "no reports" reads as "no violations". That is the AGL-518
+ * failure at desk scale, and it is what made this defect survivable long
+ * enough to be mistaken for a production one.
+ *
+ * The failure mode if `isSecureTransport` is ever computed wrong is benign in
+ * the direction that matters: guessing http on an https response emits
+ * `report-uri` alone, which row two shows still delivers in both browsers.
+ * Guessing https on an http response restores today's behaviour.
+ *
+ * @param {boolean} isSecureTransport Whether the RESPONSE goes out over https.
+ */
+function reportingDirectives(isSecureTransport) {
+  return isSecureTransport
+    ? `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`
+    : `report-uri ${CSP_REPORT_PATH}`
+}
+
+/**
+ * The `Reporting-Endpoints` header value, or `null` when the transport cannot
+ * carry the Reporting API at all.
+ *
+ * Returning `null` rather than the header on http keeps the two in step: a
+ * `Reporting-Endpoints` header without `report-to` is inert, and `report-to`
+ * without the header is row four above — silence.
+ *
+ * @param {boolean} isSecureTransport Whether the RESPONSE goes out over https.
+ */
+function reportingEndpointsHeader(isSecureTransport) {
+  return isSecureTransport ? `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"` : null
+}
+
+/**
+ * Is this request going to be answered over https?
+ *
+ * `x-forwarded-proto` first because the proxy is the only thing that knows:
+ * Vercel terminates TLS ahead of the function, so `nextUrl.protocol` can read
+ * `http:` on a request the browser made over https. It is a comma-separated
+ * list when proxies chain, and the FIRST entry is the client-facing hop.
+ *
+ * @param {Headers} headers Request headers.
+ * @param {string} protocol `nextUrl.protocol`, e.g. `https:`.
+ */
+function isSecureTransport(headers, protocol) {
+  const forwarded = headers.get('x-forwarded-proto')
+  const scheme = forwarded ? forwarded.split(',')[0] : protocol
+  return scheme.trim().toLowerCase().replace(/:$/, '') === 'https'
+}
+
 module.exports = {
   PRODUCTION_DOMAINS,
   IMAGE_ORIGINS,
   SCRIPT_ORIGINS,
   TENANT_IMAGE_ORIGINS,
+  CSP_REPORT_PATH,
+  CSP_REPORT_GROUP,
   baseCspDirectives,
   imgSrcDirective,
+  isSecureTransport,
+  reportingDirectives,
+  reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
   tenantImgSrcDirective,
 }

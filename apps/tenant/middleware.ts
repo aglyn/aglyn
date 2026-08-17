@@ -22,13 +22,13 @@ import { NextResponse } from 'next/server'
 // CommonJS outside the nx graph and must `require` the same file — see the
 // console middleware for the full reasoning.
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import { baseCspDirectives, tenantImgSrcDirective } from '../../security-origins'
-
-/** Where CSP reports go. RELATIVE, so it resolves to the customer's own domain. */
-const CSP_REPORT_PATH = '/api/csp-report'
-
-/** The `Reporting-Endpoints` group name `report-to` resolves against. */
-const CSP_REPORT_GROUP = 'csp'
+import {
+  baseCspDirectives,
+  isSecureTransport,
+  reportingDirectives,
+  reportingEndpointsHeader,
+  tenantImgSrcDirective,
+} from '../../security-origins'
 
 /**
  * NO SANCTIONS GEO-BLOCK HERE, ON PURPOSE (AGL-1492).
@@ -445,20 +445,25 @@ export const middleware: NextMiddleware = async (req, event) => {
   // nonce — the AGL-523 shadowing shape, rebuilt. Pair it with the enforcing
   // header or leave it off.
   //
-  // It carries its own `report-uri`/`report-to`: a report-only policy with no
-  // reporting directive detects violations and tells nobody, which is what
-  // AGL-518 shipped for months and what reads as an all-clear. The endpoint is
-  // RELATIVE on purpose — it resolves against the document, so it lands on the
+  // It carries its own reporting tail: a report-only policy with no reporting
+  // directive detects violations and tells nobody, which is what AGL-518
+  // shipped for months and what reads as an all-clear. The endpoint is RELATIVE
+  // on purpose — it resolves against the document, so it lands on the
   // customer's own domain and reaches `apps/tenant/app/api/csp-report`, which
   // the matcher at the top of this file keeps out of the host rewrite.
-  response.headers.set(
-    'Reporting-Endpoints',
-    `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`,
-  )
+  //
+  // Which directives that tail holds depends on the transport, and NOT because
+  // one backs the other up — `report-to` suppresses `report-uri`, so over plain
+  // http the pair delivers nothing at all (AGL-1788; the measured table lives
+  // with `reportingDirectives`). Published customer sites are https, so this
+  // changes nothing for them; it is `nx serve tenant` that was silent.
+  const secureTransport = isSecureTransport(req.headers, req.nextUrl.protocol)
+  const endpoints = reportingEndpointsHeader(secureTransport)
+  if (endpoints) response.headers.set('Reporting-Endpoints', endpoints)
   response.headers.set(
     'Content-Security-Policy-Report-Only',
     `${tenantImgSrcDirective(process.env.NODE_ENV === 'production')}; ` +
-      `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`,
+      reportingDirectives(secureTransport),
   )
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {

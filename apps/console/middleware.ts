@@ -34,17 +34,11 @@ import { enforceSanctionsGeo } from './constants/sanctions-geo'
 import {
   baseCspDirectives,
   imgSrcDirective,
+  isSecureTransport,
+  reportingDirectives,
+  reportingEndpointsHeader,
   scriptSrcReportOnlyDirective,
 } from '../../security-origins'
-
-/**
- * Where violations are posted (AGL-523). Same-origin and outside the matcher
- * below, so reporting cannot recurse through this middleware.
- */
-const CSP_REPORT_PATH = '/api/csp-report'
-
-/** The `Reporting-Endpoints` group name `report-to` resolves against. */
-const CSP_REPORT_GROUP = 'csp'
 
 /**
  * Workspace-subdomain gate (AGL-236): on `{slug}.<workspace domain>`
@@ -355,26 +349,29 @@ export async function middleware(request: NextRequest) {
   // if the header and the rendered bytes could ever disagree here, the console
   // would already be serving no JavaScript at all. It does not, so they cannot.
   const scriptSrcReportOnly = scriptSrcReportOnlyDirective(nonce, isProduction)
-  // BOTH directives, because neither is universally supported: `report-uri` is
-  // deprecated but is what Safari and older Chrome actually send, while
-  // `report-to` is the modern one and needs the `Reporting-Endpoints` header
-  // below to resolve its group name. Sending one alone loses a browser family,
-  // and `csp-report.ts` reads both wire formats for the same reason.
-  const reportDirectives =
-    `report-uri ${CSP_REPORT_PATH}; report-to ${CSP_REPORT_GROUP}`
+  // The reporting tail. Both directives over https, `report-uri` alone over
+  // plain http — and the reason is NOT the fallback this comment used to claim
+  // (AGL-1788). `report-to` does not back `report-uri` up, it switches it off,
+  // so on a transport where the Reporting API cannot run the pair delivers
+  // nothing to anyone. The measured table lives with `reportingDirectives`.
+  const secureTransport = isSecureTransport(
+    request.headers,
+    request.nextUrl.protocol,
+  )
+  const reportDirectives = reportingDirectives(secureTransport)
   // `x-nonce` is for our own inline scripts to read via `headers()`; Next's own
   // scripts are nonced from the CSP header, not from this.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
   const applyCsp = (res: NextResponse) => {
     // Resolves the `report-to` group named in the policies below. Without this
-    // header `report-to` names a group the browser has never heard of and is
-    // silently ignored — which looks exactly like "no violations", the same
-    // false all-clear this whole endpoint exists to end.
-    res.headers.set(
-      'Reporting-Endpoints',
-      `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`,
-    )
+    // header `report-to` names a group the browser has never heard of, and
+    // because its mere presence suppresses `report-uri` the result is not "the
+    // modern channel is ignored" but "nothing is delivered at all" — measured
+    // in both Chrome and Safari (AGL-1788). Set only when `report-to` is, so
+    // the two can never drift apart.
+    const endpoints = reportingEndpointsHeader(secureTransport)
+    if (endpoints) res.headers.set('Reporting-Endpoints', endpoints)
     // ONE policy carrying script-src and the base directives together, so it is
     // self-consistent by construction: the nonce Next stamps on scripts is read
     // from this exact string. Splitting them is what shadowed the nonce — see

@@ -165,14 +165,39 @@ describe('tenant report-only img-src (AGL-1703)', () => {
   it('carries BOTH reporting directives and resolves the `report-to` group', async () => {
     // AGL-518 shipped a report-only policy with no reporting directive for
     // months: it detected violations, told nobody, and read as an all-clear.
-    // `report-uri` is what Safari and older Chrome send; `report-to` is the
-    // modern one and is silently ignored unless `Reporting-Endpoints` names its
-    // group. Sending one alone loses a browser family.
+    // Over https both directives deliver, by different routes — Chrome through
+    // the Reporting API, Safari by posting to the `report-uri` path — so both
+    // ship. `report-to` needs `Reporting-Endpoints` to name its group, and
+    // without it nothing is delivered by EITHER browser (AGL-1788), which is
+    // why the header is asserted here rather than treated as decoration.
     const headers = await headersFor()
     const reportOnly = headers?.get('Content-Security-Policy-Report-Only') ?? ''
     expect(reportOnly).toContain('report-uri /api/csp-report')
     expect(reportOnly).toContain('report-to csp')
     expect(headers?.get('Reporting-Endpoints')).toBe('csp="/api/csp-report"')
+  })
+
+  it('drops `report-to` over plain http, where it would silence everything', async () => {
+    // AGL-1788, measured rather than reasoned: `report-to` suppresses
+    // `report-uri` whether or not its group resolves, and Chrome refuses a
+    // `Reporting-Endpoints` header on a non-secure transport. The pair
+    // therefore reports NOTHING over `http://`, which is every `nx serve
+    // tenant` session. Published customer sites are https and unaffected.
+    const { middleware } = await import('../middleware')
+    const response = await middleware(
+      new NextRequest(new URL('/', `http://${HOST}`), {
+        headers: { host: HOST },
+      }),
+      {} as never,
+    )
+    if (!response || !('headers' in response)) {
+      throw new Error('middleware returned no response')
+    }
+    const reportOnly =
+      response.headers.get('Content-Security-Policy-Report-Only') ?? ''
+    expect(reportOnly).toContain('report-uri /api/csp-report')
+    expect(reportOnly).not.toContain('report-to')
+    expect(response.headers.get('Reporting-Endpoints')).toBeNull()
   })
 
   it('reports to a RELATIVE path, never an absolute aglyn origin', async () => {
