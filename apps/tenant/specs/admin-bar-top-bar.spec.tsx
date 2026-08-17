@@ -62,6 +62,7 @@ const CONTEXT_RESPONSE: Record<string, unknown> = {
   analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
   viewsToday: 128,
   screenViewsToday: 12,
+  faviconUrl: '/api/media/cdn/host-1/fav1',
   accountUrl: `${CONSOLE_ORIGIN}/manage/user`,
 }
 
@@ -163,6 +164,25 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(paths[1]?.getAttribute('fill')).toBe('#00b0ff')
     // The old placeholder was a literal "A" tile.
     expect(brandLink.textContent).toBe('Aglyn Marketing')
+  })
+
+  it("shows the site's favicon beside the site name, after the platform mark", async () => {
+    await renderReadyBar()
+    const brandLink = linkByText('Aglyn Marketing')
+    const favicon = brandLink.querySelector('img[data-aglyn-site-favicon]')
+    expect(favicon).not.toBeNull()
+    expect(favicon?.getAttribute('src')).toBe(CONTEXT_RESPONSE.faviconUrl)
+    // Decorative next to the visible site name — never announced twice.
+    expect(favicon?.getAttribute('alt')).toBe('')
+    // Platform first, then site: the Aglyn mark precedes the favicon.
+    const children = Array.from(brandLink.children)
+    expect(children.indexOf(brandLink.querySelector('svg[data-aglyn-mark]')!))
+      .toBeLessThan(children.indexOf(favicon as Element))
+  })
+
+  it('renders no favicon element at all when the site set none', async () => {
+    await renderReadyBar({ faviconUrl: null })
+    expect(document.querySelector('img[data-aglyn-site-favicon]')).toBeNull()
   })
 
   it('lays out the detail: dashboard link, screen, draft flag, quick links, identity', async () => {

@@ -242,6 +242,19 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.inboxUrl).not.toBeNull()
   })
 
+  it("resolves the site's favicon exactly like the layout's icon link", async () => {
+    // Same field, same resolver as AGL-1421: a `media:` reference becomes
+    // the site-relative CDN path the bar's page can resolve.
+    mockHostData = { ...mockHostData, seo: { favicon: 'media:host-1/fav1' } }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.faviconUrl).toBe('/api/media/cdn/host-1/fav1')
+  })
+
+  it('sends null — not a broken href — when the site set no favicon', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.faviconUrl).toBeNull()
+  })
+
   it('links the console analytics surface through the real route table', async () => {
     const payload = await (await POST(contextRequest())).json()
     expect(payload.analyticsUrl).toBe(

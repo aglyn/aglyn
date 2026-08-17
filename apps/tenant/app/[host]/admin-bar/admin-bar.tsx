@@ -80,6 +80,8 @@ export interface AdminBarProps {
 
 interface EditContext {
   siteName?: string
+  /** The site's own favicon, resolved like the layout's icon link. */
+  faviconUrl?: string | null
   screenId: string | null
   screenName: string | null
   versionId: string | null
@@ -675,6 +677,24 @@ export default function AdminBar({
         title="Open this site's console dashboard"
       >
         <AglynMark />
+        {/* Two identities, platform then site (AGL-1829 follow-on): the
+            Aglyn mark stays leftmost as platform chrome; the site's own
+            favicon sits with the site's name. Absent or broken, it simply
+            does not render — never a broken-image glyph on someone's
+            website. */}
+        {context?.faviconUrl ? (
+          <img
+            src={context.faviconUrl}
+            alt=""
+            width={16}
+            height={16}
+            data-aglyn-site-favicon=""
+            style={{ flexShrink: 0, display: 'block', borderRadius: 3 }}
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
+        ) : null}
         <strong className="aglyn-ab-site">
           {context?.siteName ?? 'This site'}
         </strong>

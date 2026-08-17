@@ -20,6 +20,7 @@ import {
   checkEntitlement,
   findScreenIdByRoutePath,
   resolveHostEnabledPlugins,
+  resolveMediaSrc,
   Route,
   SCREEN_ROOT_PATH,
 } from '@aglyn/aglyn/server'
@@ -86,6 +87,7 @@ export async function POST(request: Request): Promise<Response> {
       cname?: string
       displayName?: string
       screens?: Record<string, string>
+      seo?: { favicon?: string }
     }
 
     // Outstanding tokens die the moment the flag flips off — this check is
@@ -302,9 +304,19 @@ export async function POST(request: Request): Promise<Response> {
       Route.MANAGE_USER_SETTINGS,
     )}`
 
+    // The site's own favicon (AGL-1829 follow-on), resolved EXACTLY like
+    // the `[host]` layout's `<link rel="icon">` (AGL-1421): same field,
+    // same resolver, same site-relative form — the bar renders on the same
+    // page that link tag does, so it has the same base URL to resolve
+    // against. Rides the host doc already in hand; no extra read. A site
+    // with nothing configured gets null and the bar shows no icon.
+    const faviconUrl =
+      resolveMediaSrc(hostDoc.seo?.favicon, { hostId: claims.hostId }) ?? null
+
     return Response.json(
       {
         siteName: hostDoc.displayName ?? hostDoc.subdomain,
+        faviconUrl,
         screenId: screenId ?? null,
         screenName: screenName ?? null,
         versionId: versionId ?? null,
