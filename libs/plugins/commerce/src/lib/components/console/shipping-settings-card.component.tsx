@@ -21,6 +21,8 @@ import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
+  AlertTitle,
   Button,
   Divider,
   FormControlLabel,
@@ -59,6 +61,18 @@ export interface ShippingSettingsCardProps {
  * where the parcel is going before it can price one, and a destination no
  * zone covers is refused outright rather than shipped for free. One zone, or
  * one '*' zone, needs neither: the shopper is asked nothing.
+ *
+ * AND THE MERCHANT HAS TO BE ABLE TO SEE IT (AGL-1791). Both consequences
+ * were invisible here: a merchant saved zones and the checkouts they refused
+ * were refused with nothing on this page saying so, which is a support ticket
+ * from someone who did nothing wrong. The coverage block reads
+ * `summarizeShippingCoverage` off the same `current` object the save writes,
+ * so it moves as the form is typed rather than after a round trip.
+ *
+ * It escalates to a warning ONLY for a merchant who priced some destinations
+ * and not others. A merchant whose rates reach nowhere is not misconfigured —
+ * that store charges no shipping and refuses nobody — and warning them would
+ * nag every store selling downloads.
  */
 export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   const { hostId } = props
@@ -170,6 +184,30 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
       persist: false,
     })
   }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
+
+  /**
+   * Recomputed from `current` on every render, so the block answers for what
+   * is typed rather than for what was last saved — a merchant deleting the
+   * zone that covered France should see France go uncovered before they
+   * commit it, not after.
+   */
+  const coverage = CommerceModel.summarizeShippingCoverage(current)
+  const countryNames = (codes: readonly string[]) =>
+    codes
+      .map((code) => CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code)
+      .join(', ')
+  /**
+   * The one-click half of the fix: a zone claiming everywhere the merchant
+   * has not named. It adds the ZONE only — a rate on it prices the parcel,
+   * and choosing that price is the merchant's call, not ours. A rate row
+   * defaulted here would post at whatever we picked, and a blank flat rate
+   * resolves to free.
+   */
+  const addRestOfWorldZone = () =>
+    updateZone(current.zones?.length ?? 0, {
+      name: 'Rest of world',
+      countries: ['*'],
+    })
 
   const usd = (cents: number | undefined) =>
     cents == null ? '' : String(cents / 100)
@@ -408,6 +446,47 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
           }
           label="Offer free local pickup"
         />
+
+        <Divider />
+        <Typography variant="subtitle2">{'Coverage'}</Typography>
+        {coverage.unserved.length > 0 ? (
+          <Alert
+            severity="warning"
+            action={
+              coverage.hasRestOfWorldZone ? undefined : (
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={addRestOfWorldZone}
+                >
+                  {'Add rest-of-world zone'}
+                </Button>
+              )
+            }
+          >
+            <AlertTitle>
+              {`Checkout turns away ${coverage.unserved.length} of the ${CommerceModel.CHECKOUT_SHIPPING_COUNTRIES.length} destinations it collects addresses for`}
+            </AlertTitle>
+            {`No rate reaches ${countryNames(coverage.unserved)}, so an order shipping there is refused rather than posted for free. `}
+            {coverage.hasRestOfWorldZone
+              ? 'A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them.'
+              : 'Give them a zone with a rate, or add a rest-of-world zone and price one on it.'}
+          </Alert>
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            {coverage.shipsNowhere
+              ? 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
+              : `Checkout can price shipping to every destination it collects an address for: ${countryNames(coverage.served)}.`}
+          </Typography>
+        )}
+        {coverage.asksDestination ? (
+          <Typography variant="caption" color="text.secondary">
+            {
+              'Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one.'
+            }
+          </Typography>
+        ) : null}
+
         <Button
           variant="contained"
           color="primary"

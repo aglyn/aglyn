@@ -23,6 +23,7 @@ import {
   resolveCheckoutShippingOptions,
   resolveShippingRates,
   type ShippingSettings,
+  summarizeShippingCoverage,
 } from './commerce-shipping'
 
 const settings: ShippingSettings = {
@@ -413,5 +414,144 @@ describe('planCheckoutShipping', () => {
     expect(plan.refusal).toBeUndefined()
     expect(plan.options).toHaveLength(MAX_CHECKOUT_SHIPPING_OPTIONS)
     expect(everyOptionServesEveryCountry(deep, plan)).toBe(true)
+  })
+})
+
+/**
+ * The console's answer to "which destinations do my zones refuse?"
+ * (AGL-1791).
+ *
+ * The pairing to hold is with `planCheckoutShipping`: a destination this
+ * reports unserved must be one the checkout actually refuses, and a merchant
+ * it stays quiet about must be one the checkout serves. The two are asserted
+ * against each other rather than separately, because the expensive mistake
+ * here is not a wrong list — it is warning a store that is fine, which is
+ * exactly what a bare served/unserved partition would do to every merchant
+ * who ships nothing at all.
+ */
+describe('summarizeShippingCoverage', () => {
+  const cart = { subtotalCents: 0, totalGrams: 0 }
+
+  /** Every destination named as refused is one the checkout refuses. */
+  function refusalsAgree(settings: ShippingSettings | undefined) {
+    const coverage = summarizeShippingCoverage(settings)
+    return CHECKOUT_SHIPPING_COUNTRIES.every((country) => {
+      const refused =
+        planCheckoutShipping(settings, cart, country).refusal ===
+        'destination-unserved'
+      return refused === coverage.unserved.includes(country)
+    })
+  }
+
+  it('names the destinations no rate reaches', () => {
+    // A US zone and nothing else: the four the merchant priced no rate for
+    // are the four AGL-1721 now turns away at checkout.
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US', 'CA'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(usOnly)
+    expect(coverage.served).toEqual(['US', 'CA'])
+    expect(coverage.unserved).toEqual(['GB', 'AU', 'DE', 'FR'])
+    expect(coverage.shipsNowhere).toBe(false)
+    expect(coverage.hasRestOfWorldZone).toBe(false)
+    expect(refusalsAgree(usOnly)).toBe(true)
+  })
+
+  it('reports no gap for a merchant who ships nowhere', () => {
+    // The case a bare partition gets wrong: all six resolve to nothing, and
+    // none of them is refused — this store charges no shipping and always
+    // has. Warning here would nag every merchant selling downloads.
+    for (const nothing of [
+      undefined,
+      {},
+      { zones: [{ id: 'us', name: 'US', countries: ['US'] }] },
+    ] as (ShippingSettings | undefined)[]) {
+      const coverage = summarizeShippingCoverage(nothing)
+      expect(coverage.served).toEqual([])
+      expect(coverage.unserved).toEqual([])
+      expect(coverage.shipsNowhere).toBe(true)
+      expect(coverage.asksDestination).toBe(false)
+      expect(refusalsAgree(nothing)).toBe(true)
+    }
+  })
+
+  it('reports a rest-of-world zone as complete coverage', () => {
+    const world: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+      rates: [
+        { id: 'any', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(world)
+    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.unserved).toEqual([])
+    expect(coverage.asksDestination).toBe(false)
+    expect(coverage.hasRestOfWorldZone).toBe(true)
+    expect(refusalsAgree(world)).toBe(true)
+  })
+
+  it('counts local pickup as reaching every destination', () => {
+    // `resolveShippingRates` appends pickup whatever the destination, so a
+    // merchant offering it refuses nobody — the checkout agrees, and the
+    // card must not claim a gap the shopper would not hit.
+    const pickup: ShippingSettings = { localPickup: true }
+    const coverage = summarizeShippingCoverage(pickup)
+    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.unserved).toEqual([])
+    expect(refusalsAgree(pickup)).toBe(true)
+  })
+
+  it('sees a specific zone with no rates hide the rest-of-world zone', () => {
+    // The gap a merchant is least likely to spot: naming Europe and pricing
+    // nothing on it does not fall back to '*', because a matching specific
+    // zone suppresses rest-of-world. The two countries have a zone AND a '*'
+    // fallback and are still refused.
+    const hidden: ShippingSettings = {
+      zones: [
+        { id: 'eu', name: 'Europe', countries: ['DE', 'FR'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'any', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(hidden)
+    expect(coverage.unserved).toEqual(['DE', 'FR'])
+    expect(coverage.hasRestOfWorldZone).toBe(true)
+    expect(refusalsAgree(hidden)).toBe(true)
+  })
+
+  it('counts a row Stripe would reject as the nothing it resolves to', () => {
+    // `resolveCheckoutShippingOptions` drops a blank name silently, so the
+    // merchant has a rate on screen and no rate at checkout.
+    const blank: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+        { id: 'oops', zoneId: 'world', name: '', kind: 'flat', amountCents: 2999 },
+      ],
+    }
+    const coverage = summarizeShippingCoverage(blank)
+    expect(coverage.served).toEqual(['US'])
+    expect(coverage.unserved).toEqual(['CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(refusalsAgree(blank)).toBe(true)
+  })
+
+  it('flags the checkout step that rates differing by zone add', () => {
+    // The shared fixture is the AGL-1721 layout: US at 799, rest of world at
+    // 2999. Nobody is refused, so there is no warning to show — but every
+    // shopper is now asked a question the merchant never chose to ask.
+    const coverage = summarizeShippingCoverage(settings)
+    expect(coverage.unserved).toEqual([])
+    expect(coverage.asksDestination).toBe(true)
+    expect(planCheckoutShipping(settings, cart).refusal).toBe(
+      'destination-required',
+    )
   })
 })

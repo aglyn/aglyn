@@ -22,8 +22,10 @@
  *
  * `resolveShippingRates` is the per-destination resolver;
  * `resolveCheckoutShippingOptions` is the Stripe Checkout adapter,
- * `planCheckoutShipping` decides which destinations one session may serve, and
- * `appendCheckoutShippingParams` emits it onto a session. AGL-288 shipped this
+ * `planCheckoutShipping` decides which destinations one session may serve,
+ * `appendCheckoutShippingParams` emits it onto a session, and
+ * `summarizeShippingCoverage` answers the same question for the console, so a
+ * merchant can see which destinations their zones refuse. AGL-288 shipped this
  * model with no production call site at all — the doc comment here claimed the
  * cart estimator, checkout and POS pickup used it, and none of them did, so
  * nothing ever read the settings a merchant saved and no shipping was ever
@@ -342,6 +344,91 @@ export function planCheckoutShipping(
   return {
     countries,
     options: resolveCheckoutShippingOptions(settings, countries, cart),
+  }
+}
+
+/**
+ * A cart chosen so that every rate a merchant could have written resolves if
+ * it can resolve at all (AGL-1791). The settings page has no cart, and two of
+ * the four rate kinds price against one: `tierAmount` takes the first tier
+ * whose `upTo` is at least the value, so a zero subtotal and zero weight clear
+ * every tier a merchant would write, and a `free_over` rate resolves at any
+ * subtotal.
+ *
+ * That makes a coverage answer a LOWER BOUND on the gaps. A destination
+ * reported unserved is unserved for every cart; a destination reported served
+ * may still be refused for a cart dearer or heavier than the merchant's last
+ * tier. Erring in this direction is the deliberate half: the console must not
+ * warn a merchant whose settings are fine.
+ */
+const COVERAGE_PROBE_CART = { subtotalCents: 0, totalGrams: 0 }
+
+/** What a merchant's saved zones and rates cost their shoppers (AGL-1791). */
+export interface ShippingCoverage {
+  /** Collectable destinations at least one rate reaches. */
+  served: string[]
+  /**
+   * Collectable destinations CHECKOUT REFUSES — `destination-unserved`.
+   *
+   * EMPTY FOR A MERCHANT WHOSE RATES REACH NOWHERE, who is not misconfigured:
+   * `planCheckoutShipping` refuses nobody when no rate resolves anywhere, so
+   * that store charges no shipping and completes exactly as it always has.
+   * The rule lives here rather than in the caller because reading `served`
+   * against a bare partition is how a surface comes to warn every store that
+   * does not ship.
+   */
+  unserved: string[]
+  /** No rate reaches anywhere: no shipping is charged, and nobody refused. */
+  shipsNowhere: boolean
+  /**
+   * Rates differ by destination, so the storefront asks the shopper where the
+   * parcel is going before it can price one — a checkout step the merchant
+   * added by saving these zones, and never chose.
+   */
+  asksDestination: boolean
+  /** Some zone already claims rest of world, so `*` is not the missing piece. */
+  hasRestOfWorldZone: boolean
+}
+
+/**
+ * Which of the collectable destinations a merchant's settings actually cover
+ * (AGL-1791), for a console surface to show them.
+ *
+ * Measured against `CHECKOUT_SHIPPING_COUNTRIES` and nothing wider: those six
+ * are the only destinations a storefront session collects an address for, so
+ * they are the only ones a merchant can lose an order to. Counting coverage
+ * against every country on earth would report a gap for destinations no
+ * shopper can reach checkout from.
+ *
+ * Answered through `resolveCheckoutShippingOptions` — the same function the
+ * session is built from — so a row the console allows but Stripe would reject
+ * (blank id, blank name) counts as the nothing it resolves to, and a specific
+ * zone with no rates still hides a `*` zone here exactly as it does at
+ * checkout.
+ */
+export function summarizeShippingCoverage(
+  settings: ShippingSettings | undefined,
+): ShippingCoverage {
+  const served: string[] = []
+  const unserved: string[] = []
+  const offers = new Set<string>()
+  for (const country of CHECKOUT_SHIPPING_COUNTRIES) {
+    const options = resolveCheckoutShippingOptions(
+      settings,
+      [country],
+      COVERAGE_PROBE_CART,
+    )
+    offers.add(optionsKey(options))
+    ;(options.length > 0 ? served : unserved).push(country)
+  }
+  return {
+    served,
+    unserved: served.length > 0 ? unserved : [],
+    shipsNowhere: served.length === 0,
+    asksDestination: offers.size > 1,
+    hasRestOfWorldZone: (settings?.zones ?? []).some((zone) =>
+      zone.countries.some((code) => code === '*'),
+    ),
   }
 }
 

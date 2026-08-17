@@ -75,6 +75,27 @@ snapshots, totals, and a timeline:
   inclusive pricing supported) or **Stripe Tax** automatic calculation;
   products can be tax-exempt.
 
+### Destination coverage
+
+Checkout collects a shipping address for six countries — **United States,
+Canada, United Kingdom, Australia, Germany and France** — and charges the
+rate that destination resolves to. It will not charge a rate belonging to
+another zone, so the zones you save decide what checkout can do:
+
+- **A destination no rate reaches is refused.** The shopper is told the store
+  does not ship there, rather than being posted a parcel you priced nothing
+  for. The **Coverage** line under Shipping settings names those countries as
+  you edit, and offers to add a rest-of-world zone.
+- **Rates that differ by destination make checkout ask.** The cart and
+  product page reveal a "Ship to" selector before they can price one. A
+  single zone, or a single rest-of-world zone, asks the shopper nothing.
+- **No rates at all is a valid setup**, not a gap: the store charges no
+  shipping and refuses nobody.
+
+A zone that names a country **hides the rest-of-world zone for it** — so a
+"Europe" zone with no rates on it refuses Europe even when a `*` zone exists.
+Cover a destination by pricing a rate on the zone that claims it.
+
 ## Dropshipping
 
 Assign a **supplier** to a product and paid orders route automatically —
