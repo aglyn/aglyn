@@ -81,7 +81,7 @@ import {
   parseCspReports,
   violationKey,
 } from '@aglyn/aglyn/app-utils/csp-report'
-import { checkRateLimit } from '@aglyn/tenant-data-admin'
+import { checkRateLimit, recordCspViolations } from '@aglyn/tenant-data-admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -197,6 +197,15 @@ export async function POST(request: Request): Promise<Response> {
         }),
       )
     }
+    // The durable half (AGL-1799). Fed from every ACCEPTED violation, before
+    // the key damper above — the damper protects the LOG from one defect
+    // costing a line per page view, but the counter is exactly the thing that
+    // wants those occurrences compounded, and an increment is what the damper
+    // was protecting the log from. Bounded separately inside: distinct-origin
+    // caps bound documents, a per-instance budget bounds write ops, and the
+    // per-IP limiter above still bounds what one caller can feed it. Awaited,
+    // not fire-and-forget — a serverless instance may freeze at the response.
+    await recordCspViolations(violations, { app: 'tenant', site })
     return accepted()
   } catch {
     // Never a 5xx. This route exists to observe a problem and must not become

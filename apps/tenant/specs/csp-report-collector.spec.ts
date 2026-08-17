@@ -39,6 +39,13 @@
  * would most reasonably assume is already handled by the shared code.
  */
 
+// The durable aggregate (AGL-1799) is a Firestore write, so HERE it is a spy:
+// what this suite can meaningfully pin is the wiring — which violations the
+// route hands over, and that the damper does not starve them. The bounding
+// behaviour behind the spy is tested against an injected fake store in
+// `libs/tenant/data/admin/src/lib/server/csp-aggregate.spec.ts`.
+const mockRecordCspViolations = jest.fn(async () => 0)
+
 // The route pulls the in-memory limiter from the tenant-data-admin barrel,
 // which drags in firebase-admin. The limiter itself is 20 lines of arithmetic
 // over an injectable Map, so it is reimplemented here rather than mocked away
@@ -48,6 +55,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   // `type` declaration inside a mock factory as readily as a variable.
   const fallback = new Map<string, { count: number; windowStartMs: number }>()
   return {
+    recordCspViolations: (...args: unknown[]) =>
+      mockRecordCspViolations(...(args as [])),
     checkRateLimit: (
       key: string,
       options?: {
@@ -113,6 +122,7 @@ describe('tenant csp-report collector (AGL-1703)', () => {
 
   beforeEach(() => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockRecordCspViolations.mockClear()
   })
   afterEach(() => warn.mockRestore())
 
@@ -164,6 +174,36 @@ describe('tenant csp-report collector (AGL-1703)', () => {
     // KEY_LIMIT is 3 — deliberately not 1, so the same defect showing up on
     // several sites still reads as several findings.
     expect(logged(warn)).toHaveLength(3)
+  })
+
+  it('feeds the durable aggregate from BEFORE the log damper (AGL-1799)', async () => {
+    // The damper protects the LOG from one defect costing a line per page
+    // view; the counter is the thing that WANTS those occurrences compounded
+    // — a week of traffic must be readable after the log's hour is gone. Five
+    // visitors, one defect: three log lines, but five aggregate deliveries.
+    const blocked = 'https://tracker.example/damped-but-counted.gif'
+    for (let i = 0; i < 5; i += 1) await post(reportBody(blocked))
+    expect(logged(warn)).toHaveLength(3)
+    expect(mockRecordCspViolations).toHaveBeenCalledTimes(5)
+    const [violations, options] = mockRecordCspViolations.mock.calls[4] as any
+    expect(violations).toHaveLength(1)
+    expect(violations[0].blockedUri).toBe(blocked)
+    // The site rides along, REQUEST-derived like the log line's.
+    expect(options).toEqual({ app: 'tenant', site: 'acme.com' })
+  })
+
+  it('never aggregates what the parser rejected', async () => {
+    await post(
+      JSON.stringify({
+        'csp-report': {
+          'document-uri': 'https://acme.com/',
+          'effective-directive': 'img-src',
+          'blocked-uri': 'chrome-extension://abcdef/pixel.png',
+        },
+      }),
+    )
+    await post('not json')
+    expect(mockRecordCspViolations).not.toHaveBeenCalled()
   })
 
   it('still distinguishes DIFFERENT violations on the same site', async () => {

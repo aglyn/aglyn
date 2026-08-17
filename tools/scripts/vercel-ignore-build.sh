@@ -166,7 +166,6 @@ fi
 #
 #   apps/<other>/   the other deployable apps; none imports another
 #   apps/docs/      Docusaurus, standalone (own package.json + node_modules)
-#   apps/www/       deprecated marketing site, no longer even deployed
 #   cloud/          Firebase rules, indexes and functions — a separate
 #                   deploy surface, imported by no app source
 #   .github/        CI workflows
@@ -187,7 +186,7 @@ is_ignorable() {
     return 0
   fi
   case "$1" in
-    apps/docs/*|apps/www/*) return 0 ;;
+    apps/docs/*) return 0 ;;
     cloud/*|.github/*|.claude/*|docs/*) return 0 ;;
     *.md|.gitignore) return 0 ;;
   esac

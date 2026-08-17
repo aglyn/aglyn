@@ -35,8 +35,7 @@ npm run typecheck libs/aglyn # filter by path prefix
 `tools/scripts/typecheck.mjs` drives it and runs in CI (nx-ci.yml) before the
 affected lint/test/build step. Skips (see the script's SKIP list):
 `tsconfig.base.json` (not a program), `tools/` (no .ts inputs), and `apps/docs`
-(standalone Docusaurus on its own TypeScript). `apps/www` is now fully
-type-checked (its pre-existing type debt was cleared in AGL-461).
+(standalone Docusaurus on its own TypeScript).
 
 ## TS 7 config rules that bit us (and their fixes)
 

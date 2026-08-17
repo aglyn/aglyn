@@ -21,8 +21,15 @@ import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
-import { collection, deleteDoc, doc, limit, query } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getCountFromServer,
+  limit,
+  query,
+} from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -62,7 +69,45 @@ export function RegistersCard(props: RegistersCardProps) {
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
   const locations = locationDocs ?? []
-  const quota = Aglyn.checkQuota(org, 'posRegisters', registers.length)
+  /**
+   * The register HEAD-COUNT is a server aggregate, not the length of the
+   * capped listener (AGL-1738, the ninth instance of AGL-1716's AGL-1706
+   * shape — filed as latent, made real when the clamp was declined).
+   *
+   * The listener is `limit(25)` and the stock `posRegisters` bands top out
+   * at agency's 20 — under the window — but the $89/mo register add-on is
+   * sold flat up to `POS_REGISTERS_ADDON_MAX` (50) on any plan carrying
+   * `pos`, so an agency org's effective limit reaches 70. From the 26th
+   * register the listener saturates and the card understated usage in the
+   * flattering direction while `api/hosts/resources`, which counts the
+   * collection, refused the add.
+   *
+   * Re-read after an add AND a delete: registers are hard-deleted here
+   * (like locations, unlike the soft-deleting cards), so a removal really
+   * does free a slot on both sides, and a one-shot that missed it would
+   * keep refusing.
+   */
+  const [registerCountEpoch, setRegisterCountEpoch] = useState(0)
+  const [serverRegisterCount, setServerRegisterCount] = useState<number | null>(
+    null,
+  )
+  useEffect(() => {
+    let active = true
+    void getCountFromServer(collection(firestore, 'hosts', hostId, 'registers'))
+      .then((snapshot) => {
+        if (active) setServerRegisterCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Falls back to the loaded rows — a LOWER bound and the prior
+        // behaviour, never 0, which reads as "no registers used" on a site
+        // that is over its cap.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, registerCountEpoch])
+  const registerCount = serverRegisterCount ?? registers.length
+  const quota = Aglyn.checkQuota(org, 'posRegisters', registerCount)
   // Registers beyond the plan cap (e.g. after a downgrade) can't transact —
   // pos-order.ts blocks them by creation rank (AGL-482); mirror that here.
   //
@@ -102,13 +147,22 @@ export function RegistersCard(props: RegistersCardProps) {
       })
       setName('')
       setLocationId('')
+      setRegisterCountEpoch((epoch) => epoch + 1)
     } catch (error: any) {
       enqueueSnackbar(error?.message ?? 'Could not add register', {
         variant: 'warning',
         persist: false,
       })
     }
-  }, [name, locationId, quota, hostId, createHostResource, enqueueSnackbar])
+  }, [
+    name,
+    locationId,
+    planReady,
+    quota,
+    hostId,
+    createHostResource,
+    enqueueSnackbar,
+  ])
 
   const handleDelete = useCallback(
     (register: any) => async () => {
@@ -124,6 +178,9 @@ export function RegistersCard(props: RegistersCardProps) {
         .catch(() => false)
       if (!confirmed) return
       await deleteDoc(doc(firestore, 'hosts', hostId, 'registers', register.$id))
+      // A HARD delete, so the slot really is freed on both sides — the
+      // one-shot aggregate has to be told (AGL-1716/AGL-1738).
+      setRegisterCountEpoch((epoch) => epoch + 1)
     },
     [confirm, firestore, hostId],
   )
@@ -207,12 +264,14 @@ export function RegistersCard(props: RegistersCardProps) {
           </Button>
         </Stack>
         <Typography variant="caption" color="text.secondary">
+          {/* The site's registers, not this card's rows (AGL-1738) — the
+              readout and the gate must agree, and the gate now counts. */}
           {planReady
-            ? `${registers.length}/${
+            ? `${registerCount}/${
                 quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit
               } registers on your plan`
-            : `${registers.length} register${
-                registers.length === 1 ? '' : 's'
+            : `${registerCount} register${
+                registerCount === 1 ? '' : 's'
               } · checking your plan…`}
         </Typography>
       </Stack>

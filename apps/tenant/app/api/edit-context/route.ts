@@ -233,6 +233,15 @@ export async function POST(request: Request): Promise<Response> {
           })}?tab=orders`
         : null
 
+    // The connected-as identity's destination (AGL-1829 follow-on): the
+    // console's user-level account page. `/manage/user` is deliberately NOT
+    // org-scoped (see the Route enum's header note), so it needs no slug —
+    // but it is still built here through buildRoute like every other console
+    // link, because the bar never hand-assembles console paths.
+    const accountUrl = `${CONSOLE_ORIGIN}${buildRoute(
+      Route.MANAGE_USER_SETTINGS,
+    )}`
+
     return Response.json(
       {
         siteName: hostDoc.displayName ?? hostDoc.subdomain,
@@ -247,6 +256,7 @@ export async function POST(request: Request): Promise<Response> {
         screensUrl,
         inboxUrl,
         ordersUrl,
+        accountUrl,
         expiresAtMs: claims.exp,
       },
       // Per-visitor capability data — never cacheable.

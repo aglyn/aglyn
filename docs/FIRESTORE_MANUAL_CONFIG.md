@@ -87,6 +87,7 @@ running the deploy, which is the one action that can destroy them.
 |---|---|---|
 | `rateLimits` | `expiresAt` | ephemeral rate-limit windows (AGL-794/795); expired windows should be reaped, not accumulate |
 | `mediaTombstones` | `expiresAt` | DAM undo records (AGL-1467). Each holds a deleted media document **verbatim** — alt text, description, tags, custom metadata, `visibleTo` scope tokens — plus the storage generations needed to restore it. Bounded to the bucket's **7-day soft-delete window**, because a tombstone that outlives the bytes it addresses can only ever produce a failed restore while still being a copy of customer data (the AGL-1443 shape). The subcollection sits under `hosts/{hostId}` and `orgs/{orgId}`, so an erasure takes it via `recursiveDelete` with no extra sweep. |
+| `cspViolationDaily` | `expiresAt` | Durable CSP-violation counters (AGL-1799) written by the console and tenant `/api/csp-report` collectors — one doc per (day × app × directive × disposition × blocked origin), never report bodies. 60-day retention (`CSP_AGGREGATE_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/csp-aggregate.ts`); the evidence AGL-1702/AGL-1726 gate their enforcing flips on. **TTL not yet enabled in gcloud as of 2026-08-17** — owed with the next index deploy. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -99,6 +100,9 @@ gcloud firestore fields ttls update expiresAt \
   --project=aglyn-main --database='(default)'
 gcloud firestore fields ttls update expiresAt \
   --collection-group=mediaTombstones --enable-ttl \
+  --project=aglyn-main --database='(default)'
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=cspViolationDaily --enable-ttl \
   --project=aglyn-main --database='(default)'
 # verify:
 gcloud firestore fields ttls list --project=aglyn-main --database='(default)'

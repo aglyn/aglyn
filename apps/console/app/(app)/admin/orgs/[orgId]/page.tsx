@@ -70,6 +70,7 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
@@ -1191,13 +1192,25 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   host.subdomain ??
                                   host.$id}
                               </AppLink>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ fontFamily: 'monospace' }}
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'center' }}
                               >
-                                {host.subdomain ?? host.$id}
-                              </Typography>
+                                {/* Form-abuse flag (AGL-1681): a refusing
+                                    site is visible here, without opening
+                                    each host or the Firebase console. */}
+                                <StaffHostFormCountersChips
+                                  forms={host.forms}
+                                />
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ fontFamily: 'monospace' }}
+                                >
+                                  {host.subdomain ?? host.$id}
+                                </Typography>
+                              </Stack>
                             </Stack>
                           ))
                         )}

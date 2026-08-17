@@ -378,19 +378,22 @@ export function canPurchase(
  * moves however many boxes ship. The merchant set a number, the system
  * checks it on every sale, and the number is never true.
  *
- * The honest split is subscription-ONLY vs `subscriptionOptional`, NOT
- * physical vs digital:
+ * AGL-1750 resolved the half AGL-1744 had to leave open: every paid invoice
+ * of a PHYSICAL subscription now mints an order and decrements its variant's
+ * stock (the `invoice.paid` branch of the commerce webhook), opening cycle
+ * included. So the honest split is now three-way:
  *
  *   - `subscriptionOptional` ("Both") products have a real one-time path —
  *     the cart only ever builds `mode: 'payment'` sessions, and buy-now with
  *     `billing: 'once'` records a plain order — and that path decrements
  *     honestly. Withdrawing stock tracking there would delete a working
  *     control and re-open the AGL-1711 oversell on the half that works.
- *   - a PHYSICAL subscription box does consume a unit every cycle and
- *     genuinely wants a per-renewal decrement, but that cannot be built
- *     before AGL-1743 decides whether renewals are recorded at all. Until
- *     then its count is no truer than a digital subscription's, so `type`
- *     does not rescue it.
+ *   - a PHYSICAL subscription box consumes a unit every cycle, and since
+ *     AGL-1750 the cycle's own order decrements it — the count moves as the
+ *     boxes ship, so the number the merchant sets is kept true again.
+ *   - a DIGITAL or SERVICE subscription-only product still has no
+ *     decrementing path anywhere, so the field stays withdrawn there: one
+ *     unit would still sell unlimited subscriptions.
  *
  * This says nothing about what `canPurchase` returns — that is the gate for
  * every other purchase path and is deliberately untouched. This is a console
@@ -398,9 +401,13 @@ export function canPurchase(
  * system will never keep true.
  */
 export function stockTrackingApplies(
-  product: Pick<HostProduct, 'subscription' | 'subscriptionOptional'>,
+  product: Pick<HostProduct, 'subscription' | 'subscriptionOptional' | 'type'>,
 ): boolean {
-  return !product.subscription || product.subscriptionOptional === true
+  return (
+    !product.subscription ||
+    product.subscriptionOptional === true ||
+    product.type === 'physical'
+  )
 }
 
 /** Buyer's requested billing mode on a checkout POST (AGL-545). */

@@ -134,7 +134,7 @@ database:
 **What the env var does NOT cover (know this before cutting over):**
 
 - **Browser clients.** The web SDK accessors
-  (`libs/shared/util/fbclient`, `libs/tenant/feature/instance`) are
+  (`libs/tenant/feature/instance`) are
   hard-wired to `(default)`. Client-visible data (live listeners, co-editing)
   keeps reading `(default)` until data is copied back.
 - **Security rules / indexes.** Rules and composite indexes deploy

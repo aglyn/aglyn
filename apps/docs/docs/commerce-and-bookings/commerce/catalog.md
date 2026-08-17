@@ -26,9 +26,11 @@ compare-at price, weight, image, and inventory count.
   sale badge on storefront blocks.
 - **Inventory**: leave blank for untracked, `0` means sold out — the same
   semantics the original product block used. Stock is **not** tracked on a
-  subscription-only product: nothing decrements it, on the first charge or
-  on any renewal, so the field is disabled there. Choose *Both — buyer
-  chooses* to keep tracking stock on the one-time sales.
+  **digital or service** subscription-only product: nothing decrements it,
+  on the first charge or on any renewal, so the field is disabled there. A
+  **physical** subscription tracks normally — every paid cycle decrements
+  one unit per box shipped — and *Both — buyer chooses* keeps tracking on
+  the one-time sales.
 
 Products created with the earlier single-price product block are lifted
 into this model automatically as a single default variant — nothing breaks
@@ -55,11 +57,15 @@ plan with storefront subscriptions (Business and above). Subscription
 billing applies to the product page's direct checkout — cart checkouts
 always charge one-time.
 
-Subscriptions never move stock. On a **subscription-only** product the
-stock field is disabled for that reason; any number already saved is kept
-and shown, but it does not cap subscribers and will not change on its own.
-A saved `0` still stops new subscribers, so clear it (**Clear stock** on
-the notice in the editor) if that is not what you want. On a **Both**
+Whether a subscription moves stock follows the product's **Type**. A
+**physical** subscription decrements one unit per paid cycle — the first
+charge and every renewal each create an order on the **Subscription**
+channel and take the box off the shelf, so the stock field stays live and
+low-stock alerts apply. A **digital or service** subscription never moves
+stock, and the stock field is disabled there; any number already saved is
+kept and shown, but it does not cap subscribers and will not change on its
+own. A saved `0` still stops new subscribers, so clear it (**Clear stock**
+on the notice in the editor) if that is not what you want. On a **Both**
 product the stock field stays live, because the one-time sales do
 decrement it.
 

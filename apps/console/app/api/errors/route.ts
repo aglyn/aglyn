@@ -28,6 +28,15 @@
  * cap before parse, field clamps in the parser, per-IP in-memory rate limit
  * (the volume tier, deliberately not the Firestore-backed limiter — see
  * rate-limit-store.ts on cost), and it answers 204 whatever arrived.
+ *
+ * Also the collector for docs.aglyn.com (AGL-1646): the docs site is static
+ * Docusaurus with no API routes of its own, so its beacon (a standalone
+ * copy of the wire format in apps/docs/src/error-beacon.ts) posts here
+ * cross-origin. Hence the CORS headers and the OPTIONS handler below — the
+ * docs beacon sends CORS *simple requests* (text/plain), but a preflighting
+ * client must not find a wall. Docs events are forwarded under service
+ * `docs-web`, keyed on the request Origin, so the two surfaces group
+ * separately in Error Reporting.
  */
 
 // lockdown-423: exempt — anonymous browser beacon; no caller identity, no org context.
@@ -42,7 +51,24 @@ export const dynamic = 'force-dynamic'
 
 const MAX_BODY_BYTES = 65_536
 
-const accepted = () => new Response(null, { status: 204 })
+/** The one cross-origin caller this collector accepts reports from. */
+const DOCS_ORIGIN = 'https://docs.aglyn.com'
+
+// Fixed allowed origin (same-origin console callers never read the response,
+// so a docs-only ACAO costs them nothing); Vary keeps caches honest.
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': DOCS_ORIGIN,
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400',
+  Vary: 'Origin',
+}
+
+const accepted = () => new Response(null, { status: 204, headers: CORS_HEADERS })
+
+export function OPTIONS(): Response {
+  return accepted()
+}
 
 export async function POST(request: Request): Promise<Response> {
   try {
@@ -63,9 +89,14 @@ export async function POST(request: Request): Promise<Response> {
       return accepted()
     }
     const events = parseClientErrorEvents(payload)
+    // Docs reports group under their own service; the console keeps its own.
+    // Origin is the browser-asserted caller — good enough for a grouping
+    // label, and it decides nothing security-relevant.
+    const service =
+      request.headers.get('origin') === DOCS_ORIGIN ? 'docs-web' : 'console-web'
     // Awaited (not fire-and-forget): a serverless response ending cancels
     // in-flight work, and the reporter carries its own short timeout.
-    await reportClientErrors(events, { service: 'console-web' })
+    await reportClientErrors(events, { service })
     return accepted()
   } catch {
     // The observer must never become the outage.

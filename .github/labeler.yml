@@ -57,9 +57,6 @@
 
 # Monorepo Apps
 
-'App: www':
-  - apps/www/*
-  - apps/www/**/*
 'App: console':
   - apps/console/*
   - apps/console/**/*

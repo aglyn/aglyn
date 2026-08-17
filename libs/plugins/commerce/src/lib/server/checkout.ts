@@ -88,18 +88,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // policy (backorder products keep selling at zero). Enforced here (the
     // block's display is cosmetic) and decremented by the webhook.
     //
-    // DELIBERATELY UNCHANGED for subscription sessions (AGL-1744), which this
-    // gate also covers and which nothing ever decrements — not the initial
-    // charge (AGL-1732) and not a renewal (AGL-1743). So on a
-    // subscription-only product the gate is permanently satisfied and one
-    // unit sells unlimited subscriptions. The fix went to the CONSOLE, which
-    // stops inviting the number (`stockTrackingApplies`), rather than here,
-    // for two reasons: this gate is the one shared by every other purchase
-    // path, and skipping it for subscription mode would silently RESUME
-    // selling for any merchant who set 0 to stop new subscribers — a lever
-    // that works today, on production data nobody has read. Whether to drop
-    // the gate for subscription mode, or decrement per renewal once AGL-1743
-    // lands, is the open product decision; both are recorded there.
+    // DELIBERATELY UNCHANGED for subscription sessions. For a PHYSICAL
+    // subscription the gate is honest again since AGL-1750: every paid cycle
+    // mints an order and decrements the variant (the webhook's invoice
+    // branch), so the number this checks now moves as boxes ship. For a
+    // digital or service subscription nothing decrements, and the console
+    // withdraws the field there (`stockTrackingApplies`, AGL-1744) rather
+    // than skipping this gate — it is the one shared by every purchase path,
+    // and skipping it for subscription mode would silently RESUME selling
+    // for any merchant who set 0 to stop new subscribers.
     if (!CommerceModel.canPurchase(lifted, variant.id, quantity)) {
       return res.status(409).json({ error: 'Sold out' })
     }

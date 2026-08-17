@@ -57,6 +57,17 @@ const REPO_ROOT = join(__dirname, '..', '..', '..')
  * what is allowed.
  */
 const ALLOWED = new Map<string, string>([
+  // A byte-pinned verbatim capture of the LIVE publisher-agreement page,
+  // hash-asserted by publisher-agreement-version.spec.ts — rewording it here
+  // would break the pin on what publishers actually accepted. The word is the
+  // PAGE's defect, not the snapshot's: the published agreement still says
+  // "Aglyn community marketplace" (AGL-1840). When the page is republished
+  // and re-captured under a new version, that snapshot must NOT need this
+  // exemption; do not widen this entry to the whole legal directory.
+  [
+    'libs/aglyn/src/lib/app-utils/legal/publisher-agreement/2026-08-14.1/marketplace-publisher-agreement.txt',
+    'Verbatim capture of the published page; the live page carries the stale name — AGL-1840.',
+  ],
   // ---- The forum. This is the meaning the rename exists to protect. ----
   [
     'apps/console/app/api/support/forum/route.ts',

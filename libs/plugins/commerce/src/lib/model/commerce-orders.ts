@@ -35,7 +35,16 @@ export type OrderStatus =
   | 'cancelled'
   | 'refunded'
 
-export type OrderChannel = 'online' | 'pos' | 'draft'
+/**
+ * Where the sale came through. `subscription` is a recurring cycle of a
+ * PHYSICAL subscription product (AGL-1750): each paid invoice mints one order
+ * so fulfilment has something to pick, pack and label against, and so
+ * recurring revenue reaches the surfaces that read `orders`. Digital and
+ * service subscriptions still record on the subscription document alone —
+ * there is nothing to ship, and AGL-1732's "a subscription is not an order"
+ * stands for them.
+ */
+export type OrderChannel = 'online' | 'pos' | 'draft' | 'subscription'
 
 /** Snapshot of what was bought — self-contained for history. */
 export interface OrderLineItem {
@@ -239,6 +248,14 @@ export interface HostOrder {
   /** Stripe references for refunds. */
   paymentIntentId?: string
   checkoutSessionId?: string
+  /**
+   * The recurring cycle this order fulfils (channel `subscription`,
+   * AGL-1750). The order's own doc id is the invoice id — that identity is
+   * the redelivery key — and these carry the join back to
+   * `subscriptions/{subscriptionId}/invoices/{invoiceId}`.
+   */
+  subscriptionId?: string
+  invoiceId?: string
   /** Draft orders (AGL-287): the link sent to the buyer. */
   paymentLinkUrl?: string
   refundedCents?: number

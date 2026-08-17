@@ -692,10 +692,11 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           {stockApplies
             ? 'Blank stock = untracked; 0 shows sold out. The first variant’s ' +
               'price feeds legacy Product blocks.'
-            : 'Stock is not tracked on a subscription-only product — nothing ' +
-              'decrements it, on the first charge or on any renewal. Choose ' +
-              '“Both — buyer chooses” below to track stock on the one-time ' +
-              'sales. The first variant’s price feeds legacy Product blocks.'}
+            : 'Stock is not tracked on a digital or service subscription — ' +
+              'nothing decrements it, on the first charge or on any renewal. ' +
+              'A physical subscription decrements per cycle, and “Both — ' +
+              'buyer chooses” tracks the one-time sales. The first variant’s ' +
+              'price feeds legacy Product blocks.'}
         </Typography>
         {strandedStock != null ? (
           <Alert
@@ -706,12 +707,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               </Button>
             }
           >
-            {`This product still has stock set (${strandedStock}), but ` +
-              'subscriptions never decrement it — not the first charge, not ' +
-              'any renewal — so the number will not change on its own and ' +
-              'does not cap subscribers. It is kept, not deleted: a stored 0 ' +
-              'still blocks new subscribers, and the value becomes editable ' +
-              'again if you switch Billing back to one-time or “Both”.'}
+            {`This product still has stock set (${strandedStock}), but a ` +
+              'digital or service subscription never decrements it — not the ' +
+              'first charge, not any renewal — so the number will not change ' +
+              'on its own and does not cap subscribers. It is kept, not ' +
+              'deleted: a stored 0 still blocks new subscribers, and the ' +
+              'value becomes editable again if you switch Billing back to ' +
+              'one-time or “Both”, or the Type to physical.'}
           </Alert>
         ) : null}
         <Stack direction="row" spacing={2}>

@@ -134,7 +134,7 @@ describe('the metered invoice is computed from server-owned documents only (AGL-
       // that failed to parse would silently make every collection look
       // client-writable and this whole guard would pass by accident.
       expect(rules.excluded.create).toEqual(
-        expect.arrayContaining(['screens', 'datasets', 'webhooks']),
+        expect.arrayContaining(['screens', 'datasets', 'webhooks', 'orders']),
       )
       expect(rules.excluded.update.length).toBeGreaterThanOrEqual(6)
       expect(rules.excluded.delete.length).toBeGreaterThanOrEqual(4)
@@ -157,6 +157,14 @@ describe('the metered invoice is computed from server-owned documents only (AGL-
       )
       expect(rules.serverOnly).not.toContain('screens')
       expect(rules.serverOnly).not.toContain('collections')
+      // `orders` sits in all three exclusion lists since AGL-1827 but is NOT
+      // outright server-only: its dedicated block re-grants the status-frozen
+      // update the console's note and restock answer still make. The emulator
+      // suite proves the freeze fires; this only keeps the parse honest about
+      // which set the name belongs to.
+      expect(rules.excluded.update).toContain('orders')
+      expect(rules.excluded.delete).toContain('orders')
+      expect(rules.serverOnly).not.toContain('orders')
     })
 
     it('finds the host subcollections the billing routes read', () => {

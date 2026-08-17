@@ -173,6 +173,10 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
     )
+    // The connected-as identity's destination: the console's user-level
+    // account page — deliberately org-slug-free, so it survives whatever
+    // workspace the editor lands in.
+    expect(payload.accountUrl).toBe('https://app.aglyn.com/manage/user')
   })
 
   it("subtracts the host's per-site deny-list from the quick links", async () => {

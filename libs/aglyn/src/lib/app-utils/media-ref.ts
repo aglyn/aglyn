@@ -292,7 +292,11 @@ const FIRST_PARTY_APEXES = [
 // reads as a site field: `host.toLowerCase()` was collected as a host field
 // named `toLowerCase` and turned the guard red. `url.hostname` is what the one
 // caller passes, so this is also the more accurate name.
-function isFirstPartyHost(hostname: string): boolean {
+//
+// Exported for `author-css.ts` (AGL-1737): the Styles panel's passive
+// off-site-url() hint needs the SAME first-party set this file already keeps
+// in sync with `security-origins.js`, rather than a third copy of the list.
+export function isFirstPartyHost(hostname: string): boolean {
   const lower = hostname.toLowerCase()
   if (FIRST_PARTY_MEDIA_HOSTS.includes(lower)) return true
   return FIRST_PARTY_APEXES.some(

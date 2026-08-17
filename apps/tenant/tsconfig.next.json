@@ -8,15 +8,6 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@/console/*": [
-        "../../libs/apps/console/*"
-      ],
-      "@/tenant/*": [
-        "../../libs/apps/tenant/*"
-      ],
-      "@/www/*": [
-        "../../libs/apps/www/*"
-      ],
       "@aglyn/aglyn": [
         "../../libs/aglyn/src/index.ts"
       ],
@@ -241,12 +232,6 @@
       ],
       "@aglyn/shared-util-errors/*": [
         "../../libs/shared/util/errors/src/lib/*"
-      ],
-      "@aglyn/shared-util-fbclient": [
-        "../../libs/shared/util/fbclient/src/index.ts"
-      ],
-      "@aglyn/shared-util-fbclient/*": [
-        "../../libs/shared/util/fbclient/src/lib/*"
       ],
       "@aglyn/shared-util-http": [
         "../../libs/shared/util/http/src/index.ts"

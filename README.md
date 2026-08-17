@@ -106,7 +106,6 @@ An [Nx](https://nx.dev) workspace organized into deployable **apps** and shareab
 ```
 aglyn/
 ├─ apps/
-│  ├─ 🌐 www        → marketing site               (aglyn.com)
 │  ├─ 🛠️ console     → dashboard, editor, billing    (app.aglyn.com)
 │  ├─ 🚀 tenant      → runtime for published sites   (aglyn.app + custom domains)
 │  └─ 📖 docs        → Docusaurus documentation
@@ -122,7 +121,7 @@ aglyn/
 │  └─ shared/               → data · ui · util building blocks
 │       ├─ data/  → enums · forms · mdi · regex · types
 │       ├─ ui/    → jsx · jsx-forms · theme · color-picker · json-editor · next · …
-│       └─ util/  → dom · email · errors · fbclient · fbserver · http · logger · …
+│       └─ util/  → dom · email · errors · fbserver · http · logger · …
 │
 └─ cloud/          → Firebase (functions, Firestore/Storage rules, Remote Config)
 ```
@@ -159,7 +158,7 @@ npm install
 # 2. Copy the example environment and fill in the blanks
 cp .env.example .env
 
-# 3. Serve an app (console, tenant, www, or docs)
+# 3. Serve an app (console, tenant, or docs)
 npx nx serve console
 ```
 

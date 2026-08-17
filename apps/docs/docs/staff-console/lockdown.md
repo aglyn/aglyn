@@ -495,9 +495,31 @@ Setting and lifting needs the **super** staff role, on the page and in the
 route. Looking a file up does not — during an incident "is this already
 disabled?" is usually a support question.
 
-There is still **no page listing the whole deny list**, so releasing a stale
-entry means looking up a file it covers, or reading the listing from the
-terminal.
+### The whole deny list {#deny-list}
+
+Everything above is per-file: you name a file and learn what refuses it. That
+is the right shape for an incident that starts with a report, and the wrong
+shape for the one situation the 2000-entry cap exists for — the list is full,
+the next takedown is refused with a **409**, and the remedy is "release stale
+entries". You cannot release what you cannot enumerate, and the only other
+route to a stale entry is knowing a media id it covers, which for a hash-keyed
+entry set months ago is exactly what nobody remembers.
+
+The second half of **Staff → Disabled files** renders the deny list as a
+table. Reading it is open to every staff role; releasing from it needs
+`super`, like every other write here. Three things to know before using it:
+
+- **A row is a key, not a file.** Release from the table clears exactly that
+  one entry. The file-mode release above — "clear every key that could refuse
+  this file" — is correct there and wrong here: the entry may cover a document
+  that has since been deleted, and a hash key covers files in workspaces the
+  row knows nothing about.
+- **Oldest first**, because the whole point is finding what has been sitting
+  there. An entry with no set-time at all predates the field and sorts first.
+- **Expired-but-unreleased rows are called out.** Enforcement stops the moment
+  an entry's end time passes, with no write — so those rows refuse nothing and
+  still consume the cap. They are the safest thing to clear first, and nothing
+  else on the platform would ever have told you they were there.
 
 ### From a terminal {#quarantine-curl}
 
@@ -543,6 +565,37 @@ curl -H "Authorization: Bearer $STAFF_TOKEN" \
 never leaves the audit trail. Like every lockdown write, the response carries
 the server's re-read of what it wrote — if `confirmed` is `false`, the write
 returned and the state still disagrees. Treat that as an unresolved incident.
+
+### How this surface came to be {#quarantine-history}
+
+The arc, for whoever inherits an incident and wonders why the page is shaped
+the way it is:
+
+- **AGL-1512** shipped the enforcement — take one infected file down, not the
+  host that serves it — keyed on the content digest so one takedown covers
+  every copy of the bytes in every workspace.
+- **AGL-1613** closed the re-upload chokepoints: quarantined bytes had been
+  refused at delivery but accepted back through upload, replace, and
+  large-file finalize, so a takedown could be undone by uploading the file
+  again.
+- **AGL-1612** gave quarantine a staff surface at all — before it, the DAM
+  did not show a disabled file (it looked exactly like a broken one) and no
+  staff page existed. It added the red **Disabled** badge, for staff and for
+  the owning workspace.
+- Setting and lifting stayed **a curl with a bearer token**, which is a fine
+  runbook and a bad incident tool: the operator transcribes a digest and a
+  scope segment, chooses between two digest fields, and then believes the
+  result. **AGL-1631** exists because this runbook named the wrong digest
+  field — the reason [Which digest to send](#which-digest) is a section and
+  not a footnote.
+- **AGL-1687** built the form, which asks for the file rather than any key so
+  the digest decision cannot be made wrong, and imported the read-back
+  discipline (`NOT CONFIRMED` over claimed success) from the Lockdown page
+  (AGL-1571).
+- **AGL-1700** added [the deny-list table](#deny-list): the `GET` had
+  returned the full listing since AGL-1512, and nothing had ever rendered it,
+  so the cap-full remedy — release stale entries — required remembering a
+  media id nobody remembers.
 
 ## Operating it
 
