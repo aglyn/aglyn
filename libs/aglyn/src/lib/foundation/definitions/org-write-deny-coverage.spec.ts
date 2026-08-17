@@ -271,12 +271,33 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
       // AGL-1795: /api/admin/org-override is the only writer of these three,
       // so they are denied to every client — including the super token, whose
       // branch is the loosest and therefore the one that decides.
+      //
+      // AGL-1813 extends the same argument, re-established per key, to the
+      // four commercial/branding keys an org admin was already denied:
+      // `discount` (/api/admin/org-discount + the webhook mirror),
+      // `brandingProfile` (/api/orgs/settings `update-branding`),
+      // `billingStatus` (the `writeOrgBilling` dunning mirror) and
+      // `enterprise` (no in-product writer at all — only the
+      // migrate-enterprise-plan Admin-SDK script). Both staff branches, or
+      // the OR leaves the other role writing them.
       expect(rule.superStaffDenied).toEqual(
         expect.arrayContaining([
           'plan',
           'entitlements',
           'releaseFlags',
           'suspendedAt',
+          'billingStatus',
+          'brandingProfile',
+          'discount',
+          'enterprise',
+        ]),
+      )
+      expect(rule.billingStaffDenied).toEqual(
+        expect.arrayContaining([
+          'billingStatus',
+          'brandingProfile',
+          'discount',
+          'enterprise',
         ]),
       )
       // The AGL-1517 carve-out, asserted rather than left to be inferred from
@@ -424,7 +445,8 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
     // says so — the AGL-1795 mutation run confirmed each half independently.
     //
     // A vacuous ladder proves nothing, so the floor is checked first.
-    expect(rule.superStaffDenied.length).toBeGreaterThanOrEqual(9)
+    // 13 = the AGL-1795 three + the AGL-1813 four + the six suspended* keys.
+    expect(rule.superStaffDenied.length).toBeGreaterThanOrEqual(13)
     const looser = rule.superStaffDenied.filter(
       (field) => !rule.billingStaffDenied.includes(field),
     )

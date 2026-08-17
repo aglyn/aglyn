@@ -79,10 +79,11 @@ service cloud.firestore {
       // Admin-SDK-only (org APIs, Stripe webhook, staff tooling), with
       // two staff exceptions mirroring the retired tenants rules
       // (AGL-206/238): super staff writes anything except the suspended*
-      // family (AGL-1517) and plan/entitlements/releaseFlags (AGL-1795);
-      // billing staff is denied those same keys plus the erasure and
-      // identity keys. Members with the admin role may rename the org;
-      // nothing else is client-writable.
+      // family (AGL-1517), plan/entitlements/releaseFlags (AGL-1795) and
+      // the commercial/branding keys discount/enterprise/brandingProfile/
+      // billingStatus (AGL-1813); billing staff is denied those same keys
+      // plus the erasure and identity keys. Members with the admin role may
+      // rename the org; nothing else is client-writable.
       allow create, delete: if false;
       // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
       // the install API after entitlement + kill-switch checks (AGL-501) —
@@ -153,15 +154,39 @@ service cloud.firestore {
       // the AGL-1501 host takedown keys below. `erasureRequestedAt` stays
       // super-writable: the erasure toggle still legitimately writes it
       // client-side.
+      //
+      // `discount`, `enterprise`, `brandingProfile` and `billingStatus` are
+      // Admin-SDK-only for EVERY client, staff included (AGL-1813) — the
+      // AGL-1354 reasoning that closed them to an org admin reaches a staff
+      // browser console just as well, and doing it client-side leaves no
+      // `adminAudit` row. Re-established per key, as AGL-1795's method
+      // requires:
+      //  - `discount` — written only by /api/admin/org-discount (staff
+      //    apply/remove, audited) and the Stripe webhook's coupon mirror;
+      //  - `enterprise` — the pre-AGL-1118 comped marker. NOTHING in the
+      //    product writes it any more; `isEnterpriseOrg` only reads it, and
+      //    the one writer anywhere is tools/scripts/migrate-enterprise-plan
+      //    .mjs, an audited Admin-SDK migration;
+      //  - `brandingProfile` — written only by /api/orgs/settings
+      //    `update-branding` behind `checkEntitlement(org, 'whiteLabel')`,
+      //    and a ROUTING input via `customConsoleDomain` (AGL-1099);
+      //  - `billingStatus` — the derived dunning mirror `writeOrgBilling`
+      //    stamps from `subscription.status`; a hand-set value would just be
+      //    a lie until the next webhook.
+      // The only client Web SDK write to a top-level org document anywhere
+      // is still the erasure batch (re-swept for AGL-1813), so denying the
+      // four costs the product nothing.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['plan', 'entitlements', 'releaseFlags',
+             'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
+             'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'erasureRequestedAt'])) ||

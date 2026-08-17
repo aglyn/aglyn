@@ -3416,4 +3416,235 @@ describe('plan/entitlements/releaseFlags are Admin-SDK-only — even for staff (
   })
 })
 
+/**
+ * AGL-1813: `discount`, `enterprise`, `brandingProfile` and `billingStatus`
+ * are Admin-SDK-only for EVERY client, staff included.
+ *
+ * After AGL-1795 the billing-staff branch still allowed all four, and the
+ * super branch allowed them too — keys an org ADMIN had been denied since
+ * AGL-1354, for reasons that reach a staff browser console just as well: a
+ * self-served `discount` or `enterprise` falsifies the MRR rollup, a
+ * client-written `brandingProfile.customConsoleDomain` is a ROUTING input
+ * (AGL-1099), and a hand-set `billingStatus` shows every member a dunning
+ * state the webhook never derived. Doing any of it client-side writes no
+ * `adminAudit` row.
+ *
+ * The AGL-1795 safety argument, re-established per key rather than assumed:
+ *  - `discount` — written only by /api/admin/org-discount (apply/remove,
+ *    audited) and the Stripe webhook's coupon mirror;
+ *  - `enterprise` — NO in-product writer at all: the pre-AGL-1118 comped
+ *    marker is only read (`isEnterpriseOrg`), and its one writer anywhere is
+ *    the migrate-enterprise-plan.mjs Admin-SDK script;
+ *  - `brandingProfile` — written only by /api/orgs/settings `update-branding`
+ *    behind `checkEntitlement(org, 'whiteLabel')`;
+ *  - `billingStatus` — stamped only by `writeOrgBilling`'s status mirror.
+ * A fresh sweep for this issue confirmed the erasure batch is still the only
+ * client Web SDK write to a top-level org document anywhere in the repo.
+ */
+describe('discount/enterprise/brandingProfile/billingStatus are Admin-SDK-only — even for staff (AGL-1813)', () => {
+  const COMMERCIAL_KEYS = ['discount', 'enterprise', 'brandingProfile', 'billingStatus']
+  // Same three principals as AGL-1795: a missing `staffRole` reads as super.
+  const PRINCIPALS = [
+    ['super staff', { staff: true, staffRole: 'super' }],
+    ['billing staff', { staff: true, staffRole: 'billing' }],
+    ['pre-RBAC staff (no staffRole claim)', { staff: true }],
+  ]
+  const staffDb = (tokens) => authed(STAFF, tokens)
+
+  /** A real change for each key — the shapes the legitimate routes write. */
+  const changed = (key) =>
+    key === 'discount'
+      ? { percentOff: 100, couponId: 'coupon_free' }
+      : key === 'enterprise'
+        ? true
+        : key === 'brandingProfile'
+          ? { productName: 'Acme Cloud', customConsoleDomain: 'app.acme.test' }
+          : 'active'
+  /** Byte-identical to what the seed below stores. */
+  const unchanged = (key) =>
+    key === 'discount'
+      ? { percentOff: 20, couponId: 'coupon_std' }
+      : key === 'enterprise'
+        ? false
+        : key === 'brandingProfile'
+          ? { productName: 'Acme' }
+          : 'past_due'
+
+  beforeEach(async () => {
+    // The shared seed carries none of the four. They must EXIST, or the
+    // clearing case degenerates into a no-op diff (affectedKeys compares
+    // VALUES, so deleting an absent key is not a change and would pass while
+    // proving nothing).
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        discount: unchanged('discount'),
+        enterprise: unchanged('enterprise'),
+        brandingProfile: unchanged('brandingProfile'),
+        billingStatus: unchanged('billingStatus'),
+      })
+    })
+  })
+
+  it('refuses a staff client write of each key, in every shape, for every role', async () => {
+    for (const [who, tokens] of PRINCIPALS) {
+      const db = staffDb(tokens)
+      for (const key of COMMERCIAL_KEYS) {
+        await mustDeny(
+          `${who} setting orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }),
+        )
+        // Clearing is a change too — removing a discount or the comped
+        // marker is exactly the write a staff session would reach for.
+        await mustDeny(
+          `${who} clearing orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: deleteField() }),
+        )
+        // The merge-set is the shape a browser console reaches for.
+        await mustDeny(
+          `${who} merge-setting orgs/{orgId}.${key}`,
+          setDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }, { merge: true }),
+        )
+        // Smuggled inside a write the branch does allow — `hasAny` bites on
+        // the whole diff, so the bundle must fail with the smuggled key.
+        await mustDeny(
+          `${who} smuggling ${key} inside an org rename`,
+          updateDoc(doc(db, 'orgs', ORG), {
+            name: 'Innocent Rename', [key]: changed(key),
+          }),
+        )
+      }
+      // A nested field path is the same top-level diff and must not slip
+      // past — `customConsoleDomain` is the AGL-1099 routing input, and
+      // `discount.percentOff` is the number the MRR rollup reads.
+      await mustDeny(
+        `${who} pointing brandingProfile.customConsoleDomain by field path`,
+        updateDoc(doc(db, 'orgs', ORG), {
+          'brandingProfile.customConsoleDomain': 'app.acme.test',
+        }),
+      )
+      await mustDeny(
+        `${who} deepening discount.percentOff by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'discount.percentOff': 100 }),
+      )
+    }
+  })
+
+  it('naming the four without CHANGING them is still not a change', async () => {
+    // The AGL-1795 premise holds for this key family too: a client that
+    // re-sends the whole org document unchanged (a naive save) is judged on
+    // the DIFF, so denying the keys does not refuse it.
+    const db = staffDb({ staff: true, staffRole: 'billing' })
+    await mustAllow(
+      'billing staff renaming the org while re-sending all four keys unchanged',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        {
+          name: 'Acme Renamed',
+          discount: unchanged('discount'),
+          enterprise: unchanged('enterprise'),
+          brandingProfile: unchanged('brandingProfile'),
+          billingStatus: unchanged('billingStatus'),
+        },
+        { merge: true },
+      ),
+    )
+    // The twin: one nested value differs and the same write is refused.
+    await mustDeny(
+      'the same write with ONE nested discount field changed',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        {
+          name: 'Acme Renamed',
+          discount: { percentOff: 100, couponId: 'coupon_std' },
+          enterprise: unchanged('enterprise'),
+          brandingProfile: unchanged('brandingProfile'),
+          billingStatus: unchanged('billingStatus'),
+        },
+        { merge: true },
+      ),
+    )
+  })
+
+  it('both staff branches and the erasure batch survive the narrowing', async () => {
+    // The deny is four keys, not the token: each branch keeps a write only
+    // it can make (super: enabledPlugins; billing: the rename).
+    await mustAllow(
+      'super staff still writing an org key denied to everyone else',
+      updateDoc(doc(staffDb({ staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        enabledPlugins: ['paid'],
+      }),
+    )
+    await mustAllow(
+      'billing staff still renaming the org',
+      updateDoc(
+        doc(staffDb({ staff: true, staffRole: 'billing' }), 'orgs', ORG),
+        { name: 'Acme Billing' },
+      ),
+    )
+    // The last legitimate client writer of a staff key, both directions —
+    // the write every org-rule narrowing is most likely to break.
+    const db = staffDb({ staff: true, staffRole: 'super' })
+    const requestBatch = writeBatch(db)
+    requestBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: new Date(), updatedAt: new Date() },
+      { merge: true },
+    )
+    requestBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureRequested',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: false },
+      after: { erasureRequested: true },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the erasure request batch beside the AGL-1813 narrowing',
+      requestBatch.commit(),
+    )
+    const cancelBatch = writeBatch(db)
+    cancelBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: deleteField(), updatedAt: new Date() },
+      { merge: true },
+    )
+    cancelBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureCanceled',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: true },
+      after: { erasureRequested: false },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the erasure batch cancelling the request',
+      cancelBatch.commit(),
+    )
+  })
+
+  it('the legitimate server paths still write, and members still read', async () => {
+    // /api/admin/org-discount, the webhook mirror, `update-branding` and
+    // `writeOrgBilling` all go through the Admin SDK, which rules never see —
+    // `withSecurityRulesDisabled` is that path in the emulator.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'orgs', ORG),
+        {
+          discount: changed('discount'),
+          brandingProfile: changed('brandingProfile'),
+          billingStatus: changed('billingStatus'),
+        },
+        { merge: true },
+      )
+    })
+    // A member still reads the branding the console chrome renders from and
+    // the dunning banner's status string — the whole reason both live on the
+    // member-readable org doc.
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.equal(snapshot.data().discount.percentOff, 100)
+    assert.equal(snapshot.data().brandingProfile.productName, 'Acme Cloud')
+    assert.equal(snapshot.data().billingStatus, 'active')
+  })
+})
+
 assert.ok(true)
