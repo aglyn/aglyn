@@ -220,6 +220,19 @@ read-only holds a **read** capability, not a write one, and revoking the session
 would buy no enforcement — it would only sign the workspace out during our
 maintenance window, which is the outcome the mode exists to avoid.
 
+**The corollary, and it has bitten once.** Because that projection is written
+for *both* modes, it answers "is this workspace locked at all" and cannot answer
+"does this lock refuse this request". A chokepoint that consults the projection
+*instead of* the verdict is therefore mode-blind, and it will refuse a read the
+verdict just passed. That is what 404'd every **private media preview** in the
+console under a read-only lock (AGL-1790): the route declared its read, the
+verdict honoured it, and a legacy line beside the verdict refused on the
+projection alone. The projection is still a fine *signal* — it is how these
+routes avoid an org-doc read on the happy path — and it still refuses when it
+disagrees with the workspace document, which is a stale projection rather than a
+mode. It is just never the answer. If a read 423s or 404s during a window and
+the mode table says it should work, this is the first shape to look for.
+
 ### A gentler lock never softens a stricter one
 
 This is the highest-consequence rule in the feature, so it is worth stating on

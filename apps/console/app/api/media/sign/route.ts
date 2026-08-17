@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { memberCanSee, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  isLockdownActive,
+  memberCanSee,
+  normalizeOrgLockdown,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -94,19 +99,50 @@ async function handler(request: Request): Promise<Response> {
       // reveals nothing about which asset ids exist. If the doc lock is
       // inactive while the projection still says locked, the
       // pre-AGL-1506 refusal stands — a disagreement never loosens.
+      //
+      // Held in a const since AGL-1790: the verdict gets the same carrier
+      // the line below reads, so the two cannot disagree about which
+      // document they judged, and the read still happens only when the
+      // projection trips.
+      const org =
+        member.orgSuspended === true ? ((await getOrgDoc(orgId)) ?? {}) : undefined
       const locked = await lockdownRefusal({
         request,
         // POST-shaped READ (AGL-1511): this mints a short-lived URL for
         // VIEWING a private asset. Refusing it under a read-only lock would
         // blank every private image on a site that is still serving.
         intent: 'read',
-        org:
-          member.orgSuspended === true
-            ? ((await getOrgDoc(orgId)) ?? {})
-            : undefined,
+        org,
       })
       if (locked) return locked
-      if (member.orgSuspended === true) return refuse()
+      // The pre-AGL-1506 refusal, now asking the question its comment above
+      // always claimed it asked (AGL-1790).
+      //
+      // `applyOrgLockdown` stamps `orgSuspended: true` onto every member doc
+      // for EVERY mode, read-only included, so a bare projection test is a
+      // mode-BLIND gate standing beside a mode-aware one — and the blind one
+      // won: under a read-only lock the verdict passed this read (correctly,
+      // per the declaration above) and this line 404'd it anyway, blanking
+      // every private image in a console the mode table promises still works.
+      //
+      // What the line was actually for survives unchanged. Reaching here with
+      // the projection set means the verdict declined to refuse, which is one
+      // of exactly two situations: the carrier holds an ACTIVE lock that
+      // passed on intent — agreement, and a read-only lock passing a read is
+      // the entire feature — or the carrier holds no active lock at all,
+      // which is the stale projection the refusal was written for. A full
+      // lock never arrives here; it 423s above. So the test is activeness,
+      // not the mode: asking about the mode a second time would be a copy of
+      // `lockdownBlocks` that could drift away from the verdict's.
+      //
+      // Its own `Date.now()`, a hair later than the verdict's: a lock that
+      // expires between the two refuses, which is the safe direction.
+      if (
+        member.orgSuspended === true &&
+        !isLockdownActive(normalizeOrgLockdown(org), Date.now())
+      ) {
+        return refuse()
+      }
     }
 
     const snapshot = await firebaseAdmin
