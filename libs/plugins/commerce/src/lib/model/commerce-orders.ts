@@ -350,6 +350,12 @@ export interface CheckoutSessionTotalsParts {
    * only in `manual` tax mode and sets `automatic_tax` only in `stripe` mode —
    * so summing is right in every reachable case and correct in principle if
    * both were ever charged at once.
+   *
+   * A manual-tax SUBSCRIPTION session is the third construction (AGL-1751):
+   * there the tax is a real Stripe Tax Rate (a one-time line would bill on
+   * the first invoice only), `amount_tax` carries it, and `checkout.ts`
+   * writes `metadata[taxCents]` as 0 — the exclusivity this sum rests on,
+   * kept from the other side.
    */
   lineItemTaxCents?: number
   /**
