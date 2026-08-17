@@ -1,3 +1,4 @@
+import globals from 'globals'
 import nextPlugin from '@next/eslint-plugin-next'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import nx from '@nx/eslint-plugin'
@@ -278,6 +279,49 @@ export default [
     rules: {
       ...reactHooksPlugin.configs.recommended.rules,
       ...jsRuleOverrides,
+    },
+  },
+  // `.mjs` was matched by NO block above — every `files` list stops at
+  // js/jsx/ts/tsx, so eslint resolved ZERO rules for the 190+ tracked .mjs
+  // files and exited 0 having evaluated nothing (AGL-1815). That set includes
+  // tools/scripts/** — the drift checkers, the deploy tooling, the erase-org
+  // CLI — i.e. the guards everything else trusts, with the most direct
+  // production reach in the repo. A planted `debugger;` passed "eslint clean".
+  ...scopeTo(nx.configs['flat/javascript'], ['**/*.mjs']),
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      // Node scripts, not browser code — and unlike the ts/js blocks these
+      // files are never type-checked, so `no-undef` below is the only thing
+      // standing between a typo'd identifier and a runtime crash mid-deploy.
+      globals: { ...globals.node },
+    },
+    rules: {
+      // Re-enabled: typescript-eslint's eslint-recommended turns it off on
+      // the assumption the compiler catches undefineds; nothing compiles
+      // these files.
+      'no-undef': 'error',
+      // These are Node scripts: the react/browser overrides in
+      // jsRuleOverrides do not apply, and the base set alone leaves the
+      // rules AGL-1815 named. no-unused-vars/no-undef/no-debugger arrive
+      // with the recommended set above; the rest are explicit:
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-debugger': 'error',
+      'require-atomic-updates': 'error',
+      'no-unused-expressions': [
+        'error',
+        { allowShortCircuit: true, allowTernary: true },
+      ],
+      // Parity with tsRuleOverrides: intentional no-op callbacks
+      // (`.catch(() => {})`, test-double stubs) are idiomatic here.
+      '@typescript-eslint/no-empty-function': 'off',
+      // warn severity matches tsRuleOverrides; ignoreRestSiblings admits the
+      // `const { omitted, ...rest } = row` idiom the scripts use to strip a
+      // field before serializing.
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { ignoreRestSiblings: true },
+      ],
     },
   },
   {

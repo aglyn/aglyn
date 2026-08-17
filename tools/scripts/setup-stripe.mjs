@@ -416,6 +416,11 @@ async function ensureMeteredPrice(lookupKey, interval) {
     console.log(`! ${lookupKey} MISSING (would be created)`)
     return { id: `<MISSING:${lookupKey}>` }
   }
+  // Prices are created one at a time by a sequential top-level loop; the
+  // worst concurrent case would be a duplicate product create, and
+  // restructuring a live-mode Stripe setup script to promise-memoize is not
+  // worth that non-risk (AGL-1815).
+  // eslint-disable-next-line require-atomic-updates -- sequential caller
   meteredProductId ??= (
     await stripe('products', {
       name: 'Aglyn metered usage',
