@@ -18,11 +18,13 @@
 import {
   buildRoute,
   findScreenIdByRoutePath,
+  resolveHostEnabledPlugins,
   Route,
   SCREEN_ROOT_PATH,
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
+  filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
   hostConverter,
   isServerReleaseFlagOnForOrg,
@@ -122,6 +124,7 @@ export async function POST(request: Request): Promise<Response> {
 
     let screenName: string | undefined
     let versionId: string | undefined
+    let draftChanges: boolean | null = null
     if (screenId) {
       const screenSnapshot = await firestore
         .collection('hosts')
@@ -137,6 +140,28 @@ export async function POST(request: Request): Promise<Response> {
         // the version the visitor is looking at, so exactly where the
         // besigner should open.
         versionId = screen?.versionId
+        // Draft signal (AGL-1829): the screen's most recently touched
+        // version, against the live pointer. A different id means someone
+        // has edits the visitor is not seeing. One extra read, HERE — on
+        // the editor-only edit-context call, never on anonymous renders.
+        if (versionId) {
+          try {
+            const latest = await firestore
+              .collection('hosts')
+              .doc(claims.hostId)
+              .collection('screens')
+              .doc(screenId)
+              .collection('versions')
+              .orderBy('updatedAt', 'desc')
+              .limit(1)
+              .get()
+            const latestId = latest.docs[0]?.id
+            draftChanges = latestId ? latestId !== versionId : false
+          } catch {
+            // No verdict beats a wrong one — the bar hides the indicator.
+            draftChanges = null
+          }
+        }
       }
     }
 
@@ -144,12 +169,26 @@ export async function POST(request: Request): Promise<Response> {
     // without it — AGL-621) and the host SUBDOMAIN (the `[host]` segment is
     // the subdomain; HostIdProvider resolves it back to the doc id).
     let orgSlug: string | undefined
+    let enabledPlugins: string[] = []
     if (hostDoc.orgId) {
       const orgSnapshot = await firestore
         .collection('orgs')
         .doc(hostDoc.orgId)
         .get()
       orgSlug = orgSnapshot.get('slug') as string | undefined
+      // Quick links are gated on the HOST's effective plugin set (AGL-1829):
+      // the org switchboard minus the per-site deny-list (AGL-1014) minus
+      // flagged-off plugins (AGL-422). Rides the org read already paid for
+      // the slug and the host doc already in hand — no extra Firestore read;
+      // the flag values are the cached template + per-org overrides.
+      const stored = orgSnapshot.get('enabledPlugins') as string[] | undefined
+      enabledPlugins = await filterEnabledPluginsByReleaseFlags(
+        resolveHostEnabledPlugins(
+          { enabledPlugins: stored },
+          hostDoc as { disabledPlugins?: string[] },
+        ),
+        { orgId: hostDoc.orgId },
+      )
     }
 
     const canLink = Boolean(orgSlug && hostDoc.subdomain)
@@ -169,14 +208,45 @@ export async function POST(request: Request): Promise<Response> {
           })}`
         : null
 
+    // Quick links (AGL-1829), server-built via buildRoute like everything
+    // above — the bar never hand-assembles console paths. Each renders only
+    // when the host's effective plugin set justifies it; Orders deep-links
+    // the commerce console's Orders tab (HubTabs mirrors `?tab=`).
+    const screensUrl = canLink
+      ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_SCREENS, {
+          orgSlug: orgSlug as string,
+          host: hostDoc.subdomain as string,
+        })}`
+      : null
+    const inboxUrl =
+      canLink && enabledPlugins.includes('inbox')
+        ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_INBOX, {
+            orgSlug: orgSlug as string,
+            host: hostDoc.subdomain as string,
+          })}`
+        : null
+    const ordersUrl =
+      canLink && enabledPlugins.includes('commerce')
+        ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_PRODUCTS, {
+            orgSlug: orgSlug as string,
+            host: hostDoc.subdomain as string,
+          })}?tab=orders`
+        : null
+
     return Response.json(
       {
         siteName: hostDoc.displayName ?? hostDoc.subdomain,
         screenId: screenId ?? null,
         screenName: screenName ?? null,
         versionId: versionId ?? null,
+        // True when a version newer than the live pointer exists; null when
+        // the answer isn't known (no screen, or the read failed).
+        draftChanges,
         editUrl,
         consoleUrl,
+        screensUrl,
+        inboxUrl,
+        ordersUrl,
         expiresAtMs: claims.exp,
       },
       // Per-visitor capability data — never cacheable.

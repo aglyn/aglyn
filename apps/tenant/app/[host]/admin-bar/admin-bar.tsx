@@ -22,13 +22,15 @@ import {
   EDIT_MESSAGE_TYPE,
   EDIT_RESULT_MESSAGE_TYPE,
   readStoredEditToken,
+  setEditOptOut,
   writeStoredEditToken,
   type StoredEditToken,
 } from './admin-bar-shared'
 
 /**
  * The tenant admin bar (admin edit bar, AGL-1302 follow-on; auto-appearance
- * AGL-1829) — the lazily loaded chunk behind `admin-bar-stub`. Paths in:
+ * and top bar AGL-1829) — the lazily loaded chunk behind `admin-bar-stub`.
+ * Paths in:
  *
  * - Stored token: redeemed at `/api/edit-context`, which re-verifies it
  *   server-side and resolves the screen serving the current path. Only THEN
@@ -44,6 +46,16 @@ import {
  *   auto-armed bar has no business showing UI to someone it can't verify.
  * - Manual arm without a token: the "Edit this site" pill; clicking it (a
  *   user gesture, so no popup blocker) opens the same page as a popup.
+ *
+ * The ready bar is platform chrome FIXED TO THE TOP of the site: compact,
+ * dark, visibly not part of the site's own design. While mounted it pushes
+ * the page down by its own height (a top margin on `<html>`, plus
+ * `scroll-padding-top` so anchor jumps stay visible) and nudges the site's
+ * own viewport-anchored fixed/sticky headers down the same amount — a
+ * besigner site header is usually a MUI AppBar at `top: 0`, which the bar
+ * would otherwise cover. Everything is restored on unmount. Only editors
+ * ever mount it, so the shift is theirs alone; anonymous visitors' layout
+ * is untouched by construction.
  *
  * Plain DOM and inline styles throughout: this chunk must not drag MUI or
  * the theme into a surface that sits on other people's websites.
@@ -61,8 +73,13 @@ interface EditContext {
   screenId: string | null
   screenName: string | null
   versionId: string | null
+  /** True when a version newer than the live pointer exists; null unknown. */
+  draftChanges?: boolean | null
   editUrl: string | null
   consoleUrl: string
+  screensUrl?: string | null
+  inboxUrl?: string | null
+  ordersUrl?: string | null
 }
 
 type Phase =
@@ -77,31 +94,102 @@ type Phase =
 /** How long the silent probe may take before the bar gives up quietly. */
 const PROBE_TIMEOUT_MS = 10_000
 
-const BAR_HEIGHT = 44
+export const BAR_HEIGHT = 40
 
 const barStyle: React.CSSProperties = {
   position: 'fixed',
   left: 0,
   right: 0,
-  bottom: 0,
+  top: 0,
   height: BAR_HEIGHT,
+  boxSizing: 'border-box',
   display: 'flex',
   alignItems: 'center',
-  gap: 12,
-  padding: '0 16px',
+  gap: 14,
+  padding: '0 12px',
   background: '#111826',
   color: '#f5f7fa',
   fontFamily: 'system-ui, sans-serif',
   fontSize: 13,
   lineHeight: `${BAR_HEIGHT}px`,
   zIndex: 2147483000,
-  boxShadow: '0 -1px 6px rgba(0,0,0,0.35)',
+  boxShadow: '0 1px 6px rgba(0,0,0,0.35)',
 }
 
 const linkStyle: React.CSSProperties = {
   color: '#8ecbff',
   textDecoration: 'none',
   fontWeight: 600,
+  whiteSpace: 'nowrap',
+}
+
+const quietLinkStyle: React.CSSProperties = {
+  color: '#c3ccd9',
+  textDecoration: 'none',
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+}
+
+const brandLinkStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#f5f7fa',
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+}
+
+const markStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 20,
+  height: 20,
+  borderRadius: 5,
+  background: 'linear-gradient(135deg, #4f7cff, #8ecbff)',
+  color: '#0b1020',
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: '20px',
+  flexShrink: 0,
+}
+
+const dividerStyle: React.CSSProperties = {
+  width: 1,
+  height: 18,
+  background: 'rgba(245,247,250,0.25)',
+  flexShrink: 0,
+}
+
+const draftStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  color: '#ffc766',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+}
+
+const identityStyle: React.CSSProperties = {
+  color: '#8b94a3',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  maxWidth: 180,
+}
+
+const barButtonStyle: React.CSSProperties = {
+  background: 'none',
+  border: '1px solid rgba(245,247,250,0.35)',
+  borderRadius: 5,
+  color: '#f5f7fa',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: '20px',
+  padding: '1px 8px',
   whiteSpace: 'nowrap',
 }
 
@@ -122,6 +210,16 @@ const pillStyle: React.CSSProperties = {
   boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
 }
 
+/**
+ * Site headers the bar must not cover: viewport-anchored (`top` ≈ 0)
+ * fixed/sticky elements. Besigner sites are MUI trees, so the AppBar
+ * position classes are the reliable signal; plain `header`/`nav`/banner
+ * cover hand-rolled themes. Scoped to a query, not a full DOM sweep —
+ * and only editors ever run it, once per mount.
+ */
+const HEADER_CANDIDATE_SELECTOR =
+  'header, nav, [role="banner"], .MuiAppBar-positionFixed, .MuiAppBar-positionSticky'
+
 export default function AdminBar({
   hostId,
   consoleOrigin,
@@ -129,6 +227,7 @@ export default function AdminBar({
 }: AdminBarProps) {
   const [phase, setPhase] = useState<Phase>(autoConnect ? 'probing' : 'idle')
   const [context, setContext] = useState<EditContext | null>(null)
+  const [identity, setIdentity] = useState<string | undefined>(undefined)
   const tokenRef = useRef<StoredEditToken | null>(null)
   const pathRef = useRef<string>('')
   // What a failed/expired token falls back to: silence when auto-armed, the
@@ -161,6 +260,7 @@ export default function AdminBar({
           return
         }
         tokenRef.current = stored
+        setIdentity(stored.userEmail)
         setContext((await response.json()) as EditContext)
         setPhase('ready')
       } catch {
@@ -241,6 +341,47 @@ export default function AdminBar({
     return () => window.clearInterval(interval)
   }, [phase, resolveContext])
 
+  // Make room: while the bar is up, push the page (and the site's own
+  // top-anchored fixed/sticky headers) down by the bar's height, and give
+  // anchor scrolls the same allowance. Everything restored on the way out.
+  // Editors only, by construction — this never runs on an anonymous view.
+  useEffect(() => {
+    if (phase !== 'ready') return undefined
+    const html = document.documentElement
+    const previousMargin = html.style.marginTop
+    const previousScrollPadding = html.style.scrollPaddingTop
+    html.style.marginTop = `${BAR_HEIGHT}px`
+    html.style.scrollPaddingTop = `${BAR_HEIGHT}px`
+
+    const adjusted: Array<{ element: HTMLElement; previousTop: string }> = []
+    try {
+      document
+        .querySelectorAll<HTMLElement>(HEADER_CANDIDATE_SELECTOR)
+        .forEach((element) => {
+          if (element.closest('[data-aglyn-admin-bar]')) return
+          const computed = window.getComputedStyle(element)
+          const isPinned =
+            computed.position === 'fixed' || computed.position === 'sticky'
+          // `top: 0` (give or take a subpixel) means viewport-anchored where
+          // the bar now sits; anything else is not under the bar.
+          if (!isPinned || Math.abs(parseFloat(computed.top)) > 1) return
+          adjusted.push({ element, previousTop: element.style.top })
+          element.style.top = `${BAR_HEIGHT}px`
+        })
+    } catch {
+      // A theme's exotic DOM must never break the page — worst case the
+      // site header sits behind the bar until dismissed.
+    }
+
+    return () => {
+      html.style.marginTop = previousMargin
+      html.style.scrollPaddingTop = previousScrollPadding
+      adjusted.forEach(({ element, previousTop }) => {
+        element.style.top = previousTop
+      })
+    }
+  }, [phase])
+
   const connect = useCallback(() => {
     setPhase('connecting')
     const url =
@@ -253,6 +394,16 @@ export default function AdminBar({
     )
     if (!popup) setPhase('idle')
   }, [consoleOrigin, hostId])
+
+  // Disconnect is durable (AGL-1829): token gone from storage AND the
+  // auto-arm suppressed on this host, so the bar doesn't reappear on the
+  // next pageview. The chord or ?aglyn-edit reverses it explicitly.
+  const disconnect = useCallback(() => {
+    clearStoredEditToken(hostId)
+    setEditOptOut(hostId)
+    tokenRef.current = null
+    setPhase('dismissed')
+  }, [hostId])
 
   if (phase === 'dismissed' || phase === 'silent') return null
 
@@ -296,18 +447,59 @@ export default function AdminBar({
   }
 
   return (
-    <div style={barStyle} role="region" aria-label="Aglyn admin bar">
+    <div
+      style={barStyle}
+      data-aglyn-admin-bar=""
+      role="region"
+      aria-label="Aglyn admin bar"
+    >
+      <a
+        style={brandLinkStyle}
+        href={context?.consoleUrl ?? consoleOrigin}
+        target="_blank"
+        rel="noreferrer"
+        title="Open this site's console dashboard"
+      >
+        <span style={markStyle} aria-hidden="true">
+          A
+        </span>
+        <strong
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 200,
+          }}
+        >
+          {context?.siteName ?? 'This site'}
+        </strong>
+      </a>
+      <span style={dividerStyle} aria-hidden="true" />
       <span
         style={{
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
+          color: '#c3ccd9',
+          minWidth: 0,
         }}
       >
-        <strong>{context?.siteName ?? 'This site'}</strong>
-        {context?.screenName ? ` · ${context.screenName}` : ''}
+        {context?.screenName ?? 'Unrouted page'}
       </span>
-      <span style={{ flex: 1 }} />
+      {context?.draftChanges === true ? (
+        <span style={draftStyle} title="This screen has a version newer than the published one">
+          <span
+            aria-hidden="true"
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: '#ffc766',
+              display: 'inline-block',
+            }}
+          />
+          Draft changes
+        </span>
+      ) : null}
       {context?.editUrl ? (
         <a
           style={linkStyle}
@@ -318,18 +510,55 @@ export default function AdminBar({
           Edit this page
         </a>
       ) : null}
-      <a
-        style={linkStyle}
-        href={context?.consoleUrl ?? consoleOrigin}
-        target="_blank"
-        rel="noreferrer"
+      <span style={{ flex: 1, minWidth: 12 }} />
+      {context?.screensUrl ? (
+        <a
+          style={quietLinkStyle}
+          href={context.screensUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Screens
+        </a>
+      ) : null}
+      {context?.inboxUrl ? (
+        <a
+          style={quietLinkStyle}
+          href={context.inboxUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Inbox
+        </a>
+      ) : null}
+      {context?.ordersUrl ? (
+        <a
+          style={quietLinkStyle}
+          href={context.ordersUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Orders
+        </a>
+      ) : null}
+      {identity ? (
+        <span style={identityStyle} title={`Connected as ${identity}`}>
+          {identity}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onClick={disconnect}
+        style={barButtonStyle}
+        title="Disconnect edit access in this browser (Cmd/Ctrl+Shift+E reconnects)"
       >
-        Open console
-      </a>
+        Disconnect
+      </button>
       <button
         type="button"
         onClick={() => setPhase('dismissed')}
         aria-label="Hide admin bar"
+        title="Hide until the next page view"
         style={{
           background: 'none',
           border: 'none',
