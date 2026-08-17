@@ -133,6 +133,31 @@ export function isRefusedAuthorCssUrl(target: string): boolean {
 }
 
 /**
+ * Whether an author-typed image `src` must not be rendered at all.
+ *
+ * The {@link isRefusedAuthorCssUrl} scheme rule applied to a plain `<img
+ * src>` sink rather than a CSS `url()` token. Same actor pair — the site
+ * owner supplies the URL, their own visitors fetch it — so the same
+ * decision: never the host, only the scheme. `http:` and every unknown
+ * scheme are refused (the AGL-1713 rule); `https:`, `data:`, `blob:`,
+ * protocol-relative and the site-relative forms the media picker stores
+ * (`/api/media/cdn/…`) all render.
+ *
+ * A refused `media:` reference is CORRECT here, not collateral: this
+ * helper is for the sinks that emit the stored string RAW, where a media
+ * reference would render as the literal `src="media:…"` — a request for a
+ * relative path that cannot resolve. Sinks that resolve references first
+ * (`resolveMediaSrc` callers) have no use for this function.
+ *
+ * For AGL-1725's inventory: the free-text sinks that render the stored
+ * value verbatim — the events cover, the marketing popup image — are the
+ * callers; each was an `http:`-accepting egress no other guard reached.
+ */
+export function isRefusedAuthorImageSrc(src: string): boolean {
+  return isRefusedAuthorCssUrl(src)
+}
+
+/**
  * Rewrites every refused `url()` in an author stylesheet to
  * {@link INERT_CSS_URL}, leaving the rest of the CSS byte-identical.
  *
