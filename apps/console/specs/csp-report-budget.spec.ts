@@ -40,6 +40,20 @@
  * The rest pin properties that already held and must survive the reordering.
  */
 
+// The durable aggregate (AGL-1799) reaches the route through the
+// tenant-data-admin barrel, which drags in firebase-admin and will not load
+// under jest — and an unmocked write path fed by the root `.env` would be a
+// PRODUCTION write from a test. A spy here pins the wiring (the route hands
+// the same capped, fair list to the counters as to the log); the bounding
+// behaviour lives in `libs/tenant/data/admin/src/lib/server/csp-aggregate.spec.ts`
+// against an injected fake store.
+const mockRecordCspViolations = jest.fn(async () => 0)
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  recordCspViolations: (...args: unknown[]) =>
+    mockRecordCspViolations(...(args as [])),
+}))
+
 /** One modern (`report-to`) envelope. */
 const violation = (
   blocked: string,
@@ -74,6 +88,7 @@ describe('console csp-report budget (AGL-1785)', () => {
 
   beforeEach(() => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    mockRecordCspViolations.mockClear()
   })
   afterEach(() => warn.mockRestore())
 
@@ -130,6 +145,24 @@ describe('console csp-report budget (AGL-1785)', () => {
       'https://one.example/a.js',
       'https://two.example/b.js',
     ])
+  })
+
+  it('hands the durable aggregate the same capped, fair list as the log (AGL-1799)', async () => {
+    // The log line lives an hour in the Vercel runtime log; the counters are
+    // what AGL-1702's "week of traffic" is read from. Same list on purpose:
+    // if the round-robin protects the log's budget but the aggregate saw raw
+    // order, one noisy directive could still starve the other's EVIDENCE.
+    const many = Array.from({ length: 30 }, (_, i) =>
+      violation(`https://evil.example/${i}.js`),
+    )
+    await post([...many, violation('https://tracker.example/pixel.gif', 'img-src')])
+    expect(mockRecordCspViolations).toHaveBeenCalledTimes(1)
+    const [violations, options] = mockRecordCspViolations.mock.calls[0] as any
+    expect(violations).toHaveLength(10)
+    expect(
+      violations.map((entry: any) => entry.effectiveDirective),
+    ).toContain('img-src')
+    expect(options).toEqual({ app: 'console' })
   })
 
   it('keeps the key on every line, so the streams stay separable', async () => {

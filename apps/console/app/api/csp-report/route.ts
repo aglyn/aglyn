@@ -27,8 +27,13 @@
  *
  * Reports go to the runtime log as one JSON line each, tagged for a Vercel log
  * query — the same instrument AGL-1152 used to settle the cold-start argument.
- * Deliberately not Firestore: this needs no schema, no rules change, no
- * retention job, and no write path that an unauthenticated caller can drive.
+ * The log is the last hour; the DURABLE record is the `cspViolationDaily`
+ * counters (AGL-1799) — the Vercel runtime log retains ~60 minutes with no
+ * drain, so the original "deliberately not Firestore" stance here meant the
+ * evidence AGL-1702 gates on was thrown away as fast as it arrived. What was
+ * actually being avoided was an unauthenticated write path minting unbounded
+ * documents; bounded counter documents avoid that differently — see
+ * `csp-aggregate.ts` for the caps.
  *
  * ## This route is unauthenticated by necessity
  *
@@ -49,6 +54,7 @@ import {
   parseCspReports,
   violationKey,
 } from '@aglyn/aglyn/app-utils/csp-report'
+import { recordCspViolations } from '@aglyn/tenant-data-admin'
 
 // lockdown-423: exempt — anonymous browser beacon; no caller identity, no org context.
 
@@ -160,6 +166,13 @@ export async function POST(request: Request): Promise<Response> {
         }),
       )
     }
+    // The durable half (AGL-1799): the lines above live ~60 minutes in the
+    // Vercel runtime log; the counters are what AGL-1702's "week of traffic"
+    // condition is actually read from. Awaited — a serverless instance may be
+    // frozen the moment the response returns, and a fire-and-forget write
+    // would be the AGL-518 shape again (collected, then lost). Counts here
+    // are per-request-deduped like the lines, so they are a lower bound.
+    await recordCspViolations(violations, { app: 'console' })
     return accepted()
   } catch {
     // Never a 5xx. This route exists to observe a problem, and it must not
