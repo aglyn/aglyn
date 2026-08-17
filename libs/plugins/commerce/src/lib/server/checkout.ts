@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
+import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
+import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 
 /**
@@ -55,10 +56,17 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   const billingRaw = String(body.billing ?? '')
   const billing: CommerceModel.CheckoutBillingChoice | undefined =
     billingRaw === 'once' || billingRaw === 'subscribe' ? billingRaw : undefined
+  // One buy-now attempt, minted by the product page (AGL-1697). Node
+  // lowercases incoming headers, but read both spellings — the plugin API
+  // request type makes no promise about casing.
+  const idempotencyKey = String(
+    req.headers['idempotency-key'] ?? req.headers['Idempotency-Key'] ?? '',
+  ).trim().slice(0, 200)
   if (!hostId || !productId) {
     return res.status(400).json({ error: 'Missing hostId or productId' })
   }
 
+  let claim: AttemptClaim | null = null
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
@@ -246,6 +254,33 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // A creation failure is a VISIBLE 502, never a fallback: the one-time
     // line is this very bug, and a session with no tax at all would
     // under-collect every invoice silently.
+    // Point of no return (AGL-1697): everything past here creates Stripe
+    // objects — possibly a Tax Rate, then the session. Server-side a retry
+    // looked free, but for `mode: subscription` two completed sessions are
+    // two RECURRING subscriptions for the same member and product. The
+    // shipping refusals BELOW this line release the claim: they are
+    // deterministic asks the shopper answers and retries under the same key,
+    // and the released key re-derives the same digests so Stripe replays the
+    // tax rate rather than minting a twin (AGL-1714's rule).
+    const claimed = await claimAttempt(firestore, {
+      kind: 'commerce-checkout',
+      scopeId: hostId,
+      orgId: String(ownerOrg?.org?.id ?? ''),
+      key: idempotencyKey,
+      busyMessage: 'This checkout is already being processed',
+    })
+    if ('replay' in claimed) {
+      return res.status(claimed.replay.status).json(claimed.replay.body)
+    }
+    claim = claimed.claim
+    // Derived per OBJECT, never the raw digest (AGL-1714): Stripe
+    // parameter-compares a repeated key account-wide, so one digest sent to
+    // `/v1/tax_rates` and then `checkout/sessions` would error the second.
+    const stripeKeyHeader = (object: string): Record<string, string> => {
+      const derived = deriveStripeObjectKey(claimed.claim.stripeKey, object)
+      return derived ? { 'Idempotency-Key': derived } : {}
+    }
+
     let recurringTaxRateId = ''
     if (isSubscription && taxCents > 0) {
       // ≤4 decimal places, which is all Stripe accepts on a tax rate.
@@ -263,6 +298,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           headers: {
             Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
             'Content-Type': 'application/x-www-form-urlencoded',
+            ...stripeKeyHeader('tax-rate'),
           },
           body: new URLSearchParams({
             display_name: displayLabel,
@@ -276,6 +312,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         }
         if (!rateResponse.ok || !taxRate.id) {
           console.error('Stripe tax rate error', taxRate.error)
+          // Nothing was sold — hand the key back so the same button works
+          // once Stripe does (AGL-1697).
+          await claim.release()
           return res.status(502).json({ error: 'Checkout failed' })
         }
         recurringTaxRateId = String(taxRate.id)
@@ -355,6 +394,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         )
       : { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [] }
     if (shippingPlan.refusal === 'destination-required') {
+      // A deterministic ask the shopper answers and retries under the same
+      // key — released, not burned (AGL-1697). The tax rate possibly minted
+      // above replays from its cache (or its derived key) on the retry.
+      await claim.release()
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
         needsShippingCountry: true,
@@ -365,6 +408,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       const declared = CommerceModel.normalizeCheckoutShippingCountry(
         body.shippingCountry,
       )
+      await claim.release()
       return res.status(409).json({
         error: `This store does not ship to ${
           CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[declared as string] ??
@@ -500,6 +544,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // The half that costs real money (AGL-1697): Stripe replays the
+          // existing session for a repeated key instead of opening a second
+          // one — for subscription mode, instead of a second RECURRING
+          // subscription — covering the window where the claim is written
+          // but the response never arrives.
+          ...stripeKeyHeader('session'),
         },
         body: params.toString(),
       },
@@ -507,11 +557,19 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const session = (await response.json()) as { url?: string; error?: any }
     if (!response.ok || !session.url) {
       console.error('Stripe checkout error', session.error)
+      // Nothing was sold — hand the key back so one flaky moment does not
+      // lock this product out for the shopper.
+      await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
-    return res.status(200).json({ url: session.url })
+    const payload = { url: session.url }
+    await claim.record(200, payload)
+    return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
+    // Release on the way out so a transient failure does not strand the key
+    // (AGL-1691's rule).
+    await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }
 }
