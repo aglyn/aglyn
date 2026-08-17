@@ -254,4 +254,27 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
       screen.queryByRole('button', { name: 'Add rest-of-world zone' }),
     ).toBeNull()
   })
+  it('marks a rate row checkout would drop, on the row that causes it', () => {
+    // `resolveCheckoutShippingOptions` skips a blank name because Stripe
+    // requires a display name — so the row looks priced here and exists
+    // nowhere else. The coverage block can only report the destination it
+    // costs; the cause has to be said on the row.
+    listener.shipping = {
+      zones: [{ id: 'us', name: 'Domestic', countries: ['US'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+        { id: 'oops', zoneId: 'us', name: '', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    render(<ShippingSettingsCard hostId="host-1" />)
+    const names = screen.getAllByLabelText(/^Name/) as HTMLInputElement[]
+    expect(names).toHaveLength(2)
+    expect(names[0].getAttribute('aria-invalid')).toBe('false')
+    expect(names[1].getAttribute('aria-invalid')).toBe('true')
+    expect(cardText()).toContain('checkout drops it')
+
+    // And it clears as soon as the merchant names it.
+    fireEvent.change(names[1], { target: { value: 'Express' } })
+    expect(cardText()).not.toContain('checkout drops it')
+  })
 })

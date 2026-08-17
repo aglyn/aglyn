@@ -291,6 +291,20 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
                 size="small"
                 sx={{ flex: 1 }}
                 placeholder="Standard"
+                /**
+                 * A rate with no name is DROPPED at checkout, silently
+                 * (AGL-1791): Stripe requires a `display_name`, so
+                 * `resolveCheckoutShippingOptions` skips the row rather than
+                 * emit a session Stripe would reject. Saved blank it looks
+                 * like a priced rate on this page and is not one anywhere
+                 * else, which is the same invisibility the coverage block
+                 * below exists to end — said on the row that causes it,
+                 * because the block can only report the destination it costs.
+                 */
+                error={!rate.name.trim()}
+                helperText={
+                  rate.name.trim() ? undefined : 'Needed — checkout drops it'
+                }
               />
               <TextField
                 label="Type"
