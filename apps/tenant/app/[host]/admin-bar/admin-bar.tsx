@@ -738,6 +738,10 @@ export default function AdminBar({
             does not render — never a broken-image glyph on someone's
             website. */}
         {context?.faviconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- a plain
+          // <img> is deliberate: this chunk is plain-DOM by design (no MUI,
+          // no Next image loader on other people's websites), and a 16px
+          // favicon has nothing for the optimizer to earn.
           <img
             src={context.faviconUrl}
             alt=""
