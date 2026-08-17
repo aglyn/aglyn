@@ -138,6 +138,15 @@ export async function upsertHostContact(options: {
                 ltvCents: FieldValue.increment(options.purchaseCents),
                 ordersCount: FieldValue.increment(1),
                 lastPurchaseAtMs: Date.now(),
+                // A contact that EXISTED before their first purchase (form,
+                // membership, booking capture) reached this branch, and this
+                // branch never wrote `firstPurchaseAtMs` — only the create
+                // path below did. So every converted lead permanently lacked
+                // RFM's R anchor while walk-in buyers carried it. Set it on
+                // the first purchase only; later purchases must not move it.
+                ...(docSnapshot.get('firstPurchaseAtMs')
+                  ? {}
+                  : { firstPurchaseAtMs: Date.now() }),
               }
             : {}),
           updatedAt: FieldValue.serverTimestamp(),
