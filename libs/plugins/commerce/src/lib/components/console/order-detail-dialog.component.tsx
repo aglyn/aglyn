@@ -33,7 +33,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, runTransaction, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
@@ -303,6 +303,107 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     }
   }, [order, orderId, user, hostId, confirm, enqueueSnackbar])
 
+  /**
+   * Answer the restock question a reversal flagged (AGL-1806).
+   *
+   * The answer MOVES NO STOCK, which is AGL-1797's ledger argument and it is
+   * binding: the products hub's "Adjust stock" is the one stock writer (it
+   * writes the counts AND the `InventoryAdjustment` row the hub renders as
+   * history), so "Restocked" here is clicked AFTER the merchant used it, and
+   * "No restock" says the goods are not recoverable. Either answer only sets
+   * the `resolution` triple `OrderRestockCheck` declares and says so on the
+   * timeline.
+   *
+   * A TRANSACTION rather than the dialog's plain `write`, keyed on the
+   * rendered `flaggedAtMs`, because an answer must land ONCE. The flag writer
+   * re-asks an ANSWERED question after the next reversal, and the cancel
+   * route (AGL-1808) answers an open one itself when it returns the stock —
+   * so a stale dialog writing blind would either re-answer a settled question
+   * or replace a brand-new one with a resolved copy of the old. The
+   * transaction re-reads on the server (the web SDK will not run one from
+   * cache — the products hub's `writeGuardedBySeed` refusal of unconfirmed
+   * data, by other means) and refuses both cases with the truth: nothing was
+   * written.
+   */
+  const handleRestockAnswer = useCallback(
+    async (resolution: 'restocked' | 'dismissed') => {
+      const check = order?.restockCheck
+      if (!order || !orderId || !check || check.resolution) return
+      setBusy(true)
+      try {
+        const reference = doc(firestore, 'hosts', hostId, 'orders', orderId)
+        const verdict = await runTransaction(firestore, async (transaction) => {
+          const snapshot = await transaction.get(reference)
+          if (!snapshot.exists()) return 'gone'
+          const current = CommerceModel.liftLegacyOrder(
+            (snapshot.data() ?? {}) as never,
+          )
+          const fresh = current.restockCheck
+          if (!fresh || fresh.resolution) return 'answered'
+          if (fresh.flaggedAtMs !== check.flaggedAtMs) return 'changed'
+          const resolvedAtMs = Date.now()
+          const uid = String((user as any)?.uid ?? '')
+          transaction.update(reference, {
+            restockCheck: {
+              ...fresh,
+              resolution,
+              resolvedAtMs,
+              ...(uid ? { resolvedBy: uid } : {}),
+            } satisfies CommerceModel.OrderRestockCheck,
+            // The SERVER's timeline, not the dialog's — a note landed from
+            // another tab must survive the append.
+            timeline: CommerceModel.appendOrderEvent(
+              current,
+              'restock-check',
+              resolution === 'restocked'
+                ? 'answered — restocked'
+                : 'answered — no restock',
+              resolvedAtMs,
+            ),
+          })
+          return 'recorded'
+        })
+        if (verdict === 'recorded') {
+          enqueueSnackbar(
+            resolution === 'restocked'
+              ? 'Recorded as restocked'
+              : 'Recorded — no restock',
+            { variant: 'success', persist: false },
+          )
+        } else if (verdict === 'answered') {
+          // The cancel route, or another admin, got there first.
+          enqueueSnackbar(
+            'This restock question was already answered — nothing changed.',
+            { variant: 'info', persist: false },
+          )
+        } else if (verdict === 'changed') {
+          // A later reversal re-asked; this dialog shows the OLD question.
+          enqueueSnackbar(
+            'The restock question changed while this dialog was open — ' +
+              'nothing was written. Reopen the order to see the current one.',
+            { variant: 'warning', allowDuplicate: true },
+          )
+        } else {
+          enqueueSnackbar('This order no longer exists — nothing was written.', {
+            variant: 'warning',
+            allowDuplicate: true,
+          })
+        }
+      } catch (error) {
+        // A transaction is all-or-nothing, and a thrown one did not commit.
+        console.error(error)
+        enqueueSnackbar(
+          'The answer was not recorded — it needs a live connection and the ' +
+            'editor or admin role. Nothing changed; answering again is safe.',
+          { variant: 'error', allowDuplicate: true },
+        )
+      } finally {
+        setBusy(false)
+      }
+    },
+    [order, orderId, firestore, hostId, user, enqueueSnackbar],
+  )
+
   const handleNote = useCallback(async () => {
     if (!order || !note.trim()) return
     await write({
@@ -347,6 +448,13 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   // chip alone tells the merchant they chose this. The badge is the correction.
   const dispute = CommerceModel.describeOrderDispute(order)
   const reversal = CommerceModel.splitOrderReversal(order)
+  // The restock question a reversal flagged, while it is still open
+  // (AGL-1806). Absent `resolution` IS the open state — the writer only ever
+  // re-flags an answered check (AGL-1797).
+  const restock =
+    order.restockCheck && !order.restockCheck.resolution
+      ? order.restockCheck
+      : null
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -436,6 +544,59 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 {`Charged back ${usd(reversal.chargedBackCents)}`}
               </Typography>
             ) : null}
+          </>
+        ) : null}
+        {restock ? (
+          <>
+            <Divider />
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2">{'Restock check'}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {`${restock.units} ${
+                  restock.units === 1 ? 'unit' : 'units'
+                } may need restocking after this ${
+                  restock.kind === 'chargeback' ? 'chargeback' : 'refund'
+                }.` +
+                  // The chargeback default is NO, same as the timeline's
+                  // wording: the shopper kept the item and took the money.
+                  (restock.kind === 'chargeback'
+                    ? ' The shopper kept the goods unless they actually came back.'
+                    : '') +
+                  // On a partial, no reversal records which lines it covered
+                  // (AGL-1797), so the flagged units are the MOST it could be.
+                  (restock.fullyReversed
+                    ? ''
+                    : ' Only part of the money came back, so these units are an upper bound — only you know which goods returned.')}
+              </Typography>
+              {restock.lines.map((line, index) => (
+                <Typography key={index} variant="caption" color="text.secondary">
+                  {`${line.quantity}× ${line.name ?? line.productId}` +
+                    (line.variantLabel ? ` — ${line.variantLabel}` : '')}
+                </Typography>
+              ))}
+              <Typography variant="caption" color="text.secondary">
+                {'If goods came back, put them on the shelf with "Adjust ' +
+                  'stock" in the products hub first — these answers move no ' +
+                  'stock, they only clear this question.'}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => handleRestockAnswer('restocked')}
+                >
+                  {'Restocked'}
+                </Button>
+                <Button
+                  size="small"
+                  disabled={busy}
+                  onClick={() => handleRestockAnswer('dismissed')}
+                >
+                  {'No restock'}
+                </Button>
+              </Stack>
+            </Stack>
           </>
         ) : null}
         <Divider />
