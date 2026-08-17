@@ -17,12 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  editAccessMintRefusal,
   emailUnverifiedResponse,
   firebaseAdmin,
-  getOrgDoc,
   isImpersonationSession,
-  isServerReleaseFlagOnForOrg,
-  lockdownRefusal,
   mintEditAccessToken,
 } from '@aglyn/tenant-data-admin'
 
@@ -74,75 +72,21 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Site has no organization' }, { status: 409 })
     }
 
-    // Dark until released (and the kill switch): tokens stop being minted
-    // the moment the flag flips off, and the tenant verify route refuses
-    // outstanding ones too.
-    if (!(await isServerReleaseFlagOnForOrg('release_edit_bar', orgId))) {
-      return Response.json({ error: 'Not available' }, { status: 404 })
-    }
-
-    const membership = await firestore
-      .collection('orgs')
-      .doc(orgId)
-      .collection('members')
-      .doc(decoded.uid)
-      .get()
-    if (!membership.exists) {
-      return Response.json({ error: 'Not a member of this site' }, { status: 403 })
-    }
-
-    // The co-editing gate, verbatim: this bar deep-links into the editor,
-    // so only people who could WRITE there should see it. A viewer gets a
-    // plain 403 rather than a read-only bar — a convenience surface earns
-    // no half-states.
-    const hostRole = ((host.get('memberRoles') ?? {}) as Record<string, string>)[
-      decoded.uid
-    ]
-    const orgRole = membership.get('role') as string | undefined
-    const canEdit =
-      hostRole === 'admin' ||
-      hostRole === 'editor' ||
-      orgRole === 'owner' ||
-      orgRole === 'admin' ||
-      orgRole === 'editor'
-    if (!canEdit) {
-      return Response.json({ error: 'No edit access' }, { status: 403 })
-    }
-
-    // Lockdown verdict (AGL-1506): a locked org/host mints no edit
-    // capability. Host doc already in hand; the org scope rides the member
-    // doc's `orgSuspended` projection (also already read) — the org doc is
-    // fetched only when the projection trips, so the happy path adds no
-    // org read. Staff bypass is the un-panic invariant.
-    const locked = await lockdownRefusal({
+    // The WHOLE authorization — release flag, org membership, the verbatim
+    // co-editing edit gate, and the AGL-1506 lockdown verdict at its
+    // audited `intent: 'write'` (AGL-1625's reasoning lives with the
+    // helper) — extracted to `editAccessMintRefusal` (AGL-1842) so the
+    // tenant's same-site `/api/edit-access/exchange` asks the SAME question
+    // through the same code instead of a drifting copy.
+    const refusal = await editAccessMintRefusal({
       request,
-      // AUDITED AND LEFT AT `write` (AGL-1625). Minting is not a data write
-      // — the token is a stateless HMAC and nothing is persisted — so the
-      // question is only whether refusing it over-refuses a read.
-      //
-      // It does not, for two reasons the sibling `presence/token` does not
-      // share. First, what this token buys is the EDIT bar: it deep-links
-      // into the besigner, whose saves are client-direct Firestore writes
-      // that the AGL-210 suspension rules deny for exactly the orgs a
-      // read-only lock covers. Handing one out during a write freeze admits
-      // someone to an editor that cannot save — worse than a refusal that
-      // says so. Second, the token OUTLIVES this check by its whole TTL,
-      // so a mint during the window is a write capability that survives
-      // into it; a presence token confers no such thing (it only shows who
-      // else is looking, and presence lives in RTDB).
-      //
-      // Stated rather than derived from POST so the reasoning is on the
-      // record: this one was decided, not defaulted.
-      intent: 'write',
-      staff: decoded['staff'] === true,
+      firestore,
+      host,
+      orgId,
       uid: decoded.uid,
-      org:
-        membership.get('orgSuspended') === true
-          ? ((await getOrgDoc(orgId)) ?? {})
-          : undefined,
-      host: host.data(),
+      staff: decoded['staff'] === true,
     })
-    if (locked) return locked
+    if (refusal) return refusal
 
     const { token, expiresAtMs } = mintEditAccessToken(hostId, decoded.uid)
 
