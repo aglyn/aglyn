@@ -183,6 +183,43 @@ Re-run it after any change to the chokepoints. It needs the emulators, the e2e
 seed, and **port 4500 free** — the tenant only recognizes `localhost:4500`
 locally.
 
+#### The one row that is not a wire observation: "never revoked" {#read-only-revocation-evidence}
+
+Every other claim in the mode table above was forced on the wire. **"Member
+sessions — never revoked" was not, and this is what stands behind it instead**
+(AGL-1724).
+
+It resisted the harness for a structural reason worth writing down, because the
+same reason will defeat the next attempt: `lockdown-readonly-wire.mjs` arms its
+locks by **writing the `suspended*` carrier directly**, not by POSTing to
+`/api/admin/lockdown`. That is deliberate — it keeps the harness independent of
+a running console — but revocation lives in `applyOrgLockdown`, which a direct
+carrier write never reaches. A "the session still works" probe added to that
+harness as it stands would pass against a revocation path that had been deleted
+entirely. Forcing it for real needs the emulated console up, a super-staff
+token, a minted member session cookie held across the arming, and the paired
+`mode: 'full'` run to prove the probe can fail at all.
+
+What it rests on instead is `apps/console/specs/lockdown-revocation-wiring.spec
+.ts`, which drives the **real** `applyOrgLockdown` — the module the three other
+lockdown specs all mock away, and which until then had no test of its own. It
+pins both directions against the same reason (`security`, the reason that *does*
+revoke under a full lock, so the discrimination is on the mode): read-only
+revokes nothing, full revokes both members pool-aware, and neither ever revokes
+a staff account on the roster. Each assertion was confirmed to fail against a
+deliberately broken copy of the module.
+
+**And the reason a surviving session is safe rather than merely intended:** the
+write freeze is enforced in two places that have nothing to do with the session.
+A read-only lock writes `orgSuspended: true` onto every member doc exactly as a
+full lock does, and `orgNotSuspended()` in `cloud/firebase-firestore.rules`
+gates every client-direct write on it — besigner saves included. Admin-SDK
+writes are refused separately, at the wired chokepoints
+(`lockdown-423-coverage.spec.ts`). So a member who keeps browsing under
+read-only holds a **read** capability, not a write one, and revoking the session
+would buy no enforcement — it would only sign the workspace out during our
+maintenance window, which is the outcome the mode exists to avoid.
+
 ### A gentler lock never softens a stricter one
 
 This is the highest-consequence rule in the feature, so it is worth stating on
