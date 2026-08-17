@@ -56,6 +56,9 @@ set password](/img/staff-console/admin-user-password.png)
   trail. The log is append-only, so a reason not given at the time cannot be added
   afterwards. The reason is checked by the **server** that performs the override,
   not only by the dialog, so a request without one is refused rather than applied.
+  The database now refuses a plan, entitlement or release-flag change made any
+  other way, so that server is the *only* route an override can take and the
+  reason cannot be skipped by going around the console.
   Changing an organization's release flags needs the **super** staff role; plan and
   entitlement changes are open to **billing** staff as well.
   **Clearing an override removes it.** Emptying a quota field, or setting a feature

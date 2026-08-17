@@ -45,6 +45,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -2179,9 +2180,20 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
 })
 
 describe('staff RBAC on org billing keys (AGL-206/238)', () => {
-  it('billing staff writes plans but cannot smuggle a suspension or slug', async () => {
+  it('the billing-staff branch is alive but cannot smuggle a suspension or slug', async () => {
     const billingStaffDb = authed(STAFF, { staff: true, staffRole: 'billing' })
+    // This used to write `plan` — the role's whole purpose, and the natural
+    // proof that the branch exists at all. AGL-1795 denied `plan`/
+    // `entitlements`/`releaseFlags` to every client once /api/admin/org-override
+    // became their only writer, which empties this branch of that purpose. The
+    // branch is still real, so the control moves to a key it may still write
+    // rather than being dropped: a branch nobody proves is alive is a branch
+    // that can be deleted by accident.
     await assertSucceeds(
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), { name: 'Acme Billing' }),
+    )
+    await mustDeny(
+      'billing staff writing orgs/{orgId}.plan from the client (AGL-1795)',
       updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'business' }),
     )
     await assertFails(
@@ -2202,11 +2214,20 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     )
   })
 
-  it('support staff reads orgs but cannot write billing keys', async () => {
+  it('support staff reads orgs but cannot write them at all', async () => {
     const supportStaffDb = authed(STAFF, { staff: true, staffRole: 'support' })
     await assertSucceeds(getDoc(doc(supportStaffDb, 'orgs', ORG)))
-    await assertFails(
+    await mustDeny(
+      'support staff writing orgs/{orgId}.plan',
       updateDoc(doc(supportStaffDb, 'orgs', ORG), { plan: 'business' }),
+    )
+    // `plan` alone stopped isolating the ROLE when AGL-1795 denied it to every
+    // client: that case now passes for a support token, a billing token and a
+    // super token alike. What still separates support from billing is a key
+    // billing may write — so the read-only claim is made with one of those.
+    await mustDeny(
+      'support staff renaming the org, which billing staff may do',
+      updateDoc(doc(supportStaffDb, 'orgs', ORG), { name: 'Support Rename' }),
     )
   })
 })
@@ -2957,18 +2978,22 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
         }),
       )
     }
-    // Bundled with the write billing staff legitimately makes.
+    // Bundled with a write billing staff legitimately makes. The carrier used
+    // to be `plan`, which AGL-1795 denies to every client — so this case would
+    // now pass even with `suspendedUntilMs` off the list, proving nothing about
+    // the key it names. The carrier has to be a key that still LANDS on its
+    // own, or the smuggling test tests the carrier.
     await mustDeny(
-      'smuggling suspendedUntilMs inside a plan change',
+      'smuggling suspendedUntilMs inside an org rename',
       updateDoc(doc(billingStaffDb, 'orgs', ORG), {
-        plan: 'business', suspendedUntilMs: 1,
+        name: 'Acme Renamed', suspendedUntilMs: 1,
       }),
     )
-    // Positive control: the deny is the key diff, not the branch — billing
-    // staff still write plans.
+    // Positive control: the deny is the key diff, not the branch. Same move as
+    // above — `plan` was this control until AGL-1795 closed it client-side.
     await mustAllow(
-      'billing staff still changing the plan',
-      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'business' }),
+      'billing staff still renaming the org',
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), { name: 'Acme Billing' }),
     )
     // The super-staff mustAllow that used to sit here was AGL-1507's
     // documented positive control. AGL-1517 flipped it: with the last client
@@ -3095,6 +3120,299 @@ describe('the org suspended* family is Admin-SDK-only — even for super staff (
     })
     const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
     assert.equal(snapshot.data().suspendedReasonCode, 'security')
+  })
+})
+
+/**
+ * AGL-1795: `plan`, `entitlements` and `releaseFlags` are Admin-SDK-only for
+ * EVERY client, staff included.
+ *
+ * AGL-1786 moved the staff override to POST /api/admin/org-override, which
+ * validates the reason with `normalizeOrgOverrideReason` and commits the org
+ * document and its `adminAudit` row with the Admin SDK in one batch. That made
+ * it the last client writer of these three keys — what is left on this document
+ * from a browser is the org rename (`canManageOrg()`, which already excluded
+ * them) and the erasure toggle's `erasureRequestedAt`.
+ *
+ * So this narrowing is what turns the reason gate into a boundary. It has to
+ * be, because the rules cannot police the reason itself: `adminAudit` is
+ * `allow read, create: if isStaff()` and validates no shape at all, so a
+ * `reason` predicate on `org.override` rows would imply the other actions'
+ * rows are validated when they are not (AGL-1652 declined it for exactly that,
+ * and the judgement stands). Closing the WRITE is the thing rules can say
+ * honestly. A staff session with the client SDK can still create a junk audit
+ * row; what it can no longer do is change a fee percentage.
+ *
+ * THE ROLE SPLIT IS GONE FROM HERE, and that is the finding rather than an
+ * oversight. It was `releaseFlags` super-only, `plan`/`entitlements` open to
+ * billing staff. Once both branches deny all three there is no split left for a
+ * rule to draw — it moved into the route, which re-checks the role server-side
+ * because the Admin SDK bypasses rules. The distinction the route draws IS
+ * expressible here (`affectedKeys()` is value-based, which the "named but
+ * unchanged" case below proves, and that is precisely "the change, not the
+ * payload"); it is simply vacuous once neither branch may write any of them.
+ *
+ * The sequencing was the whole risk and it is spent: the route reached
+ * production in 72869652f before these rules narrow. A console tab still
+ * serving the pre-AGL-1786 bundle is the one thing this refuses with no
+ * fallback.
+ */
+describe('plan/entitlements/releaseFlags are Admin-SDK-only — even for staff (AGL-1795)', () => {
+  const OVERRIDE_KEYS = ['plan', 'entitlements', 'releaseFlags']
+  // A missing `staffRole` reads as 'super' (the AGL-206 migration path), so
+  // pre-RBAC staff are a third principal and not a rounding error.
+  const PRINCIPALS = [
+    ['super staff', { staff: true, staffRole: 'super' }],
+    ['billing staff', { staff: true, staffRole: 'billing' }],
+    ['pre-RBAC staff (no staffRole claim)', { staff: true }],
+  ]
+  const staffDb = (tokens) => authed(STAFF, tokens)
+
+  /** A real change for each key — the shapes the override dialog writes. */
+  const changed = (key) =>
+    key === 'plan'
+      ? 'enterprise'
+      : key === 'entitlements'
+        ? { maxSeats: 500, transactionFeePhysicalPct: 0.5 }
+        : { newCheckout: true }
+  /** Byte-identical to what the seed below stores. */
+  const unchanged = (key) =>
+    key === 'plan'
+      ? 'pro'
+      : key === 'entitlements'
+        ? { maxSeats: 10 }
+        : { newCheckout: false }
+
+  beforeEach(async () => {
+    // The shared seed carries `plan` only. The other two must EXIST, or the
+    // "named but unchanged" case degenerates into an ADD — which really is a
+    // change, and would pass while proving the opposite of what it claims.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        entitlements: unchanged('entitlements'),
+        releaseFlags: unchanged('releaseFlags'),
+      })
+    })
+  })
+
+  it('refuses a staff client write of each key, in every shape, for every role', async () => {
+    for (const [who, tokens] of PRINCIPALS) {
+      const db = staffDb(tokens)
+      for (const key of OVERRIDE_KEYS) {
+        await mustDeny(
+          `${who} setting orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }),
+        )
+        // Clearing is a change too — this is how an override is REMOVED, and
+        // a deny-list that only caught additions would leave the removal open.
+        await mustDeny(
+          `${who} clearing orgs/{orgId}.${key}`,
+          updateDoc(doc(db, 'orgs', ORG), { [key]: deleteField() }),
+        )
+        // The merge-set is the exact shape the pre-AGL-1786 console used, and
+        // the shape a staff session would reach for from a browser console.
+        await mustDeny(
+          `${who} merge-setting orgs/{orgId}.${key}`,
+          setDoc(doc(db, 'orgs', ORG), { [key]: changed(key) }, { merge: true }),
+        )
+        // Smuggled inside a write the branch does allow. `hasAny` bites on the
+        // whole diff, so the bundle has to fail with the smuggled key.
+        await mustDeny(
+          `${who} smuggling ${key} inside an org rename`,
+          updateDoc(doc(db, 'orgs', ORG), {
+            name: 'Innocent Rename', [key]: changed(key),
+          }),
+        )
+      }
+      // A nested field path is the same top-level diff and must not slip past.
+      await mustDeny(
+        `${who} setting orgs/{orgId}.entitlements.maxSeats by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'entitlements.maxSeats': 5000 }),
+      )
+      await mustDeny(
+        `${who} forcing one release flag by field path`,
+        updateDoc(doc(db, 'orgs', ORG), { 'releaseFlags.newCheckout': true }),
+      )
+      // All three at once is what the override dialog actually sent.
+      await mustDeny(
+        `${who} writing the whole override the dialog used to send`,
+        setDoc(
+          doc(db, 'orgs', ORG),
+          {
+            plan: changed('plan'),
+            entitlements: changed('entitlements'),
+            releaseFlags: changed('releaseFlags'),
+          },
+          { merge: true },
+        ),
+      )
+    }
+  })
+
+  it('refuses the override even when a well-formed audit row rides with it', async () => {
+    // The batch AGL-1784 built, with a reason AGL-1652 asked for. `adminAudit`
+    // validates no shape, so the row is not what is being refused — and the
+    // batch being atomic is what makes the refusal total. This is the case
+    // that says the reason gate is now a boundary rather than a dialog: the
+    // only way to write these keys is the route that mints the reason.
+    const db = staffDb({ staff: true, staffRole: 'billing' })
+    const batch = writeBatch(db)
+    batch.set(
+      doc(db, 'orgs', ORG),
+      { entitlements: changed('entitlements') },
+      { merge: true },
+    )
+    batch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.override',
+      target: `orgs/${ORG}`,
+      reason: 'enterprise deal',
+      before: { entitlements: unchanged('entitlements') },
+      after: { entitlements: changed('entitlements') },
+      at: new Date(),
+    })
+    await mustDeny('a client override batch carrying its own reason', batch.commit())
+    // And nothing landed — the atomic refusal, not just a refused first write.
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.deepEqual(snapshot.data().entitlements, unchanged('entitlements'))
+  })
+
+  it('naming a key without CHANGING it is still not a change — affectedKeys is value-based', async () => {
+    // The premise AGL-1786 enforced the route's role split on: every override
+    // write NAMES `releaseFlags`, and refusing billing staff for naming it
+    // unchanged would take away quota overrides they can make today. That
+    // reasoning is only sound if `diff().affectedKeys()` compares VALUES, not
+    // the payload's key set. It does — asserted rather than assumed, because
+    // if it did not, the route's gate would be refusing legitimate work.
+    const db = staffDb({ staff: true, staffRole: 'billing' })
+    await mustAllow(
+      'billing staff renaming the org while re-sending all three keys unchanged',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        {
+          name: 'Acme Renamed',
+          plan: unchanged('plan'),
+          entitlements: unchanged('entitlements'),
+          releaseFlags: unchanged('releaseFlags'),
+        },
+        { merge: true },
+      ),
+    )
+    // The twin: one value differs by one nested field and the same write is
+    // refused. Without this, the case above would pass for a rule that had
+    // simply stopped looking at the keys.
+    await mustDeny(
+      'the same write with ONE nested release flag flipped',
+      setDoc(
+        doc(db, 'orgs', ORG),
+        {
+          name: 'Acme Renamed',
+          plan: unchanged('plan'),
+          entitlements: unchanged('entitlements'),
+          releaseFlags: { newCheckout: true },
+        },
+        { merge: true },
+      ),
+    )
+  })
+
+  it('the erasure batch — the last client writer of a staff key — still commits', async () => {
+    // AGL-1786 deliberately left this a client `writeBatch`, so it is the
+    // write this narrowing was most likely to break. It touches
+    // `erasureRequestedAt`, which stays OFF the super branch's deny-list.
+    const db = staffDb({ staff: true, staffRole: 'super' })
+    const requestBatch = writeBatch(db)
+    requestBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: new Date(), updatedAt: new Date() },
+      { merge: true },
+    )
+    requestBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureRequested',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: false },
+      after: { erasureRequested: true },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the AGL-1784 erasure request batch as super staff',
+      requestBatch.commit(),
+    )
+    // Cancelling clears the flag with deleteField(), a different diff shape.
+    const cancelBatch = writeBatch(db)
+    cancelBatch.set(
+      doc(db, 'orgs', ORG),
+      { erasureRequestedAt: deleteField(), updatedAt: new Date() },
+      { merge: true },
+    )
+    cancelBatch.set(doc(collection(db, 'adminAudit')), {
+      actorUid: STAFF,
+      action: 'org.erasureCanceled',
+      target: `orgs/${ORG}`,
+      before: { erasureRequested: true },
+      after: { erasureRequested: false },
+      at: new Date(),
+    })
+    await mustAllow(
+      'the erasure batch cancelling the request',
+      cancelBatch.commit(),
+    )
+  })
+
+  it('both staff branches survive — the deny is three keys, not the token', async () => {
+    await mustAllow(
+      'super staff still writing an org key denied to everyone else',
+      updateDoc(doc(staffDb({ staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        enabledPlugins: ['paid'],
+      }),
+    )
+    await mustAllow(
+      'billing staff still renaming the org',
+      updateDoc(
+        doc(staffDb({ staff: true, staffRole: 'billing' }), 'orgs', ORG),
+        { name: 'Acme Billing' },
+      ),
+    )
+    await mustAllow(
+      'the org owner still renaming the org',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Again' }),
+    )
+  })
+
+  it('the route still does all of it — the Admin SDK is not subject to rules', async () => {
+    // The positive control for what was refused above. A billing-staff quota
+    // override and a super-staff release-flag flip did not stop being
+    // possible; they stopped being possible FROM A CLIENT.
+    // `withSecurityRulesDisabled` is /api/admin/org-override's path in the
+    // emulator, batch and audit row and all.
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      const batch = writeBatch(db)
+      batch.set(
+        doc(db, 'orgs', ORG),
+        {
+          plan: changed('plan'),
+          entitlements: changed('entitlements'),
+          releaseFlags: changed('releaseFlags'),
+        },
+        { merge: true },
+      )
+      batch.set(doc(collection(db, 'adminAudit')), {
+        actorUid: STAFF,
+        action: 'org.override',
+        target: `orgs/${ORG}`,
+        reason: 'enterprise deal',
+        at: new Date(),
+      })
+      await batch.commit()
+    })
+    // And a member still READS the override every console surface gates
+    // features on — a narrowing that broke the read would break every site.
+    const snapshot = await getDoc(doc(authed(VIEWER), 'orgs', ORG))
+    assert.equal(snapshot.data().plan, 'enterprise')
+    assert.equal(snapshot.data().entitlements.transactionFeePhysicalPct, 0.5)
+    assert.equal(snapshot.data().releaseFlags.newCheckout, true)
   })
 })
 
