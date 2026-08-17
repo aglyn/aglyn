@@ -33,8 +33,6 @@
     "strictPropertyInitialization": false,
     "rootDir": ".",
     "paths": {
-      "@/console/*": ["./libs/apps/console/*"],
-      "@/tenant/*": ["./libs/apps/tenant/*"],
       "@aglyn/aglyn": ["./libs/aglyn/src/index.ts"],
       "@aglyn/aglyn/server": ["./libs/aglyn/src/server.ts"],
       "@aglyn/aglyn-markdown-editor": [
