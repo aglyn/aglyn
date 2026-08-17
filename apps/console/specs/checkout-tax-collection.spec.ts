@@ -198,6 +198,22 @@ describe('checkout charges sales tax (AGL-1133 / AGL-1537)', () => {
     expect(capturedBody?.get('customer_update[address]')).toBe('auto')
   })
 
+  it('lets the session update the REUSED customer name — tax_id_collection demands it (AGL-1823)', async () => {
+    // Stripe hard-rejects `tax_id_collection[enabled]=true` + `customer`
+    // without `customer_update[name]=auto`: "Tax ID collection requires
+    // updating business name on the customer." (reproduced against test-mode
+    // Stripe 2026-08-15, HTTP 400). Since this route enables tax id
+    // collection on EVERY session, omitting the name grant fails every
+    // churned org's resubscribe at session creation — the exact path where
+    // `stripeCustomerId` survives on the billing doc.
+    const post = loadCheckout()
+    const response = await checkout(post)
+    expect(response.status).toBe(200)
+    expect(capturedBody?.get('customer')).toBe('cus_test_1')
+    expect(capturedBody?.get('tax_id_collection[enabled]')).toBe('true')
+    expect(capturedBody?.get('customer_update[name]')).toBe('auto')
+  })
+
   it('CONTROL — a first subscribe sends customer_email and NO customer_update', async () => {
     // Stripe rejects `customer_update` on a session without a `customer`, so
     // leaking it onto the first-purchase path would break every first
@@ -209,6 +225,7 @@ describe('checkout charges sales tax (AGL-1133 / AGL-1537)', () => {
     expect(capturedBody?.get('customer_email')).toBe('owner@example.com')
     expect(capturedBody?.get('customer')).toBeNull()
     expect(capturedBody?.get('customer_update[address]')).toBeNull()
+    expect(capturedBody?.get('customer_update[name]')).toBeNull()
   })
 
   it('PIN — tax params ride ALONGSIDE the existing session shape', async () => {
