@@ -21,9 +21,19 @@ Related: `docs/FIRESTORE_MANUAL_CONFIG.md` (how the protections were set up),
 | Delete protection | ENABLED on `(default)` | Blocks accidental/hostile database deletion |
 | Off-project copy | **NONE** | Nothing survives loss of the `aglyn-main` project itself (see gaps) |
 
-**Backups can fail silently.** The 2026-08-02 backup sat at
-`state: NOT_AVAILABLE` (unusable) with no error surfaced anywhere and no
-alert; the API exposes no reason field. Before you rely on a backup, check:
+**Backups can fail silently — and a READY backup can STOP being restorable.**
+(AGL-1490, AGL-1843.) As of 2026-08-17, **every backup this project has taken
+has flipped `READY` → `state: NOT_AVAILABLE` at roughly one week old**: the
+2026-08-02 backup (never READY as far as anyone observed), and the 2026-08-09
+backup — which was READY at age 4 days and was the *successfully restored
+source of the 2026-08-13 rehearsal* — was NOT_AVAILABLE by age 8 days. Both
+have `expireTime` months out, so this is not retention expiry. The flip window
+(~day 7) coincides with the 7-day PITR `versionRetentionPeriod`; cause is
+unestablished — the API exposes no reason field anywhere (list, describe, and
+raw REST all return only `name/database/databaseUid/snapshotTime/expireTime/state`).
+Until a Google support case resolves it, assume the **effective restorable
+depth is the single newest backup (≤ 7 days old)**, not 14 weeks. Before you
+rely on a backup, check:
 
 ```bash
 gcloud firestore backups list --project=aglyn-main --location='-' \
@@ -53,7 +63,7 @@ reads `FIRESTORE_DATABASE_ID` at call time. Unset (the norm) targets
 | Scenario | Tool | RPO | Caveats |
 | --- | --- | --- | --- |
 | Bad deploy / bad script / corruption noticed within 7 days | PITR clone | ~0 (any minute in the window) | Pick the pre-damage timestamp |
-| Damage older than 7 days | Weekly backup restore | Up to 7 days (Sunday snapshots), 14 weeks back | Only `READY` backups; 1 of the first 2 ever taken was not |
+| Damage older than 7 days | Weekly backup restore | Up to 7 days (Sunday snapshots); nominally 14 weeks back | Only `READY` backups — and as of 2026-08-17 every backup has gone `NOT_AVAILABLE` at ~1 week old (AGL-1843), so in practice this row currently collapses into the PITR window |
 | `aglyn-main` project lost (deletion, billing kill, account compromise) | — | **Total loss.** No off-project copy exists | The remaining gap; see below |
 
 ## RTO (measured 2026-08-13)
