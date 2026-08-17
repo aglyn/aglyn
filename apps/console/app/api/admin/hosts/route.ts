@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, submissionMonthKey } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -84,14 +84,56 @@ async function handler(request: Request): Promise<Response> {
     const docs = snapshot.docs
     const more = docs.length > PAGE_SIZE
     const pageDocs = more ? docs.slice(0, PAGE_SIZE) : docs
-    // Identity only. A host document carries screens, layouts and directory
-    // maps; projecting them into a picker would ship kilobytes per row for
-    // three fields.
+    /**
+     * Form-abuse counters, joined per host for the ORG-NARROWED case only
+     * (AGL-1681) — the staff org detail page's Sites card, where "my form
+     * stopped working" support conversations start. Without this join staff
+     * answered that question with a raw Firestore read of
+     * `hosts/{id}/counters/formSubmissionsRefused`, per host, by hand.
+     *
+     * One `getAll` for the page, the same bounded-round-trip shape
+     * `/api/admin/orgs` uses for its billing join. The picker case (no
+     * `orgId`) deliberately skips it and serves `forms: null` — 200 rows ×
+     * a counter read would price the global picker for a field it never
+     * renders, and `null` (vs a zero) keeps "not joined" distinguishable
+     * from "nothing refused".
+     *
+     * The month key is `submissionMonthKey()` — the SAME function the submit
+     * route increments by. Deriving the key separately is how a staff view
+     * reads zero refusals on exactly the sites being refused (AGL-1681's
+     * warning). The counter document persists from its first trip forever,
+     * so only the CURRENT month's key means "refusing now"; `ceiling` is a
+     * plain field and rides along whenever recorded.
+     */
+    const monthKey = submissionMonthKey()
+    const formsByHostId = new Map<
+      string,
+      { month: string; refused: number; ceiling: number | null }
+    >()
+    if (orgId && pageDocs.length > 0) {
+      const refusedSnaps = await db.getAll(
+        ...pageDocs.map((docSnap) =>
+          docSnap.ref.collection('counters').doc('formSubmissionsRefused'),
+        ),
+      )
+      refusedSnaps.forEach((snap, index) => {
+        const ceiling = snap.exists ? snap.get('ceiling') : null
+        formsByHostId.set(pageDocs[index].id, {
+          month: monthKey,
+          refused: snap.exists ? Number(snap.get(monthKey) ?? 0) : 0,
+          ceiling: typeof ceiling === 'number' ? ceiling : null,
+        })
+      })
+    }
+    // Identity only, plus the AGL-1681 counters join above. A host document
+    // carries screens, layouts and directory maps; projecting them into a
+    // picker would ship kilobytes per row for three fields.
     const hosts = pageDocs.map((docSnap) => ({
       $id: docSnap.id,
       displayName: docSnap.get('displayName') ?? null,
       subdomain: docSnap.get('subdomain') ?? null,
       orgId: docSnap.get('orgId') ?? null,
+      forms: formsByHostId.get(docSnap.id) ?? null,
     }))
     return Response.json(
       {
