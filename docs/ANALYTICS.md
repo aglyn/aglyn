@@ -517,6 +517,74 @@ only `aglyn.com`, and reports into whatever measurement id **that host**
 configured. A customer's contact form reports to the customer's property;
 `aglyn.com`'s reports to ours. That is the intended behaviour.
 
+#### What the consent tool declares to Google (AGL-1606/1608/1622)
+
+The gate above decides whether the tag LOADS. Three commits then settled what
+a loaded tag is *told*, and the posture they implement, stated as the decision
+was made (Zach, 2026-08-14): **load-then-restrict is approved for the United
+States**, where the implied-consent posture already permits the load and the
+restriction signals act on a tag that is legitimately resident.
+**EU/UK/EEA and unknown-region visitors are unchanged** — the gate still means
+the tag never loads without an explicit accept, because loading an analytics
+tag before consent is the specific act prior-consent law prohibits.
+Load-then-restrict is additive to the gate, never a replacement for it.
+
+**The signal set.** `analytics_storage` follows the visitor's grant;
+`ad_storage`, `ad_user_data` and `ad_personalization` are **denied
+unconditionally, in both directions, from the first hit** — the tool asks a
+visitor about analytics and nothing else, so there is no advertising basis on
+file to grant, and the type declares those three as the literal `'denied'` so
+widening them is a change the type has to be edited to allow. This is a change
+from the pre-AGL-1622 state, where a freshly loaded tag ran with `ad_storage`
+unrestricted: anyone reading GA4 Ads-linked reporting for a tenant site needs
+to know why the numbers moved on 2026-08-14. Whether a host should be able to
+grant the advertising signals themselves is AGL-1649, open.
+
+`analyticsConsentSignals()` in
+`libs/aglyn/src/lib/app-utils/visitor-consent.ts` is the **single source** for
+both declarations — the load-time `default` (`GA_CONSENT_DEFAULT_SNIPPET` is
+built from it) and the withdrawal `update` — so the two cannot drift. Read the
+payload there rather than trusting any restatement here.
+
+The three mechanisms, in the order a visitor meets them:
+
+- **A consent-mode `default` is declared before the first hit** (AGL-1622).
+  `site-analytics.tsx` (`apps/tenant/app/[host]/[[...slug]]/`) emits it
+  **inside the gated block**, in the same inline script that creates
+  `dataLayer`, ahead of `gtag('js')` and `gtag('config')` — so it exists only
+  on a pageview the AGL-1498 gate already permitted, and no hit is ever sent
+  before the tag has been told what it may store. It is deliberately **not**
+  declared when the host runs their own CMP (`consent.disabled`): their
+  solution owns the default, and a second one racing it would overwrite their
+  visitor's answer.
+- **A withdrawal silences the already-resident tag before sweeping**
+  (AGL-1608). Unmounting the `<script>` cannot unload `gtag.js`, and enhanced
+  measurement re-creates `_ga` on the next scroll. So
+  `setResidentAnalyticsTags` (same module) sets `window['ga-disable-<id>']`
+  for every resident measurement id AND sends
+  `gtag('consent', 'update', analyticsConsentSignals(false))` — two signals
+  because they fail differently: the flag reaches a tag that never got a
+  default, the update reaches a GTM-delivered tag whose id we never saw.
+  Order is load-bearing: **silence, then sweep**. Symmetric on a same-pageview
+  re-grant, which restores analytics only — the ad signals stay denied in
+  both directions.
+- **A non-granting state expires the GA cookies** (AGL-1606).
+  `clearAnalyticsCookies` (same module) expires every cookie matching
+  `ANALYTICS_COOKIE_PREFIXES` (`_ga`, `_gid`) at the host itself and at every
+  domain up the ladder to the registrable one, and returns the names it acted
+  on so the sweep is assertable.
+
+**Where the guard lives:** `apps/tenant/specs/consent-mode-default.spec.tsx`
+walks **every member of `PRIOR_CONSENT_COUNTRY_CODES`** and fails if any
+prior-consent region emits any GA artefact — a `default`, a `config`, a
+script request — before consent; it asserts the consent banner IS present in
+the same breath, so it cannot pass vacuously if the component throws. The
+tempting misreading it exists to catch is hoisting the `default` into the
+page for everyone, the way third-party CMPs do — that compiles, keeps every
+other consent spec green, and is a compliance defect. Siblings:
+`ga-consent-gate.spec.tsx` (the gate), `consent-resident-tag.spec.tsx`
+(AGL-1608), `consent-cookie-cleanup.spec.tsx` (AGL-1606).
+
 ### 3. No PII, enforced rather than promised
 
 Every payload passes `sanitizeEventParams` before reaching a transport:
