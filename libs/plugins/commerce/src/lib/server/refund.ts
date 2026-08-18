@@ -204,6 +204,12 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           status: 'pending',
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           createdAtMs: Date.now(),
+          // The second writer into `apiIdempotency` (AGL-1978). The shared
+          // `claimAttempt` stamps this too; this local copy has to as well,
+          // or refund claims are the one shape the TTL policy silently never
+          // reaches — a policy that governs most of a collection reads, from
+          // the outside, exactly like one that governs all of it.
+          expiresAt: Aglyn.apiIdempotencyExpiry(),
         })
       } catch {
         const prior = await claimRef.get()

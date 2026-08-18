@@ -70,6 +70,54 @@ export type ChurnSurveyReason = (typeof CHURN_SURVEY_REASONS)[number]
 export const CHURN_SURVEY_DETAIL_MAX_LENGTH = 500
 
 /**
+ * Where the free text goes: its OWN subcollection, one document per survey,
+ * sharing the survey's id (AGL-1978).
+ *
+ * A period had to be put on the free text, and a TTL policy deletes
+ * DOCUMENTS. Stamping `expiresAt` on the survey document itself would have
+ * reaped the closed-set `reason` along with the prose — which is the one
+ * field the funnel exists to break down, and the thing Zach asked for. So
+ * the two are separated by document rather than compromised on by period:
+ * the survey keeps `surface`, `reason`, `plan` and `uid` for as long as the
+ * workspace lives, and the sentence somebody typed on their way out expires.
+ *
+ * Same shape as the Assist split (AGL-1972) and for the same reason: one
+ * document cannot carry two retention periods, and picking one number for
+ * both is how the analysis loses its history or the prose never expires.
+ *
+ * Unmatched by name in the org rules block, which has no wildcard — so it is
+ * default-deny for every client, exactly like `retention` itself.
+ */
+export const CHURN_SURVEY_DETAIL_COLLECTION = 'churnSurveyDetails'
+
+/**
+ * How long the free text is kept.
+ *
+ * 365 days because churn analysis is ANNUAL — the question a retention
+ * roadmap actually asks is "why did people leave this year versus last", and
+ * a shorter window silently makes that comparison impossible for the half of
+ * the answers that carry any nuance. Past a year the closed-set `reason`
+ * carries the analysis on its own, which is what it is for.
+ *
+ * The free-text box is where a person types something we did not ask for —
+ * a name, an invoice number, a grievance about a colleague. That is the
+ * reason it is bounded at all, and the reason the bound is a period rather
+ * than a promise not to read it.
+ */
+export const CHURN_SURVEY_DETAIL_RETENTION_DAYS = 365
+
+/**
+ * When free text written at `now` expires. A `Date`, never an epoch number:
+ * a TTL policy keys on a Firestore Timestamp and silently governs nothing
+ * when handed a number.
+ */
+export function churnSurveyDetailExpiry(now = new Date()): Date {
+  return new Date(
+    now.getTime() + CHURN_SURVEY_DETAIL_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  )
+}
+
+/**
  * The winback offer, as constants rather than request inputs — the CLIENT
  * never chooses the discount. 50% for 2 months is margin-checked against the
  * plan floor: every self-serve tier's list price covers its infra cost at

@@ -94,6 +94,50 @@ export interface AttemptScope {
 const COLLECTION = 'apiIdempotency'
 
 /**
+ * How long a replay key is remembered (AGL-1978).
+ *
+ * This was unbounded, and the reason that matters is not document count. A
+ * settled claim stores the ORIGINAL RESPONSE BODY, and for the REST API that
+ * body is the created record's `values` — the customer's own data. So the
+ * collection was a second, permanent copy of every record ever created
+ * through the API, and `conventions.md` advertises the consequence in terms:
+ * a replay "keeps working after the record has been edited or deleted". A
+ * customer who deleted a record left our copy of it behind, forever, in a
+ * collection nobody thought of as content.
+ *
+ * 30 days, chosen against real retry behaviour rather than against the
+ * feeling that shorter is safer:
+ *
+ * - Stripe's own idempotency window is 24 hours, and it serves the whole
+ *   payments industry. 30 days is thirty times that.
+ * - It covers every retry pattern an integration actually has: the immediate
+ *   retry, the retry after a timeout, and the nightly job that fails and
+ *   re-runs the next morning. A human re-importing last quarter's data is
+ *   not retrying — that is a new operation, and it should mint a new key.
+ * - It turns an unbounded archive into a working set without touching the
+ *   in-flight semantics the `409` protects.
+ *
+ * ⚠️ This CHANGES a documented promise. `apps/docs/api/conventions.md` said
+ * keys "never expire — a key really is single-use forever"; it now states
+ * the window. The doc moved in the same commit, because a retention change
+ * that leaves the published contract behind is the AGL-1496 shape.
+ */
+export const API_IDEMPOTENCY_RETENTION_DAYS = 30
+
+/**
+ * When a claim taken at `now` expires. A `Date`, never an epoch number: a
+ * TTL policy keys on a Firestore Timestamp and silently governs nothing when
+ * the field is a number. Note the existing `createdAtMs`/`settledAtMs`
+ * fields are numbers and could not have been used — which is why AGL-1978
+ * called for a new field rather than a policy on an existing one.
+ */
+export function apiIdempotencyExpiry(now = new Date()): Date {
+  return new Date(
+    now.getTime() + API_IDEMPOTENCY_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  )
+}
+
+/**
  * One Stripe idempotency key per OBJECT an attempt creates (AGL-1714).
  *
  * Stripe's idempotency layer is account-scoped, not endpoint-scoped: it
@@ -161,6 +205,12 @@ export async function claimAttempt(
       kind: scope.kind,
       status: 'pending',
       createdAtMs: Date.now(),
+      // Stamped at CLAIM, not at settlement, so a claim stranded by a killed
+      // process is reaped on the same schedule as one that completed. Those
+      // are the documents that would otherwise sit forever holding a key
+      // hostage — the failure mode `release()` exists to avoid and cannot
+      // cover when the process is gone.
+      expiresAt: apiIdempotencyExpiry(),
     })
   } catch {
     // Already claimed: either the attempt finished and we replay its result,
