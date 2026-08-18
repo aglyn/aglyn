@@ -117,7 +117,14 @@ const mockOrg: any = {
   org: {
     id: 'org-1',
     plan: 'business',
-    subscriptionStatus: 'active',
+    // The org doc's real status field is `billingStatus` — the bare mirror
+    // `writeOrgBilling` writes back for the dunning banner, and the one
+    // `subscriptionStatusOf` reads on an org doc (the live `subscription`
+    // object lives under `orgs/{orgId}/billing/stripe`, which
+    // `getOrgForHost` does not return). A fixture keyed `subscriptionStatus`
+    // is read by nothing, so a dead-subscription case written against it
+    // silently resolves as ACTIVE.
+    billingStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
   },
@@ -386,5 +393,43 @@ describe('draft-order idempotency (AGL-1697)', () => {
     expect(stripeCalls).toHaveLength(2)
     expect(claimDocs()).toHaveLength(0)
     expect(stripeCalls[0].idempotencyKey).toBeNull()
+  })
+})
+
+/**
+ * AGL-1873: the commerce entitlement is re-asked per request, the AGL-481
+ * pattern — a downgrade takes effect at the next draft, not never. Before
+ * the gate, a free/lapsed org's admin could mint live payment links at the
+ * free plan's 0% transaction fee.
+ */
+describe('the commerce entitlement gates the draft door (AGL-1873)', () => {
+  afterEach(() => {
+    mockOrg.org.plan = 'business'
+    mockOrg.org.billingStatus = 'active'
+  })
+
+  it('a free-plan org is refused before Stripe and before any order doc', async () => {
+    mockOrg.org.plan = 'free'
+    const result = await post({}, { 'idempotency-key': 'attempt-entitlement' })
+    expect(result.status).toBe(403)
+    expect(stripeCalls).toHaveLength(0)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('a dead subscription on a paid plan is refused too — the sticky-downgrade half', async () => {
+    mockOrg.org.billingStatus = 'canceled'
+    const result = await post({}, { 'idempotency-key': 'attempt-entitlement-2' })
+    expect(result.status).toBe(403)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('the refusal does not burn the attempt key', async () => {
+    mockOrg.org.plan = 'free'
+    const refused = await post({}, { 'idempotency-key': 'attempt-back' })
+    expect(refused.status).toBe(403)
+    mockOrg.org.plan = 'business'
+    const retry = await post({}, { 'idempotency-key': 'attempt-back' })
+    expect(retry.status).toBe(200)
+    expect(orderDocs()).toHaveLength(1)
   })
 })

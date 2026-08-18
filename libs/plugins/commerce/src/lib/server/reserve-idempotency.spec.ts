@@ -119,7 +119,9 @@ const mockOrg: any = {
   org: {
     id: 'org-1',
     plan: 'business',
-    subscriptionStatus: 'active',
+    // `billingStatus`, not `subscriptionStatus` — see the note in
+    // draft-order-idempotency.spec.ts. Only this key downgrades a paid plan.
+    billingStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
   },
@@ -395,5 +397,46 @@ describe('reservation idempotency (AGL-1697)', () => {
     expect(stripeCalls).toHaveLength(1)
     expect(claimDocs()).toHaveLength(0)
     expect(stripeCalls[0].idempotencyKey).toBeNull()
+  })
+})
+
+/**
+ * AGL-1873: the commerce entitlement is re-asked per request, the AGL-481
+ * pattern — a lapsed org's storefront stops taking reservation deposits at
+ * the next attempt. The refusal is hoisted with the other deterministic
+ * merchant-side refusals ABOVE the claim (AGL-1697), so it never burns the
+ * guest's attempt key.
+ */
+describe('the commerce entitlement gates the reservation door (AGL-1873)', () => {
+  afterEach(() => {
+    mockOrg.org.plan = 'business'
+    mockOrg.org.billingStatus = 'active'
+  })
+
+  it('a free-plan org is refused before Stripe and before any hold', async () => {
+    mockOrg.org.plan = 'free'
+    const result = await post({}, { 'idempotency-key': 'attempt-entitlement' })
+    expect(result.status).toBe(403)
+    expect(stripeCalls).toHaveLength(0)
+    expect(holdDocs()).toHaveLength(0)
+  })
+
+  it('a dead subscription on a paid plan is refused too — the sticky-downgrade half', async () => {
+    mockOrg.org.billingStatus = 'canceled'
+    const result = await post({}, { 'idempotency-key': 'attempt-entitlement-2' })
+    expect(result.status).toBe(403)
+    expect(stripeCalls).toHaveLength(0)
+    expect(holdDocs()).toHaveLength(0)
+  })
+
+  it('the refusal does not burn the guest attempt key', async () => {
+    mockOrg.org.plan = 'free'
+    const refused = await post({}, { 'idempotency-key': 'attempt-back' })
+    expect(refused.status).toBe(403)
+    expect(claimDocs()).toHaveLength(0)
+    mockOrg.org.plan = 'business'
+    const retry = await post({}, { 'idempotency-key': 'attempt-back' })
+    expect(retry.status).toBe(200)
+    expect(holdDocs()).toHaveLength(1)
   })
 })

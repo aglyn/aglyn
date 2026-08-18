@@ -92,6 +92,15 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
 
     // Merchant account like the storefront checkout (AGL-284).
     const ownerOrg = await getOrgForHost(hostId)
+    // Plan gate, re-asked per request exactly as the storefront checkout
+    // asks it (AGL-1873, the AGL-481 pattern): a free or lapsed org must not
+    // keep minting payment links — at the free plan's 0% transaction fee —
+    // through the one commerce door that skipped the entitlement. Sits
+    // ABOVE the attempt claim with the other deterministic refusals, so it
+    // never burns the merchant's idempotency key.
+    if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'commerce')) {
+      return res.status(403).json({ error: 'Selling is not enabled' })
+    }
     const ownerId = ownerOrg?.org?.ownerUid
     const ownerProfile = ownerId
       ? await firestore.collection('profiles').doc(String(ownerId)).get()
