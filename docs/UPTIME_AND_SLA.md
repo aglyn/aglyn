@@ -160,9 +160,19 @@ Notes that keep these honest:
   the main check. A status-code monitor is blind to it; this check reads the
   body with a JSONPath matcher. That failure mode was real: three weeks of no
   WebP variants, discovered by archaeology (AGL-1468).
-- `backup-state` closes AGL-1490's alert gap: 503 when any backup is failed,
-  none is READY, or the newest READY is older than 8 days. The probe's verdict
-  logic is `backupsHealth` in `health-report.ts`, spec-covered. Since
+- `backup-state` closes AGL-1490's alert gap: 503 when the **newest** backup is
+  unusable, none is READY, or the newest READY is older than 8 days. The
+  probe's verdict logic is `backupsHealth` in `health-report.ts`, spec-covered.
+  **"Newest" is load-bearing, and it was learned the hard way.** The rule was
+  originally "any non-READY backup fails", and that made the check incapable of
+  ever reporting green: managed Firestore backups flip `READY` →
+  `NOT_AVAILABLE` at ~7 days while their `expireTime` sits ~90 days out, so a
+  working weekly schedule always shows a pile of aged-out backups beside
+  exactly one READY one. It went red on 2026-08-13 and stayed red for four and
+  a half days — 210 consecutive windows, 6/6 probe regions — while the backups
+  were entirely healthy (AGL-1843). An aged-out backup behind a good one is how
+  a managed backup *ends*, not a failure; what reproduces AGL-1490 is a newest
+  run that produced nothing usable, so that is what is measured. Since
   AGL-1843 the same endpoint carries a SECOND, separately-labeled check —
   `exports` — watching the weekly Firestore GCS export
   (`gs://aglyn-main-firestore-exports`, cron in `scheduled-crons.yml`): 503
@@ -201,10 +211,17 @@ Notes that keep these honest:
 - **The 30-minute window is the design, not a default.** Markers carry a
   30-day `expiresAt`, so a check that asked "does a marker exist" would sit red
   for a month after a thirty-second blip, and a permanently red check gets
-  muted. That is the deliberate **opposite** of `backup-state`, which is red by
-  design until the bad backup is gone (`DISASTER_RECOVERY.md` gap 2) because a
-  missing restore point is a *condition* that persists; a degraded limiter
-  window is an *event* that is already over. The window's floor is set by this
+  muted. `backup-state` is the nearer case, not the opposite one: it stays red
+  while a *condition* persists — no usable restore point
+  (`DISASTER_RECOVERY.md` gap 2) — where a degraded limiter window is an
+  *event* that is already over. But it holds that licence only for a condition
+  that can actually be cleared. Reading "red until the bad backup is gone"
+  literally is what produced AGL-1843, because an aged-out `NOT_AVAILABLE`
+  backup never goes away inside its 90-day retention: the condition was
+  unclearable, so the check was permanently red, and the mute this very
+  paragraph warns about is exactly what it was earning. **Before giving any
+  check a persistent-condition licence, name the event that clears it.** The
+  window's floor is set by this
   alert path, not by taste: 5 min probe memo + 5 min check period + ~10 min
   sustained-failure before the email means anything under ~20 minutes can go
   red and green again before anyone is told.
