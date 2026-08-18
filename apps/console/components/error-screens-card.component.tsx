@@ -76,6 +76,23 @@ const ERROR_SLOTS: Array<{
  * designed screen per status code, plus the site-wide maintenance toggle.
  * The 404 pick also writes the legacy `notFoundScreenId` so older tenant
  * builds keep working.
+ *
+ * ## The empty option used to be a lie (AGL-2074)
+ *
+ * It read "Built-in default", which sounds like the platform ships a designed
+ * page for anyone who does not pick one. It did not. Leaving a slot empty
+ * meant the visitor got **Next.js's own unstyled `404 | This page could not
+ * be found`** — no brand, no navigation. Measured 2026-08-18: `errorScreens`
+ * was unset on 6 of 6 production hosts, so that framework page was the live
+ * behaviour of every site on the platform, and this card said it was the
+ * intended default.
+ *
+ * AGL-2074 built the fallback the label was describing, so the option is
+ * finally truthful — but truthful is not the same as informative, and an
+ * operator reading "default" has no reason to pick anything. The copy now
+ * says what the fallback actually is and what assigning a screen buys: the
+ * fallback carries the site's own logo and a link home, and the site's real
+ * header, nav and footer come only from a screen you designed.
  */
 export function ErrorScreensCard(props: ErrorScreensCardProps) {
   const { hostId } = props
@@ -146,6 +163,12 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
         {'Design these like any screen, then assign them here. Assigned ' +
           'screens are kept out of search results.'}
       </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {'Leave a slot on the built-in fallback and visitors still get a ' +
+          'page carrying your logo and a link to your homepage — but only a ' +
+          'screen you design here can show your site’s own header, ' +
+          'navigation and footer.'}
+      </Typography>
       <Stack spacing={2}>
         {ERROR_SLOTS.map((slot) => (
           <TextField
@@ -163,7 +186,12 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
             }
             sx={{ minWidth: 280 }}
           >
-            <MenuItem value="">{'Built-in default'}</MenuItem>
+            {/* Not "default" (AGL-2074). This is the fallback the tenant
+                app renders when nothing is assigned — the site's logo, the
+                status, and a link home. Naming it that way is the difference
+                between an operator thinking the slot is already handled and
+                knowing there is a better page to be had. */}
+            <MenuItem value="">{'Built-in fallback page'}</MenuItem>
             {screens.map((screen: any) => (
               <MenuItem key={screen.$id} value={screen.$id}>
                 {screen.displayName ?? screen.$id}
