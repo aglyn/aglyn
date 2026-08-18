@@ -71,6 +71,11 @@ const USES_HELPERS = /isBillingSubscription|orgMonthlyRevenueUsd/
 const EXCEPTIONS: Record<string, string> = {
   'libs/aglyn/src/lib/app-utils/plan-entitlements.ts':
     'Home of isBillingSubscription/orgMonthlyRevenueUsd — it IS the rule.',
+  'libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts':
+    'GA4 event senders (purchase/refund/cancellation, AGL-1850/1851): they ' +
+    'forward per-event Stripe invoice amounts and the plan LABEL being left ' +
+    'as event params — no aggregate is computed and nothing derives money ' +
+    'from org.plan; the invoice is the money source per event.',
   'apps/console/app/(app)/admin/overview/page.tsx':
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
   'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx':
