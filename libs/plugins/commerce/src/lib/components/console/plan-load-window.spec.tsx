@@ -56,6 +56,11 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 const profile = { data: undefined as unknown, status: 'success' }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The real hook resolves through two async `getDoc` round-trips, so it
+  // returns nulls on first render and these specs never await past that.
+  // Modelling the resolved shape here would fabricate a link the real
+  // render cannot have yet (AGL-2080 added this call).
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestore: () => ({}),
   useOrgPlan: () => orgPlan,
   useHostResourceApi: () => jest.fn(),
