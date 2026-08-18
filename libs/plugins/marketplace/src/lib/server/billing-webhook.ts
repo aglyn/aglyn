@@ -20,6 +20,7 @@ import {
   firebaseAdmin,
   sendGa4Purchase,
   sendGa4Refund,
+  syncConnectAccountStatus,
 } from '@aglyn/tenant-data-admin'
 
 /** Stripe failures a redelivery can actually fix. */
@@ -242,6 +243,16 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
 }) => {
+  // Connect readiness, kept fresh (AGL-1997) — the publisher twin of the
+  // commerce sync. The seller panel reads `stripeChargesEnabled` /
+  // `stripePayoutsEnabled` off this document, and before this nothing but the
+  // publisher reopening the connect route ever refreshed either. Same early
+  // return: `account.updated` shares nothing with the purchase sections below.
+  if (type === 'account.updated') {
+    await syncConnectAccountStatus('publisherProfiles', object)
+    return
+  }
+
   // Marketplace purchases (AGL-46): keyed by session id (idempotent on
   // Stripe redelivery). Install gating and the seller ledger read these.
   if (

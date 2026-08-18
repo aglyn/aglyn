@@ -25,6 +25,7 @@ import {
   notifyHostManagers,
   upsertHostContact,
   renderHostEmailWithTokens,
+  syncConnectAccountStatus,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
@@ -911,6 +912,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   object,
   requestHost,
 }) => {
+  // Connect readiness, kept fresh (AGL-1997). Every commerce money route —
+  // checkout, cart checkout, draft orders, reservations, POS — gates the sale
+  // on the CACHED `stripeChargesEnabled` written by the connect route. Nothing
+  // refreshed it but the merchant reopening that route, so a merchant Stripe
+  // later restricted kept selling on a stale `true` and the shopper met the
+  // failure at payment time.
+  //
+  // FIRST and with an early return: this event shares nothing with the order
+  // sections below, and returning here keeps it out of every `metadata.type`
+  // test. `syncConnectAccountStatus` mirrors current state, so a redelivery is
+  // harmless.
+  if (type === 'account.updated') {
+    await syncConnectAccountStatus('profiles', object)
+    return
+  }
+
   // White-label brand per host (White-Label Phase 3): every storefront email
   // this webhook sends — receipts, gift cards, reservation and sale notices,
   // supplier notices — reads as the store's brand. Resolved once per host from
