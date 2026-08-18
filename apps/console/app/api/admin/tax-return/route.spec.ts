@@ -202,4 +202,46 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
     // …and said out loud instead of silently absent.
     expect(body.undatedRows).toBe(1)
   })
+
+  /**
+   * AGL-1904. Storefront tax is a SECOND collection and a second query — the
+   * route used to read `platformRevenue` alone, so tax charged to shoppers
+   * under Aglyn's own registration reached no response field at all.
+   */
+  it('serves storefront tax as its own section, never merged into the summary', async () => {
+    seedRow('in_q3')
+    docs.set('storefrontTaxCollected/cs_q3', {
+      hostId: 'host-1',
+      orgId: 'org-2',
+      taxMode: 'stripe-automatic',
+      taxLiability: 'platform',
+      grossCents: 10825,
+      taxCents: 825,
+      currency: 'usd',
+      customerAddress: { country: 'US', state: 'TX' },
+      taxLines: [{ amountCents: 825, taxableAmountCents: 10000 }],
+      paidAt: new Date('2026-09-16T12:00:00Z'),
+    })
+    docs.set('storefrontTaxCollected/cs_manual', {
+      hostId: 'host-2',
+      orgId: 'org-3',
+      taxMode: 'manual',
+      taxLiability: null,
+      grossCents: 10800,
+      taxCents: 800,
+      currency: 'usd',
+      customerAddress: { country: 'US', state: 'TX' },
+      taxLines: [],
+      paidAt: new Date('2026-09-17T12:00:00Z'),
+    })
+    const body = await (await GET(get('2026-Q3'))).json()
+    // Aglyn's OWN figures are untouched by the storefront rows.
+    expect(body.summary.transactionCount).toBe(1)
+    expect(body.summary.taxCollectedCents).toBe(660)
+    // …and the storefront money is present, split by who computed it.
+    expect(body.storefront.summary.aglynLiable.taxCollectedCents).toBe(825)
+    expect(body.storefront.summary.aglynLiable.taxableSalesCents).toBe(10000)
+    expect(body.storefront.summary.merchantManual.taxCollectedCents).toBe(800)
+    expect(body.storefront.rows).toHaveLength(2)
+  })
 })
