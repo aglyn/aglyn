@@ -67,8 +67,6 @@ const CLIENT_ROOTS = [
 const EXEMPT: Record<string, string> = {
   'report-usage':
     'Cron-invoked usage rollup (AGL-635). It is called on a schedule by Vercel Cron against the deployed URL, so there is no in-repo caller and there should not be one — a browser-originated call would let a client decide when usage is billed.',
-  'storage-overage':
-    'NO SURFACE, and that is a known defect rather than a decision — tracked in AGL-1957. It is Bearer-authenticated and `billing.manage`-gated, so it is a customer consent surface with no way for a customer to reach it, exactly the AGL-1947 shape. Listed here so the guard stays green while the gap stays VISIBLE; removing this entry is the acceptance test for AGL-1957.',
 }
 
 /** Routes we know exist, so a collapsed sweep cannot pass vacuously. */
@@ -76,6 +74,7 @@ const KNOWN_ROUTES = [
   'addons',
   'checkout',
   'register-allocations',
+  'storage-overage',
   'subscription',
   'webhook',
 ]
@@ -189,5 +188,45 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
     )
     // Imported and rendered: two occurrences on the billing page.
     expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+  })
+
+  it('storage-overage specifically is wired to the billing page (AGL-1957)', () => {
+    // The second instance of the same defect, and the worse one: the media
+    // ingress gate refuses an upload with "turn it on in Billing", and until
+    // AGL-1957 there was nothing in Billing to turn on. The refusal pointed
+    // customers at a control that did not exist.
+    const callers = clientCallers('storage-overage')
+    expect(
+      callers.some((file) =>
+        file.includes('billing-storage-overage-card.component.tsx'),
+      ),
+    ).toBe(true)
+
+    const page = execFileSync(
+      'git',
+      [
+        'grep',
+        '-c',
+        '--',
+        'BillingStorageOverageCardComponent',
+        '--',
+        'apps/console/app',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    )
+    expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+  })
+
+  it('the exemption list records decisions, never open defects (AGL-1957)', () => {
+    // `storage-overage` sat in EXEMPT with a reason that said, in terms, "this
+    // is a known defect". That was the right way to keep a gap visible while
+    // it was open — and it is exactly what must not survive the fix, or the
+    // list quietly becomes the place uncalled routes go to stop being
+    // counted. An exemption is "we decided", never "we noticed".
+    for (const [route, reason] of Object.entries(EXEMPT)) {
+      expect(`${route}: ${/\bdefect\b|\bAGL-1957\b/i.test(reason) ? 'OPEN DEFECT' : 'a decision'}`).toBe(
+        `${route}: a decision`,
+      )
+    }
   })
 })
