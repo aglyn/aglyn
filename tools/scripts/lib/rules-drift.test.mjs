@@ -659,6 +659,64 @@ describe('the checker is wired (workflow + package.json)', () => {
     }
   })
 
+  it('the two emulator guard suites run in the ACTIVE emulator-guards.yml (AGL-2002)', () => {
+    // Same argument as the block above, one tier heavier. `test:rules` and
+    // `test:emulator-guards` need a JVM and the emulator suite, so nx-ci.yml
+    // excludes the first ON PURPOSE and never had the second — and nx-ci.yml
+    // is `disabled_manually` anyway. emulator-guards.yml is their only home.
+    //
+    // Asserted from HERE for the anti-circularity reason: this suite runs in
+    // rules-drift.yml, index-drift.yml and tools-guards.yml, none of which is
+    // emulator-guards.yml. Deleting a step there — or the whole file — turns
+    // three other active workflows red. Asserted from inside emulator-guards.yml
+    // it would delete the check along with the step.
+    //
+    // What this is standing in for: before AGL-2002 the rules suite had been
+    // dead at import for nine days and 18 emulator specs had never executed
+    // once, and nothing anywhere said so.
+    const workflow = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'emulator-guards.yml'),
+      'utf8',
+    )
+    const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
+    for (const script of ['test:rules', 'test:emulator-guards']) {
+      // Step syntax, not the bare name: this workflow's comments discuss both
+      // scripts at length, and an assertion its own prose can satisfy is the
+      // vacuous green this block exists to catch.
+      assert.ok(
+        workflow.includes(`- run: npm run ${script}`),
+        `emulator-guards.yml must have a step running npm run ${script}`,
+      )
+      assert.ok(
+        typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',
+        `package.json must define the ${script} script emulator-guards.yml runs`,
+      )
+    }
+    // A JVM in both jobs. Both emulators are `java -jar`, and a missing JDK
+    // fails deep inside firebase-tools with a message about neither.
+    //
+    // Anchored to the STEP syntax — `- uses:` at a step's indentation — for
+    // the same reason as the `- run:` checks above, and this one was caught
+    // the hard way: the first version matched a bare `uses: actions/setup-java`
+    // anywhere, so commenting a step out left the match intact and the
+    // assertion green. A guard satisfied by the text of the thing it is
+    // supposed to notice missing is not a guard.
+    assert.equal(
+      workflow.match(/^ {6}- uses: actions\/setup-java/gm)?.length,
+      2,
+      'both emulator-guards.yml jobs need actions/setup-java — the Firestore ' +
+        'and Database emulators are JVM jars',
+    )
+    // No `paths:` filter. These guard behaviour, not files: an erasure sweep
+    // can stop deleting a collection because of an edit three libraries away,
+    // so any path list is a guess about which edits can break a legal
+    // promise — and a wrong guess renders as green.
+    assert.ok(
+      !/^\s{4}paths:/m.test(workflow),
+      'emulator-guards.yml must not filter on paths — see the header comment',
+    )
+  })
+
   it('the workflow compares against the PROMOTED baseline, with the history to resolve it (AGL-1690)', () => {
     const workflow = readFileSync(
       join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),

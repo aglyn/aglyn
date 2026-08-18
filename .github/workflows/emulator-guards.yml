@@ -1,0 +1,120 @@
+name: Emulator guards
+
+# The two guard suites that need a Firebase emulator, and therefore ran in no
+# workflow at all until AGL-2002. Same shape as AGL-1778/1816/1822 and the
+# `tools-guards.yml` they produced, one tier heavier: these need a JVM.
+#
+# WHAT RAN NOWHERE, AND WHAT IT COST
+#
+# 1. `npm run test:rules` — the Firestore and RTDB rules matrices. nx-ci.yml
+#    excludes it ON PURPOSE (emulator + JVM, not the pure node its other steps
+#    use) and says so; the exclusion was correct and the consequence was still
+#    that nothing ran it, because nx-ci.yml is `disabled_manually` besides.
+#    `rules-drift.yml` does not cover this: drift proves LIVE matches the
+#    promoted file, not that the file says the right thing.
+#
+#    While wiring this up the suite turned out to have been dead at import
+#    since a4ce14485 — 0 of 124 assertions, on the AGL-2004 comment-parser
+#    bug. Nine days, including the commit that added the abuse-queue rules.
+#
+# 2. `npm run test:emulator-guards` — 18 `*.emulator.spec.ts` files. jest DOES
+#    collect them; no workflow ever set `FIRESTORE_EMULATOR_HOST`, so all 18
+#    degraded to `describe.skip` and reported as passing-with-skips. Three are
+#    the GDPR-erasure guards behind DPA §11 and the published Privacy Policy
+#    (AGL-1970, AGL-1971, AGL-1975).
+#
+# NO `paths:` FILTER, DELIBERATELY, and this is the one place this repo's
+# usual cheap-approximation-of-affectedness is the wrong trade. tools-guards.yml
+# can filter on `tools/**` because its suites read files in `tools/`. These
+# read BEHAVIOUR: the erasure guards fail when a sweep stops deleting a
+# collection, and that regression can arrive from anywhere — a converter, a
+# shared helper, a rules edit, a field rename three libraries away. Any path
+# list would be a guess about which edits can break a legal promise, and a
+# wrong guess reads as green. Roughly five minutes a run buys not having to be
+# right about that.
+#
+# ⚠️ Never pipe a step's command. `emulators:exec … | tail` reports SUCCESS on
+# a jest failure — observed while building this, and the reason
+# test-emulator-guards.sh pipes nothing either.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Daily, 08:11 UTC — after tools-guards (07:53) so the npm cache is warm
+    # and the two do not contend. GitHub schedules are best-effort and pause
+    # on 60-day-quiet repos; a green history is not proof of coverage.
+    - cron: '11 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Only the newest verdict matters, but do NOT cancel in progress on main —
+  # a cancelled run of these reads as "no answer", and the answer is the point.
+  group: emulator-guards-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Two jobs rather than two steps: they are independent verdicts and one
+  # should not hide behind the other's failure. The rules suite is the faster
+  # of the two, so a rules regression reports first.
+  rules:
+    name: Firestore + RTDB rules matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # The Firestore and Database emulators are JVM jars. ubuntu-latest ships
+      # a JDK today; pinning it means this job does not silently depend on
+      # that staying true.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Root install only. `cloud/rules-tests/` imports
+      # @firebase/rules-unit-testing and firebase/firestore from the root
+      # package; it reaches into neither standalone package (cloud/functions,
+      # apps/docs), so this job does not pay for their installs. If that ever
+      # changes, add the matching `npm ci --prefix <dir>` rather than working
+      # around the failure.
+      - run: npm ci
+
+      - run: npm run test:rules
+
+  emulator-specs:
+    name: '*.emulator.spec.ts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - run: npm ci
+
+      # The runner asserts its own coverage after the suites: non-zero tests,
+      # zero SKIPPED, and every `*.emulator.spec.ts` that `git ls-files` knows
+      # about actually executed. Without that last one a nineteenth spec
+      # landing in a project the runner does not list would be born dark,
+      # which is exactly how the first eighteen got here — and jest would
+      # still exit 0.
+      - run: npm run test:emulator-guards
