@@ -691,10 +691,17 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       nextParams.set('tab', value)
       router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
       const form = forms.find(({ schema }) => schema.id === value)
-      logEvent(analytics, 'screen_view', {
-        firebase_screen: (form?.schema.title as string) ?? 'Theme',
-        firebase_screen_class: HostSetup.displayName,
-      })
+      // `analytics` is undefined whenever Firebase Analytics failed to
+      // initialize (ad blocker, blocked storage, missing measurement id) —
+      // `useAnalytics()` is typed as if it never is, and strictNullChecks is
+      // off. Unguarded this throws out of a tab-change handler on every
+      // switch, for a pageview.
+      if (analytics) {
+        logEvent(analytics, 'screen_view', {
+          firebase_screen: (form?.schema.title as string) ?? 'Theme',
+          firebase_screen_class: HostSetup.displayName,
+        })
+      }
     },
     [forms, analytics, router, pathname, searchParams],
   )

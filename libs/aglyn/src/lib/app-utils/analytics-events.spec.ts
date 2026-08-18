@@ -119,6 +119,41 @@ describe('analytics-events (AGL-1561)', () => {
 
       expect(() => trackEvent('host_created', {})).not.toThrow()
     })
+
+    it('a throwing transport takes the event DOWN WITH IT — gtag is not a safety net', () => {
+      // The characterization that explains the console-side guard in
+      // `firebase-app.layout.tsx`. Surviving the throw is not the same as
+      // delivering the event: `deliver()` commits to the transport branch
+      // BEFORE it can fail, so the `window.gtag` pipe underneath is
+      // unreachable and the catch turns total data loss into silence.
+      //
+      // This is exactly what shipped. The console registered a transport
+      // closing over an `analytics` that is undefined whenever Firebase
+      // Analytics fails to initialize (ad blocker, blocked storage, missing
+      // measurement id), `logEvent` read `.app` off it, and every console
+      // event for those visitors went nowhere — reported as zero, not as an
+      // error. The fix is upstream, in what gets registered: there is no
+      // repair available here, which is the point of pinning it.
+      const calls = installGtag()
+      configureAnalyticsTransport(() => {
+        throw new TypeError("Cannot read properties of undefined (reading 'app')")
+      })
+
+      trackEvent('host_created', {})
+
+      expect(calls).toHaveLength(0)
+    })
+
+    it('falls back to gtag when no transport is registered — the unsupported-Analytics path', () => {
+      // The state the console now leaves itself in when Analytics is
+      // unavailable, rather than registering one that cannot deliver.
+      const calls = installGtag()
+
+      trackEvent('host_created', {})
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0][1]).toBe('host_created')
+    })
   })
 
   describe('one begin_checkout shape across both surfaces (AGL-1591)', () => {

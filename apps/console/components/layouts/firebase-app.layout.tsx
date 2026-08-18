@@ -118,6 +118,26 @@ function AnalyticsGlobalEvents({ children }) {
   // through to `window.gtag`, which only exists once the visitor has granted
   // consent (AGL-1498), making the gate structural there.
   useEffect(() => {
+    // Registering a transport that cannot deliver is WORSE than registering
+    // none (AGL-1516 beacon, top error group). `initializeAnalytics` throws
+    // whenever Analytics is unsupported — no measurement id, cookies or
+    // IndexedDB blocked, an ad blocker eating the gtag script — and the
+    // provider catches that and leaves `analytics` undefined. Because
+    // `useAnalytics()` is typed as always returning an `Analytics` and
+    // strictNullChecks is off repo-wide, nothing here ever complained.
+    //
+    // `logEvent(undefined, ...)` then reads `.app` off undefined and throws.
+    // `deliver()` swallows it ("analytics never breaks the page") — but it
+    // swallows it AFTER having taken the transport branch and returned, so
+    // the `window.gtag` fallback underneath is never reached. The result is
+    // not a degraded surface, it is a silent TOTAL loss of console analytics
+    // for exactly the visitors whose browsers are hostile to Firebase, with
+    // no error surfaced anywhere. Sept 1 activation and funnel numbers are
+    // read off this taxonomy, so they would have quietly under-reported.
+    //
+    // Leaving the transport unregistered is the honest state: `deliver()`
+    // falls through to `window.gtag`, which is what every other surface uses.
+    if (!analytics) return
     configureAnalyticsTransport((name, params) => {
       // `logEvent`'s overloads type each reserved name individually, so the
       // shared taxonomy's union has to be widened past them here. The typing
