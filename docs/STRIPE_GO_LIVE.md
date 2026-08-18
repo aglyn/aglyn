@@ -82,6 +82,49 @@ returns plaintext.
 - Confirm the tenant doc (`tenants/{uid}`) shows the plan and the Billing
   page chip flips from "no subscription".
 
+### Assert the LIVE webhook, on evidence (AGL-1906)
+
+```bash
+npm run audit:stripe-webhook            # last 30 days
+npm run audit:stripe-webhook -- --days 7 --json
+```
+
+Read-only (GET only), and it loads `.env` + `apps/console/.env.production.local`
+itself so it is one command. Exits non-zero unless every check passes.
+
+**Do not tick "webhooks are live" off `stripeEvents` alone.** On 2026-08-14
+that collection was read on its own and the conclusion drawn was that the
+endpoint was healthy: 14 events recorded, newest five from a real live
+checkout, nothing newer because no Stripe activity had happened since. Every
+fact was true. Hours later AGL-1551 read the Stripe destination itself and
+found HTTP 400 `Invalid signature` on **100% of deliveries** for the preceding
+week, behind a green *Active* badge.
+
+The collection cannot answer the question by construction: `route.ts` returns
+400 **before** claiming the `stripeEvents/{event.id}` idempotency document, so
+a rejected delivery writes nothing, and an empty collection is indistinguishable
+from a totally broken endpoint. Stripe's list of what it *tried* to deliver is
+the missing denominator. The audit joins the two and reports the gap:
+
+| check | asserts |
+| -- | -- |
+| `endpoint.count` | exactly one live destination — otherwise account-wide signals cannot be attributed to it |
+| `endpoint.status` / `endpoint.url` | enabled, and pointed at the production console |
+| `endpoint.events` | every event in `WEBHOOK_EVENTS` still subscribed (AGL-1798 was a silent gap) |
+| `delivery.evidence` | the window contains at least one **real delivery** — 0% over an empty window is not evidence |
+| `delivery.failures` | Stripe reports no failed delivery in the window |
+| `processing.coverage` | every deliverable event has a `stripeEvents` document, i.e. the signature verified and the handler ran |
+
+Two readings it deliberately refuses to flatter: an **empty window fails**
+rather than reporting a comfortable 0%, and a **skipped Firestore arm reads
+`unknown`, never `pass`**.
+
+`--since` / `--until` take ISO timestamps, so the audit can be pointed at a
+window known to be bad and watched to go red — the way to confirm the check
+can still fail before trusting a green one. `tools/scripts/lib/stripe-webhook-health.test.mjs`
+(`npm run test:stripe-webhook-health`) does the same against fixtures, giving
+every check a failing input including the AGL-1551 shape.
+
 ## 4. Related, not blocking
 
 - Firestore rules deploy (`firebase deploy --only firestore:rules`) —
