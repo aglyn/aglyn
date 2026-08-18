@@ -21,6 +21,7 @@ import {
   MAX_EXPORT_AGE_DAYS,
   backupsHealth,
   beaconHealth,
+  billingWebhookHealth,
   exportsHealth,
   healthBody,
   healthHeaders,
@@ -583,5 +584,111 @@ describe('beaconHealth (AGL-1923)', () => {
     const green = beaconHealth({ ok: true }, LOG, 'console-web', 40)
     expect(red.ok).toBe(false)
     expect(green.ok).toBe(true)
+  })
+})
+
+describe('billingWebhookHealth (AGL-1924)', () => {
+  const HEALTHY = {
+    endpointStatus: 'enabled' as const,
+    undelivered: 0,
+    emitted: 12,
+    processed: 12,
+  }
+
+  it('is ok when the destination is enabled and nothing failed to deliver', () => {
+    const check = billingWebhookHealth(HEALTHY, 90)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(200)
+  })
+
+  it('is ok on a QUIET window — zero events is not a failure', () => {
+    // The AGL-1843 mistake in a new costume: at beta volume a night with no
+    // deliveries is legitimate, and a freshness rule would page on it. The
+    // verdict never keys on absence.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'enabled', undelivered: 0, emitted: 0, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(true)
+  })
+
+  it('goes red when Stripe could not deliver — the AGL-1551 shape', () => {
+    const check = billingWebhookHealth({ ...HEALTHY, undelivered: 7, processed: 0 }, 90)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('deliveries-failing')
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(503)
+  })
+
+  it('goes red on ONE failed delivery — there is no organic baseline', () => {
+    expect(billingWebhookHealth({ ...HEALTHY, undelivered: 1 }, 90).ok).toBe(false)
+  })
+
+  it('goes red when the destination is disabled, even with zero failures', () => {
+    // Total silent failure: Stripe stops ATTEMPTING, so `undelivered` reads
+    // zero and a delivery-only rule would call this healthy.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'disabled', undelivered: 0, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('endpoint-disabled')
+  })
+
+  it('goes red when the destination is gone entirely', () => {
+    const check = billingWebhookHealth(
+      { endpointStatus: 'missing', undelivered: 0, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('endpoint-missing')
+  })
+
+  it('reports the endpoint problem in preference to the delivery count', () => {
+    // The more actionable statement, and it EXPLAINS the other number.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'missing', undelivered: 9, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.code).toBe('endpoint-missing')
+  })
+
+  it('treats an unavailable census as degraded — unknown is never a pass', () => {
+    // The 2026-08-14 mis-tick: "no contrary evidence" read as "healthy" while
+    // the live endpoint was 400ing every delivery.
+    const check = billingWebhookHealth(null, 6000)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('stripe-unavailable')
+    expect(check.undelivered).toBeNull()
+    expect(check.endpointStatus).toBeNull()
+  })
+
+  it('stays ok when only the Firestore arm is unavailable', () => {
+    // Stripe already answered the question that matters; a Firestore hiccup
+    // must not manufacture a billing page.
+    const check = billingWebhookHealth({ ...HEALTHY, processed: null }, 90)
+    expect(check.ok).toBe(true)
+    expect(check.processed).toBeNull()
+  })
+
+  it('carries emitted and processed WITHOUT letting them move the verdict', () => {
+    // No floor for these exists until the beta produces a baseline, so they
+    // are for the human reading the incident, not for the alarm.
+    const check = billingWebhookHealth({ ...HEALTHY, emitted: 500, processed: 0 }, 90)
+    expect(check.ok).toBe(true)
+    expect(check.emitted).toBe(500)
+    expect(check.processed).toBe(0)
+  })
+
+  it('CLEARS: a red window does not latch — the next clean window is ok', () => {
+    const red = billingWebhookHealth({ ...HEALTHY, undelivered: 3 }, 90)
+    const green = billingWebhookHealth(HEALTHY, 90)
+    expect(red.ok).toBe(false)
+    expect(green.ok).toBe(true)
+  })
+
+  it('describes its own window, so the body needs no external key', () => {
+    expect(billingWebhookHealth(HEALTHY, 90).windowMinutes).toBe(60)
+    expect(billingWebhookHealth(HEALTHY, 90, 15).windowMinutes).toBe(15)
   })
 })
