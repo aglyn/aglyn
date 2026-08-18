@@ -1827,6 +1827,46 @@ export function resolveMarketplaceFeePct(
     : PLAN_ENTITLEMENTS.free.marketplaceFeePct
 }
 
+/**
+ * The cheapest plan whose BASE features include `feature`, in ladder order —
+ * the answer to "which plan do I need for this?", which is the one thing an
+ * upsell has to say and the one thing no gate can hard-code without drifting
+ * from the table it is quoting.
+ *
+ * Returns `undefined` when NO plan carries it on the base tier. That is not
+ * an error: `eventCalendar` is an add-on purchased through
+ * `resolveOrgEntitlements`' override path and is false on all eight tiers, so
+ * "upgrade to X" is the wrong sentence for it. Callers must handle undefined
+ * rather than defaulting to a tier name.
+ *
+ * Derived from PLAN_ENTITLEMENTS on every call rather than from a
+ * hand-written map: a table of "feature → plan" is exactly the artifact that
+ * decays silently when a tier's flags are re-cut, and it would decay into
+ * pricing copy shown to a customer.
+ *
+ * Ladder order is `SELF_SERVE_PLANS` then `enterprise` — the same order the
+ * plan grid renders — so an enterprise-only feature (`ssoEnabled`) reports
+ * Enterprise rather than nothing.
+ */
+export function planGrantingFeature(
+  feature: keyof OrgFeatureFlags,
+): OrgPlan | undefined {
+  return [...SELF_SERVE_PLANS, 'enterprise' as OrgPlan].find((plan) =>
+    Boolean(PLAN_ENTITLEMENTS[plan].features[feature]),
+  )
+}
+
+/**
+ * The plan name an upsell should name, ready to interpolate — "Business",
+ * or undefined when {@link planGrantingFeature} has no answer.
+ */
+export function planLabelGrantingFeature(
+  feature: keyof OrgFeatureFlags,
+): string | undefined {
+  const plan = planGrantingFeature(feature)
+  return plan ? PLAN_LABELS[plan] : undefined
+}
+
 /** True when the org's plan (or overrides) enables the boolean feature. */
 export function checkEntitlement(
   org: Partial<AglynOrgBilling> | null | undefined,

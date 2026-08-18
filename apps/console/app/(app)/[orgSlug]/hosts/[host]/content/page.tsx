@@ -1505,7 +1505,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                     { variant: 'info', persist: false },
                   )
                 }
-                if (!hasEntitlement('ai-assist', org)) {
+                if (!hasEntitlement('aiAssist', org)) {
                   return void enqueueSnackbar(
                     'AI assist requires a Pro plan — see Billing to upgrade',
                     { variant: 'warning', persist: false },

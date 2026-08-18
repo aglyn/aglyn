@@ -57,7 +57,7 @@ export function ScreenAnalyticsCard(props: {
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
   const { org, ready: orgReady } = useCurrentOrg()
-  const entitled = hasEntitlement('screen-analytics', org)
+  const entitled = hasEntitlement('screenAnalytics', org)
   const [days, setDays] = useState<DayStat[] | null>(null)
 
   useEffect(() => {

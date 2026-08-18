@@ -584,7 +584,7 @@ function ScreenDetails() {
           persist: false,
         })
       }
-      if (!hasEntitlement('scheduled-publishing', org)) {
+      if (!hasEntitlement('scheduledPublishing', org)) {
         return enqueueSnackbar(
           'Scheduled publishing requires a Business plan — see Billing',
           { variant: 'warning', persist: false },

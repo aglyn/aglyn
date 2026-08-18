@@ -25,51 +25,21 @@ import {
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
 
-/** Console-facing feature keys mapped onto the org feature flags. */
-export type Entitlement =
-  | 'versioning'
-  | 'reusable-components'
-  | 'custom-domain'
-  | 'remove-branding'
-  | 'scheduled-publishing'
-  | 'marketplace-selling'
-  | 'ai-assist'
-  | 'workflows'
-  | 'data-store'
-  | 'bookings'
-  | 'actions'
-  | 'webhooks'
-  | 'site-export'
-  | 'multilingual'
-  | 'event-calendar'
-  | 'redirects'
-  | 'screen-analytics'
-  | 'marketing-overlays'
-  | 'media-cdn'
-  | 'ab-testing'
-
-const FEATURE_KEYS: Record<Entitlement, keyof OrgFeatureFlags> = {
-  versioning: 'versioning',
-  'reusable-components': 'reusableComponents',
-  'custom-domain': 'customDomain',
-  'remove-branding': 'removeBranding',
-  'scheduled-publishing': 'scheduledPublishing',
-  'marketplace-selling': 'marketplaceSelling',
-  'ai-assist': 'aiAssist',
-  workflows: 'workflows',
-  'data-store': 'dataStore',
-  bookings: 'bookings',
-  actions: 'actions',
-  webhooks: 'webhooks',
-  'site-export': 'siteExport',
-  multilingual: 'multilingual',
-  'event-calendar': 'eventCalendar',
-  redirects: 'redirects',
-  'screen-analytics': 'screenAnalytics',
-  'marketing-overlays': 'marketingOverlays',
-  'media-cdn': 'mediaCdn',
-  'ab-testing': 'abTesting',
-}
+/**
+ * The console's feature-gate key — the org flag name itself (AGL-2079).
+ *
+ * This was a hand-written kebab-case union of 20 names plus a `FEATURE_KEYS`
+ * map onto `OrgFeatureFlags`. The indirection bought nothing and cost the
+ * thing that matters: the union covered 20 of the 34 flags, so the commerce
+ * and enterprise flags (`ssoEnabled`, `whiteLabel`, `contentGating`,
+ * `giftCards`, …) were structurally invisible to anything that enumerated it
+ * and had to be checked ad hoc through `checkEntitlement`. A second list of
+ * the same names can only ever drift from the first.
+ *
+ * Aliased to `keyof OrgFeatureFlags` so it cannot: adding a flag to the type
+ * adds it here, and no rename is needed on either side.
+ */
+export type Entitlement = keyof OrgFeatureFlags
 
 /**
  * Resolves through the plan/override model (`resolveOrgEntitlements`,
@@ -84,7 +54,7 @@ export function hasEntitlement(
   feature: Entitlement,
   org?: Partial<AglynOrgBilling> | null,
 ): boolean {
-  return checkEntitlement(org, FEATURE_KEYS[feature])
+  return checkEntitlement(org, feature)
 }
 
 /** Quota gate on the same effective-plan resolution (AGL-247). */
