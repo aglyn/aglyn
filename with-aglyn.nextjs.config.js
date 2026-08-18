@@ -21,7 +21,6 @@ const withNx = require('@nx/next/plugins/with-nx')
 const deepFillIn = require('mout/object/deepFillIn')
 
 const PACKAGE_VERSION = String(pkg?.version ?? '0.0.0')
-const PROCESS_VERSION = String(process.version)
 const PROCESS_VERSIONS = process.versions
 
 const NODE_ENV = process.env.NODE_ENV
@@ -120,10 +119,38 @@ const SECURITY_HEADERS = [
   },
 ]
 
-const BRAND_HEADERS = [
-  { key: 'x-aglyn-package-version', value: PACKAGE_VERSION },
-  { key: 'x-aglyn-process-version', value: PROCESS_VERSION },
-]
+/**
+ * There is deliberately NO brand/version header list here anymore (AGL-2088).
+ *
+ * Until this change every response from every app carried
+ * `x-aglyn-package-version: 1.0.0-alpha.0` and `x-aglyn-process-version:
+ * v24.15.0`, applied from this file as a static `headers()` rule on
+ * `source: '/(.*)'`. Two separate problems, and the first is the one that
+ * makes re-adding them a defect rather than a preference:
+ *
+ * 1. IT LEAKED THROUGH WHITE-LABEL. An Agency org pays for the `whiteLabel`
+ *    entitlement specifically so its customers' sites do not disclose that
+ *    they run on Aglyn. `resolveBrandingProfile` honours that for every
+ *    VISIBLE surface; these headers sat outside it and announced the platform
+ *    on every request of every published site, where any competitor or
+ *    tech-stack detector reads them. Measured against production on
+ *    2026-08-18: `curl -sSI https://aglyn.com/` returned both.
+ *
+ * 2. VERSION DISCLOSURE. The package version dates the deployment and the
+ *    process version names the Node build, to no consumer — grep found one
+ *    `set` and zero readers, in the repo or in ops.
+ *
+ * THE GATE CANNOT LIVE HERE, which is why the answer is removal and not a
+ * conditional. `headers()` is evaluated ONCE at build time and compiles to a
+ * static route rule: there is no request, no host, and therefore no org whose
+ * entitlement could be consulted. Anything host-aware has to be set where a
+ * host exists — the tenant middleware, which is where the deliberate,
+ * entitlement-gated `x-powered-by: Aglyn` now lives.
+ *
+ * `apps/tenant/specs/platform-fingerprint-headers.spec.ts` asserts the real
+ * header list this config produces, so re-adding a version header here fails
+ * a test rather than shipping.
+ */
 
 /**
  * Base configuration for NextJS Apps next.config.js
@@ -292,7 +319,7 @@ const AGLYN_CONFIG = {
     return [
       {
         source: '/(.*)',
-        headers: [...SECURITY_HEADERS, ...BRAND_HEADERS],
+        headers: [...SECURITY_HEADERS],
       },
     ]
   },
