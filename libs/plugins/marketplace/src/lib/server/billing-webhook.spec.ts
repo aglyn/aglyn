@@ -42,6 +42,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }),
   })
   const ga4: Ga4PurchaseInput[] = []
+  const ga4Refunds: Ga4PurchaseInput[] = []
   return {
     __writes: writes,
     __store: store,
@@ -49,10 +50,18 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // `purchase`. Captured rather than stubbed so the money that reaches
     // GA can be asserted against the money that reaches the ledger.
     __ga4: ga4,
+    // AGL-1850: and a full refund reverses it, in the same accounting.
+    __ga4Refunds: ga4Refunds,
     sendGa4Purchase: async (
       input: Ga4PurchaseInput,
     ): Promise<Ga4SendResult> => {
       ga4.push(input)
+      return { sent: true, synthesizedClientId: false }
+    },
+    sendGa4Refund: async (
+      input: Ga4PurchaseInput,
+    ): Promise<Ga4SendResult> => {
+      ga4Refunds.push(input)
       return { sent: true, synthesizedClientId: false }
     },
     firebaseAdmin: {
@@ -70,6 +79,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
                         (data ?? {})[field] === value,
                     )
                     .map(([path, data]) => ({
+                      // Real query snapshots carry the document id, and the
+                      // AGL-1850 refund keys its GA hit on it.
+                      id: path.split('/').pop(),
                       ref: docFor(path),
                       get: (f: string) => (data ?? {})[f],
                       data: () => data,
@@ -98,6 +110,7 @@ const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   // a renamed field on `Ga4PurchaseInput` fails typecheck here instead of
   // silently making `sent.transactionId` read as `undefined` at runtime.
   __ga4: Ga4PurchaseInput[]
+  __ga4Refunds: Ga4PurchaseInput[]
 }
 
 const completedSession = (over: Record<string, unknown> = {}) => ({
@@ -124,6 +137,7 @@ const completedSession = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   adminMock.__writes.length = 0
   adminMock.__ga4.length = 0
+  adminMock.__ga4Refunds.length = 0
   for (const key of Object.keys(adminMock.__store)) {
     delete adminMock.__store[key]
   }
@@ -314,5 +328,61 @@ describe('refund revocation (AGL-1546)', () => {
       refundEvent({ payment_intent: 'pi_other' }) as any,
     )
     expect(adminMock.__writes).toHaveLength(0)
+    expect(adminMock.__ga4Refunds).toHaveLength(0)
+  })
+})
+
+/**
+ * AGL-1850. The refund is the AGL-1639 purchase run backwards, and every
+ * assertion here is the mirror of one over there: same transaction id space
+ * (the session id), same accounting (platform net, never the gross the buyer
+ * paid back), and the same one-way ratchet (a redelivery must not report the
+ * money out twice).
+ */
+describe('GA4 refund reverses the purchase in the same accounting (AGL-1850)', () => {
+  const refundEvent = (over: Record<string, unknown> = {}) => ({
+    type: 'charge.refunded',
+    object: {
+      id: 'ch_1',
+      payment_intent: 'pi_1',
+      customer: 'cus_buyer_1',
+      currency: 'usd',
+      refunded: true,
+      amount_refunded: 10825,
+      ...over,
+    },
+    event: {},
+  })
+
+  it('a full refund sends `refund` keyed by the ORIGINAL session id, valued at platform net', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+
+    expect(adminMock.__ga4Refunds).toHaveLength(1)
+    const sent = adminMock.__ga4Refunds[0]
+    // The session id the purchase reported — netting requires the SAME
+    // transaction, not the charge id and not the refund's own event.
+    expect(sent.transactionId).toBe('cs_test_1')
+    // Platform net ($20), matching what the purchase put in. The gross the
+    // buyer got back (108.25) would net MORE out of GA than the sale ever
+    // reported — the AGL-1639 failure with the opposite sign.
+    expect(sent.value).toBe(20)
+    expect(sent.value).toBe(adminMock.__ga4[0].value)
+    expect(sent.stripeCustomerId).toBe('cus_buyer_1')
+  })
+
+  it('a redelivery that slips the event claim reports nothing twice — refundedAt is the guard', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(adminMock.__ga4Refunds).toHaveLength(1)
+  })
+
+  it('a partial refund reports nothing — the ledger split does not decompose it', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    await marketplaceBillingWebhookHandler(
+      refundEvent({ refunded: false, amount_refunded: 500 }) as any,
+    )
+    expect(adminMock.__ga4Refunds).toHaveLength(0)
   })
 })

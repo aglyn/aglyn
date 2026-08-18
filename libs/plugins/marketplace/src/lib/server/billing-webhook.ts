@@ -16,7 +16,11 @@
  */
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin, sendGa4Purchase } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  sendGa4Purchase,
+  sendGa4Refund,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * Marketplace-purchase section of the platform Stripe webhook (AGL-46/418):
@@ -150,13 +154,53 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
           .limit(1)
           .get()
         if (!purchases.empty) {
-          await purchases.docs[0].ref.set(
+          const purchase = purchases.docs[0]
+          // Read BEFORE the stamp: `refundedAt` doubles as the GA guard, so
+          // a redelivery that slips past the route's event claim finds the
+          // purchase already refunded and reports nothing a second time.
+          const alreadyRefunded = Boolean(purchase.get('refundedAt'))
+          await purchase.ref.set(
             {
               refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
               refundedCents: Number(object?.amount_refunded ?? 0),
             },
             { merge: true },
           )
+          // GA4 `refund` (AGL-1850) — the reversal of the AGL-1639 purchase,
+          // in the SAME accounting. The purchase reported the platform NET
+          // (gross − tax − transfer), so the refund must reverse that number:
+          // refunding the tax-inclusive gross would net MORE out of GA than
+          // the sale ever put in. The ledger doc read above holds the split
+          // the sale was recorded with, so the two cannot disagree.
+          //
+          // `transaction_id` is the purchase's own — the checkout session id
+          // the ledger and the original `purchase` are keyed by — which is
+          // what tells GA WHICH revenue to net out.
+          //
+          // Full refunds only, matching the revocation gate: the ledger's
+          // split does not decompose an arbitrary partial amount (whose share
+          // came back is a Stripe-side question), so a partial refund stays a
+          // concession in GA exactly as it does for the entitlement.
+          //
+          // Fire-and-forget, after the stamp, same posture as the purchase:
+          // an analytics failure must never un-claim a Stripe event.
+          if (!alreadyRefunded) {
+            const grossCents = Number(purchase.get('amountCents') ?? 0)
+            const taxCents = Number(purchase.get('taxCents') ?? 0)
+            const sellerCents = Number(purchase.get('transferCents') ?? 0)
+            const netCents = grossCents - taxCents - sellerCents
+            if (netCents > 0) {
+              void sendGa4Refund({
+                transactionId: String(purchase.id),
+                value: netCents / 100,
+                currency: String(object?.currency ?? 'usd'),
+                items: [],
+                stripeCustomerId:
+                  String(object?.customer ?? '') ||
+                  String(purchase.get('buyerUid') ?? ''),
+              }).catch(() => undefined)
+            }
+          }
         }
       }
     }
