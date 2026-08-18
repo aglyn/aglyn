@@ -169,7 +169,12 @@ Distilled into work:
   `DOCS_HELP_TOPICS` anchors where a "learn more" belongs. Aglyn Assist (Workstream F) mines its
   Q&A data for which tooltips and guides are missing.
 
-## Workstream H — GA reports and dependency hygiene (Zach, 2026-08-17)
+## Workstream H — GA reports and dependency hygiene (Zach, verbatim, 2026-08-17)
+
+> Make sure we also add to the new command to also build numerous reports for us in GA, and it can
+> use my browser to do it
+
+> Also add to the new command to fix all of the dependabot alerts and prs etc
 
 - **Build numerous GA4 reports** — using Zach's browser session on analytics.google.com (property
   `Aglyn — Platform`, 302497406). Start from the AGL-1637 click-list (dimension registrations, key
