@@ -33,25 +33,56 @@ export const FIREBASE_CLIENT_APP_NAME = 'DEFAULT_AGLYN'
  * wildcard redirect URIs, so a per-host authDomain would need a new
  * registration per org; the single auth host needs exactly one.
  *
- * The host derives from NEXT_PUBLIC_WORKSPACE_DOMAIN so it tracks the
- * deployment automatically; NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST
- * overrides it outright. Localhost, preview URLs (not on the workspace
- * domain), and the emulator keep the configured *.firebaseapp.com domain.
+ * **The auth origin is a property of the DEPLOYMENT, not of the page you
+ * happen to be on** (AGL-1919). This used to gate on
+ * `window.location.hostname` being on the workspace domain, which meant
+ * localhost and every preview deployment silently fell back to
+ * `aglyn-main.firebaseapp.com` — and so Google's account chooser said
+ * "continue to aglyn-main.firebaseapp.com" for the entire local
+ * development loop. Google renders the redirect_uri's host, and the
+ * redirect_uri is `https://<authDomain>/__/auth/handler`. Preview was the
+ * sharper version of the same bug: it *has* NEXT_PUBLIC_FIREBASE_AUTH_
+ * HANDLER_HOST set and could not use it, because a `*.vercel.app`
+ * hostname fails the `endsWith` test.
+ *
+ * Widening it is safe precisely because nothing about the branded host is
+ * new: `auth.aglyn.com` already serves `/__/auth/*`, is already a Firebase
+ * authorized domain, and `https://auth.aglyn.com/__/auth/handler` is
+ * already a registered redirect URI on the production OAuth client
+ * (AGL-1486 probed all three). This only widens which page hosts use a
+ * handler that already works.
+ *
+ * The precedence deliberately MIRRORS `ssoServiceMetadata()` in
+ * `sso-provisioning.ts`, which documents it as load-bearing — the SAML ACS
+ * URL and the OAuth redirect URI have to name the same origin or the two
+ * halves of a flow land on different ones:
+ *
+ *   1. NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST — an explicit override wins.
+ *   2. `auth.<NEXT_PUBLIC_WORKSPACE_DOMAIN>` — derived only when the
+ *      variable is actually SET, never defaulted to `aglyn.com`: a
+ *      self-hosted install with neither variable would otherwise be
+ *      pointed at OUR auth origin.
+ *   3. NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN — the project's own
+ *      *.firebaseapp.com, for self-host installs that never stood up an
+ *      auth subdomain.
+ *
+ * The emulator keeps the configured domain outright: there is no branded
+ * host in front of a local Auth emulator.
  */
 function resolveFirebaseAuthDomain(): string | undefined {
   const configured = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-  if (typeof window === 'undefined') return configured
   if (process.env['FIREBASE_AUTH_EMULATOR_ENABLED'] === 'true') {
     return configured
   }
-  const workspaceDomain = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
-  const { hostname } = window.location
-  const onWorkspaceDomain =
-    hostname === workspaceDomain || hostname.endsWith(`.${workspaceDomain}`)
-  if (!onWorkspaceDomain) return configured
-  return (
-    process.env.NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST ?? `auth.${workspaceDomain}`
-  )
+  const workspaceDomain = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN
+  // `||`, not `??`, and for the same reason `ssoServiceMetadata()` uses it:
+  // a variable declared-but-empty in a .env file (`NEXT_PUBLIC_FIREBASE_
+  // AUTH_HANDLER_HOST=`) is NOT an override — `??` would accept `''` and
+  // hand Firebase `https:///__/auth/handler`.
+  const branded =
+    process.env.NEXT_PUBLIC_FIREBASE_AUTH_HANDLER_HOST ||
+    (workspaceDomain ? `auth.${workspaceDomain}` : '')
+  return branded || configured
 }
 
 /**
