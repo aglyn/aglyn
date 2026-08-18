@@ -53,7 +53,7 @@ import { join } from 'path'
  * It also does not assert the PERIODS. Those are unit-tested at the writer,
  * where the boundary can be checked in both directions — see the
  * "an exchange INSIDE its period is not expired" negative control in
- * `app/api/_lib/assist-usage.spec.ts`. A period asserted only here would be
+ * `libs/tenant/data/admin/src/lib/server/assist-usage.spec.ts`. A period asserted only here would be
  * a number restated next to itself.
  */
 
@@ -135,7 +135,7 @@ const POLICIES: Array<{
   // AGL-1972: the verbatim half of an Assist exchange.
   {
     collectionGroup: 'assistExchanges',
-    writers: ['apps/console/app/api/_lib/assist-usage.ts'],
+    writers: ['libs/tenant/data/admin/src/lib/server/assist-usage.ts'],
     stamp: 'expiresAt: assistExchangeExpiry(now)',
   },
   // AGL-1978: the churn survey's free text, split off the survey document so

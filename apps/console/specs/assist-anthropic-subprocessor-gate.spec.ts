@@ -25,26 +25,30 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RELEASE_FLAGS } from '@aglyn/aglyn'
 
-// `assist-usage` reaches the admin barrel only for FieldValue, and the barrel
-// pulls the whole tenancy surface (and `next/cache`) with it. Stubbed to the
-// two sentinels the batch writes, so the path assertions below stay about
-// PATHS.
-jest.mock('@aglyn/tenant-data-admin', () => ({
+// `assist-usage` moved into the admin lib (AGL-2073) so the besigner's
+// `/api/ai/assist` handler — which lives in a lib and cannot import from an
+// app — can reserve and meter through the same code. Importing the barrel for
+// real would pull the whole tenancy surface (and `next/cache`) with it, so the
+// barrel stays stubbed and the REAL module is spliced back in by path. The
+// module itself only reaches `firebase-admin/firestore` for FieldValue, which
+// is stubbed to the two sentinels the batch writes — the assertions below stay
+// about PATHS.
+jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  firebaseAdmin: {
-    firestore: {
-      FieldValue: {
-        increment: (n: number) => ({ __inc: n }),
-        serverTimestamp: () => '__now__',
-      },
-    },
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
   },
 }))
 
-import {
-  recordAssistExchange,
-  reserveAssistMessage,
-} from '../app/api/_lib/assist-usage'
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+  ),
+}))
+
+import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-admin'
 
 /**
  * AGL-1909: Anthropic must be a published subprocessor BEFORE it processes

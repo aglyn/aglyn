@@ -26,18 +26,16 @@ import {
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
   rateLimitHeaders,
+  recordAssistExchange,
+  releaseAssistMessage,
+  reserveAssistMessage,
+  type AssistTokenUsage,
 } from '@aglyn/tenant-data-admin'
 import {
   docsGroundingBlock,
   retrieveDocsSections,
   DOCS_SITE_ORIGIN,
 } from '../../_lib/assist-retrieval'
-import {
-  recordAssistExchange,
-  releaseAssistMessage,
-  reserveAssistMessage,
-  type AssistTokenUsage,
-} from '../../_lib/assist-usage'
 import {
   describeView,
   extractAssistAction,

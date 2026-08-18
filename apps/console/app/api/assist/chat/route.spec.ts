@@ -149,8 +149,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: mockPlanEntitlements.checkEntitlement,
 }))
 
+// The reservation/metering module moved into the admin lib (AGL-2073) so the
+// besigner assist handler can share it. The barrel is still stubbed here — a
+// real import would pull the whole tenancy surface — so the REAL module is
+// spliced back in by path, and its `FieldValue` is stubbed to the sentinels the
+// fake Firestore below understands. Without the splice the route would call
+// undefined and the cap tests would go green on nothing.
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

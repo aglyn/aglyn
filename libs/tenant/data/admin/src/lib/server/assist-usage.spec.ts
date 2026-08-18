@@ -161,15 +161,15 @@ function mockMakeFirestore() {
   }
 }
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
+// The module under test reads `FieldValue` straight off the SDK (AGL-2073),
+// so the sentinel factory is stubbed there rather than on the admin barrel.
+// Mocking the barrel would no longer intercept anything, and the tests would
+// silently run against real Firestore transforms the fake cannot interpret.
+jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  firebaseAdmin: {
-    firestore: {
-      FieldValue: {
-        increment: (n: number) => ({ __inc: n }),
-        serverTimestamp: () => '__now__',
-      },
-    },
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
   },
 }))
 

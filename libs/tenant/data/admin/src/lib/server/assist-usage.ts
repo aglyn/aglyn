@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+/**
+ * `FieldValue` comes straight from the SDK rather than through the admin
+ * barrel (AGL-2073). This module now serves BOTH assist entrypoints — the
+ * console chat route and the besigner `/api/ai/assist` handler, which lives in
+ * a lib and cannot import from an app — so it had to move here. Importing
+ * `./firebase-admin` would drag the default-app initialization (cert
+ * credential, RTDB, AppCheck) into every unit test that touches a counter;
+ * `FieldValue`'s statics need no app at all.
+ */
+import { FieldValue } from 'firebase-admin/firestore'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -275,8 +284,8 @@ export async function reserveAssistMessage(
   entitled: boolean,
   now = new Date(),
 ): Promise<AssistReservation> {
-  const increment = firebaseAdmin.firestore.FieldValue.increment
-  const serverTimestamp = firebaseAdmin.firestore.FieldValue.serverTimestamp
+  const increment = FieldValue.increment
+  const serverTimestamp = FieldValue.serverTimestamp
   const orgRef = firestore.collection('orgs').doc(orgId)
   const day = assistUsageDay(now)
   const month = assistUsageMonth(now)
@@ -341,7 +350,7 @@ export async function releaseAssistMessage(
   reservation: Pick<AssistReservation, 'allowed' | 'dayKey' | 'monthKey'>,
 ): Promise<void> {
   if (!reservation.allowed) return
-  const increment = firebaseAdmin.firestore.FieldValue.increment
+  const increment = FieldValue.increment
   const orgRef = firestore.collection('orgs').doc(orgId)
   const dailyRef = orgRef.collection('counters').doc('assistMessagesDaily')
   const monthlyRef = orgRef.collection('assistUsage').doc(reservation.monthKey)
@@ -410,10 +419,18 @@ export async function checkAssistQuota(
   }
 }
 
-export interface AssistExchangeRecord {
-  uid: string
-  question: string
-  answer: string
+/**
+ * The DERIVED half of one assist turn: what it cost, what it cited, how it
+ * stopped. No prose and no uid, by construction — see the module header.
+ *
+ * Split out of `AssistExchangeRecord` (AGL-2073) because the besigner copy
+ * assistant at `/api/ai/assist` needs the meters WITHOUT the verbatim half.
+ * What a customer types into that surface is their own site copy and blog
+ * bodies, and retaining it for 180 days is a data flow the published privacy
+ * disclosure does not describe. The margin question — what did this org's
+ * assist usage cost us — is answered entirely by this record.
+ */
+export interface AssistSignalRecord {
   /** Console route the user asked from, e.g. `/org/acme/hosts`. */
   route: string
   hostId: string | null
@@ -433,43 +450,30 @@ export interface AssistExchangeRecord {
   stopReason: string | null
 }
 
-/**
- * The data loop + meters, one batch: writes the two halves of the exchange
- * and folds tokens/cost into the monthly usage doc. It does NOT count the
- * message — `reserveAssistMessage` already did, before the tokens were spent.
- * Returns the shared id (the feedback route addresses it later). Callers
- * `await` this — an exchange that fails to record should surface in logs,
- * but the batch is one round trip so it does not add meaningful latency.
- *
- * The two halves share one id ON PURPOSE. It is what lets the feedback route
- * keep its single-id signature, and it is what makes an exchange and its
- * signal joinable for as long as both exist — without storing a second
- * pointer that could rot.
- */
-export async function recordAssistExchange(
-  firestore: FirebaseFirestore.Firestore,
-  orgId: string,
-  record: AssistExchangeRecord,
-  now = new Date(),
-): Promise<string> {
-  const increment = firebaseAdmin.firestore.FieldValue.increment
-  const serverTimestamp = firebaseAdmin.firestore.FieldValue.serverTimestamp
-  const orgRef = firestore.collection('orgs').doc(orgId)
-  const exchangeRef = orgRef.collection('assistExchanges').doc()
-  const signalRef = orgRef.collection('assistSignals').doc(exchangeRef.id)
-  const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
+/** A signal PLUS the verbatim half — the question, the answer, the asker. */
+export interface AssistExchangeRecord extends AssistSignalRecord {
+  uid: string
+  question: string
+  answer: string
+}
 
-  const batch = firestore.batch()
-  // The personal half. Everything a person typed, everything we said back,
-  // and who asked — and nothing else. Expires.
-  batch.set(exchangeRef, {
-    uid: record.uid,
-    question: record.question,
-    answer: record.answer,
-    hostId: record.hostId,
-    createdAt: serverTimestamp(),
-    expiresAt: assistExchangeExpiry(now),
-  })
+/**
+ * The signal document and the monthly cost rollup — the two writes every
+ * assist turn owes regardless of whether its prose is kept. Shared by
+ * `recordAssistExchange` and `recordAssistCost` so the meter has exactly one
+ * writer and the two entrypoints can never drift into reporting different
+ * money for the same tokens.
+ */
+function writeSignalAndRollup(
+  batch: FirebaseFirestore.WriteBatch,
+  orgRef: FirebaseFirestore.DocumentReference,
+  signalRef: FirebaseFirestore.DocumentReference,
+  record: AssistSignalRecord,
+  now: Date,
+): void {
+  const increment = FieldValue.increment
+  const serverTimestamp = FieldValue.serverTimestamp
+  const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
   // The analytic half. No prose and NO uid — deliberately, because a signal
   // row that names the asker is just the exchange with the words removed,
   // and would re-create as an access-request obligation exactly what the
@@ -509,6 +513,75 @@ export async function recordAssistExchange(
     },
     { merge: true },
   )
+}
+
+/**
+ * Meter one assist turn that keeps NO verbatim record (AGL-2073) — the
+ * besigner copy assistant at `/api/ai/assist`.
+ *
+ * Writes the signal and folds tokens/cost into the monthly rollup, and writes
+ * nothing to `assistExchanges`. Same reason the console route splits the two:
+ * the loop's corpus was never the words. Here there is no loop to feed and no
+ * thumbs to collect, so the words are simply not taken.
+ *
+ * Like `recordAssistExchange` it counts NO message — the reservation did that
+ * before the tokens were spent. Callers should not let a metering failure fail
+ * the request: the tokens are already spent either way, and refusing the
+ * answer the customer paid for would make an accounting problem a product one.
+ */
+export async function recordAssistCost(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  record: AssistSignalRecord,
+  now = new Date(),
+): Promise<string> {
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const signalRef = orgRef.collection('assistSignals').doc()
+  const batch = firestore.batch()
+  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
+  await batch.commit()
+  return signalRef.id
+}
+
+/**
+ * The data loop + meters, one batch: writes the two halves of the exchange
+ * and folds tokens/cost into the monthly usage doc. It does NOT count the
+ * message — `reserveAssistMessage` already did, before the tokens were spent.
+ * Returns the shared id (the feedback route addresses it later). Callers
+ * `await` this — an exchange that fails to record should surface in logs,
+ * but the batch is one round trip so it does not add meaningful latency.
+ *
+ * The two halves share one id ON PURPOSE. It is what lets the feedback route
+ * keep its single-id signature, and it is what makes an exchange and its
+ * signal joinable for as long as both exist — without storing a second
+ * pointer that could rot.
+ */
+export async function recordAssistExchange(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  record: AssistExchangeRecord,
+  now = new Date(),
+): Promise<string> {
+  const serverTimestamp = FieldValue.serverTimestamp
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const exchangeRef = orgRef.collection('assistExchanges').doc()
+  const signalRef = orgRef.collection('assistSignals').doc(exchangeRef.id)
+
+  const batch = firestore.batch()
+  // The personal half. Everything a person typed, everything we said back,
+  // and who asked — and nothing else. Expires.
+  batch.set(exchangeRef, {
+    uid: record.uid,
+    question: record.question,
+    answer: record.answer,
+    hostId: record.hostId,
+    createdAt: serverTimestamp(),
+    expiresAt: assistExchangeExpiry(now),
+  })
+  // The analytic half plus the meters — the same writer `recordAssistCost`
+  // uses, so the two assist entrypoints can never report different money for
+  // the same tokens.
+  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
   await batch.commit()
   return exchangeRef.id
 }
