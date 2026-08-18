@@ -294,14 +294,14 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       state.usedBytes = resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024
       const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
       expect(response.status).toBe(403)
-      // AGL-1886 replaced the flat "Storage limit reached" with the overage
-      // -protection copy: the refusal now names the allowance it crossed and
-      // points at metered storage rather than dead-ending. What this test
-      // pins is unchanged — the upload is REFUSED (403) and the reason is the
-      // storage cap, not the entitlement gate above it.
-      const { error } = await response.json()
-      expect(error).toContain('past your included')
-      expect(error).toContain('storage')
+      const body = await response.json()
+      // The refusal is now ACTIONABLE (AGL-1886): pro meters storage, so
+      // past the allowance the answer is "opt in and keep uploading" rather
+      // than a dead end. What must not change is the property this case was
+      // written for — the counter the check reads is the counter the upload
+      // moves, so the bytes never land.
+      expect(body.code).toBe('overage_optin_required')
+      expect(body.error).toContain('past your included')
       expect(mockCounterSet).not.toHaveBeenCalled()
     })
 
