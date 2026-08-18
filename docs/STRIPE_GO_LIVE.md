@@ -119,6 +119,13 @@ Two readings it deliberately refuses to flatter: an **empty window fails**
 rather than reporting a comfortable 0%, and a **skipped Firestore arm reads
 `unknown`, never `pass`**.
 
+It follows the key's mode, so the **test** destination can be asserted the same
+way — and should be, because that is where refunds and disputes get rehearsed:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_… npm run audit:stripe-webhook
+```
+
 `--since` / `--until` take ISO timestamps, so the audit can be pointed at a
 window known to be bad and watched to go red — the way to confirm the check
 can still fail before trusting a green one. `tools/scripts/lib/stripe-webhook-health.test.mjs`

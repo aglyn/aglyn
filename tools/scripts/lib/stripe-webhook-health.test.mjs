@@ -322,3 +322,44 @@ test('an unknown destination creation date still respects retention', () => {
   assert.equal(start, now - EVENT_RETENTION_DAYS * DAY)
   assert.deepEqual(clamps, ['stripe-event-retention'])
 })
+
+// ---------------------------------------------------------------------------
+// Mode matching. A test-mode key lists only `livemode: false` endpoints, so a
+// hard-coded live filter reported "no destination" and the audit could not be
+// pointed at the test endpoint at all — which is where a real gap was hiding
+// (three money-reversal events unsubscribed).
+
+test('a test-mode key assesses the test-mode endpoint', () => {
+  const result = assessWebhookHealth(
+    healthy({
+      endpoints: [endpoint({ livemode: false })],
+      expectLivemode: false,
+    }),
+  )
+  assert.equal(levelOf(result, 'endpoint.count'), 'pass')
+  assert.equal(result.ok, true)
+})
+
+test('a live-mode key ignores test-mode endpoints, and vice versa', () => {
+  const both = [endpoint({ id: 'we_live' }), endpoint({ id: 'we_test', livemode: false })]
+  const asLive = assessWebhookHealth(healthy({ endpoints: both, expectLivemode: true }))
+  const asTest = assessWebhookHealth(healthy({ endpoints: both, expectLivemode: false }))
+  assert.equal(levelOf(asLive, 'endpoint.count'), 'pass')
+  assert.equal(levelOf(asTest, 'endpoint.count'), 'pass')
+  assert.equal(
+    asLive.findings.find((f) => f.check === 'endpoint.count').detail.id,
+    'we_live',
+  )
+  assert.equal(
+    asTest.findings.find((f) => f.check === 'endpoint.count').detail.id,
+    'we_test',
+  )
+})
+
+test('a live-mode key finding only test endpoints goes RED', () => {
+  const result = assessWebhookHealth(
+    healthy({ endpoints: [endpoint({ livemode: false })], expectLivemode: true }),
+  )
+  assert.equal(result.ok, false)
+  assert.equal(levelOf(result, 'endpoint.count'), 'fail')
+})

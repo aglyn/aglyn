@@ -136,9 +136,13 @@ const endpointUrl = flag('--url', PLATFORM_WEBHOOK_URL)
  */
 const seconds = (iso) => Math.floor(new Date(iso).getTime() / 1000)
 const days = Number(flag('--days', '30'))
-const until = args.includes('--until')
-  ? seconds(flag('--until'))
-  : Math.floor(Date.now() / 1000)
+// ONE clock reading for the whole run. Two `Date.now()` calls a few hundred
+// milliseconds apart put the retention floor a second past the requested
+// start and printed a clamp warning on every default run — a warning that
+// cries wolf is worse than no warning, since the real one (`--days 365`)
+// then reads as noise.
+const nowSeconds = Math.floor(Date.now() / 1000)
+const until = args.includes('--until') ? seconds(flag('--until')) : nowSeconds
 const since = args.includes('--since')
   ? seconds(flag('--since'))
   : until - Math.round(days * 86_400)
@@ -192,7 +196,7 @@ async function main() {
     requestedStart: since,
     end: until,
     endpointCreated: Number.isFinite(created) ? created : null,
-    now: Math.floor(Date.now() / 1000),
+    now: nowSeconds,
   })
 
   const window = { 'created[gte]': String(windowStart), 'created[lte]': String(until) }
@@ -249,6 +253,7 @@ async function main() {
     failedEventIds: failures.map((event) => event.id),
     processedEventIds,
     firestoreChecked,
+    expectLivemode: keyMode === 'live',
     windowStart,
     windowEnd: until,
   })

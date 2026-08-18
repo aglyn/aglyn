@@ -142,6 +142,7 @@ const UNKNOWN = 'unknown'
  *        Firestore arm did not run — the verdict then reports `unknown`,
  *        never `pass`.
  * @param {boolean} input.firestoreChecked
+ * @param {boolean} [input.expectLivemode] Whether the key is a live-mode key.
  * @param {number} input.windowStart Unix seconds, inclusive.
  * @param {number} input.windowEnd   Unix seconds, inclusive.
  */
@@ -152,6 +153,7 @@ export function assessWebhookHealth({
   failedEventIds = [],
   processedEventIds = [],
   firestoreChecked = false,
+  expectLivemode = true,
   windowStart = 0,
   windowEnd = 0,
 } = {}) {
@@ -170,25 +172,32 @@ export function assessWebhookHealth({
   // an unsubscribed type is delivered nowhere, so it can neither succeed nor
   // fail. Counting those as successes is how an account-wide "0 failures"
   // becomes vacuous.
-  const live = endpoints.filter((endpoint) => endpoint?.livemode !== false)
+  // Match the key's mode rather than assuming live. A test-mode key lists
+  // only `livemode: false` endpoints, so a hard-coded live filter found zero
+  // and reported "no destination" — which would have made the audit unable to
+  // ASK about the test endpoint at all, and the test endpoint turned out to be
+  // missing three events (see `--mode test`).
+  const live = endpoints.filter(
+    (endpoint) => (endpoint?.livemode !== false) === expectLivemode,
+  )
   if (live.length !== 1) {
     add(
       'endpoint.count',
       FAIL,
-      `Expected exactly 1 live webhook endpoint, found ${live.length}`,
+      `Expected exactly 1 ${expectLivemode ? 'live' : 'test'}-mode webhook endpoint, found ${live.length}`,
       live.map((endpoint) => ({ id: endpoint.id, url: endpoint.url })),
     )
   } else {
-    add('endpoint.count', PASS, '1 live webhook endpoint on the account', {
+    add('endpoint.count', PASS, `1 ${expectLivemode ? 'live' : 'test'}-mode webhook endpoint on the account`, {
       id: live[0].id,
     })
   }
 
   const endpoint = live[0] ?? null
   if (!endpoint) {
-    add('endpoint.status', FAIL, 'No live webhook endpoint to assess')
-    add('endpoint.url', FAIL, 'No live webhook endpoint to assess')
-    add('endpoint.events', FAIL, 'No live webhook endpoint to assess')
+    add('endpoint.status', FAIL, 'No matching webhook endpoint to assess')
+    add('endpoint.url', FAIL, 'No matching webhook endpoint to assess')
+    add('endpoint.events', FAIL, 'No matching webhook endpoint to assess')
   } else {
     if (endpoint.status === 'enabled') {
       add('endpoint.status', PASS, 'Destination status is enabled')
