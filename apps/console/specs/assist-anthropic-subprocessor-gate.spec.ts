@@ -136,6 +136,10 @@ const MENTIONS_ONLY = new Map<string, string>([
   ['docs/PLATFORM_PROVISIONING.md', 'Documentation.'],
   ['apps/docs/docs/developers/self-hosting.md', 'Documentation.'],
   [
+    'docs/BREACH_NOTIFICATION.md',
+    'The breach runbook (AGL-1915). Names the key only in the list of credentials to rotate after an exposure, alongside FIREBASE_PRIVATE_KEY and STRIPE_SECRET_KEY — a rotation target, not a data flow to Anthropic.',
+  ],
+  [
     'apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts',
     'This suite.',
   ],
