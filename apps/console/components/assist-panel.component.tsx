@@ -368,16 +368,23 @@ export function AssistPanelComponent() {
         anchor="right"
         open={open}
         onClose={() => setOpen(false)}
-        PaperProps={{
-          sx: { width: { xs: '100%', sm: 420 }, display: 'flex' },
+        slotProps={{
+          paper: {
+            sx: { width: { xs: '100%', sm: 420 }, display: 'flex' },
+          },
         }}
       >
         <Stack sx={{ height: '100%' }}>
           <Stack
             direction="row"
-            alignItems="center"
             spacing={1}
-            sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}
+            sx={{
+              px: 2,
+              py: 1.5,
+              borderBottom: 1,
+              borderColor: 'divider',
+              alignItems: 'center',
+            }}
           >
             <MdiIcon path={mdiChatQuestionOutline.path} />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
@@ -498,7 +505,11 @@ export function AssistPanelComponent() {
                 ) : null}
               </Typography>
             )}
-            <Stack direction="row" spacing={1} alignItems="flex-end">
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'flex-end' }}
+            >
               <TextField
                 fullWidth
                 multiline
