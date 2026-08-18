@@ -1250,9 +1250,8 @@ function AdminAbuseReports() {
                     <Stack
                       direction="row"
                       spacing={1}
-                      alignItems="center"
-                      flexWrap="wrap"
                       useFlexGap
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
                       <Typography variant="subtitle1">
                         {notice.reference ?? notice.id}
@@ -1297,7 +1296,11 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {'Where the material was'}
                       </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center' }}
+                      >
                         <Typography
                           variant="body2"
                           sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
@@ -1364,7 +1367,12 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {'Sworn by the subscriber'}
                       </Typography>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        useFlexGap
+                        sx={{ flexWrap: 'wrap' }}
+                      >
                         <Chip
                           size="small"
                           variant="outlined"
