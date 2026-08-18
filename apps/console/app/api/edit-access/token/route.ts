@@ -72,6 +72,9 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Site has no organization' }, { status: 409 })
     }
 
+    // lockdown-423: via libs/tenant/data/admin/src/lib/server/edit-access-authz.ts
+    // — editAccessMintRefusal runs lockdownRefusal at intent 'write'.
+    //
     // The WHOLE authorization — release flag, org membership, the verbatim
     // co-editing edit gate, and the AGL-1506 lockdown verdict at its
     // audited `intent: 'write'` (AGL-1625's reasoning lives with the

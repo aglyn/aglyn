@@ -47,6 +47,11 @@ async function handler(request: Request): Promise<Response> {
   if (method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
+  // lockdown-423: exempt — user-scoped hint mint with no org/host doc in
+  // reach ({uid, exp} only; deliberately NOT per-host — see AGL-1842). Every
+  // per-host authorization, including the lockdown verdict, happens where the
+  // hint is EXCHANGED: the tenant's /api/edit-access/exchange runs
+  // editAccessMintRefusal, the same gate as the mint route above.
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
