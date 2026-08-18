@@ -169,6 +169,23 @@ Distilled into work:
   `DOCS_HELP_TOPICS` anchors where a "learn more" belongs. Aglyn Assist (Workstream F) mines its
   Q&A data for which tooltips and guides are missing.
 
+## Workstream H — GA reports and dependency hygiene (Zach, 2026-08-17)
+
+- **Build numerous GA4 reports** — using Zach's browser session on analytics.google.com (property
+  `Aglyn — Platform`, 302497406). Start from the AGL-1637 click-list (dimension registrations, key
+  events, internal-traffic filter activation), then build the reports themselves: funnel
+  explorations (signup → publish → purchase; pricing-CTA per tier via `content_id`), revenue
+  (purchase/refund net), retention/churn (cancellation event, downsell funnel once AGL-1859 ships),
+  traffic split by `content_group` (marketing/docs/console), UTM acquisition, Web Vitals (RUM),
+  audiences (by plan via `org_plan` user property; by ICP proxy where derivable). Record every
+  report/audience created on AGL-1637 so the GA workspace state is reproducible.
+- **Fix ALL Dependabot alerts and PRs** — `gh api repos/aglyn/aglyn/dependabot/alerts` for the
+  alert list, `gh pr list --author app/dependabot` for the PRs. Triage each: security alerts first
+  (upgrade, or document why not exploitable in our usage), then version-bump PRs (rebase/merge the
+  safe ones through the normal gate — never merge a dependency bump ungated; a major bump gets its
+  own verification pass). ⚠️ Lockfile lore applies: never blanket-rename or hand-edit lockfiles;
+  one bump per commit where risk is nontrivial. Close obsolete PRs with a reason.
+
 ## Browser, auth, and env access (Zach, verbatim)
 
 > Don't forget you can use my browser to test and use my authentication session, but first try using
