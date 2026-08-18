@@ -28,6 +28,11 @@ export interface DocsHelpTopic {
 }
 
 export const DOCS_HELP_TOPICS = {
+  abuseReports: {
+    path: '/staff-console/abuse-reports',
+    title: 'Abuse reports',
+    excerpt: 'The public abuse-report queue — where outside reports land, how to triage by severity, which lever answers which report, and the CSAM and DMCA paths that are not takedown buttons.',
+  },
   account: {
     path: '/workspace-and-billing/signing-in-and-sessions',
     title: 'Signing In & Sessions',
@@ -600,6 +605,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // Heading anchors present on each topic's docs page. Only topics with H2–H4
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
+  abuseReports: ['#where-reports-come-from', '#triage-by-severity', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#known-gaps'],
   account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#closing-your-account'],
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],

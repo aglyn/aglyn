@@ -57,28 +57,56 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
+/**
+ * The fake has to model `set(..., {merge:true})` faithfully — a partial write
+ * MERGES, it does not replace — or the `createdAt`/`status` assertions below
+ * would pass against a double that cannot express the bug they exist to
+ * catch.
+ */
+const mockApplySet = (
+  path: string,
+  patch: Record<string, any>,
+  options?: { merge?: boolean },
+) => {
+  if (mockWriteThrows) throw new Error('firestore unavailable')
+  const base = options?.merge ? (mockStore[path] ?? {}) : {}
+  const next: Record<string, any> = { ...base }
+  for (const [key, value] of Object.entries(patch)) {
+    next[key] = mockIsIncrement(value)
+      ? Number(next[key] ?? 0) + value.__increment
+      : value
+  }
+  mockStore[path] = next
+}
+
 const mockDocHandle = (path: string) => ({
-  set: async (patch: Record<string, any>, options?: { merge?: boolean }) => {
-    if (mockWriteThrows) throw new Error('firestore unavailable')
-    const base = options?.merge ? (mockStore[path] ?? {}) : {}
-    const next: Record<string, any> = { ...base }
-    for (const [key, value] of Object.entries(patch)) {
-      next[key] = mockIsIncrement(value)
-        ? Number(next[key] ?? 0) + value.__increment
-        : value
-    }
-    mockStore[path] = next
-  },
+  __path: path,
+  set: async (patch: Record<string, any>, options?: { merge?: boolean }) =>
+    mockApplySet(path, patch, options),
 })
+
+let mockNotifications: Record<string, any>[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  notifyStaff: async (payload: Record<string, any>) => {
+    mockNotifications.push(payload)
+  },
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
         collection: (name: string) => ({
           doc: (id: string) => mockDocHandle(`${name}/${id}`),
         }),
+        runTransaction: async (fn: (tx: any) => Promise<void>) =>
+          fn({
+            get: async (ref: any) => {
+              const data = mockStore[ref.__path]
+              return { exists: data !== undefined, data: () => data }
+            },
+            set: (ref: any, patch: Record<string, any>, options?: any) =>
+              mockApplySet(ref.__path, patch, options),
+          }),
       }),
     }),
   },
@@ -139,6 +167,7 @@ beforeEach(() => {
   mockStore = {}
   mockAllowed = true
   mockWriteThrows = false
+  mockNotifications = []
   mockResolvedHost = { $id: 'host-evil', orgId: 'org-9' }
 })
 
@@ -209,6 +238,33 @@ describe('an anonymous reporter can reach staff', () => {
     //    breakout characters before escaping ever sees them.
     expect(body).toContain('%3Cscript%3E')
     expect(body).toContain('value="https://evil.aglyn.app/%22%3E')
+  })
+
+  it('pre-fills from the Referer, which is how the per-site badge carries the page', async () => {
+    // The badge links to a bare `/api/report-abuse`. Reading
+    // `window.location` to build a `?url=` would render '' on the server and
+    // the real URL on the client — a hydration mismatch on every page that
+    // shows the badge — so the header does the job instead.
+    const response = await GET(
+      new Request('https://evil.aglyn.app/api/report-abuse', {
+        headers: { referer: 'https://evil.aglyn.app/signin?next=/account' },
+      }),
+    )
+    const body = await response.text()
+    expect(body).toContain(
+      'value="https://evil.aglyn.app/signin?next=/account"',
+    )
+  })
+
+  it('does not pre-fill with the report form itself', async () => {
+    // Otherwise a reporter who navigated back to the form is shown its own
+    // address as the thing they are reporting, and files a useless row.
+    const response = await GET(
+      new Request('https://evil.aglyn.app/api/report-abuse', {
+        headers: { referer: 'https://evil.aglyn.app/api/report-abuse' },
+      }),
+    )
+    expect(await response.text()).toContain('value=""')
   })
 
   it('drops a prefill that is not an http(s) URL rather than echoing it', async () => {
@@ -342,6 +398,70 @@ describe('one reporter cannot make one site look widely reported', () => {
     await POST(jsonPost(PHISHING, '203.0.113.5'))
     const serialized = JSON.stringify(reports()[0][1])
     expect(serialized).not.toContain('203.0.113.5')
+  })
+})
+
+describe('a repeat cannot rewrite what staff already know', () => {
+  it('stamps createdAt once, so "when did we first know" survives', async () => {
+    // The merge-set this replaced re-stamped `createdAt` on every repeat, so a
+    // row with reportCount 4 claimed to be created at the FOURTH report. That
+    // is the one question the queue exists to answer afterwards, and the
+    // reporter's own persistence was overwriting it.
+    await POST(jsonPost(PHISHING))
+    const [, first] = reports()[0]
+    expect(first.createdAt).toBe('server-timestamp')
+
+    // Second submission: `createdAt` must not be written at all this time.
+    mockStore[reports()[0][0]].createdAt = 'FIRST-TIME-ONLY'
+    await POST(jsonPost(PHISHING))
+    expect(reports()[0][1].createdAt).toBe('FIRST-TIME-ONLY')
+    expect(reports()[0][1].reportCount).toBe(2)
+    // …while `updatedAt` does move, because a nudge is news.
+    expect(reports()[0][1].updatedAt).toBe('server-timestamp')
+  })
+
+  it('does not re-open a report staff already closed', async () => {
+    await POST(jsonPost(PHISHING))
+    const id = reports()[0][0]
+    // Staff dismiss it.
+    mockStore[id].status = 'dismissed'
+    // The same reporter files again. A resubmission must not undo the
+    // decision and push the row back to the top of the queue.
+    await POST(jsonPost(PHISHING))
+    expect(reports()[0][1].status).toBe('dismissed')
+    expect(reports()[0][1].reportCount).toBe(2)
+  })
+})
+
+describe('urgent reports are pushed at staff, not left to be found', () => {
+  it('notifies staff on a first urgent report', async () => {
+    await POST(jsonPost(PHISHING))
+    expect(mockNotifications).toHaveLength(1)
+    expect(mockNotifications[0].type).toBe('system.abuseReportUrgent')
+    expect(mockNotifications[0].link).toBe('/admin/abuse-reports')
+    expect(mockNotifications[0].body).toContain('evil.aglyn.app')
+  })
+
+  it('stays quiet for the non-urgent categories', async () => {
+    // The `formSubmissionsPaused` lesson: a flood of alerts IS the flood. If
+    // spam reports notified, the notification would stop being read — and the
+    // one it costs us is the phishing one.
+    await POST(
+      jsonPost({
+        category: 'spam',
+        url: 'https://junk.aglyn.app/',
+        details: 'SEO doorway pages, nothing but keyword lists.',
+      }),
+    )
+    expect(reports()).toHaveLength(1)
+    expect(mockNotifications).toHaveLength(0)
+  })
+
+  it('does not let a reporter re-alert staff by resubmitting', async () => {
+    await POST(jsonPost(PHISHING))
+    await POST(jsonPost(PHISHING))
+    await POST(jsonPost(PHISHING))
+    expect(mockNotifications).toHaveLength(1)
   })
 })
 

@@ -69,6 +69,14 @@ export function adminNavTabItems() {
       label: 'Emails',
       href: buildRoute(Route.ADMIN_EMAILS),
     },
+    // Reports sit immediately before the two levers that answer them
+    // (AGL-1964). The order is the workflow: read what came in, then decide
+    // whether it is one file, one site, or a whole workspace.
+    {
+      id: 'nav-tab-admin-abuse-reports',
+      label: 'Abuse reports',
+      href: buildRoute(Route.ADMIN_ABUSE_REPORTS),
+    },
     {
       id: 'nav-tab-admin-lockdown',
       label: 'Lockdown',

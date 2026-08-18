@@ -88,7 +88,11 @@
 
 import { createHash } from 'node:crypto'
 import * as Aglyn from '@aglyn/aglyn/server'
-import { consumeRateLimit, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  consumeRateLimit,
+  firebaseAdmin,
+  notifyStaff,
+} from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getHost } from '../../../utils/get-host'
 
@@ -356,14 +360,28 @@ const html = (body: string, status = 200): Response =>
 /**
  * Render the form.
  *
- * `?url=` pre-fills the reported address so the per-site affordance can carry
- * the page the visitor was looking at. It is echoed into a `value` attribute
- * and therefore escaped; it is NOT trusted for anything else, and the stored
- * URL is re-validated on POST like any other field.
+ * The reported address is pre-filled from `?url=` when a caller supplies one,
+ * and otherwise from the `Referer`. The header is how the per-site "Report
+ * abuse" badge carries the page the visitor was looking at without reading
+ * `window.location` during render — which would produce a different string on
+ * the server and the client, i.e. a hydration mismatch on every page the badge
+ * appears on.
+ *
+ * NEITHER source is trusted. Both go through `normalizeReportedUrl`, which
+ * admits only absolute http(s) URLs, so a `javascript:` or `data:` value
+ * becomes an empty field rather than a reflected one; what survives that is
+ * then HTML-escaped into the `value` attribute; and the POST re-validates
+ * independently, because a prefill is a convenience and never a claim.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const prefill = Aglyn.normalizeReportedUrl(url.searchParams.get('url')) ?? ''
+  const referred = Aglyn.normalizeReportedUrl(request.headers.get('referer'))
+  const prefill =
+    Aglyn.normalizeReportedUrl(url.searchParams.get('url')) ??
+    // Never prefill with this page. A reporter who arrived here from the form
+    // itself would otherwise be shown the form's own address as the thing
+    // they are reporting, which reads as a bug and invites a useless row.
+    (referred && !referred.includes('/api/report-abuse') ? referred : '')
   return html(formHtml({ reportedUrl: prefill }))
 }
 
@@ -478,16 +496,32 @@ export async function POST(request: Request): Promise<Response> {
 
   const reference = `AR-${reportId.slice(0, 10).toUpperCase()}`
 
+  let firstReport = false
   try {
-    await firebaseAdmin
-      .app()
-      .firestore()
+    const firestore = firebaseAdmin.app().firestore()
+    const ref = firestore
       .collection(Aglyn.ABUSE_REPORT_COLLECTION)
       .doc(reportId)
-      .set(
+    /**
+     * A transaction, and `createdAt` written ONLY on the first write.
+     *
+     * The merge-set that used to do this re-stamped `createdAt` on every
+     * repeat, so a row with `reportCount: 4` claimed to have been created at
+     * the moment of the FOURTH report. The one question this queue exists to
+     * answer afterwards is "when did we first know", and the field that
+     * answers it was being overwritten by the reporter's own persistence.
+     *
+     * Reading inside the transaction also gives the notification below an
+     * honest `firstReport`, so a determined reporter cannot re-alert staff by
+     * resubmitting.
+     */
+    await firestore.runTransaction(async (tx) => {
+      const existing = await tx.get(ref)
+      firstReport = !existing.exists
+      tx.set(
+        ref,
         {
           reference,
-          status: 'open',
           category: report.category,
           severity: report.severity,
           url: report.url,
@@ -501,10 +535,16 @@ export async function POST(request: Request): Promise<Response> {
           // A repeat from the same source is a nudge, not a second report.
           reportCount: FieldValue.increment(1),
           updatedAt: FieldValue.serverTimestamp(),
-          createdAt: FieldValue.serverTimestamp(),
+          // Never re-opened by a repeat: a reporter resubmitting must not
+          // undo a staff decision and push the row back to the top of the
+          // queue. Staff own `status` from the moment they touch it.
+          ...(firstReport
+            ? { status: 'open', createdAt: FieldValue.serverTimestamp() }
+            : {}),
         },
         { merge: true },
       )
+    })
   } catch (error) {
     console.error('abuse report write failed', error)
     const message =
@@ -516,6 +556,36 @@ export async function POST(request: Request): Promise<Response> {
           { status: 503 },
         )
       : html(formHtml({ reportedUrl: report.url, error: message }), 503)
+  }
+
+  /**
+   * Push the urgent ones at staff instead of waiting to be found.
+   *
+   * `notifyStaff` (AGL-850) enumerates the `staff` claim and writes
+   * `users/{uid}/notifications`, which the console's notifications menu
+   * already renders — so this needs no new inbox and no email, which matters
+   * because `abuse@aglyn.com` is not confirmed to deliver (AGL-1973).
+   *
+   * URGENT ONLY, and that restraint is the design rather than laziness. The
+   * `formSubmissionsPaused` lesson in `/api/forms/submit` is that a flood of
+   * alerts IS the flood: notify on every spam report and the notification
+   * stops being read, which costs us the phishing one. Phishing, CSAM and
+   * malware are the three where an hour is paid for by someone who is not our
+   * customer; everything else waits for the queue.
+   *
+   * FIRST REPORT ONLY, so a reporter cannot re-alert by resubmitting.
+   *
+   * After the write and outside its try/catch, deliberately: `notifyStaff`
+   * never throws, and a notification failure must not turn a report we have
+   * already stored into a 503 that invites the reporter to file it again.
+   */
+  if (firstReport && report.severity === 'urgent') {
+    await notifyStaff({
+      type: 'system.abuseReportUrgent',
+      title: `Urgent abuse report — ${report.category}`,
+      body: `${report.reportedHostname || report.url} was reported as ${report.category}. Reference ${reference}.`,
+      link: '/admin/abuse-reports',
+    })
   }
 
   return asJson
