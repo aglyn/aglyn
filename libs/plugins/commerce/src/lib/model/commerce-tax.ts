@@ -35,8 +35,13 @@ export interface TaxRate {
 }
 
 export interface TaxSettings {
-  /** 'manual' rates below, or 'stripe' for Stripe Tax automatic. */
-  mode?: 'manual' | 'stripe'
+  /**
+   * 'manual' rates below, 'stripe' for Stripe Tax automatic, or 'none' —
+   * an EXPLICIT decision not to collect (AGL-1999). `undefined` is not a
+   * fourth mode: it means nobody has decided, and `storefrontTaxDecision`
+   * refuses the sale rather than zero-rating it silently.
+   */
+  mode?: 'manual' | 'stripe' | 'none'
   /** Displayed prices already include tax (VAT-style). */
   pricesIncludeTax?: boolean
   /**

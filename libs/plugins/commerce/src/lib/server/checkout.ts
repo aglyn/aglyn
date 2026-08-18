@@ -224,7 +224,26 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       .doc('store')
       .get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
-    const useStripeTax = taxSettings.mode === 'stripe' && !lifted.taxExempt
+    // AGL-1999: an unset tax mode is NOT a decision, and it must not sell.
+    // `mode` was `undefined` for every store whose owner never opened the
+    // Taxes card — the default state of every new storefront — and each
+    // branch below tested for a specific string, so no branch was taken, no
+    // tax was computed, and the shopper was charged an untaxed total. See
+    // `commerce-tax-decision.ts` for why refusing beats defaulting to either
+    // mode. `mode: 'none'` is the explicit opt-out and passes straight
+    // through.
+    const taxDecision = CommerceModel.storefrontTaxDecision({
+      settings: taxSettings,
+      taxExempt: lifted.taxExempt,
+    })
+    if (taxDecision.kind === 'undecided') {
+      // Above the attempt claim, like every other deterministic refusal on
+      // this path — there is no claim to release yet.
+      return res
+        .status(409)
+        .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
+    }
+    const useStripeTax = taxDecision.kind === 'stripe-automatic'
     let taxCents = 0
     let taxLabel = ''
     let taxPct = 0

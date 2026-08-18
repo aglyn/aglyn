@@ -182,8 +182,24 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // Origin tax (AGL-285) — in-person sales are origin-based by nature.
     const storeSettings = await hostRef.collection('settings').doc('store').get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
+    // AGL-1999: an unset tax mode is NOT a decision, and it must not sell.
+    // `mode` was `undefined` for every store whose owner never opened the
+    // Taxes card — the default state of every new storefront — and each
+    // branch below tested for a specific string, so no branch was taken, no
+    // tax was computed, and the shopper was charged an untaxed total. See
+    // `commerce-tax-decision.ts` for why refusing beats defaulting to either
+    // mode. `mode: 'none'` is the explicit opt-out and passes straight
+    // through.
+    const taxDecision = CommerceModel.storefrontTaxDecision({
+      settings: taxSettings,
+    })
+    if (taxDecision.kind === 'undecided') {
+      return res
+        .status(409)
+        .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
+    }
     const rate =
-      taxSettings.mode === 'manual'
+      taxDecision.kind === 'manual'
         ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
         : null
     const taxCents =

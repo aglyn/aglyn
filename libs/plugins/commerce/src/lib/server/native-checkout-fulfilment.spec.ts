@@ -337,6 +337,8 @@ beforeEach(() => {
     ],
   })
   docs.set('hosts/host-1/settings/store', {
+    // AGL-1999: state the tax decision; an absent mode refuses the sale.
+    tax: { mode: 'none' },
     shipping: {
       zones: [{ id: 'us', name: 'United States', countries: ['US'] }],
       rates: [

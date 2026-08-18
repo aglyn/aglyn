@@ -379,3 +379,77 @@ describe('subscription checkout manual tax (AGL-1751)', () => {
     expect(inclusive.body?.get('metadata[taxCents]')).toBe('0')
   })
 })
+
+/**
+ * The AGL-1999 refusal on the buy-now door.
+ *
+ * Nothing seeds `hosts/{hostId}/settings/store`, so a merchant who never
+ * opened the Taxes card had `tax.mode === undefined`. Both branches here test
+ * for a specific string, so neither ran: no tax was computed and the shopper
+ * was charged an untaxed total, silently, in the one direction that cannot be
+ * recovered once they have gone.
+ */
+describe('an undecided store cannot sell (AGL-1999)', () => {
+  // Same boundary discipline as the suite above: `global.fetch` is replaced
+  // and the key is a throwaway, because localhost carries the LIVE one.
+  const realFetch = global.fetch
+  const realKey = process.env.STRIPE_SECRET_KEY
+
+  beforeAll(() => {
+    global.fetch = fetchMock as unknown as typeof fetch
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterAll(() => {
+    global.fetch = realFetch
+    process.env.STRIPE_SECRET_KEY = realKey as string
+  })
+
+  beforeEach(() => {
+    fetchMock.mockClear()
+    taxRateResponse = { ok: true, body: { id: 'txr_test_1' } }
+  })
+
+  it('REFUSES buy-now when no settings document exists', async () => {
+    const { result, body } = await runCheckout()
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('sales tax')
+    // No session was minted for an untaxed total.
+    expect(body).toBeNull()
+  })
+
+  it('REFUSES when the settings doc exists but states no tax mode', async () => {
+    const { result } = await runCheckout({ settings: { tax: {} } })
+    expect(result.status).toBe(409)
+  })
+
+  // Positive controls. The refusal must be reserved for the state that is not
+  // a decision — every real decision still sells, or the guard passes by
+  // refusing everyone.
+  it('SELLS when the merchant decided not to collect', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: { mode: 'none' } },
+    })
+    expect(result.status).toBe(200)
+    expect(body?.get('automatic_tax[enabled]')).toBeNull()
+  })
+
+  it('SELLS, and taxes, a manual-mode store', async () => {
+    const { result } = await runCheckout({ settings: { tax: manualTax } })
+    expect(result.status).toBe(200)
+  })
+
+  it('SELLS a stripe-mode store with automatic tax on', async () => {
+    const { result, body } = await runCheckout({
+      settings: { tax: { mode: 'stripe' } },
+    })
+    expect(result.status).toBe(200)
+    expect(body?.get('automatic_tax[enabled]')).toBe('true')
+  })
+
+  it('SELLS a tax-exempt product even though the store never decided', async () => {
+    // The product answers the question for itself, so no decision is owed.
+    const { result } = await runCheckout({ product: { taxExempt: true } })
+    expect(result.status).toBe(200)
+  })
+})

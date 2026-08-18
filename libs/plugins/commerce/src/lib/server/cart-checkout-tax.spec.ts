@@ -389,12 +389,35 @@ describe('the modes the cart already had keep their behaviour', () => {
     expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBeNull()
   })
 
-  /** A merchant who configured nothing gets the session they always got. */
-  it('sends no tax of any kind when none is configured', async () => {
-    await runCheckout(null)
+  /**
+   * A merchant who DECIDED not to collect gets the session they always got
+   * (AGL-1999). Previously spelled as an absent settings document, which is
+   * now the refusal below.
+   */
+  it('sends no tax of any kind when the store decided not to collect', async () => {
+    await runCheckout({ tax: { mode: 'none' } })
     expect(sessionBody?.get('automatic_tax[enabled]')).toBeNull()
     expect(sessionBody?.get('line_items[0][tax_rates][0]')).toBeNull()
     expect(stripeCalls('/v1/tax_rates')).toBe(0)
+  })
+
+  /**
+   * THE AGL-1999 DEFECT, on the cart door. `mode: undefined` matched neither
+   * branch, so the cart charged the shopper an untaxed total and refused
+   * nothing.
+   */
+  it('REFUSES a cart checkout when nobody has decided about tax', async () => {
+    const result = await runCheckout(null)
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('sales tax')
+    // No session was minted for an untaxed total.
+    expect(sessionBody).toBeNull()
+  })
+
+  /** The same for a settings doc that exists but states no mode. */
+  it('REFUSES when the settings doc exists with an empty tax map', async () => {
+    const result = await runCheckout({ tax: {} })
+    expect(result.status).toBe(409)
   })
 
   /**
