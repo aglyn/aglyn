@@ -373,13 +373,32 @@ export interface MediaStorageGateResult {
  */
 export function mediaStorageGate(input: {
   org: Partial<AglynOrgBilling> | null | undefined
-  /** Total scope usage including the incoming file, in MB. */
+  /** Total usage including the incoming file, in MB. */
   usedMb: number
+  /**
+   * The band `usedMb` is measured against, in MB (AGL-2075).
+   *
+   * ALWAYS the ORG-WIDE band — `resolveOrgMediaBand` computes it as
+   * `hostLimit × storagePerHostMb`, the same arithmetic
+   * `meteredIncludedAllowance` uses to size what the invoice subtracts. It is
+   * optional only so this function keeps a defined answer for a caller that
+   * has not been given a pool to measure; that fallback is the PER-SCOPE band,
+   * which was the bug — `resolveMediaScope` serves a site library AND the org
+   * library, each with its own counter, so a per-scope band handed a free org
+   * 250 MB twice. Every ingress route passes this; nothing should rely on the
+   * fallback.
+   */
+  allowanceMb?: number
 }): MediaStorageGateResult {
   const { org, usedMb } = input
   // The historical convention, kept verbatim so this is not also a rounding
   // change: `usedMb` includes the incoming file and the cap is inclusive.
-  const quota = checkQuota(org as any, 'storagePerHostMb', Math.ceil(usedMb) - 1)
+  const perScope = checkQuota(org as any, 'storagePerHostMb', Math.ceil(usedMb) - 1)
+  const limit = input.allowanceMb ?? perScope.limit
+  const quota = {
+    limit,
+    allowed: Math.ceil(usedMb) - 1 < limit,
+  }
   if (quota.allowed) {
     return {
       allowed: true,

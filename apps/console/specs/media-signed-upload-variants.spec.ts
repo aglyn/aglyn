@@ -82,6 +82,32 @@ const mockCounterDoc = () => ({
 })
 
 const mockScopeRef = {
+  /**
+   * The org's whole media pool, in one round trip (AGL-2075). Ingress no
+   * longer checks a scope's own counter against `storagePerHostMb` — it checks
+   * every scope the org owns against `hostLimit × storagePerHostMb` — so the
+   * double has to answer `getAll` the way a real `Firestore` does. This org
+   * has no `hosts` map, so the pool is the org library alone and the
+   * arithmetic is what it always was.
+   */
+  firestore: {
+    collection: (name: string) => ({
+      doc: (id: string) => ({
+        path: `${name}/${id}`,
+        collection: (sub: string) => ({
+          doc: (subId: string) => ({ path: `${name}/${id}/${sub}/${subId}` }),
+        }),
+      }),
+      where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }),
+    }),
+    getAll: async (...refs: Array<{ path: string }>) =>
+      refs.map((ref) => ({
+        get: (field: string) =>
+          field === 'bytes' && ref.path === 'orgs/org-1/counters/media'
+            ? mockState.usedBytes
+            : undefined,
+      })),
+  },
   collection: (name: string) => ({
     doc: () =>
       name === 'counters'
@@ -188,6 +214,7 @@ jest.mock('../utils/server/media-scope', () => ({
       base: 'orgs/org-1',
       collection: 'orgs',
       scopeId: 'org-1',
+      orgId: 'org-1',
       scopeRef: mockScopeRef,
       billing: mockState.org,
       cdnScope: 'org:org-1',

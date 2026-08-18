@@ -69,7 +69,35 @@ const counterDoc = () => ({
   },
 })
 
+
 const scopeRef = {
+  /**
+   * The org's whole media pool, in one round trip (AGL-2075). Ingress no
+   * longer checks a scope's own counter against `storagePerHostMb` — it checks
+   * every scope the org owns against `hostLimit × storagePerHostMb` — so the
+   * double has to answer `getAll` the way a real `Firestore` does.
+   * `state.usedBytes` stays the single knob these tests turn: this org has no
+   * `hosts` map, so the pool is the org library alone and the arithmetic is
+   * what it always was.
+   */
+  firestore: {
+    collection: (name: string) => ({
+      doc: (id: string) => ({
+        path: `${name}/${id}`,
+        collection: (sub: string) => ({
+          doc: (subId: string) => ({ path: `${name}/${id}/${sub}/${subId}` }),
+        }),
+      }),
+      where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }),
+    }),
+    getAll: async (...refs: Array<{ path: string }>) =>
+      refs.map((ref) => ({
+        get: (field: string) =>
+          field === 'bytes' && ref.path === 'orgs/org-1/counters/media'
+            ? state.usedBytes
+            : undefined,
+      })),
+  },
   collection: (name: string) => ({
     doc: () =>
       name === 'counters'
@@ -148,6 +176,7 @@ jest.mock('../utils/server/media-scope', () => ({
       base: 'orgs/org-1',
       collection: 'orgs',
       scopeId: 'org-1',
+      orgId: 'org-1',
       scopeRef,
       billing: state.org,
       cdnScope: 'org:org-1',
@@ -302,8 +331,19 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       }
       // 10 GB past the band, which is $0.338 of overage — a hundred times the
       // cap, so the verdict cannot turn on how large the test document is.
+      //
+      // The band is `hostLimit × storagePerHostMb` since AGL-2075: the org
+      // library used to get a full `storagePerHostMb` of its own on top of
+      // every site's, so ingress now measures the org-wide pool against the
+      // org-wide band the invoice already subtracts. Reading the per-scope
+      // figure here would leave this fixture comfortably UNDER the band on
+      // any plan with more than one site, and the refusal under test would
+      // never fire.
       state.usedBytes =
-        resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024 +
+        Math.max(1, resolveOrgEntitlements(state.org).hostLimit) *
+          resolveOrgEntitlements(state.org).storagePerHostMb *
+          1024 *
+          1024 +
         10 * 1024 * 1024 * 1024
       const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
       expect(response.status).toBe(403)
@@ -319,7 +359,12 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
       // the opt-in gate is ever restored, this is the case that goes red on
       // the route itself.
       state.org = { plan: 'pro' }
-      state.usedBytes = resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024
+      // At the org-wide band exactly (AGL-2075), so the next byte is overage.
+      state.usedBytes =
+        Math.max(1, resolveOrgEntitlements(state.org).hostLimit) *
+        resolveOrgEntitlements(state.org).storagePerHostMb *
+        1024 *
+        1024
       const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
       expect(response.status).toBe(200)
       // The bytes landed, so the rollup will find and bill them.

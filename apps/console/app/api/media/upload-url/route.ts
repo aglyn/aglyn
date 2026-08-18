@@ -20,6 +20,7 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import { mediaStorageGate } from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   checkEntitlement,
   createResourceUid,
@@ -171,10 +172,25 @@ async function handler(request: Request): Promise<Response> {
         // Storage quota applies to every org; a plan-less org resolves as
         // `free` (250 MB cap), not unmetered. Metered plans bill past the
         // metered plans (AGL-1886) — see `utils/storage-overage.ts`.
-        const counterSnapshot = await counterRef.get()
-        const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
-        const usedMb = (usedBytes + sizeBytes) / (1024 * 1024)
-        const gate = mediaStorageGate({ org: org as any, usedMb })
+      // ONE org-wide band across every media scope (AGL-2075). The counter
+      // used to be read per scope and checked against `storagePerHostMb`,
+      // which handed the org library a second full band of its own — a free
+      // org's real ceiling was 250 MB + 250 MB against a published 250 MB.
+      // The pool is what `meteredIncludedAllowance` and the usage alert
+      // already measure, so ingress now refuses at the band the invoice bills
+      // past.
+        const band = await resolveOrgMediaBand({
+          firestore: scope.scopeRef.firestore,
+          orgId: scope.orgId,
+          org: org as any,
+          currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+        })
+        const usedMb = (band.usedBytes + sizeBytes) / (1024 * 1024)
+        const gate = mediaStorageGate({
+          org: org as any,
+          usedMb,
+          allowanceMb: band.allowanceMb,
+        })
         if (!gate.allowed) {
           return Response.json(
             {
@@ -329,10 +345,25 @@ async function handler(request: Request): Promise<Response> {
       // `free` (250 MB cap), not unmetered. Same gate as the POST above
       // (AGL-1886) — the two must not disagree about whether these bytes fit,
       // or a customer signs a URL they are then refused at finalize.
-      const counterSnapshot = await counterRef.get()
-      const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
-      const usedMb = (usedBytes + actualBytes) / (1024 * 1024)
-      const gate = mediaStorageGate({ org: org as any, usedMb })
+      // ONE org-wide band across every media scope (AGL-2075). The counter
+      // used to be read per scope and checked against `storagePerHostMb`,
+      // which handed the org library a second full band of its own — a free
+      // org's real ceiling was 250 MB + 250 MB against a published 250 MB.
+      // The pool is what `meteredIncludedAllowance` and the usage alert
+      // already measure, so ingress now refuses at the band the invoice bills
+      // past.
+      const band = await resolveOrgMediaBand({
+        firestore: scope.scopeRef.firestore,
+        orgId: scope.orgId,
+        org: org as any,
+        currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+      })
+      const usedMb = (band.usedBytes + actualBytes) / (1024 * 1024)
+      const gate = mediaStorageGate({
+        org: org as any,
+        usedMb,
+        allowanceMb: band.allowanceMb,
+      })
       if (!gate.allowed) {
         await file.delete().catch(() => undefined)
         return Response.json(
