@@ -39,6 +39,7 @@ import {
   tombstoneIsExpired,
   SESSION_TOMBSTONE_TTL_MS,
 } from './session-tombstone'
+import { readCookie } from '../read-cookie'
 import {
   hostnameOf,
   isWorkspaceDomainHost,
@@ -126,47 +127,6 @@ function jsonWithCookie(
     response.headers.append('Set-Cookie', value)
   }
   return response
-}
-
-/**
- * Reads one cookie, preferring a NON-EMPTY value when the jar holds more
- * than one of the same name (AGL-1259).
- *
- * A browser will happily send two cookies with the same name at different
- * scopes — one `Domain=.aglyn.com`, one host-only — and the `Cookie` header
- * gives no way to tell them apart. Taking the first match meant an empty
- * duplicate permanently shadowed the real session:
- *
- * ```
- * Cookie: __session=; __session=<real>   → 401 {"reason":"absent"}
- * Cookie: __session=<real>               → 200
- * ```
- *
- * That is not hypothetical — it reproduces against production, and it is a
- * DEADLOCK rather than a hiccup: `useSessionCookie` reads `absent`, correctly
- * re-mints, the mint sets its own scope, the empty duplicate still sorts
- * first, and the next read says `absent` again. Observed as a console signed
- * in as the right user and showing "0 Workspaces" — a silent wrong answer,
- * with no path out but clearing site data.
- *
- * Preferring a non-empty value is the smallest change that breaks the
- * deadlock, and it is right on its own terms: an empty cookie carries no
- * session, so there is never a reason to choose it over one that does.
- */
-function readCookie(request: Request, name: string): string | undefined {
-  const raw = request.headers.get('cookie')
-  if (!raw) return undefined
-  let empty: string | undefined
-  for (const pair of raw.split(';')) {
-    const index = pair.indexOf('=')
-    if (index < 0) continue
-    if (pair.slice(0, index).trim() !== name) continue
-    const value = decodeURIComponent(pair.slice(index + 1).trim())
-    if (value) return value
-    // Remember it, so a jar holding ONLY empties still behaves as before.
-    empty = value
-  }
-  return empty
 }
 
 /**
