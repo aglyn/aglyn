@@ -18,19 +18,24 @@
  */
 
 /**
- * The paid-install purchase gate (AGL-46, refund-aware per AGL-1546): a
- * webhook-written purchase record is the buyer's entitlement, and a FULLY
- * refunded one must stop counting — before AGL-1546 a refunded buyer kept
- * paid-install access forever.
+ * The `reusableComponents` gate on marketplace component install (AGL-2072).
+ *
+ * `/api/hosts/resources` declares that creating a doc in
+ * `hosts/{hostId}/components` requires the `reusableComponents` entitlement,
+ * because a reusable component RENDERS ON THE LIVE SITE and so the Starter+
+ * gate has to be server-enforced rather than hidden in the console (AGL-473).
+ * This route wrote the equivalent document and asked nothing, so a free org
+ * installed any marketplace component and got the working feature its own
+ * console would have refused.
+ *
+ * `checkEntitlement` is the REAL one against the REAL plan table — a fake
+ * returning a boolean would only prove that this file's own stub agrees with
+ * itself, and the whole defect was an assumption about what the table says.
+ * The listing is FREE here (`priceUsd: 0`), which is the population the gap
+ * actually served: a free org never reaches the purchase gate at all.
  */
 
 jest.mock('@aglyn/aglyn/server', () => ({
-  // The REAL `checkEntitlement` against the REAL plan table (AGL-2072): the
-  // route now asks for `reusableComponents` before it asks about payment, and
-  // a stubbed `() => true` here would let this file keep passing if that gate
-  // ever stopped meaning anything. The org below is `starter`, the lowest
-  // plan that includes the feature, so what these tests prove stays the
-  // PURCHASE gate and nothing else.
   ...jest.requireActual('@aglyn/aglyn/server'),
   createResourceUid: () => 'component-new',
 }))
@@ -60,7 +65,8 @@ jest.mock('./version-stats', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const state = {
-    purchases: [] as Array<Record<string, unknown>>,
+    /** Whatever `getOrgForHost` should answer for this test. */
+    org: { id: 'buyer-org', plan: 'starter' } as Record<string, unknown>,
     componentWrites: [] as Array<Record<string, unknown>>,
   }
   const componentsCollection = {
@@ -87,7 +93,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const listingRef = {
     get: async () => ({
       data: () => ({
-        priceUsd: 100,
+        // FREE listing: the purchase gate is not what is under test, and a
+        // free org installing a free component is exactly the shape that
+        // reached the missing check.
+        priceUsd: 0,
         profileId: 'seller-org',
         latestVersion: 1,
         displayName: 'Fancy hero',
@@ -100,23 +109,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     collection: (name: string) => {
       if (name === 'hosts') return { doc: () => hostRef }
       if (name === 'marketplaceListings') return { doc: () => listingRef }
-      if (name === 'marketplacePurchases') {
-        return {
-          where: () => ({
-            where: () => ({
-              limit: () => ({
-                get: async () => {
-                  const docs = state.purchases.map((purchase) => ({
-                    get: (field: string) => purchase[field],
-                    data: () => purchase,
-                  }))
-                  return { empty: docs.length === 0, docs }
-                },
-              }),
-            }),
-          }),
-        }
-      }
       return {
         doc: () => ({
           get: async () => ({ exists: false, data: () => undefined }),
@@ -126,11 +118,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
   return {
     __state: state,
-    // The owning org, read whole exactly as `getOrgDoc` returns it (AGL-2072).
-    getOrgForHost: async () => ({
-      orgId: 'buyer-org',
-      org: { id: 'buyer-org', plan: 'starter' },
-    }),
+    getOrgForHost: async () => ({ orgId: 'buyer-org', org: state.org }),
     firebaseAdmin: {
       app: () => ({
         auth: () => ({ verifyIdToken: async () => ({ uid: 'buyer-1' }) }),
@@ -151,7 +139,7 @@ import { installHandler } from './install'
 const state = (
   jest.requireMock('@aglyn/tenant-data-admin') as {
     __state: {
-      purchases: Array<Record<string, unknown>>
+      org: Record<string, unknown>
       componentWrites: Array<Record<string, unknown>>
     }
   }
@@ -181,37 +169,94 @@ const makeReq = () =>
   }) as any
 
 beforeEach(() => {
-  state.purchases.length = 0
   state.componentWrites.length = 0
+  state.org = { id: 'buyer-org', plan: 'starter' }
 })
 
-describe('paid install gate (AGL-46/1546)', () => {
-  it('402s with no purchase record at all', async () => {
+describe('marketplace component install honours reusableComponents (AGL-2072)', () => {
+  /** THE DEFECT: this wrote the component and returned 200. */
+  it('refuses a FREE org and writes nothing', async () => {
+    state.org = { id: 'buyer-org', plan: 'free' }
     const res = makeRes()
+
     await installHandler(makeReq(), res)
-    expect(res.statusCode).toBe(402)
+
+    expect(res.statusCode).toBe(403)
+    expect(String(res.body.error)).toMatch(/Starter plan or higher/)
     expect(state.componentWrites).toHaveLength(0)
   })
 
-  it('402s when the only purchase was FULLY refunded', async () => {
-    state.purchases.push({
-      buyerUid: 'buyer-1',
-      listingId: 'listing-1',
-      refundedAt: 'THEN',
-    })
+  /**
+   * The gate is RE-ASKED per install, never inherited from the plan that was
+   * in force when an earlier copy was installed: `resolveEffectivePlan`
+   * collapses a dead subscription to free, and the whole org doc is read so
+   * the status is actually there to see.
+   */
+  it('refuses a LAPSED paid org, whose stale `plan` field still says starter', async () => {
+    state.org = {
+      id: 'buyer-org',
+      plan: 'starter',
+      subscription: { status: 'canceled' },
+    }
     const res = makeRes()
+
     await installHandler(makeReq(), res)
-    expect(res.statusCode).toBe(402)
+
+    expect(res.statusCode).toBe(403)
     expect(state.componentWrites).toHaveLength(0)
   })
 
-  it('installs when a live purchase exists — even beside a refunded one', async () => {
-    state.purchases.push(
-      { buyerUid: 'buyer-1', listingId: 'listing-1', refundedAt: 'THEN' },
-      { buyerUid: 'buyer-1', listingId: 'listing-1' },
-    )
+  /**
+   * An org with no doc at all resolves as free, not as unmetered — the
+   * fail-CLOSED direction, and the same one every other entitlement door
+   * takes.
+   */
+  it('refuses an org the host index cannot resolve', async () => {
+    state.org = undefined as any
     const res = makeRes()
+
     await installHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(403)
+    expect(state.componentWrites).toHaveLength(0)
+  })
+
+  /** And the entitled path still installs — the assertion above is live. */
+  it('installs for a STARTER org, the lowest plan that includes the feature', async () => {
+    const res = makeRes()
+
+    await installHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
+    expect(state.componentWrites[0].displayName).toBe('Fancy hero')
+  })
+
+  it('installs for a BUSINESS org', async () => {
+    state.org = { id: 'buyer-org', plan: 'business' }
+    const res = makeRes()
+
+    await installHandler(makeReq(), res)
+
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
+  })
+
+  /**
+   * A per-org feature override is the supported way staff comp this, and it
+   * has to keep working — the gate must read the RESOLVED entitlement, not
+   * the plan name.
+   */
+  it('installs for a free org staff granted the feature', async () => {
+    state.org = {
+      id: 'buyer-org',
+      plan: 'free',
+      entitlements: { features: { reusableComponents: true } },
+    }
+    const res = makeRes()
+
+    await installHandler(makeReq(), res)
+
     expect(res.statusCode).toBe(200)
     expect(state.componentWrites).toHaveLength(1)
   })

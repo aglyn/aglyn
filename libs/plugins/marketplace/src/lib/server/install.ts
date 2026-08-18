@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
@@ -67,6 +67,36 @@ export const installHandler: PluginApiHandler = async (req, res) => {
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not a site admin' })
+    }
+
+    // The SAME gate the console's own create path applies to this exact
+    // document (AGL-2072). `/api/hosts/resources` declares
+    // `reusableComponent: { collection: 'components', entitlement:
+    // 'reusableComponents' }` and says why: a reusable component renders on
+    // the LIVE SITE, so the Starter+ gate has to be server-enforced rather
+    // than merely hidden in the console (AGL-473). This route writes a
+    // byte-for-byte equivalent doc into `hosts/{hostId}/components` and asked
+    // nothing — so a free org installed from the marketplace and got the
+    // working feature its own console would have refused.
+    //
+    // The assumption that hid it is written down at
+    // `apps/console/app/api/hosts/import/route.ts:329-331`:
+    // "`reusableComponents` is a BOOLEAN entitlement, true on every plan that
+    // can reach here". True of import, which is Pro+. False here — any plan
+    // reaches the marketplace, and free listings cost nothing to install.
+    //
+    // Ahead of `requirePurchase`, deliberately, and matching
+    // `install-dataset-schema.ts:89`: refusing on plan AFTER taking someone's
+    // money for the listing would be the worse order. The whole org doc is
+    // read (`getOrgDoc` projects nothing), so `resolveEffectivePlan` sees the
+    // subscription status and a LAPSED org is refused exactly as a free one
+    // is — the gate is re-asked per install, never inherited from whatever
+    // plan was in force when an earlier copy was installed.
+    const org = (await getOrgForHost(hostId))?.org
+    if (!checkEntitlement(org as any, 'reusableComponents')) {
+      return res.status(403).json({
+        error: 'Reusable components require a Starter plan or higher',
+      })
     }
 
     const listingRef = firestore
