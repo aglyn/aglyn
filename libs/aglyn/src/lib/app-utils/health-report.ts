@@ -365,6 +365,136 @@ export function signupsHealth(
 }
 
 /**
+ * Refused org creations, reduced to a health verdict (AGL-1907).
+ *
+ * `signupsHealth` above counts the signups that SUCCEEDED. That is the right
+ * alarm for a wave that gets through, and the wrong one for a wave that is
+ * being contained: when the AGL-1534 limiter starts refusing, org-creation
+ * volume goes *down*, so the check that watches volume reads calmer at exactly
+ * the moment scripted pressure arrives. The 429s are the signature. Before the
+ * doors open on Sep 1 this is also the only thing that can answer "has the
+ * limiter ever actually fired in production" — a control nobody has seen
+ * refuse is a control nobody has tested.
+ *
+ * Counted from `rateLimits/signupRefused_{minuteBucket}` markers, which carry
+ * per-reason counts and no identifiers. This is a separate check rather than
+ * more fields on `SignupsCheck` so the AGL-1536 verdict keeps its meaning
+ * exactly: a creation wave and a refusal wave are different events with
+ * different responses (feature-lock the signups door vs. leave the limiter to
+ * do its job and go read the refusal reasons).
+ *
+ * Pure on purpose, like its siblings: the route queries, this decides.
+ */
+export interface SignupRefusalMarker {
+  /** Refused attempts merged into this minute bucket. */
+  refusals?: number
+  /** Split by which cap refused: `{ uid?: n, ip?: n }`. */
+  byReason?: Record<string, number>
+  /** When the most recent refusal in this bucket happened. */
+  refusedAtMs?: number
+}
+
+export interface SignupRefusalsCheck extends HealthCheck {
+  /**
+   * Refused org creations inside the trailing window. A COUNT only — the
+   * endpoint is public, and the limiter's keys are a uid and a hashed client
+   * IP. Null when the query itself failed.
+   */
+  refusedSignups: number | null
+  /**
+   * Which cap did the refusing. A run that is almost all `ip` is one address
+   * hammering; a run that is almost all `uid` is many accounts each pushing
+   * past three, which is the distributed shape. Null when the query failed.
+   */
+  refusedByReason: Record<string, number> | null
+  /** Minutes since the most recent refusal, so the body dates itself. */
+  minutesSinceLast: number | null
+  /** The trailing window the count covers, so the body is self-describing. */
+  windowMinutes: number
+  /** The count above which this reports degraded. */
+  threshold: number
+}
+
+/**
+ * Trailing window the refusal count covers. One hour, matching the limiter's
+ * own window (`org-create` is 3/h and 10/h) so the number is readable against
+ * the caps that produced it.
+ */
+export const SIGNUP_REFUSAL_WINDOW_MINUTES = 60
+
+/**
+ * Degraded above 50 refusals/hour.
+ *
+ * Not zero, unlike the limiter-degradation alarm: a refusal is the system
+ * working, and a real person who fumbles a workspace slug four times in an
+ * hour produces one. The number that means something is *sustained* refusal.
+ * Calibrated the same way AGL-1536's was: production holds single-digit orgs
+ * (2026-08), so organic refusals are ~zero per hour, and 50 is far above any
+ * plausible human while being reached in under a minute by a script. One
+ * determined address can generate this alone — that is intended, because "one
+ * address is hammering the signup door" is worth an email even though the
+ * limiter is containing it.
+ */
+export const MAX_SIGNUP_REFUSALS_PER_WINDOW = 50
+
+export function signupRefusalsHealth(
+  markers: SignupRefusalMarker[] | null,
+  ms: number,
+  now: number = Date.now(),
+  threshold: number = MAX_SIGNUP_REFUSALS_PER_WINDOW,
+  windowMinutes: number = SIGNUP_REFUSAL_WINDOW_MINUTES,
+): SignupRefusalsCheck {
+  // A failed query is degraded, not ok — the same rule `signupsHealth` and
+  // `rateLimitsHealth` follow. An alarm that cannot see the thing it watches
+  // must not report calm.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'refusals-unavailable',
+      refusedSignups: null,
+      refusedByReason: null,
+      minutesSinceLast: null,
+      windowMinutes,
+      threshold,
+    }
+  }
+
+  let refusedSignups = 0
+  let newestAtMs: number | null = null
+  const refusedByReason: Record<string, number> = {}
+  for (const marker of markers) {
+    refusedSignups += marker.refusals ?? 0
+    for (const [reason, count] of Object.entries(marker.byReason ?? {})) {
+      // `Number(...) || 0` rather than a bare add: these come out of Firestore
+      // and a corrupt field must not turn the total into NaN, which compares
+      // false against the threshold and would report calm forever.
+      refusedByReason[reason] =
+        (refusedByReason[reason] ?? 0) + (Number(count) || 0)
+    }
+    const at = marker.refusedAtMs
+    if (typeof at === 'number' && (newestAtMs === null || at > newestAtMs)) {
+      newestAtMs = at
+    }
+  }
+
+  const over = refusedSignups > threshold
+  return {
+    ok: !over,
+    ms,
+    ...(over ? { code: 'signup-refusal-wave' } : {}),
+    refusedSignups,
+    refusedByReason,
+    minutesSinceLast:
+      newestAtMs === null
+        ? null
+        : Math.max(0, Math.floor((now - newestAtMs) / 60_000)),
+    windowMinutes,
+    threshold,
+  }
+}
+
+/**
  * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
  *
  * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it

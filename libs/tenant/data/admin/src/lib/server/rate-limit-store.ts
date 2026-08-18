@@ -213,6 +213,123 @@ export function resetRateLimitDegradationForTests(): void {
   episode = null
 }
 
+/**
+ * Document-id prefix for signup-refusal markers (AGL-1907).
+ *
+ * `/api/orgs/create` has been rate-limited since AGL-1534 (3/h per uid, 10/h
+ * per IP) and AGL-1536 watches org-creation VOLUME — but volume only counts
+ * the signups that SUCCEEDED. A scripted farm that trips the limiter is
+ * therefore invisible in exactly the moment it is being contained: the 429s
+ * are the attack's signature and nothing recorded them. Before Sep 1 that is
+ * the difference between "the limiter held" and "we have no idea whether it
+ * was ever tested".
+ *
+ * Written into the SAME `rateLimits` collection as the counters and the
+ * AGL-1679 degradation markers, for the same reason that one gave: it inherits
+ * the deny-all security rule and the `expiresAt` TTL policy that already
+ * exist, instead of needing a new collection, a rules deploy and a second TTL
+ * policy. Minute-bucketed so concurrent instances converge:
+ *
+ * ```
+ * rateLimits/signupRefused_1755100800000
+ * ```
+ *
+ * **The timestamp field is `refusedAtMs`, deliberately not `lastAtMs`.** The
+ * AGL-1693 rate-limiter health probe queries this collection with
+ * `where('lastAtMs', '>=', cutoff).orderBy('lastAtMs','desc').limit(N)`. A
+ * refusal marker carrying `lastAtMs` would be picked up by that range and,
+ * under a flood, could fill the limit and push the real degradation markers
+ * out of the result — silently blinding a sibling alarm. A distinct field name
+ * keeps the two queries disjoint at the index level rather than relying on the
+ * id-prefix filter that runs after the read.
+ */
+export const SIGNUP_REFUSAL_DOC_PREFIX = 'signupRefused_'
+
+/** Marker id granularity. Matches the degradation markers. */
+const SIGNUP_REFUSAL_BUCKET_MS = 60_000
+
+/**
+ * How long a refusal marker survives the TTL sweep. Shorter than the 30 days
+ * degradation markers get: these can be written once a minute under sustained
+ * pressure, and the question they answer ("was there a wave, and when") is
+ * asked in the days after launch, not the month after.
+ */
+const SIGNUP_REFUSAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Which cap refused. Bounded on purpose — this is a public health body. */
+export type SignupRefusalReason = 'uid' | 'ip'
+
+/**
+ * Record one refused org-creation attempt.
+ *
+ * Fire-and-forget and best-effort, like `flushDegradation`: refusing the
+ * request is the control, and failing a 429 because its breadcrumb could not
+ * be written would be strictly worse than not having the breadcrumb. Callers
+ * must not await this on the response path.
+ *
+ * **On the write-per-refusal cost.** A refused request is free to the attacker
+ * and now costs one transaction — the usual amplification objection. It does
+ * not apply here in kind, only in degree: `/api/orgs/create` already spends
+ * TWO `consumeRateLimit` transactions on every hit including the refused ones
+ * (AGL-1534 counts over-limit attempts by design), so this is a third write on
+ * a path that was already three, not a new class of cost. If it ever shows up
+ * on the bill the fix is in-process coalescing like `episode` above, not
+ * dropping the signal.
+ *
+ * Nothing identifying is stored. The counts are per-reason only; the uid and
+ * IP that were refused stay in the (hashed) limiter keys, which this never
+ * reads.
+ */
+export function recordSignupRefusal(
+  reason: SignupRefusalReason,
+  options?: { now?: number; firestore?: any },
+): void {
+  const nowMs = options?.now ?? Date.now()
+  const bucketStart =
+    Math.floor(nowMs / SIGNUP_REFUSAL_BUCKET_MS) * SIGNUP_REFUSAL_BUCKET_MS
+  let firestore: any
+  try {
+    firestore = options?.firestore ?? firebaseAdmin.app().firestore()
+  } catch {
+    // No Admin app (a unit test, a misconfigured instance). The refusal still
+    // happened and the caller still refuses; only the breadcrumb is lost.
+    return
+  }
+  const ref = firestore
+    .collection(RATE_LIMIT_COLLECTION)
+    .doc(`${SIGNUP_REFUSAL_DOC_PREFIX}${bucketStart}`)
+
+  void firestore
+    .runTransaction(async (tx: any) => {
+      const snapshot = await tx.get(ref)
+      const priorTotal = (snapshot.exists ? snapshot.get('refusals') : 0) ?? 0
+      const priorByReason =
+        (snapshot.exists ? snapshot.get('byReason') : undefined) ?? {}
+      const priorFirst = snapshot.exists
+        ? snapshot.get('firstRefusedAtMs')
+        : undefined
+      tx.set(
+        ref,
+        {
+          refusals: priorTotal + 1,
+          byReason: {
+            ...priorByReason,
+            [reason]: ((priorByReason as any)?.[reason] ?? 0) + 1,
+          },
+          firstRefusedAtMs: Math.min(priorFirst ?? nowMs, nowMs),
+          // NOT `lastAtMs` — see the prefix doc above.
+          refusedAtMs: Math.max(
+            (snapshot.exists ? snapshot.get('refusedAtMs') : 0) ?? 0,
+            nowMs,
+          ),
+          expiresAt: new Date(nowMs + SIGNUP_REFUSAL_RETENTION_MS),
+        },
+        { merge: true },
+      )
+    })
+    .catch(() => undefined)
+}
+
 export interface DurableRateLimitOptions {
   limit?: number
   windowMs?: number

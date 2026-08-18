@@ -48,7 +48,11 @@ import { getApp } from 'firebase-admin/app'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, exactly like the sibling health route.
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  RATE_LIMIT_COLLECTION,
+  SIGNUP_REFUSAL_DOC_PREFIX,
+} from '@aglyn/tenant-data-admin'
 import {
   healthBody,
   healthHeaders,
@@ -56,7 +60,11 @@ import {
   healthStatus,
   memoizeWithTtl,
   ORG_CREATION_WINDOW_MINUTES,
+  SIGNUP_REFUSAL_WINDOW_MINUTES,
+  signupRefusalsHealth,
   signupsHealth,
+  type SignupRefusalMarker,
+  type SignupRefusalsCheck,
   type SignupsCheck,
 } from '@aglyn/aglyn/server'
 
@@ -119,8 +127,86 @@ const signupsProbe = memoizeWithTtl<SignupsCheck>(PROBE_TTL_MS, async () => {
   }
 })
 
+/**
+ * `SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR` overrides the shared default (50/h),
+ * the same knob shape as the sibling above — the ops lever for tightening
+ * during an incident, and the forced-failure lever this check's red path was
+ * proven with (set to -1 and every count is over).
+ */
+function configuredRefusalThreshold(): number | undefined {
+  const raw = process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR']
+  if (!raw) return undefined
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/**
+ * One minute-bucketed marker can be written per instance per minute, so a
+ * 60-minute window is bounded by (minutes × instances). 240 is four times the
+ * single-instance ceiling and keeps the probe's cost flat under a flood.
+ */
+const REFUSAL_MARKER_READ_LIMIT = 240
+
+/**
+ * Refused org creations in the trailing hour (AGL-1907).
+ *
+ * A range on ONE field ordered by the same field — served by the automatic
+ * single-field index, so no composite index and no
+ * `firebase-firestore.indexes.json` change. `refusedAtMs` exists only on
+ * refusal markers: the live counters carry `count`/`windowStartMs` and the
+ * AGL-1679 degradation markers carry `lastAtMs`, so this query cannot pick up
+ * either, and — the reason for the distinct field name — the AGL-1693
+ * degradation probe's `lastAtMs` range cannot pick up these.
+ */
+const refusalsProbe = memoizeWithTtl<SignupRefusalsCheck>(
+  PROBE_TTL_MS,
+  async () => {
+    const startedAt = Date.now()
+    try {
+      void firebaseAdmin
+      const db = getFirestore(getApp())
+      const cutoff = Date.now() - SIGNUP_REFUSAL_WINDOW_MINUTES * 60_000
+      const snapshot = await db
+        .collection(RATE_LIMIT_COLLECTION)
+        .where('refusedAtMs', '>=', cutoff)
+        .orderBy('refusedAtMs', 'desc')
+        .limit(REFUSAL_MARKER_READ_LIMIT)
+        .get()
+      const markers: SignupRefusalMarker[] = snapshot.docs
+        // Belt and braces against a future field named `refusedAtMs` on some
+        // other document in this collection; free, the docs are already read.
+        .filter((doc: { id: string }) =>
+          doc.id.startsWith(SIGNUP_REFUSAL_DOC_PREFIX),
+        )
+        .map((doc: { data: () => SignupRefusalMarker }) => doc.data())
+      return signupRefusalsHealth(
+        markers,
+        Date.now() - startedAt,
+        Date.now(),
+        configuredRefusalThreshold(),
+      )
+    } catch {
+      // Null is degraded by contract (`refusals-unavailable`) — same rule as
+      // the sibling. The error is dropped: this body is public and a Firestore
+      // error message can carry project ids and paths.
+      return signupRefusalsHealth(
+        null,
+        Date.now() - startedAt,
+        Date.now(),
+        configuredRefusalThreshold(),
+      )
+    }
+  },
+)
+
 export async function GET(): Promise<Response> {
-  const checks = { signups: await signupsProbe() }
+  // Both probes, in parallel — each memoises independently, so a warm one
+  // costs nothing and the endpoint's worst case stays one round trip.
+  const [signups, signupRefusals] = await Promise.all([
+    signupsProbe(),
+    refusalsProbe(),
+  ])
+  const checks = { signups, signupRefusals }
   const status = healthStatus(checks)
   return Response.json(
     healthBody({

@@ -33,6 +33,7 @@ import {
   lockdownRefusal,
   meterOrgEmail,
   OrgSlugTakenError,
+  recordSignupRefusal,
   signupProvisioningGraceAllows,
 } from '@aglyn/tenant-data-admin'
 
@@ -121,6 +122,14 @@ async function handler(request: Request): Promise<Response> {
     // permanently true and the limit would never bite.
     const overLimit = !perUid.allowed ? perUid : !perIp.allowed ? perIp : null
     if (overLimit) {
+      // Make the refusal observable (AGL-1907). The AGL-1536 alarm counts
+      // orgs that were CREATED, so a contained wave reads as calm — volume
+      // falls the moment the limiter starts biting. This records the 429s
+      // themselves, per-reason and with no identifiers, into the same
+      // `rateLimits` collection the limiter already owns; the signups health
+      // endpoint sums them. Deliberately not awaited: the refusal is the
+      // control, the breadcrumb must never be able to delay or fail it.
+      recordSignupRefusal(!perUid.allowed ? 'uid' : 'ip')
       // This copy is what a person reads: provisionSignUpOrg forwards the
       // body's `error` to the workspace picker via the AGL-1523 marker.
       return Response.json(

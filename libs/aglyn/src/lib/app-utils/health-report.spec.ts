@@ -33,6 +33,9 @@ import {
   meteredPricingHealth,
   RATE_LIMIT_DEGRADED_WINDOW_MINUTES,
   rateLimitsHealth,
+  MAX_SIGNUP_REFUSALS_PER_WINDOW,
+  SIGNUP_REFUSAL_WINDOW_MINUTES,
+  signupRefusalsHealth,
   signupsHealth,
 } from './health-report'
 
@@ -770,5 +773,118 @@ describe('meteredPricingHealth (AGL-1931)', () => {
     expect(check.yearly).toBe(false)
     expect(check.stripeConfigured).toBe(true)
     expect(check.ms).toBe(7)
+  })
+})
+
+describe('signupRefusalsHealth (AGL-1907)', () => {
+  const at = (ms: number, refusals: number, byReason: Record<string, number>) =>
+    ({ refusals, byReason, refusedAtMs: ms })
+  const NOW = 1_755_100_800_000
+
+  it('ALLOWS legitimate use: zero refusals, and a fumbling human, stay green', () => {
+    // The direction that ships a launch-day outage if it is wrong. A quiet
+    // hour must be ok, and so must a real person who mistypes a workspace
+    // slug into the 429 a handful of times.
+    const quiet = signupRefusalsHealth([], 7, NOW)
+    expect(quiet.ok).toBe(true)
+    expect(quiet.code).toBeUndefined()
+    expect(quiet.refusedSignups).toBe(0)
+
+    const fumbling = signupRefusalsHealth([at(NOW, 4, { uid: 4 })], 7, NOW)
+    expect(fumbling.ok).toBe(true)
+    expect(fumbling.code).toBeUndefined()
+  })
+
+  it('is ok AT the threshold, not merely below it', () => {
+    const atCap = signupRefusalsHealth(
+      [at(NOW, MAX_SIGNUP_REFUSALS_PER_WINDOW, { ip: 50 })],
+      7,
+      NOW,
+    )
+    expect(atCap.ok).toBe(true)
+    expect(atCap.code).toBeUndefined()
+  })
+
+  it('REFUSES: one past the threshold is a wave', () => {
+    const check = signupRefusalsHealth(
+      [at(NOW, MAX_SIGNUP_REFUSALS_PER_WINDOW + 1, { ip: 51 })],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('signup-refusal-wave')
+    expect(check.refusedSignups).toBe(MAX_SIGNUP_REFUSALS_PER_WINDOW + 1)
+  })
+
+  it('sums across minute buckets and keeps the per-reason split', () => {
+    // The split is the diagnosis: mostly `ip` is one address hammering,
+    // mostly `uid` is many accounts, which is the distributed shape.
+    const check = signupRefusalsHealth(
+      [
+        at(NOW, 30, { ip: 25, uid: 5 }),
+        at(NOW - 60_000, 25, { ip: 20, uid: 5 }),
+      ],
+      7,
+      NOW,
+    )
+    expect(check.refusedSignups).toBe(55)
+    expect(check.refusedByReason).toEqual({ ip: 45, uid: 10 })
+    expect(check.ok).toBe(false)
+  })
+
+  it('degrades when the query itself failed', () => {
+    const check = signupRefusalsHealth(null, 7, NOW)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('refusals-unavailable')
+    expect(check.refusedSignups).toBeNull()
+    expect(check.refusedByReason).toBeNull()
+  })
+
+  it('honours a threshold override and self-describes its window', () => {
+    // The forced-failure knob: SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR=-1 makes
+    // every count over, which is how the red path was proven end to end.
+    const check = signupRefusalsHealth([at(NOW, 0, {})], 7, NOW, -1)
+    expect(check.ok).toBe(false)
+    expect(check.threshold).toBe(-1)
+    expect(check.windowMinutes).toBe(SIGNUP_REFUSAL_WINDOW_MINUTES)
+  })
+
+  it('dates itself from the newest marker, not the first one read', () => {
+    const check = signupRefusalsHealth(
+      [at(NOW - 600_000, 1, { uid: 1 }), at(NOW - 120_000, 1, { uid: 1 })],
+      7,
+      NOW,
+    )
+    expect(check.minutesSinceLast).toBe(2)
+  })
+
+  it('reports null minutesSinceLast when no marker carries a timestamp', () => {
+    const check = signupRefusalsHealth([{ refusals: 3 }], 7, NOW)
+    expect(check.minutesSinceLast).toBeNull()
+    expect(check.refusedSignups).toBe(3)
+  })
+
+  it('a corrupt count cannot launder the verdict into NaN', () => {
+    // NaN > threshold is false, so a bad field would report calm forever.
+    const check = signupRefusalsHealth(
+      [{ refusals: 200, byReason: { ip: 'lots' as any }, refusedAtMs: NOW }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.refusedByReason).toEqual({ ip: 0 })
+  })
+
+  it('exposes counts only — no uid, no IP, no limiter key', () => {
+    const check = signupRefusalsHealth([at(NOW, 2, { uid: 2 })], 7, NOW)
+    expect(Object.keys(check).sort()).toEqual([
+      'minutesSinceLast',
+      'ms',
+      'ok',
+      'refusedByReason',
+      'refusedSignups',
+      'threshold',
+      'windowMinutes',
+    ])
   })
 })
