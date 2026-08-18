@@ -1773,7 +1773,26 @@ export function resolveTransactionFeePct(
     productType === 'physical'
       ? 'transactionFeePhysicalPct'
       : 'transactionFeeDigitalPct'
-  const pct = entitlements[key]
+  // A MALFORMED value falls back to the PLAN'S OWN rate, never to zero
+  // (AGL-2114). `resolveOrgEntitlements` merges any numeric override
+  // indistinguishably from the default, and `strictNullChecks` is off
+  // repo-wide, so a `NaN`, an `Infinity`, a stringly-typed number or a
+  // negative can reach here from a hand-edited or partially-written org doc.
+  // This used to answer 0 for every one of them — silently zeroing the
+  // platform's cut on a PAYING merchant's storefront, which on a destination
+  // charge is not "no take rate" but a loss (see below).
+  //
+  // The sibling `resolveMarketplaceFeePct` has forbidden exactly this since
+  // AGL-1543, in as many words: "A malformed override must never zero the
+  // platform's cut." This is the storefront half of the same rule. The plan
+  // table is a literal and cannot itself be malformed, so it is the honest
+  // floor — and it preserves the tiers whose 0% is a DELIBERATE, advertised
+  // rate rather than a data fault.
+  const raw = entitlements[key]
+  const pct =
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 0
+      ? raw
+      : PLAN_ENTITLEMENTS[resolvePlan(org)][key]
   if (Number.isFinite(pct) && pct > 0) return pct
   // The free plan's 0% prices a plan that CANNOT SELL: `features.commerce` is
   // false there, so on an ordinary free org this rate is never consulted. It
