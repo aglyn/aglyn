@@ -37,6 +37,17 @@ import {
   recordAssistExchange,
   type AssistTokenUsage,
 } from '../../_lib/assist-usage'
+import {
+  describeView,
+  extractAssistAction,
+  finalAssistText,
+  resolveAssistProposal,
+  safeOrgFacts,
+  sanitiseId,
+  sanitiseRoute,
+  viewContextBlock,
+  visibleAssistText,
+} from '../../_lib/assist-view-context'
 
 /**
  * Aglyn Assist chat proxy (AGL-1860, phase 1 — capability levels 1–2).
@@ -69,12 +80,21 @@ import {
  * ceiling. `effort: low` is the documented posture for a scoped chat
  * workload; both are asserted in the spec so a silent default change fails.
  *
- * Prompt caching: the static system block carries the breakpoint so the
- * per-turn variation (context + retrieval) sits after it. Note the prefix
- * is currently BELOW Sonnet 5's 1024-token cacheable minimum, so it does
- * not actually cache yet — the breakpoint is correct placement that starts
- * paying the moment the prefix or the model changes, not a live saving.
- * `usage.cacheReadTokens` on the exchange doc is where to confirm that.
+ * Prompt caching: the system array is ordered stable-to-volatile and carries
+ * TWO breakpoints — one after the static prefix, one after the per-view
+ * block. Caching is a prefix match, so the second covers both blocks
+ * together, which is what makes level 2 cost less per turn than it looks:
+ * the view block is identical for every user asking anything on the same
+ * route, so the whole per-route prefix is written once and read thereafter,
+ * while docs retrieval — the one part that follows the QUESTION — sits last
+ * where it can invalidate nothing.
+ *
+ * Two breakpoints rather than one because a request without a view block
+ * (free tier, unknown route) would otherwise get no cache at all: the first
+ * keeps the global prefix cacheable on its own. `usage.cacheReadTokens` on
+ * the exchange doc is where to confirm any of this is live — the minimum
+ * cacheable prefix is model-dependent (1024 tokens on Sonnet 5, 512 on
+ * Opus 5) and a prefix under it caches silently not at all.
  */
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
@@ -102,8 +122,16 @@ const MAX_STORED_ANSWER_CHARS = 20000
 
 /**
  * The stable system prefix — MUST stay byte-identical across requests (it
- * carries the prompt-cache breakpoint; per-turn content goes in the second
- * system block). Keep every volatile detail out of this string.
+ * carries the first prompt-cache breakpoint; per-turn content goes in the
+ * blocks after it). Keep every volatile detail out of this string.
+ *
+ * Level 2 grew this deliberately rather than incidentally. The three
+ * additions — guiding from the current screen, the two-depth answer, and
+ * the proposal protocol — are what the capability IS, and they belong in the
+ * cached prefix rather than the per-turn block precisely because they never
+ * vary. A longer static prefix is also the cheaper one once it crosses the
+ * model's minimum cacheable length: it is billed at cache-read rates on
+ * every turn after the first.
  */
 const STATIC_SYSTEM = `You are Aglyn Assist, the in-console helper for Aglyn — a multi-tenant website-building and commerce platform. You are embedded in the customer console and answer questions about using Aglyn: building sites in the Besigner, publishing, domains, commerce, bookings, workflows, datasets, members and roles, billing and plans, and the marketplace.
 
@@ -111,9 +139,27 @@ Rules:
 - Ground answers in the provided documentation sections when they are relevant, and cite them by linking their URLs with markdown links. Never invent a docs URL — only link URLs given to you.
 - When the user should go somewhere in the console, link the console path as a markdown link with a root-relative path (for example [Billing](/acme/billing)) only when you are certain of the path from the context provided; otherwise describe the navigation in words.
 - Be concise and task-focused: answer the question, give the steps, link the source. Skip preamble.
-- You cannot perform actions, fill forms, or change anything — you answer and direct. If asked to do something, explain the steps the user can take instead.
 - If the question is not about Aglyn, say so briefly and point the user back to Aglyn topics.
-- If you do not know, say so and suggest contacting support from the Support page rather than guessing.`
+- If you do not know, say so and suggest contacting support from the Support page rather than guessing.
+
+Guiding from the current screen:
+- When you are told where the user is, answer about THAT screen first. "Where do I do this?" is usually answered by the page they already have open, and sending someone away from a screen that can already do the job is the most common way to be unhelpful while sounding correct.
+- Use only the facts given about the screen. Do not assert that a page contains a particular button, tab or field unless the screen description or the documentation says so — a confidently invented control costs the user more time than saying you are not sure.
+- Name the next thing to do in the order the user will do it. Prefer one concrete next step over a list of everything possible.
+
+Two depths, one answer:
+- Aglyn's users run from first-time business owners to working developers, and they get the same message. Lead with the plain answer: what to click, in ordinary words, with no jargon and nothing assumed about what they already know.
+- Then, when there is genuinely something technical to add — the route path, the identifier in the URL, the field or API behind the screen — add ONE final paragraph that begins exactly "Under the hood:" and carries it. The console collapses that paragraph, so a beginner never has to read it and a developer never has to ask for it.
+- Do not write an "Under the hood:" paragraph when it would only restate the plain answer in longer words. Nothing technical to add is a normal outcome.
+- Never talk down. No "don't worry", no "it's easy", no praise for the question.
+
+Proposing an action:
+- You cannot perform actions, fill in forms, publish, or change anything. Nothing you do saves data.
+- Where the screen description lists actions, you may PROPOSE one when the user has asked to get something done and that action is the way to start it. The console shows your proposal as a card the user has to confirm; confirming only opens the page, and they still fill in and submit the form themselves.
+- To propose, end your message with a fenced block containing only JSON: a fence line reading three backticks followed by aglyn:action, then {"id": "<an id from the screen description>", "params": {…}}, then a closing three-backtick line.
+- Propose at most one action per message, and only ids listed for the screen the user is on. Supply only the params that id declares. Anything else is discarded.
+- Write the message as if the card may not appear, because it may not. Say what the user should do; never say you have done it, opened it, or filled anything in.
+- If the screen lists no actions, or nothing needs doing, write no block at all. Most answers have none.`
 
 interface AssistHistoryTurn {
   role: 'user' | 'assistant'
@@ -226,22 +272,50 @@ export function assistScopeRefusal(
   return null
 }
 
-/** Level-2 context block (entitled orgs only). */
-function contextBlock(
+/**
+ * The level-2 view block (entitled orgs only) and the scope the proposal
+ * channel resolves against.
+ *
+ * Everything here is either a static registry lookup or a sanitised scalar.
+ * Nothing is read out of the customer's data: `safeOrgFacts` is an allowlist
+ * of two fields, and the three client-supplied strings are filtered before
+ * they reach a system block — `route` in particular, which is whatever the
+ * panel says the pathname is and would otherwise be an instruction-injection
+ * channel straight into the model's own instructions.
+ */
+function buildViewBlock(
   context: NonNullable<AssistRequestBody['context']>,
-  orgName: string,
-  plan: string,
-): string {
-  const lines = [
-    'Current console context:',
-    context.route && `- Current console page path: ${context.route}`,
-    context.orgSlug && `- Organization URL slug: ${context.orgSlug}`,
-    context.hostId && `- Currently selected site (host) id: ${context.hostId}`,
-    orgName && `- Organization name: ${orgName}`,
-    plan && `- Organization plan: ${plan}`,
-    'Use this to walk the user through the page they are on when relevant.',
-  ].filter(Boolean)
-  return `\n\n${lines.join('\n')}`
+  org: Record<string, unknown>,
+): {
+  block: string
+  view: ReturnType<typeof describeView>
+  scope: { orgSlug: string; hostId: string }
+} {
+  const route = sanitiseRoute(context.route)
+  const hostId = sanitiseId(context.hostId)
+  // Which slug builds a destination path. The org document's own slug is
+  // authoritative; the URL's first segment is the fallback, because `slug`
+  // is absent on plenty of org docs (AGL-1916) and a workspace that cannot
+  // state its own must still get working links. Not the client's `orgSlug`
+  // field — that is the SUBDOMAIN, empty on every apex route, and taking it
+  // would silently drop every proposal on `app.aglyn.com`.
+  const pathSlug = route.split('/').filter(Boolean)[0] ?? ''
+  const orgSlug =
+    sanitiseId(String(org['slug'] ?? '')) ||
+    (ORGLESS_PATH_SEGMENTS.has(pathSlug) ? '' : sanitiseId(pathSlug))
+  const view = describeView(route)
+  const { name, plan } = safeOrgFacts(org)
+  return {
+    block: viewContextBlock(view, {
+      route,
+      hostId,
+      orgSlug,
+      name,
+      plan,
+    }),
+    view,
+    scope: { orgSlug, hostId },
+  }
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -374,15 +448,12 @@ async function handler(request: Request): Promise<Response> {
         : section.title,
       url: `${DOCS_SITE_ORIGIN}${section.path}${section.anchor}`,
     }))
-    let dynamicBlock = docsGroundingBlock(scored)
-    if (entitled && body.context) {
-      dynamicBlock =
-        contextBlock(
-          body.context,
-          String((org as Record<string, unknown>).name ?? ''),
-          String((org as Record<string, unknown>).plan ?? ''),
-        ) + dynamicBlock
-    }
+    const docsBlock = docsGroundingBlock(scored)
+    // Level 2 is the paid rung. A free workspace gets docs grounding and
+    // deep links; the view block, and with it the proposal channel, is not
+    // assembled at all — not assembled-then-withheld, so there is no path
+    // where a free org's prompt carries it.
+    const guide = entitled && body.context ? buildViewBlock(body.context, org as Record<string, unknown>) : null
 
     const messages = [
       ...body.history.map((turn) => ({
@@ -408,13 +479,27 @@ async function handler(request: Request): Promise<Response> {
         // `high` effort, which this workload neither needs nor can afford.
         thinking: { type: 'disabled' },
         output_config: { effort: ASSIST_EFFORT },
+        // Stable → volatile, with a breakpoint after each stable block.
+        // See the header: the view block is identical for everyone on the
+        // route, so the combined prefix is written once and read after; the
+        // docs block follows the QUESTION and must therefore come last,
+        // where it invalidates nothing behind it.
         system: [
           {
             type: 'text',
             text: STATIC_SYSTEM,
             cache_control: { type: 'ephemeral' },
           },
-          ...(dynamicBlock ? [{ type: 'text', text: dynamicBlock }] : []),
+          ...(guide
+            ? [
+                {
+                  type: 'text',
+                  text: guide.block,
+                  cache_control: { type: 'ephemeral' },
+                },
+              ]
+            : []),
+          ...(docsBlock ? [{ type: 'text', text: docsBlock }] : []),
         ],
         messages,
       }),
@@ -444,7 +529,14 @@ async function handler(request: Request): Promise<Response> {
         const emit = (event: Record<string, unknown>) => {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
         }
-        let answer = ''
+        // `raw` is everything the model wrote; `emitted` tracks how much of
+        // the VISIBLE prefix has already gone down the wire. The proposal
+        // fence must never reach the panel as text — a user watching raw
+        // JSON appear mid-answer reads it as the assistant breaking — and
+        // trimming at the end would be too late, because deltas are already
+        // sent by then.
+        let raw = ''
+        let emitted = 0
         let stopReason: string | null = null
         const usage: AssistTokenUsage = {
           inputTokens: 0,
@@ -477,8 +569,12 @@ async function handler(request: Request): Promise<Response> {
               } else if (event.type === 'content_block_delta') {
                 const delta = event.delta as { type?: string; text?: string }
                 if (delta?.type === 'text_delta' && delta.text) {
-                  answer += delta.text
-                  emit({ type: 'delta', text: delta.text })
+                  raw += delta.text
+                  const visible = visibleAssistText(raw)
+                  if (visible.length > emitted) {
+                    emit({ type: 'delta', text: visible.slice(emitted) })
+                    emitted = visible.length
+                  }
                 }
               } else if (event.type === 'message_delta') {
                 const deltaUsage = (event.usage as Record<string, number>) ?? {}
@@ -493,6 +589,26 @@ async function handler(request: Request): Promise<Response> {
               }
             }
           }
+          // End of stream: the fence ambiguity is resolved, so flush the
+          // tail that was being held back in case it became one. Without
+          // this an answer closing on a code fence loses its last three
+          // characters, on screen and in the stored exchange alike.
+          const answer = finalAssistText(raw)
+          if (answer.length > emitted) {
+            emit({ type: 'delta', text: answer.slice(emitted) })
+            emitted = answer.length
+          }
+
+          // The proposal, if the model made one. Validated against the view
+          // it was given — an unknown id, a foreign id or an undeclared
+          // param is dropped, and the destination is composed from the
+          // registry rather than taken from the completion. A dropped
+          // proposal costs the user a button; an honoured bad one costs
+          // them trust.
+          const proposal = guide
+            ? resolveAssistProposal(extractAssistAction(raw), guide.view, guide.scope)
+            : null
+
           // A refusal is an HTTP 200 with an empty or partial answer, not an
           // error — so without this the user watches the spinner stop and
           // gets nothing back. Truncation is the same shape: the tokens are
@@ -535,6 +651,10 @@ async function handler(request: Request): Promise<Response> {
             exchangeId,
             usage,
             docs,
+            // Inert data. The panel renders it as a card the user must
+            // confirm, and confirming navigates — see the write boundary in
+            // `assist-view-context.ts`.
+            proposal,
             quota: { ...quota, used: quota.used + 1, remaining: Math.max(0, quota.remaining - 1) },
           })
         } catch (error) {

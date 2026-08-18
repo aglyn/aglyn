@@ -609,6 +609,20 @@ export function visibleAssistText(raw: string): string {
   return raw
 }
 
+/**
+ * The visible answer once the stream has ENDED — no holdback.
+ *
+ * `visibleAssistText` withholds a tail that might still become a fence,
+ * which is right mid-stream and wrong at the end: an answer that genuinely
+ * closes on a code fence would otherwise lose its last three characters
+ * permanently, both on screen and in the stored exchange. Once there are no
+ * more deltas the ambiguity is resolved, so the only cut left is a real one.
+ */
+export function finalAssistText(raw: string): string {
+  const cut = raw.indexOf(ASSIST_ACTION_FENCE)
+  return cut >= 0 ? raw.slice(0, cut) : raw
+}
+
 /** The raw JSON body between the fences, if the model emitted one. */
 export function extractAssistAction(raw: string): string | null {
   const start = raw.indexOf(ASSIST_ACTION_FENCE)
