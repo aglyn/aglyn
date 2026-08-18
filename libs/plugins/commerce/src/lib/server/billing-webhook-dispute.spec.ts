@@ -1173,6 +1173,65 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
   })
 
+  /**
+   * THE MONEY SPLIT, pinned as economics rather than as a wire constant
+   * (AGL-1794).
+   *
+   * `amount` alone does not pin it. `refund_application_fee` on a transfer
+   * reversal refunds the platform's cut back to the connected account —
+   * "If a full transfer reversal is given, the full application fee will be
+   * refunded" — WITHOUT changing the reversal amount by a cent. So a single
+   * added parameter moves the merchant from handing back the gross 6200 to
+   * handing back the 5580 they actually netted, hands Aglyn's 620 commission
+   * back to them, and every assertion above still passes green. That is the
+   * shape of a guard that cannot fail, so the absence of the flag is asserted
+   * on its own.
+   *
+   * The split this pins: on a 6200 sale the merchant nets 5580 and Aglyn
+   * keeps 620. A lost dispute debits the merchant the full 6200 and Aglyn
+   * keeps the 620, so the merchant is out 6200 and Aglyn is out only Stripe's
+   * dispute fee. Gross, not net — chosen on a market survey recorded on
+   * AGL-1794 (Shopify, Etsy, eBay, PayPal and Square all take the gross and
+   * none return the platform's cut on a chargeback).
+   */
+  it('keeps Aglyn commission — the reversal carries no refund_application_fee', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const body = new URLSearchParams(String(reversalPosts()[0].init.body))
+    // The switch to NET, asserted absent rather than assumed absent.
+    expect(body.has('refund_application_fee')).toBe(false)
+    // ...and the gross/net outcome the switch would have changed, stated in
+    // the numbers a reader can check against the order.
+    expect(Number(body.get('amount'))).toBe(ORDER_TOTAL_CENTS)
+    expect(Number(body.get('amount'))).not.toBe(
+      ORDER_TOTAL_CENTS - APPLICATION_FEE_CENTS,
+    )
+  })
+
+  /**
+   * The OTHER half of the AGL-1794 decision: Aglyn eats Stripe's dispute fee.
+   *
+   * There is no such thing as a partial assertion of this — the fee is never
+   * mentioned in the reversal, so the only way to prove it is never passed on
+   * is to prove nothing ELSE bills the merchant either. A transfer reversal
+   * cannot carry it (it is capped at the transfer), so passing it on would
+   * have to arrive as a second write: an account debit, an invoice, a second
+   * reversal. This asserts the merchant is touched exactly once, for exactly
+   * the principal.
+   */
+  it('never bills the merchant for the dispute fee', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    // Exactly one write against Stripe, and it is the reversal.
+    expect(reversalPosts()).toHaveLength(1)
+    expect(reversalPosts()[0].url).toBe(REVERSAL_URL)
+    const body = new URLSearchParams(String(reversalPosts()[0].init.body))
+    // Never more than the principal — a fee riding along would exceed it.
+    expect(Number(body.get('amount'))).toBeLessThanOrEqual(ORDER_TOTAL_CENTS)
+    // And nothing recorded against the order claims a fee was recovered.
+    expect(order().dispute.reversedTransferCents).toBe(ORDER_TOTAL_CENTS)
+  })
+
   /** The wording the merchant reads — honest about which door and whose share. */
   it('stamps the timeline in words the merchant can read', async () => {
     happyStripe()
