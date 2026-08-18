@@ -84,7 +84,8 @@ commits while preserving the working tree.
 3. **AGL-1620** E2ETEST100 drill coupon expires **2026-08-21**.
 4. Ruling signature (`Platform Docs/Legal/TX_PRIVATE_LETTER_RULING_REQUEST_…md`); §151.0242 publisher
    certification text before the first real plugin sale.
-5. Webfile **RT974186** is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. Residual:
+5. The Webfile number is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. The value
+   is operator config (`TX_WEBFILE_NUMBER`), never source: see memory `reference_business_contact_details`. Residual:
    confirm on the next correspondence whether the *officer* mailing address got the RA swap (AGL-1812).
 6. AGL-1506/1573 need a drill API key only he can mint; AGL-1133 needs the 07-31 roster ratified.
 7. **AGL-1777** — `main`/`production` have NO branch protection. NX CI stays `disabled_manually`
