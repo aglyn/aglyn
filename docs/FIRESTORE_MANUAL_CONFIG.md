@@ -87,7 +87,9 @@ running the deploy, which is the one action that can destroy them.
 |---|---|---|
 | `rateLimits` | `expiresAt` | ephemeral rate-limit windows (AGL-794/795); expired windows should be reaped, not accumulate |
 | `mediaTombstones` | `expiresAt` | DAM undo records (AGL-1467). Each holds a deleted media document **verbatim** — alt text, description, tags, custom metadata, `visibleTo` scope tokens — plus the storage generations needed to restore it. Bounded to the bucket's **7-day soft-delete window**, because a tombstone that outlives the bytes it addresses can only ever produce a failed restore while still being a copy of customer data (the AGL-1443 shape). The subcollection sits under `hosts/{hostId}` and `orgs/{orgId}`, so an erasure takes it via `recursiveDelete` with no extra sweep. |
-| `cspViolationDaily` | `expiresAt` | Durable CSP-violation counters (AGL-1799) written by the console and tenant `/api/csp-report` collectors — one doc per (day × app × directive × disposition × blocked origin), never report bodies. 60-day retention (`CSP_AGGREGATE_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/csp-aggregate.ts`); the evidence AGL-1702/AGL-1726 gate their enforcing flips on. **TTL not yet enabled in gcloud as of 2026-08-17** — owed with the next index deploy. |
+| `cspViolationDaily` | `expiresAt` | Durable CSP-violation counters (AGL-1799) written by the console and tenant `/api/csp-report` collectors — one doc per (day × app × directive × disposition × blocked origin), never report bodies. 60-day retention (`CSP_AGGREGATE_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/csp-aggregate.ts`); the evidence AGL-1702/AGL-1726 gate their enforcing flips on. **TTL `ACTIVE`, re-verified 2026-08-18.** |
+| `analytics` | `expiresAt` | Per-day pageview/serve/redirect counters on hosts and orgs (AGL-1844). **400 days** (`ANALYTICS_DAY_RETENTION_DAYS` in `libs/tenant/data/admin/src/lib/server/analytics-retention.ts`) — wide enough for the console's 90-day range, a usage-metering dispute a year later, and a year-over-year comparison no surface renders yet. TTL `ACTIVE`. |
+| `screenAnalytics` | `expiresAt` | The same counters per screen, same 400 days, same policy. TTL `ACTIVE`. |
 
 Not TTL targets (deliberately): `apiKeys.expiresAt` (validity field — keep expired
 keys as records), `orgSlugs.movedTo` tombstones (intentional persistent
@@ -155,5 +157,5 @@ gcloud firestore databases describe --database='(default)' --project=aglyn-main 
 - Location `nam5` (US multi-region), Native mode, Pessimistic concurrency
 - Point-in-time recovery: **ENABLED** (7-day window)
 - Delete protection: **ENABLED** (AGL-872)
-- TTL policies: **`rateLimits.expiresAt`** (AGL-870), **`mediaTombstones.expiresAt`** (AGL-1467 — NOT YET APPLIED; the collection ships with this change)
+- TTL policies: **five, all `ACTIVE`** — `rateLimits` (AGL-870), `mediaTombstones` (AGL-1467), `cspViolationDaily` (AGL-1799), `analytics` and `screenAnalytics` (AGL-1844). Re-verified 2026-08-18 with `gcloud firestore fields ttls list --project=aglyn-main --database='(default)'`; the retention schedule they implement is [`docs/DATA_RETENTION.md`](DATA_RETENTION.md)
 - Backup schedules: **weekly (Sunday), 14-week retention** (AGL-871)
