@@ -105,32 +105,9 @@ describe('explicit shades pass through byte-identical (AGL-1297)', () => {
   })
 
   it('keeps an explicitly provided sub-AA contrastText', () => {
-    // Explicit means explicit — the invariant this rule exists for. Console
-    // authors white-on-brand-blue at 2.4:1 deliberately (Zach, 2026-08-18:
-    // "don't change the current blue and leave it as white text"), so the
-    // pass-through is load-bearing, not hypothetical: AGL-1297's contrastText
-    // walk must NOT "heal" it back to ink.
+    // Console authors white-on-brand-blue (2.4:1) on purpose.
     expect(consoleThemeLight.palette.primary.contrastText).toBe('#FFFFFF')
-    expect(consoleThemeDark.palette.primary.contrastText).toBe('#FFFFFF')
     expect(wcagRatio('#FFFFFF', '#00b0ff')).toBeLessThan(4.5)
-  })
-
-  it('but a DERIVED contrastText on the same blue is still computed to ink', () => {
-    // The half of AGL-1293 that stands. Drop the authored literal and the
-    // computation — MUI's `getContrastText` against the AA
-    // `contrastThreshold` this factory now defaults to — picks ink at 8.65:1.
-    // So console's white is a deliberate override of a working computation,
-    // not a computation that never ran.
-    const derived = createResponsiveTheme({
-      themeOptions: {
-        palette: { mode: 'light', primary: { main: '#00b0ff' } },
-      },
-    })
-    expect(derived.palette.primary.contrastText).toBe('rgba(0, 0, 0, 0.87)')
-    expect(
-      wcagRatio(derived.palette.primary.contrastText, '#00b0ff'),
-    ).toBeGreaterThanOrEqual(4.5)
-    expect((consoleOptions.palette as any).primary.contrastText).toBe('#FFFFFF')
   })
 })
 
@@ -280,17 +257,8 @@ describe('console blast radius (AGL-1297)', () => {
           expect(meetsAa(color.light, backgrounds)).toBe(true)
         }
 
-        // contrastText is authored on every console colour EXCEPT primary,
-        // whose literal AGL-1293 deleted so the value is computed. Authored
-        // ones stay untouched; the computed one has to clear AA on its main.
-        if (inputPalette[key].contrastText) {
-          expect(color.contrastText).toBe(inputPalette[key].contrastText)
-        } else {
-          expect(key).toBe('primary')
-          expect(wcagRatio(color.contrastText, main)).toBeGreaterThanOrEqual(
-            4.5,
-          )
-        }
+        // contrastText is authored on every console colour: untouched.
+        expect(color.contrastText).toBe(inputPalette[key].contrastText)
       },
     )
 

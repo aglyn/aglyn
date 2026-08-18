@@ -18,7 +18,6 @@
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
-import { accentTextColor } from './util/accent-text'
 import createResponsiveTheme, {
   createResponsiveCssVarTheme,
 } from './util/create-responsive-theme'
@@ -43,32 +42,6 @@ const colorScheme = {
     // component was already opting into is now `primary`, so nothing has to
     // opt out of a primary that was really a surface tone. Whole colour
     // objects moved, so each keeps the contrastText it shipped with.
-    // ⚠️ KNOWN, DELIBERATE ACCESSIBILITY EXCEPTION — do not "fix" this.
-    //
-    // AGL-1293 deleted this literal so MUI would compute it, and the computed
-    // answer is dark ink (8.65:1). That shipped, and it made every filled
-    // primary button in the product dark-on-blue. Shown that exact tradeoff —
-    // darken the brand blue, or keep it and accept sub-AA white — Zach chose,
-    // verbatim, 2026-08-18:
-    //
-    //   "don't change the current blue and leave it as white text"
-    //
-    // So `main` stays the brand `#00b0ff` and `contrastText` is authored back
-    // to white. The cost is stated, not hidden: white on `#00b0ff` measures
-    // **2.43:1**, which misses the 4.5:1 AA text bar and the 3:1 non-text bar
-    // alike. It is a business decision about the brand, taken with the number
-    // in hand.
-    //
-    // Scope: this pairing ONLY — `primary.contrastText` `#FFFFFF` on
-    // `#00b0ff`, i.e. the foreground of a FILLED primary surface. It is
-    // registered in `DOCUMENTED_CONTRAST_EXCEPTIONS` (`util/accent-text.ts`)
-    // keyed on all four of those values, so changing the blue, the white, or
-    // the slot reds the audit again instead of inheriting the waiver.
-    //
-    // Everything else AGL-1293 did stands. `primary.main` rendered AS TEXT is
-    // still wrong at 2.43:1 and still routes through `accentTextColor` →
-    // `primary.dark` (`#0077ad`); the AA `contrastThreshold` still governs
-    // every computed pairing, ours and every tenant-generated palette.
     primary: {
       main: '#00b0ff',
       contrastText: '#FFFFFF',
@@ -152,11 +125,6 @@ const colorScheme = {
     },
   },
   dark: {
-    // ⚠️ The same known exception as the light scheme — see that note for
-    // Zach's words and the measured 2.43:1. `#00b0ff` is the same brand blue
-    // in both schemes, so the decision and the number are identical; carrying
-    // it here too is what keeps a filled primary button from flipping ink
-    // when the user switches to dark.
     primary: {
       main: '#00b0ff',
       contrastText: '#FFFFFF',
@@ -276,27 +244,12 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        // AGL-1293. MUI's own variants set `--variant-textColor` and
-        // `--variant-outlinedColor` to `palette[color].main` — i.e. they
-        // paint the BRAND colour as normal-size text. For this palette that
-        // is `#00b0ff` at 2.43:1 on white. Both vars move to the computed
-        // accent-text shade; `--variant-outlinedBorder` and
-        // `--variant-containedBg` are left on `main`, because a border and a
-        // fill owe 3:1, not 4.5:1, and the brand colour is meant to be seen
-        // there.
-        root: ({ theme, ownerState }) => {
-          const accent = accentTextColor(theme, ownerState?.color)
-          return {
-            '&a[disabled], &.disabled': {
-              pointerEvents: 'none',
-              textDecoration: 'none',
-              filter: 'grayscale(1) opacity(0.65)',
-            },
-            ...(accent && {
-              '--variant-textColor': accent,
-              '--variant-outlinedColor': accent,
-            }),
-          }
+        root: {
+          '&a[disabled], &.disabled': {
+            pointerEvents: 'none',
+            textDecoration: 'none',
+            filter: 'grayscale(1) opacity(0.65)',
+          },
         },
       },
     },
@@ -330,43 +283,12 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        // AGL-1293. A Link is text by definition, so `color="primary"`
-        // resolving to `palette.primary.main` is always the wrong bar. Only
-        // the PaletteColor keys are rewritten — `inherit`, `textPrimary`,
-        // `textSecondary` and `textDisabled` return undefined from
-        // `accentTextColor` and keep MUI's resolution.
-        root: ({ theme, ownerState }) => {
-          const accent = accentTextColor(theme, ownerState?.color)
-          return {
-            '&[disabled], &.disabled': {
-              pointerEvents: 'none',
-              textDecoration: 'none',
-              filter: 'grayscale(1) opacity(0.65)',
-            },
-            ...(accent && { color: accent }),
-          }
-        },
-      },
-    },
-    // AGL-1293. `textColor="primary"` paints the SELECTED tab label
-    // `palette.primary.main`. The indicator underneath it keeps `main` — it
-    // is non-text and owes 3:1 — so the brand colour still reads as the
-    // selection cue.
-    MuiTab: {
-      styleOverrides: {
-        root: ({ theme, ownerState }) => {
-          // Brackets, not dots: `textColor` comes from an index signature and
-          // `json-editor` compiles this file under
-          // `noPropertyAccessFromIndexSignature` (paths resolve to source, so
-          // a consumer's flags check its dependencies). Dot access reds that
-          // build while this project's own stays green — AGL-1323, and the
-          // same trap create-responsive-theme.ts already carries a note for.
-          const textColor = ownerState?.['textColor']
-          const accent =
-            textColor === 'primary' || textColor === 'secondary'
-              ? accentTextColor(theme, textColor)
-              : undefined
-          return accent ? { '&.Mui-selected': { color: accent } } : {}
+        root: {
+          '&[disabled], &.disabled': {
+            pointerEvents: 'none',
+            textDecoration: 'none',
+            filter: 'grayscale(1) opacity(0.65)',
+          },
         },
       },
     },

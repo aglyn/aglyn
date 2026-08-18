@@ -37,24 +37,33 @@ export const ACCENT_TEXT_SHADE = 'dark' as const
 export const AA_NON_TEXT_CONTRAST = 3
 
 /**
- * The colour a palette entry should use when it is painted as FOREGROUND on
- * the page — the answer to "what does `color=\"primary\"` text resolve to".
+ * ⚠️ NOT WIRED TO ANYTHING, DELIBERATELY. This is a MEASUREMENT helper, not a
+ * rendering path.
+ *
+ * `c03a2d754` routed `MuiButton`'s `--variant-textColor` /
+ * `--variant-outlinedColor`, `MuiLink`'s `color` and `MuiTab`'s selected
+ * label through this function. That shipped, and it repainted Zach's brand
+ * blue: links and text/outlined button labels went `#00b0ff` → `#0077ad` in
+ * light and → `rgb(76, 199, 255)` in dark. Zach, 2026-08-18: **"You changed
+ * my theme colors, I told you deliberately not to do that."** Every one of
+ * those call sites is reverted; `#00b0ff` renders everywhere it rendered
+ * before.
+ *
+ * What survives here is the ability to ANSWER the question — "what would
+ * accent-coloured text resolve to if we ever decided to change it" — for a
+ * decision that is Zach's to make. Wiring it into a component override again
+ * is a visual change to the brand and needs him to ask for it.
  *
  * Returns a CSS variable reference (`var(--mui-palette-primary-dark)`) on a
- * CSS-vars theme and a literal on a single-mode theme, so the value flips
- * with the active colour scheme either way. Baking a literal here is the
- * AGL-1292 bug shape: `components` are evaluated ONCE against the root
- * theme, so a light-scheme hex would freeze into dark mode.
- *
- * `main` is NOT the answer. `primary.main` is the brand colour and is sized
- * for the 3:1 non-text bar (fills, borders, indicators); as normal-size text
- * the marketing/console `#00b0ff` measures 2.43:1 on white, which fails both
- * bars. This is the whole of AGL-1293.
+ * CSS-vars theme and a literal on a single-mode theme. If this is ever wired
+ * up, that matters: baking a literal is the AGL-1292 bug shape, because
+ * `components` are evaluated ONCE against the root theme, so a light-scheme
+ * hex would freeze into dark mode.
  *
  * @param theme the active MUI theme (CSS-vars or single-mode)
  * @param color a palette key — `'primary'`, `'error'`, … Anything without a
  *   PaletteColor shape (`'inherit'`, `'textPrimary'`, `undefined`) returns
- *   `undefined` so the caller leaves MUI's own resolution alone.
+ *   `undefined`.
  */
 export function accentTextColor(
   theme: Theme | undefined,
@@ -100,15 +109,20 @@ export type PaletteContrastViolation = {
 }
 
 /**
- * Pairings a human has knowingly signed off BELOW the bar.
+ * Pairings a human has knowingly SIGNED OFF below the bar — decided, not
+ * outstanding.
+ *
+ * The rest of what {@link auditPaletteContrast} reports is a FINDING: a
+ * measurement offered for a decision Zach owns, not a defect queued for
+ * repair. Nothing in this module changes a rendered colour.
  *
  * This is not a suppression list and it must not become one. Each entry pins
  * all four coordinates of one pairing — palette key, role, the exact
  * foreground and the exact background — so it waives a decision, not a slot.
  * Change the brand blue, change the white, or move the same white onto
- * `secondary`, and none of them match: the audit reds, which is the point.
- * A new entry needs a named person, a date, their words, and the measured
- * ratio, the same as this one.
+ * `secondary`, and none of them match: the audit reports it again, which is
+ * the point. A new entry needs a named person, a date, their words, and the
+ * measured ratio, the same as this one.
  */
 export const DOCUMENTED_CONTRAST_EXCEPTIONS: ReadonlyArray<{
   color: string
@@ -118,12 +132,16 @@ export const DOCUMENTED_CONTRAST_EXCEPTIONS: ReadonlyArray<{
   reason: string
 }> = [
   {
-    // AGL-1293. AGL-1293 computed this slot to dark ink (8.65:1) and that
+    // AGL-1293. `c03a2d754` computed this slot to dark ink (8.65:1) and that
     // shipped, turning every filled primary button dark-on-blue. Shown the
     // tradeoff — darken the brand, or keep it and accept sub-AA white — Zach
     // chose, verbatim, 2026-08-18: "don't change the current blue and leave
     // it as white text". White on `#00b0ff` is 2.43:1, below the 4.5:1 AA
     // text bar and below the 3:1 non-text bar. Accepted knowingly.
+    //
+    // This is the ONE decided pairing. Everything else the audit reports —
+    // the five other authored sub-AA `contrastText` literals, and `#00b0ff`
+    // as text — is a finding awaiting Zach, not a waiver.
     color: 'primary',
     role: 'contrastText',
     value: '#FFFFFF',
