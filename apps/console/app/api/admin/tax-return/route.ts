@@ -23,8 +23,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   asRowDate,
+  storefrontTaxSummary,
   taxPeriodRange,
   taxReturnSummary,
+  type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
 } from '../../../../utils/server/tx-return'
 
@@ -86,19 +88,30 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    const revenue = firebaseAdmin
-      .app()
-      .firestore()
-      .collection('platformRevenue')
-    const [inPeriod, undatedProbe] = await Promise.all([
-      revenue
-        .where('paidAt', '>=', range.start)
-        .where('paidAt', '<', range.end)
-        .limit(ROW_CAP + 1)
-        .get(),
-      // Rows a range query can never see — see the doc block.
-      revenue.where('paidAt', '==', null).limit(50).get(),
-    ])
+    const firestore = firebaseAdmin.app().firestore()
+    const revenue = firestore.collection('platformRevenue')
+    // Storefront commerce tax (AGL-1904): a SEPARATE collection, queried and
+    // reported separately, because a storefront row's money is mostly the
+    // merchant's while a `platformRevenue` row's is Aglyn's. Summing the two
+    // would put other companies' receipts into this return's total sales —
+    // which is why they never meet in one query.
+    const storefront = firestore.collection('storefrontTaxCollected')
+    const [inPeriod, undatedProbe, storefrontInPeriod, storefrontUndated] =
+      await Promise.all([
+        revenue
+          .where('paidAt', '>=', range.start)
+          .where('paidAt', '<', range.end)
+          .limit(ROW_CAP + 1)
+          .get(),
+        // Rows a range query can never see — see the doc block.
+        revenue.where('paidAt', '==', null).limit(50).get(),
+        storefront
+          .where('paidAt', '>=', range.start)
+          .where('paidAt', '<', range.end)
+          .limit(ROW_CAP + 1)
+          .get(),
+        storefront.where('paidAt', '==', null).limit(50).get(),
+      ])
     const truncated = inPeriod.size > ROW_CAP
     const docs = inPeriod.docs.slice(0, ROW_CAP)
     const rows: TaxReturnRowInput[] = docs.map((doc) => ({
@@ -107,10 +120,52 @@ async function handler(request: Request): Promise<Response> {
     }))
 
     const summary = taxReturnSummary(rows, range)
+    const storefrontDocs = storefrontInPeriod.docs.slice(0, ROW_CAP)
+    const storefrontRows: StorefrontTaxReturnRowInput[] = storefrontDocs.map(
+      (doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
+      }),
+    )
     return Response.json({
       period,
       summary,
       truncated,
+      /**
+       * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
+       * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe
+       * computed against Aglyn's own registrations and is money Aglyn holds;
+       * `merchantManual` is a merchant's own configured rate and is not
+       * Aglyn's to remit. A reader that adds them has made the mistake this
+       * shape exists to prevent.
+       */
+      storefront: {
+        summary: storefrontTaxSummary(storefrontRows, range),
+        truncated: storefrontInPeriod.size > ROW_CAP,
+        undatedRows: storefrontUndated.size,
+        rows: storefrontRows.map((row) => ({
+          id: row.id,
+          hostId: typeof row.hostId === 'string' ? row.hostId : null,
+          orgId: row.orgId ?? null,
+          paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
+          taxMode: typeof row.taxMode === 'string' ? row.taxMode : null,
+          taxLiability:
+            typeof row.taxLiability === 'string' ? row.taxLiability : null,
+          grossCents: Number(row.grossCents ?? 0),
+          taxCents: Number(row.taxCents ?? 0),
+          taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
+            .map((line) => Number(line?.taxableAmountCents ?? 0))
+            .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
+          state:
+            typeof row.customerAddress?.state === 'string'
+              ? row.customerAddress.state
+              : null,
+          country:
+            typeof row.customerAddress?.country === 'string'
+              ? row.customerAddress.country
+              : null,
+        })),
+      },
       /** Rows no period query can reach — must be zero before filing. */
       undatedRows: undatedProbe.size,
       rows: rows.map((row) => ({

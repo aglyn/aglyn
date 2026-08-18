@@ -268,3 +268,210 @@ export function taxReturnSummary(
 
   return summary
 }
+
+/* -------------------------------------------------------------------------
+ * Storefront commerce (AGL-1904)
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The second half of the return, and a DIFFERENT half.
+ *
+ * `taxReturnSummary` above sums Aglyn's own sales. A storefront sale is a
+ * merchant's sale — but on a `mode: 'stripe'` store the tax charged to the
+ * shopper is computed against AGLYN's registrations on a Checkout Session
+ * created on Aglyn's own platform account (measured, not inferred: with the
+ * platform unregistered and the destination connected account registered in
+ * Texas, Stripe answered `amount_tax: 0` / `not_collecting`; with the platform
+ * registered and nothing else changed, 8.25% / `standard_rated`; both sessions
+ * reported `automatic_tax.liability: { type: "self" }`). That tax lands in
+ * Aglyn's balance and was invisible to every figure above.
+ *
+ * ## THREE BUCKETS, AND THEY MUST NEVER BE SUMMED
+ *
+ * There is deliberately no grand total on this summary, and adding one would
+ * be the bug — the three are answers to three different questions:
+ *
+ *   - **`aglynLiable`** — Stripe Tax computed it against Aglyn's own
+ *     registrations (`taxMode: 'stripe-automatic'`,
+ *     `taxLiability: 'platform'`). This is money Aglyn is holding.
+ *   - **`merchantManual`** — the merchant's own configured rate, added as an
+ *     ordinary line item Stripe is never told is tax. Aglyn's registrations
+ *     played no part; it is not Aglyn's to remit, and counting it here would
+ *     have Aglyn filing and paying another company's tax.
+ *   - **`connectedAccountLiable`** — Stripe Tax that named a CONNECTED
+ *     account as the liable party. None exists today (no storefront path sets
+ *     `on_behalf_of`), and the bucket is here so that if one ever does, the
+ *     money moves out of `aglynLiable` visibly rather than silently.
+ *
+ * The classification comes from the stored `taxMode` / `taxLiability`, which
+ * `storefront-tax.ts` derives from `automatic_tax.enabled` and never from the
+ * presence of tax lines — a manual-mode subscription renewal carries genuine
+ * Stripe Tax Rates (AGL-1751) and is otherwise indistinguishable.
+ *
+ * **This says nothing about marketplace-facilitator status.** It reports which
+ * registration computed which tax and where the money is. Which line of a
+ * filed return each bucket belongs on is a question for the preparer and for
+ * counsel, and this module deliberately declines to answer it — which is
+ * exactly why there is no merged total to mistake for one.
+ *
+ * Rows that cannot be classified or read are counted in `attention`, never
+ * dropped and never zeroed.
+ *
+ * Pure and total, like everything above it.
+ */
+
+/** The subset of a `storefrontTaxCollected/{stripeId}` row this reads. */
+export interface StorefrontTaxReturnRowInput {
+  id: string
+  hostId?: unknown
+  orgId?: string | null
+  taxMode?: unknown
+  taxLiability?: unknown
+  grossCents?: unknown
+  taxCents?: unknown
+  currency?: unknown
+  customerAddress?: {
+    country?: unknown
+    state?: unknown
+  } | null
+  taxLines?: Array<{
+    amountCents?: unknown
+    taxableAmountCents?: unknown
+  }> | null
+  paidAt?: unknown
+}
+
+export interface StorefrontTaxBucket {
+  transactionCount: number
+  /** What shoppers paid, tax included. NOT Aglyn's revenue. */
+  grossCents: number
+  /** Stripe's `taxable_amount` summed; 0 for buckets that state no base. */
+  taxableSalesCents: number
+  taxCollectedCents: number
+  /** Keyed `COUNTRY-STATE`, or `unknown`. */
+  byJurisdiction: Record<string, TaxReturnJurisdiction>
+}
+
+export interface StorefrontTaxSummary {
+  periodStart: string
+  periodEnd: string
+  transactionCount: number
+  /** Tax computed against AGLYN's registrations. See the module note. */
+  aglynLiable: StorefrontTaxBucket
+  /** The merchant's own configured tax. Never Aglyn's to remit. */
+  merchantManual: StorefrontTaxBucket
+  /** Stripe Tax that named a connected account liable. Empty today. */
+  connectedAccountLiable: StorefrontTaxBucket
+  attention: {
+    /** Tax collected but no line states its base — see the module note. */
+    rowsMissingTaxableBase: number
+    rowsMissingAddress: number
+    nonUsdRows: number
+    rowsMissingPaidAt: number
+    /** A `taxMode` this code does not recognise — never silently bucketed. */
+    rowsUnclassified: number
+  }
+}
+
+function emptyBucket(): StorefrontTaxBucket {
+  return {
+    transactionCount: 0,
+    grossCents: 0,
+    taxableSalesCents: 0,
+    taxCollectedCents: 0,
+    byJurisdiction: {},
+  }
+}
+
+/** The storefront figures from one period's rows. See the module note. */
+export function storefrontTaxSummary(
+  rows: readonly StorefrontTaxReturnRowInput[],
+  period: { start: Date; end: Date },
+): StorefrontTaxSummary {
+  const summary: StorefrontTaxSummary = {
+    periodStart: period.start.toISOString(),
+    periodEnd: period.end.toISOString(),
+    transactionCount: 0,
+    aglynLiable: emptyBucket(),
+    merchantManual: emptyBucket(),
+    connectedAccountLiable: emptyBucket(),
+    attention: {
+      rowsMissingTaxableBase: 0,
+      rowsMissingAddress: 0,
+      nonUsdRows: 0,
+      rowsMissingPaidAt: 0,
+      rowsUnclassified: 0,
+    },
+  }
+
+  for (const row of rows ?? []) {
+    const gross = cents(row.grossCents)
+    const tax = cents(row.taxCents)
+    const lines = Array.isArray(row.taxLines) ? row.taxLines : []
+    const statedBases = lines
+      .map((line) => line?.taxableAmountCents)
+      .filter(
+        (base): base is number =>
+          base !== null && base !== undefined && Number.isFinite(Number(base)),
+      )
+    const taxableBase = statedBases.reduce(
+      (sum, base) => sum + Math.round(Number(base)),
+      0,
+    )
+
+    const country = row.customerAddress?.country
+    const state = row.customerAddress?.state
+    const jurisdiction =
+      typeof country === 'string' && country
+        ? `${country}${typeof state === 'string' && state ? `-${state}` : ''}`
+        : 'unknown'
+    if (jurisdiction === 'unknown') summary.attention.rowsMissingAddress += 1
+    if (String(row.currency ?? 'usd').toLowerCase() !== 'usd') {
+      summary.attention.nonUsdRows += 1
+    }
+    if (!asRowDate(row.paidAt)) summary.attention.rowsMissingPaidAt += 1
+    // A taxed row that cannot state the base the rate was applied to. Counted
+    // for EVERY bucket, because "we collected $8.25 and cannot say on what"
+    // is the same defect whoever the money belongs to.
+    if (tax > 0 && statedBases.length === 0) {
+      summary.attention.rowsMissingTaxableBase += 1
+    }
+
+    // The bucket is chosen from the STORED classification, and an unfamiliar
+    // one falls through to `rowsUnclassified` rather than defaulting into a
+    // bucket — a default here would put a merchant's tax on Aglyn's return, or
+    // Aglyn's tax nowhere, and neither is allowed to happen quietly.
+    const mode = String(row.taxMode ?? '')
+    const liability = String(row.taxLiability ?? '')
+    const bucket =
+      mode === 'stripe-automatic' && liability === 'connected-account'
+        ? summary.connectedAccountLiable
+        : mode === 'stripe-automatic'
+          ? summary.aglynLiable
+          : mode === 'manual'
+            ? summary.merchantManual
+            : null
+    if (!bucket) {
+      summary.attention.rowsUnclassified += 1
+      continue
+    }
+
+    summary.transactionCount += 1
+    bucket.transactionCount += 1
+    bucket.grossCents += gross
+    bucket.taxableSalesCents += taxableBase
+    bucket.taxCollectedCents += tax
+    const jurisdictionBucket = (bucket.byJurisdiction[jurisdiction] ??= {
+      transactionCount: 0,
+      totalSalesCents: 0,
+      taxableSalesCents: 0,
+      taxCollectedCents: 0,
+    })
+    jurisdictionBucket.transactionCount += 1
+    jurisdictionBucket.totalSalesCents += gross - tax
+    jurisdictionBucket.taxableSalesCents += taxableBase
+    jurisdictionBucket.taxCollectedCents += tax
+  }
+
+  return summary
+}
