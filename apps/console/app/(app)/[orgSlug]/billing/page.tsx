@@ -1180,6 +1180,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           orgId={orgId ?? ''}
           subscriptionActive={subscriptionActive}
           impact={funnelImpact}
+          currentPlan={org?.plan as OrgPlan | undefined}
           onClose={() => setFunnelOpen(false)}
           onDownsell={handleFunnelDownsell}
           onLeave={handleFunnelLeave}

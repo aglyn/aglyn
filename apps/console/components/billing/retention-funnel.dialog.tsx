@@ -17,6 +17,7 @@
 'use client'
 
 import { PLAN_LABELS, type OrgPlan } from '@aglyn/aglyn'
+import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -81,6 +82,13 @@ export interface RetentionFunnelDialogProps {
    * without moving the warning would have quietly dropped it.
    */
   impact?: string[]
+  /**
+   * The plan being left. GA-only: it is what turns "someone churned" into
+   * "churn at THIS tier", which is the breakdown that decides whether the
+   * funnel is working. Never sent to the retention route — the server reads
+   * the plan from the org document rather than trusting the client for it.
+   */
+  currentPlan?: OrgPlan | null
   onClose(): void
   /**
    * Accept the downsell. The caller performs the plan switch — which is a
@@ -122,6 +130,7 @@ export function RetentionFunnelDialog({
   orgId,
   subscriptionActive = false,
   impact = [],
+  currentPlan = null,
   onClose,
   onDownsell,
   onLeave,
@@ -185,6 +194,16 @@ export function RetentionFunnelDialog({
       // records itself as funnel-skipped, which is the honest answer.
       const id = ok && typeof payload?.funnelId === 'string' ? payload.funnelId : null
       setFunnelId(id)
+      // The funnel's DENOMINATOR (AGL-1859). Fired on the answer, not on the
+      // dialog opening: an abandoned dialog is not a survey, and counting it
+      // as one would deflate every downstream rate. The closed `reason` goes
+      // to GA; the free-text `detail` deliberately does not — it is customer
+      // prose, and it belongs in Firestore where the data loop reads it.
+      trackEvent('churn_survey_submitted', {
+        reason,
+        surface,
+        ...(currentPlan ? { plan: currentPlan } : {}),
+      })
       const target = ok ? (payload?.downsellPlan as OrgPlan | null) : null
       setDownsellPlan(target)
       if (ok && payload?.winbackAvailable) {
@@ -200,18 +219,28 @@ export function RetentionFunnelDialog({
     } finally {
       setBusy(false)
     }
-  }, [reason, detail, surface, subscriptionActive, retentionRequest])
+  }, [reason, detail, surface, subscriptionActive, retentionRequest, currentPlan])
 
   const acceptDownsell = useCallback(async () => {
     if (!downsellPlan) return
     setBusy(true)
     try {
       const retained = await onDownsell(downsellPlan)
-      if (retained) onClose()
+      // Only on a switch that actually happened — `onDownsell` resolves false
+      // when the plan change failed, and reporting a save that did not occur
+      // would credit the funnel with a customer who is still leaving.
+      if (retained) {
+        trackEvent('downsell_accepted', {
+          from_plan: currentPlan ?? 'unknown',
+          to_plan: downsellPlan,
+          surface,
+        })
+        onClose()
+      }
     } finally {
       setBusy(false)
     }
-  }, [downsellPlan, onDownsell, onClose])
+  }, [downsellPlan, onDownsell, onClose, surface, currentPlan])
 
   const acceptWinback = useCallback(async () => {
     setBusy(true)
@@ -221,6 +250,16 @@ export function RetentionFunnelDialog({
         ...(funnelId ? { funnelId } : {}),
       })
       if (ok) {
+        // The SERVER's numbers, not the constants this component could have
+        // read: what was actually minted is the only honest answer, and the
+        // margin question ("what did this save cost?") is answered wrong by
+        // anything else.
+        trackEvent('winback_discount_accepted', {
+          percent_off: Number(payload?.percentOff),
+          duration_months: Number(payload?.durationMonths),
+          surface,
+          ...(currentPlan ? { plan: currentPlan } : {}),
+        })
         enqueueSnackbar(
           `Discount applied — ${payload?.percentOff}% off for the next ` +
             `${payload?.durationMonths} months.`,
@@ -240,17 +279,27 @@ export function RetentionFunnelDialog({
     } finally {
       setBusy(false)
     }
-  }, [retentionRequest, funnelId, enqueueSnackbar, onClose])
+  }, [retentionRequest, funnelId, enqueueSnackbar, onClose, surface, currentPlan])
 
   const leave = useCallback(async () => {
     setBusy(true)
     try {
       await onLeave(funnelId)
+      // The NUMERATOR. `funnel_completed` mirrors the inverse of the
+      // `funnelSkipped` marker the routes write, so the GA funnel and the
+      // Firestore record cannot disagree about how many departures were ever
+      // surveyed. It is true here whenever a funnelId survived the survey —
+      // a failed survey leaves it null and this reports the skip honestly.
+      trackEvent('cancellation_completed', {
+        surface,
+        funnel_completed: Boolean(funnelId),
+        ...(currentPlan ? { plan: currentPlan } : {}),
+      })
       onClose()
     } finally {
       setBusy(false)
     }
-  }, [onLeave, funnelId, onClose])
+  }, [onLeave, funnelId, onClose, surface, currentPlan])
 
   /** Past the offers, to the exit. */
   const skipToNext = useCallback(() => {

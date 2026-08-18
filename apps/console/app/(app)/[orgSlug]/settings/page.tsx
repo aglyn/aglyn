@@ -935,6 +935,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             orgReady &&
             isLiveSubscriptionStatus((org as any)?.subscription?.status)
           }
+          currentPlan={org?.plan as OrgPlan | undefined}
           onClose={() => setDeleteFunnelOpen(false)}
           onDownsell={handleDeleteDownsell}
           onLeave={handleDeleteLeave}
