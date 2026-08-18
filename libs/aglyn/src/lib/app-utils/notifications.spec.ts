@@ -29,10 +29,23 @@ describe('notification categories (AGL-267)', () => {
     expect(notificationCategory('nonsense.thing')).toBe('system')
   })
 
-  it('labels every type — an unlabelled one renders as a raw key', () => {
+  // NOTE (AGL-1964): this used to be called "labels every type", which it
+  // cannot check and never did. A union type is not enumerable at runtime, so
+  // iterating `Object.keys(labels)` walks the labels map against ITSELF — add
+  // a new `AglynNotificationType` with no label and this stays green. Proved
+  // by deleting one: jest passed, and `tsc` failed with TS2741.
+  //
+  // Completeness is enforced by `Record<AglynNotificationType, string>` on the
+  // declaration, i.e. by the compiler, and that is the real guard. What is
+  // left here is worth keeping but is a smaller claim, so it now says so: no
+  // label may be an empty string, which the type would happily allow and which
+  // would render as a blank row.
+  it('has no empty label — the type only guarantees a string', () => {
     const labels = NOTIFICATION_TYPE_LABELS as Record<string, string>
-    for (const type of Object.keys(labels)) {
-      expect(labels[type]).toBeTruthy()
+    const entries = Object.entries(labels)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const [type, label] of entries) {
+      expect(`${type}:${label}`).not.toMatch(/:$/)
     }
   })
 })
