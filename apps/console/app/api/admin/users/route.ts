@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  collapseCrossPoolUidRows,
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
   firebaseAdmin,
@@ -77,9 +78,11 @@ async function handler(request: Request): Promise<Response> {
       /**
        * Other pools holding this same uid (AGL-1962) — present only when
        * something minted a custom token across pools and Firebase created an
-       * empty shadow account rather than refusing. Sent through so the row
-       * can say so: both records are real, neither is deduplicated, and the
-       * shadow is the one that wins every uid lookup.
+       * empty shadow account rather than refusing.
+       *
+       * Since AGL-2005 those rows are merged, so on a listed row this names
+       * the pools that were folded INTO it. It is what stops the merge being
+       * a cover-up: one row per human, and the row still says it was two.
        */
       uidAlsoInPools: uidAlsoInPools ?? null,
     })
@@ -97,8 +100,15 @@ async function handler(request: Request): Promise<Response> {
         ? query.nextPageToken
         : undefined
     const page = await listUsersAcrossPools(200, pageToken)
+    // One row per human (AGL-2005). `listUsersAcrossPools` stays the honest
+    // primitive and returns every auth record; the collapse happens here, at
+    // the display, where Zach's "we should only see one user, even if they
+    // are sso" applies. It merges on uid alone — two distinct accounts that
+    // share an email are two people and stay two rows — and the survivor is
+    // the identified record, never the emailless twin.
+    const rows = collapseCrossPoolUidRows(page.users)
     return Response.json({
-      users: page.users.map(serialize),
+      users: rows.map(serialize),
       nextPageToken: page.nextPageToken,
       tenantsIncluded: page.tenantsIncluded,
       // Never silently truncate: a tenant whose pool outgrew the cap is named

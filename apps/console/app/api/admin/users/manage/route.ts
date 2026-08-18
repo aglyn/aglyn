@@ -277,7 +277,17 @@ async function handler(request: Request): Promise<Response> {
       // signed in with the OLD password keeps working. Revoking is the
       // difference between "changed the password" and "took back the
       // account" — which is the point of the action.
-      await auth.revokeRefreshTokens(uid)
+      //
+      // `targetAuth`, not `auth` (AGL-2005). `auth` is the PROJECT pool — it
+      // is the right receiver for verifying the CALLER's token above and the
+      // wrong one for touching the target, whose uid may only exist inside a
+      // GCIP tenant. The password landed in the tenant pool one line up while
+      // the revocation went to the project pool, so for an SSO account the
+      // credential changed and every existing session stayed valid: the exact
+      // half-done state this call exists to prevent. Not hypothetical — the
+      // AGL-1962 audit found a `tokensValidAfterTime` of 2026-08-14 sitting on
+      // the forged project-pool twin while the real account's never moved.
+      await targetAuth.revokeRefreshTokens(uid)
       const notified = await sendPasswordChangedNotice({
         email: target.email,
         origin,

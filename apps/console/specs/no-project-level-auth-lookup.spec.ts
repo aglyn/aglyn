@@ -75,8 +75,22 @@ function* sourceFiles(dir: string): Generator<string> {
  * legitimate pool-scoped calls that live there, like `sso-enforcement.ts`
  * calling `pool.listUsers`.
  */
+/**
+ * `apps/tenant` is walked too (AGL-2005). It was not, and it held a live one:
+ * `api/edit-access/exchange` called project-level `getUser(claims.uid)`, so
+ * every SSO user was refused edit access with "No edit access" — a message
+ * that reads as a permission decision rather than a lookup that never
+ * happened. It survived because the forged project-pool twin AGL-1962
+ * describes answered the call; deleting that twin re-exposed it.
+ *
+ * The lesson is about the guard, not the route. A guard is only as wide as
+ * its roots, and this one passed for months while an app it never opened
+ * carried the exact bug it exists to find. Any new app serving authenticated
+ * routes belongs on this list.
+ */
 const ROOTS = [
   join(__dirname, '..', 'app'),
+  join(__dirname, '..', '..', 'tenant', 'app'),
   join(__dirname, '..', '..', '..', 'libs'),
 ]
 
@@ -90,7 +104,7 @@ const ROOTS = [
 const EXEMPT = /auth-pools\.ts$/
 
 describe('project-level auth lookups (AGL-1122)', () => {
-  it('are not used anywhere in the console or libs', () => {
+  it('are not used anywhere in the console, the tenant app, or libs', () => {
     const offenders: string[] = []
     for (const file of ROOTS.flatMap((root) => [...sourceFiles(root)])) {
       if (EXEMPT.test(file)) continue

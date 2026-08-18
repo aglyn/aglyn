@@ -37,6 +37,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -71,8 +72,12 @@ interface AdminUser {
    * Other pools holding this same uid (AGL-1962). A uid is unique only
    * WITHIN a pool, so this is never normal — it means a custom token was
    * minted for one pool's uid against another, and `signInWithCustomToken`
-   * created an empty shadow account instead of refusing. Both rows are real
-   * records and neither is deduplicated away; the row says which is which.
+   * created an empty shadow account instead of refusing.
+   *
+   * Those rows arrive merged (AGL-2005), so on a row this names the pools
+   * folded into it — the record shown is the identified one. Kept visible
+   * because a merge that says nothing is indistinguishable from a duplicate
+   * being quietly dropped.
    */
   uidAlsoInPools?: (string | null)[] | null
 }
@@ -350,21 +355,35 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                             sx={{ ml: 1 }}
                           />
                         ) : null}
-                        {/* Two rows, one uid, two pools (AGL-1962). They are
-                            NOT merged: both records exist in Firebase, and
-                            the project-pool copy is the one that wins every
-                            uid lookup, so hiding it would hide the bug. Name
-                            the other pool so staff can tell which row is the
-                            real account and which is the shadow. */}
+                        {/* One uid, more than one pool. The rows are merged
+                            now (AGL-2005) — Zach asked to see one user, not
+                            two — but merged is not the same as hidden, so the
+                            surviving row says what was folded into it and
+                            which pools those records are in. Without this the
+                            fix would be a cover-up: a genuine duplicate would
+                            vanish from the console with nothing to notice. */}
                         {record.uidAlsoInPools?.length ? (
-                          <Chip
-                            size="small"
-                            color="warning"
-                            label={`same uid in ${record.uidAlsoInPools
-                              .map(poolLabel)
-                              .join(', ')}`}
-                            sx={{ ml: 1 }}
-                          />
+                          <Tooltip
+                            title={
+                              `This uid also exists in ${record.uidAlsoInPools
+                                .map(poolLabel)
+                                .join(', ')}. A uid is unique only WITHIN a ` +
+                              'pool, so a second copy is not a second person — ' +
+                              'it is an account minted by a cross-pool custom ' +
+                              'token. The row shown is the record that ' +
+                              'identifies the person, and it is the one every ' +
+                              'action here targets.'
+                            }
+                          >
+                            <Chip
+                              size="small"
+                              color="warning"
+                              label={`merged · also in ${record.uidAlsoInPools
+                                .map(poolLabel)
+                                .join(', ')}`}
+                              sx={{ ml: 1 }}
+                            />
+                          </Tooltip>
                         ) : null}
                       </TableCell>
                       <TableCell>

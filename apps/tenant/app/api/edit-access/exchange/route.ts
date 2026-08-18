@@ -18,6 +18,7 @@
 import {
   EDIT_HINT_COOKIE,
   editAccessMintRefusal,
+  findUserByUidAcrossPools,
   firebaseAdmin,
   mintEditAccessToken,
   verifyEditHintToken,
@@ -91,11 +92,22 @@ export async function POST(request: Request): Promise<Response> {
     // checkable thing a week-long cookie is bound to.
     let userEmail: string | undefined
     try {
-      const user = await firebaseAdmin.app().auth().getUser(claims.uid)
-      if (user.disabled) {
+      // Across pools (AGL-2005). A project-level `getUser` THROWS for anyone
+      // who signs in through SSO — their uid lives in their org's GCIP tenant
+      // — so this denied edit access to exactly the enterprise customers the
+      // feature is sold to, and denied it as "No edit access", which reads
+      // like a permission decision rather than a lookup that never happened.
+      //
+      // It was masked until today: the forged project-pool twin AGL-1962
+      // describes answered this call and was not disabled, so the route
+      // passed. Deleting the twin re-exposed the real bug, and the guard that
+      // should have caught it does not walk `apps/tenant` — widened with this
+      // change.
+      const found = await findUserByUidAcrossPools(claims.uid)
+      if (!found || found.record.disabled) {
         return Response.json({ error: 'No edit access' }, { status: 403 })
       }
-      userEmail = user.email ?? undefined
+      userEmail = found.record.email ?? undefined
     } catch {
       return Response.json({ error: 'No edit access' }, { status: 403 })
     }

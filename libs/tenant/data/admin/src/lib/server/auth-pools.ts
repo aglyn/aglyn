@@ -58,12 +58,110 @@ export interface PooledUserRecord {
    * project pool and `aglyn-org-y5v14`, the project copy created by
    * `/api/presence/token` minting an SSO user's tenant uid at project level.
    *
-   * These are NOT deduplicated. Both records genuinely exist in Firebase, and
-   * collapsing them would hide the shadow — which outranks its twin in every
-   * `findUserByUidAcrossPools` caller, since that helper checks the project
-   * pool first. Staff need to see it to delete it.
+   * This is the marker, not a deletion: `listUsersAcrossPools` still returns
+   * every record, and `collapseCrossPoolUidRows` — which is what a display
+   * uses — keeps this field on the row it keeps, so a collision is still
+   * legible after the rows are merged (AGL-2005).
    */
   uidAlsoInPools?: (string | null)[]
+}
+
+/**
+ * Does this record show that a human ever authenticated as it? (AGL-2005)
+ *
+ * An address or a provider entry is the evidence. `signInWithCustomToken`
+ * mints an account out of nothing when the uid is absent from the pool the
+ * token was minted in, and the record it manufactures has neither: measured
+ * on production, the `IHumyGGhGxZKjVV26qCRx5Okf573` project-pool twin had
+ * `email: null` and `providerData: []` while the real SSO record carried
+ * `zach@aglyn.com` and `saml.aglyn-workspace`.
+ *
+ * `displayName` and custom claims deliberately do NOT count. Both can be
+ * written onto any record after the fact — `updateProfile` and `grantStaff`
+ * in the staff console do exactly that — so a shadow that a staff action had
+ * already landed on would start qualifying as an identity and go on winning
+ * the lookups it should be losing. The bar has to be a signal the forgery
+ * cannot acquire by being acted upon.
+ */
+export function isIdentifiedUserRecord(record: UserRecord): boolean {
+  if (!record) return false
+  return Boolean(record.email) || (record.providerData?.length ?? 0) > 0
+}
+
+/**
+ * How strongly a record identifies its human, for choosing between two that
+ * share a uid (AGL-2005). Ordering only — the numbers have no other meaning.
+ *
+ * Email and provider data lead because they are what `isIdentifiedUserRecord`
+ * trusts; the rest break ties between records that both qualify.
+ */
+export function identityStrength(record: UserRecord): number {
+  if (!record) return 0
+  let score = 0
+  if (record.email) score += 8
+  if ((record.providerData?.length ?? 0) > 0) score += 4
+  if (record.phoneNumber) score += 2
+  if (record.displayName) score += 1
+  if (Object.keys(record.customClaims ?? {}).length > 0) score += 1
+  return score
+}
+
+/**
+ * Collapse rows sharing a uid to ONE row apiece (AGL-2005).
+ *
+ * **Zach, 2026-08-18:** "We still have two users list in this list with the
+ * same uid but one without an email attached, this needs fixed we should only
+ * see one user, even if they are sso."
+ *
+ * AGL-1962 deliberately refused to merge, on the grounds that collapsing two
+ * accounts could hide an identity split. That reasoning still stands for two
+ * DISTINCT accounts — which is why this keys on **uid** and never on email.
+ * Two people who happen to share an address are two accounts with two uids
+ * and stay two rows; merging them on email would delete a real user from the
+ * staff console, a worse bug than the one being fixed and an invisible one.
+ *
+ * A repeated uid is different in kind: a uid is unique WITHIN a pool, so the
+ * same uid in two pools is not two people, it is one person plus an artifact
+ * of a cross-pool custom-token mint. Those merge.
+ *
+ * Two rules make the merge safe:
+ *
+ *  - **The identified record wins.** Ranked by `identityStrength`, so an
+ *    emailless, providerless artifact can never be the row staff see — the
+ *    exact inversion that let the shadow win every uid lookup.
+ *  - **The collision is not discarded.** `markCrossPoolUidCollisions` runs
+ *    here rather than being left to the caller, so the surviving row always
+ *    carries `uidAlsoInPools` naming the pools that were folded into it. One
+ *    row, and it still says it was two.
+ *
+ * The survivor takes the FIRST occurrence's position so list ordering does
+ * not shuffle, and ties keep the earlier row so the result is deterministic.
+ */
+export function collapseCrossPoolUidRows(
+  users: PooledUserRecord[],
+): PooledUserRecord[] {
+  // Marked here, not by the caller. A caller that forgot would silently turn
+  // this into the cover-up the merge is explicitly not allowed to be.
+  const marked = markCrossPoolUidCollisions(users)
+  const winnerByUid = new Map<string, PooledUserRecord>()
+  for (const user of marked) {
+    const incumbent = winnerByUid.get(user.record.uid)
+    if (
+      !incumbent ||
+      identityStrength(user.record) > identityStrength(incumbent.record)
+    ) {
+      winnerByUid.set(user.record.uid, user)
+    }
+  }
+  const emitted = new Set<string>()
+  const collapsed: PooledUserRecord[] = []
+  for (const user of marked) {
+    const uid = user.record.uid
+    if (emitted.has(uid)) continue
+    emitted.add(uid)
+    collapsed.push(winnerByUid.get(uid) ?? user)
+  }
+  return collapsed
 }
 
 /**
@@ -168,24 +266,57 @@ export async function findUserByEmailAcrossPools(
  * Find a user by uid across the project pool and every GCIP tenant. Same
  * shape as the email lookup — a uid is only unique WITHIN a pool, so the
  * caller needs to know which pool answered before it mutates anything.
+ *
+ * **First pool to answer is NOT good enough** (AGL-2005). This used to return
+ * the project pool's record the moment it existed, which is how a forged
+ * emailless twin won every uid lookup for a real SSO user: `grantStaff`,
+ * `disable`, `setRole`, `updateProfile`, `revokeRefreshTokens`, impersonate,
+ * usage-email, resolve-people, org-lockdown and erasure all landed on a
+ * record nobody can sign in as. Two of those were caught having happened —
+ * a `revokeRefreshTokens` dated 2026-08-14 sat on the twin while the real
+ * account's `tokensValidAfterTime` never moved, so "sign out everywhere" did
+ * nothing at all.
+ *
+ * So a pool's answer is accepted only when the record it returns actually
+ * identifies someone, and the winner is chosen by the SAME rule the staff
+ * list collapses rows with. That equivalence is the point: the row staff
+ * click is the record the action mutates, by construction rather than by
+ * coincidence.
+ *
+ * The fast path survives intact — a project account with an address or a
+ * provider is returned without any tenant call, which is nearly every
+ * account. Only a record carrying no identity at all pays for the sweep.
  */
 export async function findUserByUidAcrossPools(
   uid: string,
 ): Promise<PooledUserRecord | null> {
   if (!uid) return null
+  const matches: PooledUserRecord[] = []
   try {
-    return { record: await auth().getUser(uid), tenantId: null }
+    const record = await auth().getUser(uid)
+    if (isIdentifiedUserRecord(record)) return { record, tenantId: null }
+    // Held, not returned. It is still the answer if nothing better exists —
+    // an anonymous or half-created account legitimately looks like this, and
+    // refusing it here would break every caller that handles those.
+    matches.push({ record, tenantId: null })
   } catch {
     // Not in the project pool.
   }
   for (const tenantId of await listAuthTenantIds()) {
     try {
-      return { record: await authForPool(tenantId).getUser(uid), tenantId }
+      const record = await authForPool(tenantId).getUser(uid)
+      matches.push({ record, tenantId })
+      // Stop at the first pool that knows who this is. Scanning the rest
+      // would cost a call per enterprise tenant on a path that runs during
+      // sign-in and billing, and a uid identified in two tenant pools is not
+      // a shape Firebase can produce — tenant uids are minted per pool.
+      if (isIdentifiedUserRecord(record)) break
     } catch {
       // Keep looking.
     }
   }
-  return null
+  if (!matches.length) return null
+  return collapseCrossPoolUidRows(matches)[0] ?? null
 }
 
 export interface PooledUserPage {
