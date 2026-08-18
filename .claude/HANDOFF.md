@@ -1,89 +1,111 @@
-# HANDOFF — 2026-08-15 (post-promotion, batch-5)
+# HANDOFF — 2026-08-18 (the /release push, wave 1–3)
 
-## ✅ READ FIRST — TWO PROMOTIONS TODAY, BOTH VERIFIED DEPLOYED
+## ✅ READ FIRST
 
-**Production: `6f5c8b52e`** — PR **#853**, direct from `main`, **18 commits**, gated at `051450a2f`,
-merged (not squashed), drift **zero** at PR-create and merge. Before it, PR **#852** (61 commits,
-gated at `57192ff30`, drift zero) landed `85ffedddc`. Both verified Ready on Vercel and probed live
-(the cancel route answers 401 = exists + refuses unauthenticated).
+`main` is at **`3d87e0817`**, everything pushed, tree essentially clean. `origin/production` trails
+main by the night's work — **no promotion has run yet this session**. Rules / indexes / TTL drift are
+all **zero** (checked this session): live matches HEAD on firestore, storage and RTDB; 43 composite +
+19 field overrides match. `check:legal-drift` still reports **8 DIFFERS** — that is the Google-Docs
+side being stale (AGL-1647), not a live-page defect.
 
-**Rules deployed** from `932559b60` (AGL-1795 narrowing — staff client writes to
-`plan`/`entitlements`/`releaseFlags` denied on BOTH staff branches; the org-override route is the only
-writer). **Indexes deployed** from `85ffedddc`: four collection-group overrides
-(`bookings.startsAtMs`, `checkouts.status`, `restockAlerts.notifiedAtMs`, `orders.paymentIntentId`)
-all READY — abandoned-cart recovery, restock email and booking reminders run in production for the
-first time ever. The deploy no longer deletes the live TTL policies (AGL-1801 fixed the file first).
+## ⚑ ZACH PRE-AUTHORIZED BATCH PROMOTIONS FOR THIS PUSH
 
-## 🎯 TEXAS TAX IS LAUNCH-READY (verified, not assumed)
+Asked and answered 2026-08-17: gate each batch in the pinned worktree, open the main→production PR,
+real-merge, verify DEPLOYED, run stacked deploys from the promoted SHA, report evidence after.
+**Scoped to the Sept-1 release push only** — the default (`no-auto-production-pr`) resumes after
+launch. Every other promotion rule still binds: gate first, batch, never squash, verify deployed.
 
-- Comptroller registration filed 08/14 (DLN 26226940010); **first taxable sales date 2026-09-01**.
-  Sales & Use account EXISTS but was never linked to eSystems — assign flow needs the **Webfile RT
-  number** from the mailed notice (Zach owed; or call 800-442-3453).
-- **Stripe: TX registration `taxreg_1U5FqBDYHP4psn7hdEihD9lK` active.** Account default tax code is
-  `txcd_10103001` (SaaS). Live calculation verified the **80% data-processing base**: $100 @ Jarrell
-  (8.25%) → $6.60 tax.
-- Marketplace checkout taxed (AGL-1544); self-serve taxed since AGL-1133/1537; **enterprise route
-  taxed both modes + `platformRevenue/{invoiceId}` recording** (AGL-1811, `50aba4505`/`c2e24f4d0`);
-  merchant manual tax now **recurs** on subscription renewals via real Tax Rates (AGL-1751).
-- Live webhook endpoint `we_1TuaNvDYHP4psn7hmNkYMbEU` carries **10 events** including
-  `charge.dispute.created/closed` + `charge.refunded` (reconciled via
-  `setup-stripe.mjs --reconcile-events --webhook-url …` — the flag WITHOUT the URL is a silent no-op).
-- Resubscribe was broken (`tax_id_collection` + existing customer 400s) — fixed `b01b5ca81`,
-  reproduced against test-mode Stripe first (AGL-1823).
-- **Private letter ruling request** (`Platform Docs/Legal/TX_PRIVATE_LETTER_RULING_REQUEST_…md`) is
-  consistent with the verified system behaviour; needs Zach's read-through + signature, exhibits,
-  send to tax.help@cpa.texas.gov. Position: data processing, 80%; interim = collect at 80%, Aglyn
-  eats any shortfall if ruled otherwise.
-- `platformRevenue` must stay OUT of the GDPR erasure sweep (statutory retention).
+## ⚑ FOUR ZACH DECISIONS MADE THIS SESSION — the long form is in Linear, the durable copy in memory
 
-## OWED TO ZACH (only he can)
+1. **AGL-1775 POS register add-on → ENFORCE PER-HOST** (he passed on the free re-document option).
+   `seatAddons.posRegisters` becomes an org pool each host draws from. **First task is a production
+   query**: orgs with `posRegisters > 0` AND multiple hosts running registers. Empty set (likely,
+   pre-beta) ⇒ ships clean, no grandfathering, no comms. /pricing copy (AGL-1279) must match.
+2. **Org-library storage → BILL FROM TODAY, but with overage protection + usage alerts** — his words,
+   "so customers don't get a surprise bill". **AGL-1886.** Not retroactive. ⚠️ The existing
+   `usage-alerts` route reads HOST counters only, so an org over allowance purely in the org library
+   is *structurally unwarnable* — fix that read BEFORE billing turns on, or the alert reads as
+   coverage while being unable to fire.
+3. **AGL-1794 lost disputes → THE MERCHANT EATS IT.** Reverse the transfer on
+   `charge.dispute.closed` + `status:'lost'` ONLY. Marketplace half landed (`ed458b73e`, AGL-1554);
+   commerce merchant-notification landed (`3ed5751b9`). **The merchant-agreement clause is the
+   critical path** and is in the legal batch. `on_behalf_of` deliberately NOT taken.
+4. **The legal publication batch publishes WITHOUT his review** (he waived it), and the first nonzero
+   marketplace purchase runs **"Zach drives, Claude stages"** — stage to the Stripe pay step, he
+   clicks Pay, then verify split/refund/payout legs.
 
-1. **AGL-1548** — no real paid marketplace purchase has ever completed. Tax is now verified
-   end-to-end; this is the last gap before a real sale.
-2. **Webfile RT number** → finish the eSystems assign + the AGL-1812 amendment (NAICS→513210 per
-   Zach; mailing/officer addresses → registered agent; outlet address stays).
-3. **AGL-1821** — attach tax rates to EXISTING live merchant subscriptions (raises what customers pay).
-4. **AGL-1794** — who eats a lost dispute on destination charges (policy + merchant agreement).
-5. **AGL-1620** — E2ETEST100 drill expires **2026-08-21**. AGL-1617/1533 launch runbook.
-6. Ruling signature (above). Post-deploy staff smoke for AGL-1795 (staff `setDoc` of `plan` refused).
-7. **AGL-1777** — `main`/`production` have NO branch protection; force-push to production possible.
-8. NX CI stays `disabled_manually` by Zach's decision (AGL-1776). `firebase-hosting-pull-request.yml`
-   also disabled — **no workflow builds PRs**. Six gates (typecheck, generated-file checks,
-   revenue-truth, app-router-graph, nx affected) still run nowhere; moving them = re-enable decision.
+## LANDED THIS SESSION (verify, don't trust — every one of these is a claim)
 
-## ACTIVE WORKFLOWS (all fault-injected, all can fail)
+- `a9870b71d` **AGL-1873 — the best find of the night**: draft orders and reservation deposits were
+  the only session-creating commerce routes that never re-asked the org's plan. A free or lapsed org
+  kept both doors open, and both price `application_fee_amount` through `resolveTransactionFeePct`,
+  which is **0% on free** — those sales paid Aglyn nothing.
+- `ae217fba3` + `3d87e0817` **AGL-1860 Aglyn Assist phase 1** — docs-grounded in-console helper.
+  Verified this session: `release_assist` `defaultEnabled: false`, panel returns null when not
+  visible, loading state fails SAFE (hidden). **The flag must not flip until the privacy disclosure
+  publishes** (it is section 2 of the legal batch).
+- `e3dcc8f7d` + `a09a1cc64` **AGL-1863** retention funnel (survey → downsell → bounded winback) and
+  its reachability; `64482fca6` **AGL-1862** end-of-cycle downgrades / instant upgrades.
+- `c1b313190` **AGL-1811** — a quarterly TX return is computable (`GET /api/admin/tax-return`), and
+  `platformRevenue` now has a real erasure tripwire (emulator spec runs a live `eraseOrg`).
+- `78b342581` **AGL-1872** — GA4 purchases were reported tax-INCLUSIVE; post-tax-launch that books
+  the Comptroller's money as revenue. Now netted, refunds scale exactly.
+- `57131598e` deepmerge-ts 7→8 (**AGL-1861**), verified in an isolated worktree against all five v8
+  breaking changes. ⚠️ It taught a lesson: the shared checkout's working tree still held the PRE-bump
+  `package.json` with `node_modules` on 7.1.5 — agents were about to test a tree that didn't match
+  itself. **After any dependency merge, reconcile the shared checkout.**
 
-`rules-drift.yml`, `index-drift.yml` (TTL-aware — the naive field filter MISSES TTL policies and
-would tell you to run the deploy that deletes them), `tools-guards.yml` (7 pure-node guards),
-retired-colour census + self-test. eslint now applies 72 rules to 193 `.mjs` files that had ZERO
-(`scopeTo()` had overwritten the preset's glob — every prior "eslint clean" on tools/ was vacuous).
+## SMOKE SWEEP — 40 of ~137 processed, 29 Done, 0 broken fixes found
 
-## GATE RECIPE THAT ACTUALLY WORKS
+Batches 1 and 2 finished (12/20 and 17/20 Done). The `awaiting-smoke` pool was **~137, not the 78**
+the old handoff claimed — never trust a written-down count. Blocked remainders name their exact
+unblocker. Batches 3 (AGL-1324…1375) and 4 (AGL-1283…1323) were interrupted by API limits and need
+re-running; batch 3 had reached AGL-1374.
 
-Isolated worktree at `/private/tmp/aglyn-gate/wt` — OUTSIDE the shared scratchpad (a session's
-scratchpad is shared and an agent deleted the gate worktree from it once). Real `node_modules`
+## 🚨 THE OPERATIONAL LESSON OF THIS SESSION: COMMIT EVERY PIECE IMMEDIATELY
+
+Two full agent waves were killed mid-flight by API limits (a Fable-5 tier limit, then a session limit
+resetting 11:30pm CDT). **Wave 2 lost nothing that mattered because every agent had been ordered to
+commit and push each coherent piece rather than batch to the end** — five commits were already
+banked when they died. Wave 1 lost a completed 20-issue Linear pass because it held results in
+context. Give every agent that instruction verbatim; it is the difference between a survivable
+interruption and a lost hour.
+
+Recovery recipe that worked: unique local commits pushed via a temp worktree cherry-pick (the shared
+tree was too dirty to rebase), then `git reset --mixed origin/main` to dedupe patch-identical
+commits while preserving the working tree.
+
+## ZACH-ONLY (surfaced, not blocking)
+
+1. **~5 minutes of on-device checks** closes three issues: AGL-1417 (cancel a passkey sign-in),
+   AGL-1416 (SSO from the normal multi-account Chrome profile), AGL-1415 (Google account chooser).
+2. **AGL-1548** nonzero legs — the $0 drill is DONE; what remains is card capture → 80/20 split →
+   refund → payout, staged for his click.
+3. **AGL-1620** E2ETEST100 drill coupon expires **2026-08-21**.
+4. Ruling signature (`Platform Docs/Legal/TX_PRIVATE_LETTER_RULING_REQUEST_…md`); §151.0242 publisher
+   certification text before the first real plugin sale.
+5. Webfile **RT974186** is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. Residual:
+   confirm on the next correspondence whether the *officer* mailing address got the RA swap (AGL-1812).
+6. AGL-1506/1573 need a drill API key only he can mint; AGL-1133 needs the 07-31 roster ratified.
+7. **AGL-1777** — `main`/`production` have NO branch protection. NX CI stays `disabled_manually`
+   (AGL-1776); no workflow builds PRs.
+
+## STANDING RULES (unchanged)
+
+Push to `main` immediately; batch ONLY production PRs; real merge commit, never squash, no
+intermediate branches; verify deployed (Vercel CLI prints to STDERR). `--only` explicit paths; never
+`add -A`/stash/amend; this environment AUTO-STAGES new files, and `--only` bounds the file LIST, not
+the lines — check `git diff` per file for other agents' work. Never swap a shared file to prove a
+red. Never format a shared checkout. localhost Stripe key is LIVE. Two nx processes in one checkout
+rmSync each other's `dist` — single-project runs only. Firestore: `undefined` rejected; `update()`
+NOT_FOUND vs `set(merge)` conjures; converters run on PARTIAL writes. Test doubles model real
+semantics. **Make every guard fail on purpose.** Decompose every count. Confirm Linear ids with
+`get_issue` BEFORE citing.
+
+## GATE RECIPE
+
+Isolated worktree at `/private/tmp/aglyn-gate/wt` — OUTSIDE the shared scratchpad. Real `node_modules`
 (APFS clone `cp -Rc`; a symlink breaks Turbopack), `npm ci --prefix apps/docs` AND
-`--prefix cloud/functions` (two standalone packages), private npm cache (shared `~/.npm` races to
-exit 243 while a pipe shows 0), `NX_DAEMON=false`, exit codes to files, and END with a deliberate
-cross-project import proving `@nx/enforce-module-boundaries` fires (`run2.sh` there does all this).
-TWO nx processes in one checkout rmSync each other's `dist` — never run `nx run-many --all` in the
-shared checkout while agents work.
-
-## STANDING RULES (unchanged, still binding)
-
-Push to `main` immediately; batch ONLY production PRs; PR `main`→`production`, real merge commit,
-never squash, no intermediate branches; promotion needs Zach's word; verify deployed (Vercel CLI
-prints its table to STDERR — `2>/dev/null` eats it). `--only` explicit paths; never `add -A`/stash/
-amend; this environment AUTO-STAGES new files. Never swap a shared file to prove a red. localhost
-Stripe key is LIVE. Firestore: `undefined` rejected; `update()` NOT_FOUND vs `set(merge)` conjures;
-`.doc('')` throws sync, reserved ids fail at the SERVICE; import shared helpers from the LEAF (specs
-mock barrels). Test doubles must model real semantics. Decompose every red/green count. Confirm
-Linear ids via `get_issue` BEFORE citing (three agents wrote predicted ids this week).
-
-## IN FLIGHT AT HANDOFF (check `git log` — they may have landed)
-
-Order-dialog cluster (AGL-1806 restock answer / AGL-1820 refund-guard UI / AGL-1810 drawer wording),
-AGL-1813 (billing-staff writable keys per-key analysis), AGL-1807 (buy-now stock decrements skip the
-inventoryAdjustments ledger), AGL-1725 (28 tenant image sinks → the allowlist AGL-1726 needs).
-Queued next: AGL-1819 (fulfill/delivered client writes — same stale-dialog shape as the cancel fix,
-routes first, rules last).
+`--prefix cloud/functions`, private npm cache, `NX_DAEMON=false`, exit codes to files, and END with a
+deliberate cross-project import proving `@nx/enforce-module-boundaries` fires. The gate must run
+tests AND lint, not just build.

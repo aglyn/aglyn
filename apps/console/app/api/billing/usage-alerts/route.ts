@@ -20,6 +20,10 @@ import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
 import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
 import {
+  usageAlertApproachPct,
+  usageAlertThreshold,
+} from '../../../../utils/storage-overage'
+import {
   measureScreenCaps,
   screenCapMaxBillable,
 } from '../../../../utils/screen-cap-reconciliation'
@@ -41,14 +45,22 @@ import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 /**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
  * quota banner only helps people who are looking — this cron pushes a
- * `billing.usage` notification to org admins when a quota crosses 80%
- * or 100%. One alert per quota per threshold per month, guarded by
+ * `billing.usage` notification to org admins when a quota crosses the
+ * approach threshold (80% by default, `USAGE_ALERT_APPROACH_PCT`) or 100%
+ * — see `utils/storage-overage.ts` for why those two numbers and not
+ * others. One alert per quota per threshold per month, guarded by
  * `orgs/{orgId}.usageAlerts`. Covers sites, media storage, monthly email
  * sends, dataset count + storage, workflow/automation runs, and — added
  * AGL-1106 — monthly bandwidth, which is the included band the invoice meters
  * page views against, so the alert is a real pre-invoice heads-up. The
  * published-site-size check AGL-1107 added was removed in AGL-1370 as
  * unreachable. Scheduler-invoked (x-cron-secret, like report-usage).
+ *
+ * AGL-1886 added `orgLibraryStorage`, the check that closes the last
+ * structurally-silent case before org-library bytes start reaching invoices:
+ * the org library is enforced against `storagePerHostMb` on its own but was
+ * only ever compared to the ORG-WIDE band, which it cannot fill. See the
+ * check itself.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -160,7 +172,11 @@ async function handler(request: Request): Promise<Response> {
         .collection('counters')
         .doc('media')
         .get()
-      mediaBytes += Math.max(0, Number(orgMediaCounter.get('bytes') ?? 0) || 0)
+      const orgLibraryBytes = Math.max(
+        0,
+        Number(orgMediaCounter.get('bytes') ?? 0) || 0,
+      )
+      mediaBytes += orgLibraryBytes
 
       const hostCount = hosts.size
       const mediaMb = mediaBytes / (1024 * 1024)
@@ -249,6 +265,31 @@ async function handler(request: Request): Promise<Response> {
           limit: entitlements.hostLimit * entitlements.storagePerHostMb,
         },
         {
+          // THE ORG LIBRARY ON ITS OWN (AGL-1886), and this is the blind spot,
+          // not a duplicate of the line above.
+          //
+          // AGL-1473 got the org library's bytes INTO the org-wide sum, which
+          // is why `mediaStorage` is no longer blind to them. It is still
+          // structurally unable to WARN about them, because the two numbers
+          // are measured against different allowances: uploads are enforced
+          // PER SCOPE against `storagePerHostMb` (`api/media/upload-url` reads
+          // the very counter it increments), while the check above compares a
+          // summed total against `hostLimit × storagePerHostMb`. On a Pro org
+          // — three sites, 10 GB each — an org library sitting at its full
+          // 10 GB is AT the cap that refuses the next upload and reads as 33%
+          // of the org-wide band. It can never reach 80%, so the alert cannot
+          // fire, on the one surface whose whole job is telling somebody
+          // before a limit bites. An alert that cannot fire reads as coverage.
+          //
+          // Its own key, so it thresholds and dedupes independently: an org
+          // over its org-library allowance and comfortably inside its
+          // org-wide one must get this warning and only this one.
+          key: 'orgLibraryStorage',
+          label: 'organization library storage',
+          used: orgLibraryBytes / (1024 * 1024),
+          limit: entitlements.storagePerHostMb,
+        },
+        {
           // The only email figure a quota can refuse (AGL-1438). Reading the
           // all-mail counter here would tell an owner they were at their
           // campaign limit because their store had a busy week of orders.
@@ -313,10 +354,19 @@ async function handler(request: Request): Promise<Response> {
         >) ?? {}
       const guardUpdates: Record<string, { month: string; threshold: number }> =
         {}
+      // Config-driven since AGL-1886, and shared with the specs that pin the
+      // percentages. Read once per org rather than once per check so a single
+      // sweep cannot use two different approach thresholds.
+      const approachPct = usageAlertApproachPct(
+        process.env.USAGE_ALERT_APPROACH_PCT,
+      )
       for (const check of checks) {
         if (check.limit === UNLIMITED || !(check.limit > 0)) continue
-        const ratio = check.used / check.limit
-        const threshold = ratio >= 1 ? 100 : ratio >= 0.8 ? 80 : 0
+        const threshold = usageAlertThreshold(
+          check.used,
+          check.limit,
+          approachPct,
+        )
         if (!threshold) continue
         const guard = guards[check.key]
         if (guard?.month === month && (guard.threshold ?? 0) >= threshold) {
@@ -328,7 +378,7 @@ async function handler(request: Request): Promise<Response> {
           title:
             threshold >= 100
               ? `You've reached your ${check.label} limit`
-              : `You're above 80% of your ${check.label} quota`,
+              : `You're above ${approachPct}% of your ${check.label} quota`,
           body:
             `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
             'in Billing to raise the limit.',

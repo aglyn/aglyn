@@ -163,9 +163,38 @@ export function backupsHealth(
   // backup legitimately is one, and paging on it weekly would teach everyone
   // to ignore the alert. It earns no freshness credit either — a backup that
   // never finishes fails the age rule instead.
-  const failed = backups.some(
-    (backup) => backup.state !== 'READY' && backup.state !== 'CREATING',
-  )
+  //
+  // `NOT_AVAILABLE` BEHIND the newest READY backup is tolerated for a sharper
+  // reason (AGL-1843): it is not a failure at all, it is how a managed backup
+  // ends. Every backup this project has ever taken flips `READY` →
+  // `NOT_AVAILABLE` at roughly one week old while its `expireTime` sits ~90
+  // days out, so an aged-out backup lingers in the listing for another three
+  // months. Against a weekly schedule that means the steady state is ~13
+  // aged-out backups beside exactly one READY one — and the original rule
+  // ("any non-READY backup fails") could therefore NEVER be satisfied again.
+  // It went red on 2026-08-13 and stayed red, structurally, for as long as
+  // the schedule kept working. A check that cannot go green is worth no more
+  // than one that cannot go red: both times the alert says nothing, and this
+  // one was actively teaching the one person who receives it that a backup
+  // page is noise — eight days before launch.
+  //
+  // What genuinely reproduces AGL-1490 is a NEWEST run that produced nothing
+  // usable, so that is what is measured: a non-READY backup is a failure only
+  // when it is newer than the newest READY one (or when it cannot be dated,
+  // which is not a claim of freshness this check will make on its behalf).
+  // On 2026-08-13 the unusable 08-02 backup WAS the newest, so the condition
+  // this rule was born to catch still trips it. The age rule below remains
+  // the backstop: if the flip ever starts happening faster than the schedule
+  // replaces it, `newestReadyAgeDays` crosses the budget and this goes red on
+  // freshness instead — which is the honest reason to be worried.
+  const failed = backups.some((backup) => {
+    if (backup.state === 'READY' || backup.state === 'CREATING') return false
+    if (newestReadyMs === null) return true
+    const snapshotMs = backup.snapshotTime
+      ? Date.parse(backup.snapshotTime)
+      : Number.NaN
+    return !Number.isFinite(snapshotMs) || snapshotMs > newestReadyMs
+  })
 
   const code = failed
     ? 'backup-failed'
@@ -505,4 +534,228 @@ export function memoizeWithTtl<T>(
     cached = { at, value }
     return value
   }
+}
+
+/**
+ * The error beacon's own liveness, reduced to a health verdict (AGL-1923).
+ *
+ * ## The failure this exists for
+ *
+ * The `Client error beacon` alert policy is a log-match: it fires when an
+ * entry APPEARS in `client-errors`. A policy of that shape can only report
+ * presence, so if the thing writing the entries stops writing, the policy
+ * goes quiet — and quiet is the reading it also gives when everything is
+ * healthy. **A dead beacon is indistinguishable from zero errors**, and
+ * `reportClientErrors` has three fail-soft paths that each end in a
+ * `console.warn` to a log that retains an hour and drains nowhere
+ * (AGL-1799). Error Reporting would show zero errors; the policy would stay
+ * silent; both readings look exactly like a clean launch.
+ *
+ * ## Why this shape and not a metric-absence policy
+ *
+ * AGL-1923 proposed a log-based metric plus `conditionAbsent`. This is the
+ * same guarantee with two properties that one lacks. It is PROVABLE — the
+ * verdict is graded synchronously against the write's own status, so the
+ * degraded branch can be induced and observed rather than waited out over an
+ * absence window. And it needs nothing new to run it: the uptime probe is
+ * what winds the dead-man's switch, so there is no cron that can itself stop
+ * without anyone noticing (which would only move the problem one layer out).
+ *
+ * ## It must be able to go GREEN
+ *
+ * The condition is an EVENT, not a state. A failed write degrades; the next
+ * successful write clears it, within one probe TTL — no marker, no latch, no
+ * retention window to age out of. That is the AGL-1843 rule applied before
+ * the fact: the clearing event is named, and it is "the next heartbeat that
+ * reaches Cloud Logging".
+ *
+ * Pure on purpose, like its siblings: the route writes, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface BeaconCheck extends HealthCheck {
+  /**
+   * The log id the heartbeat targets, so the body names what to query during
+   * an incident rather than making someone go and find it.
+   */
+  logId: string
+  /** Which deployment's credential was exercised — console and tenant differ. */
+  service: string
+}
+
+export function beaconHealth(
+  write: { ok: boolean; code?: string } | null,
+  logId: string,
+  service: string,
+  ms: number,
+): BeaconCheck {
+  // A null result is degraded by contract, the same rule `signupsHealth` and
+  // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
+  // must not report calm. Here it is stronger than a convention — "we could
+  // not determine whether the beacon works" IS the AGL-1923 condition.
+  if (write === null) {
+    return { ok: false, ms, code: 'heartbeat-unavailable', logId, service }
+  }
+  return {
+    ok: write.ok,
+    ms,
+    ...(write.ok ? {} : { code: write.code ?? 'heartbeat-failed' }),
+    logId,
+    service,
+  }
+}
+
+/**
+ * Billing webhook delivery, reduced to a health verdict (AGL-1924).
+ *
+ * ## The gap this closes
+ *
+ * Of the alert policies in `aglyn-main`, none watched billing. Sept 1 opens to
+ * PAYING customers, and the billing path is the one place where a failure
+ * nobody notices converts directly into lost revenue and a support incident
+ * per affected customer. The webhook has a documented history of failing
+ * exactly that way: AGL-1551 (every delivery rejected `400 Invalid signature`
+ * for a week, behind a green "Active" badge), AGL-1560 (a secret roll 400ing
+ * roughly half of deliveries), AGL-1552 (the replay window making every retry
+ * unreceivable), AGL-1798 (`charge.refunded` never subscribed). Each is a
+ * total or near-total failure of the billing event path, and not one of them
+ * would have paged anyone.
+ *
+ * ## Why the denominator has to come from Stripe
+ *
+ * `stripeEvents` alone cannot answer this. `route.ts` returns 400 BEFORE
+ * claiming the idempotency document, so a rejected delivery writes nothing —
+ * an empty collection reads identically whether nothing happened or
+ * everything was refused. That is precisely how the 2026-08-14 checklist tick
+ * came out green while AGL-1551 was live. Stripe supplies what it TRIED to
+ * deliver; we supply what we processed; the gap is the failure.
+ *
+ * ## Why this cannot false-page on a quiet night
+ *
+ * The verdict never keys on the ABSENCE of events. At beta volume a night
+ * with zero deliveries is legitimate, and a naive freshness rule would page
+ * on it — the AGL-1843 mistake in a new costume. `undelivered` is a count of
+ * deliveries Stripe attempted AND failed, so a quiet window scores zero and
+ * reads healthy for the right reason. `emitted` and `processed` are carried
+ * for the human reading the incident and are DELIBERATELY not inputs to the
+ * verdict: no floor for them exists yet, and inventing one before the beta
+ * produces a baseline would be a threshold nobody could defend.
+ *
+ * ## Division of labour with the AGL-1906 audit
+ *
+ * `tools/scripts/lib/stripe-webhook-health.mjs` asserts the endpoint's full
+ * subscribed-event list against `WEBHOOK_EVENTS`. That list is deliberately
+ * NOT duplicated here — a second copy is the exact failure its own comment
+ * warns about, and a subscription set is config that changes on deploys, not
+ * a thing that changes minute to minute. This watches the two facts that DO
+ * move continuously: whether the destination is still enabled, and whether
+ * deliveries are landing.
+ *
+ * ## It must be able to go GREEN
+ *
+ * Everything here is a trailing window over live Stripe state. A destination
+ * re-enabled, or a fixed handler whose retries then succeed, reads healthy on
+ * the next probe. There is no marker to age out and nothing to latch
+ * (AGL-1843): the clearing event is "a window with no failed deliveries and
+ * an enabled endpoint".
+ *
+ * Pure on purpose, like its siblings: the route fetches, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface BillingWebhookFacts {
+  /** Our production destination, as Stripe currently holds it. */
+  endpointStatus: 'enabled' | 'disabled' | 'missing'
+  /** Events Stripe attempted and failed to deliver inside the window. */
+  undelivered: number
+  /** Events Stripe emitted inside the window. Reported, never a verdict input. */
+  emitted: number
+  /**
+   * Events our handler claimed inside the window. Reported, never a verdict
+   * input — and null when the Firestore arm could not run, which does NOT on
+   * its own make the check red: Stripe already answered the question that
+   * matters.
+   */
+  processed: number | null
+}
+
+export interface BillingWebhookCheck extends HealthCheck {
+  endpointStatus: BillingWebhookFacts['endpointStatus'] | null
+  undelivered: number | null
+  emitted: number | null
+  processed: number | null
+  /** The trailing window the counts cover, so the body is self-describing. */
+  windowMinutes: number
+}
+
+/**
+ * Trailing window the delivery counts cover.
+ *
+ * Bounded from below by the alert path, not by taste, exactly like
+ * `RATE_LIMIT_DEGRADED_WINDOW_MINUTES`: the probe memoises for 5 minutes, the
+ * uptime check runs every 5, and the policy wants ~10 minutes of sustained
+ * failure before it emails — so a window under ~20 minutes can go red and
+ * green again before anyone is told. Bounded from ABOVE by Stripe's retry
+ * schedule: an event that fails and then succeeds on retry stops counting, so
+ * a window much longer than an hour would hold transient blips red past their
+ * own recovery.
+ */
+export const WEBHOOK_FAILURE_WINDOW_MINUTES = 60
+
+/**
+ * Failed deliveries tolerated in the window.
+ *
+ * Zero, and unlike the signup alarm there is no organic baseline to clear: a
+ * healthy account produces exactly zero, and one is already the statement
+ * "Stripe tried to tell us something about money and could not". Stripe
+ * retries on its own, so a failure visible here is not one unlucky packet.
+ */
+export const MAX_FAILED_DELIVERIES_PER_WINDOW = 0
+
+export function billingWebhookHealth(
+  facts: BillingWebhookFacts | null,
+  ms: number,
+  windowMinutes: number = WEBHOOK_FAILURE_WINDOW_MINUTES,
+  threshold: number = MAX_FAILED_DELIVERIES_PER_WINDOW,
+): BillingWebhookCheck {
+  // A null census is degraded, the same rule `signupsHealth` and
+  // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
+  // must not report calm. Here it is also the AGL-1906 lesson — `unknown` was
+  // read as `healthy` on 2026-08-14 and the endpoint was 400ing every
+  // delivery at the time.
+  if (facts === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'stripe-unavailable',
+      endpointStatus: null,
+      undelivered: null,
+      emitted: null,
+      processed: null,
+      windowMinutes,
+    }
+  }
+
+  const base = {
+    ms,
+    endpointStatus: facts.endpointStatus,
+    undelivered: facts.undelivered,
+    emitted: facts.emitted,
+    processed: facts.processed,
+    windowMinutes,
+  }
+
+  // Order matters: a missing or disabled destination explains any delivery
+  // count that follows, and is the more actionable statement. An endpoint
+  // deleted or switched off in the dashboard is TOTAL silent failure — Stripe
+  // stops attempting, so `undelivered` would read zero and a delivery-only
+  // rule would call it healthy.
+  if (facts.endpointStatus === 'missing') {
+    return { ...base, ok: false, code: 'endpoint-missing' }
+  }
+  if (facts.endpointStatus === 'disabled') {
+    return { ...base, ok: false, code: 'endpoint-disabled' }
+  }
+  if (facts.undelivered > threshold) {
+    return { ...base, ok: false, code: 'deliveries-failing' }
+  }
+  return { ...base, ok: true }
 }

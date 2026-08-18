@@ -389,6 +389,34 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
   // must be GREEN and itemised, while a ref that cannot be resolved must be
   // exit 2 rather than a silent fall back to HEAD.
 
+  // This fixture is built from REAL history, so it has a premise the rest of
+  // the suite does not: the clone must be complete. State it here, because a
+  // shallow clone does not merely fail — it LIES (AGL-1920). The graft commit
+  // has no parents, so git reads every file as newly added in it and
+  // `git log -1 -- <path>` returns HEAD itself rather than the real last
+  // rules commit. The only reason that surfaced at all is that `<HEAD>^` then
+  // fails to resolve; had the fixture needed one commit less, it would have
+  // compared HEAD against HEAD and passed VACUOUSLY.
+  //
+  // Assert it, and fail with the cause rather than `fatal: invalid object
+  // name`. Deliberately NOT a skip: a workflow that cannot run this check
+  // must go red, since the self-test is what licenses trusting the comparator
+  // (AGL-1778). The fix is fetch-depth: 0 on the workflow's checkout — all
+  // three workflows that run this suite now carry it, asserted below.
+  const isShallow =
+    execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim() === 'true'
+  assert.equal(
+    isShallow,
+    false,
+    'this suite needs real git history: it builds the promotion-window fixture ' +
+      'from the last rules commit and its PARENT. In a shallow clone ' +
+      '`git log -1 -- <path>` silently returns the graft commit instead. ' +
+      'Give the workflow `actions/checkout` with `fetch-depth: 0` (AGL-1920).',
+  )
+
   // The newest commit that touched the firestore rules, and its parent. The
   // parent stands in for "the promoted SHA" — live is at the parent, HEAD
   // carries one undeployed rules commit. Exactly the state that was failing.
@@ -645,6 +673,38 @@ describe('the checker is wired (workflow + package.json)', () => {
     // A skipped rules deploy must go red AT the promotion, not up to a day
     // later on the schedule.
     assert.match(workflow, /^ {6}- production$/m)
+  })
+
+  it('EVERY workflow running this suite fetches full history (AGL-1920)', () => {
+    // This suite's promotion-window fixture needs the last rules commit's
+    // PARENT. rules-drift.yml always had fetch-depth: 0; tools-guards.yml and
+    // index-drift.yml ran it on the shallow default, which does not error
+    // cleanly — it makes `git log -1 -- <path>` return the graft commit. The
+    // self-test is the FIRST guard step in both, so the false red SKIPPED
+    // every check behind it: all seven tools guards, and the live index diff.
+    //
+    // Asserted from inside the suite so removing the setting goes red on the
+    // push that removes it, in all three workflows at once.
+    for (const file of ['rules-drift.yml', 'index-drift.yml', 'tools-guards.yml']) {
+      const workflow = readFileSync(
+        join(repoRoot, '.github', 'workflows', file),
+        'utf8',
+      )
+      assert.ok(
+        workflow.includes('npm run test:rules-drift'),
+        `${file} is expected to run this suite`,
+      )
+      // The `with:` block must belong to the checkout step, not merely appear
+      // somewhere in the file — a comment mentioning fetch-depth would
+      // otherwise satisfy this.
+      assert.match(
+        workflow,
+        /- uses: actions\/checkout@[^\n]*\n(?:\s*#[^\n]*\n)*\s+with:\n(?:\s*#[^\n]*\n)*\s+fetch-depth:\s*0\b/,
+        `${file} must check out with fetch-depth: 0 — this suite builds its ` +
+          `fixture from the last rules commit's parent, and a shallow clone ` +
+          `silently resolves that to the graft commit instead (AGL-1920)`,
+      )
+    }
   })
 
   it('the CLI actually uses the shared comparison and shared auth', () => {

@@ -309,6 +309,68 @@ export interface AnalyticsEventParams {
      */
     surface?: string
   }
+  /**
+   * Custom: no GA4 equivalent. One Aglyn Assist message sent (AGL-1860).
+   * `tier` is the capability tier served (`free` | `entitled`);
+   * `grounded` says whether docs retrieval found sections to cite —
+   * ungrounded questions at volume are the docs-gap signal the data loop
+   * mines. No question text: params carry no user content.
+   */
+  assistant_message_sent: { tier: string; grounded: boolean }
+  /**
+   * Custom: no GA4 equivalent. Explicit thumbs on an Assist answer
+   * (AGL-1860). `feedback` is `up` | `down`.
+   */
+  assistant_feedback: { feedback: string }
+
+  // --- Retention (AGL-1859/AGL-1863: the leave path, measurable) -----------
+  /**
+   * Custom: no GA4 equivalent. The churn survey was answered — step 1 of the
+   * cancellation/deletion funnel, and the DENOMINATOR every step below is a
+   * rate against. Fired for both leave paths.
+   *
+   * `reason` is the closed `ChurnSurveyReason` set, never the free-text
+   * detail: the detail is customer-written prose, it belongs in Firestore
+   * where the data loop reads it, and shipping it to GA would put user
+   * content in analytics params. `surface` separates a subscription cancel
+   * from an account delete — counting only one understates churn by exactly
+   * the orgs that chose the other.
+   */
+  churn_survey_submitted: { reason: string; surface: string; plan?: string }
+  /**
+   * Custom: no GA4 equivalent. The customer took the smaller tier instead of
+   * leaving — a SAVE, at reduced ARPA. `from_plan`/`to_plan` are what makes
+   * that tradeoff measurable rather than a win recorded without its cost.
+   */
+  downsell_accepted: { from_plan: string; to_plan: string; surface: string }
+  /**
+   * Custom: no GA4 equivalent. The time-boxed winback discount was accepted.
+   *
+   * `percent_off` and `duration_months` are reported because the discount is
+   * bounded and the bound is the entire point (AGL-1620/AGL-1863): a retained
+   * org and the margin it was retained at are one fact, and a save recorded
+   * without its price reads as free.
+   */
+  winback_discount_accepted: {
+    percent_off: number
+    duration_months: number
+    plan?: string
+    surface: string
+  }
+  /**
+   * Custom: no GA4 equivalent. They left anyway — the funnel's terminal step,
+   * and the numerator for churn.
+   *
+   * `funnel_completed` is false when the cancel arrived without a funnelId
+   * (support ops, Stripe dashboard). It mirrors the `funnelSkipped` marker
+   * the routes write, so the GA funnel and the Firestore record agree instead
+   * of quietly disagreeing about how many departures were ever surveyed.
+   */
+  cancellation_completed: {
+    surface: string
+    plan?: string
+    funnel_completed: boolean
+  }
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventParams
@@ -610,6 +672,12 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   aglyn_overlay: true,
   aglyn_experiment: true,
   click: true,
+  assistant_message_sent: true,
+  assistant_feedback: true,
+  churn_survey_submitted: true,
+  downsell_accepted: true,
+  winback_discount_accepted: true,
+  cancellation_completed: true,
 }
 
 /** The taxonomy, enumerable. */

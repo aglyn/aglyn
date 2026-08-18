@@ -74,7 +74,37 @@ snapshots, totals, and a timeline:
   dispute you win reverses nothing. Filter the list by **Disputes** to find
   either.
 - **Draft orders**: build an order in the console and send the buyer a
-  payment link (Shopify parity).
+  payment link (Shopify parity). Requires an active plan with commerce — see
+  the note below.
+
+### If a dispute is lost, the money comes back out of your payout {#a-lost-dispute}
+
+Worth knowing before it happens, because it is money leaving an account you
+already received it into:
+
+- **The sale was paid out to you at the time of the charge.** When a dispute is
+  lost, that payout is reversed — the amount is pulled back from your connected
+  Stripe account, not absorbed by Aglyn.
+- **You are notified** when the reversal happens, so the first you hear of it is
+  not a shortfall in a payout you were expecting.
+- **The reversal can push your Stripe balance negative** if you have already
+  been paid out and nothing new has come in. Stripe recovers a negative balance
+  from your next payouts; it does not ask you for money. It does mean your next
+  payout can be smaller than the sales behind it, which is normal and not an
+  error.
+- **Answer disputes promptly.** An unanswered dispute is decided for the shopper
+  by default, so the deadline on the order row is the whole game. Evidence is
+  submitted in the Stripe dashboard.
+
+:::info Selling needs a plan with commerce
+Storefront checkout, POS, **draft orders**, and **reservation deposits** all
+check your plan at the moment of the sale, not just when the feature was
+switched on. If your plan lapses or you move to one without commerce, these
+answer "Selling is not enabled" and stop creating payment links — even though
+the commerce plugin is still enabled on the site. Turning the plugin on is your
+switch; including commerce is your plan's. See
+[downgrading](/workspace-and-billing/billing-and-plans/downgrading-and-canceling#what-changes-on-a-downgrade).
+:::
 
 ## Shipping & taxes
 

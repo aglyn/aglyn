@@ -90,11 +90,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Shallow is fine: the only git consumer is check:standalone-installs,
-      # which uses `git ls-files` (worktree listing, no history).
-      - uses: actions/checkout@v4
+      # fetch-depth 0 is REQUIRED, not a nicety (AGL-1920). `test:rules-drift`
+      # below builds its promotion-window fixture from real history — the last
+      # commit touching cloud/firebase-firestore.rules, and that commit's
+      # PARENT. A shallow clone has neither, and worse, it lies rather than
+      # erroring: the graft commit has no parents, so every file reads as
+      # newly added in it and `git log -1 -- <path>` returns HEAD itself.
+      # `<HEAD>^` then does not resolve, the self-test fails, and because it
+      # is the FIRST guard step every suite below it is skipped — this
+      # workflow rendered red while checking nothing, for four days.
+      # check:standalone-installs only needs `git ls-files`; this is for the
+      # drift self-test. rules-drift.yml has always fetched full history for
+      # the same reason.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'

@@ -219,8 +219,15 @@ async function run() {
 const mediaAlerts = (notifications: Array<{ title: string }>) =>
   notifications.filter((entry) => entry.title.includes('media storage'))
 
+/** The AGL-1886 check, keyed and labelled apart from the org-wide one. */
+const libraryAlerts = (notifications: Array<{ title: string }>) =>
+  notifications.filter((entry) =>
+    entry.title.includes('organization library storage'),
+  )
+
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
+  delete process.env.USAGE_ALERT_APPROACH_PCT
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []
@@ -268,5 +275,129 @@ describe('the media-storage alert sees the org library (AGL-1473)', () => {
 
     mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: BAND_MB * MB }]
     expect(mediaAlerts(await run())).toHaveLength(1)
+  })
+})
+
+/**
+ * The org library is warnable AT ALL (AGL-1886).
+ *
+ * AGL-1473's suite above passes on `starter`, and that is exactly why the
+ * defect survived it: starter's `hostLimit` is 1, so the org-wide band
+ * (`hostLimit x storagePerHostMb`) and the per-scope cap the uploader enforces
+ * are the SAME NUMBER, and any org-library overage crosses both at once. Give
+ * the org a second site and the two numbers part company — the org library can
+ * be full, refusing uploads, and read as a third of the band it is compared
+ * against.
+ *
+ * That is a guard that could not fail, on a plan where it could never be
+ * asked. These cases ask it on `pro`.
+ *
+ * Zach's condition on billing these bytes from today was, verbatim: "also give
+ * overage protection and usage alerts, so customers don't get a surprise
+ * bill." An alert that is structurally unable to fire is not an alert.
+ */
+describe('the org library is warnable on its own (AGL-1886)', () => {
+  /** Pro: 3 sites x 10240 MB. The org-wide band is 30720 MB. */
+  const PRO_SCOPE_MB = 10240
+  const PRO_BAND_MB = 3 * PRO_SCOPE_MB
+
+  it('warns an org whose library is full while the org-wide band is a third used', async () => {
+    // The bytes: 10240 MB in the org library, nothing on either site. The
+    // uploader refuses the next org DAM upload — `storagePerHostMb` is the
+    // scope's cap and this scope is at it.
+    mockOrgs = [{ id: 'org-1', plan: 'pro', orgLibraryBytes: PRO_SCOPE_MB * MB }]
+    mockHosts = [
+      { id: 'site-a', orgId: 'org-1', mediaBytes: 0 },
+      { id: 'site-b', orgId: 'org-1', mediaBytes: 0 },
+    ]
+    const notifications = await run()
+    // The org-wide check is SILENT and correct to be: 10240 of 30720 is 33%.
+    // Forced red by deleting the `orgLibraryStorage` check: this line still
+    // passed and the next one failed, which is the shape of the whole bug.
+    expect(mediaAlerts(notifications)).toHaveLength(0)
+    expect(10240 / PRO_BAND_MB).toBeLessThan(0.8)
+    // The library check fires, at the cap.
+    expect(libraryAlerts(notifications)).toHaveLength(1)
+    expect(libraryAlerts(notifications)[0].title).toContain('reached')
+  })
+
+  it('warns on the approach, before the money and before the refusal', async () => {
+    // 85% of the scope cap: uploads still succeed, nothing is refused yet, and
+    // this is the last stretch in which a customer can act for free.
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: 'pro',
+        orgLibraryBytes: Math.round(0.85 * PRO_SCOPE_MB * MB),
+      },
+    ]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
+    const notifications = await run()
+    expect(libraryAlerts(notifications)).toHaveLength(1)
+    expect(libraryAlerts(notifications)[0].title).toContain('above 80%')
+  })
+
+  it('stays quiet below the approach threshold', async () => {
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: 'pro',
+        orgLibraryBytes: Math.round(0.79 * PRO_SCOPE_MB * MB),
+      },
+    ]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
+    expect(libraryAlerts(await run())).toHaveLength(0)
+  })
+
+  it('honours a configured approach percentage', async () => {
+    // `USAGE_ALERT_APPROACH_PCT` moves the warning; the same 79% that was
+    // silent above must speak at 70. Forced red by hard-coding 0.8 back into
+    // the loop.
+    process.env.USAGE_ALERT_APPROACH_PCT = '70'
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: 'pro',
+        orgLibraryBytes: Math.round(0.79 * PRO_SCOPE_MB * MB),
+      },
+    ]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
+    const notifications = await run()
+    expect(libraryAlerts(notifications)).toHaveLength(1)
+    expect(libraryAlerts(notifications)[0].title).toContain('above 70%')
+  })
+
+  it('falls back to 80 rather than going silent on a malformed percentage', async () => {
+    // The failure mode that matters: a typo in an env var must not disable the
+    // warning. `''`, `'yes'` and `'0'` each used to be candidates for a
+    // threshold of zero (alert always) or NaN (alert never).
+    for (const bad of ['yes', '0', '-10', '100', '']) {
+      process.env.USAGE_ALERT_APPROACH_PCT = bad
+      mockOrgs = [
+        {
+          id: 'org-1',
+          plan: 'pro',
+          orgLibraryBytes: Math.round(0.85 * PRO_SCOPE_MB * MB),
+        },
+      ]
+      mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
+      const notifications = await run()
+      expect(libraryAlerts(notifications)).toHaveLength(1)
+      expect(libraryAlerts(notifications)[0].title).toContain('above 80%')
+    }
+  })
+
+  it('leaves a host-only org untouched by the new check', async () => {
+    // Nothing about a site's own library moves. An org with no library at all
+    // gets neither alert, whatever its sites hold, until the org-wide band
+    // itself is crossed.
+    mockOrgs = [{ id: 'org-1', plan: 'pro', orgLibraryBytes: 0 }]
+    mockHosts = [
+      { id: 'site-a', orgId: 'org-1', mediaBytes: PRO_SCOPE_MB * MB },
+      { id: 'site-b', orgId: 'org-1', mediaBytes: 0 },
+    ]
+    const notifications = await run()
+    expect(libraryAlerts(notifications)).toHaveLength(0)
+    expect(mediaAlerts(notifications)).toHaveLength(0)
   })
 })

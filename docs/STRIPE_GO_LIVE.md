@@ -82,6 +82,56 @@ returns plaintext.
 - Confirm the tenant doc (`tenants/{uid}`) shows the plan and the Billing
   page chip flips from "no subscription".
 
+### Assert the LIVE webhook, on evidence (AGL-1906)
+
+```bash
+npm run audit:stripe-webhook            # last 30 days
+npm run audit:stripe-webhook -- --days 7 --json
+```
+
+Read-only (GET only), and it loads `.env` + `apps/console/.env.production.local`
+itself so it is one command. Exits non-zero unless every check passes.
+
+**Do not tick "webhooks are live" off `stripeEvents` alone.** On 2026-08-14
+that collection was read on its own and the conclusion drawn was that the
+endpoint was healthy: 14 events recorded, newest five from a real live
+checkout, nothing newer because no Stripe activity had happened since. Every
+fact was true. Hours later AGL-1551 read the Stripe destination itself and
+found HTTP 400 `Invalid signature` on **100% of deliveries** for the preceding
+week, behind a green *Active* badge.
+
+The collection cannot answer the question by construction: `route.ts` returns
+400 **before** claiming the `stripeEvents/{event.id}` idempotency document, so
+a rejected delivery writes nothing, and an empty collection is indistinguishable
+from a totally broken endpoint. Stripe's list of what it *tried* to deliver is
+the missing denominator. The audit joins the two and reports the gap:
+
+| check | asserts |
+| -- | -- |
+| `endpoint.count` | exactly one live destination — otherwise account-wide signals cannot be attributed to it |
+| `endpoint.status` / `endpoint.url` | enabled, and pointed at the production console |
+| `endpoint.events` | every event in `WEBHOOK_EVENTS` still subscribed (AGL-1798 was a silent gap) |
+| `delivery.evidence` | the window contains at least one **real delivery** — 0% over an empty window is not evidence |
+| `delivery.failures` | Stripe reports no failed delivery in the window |
+| `processing.coverage` | every deliverable event has a `stripeEvents` document, i.e. the signature verified and the handler ran |
+
+Two readings it deliberately refuses to flatter: an **empty window fails**
+rather than reporting a comfortable 0%, and a **skipped Firestore arm reads
+`unknown`, never `pass`**.
+
+It follows the key's mode, so the **test** destination can be asserted the same
+way — and should be, because that is where refunds and disputes get rehearsed:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_… npm run audit:stripe-webhook
+```
+
+`--since` / `--until` take ISO timestamps, so the audit can be pointed at a
+window known to be bad and watched to go red — the way to confirm the check
+can still fail before trusting a green one. `tools/scripts/lib/stripe-webhook-health.test.mjs`
+(`npm run test:stripe-webhook-health`) does the same against fixtures, giving
+every check a failing input including the AGL-1551 shape.
+
 ## 4. Related, not blocking
 
 - Firestore rules deploy (`firebase deploy --only firestore:rules`) —
@@ -267,3 +317,44 @@ subscription product, Stripe records them and charges no one.
    five orders of magnitude below their 2 GB included band. So turning this on
    today changes **no org's bill by a single cent**, which makes now the
    cheapest moment it will ever be to turn on.
+
+   ### Zach's decision, 2026-08-17 (AGL-1886) — and its condition
+
+   Asked which date this should carry, Zach chose **immediately**, and added a
+   condition in his own words: *"also give overage protection and usage
+   alerts, so customers don't get a surprise bill."* The condition is not
+   garnish — billing turns on only when the protection ships with it.
+
+   **Shipped (AGL-1886), all of it before this variable is set:**
+
+   - The alert can fire at all. `usage-alerts` gained an `orgLibraryStorage`
+     check against the library's OWN allowance. The pre-existing org-wide
+     media check could never warn about an org-library overage on any plan
+     with more than one site: uploads are enforced per scope against
+     `storagePerHostMb`, the check compared a summed total to
+     `hostLimit × storagePerHostMb`, and on Pro a *full* library reads as 33%
+     of the band. An alert that cannot fire reads as coverage.
+   - Thresholds are config (`USAGE_ALERT_APPROACH_PCT`, default 80; cap at
+     100) and fail TO the default on anything malformed.
+   - **Overage protection is a SOFT cap with an acknowledged opt-in**, bounded
+     by a monthly ceiling (`org.storageOverage`, written only by
+     `/api/billing/storage-overage`). Past the included allowance an upload is
+     refused with the price named until a manager opts in, and refused again
+     at the ceiling they set. An org that never opts in cannot be billed a
+     cent of storage overage, because the bytes were never accepted — see
+     `apps/console/utils/storage-overage.ts` for the full hard-vs-soft
+     reasoning. Free still hard-bands (no subscription to bill on).
+   - The Billing card shows the library's usage **against its own allowance**,
+     before any invoice.
+   - The rollup records `orgLibraryBilledFrom` verbatim beside
+     `orgLibraryBilled`, so a month's audit document says why it billed.
+
+   **THE REMAINING STEP IS ZACH'S**, because setting it starts real invoices:
+
+   ```
+   vercel env add BILL_ORG_LIBRARY_STORAGE_FROM production   # value: 2026-08
+   ```
+
+   (`2026-08` = the month this shipped. Use the month of the deploy, never an
+   earlier one — an earlier month is the one input that would reach backwards.)
+

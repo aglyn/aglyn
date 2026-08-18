@@ -19,9 +19,9 @@ import {
   defaultScopeForNewResource,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
+import { mediaStorageGate } from '../../../../utils/storage-overage'
 import {
   checkEntitlement,
-  checkQuota,
   createResourceUid,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
@@ -169,19 +169,22 @@ async function handler(request: Request): Promise<Response> {
       }
       {
         // Storage quota applies to every org; a plan-less org resolves as
-        // `free` (250 MB cap), not unmetered.
+        // `free` (250 MB cap), not unmetered. Soft cap past the allowance for
+        // metered plans (AGL-1886) — see `utils/storage-overage.ts`.
         const counterSnapshot = await counterRef.get()
         const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
         const usedMb = (usedBytes + sizeBytes) / (1024 * 1024)
-        // usedMb includes the incoming file; ceil-1 allows exactly up to
-        // the integer MB cap and no further (AGL-471 off-by-one).
-        const quota = checkQuota(
-          org as any,
-          'storagePerHostMb',
-          Math.ceil(usedMb) - 1,
-        )
-        if (!quota.allowed) {
-          return Response.json({ error: `Storage limit reached (${quota.limit} MB)` }, { status: 403 })
+        const gate = mediaStorageGate({ org: org as any, usedMb })
+        if (!gate.allowed) {
+          return Response.json(
+            {
+              error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
+              code: gate.code,
+              projectedOverageUsd: gate.projectedOverageUsd,
+              ceilingUsd: gate.ceilingUsd,
+            },
+            { status: gate.status },
+          )
         }
       }
 
@@ -323,20 +326,24 @@ async function handler(request: Request): Promise<Response> {
     }
     {
       // Storage quota applies to every org; a plan-less org resolves as
-      // `free` (250 MB cap), not unmetered.
+      // `free` (250 MB cap), not unmetered. Same gate as the POST above
+      // (AGL-1886) — the two must not disagree about whether these bytes fit,
+      // or a customer signs a URL they are then refused at finalize.
       const counterSnapshot = await counterRef.get()
       const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
       const usedMb = (usedBytes + actualBytes) / (1024 * 1024)
-      // usedMb includes the finalized object; ceil-1 allows exactly up to
-      // the integer MB cap and no further (AGL-471 off-by-one).
-      const quota = checkQuota(
-        org as any,
-        'storagePerHostMb',
-        Math.ceil(usedMb) - 1,
-      )
-      if (!quota.allowed) {
+      const gate = mediaStorageGate({ org: org as any, usedMb })
+      if (!gate.allowed) {
         await file.delete().catch(() => undefined)
-        return Response.json({ error: `Storage limit reached (${quota.limit} MB)` }, { status: 403 })
+        return Response.json(
+          {
+            error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
+            code: gate.code,
+            projectedOverageUsd: gate.projectedOverageUsd,
+            ceilingUsd: gate.ceilingUsd,
+          },
+          { status: gate.status },
+        )
       }
     }
 

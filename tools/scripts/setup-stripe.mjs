@@ -35,6 +35,8 @@
 // PLAN_PRICING in libs/aglyn/src/lib/app-utils/plan-entitlements.ts — keep
 // the two in sync when pricing changes.
 
+import { WEBHOOK_EVENTS } from './lib/stripe-webhook-health.mjs'
+
 const SECRET = process.env.STRIPE_SECRET_KEY
 if (!SECRET) {
   console.error('Missing STRIPE_SECRET_KEY env var (sk_test_... or sk_live_...)')
@@ -220,39 +222,15 @@ for (const {
 }
 
 /**
- * Every event a handler in this repo actually reads — the checked-in record
- * of what the endpoint must carry (AGL-1798).
+ * Every event a handler in this repo actually reads — the checked-in record of
+ * what the endpoint must carry (AGL-1798).
  *
- * A missing entry here is not a syntax error anywhere: the handler compiles,
- * its tests pass against a synthesised event, and it simply never runs in
- * production. `charge.refunded` was missing for exactly that reason and the
- * live endpoint carries it only because someone added it by hand.
- *
- * Add an event here in the same commit as the handler that reads it, and say
- * which one in the comment, so the next reader can tell a live subscription
- * from a dead one without opening the dashboard.
+ * The list itself lives in `lib/stripe-webhook-health.mjs` so that the script
+ * which CREATES the endpoint and the audit which ASSERTS it (AGL-1906,
+ * `audit-stripe-webhook-health.mjs`) cannot drift apart. Two hand-maintained
+ * copies would eventually disagree, and the audit would then certify the live
+ * endpoint against the wrong list — a green check reading the wrong thing.
  */
-const WEBHOOK_EVENTS = [
-  'customer.subscription.created',
-  'customer.subscription.updated',
-  'customer.subscription.deleted',
-  // Marketplace purchases (AGL-46).
-  'checkout.session.completed',
-  // Billing notifications (AGL-259): invoice availability + dunning.
-  'invoice.finalized',
-  'invoice.paid',
-  'invoice.payment_failed',
-  // Marketplace refunds (AGL-1546): a FULLY refunded purchase loses its
-  // install entitlement. `libs/plugins/marketplace/src/lib/server/billing-webhook.ts`
-  // has handled this since AGL-1546 shipped and this list never carried the
-  // event, so any endpoint this script created would have revoked nothing.
-  'charge.refunded',
-  // Card disputes (AGL-1787): `created` flags the order and warns the
-  // merchant while the evidence window is open; `closed` is the only one
-  // that moves money, and only when `status` is `lost`.
-  'charge.dispute.created',
-  'charge.dispute.closed',
-]
 
 if (webhookUrl) {
   // Reuse an existing endpoint for the URL: Stripe returns the signing

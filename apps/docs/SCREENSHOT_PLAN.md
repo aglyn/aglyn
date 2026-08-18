@@ -231,3 +231,378 @@ published site, and a signed-in editor account.
 - **Frame:** the reader dialog, with the table's unread row peeking behind it.
 - **Alt text:** A form submission open in the inbox reader, fields labeled, with
   Mark unread and Delete actions — an unread row with its New chip behind.
+
+---
+
+# Addendum — 2026-08-18 release documentation
+
+Capture specs for the docs written during the September 1 release push
+(AGL-1905, AGL-1928, AGL-1943). Same conventions as above: 1440×900, light
+scheme, `tools/e2e/capture-docs-screenshots.mjs`, save under
+`static/img/<area>/`, optimize to \<300 KB.
+
+**These were planned but not captured** — the browser was held by another agent
+for the whole session. Every entry below carries a ready-to-paste shot spec, so
+a browser session can run them without re-deriving a route, a selector or a
+crop. Paste each `spec` into the `SHOTS` array, run the harness, then replace
+the `<!-- screenshot: … -->` comment on the named docs page with a standard
+image reference using the alt text given.
+
+Two conventions worth restating because most of these need them:
+
+- **`clipTo` beats a full page.** Zach's ask is section- and component-level
+  crops. A `clipTo` crops to what the element *measures at capture time*, which
+  is what a card whose neighbours keep growing needs. Reach for a fixed `rect`
+  only when there is no element to name (page chrome, a toolbar band).
+- **`annotate` draws the numbered badge + outline.** Where an entry lists
+  callouts, they are the `annotate` marks, in order — and the docs page needs a
+  matching numbered list beneath the image, or the badges mean nothing.
+
+⚠️ **Read `CONTRIBUTING.md`'s note on the capture account before running these.**
+The harness signs in as STAFF, and staff see release-flagged-off surfaces no
+customer does. Three shots below are on a flagged surface (Aglyn Assist) and
+must hide the staff-preview chip — noted per shot.
+
+## Billing lifecycle (AGL-1905)
+
+### A1. `static/img/billing-and-plans/pending-downgrade-chip.png`
+
+- **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#pending-downgrade`
+- **Precondition:** an org on a paid tier with a **scheduled downgrade** —
+  switch to a lower self-serve plan and confirm, so `subscription.pendingDowngrade`
+  is set. Do not let it settle; the chip only exists while the schedule is pending.
+- **Frame:** the **Current plan** card only. The `moves to {plan} on {date}` chip
+  and the **Keep my current plan** button must both be in frame — they are the
+  two halves of the story and a crop holding one without the other is worse than
+  no image.
+- **Callouts:** ① the pending-downgrade chip, ② Keep my current plan.
+- **Alt text:** The Current plan card with a chip reading that the plan moves to
+  a lower tier on a future date, and a Keep my current plan button beside it.
+
+```js
+{
+  out: 'billing-and-plans/pending-downgrade-chip.png',
+  path: `/${ORG_SLUG}/billing`,
+  waitFor: 'Current plan',
+  settleMs: 1500,
+  annotate: [
+    { locator: '.MuiChip-root:has-text("moves to")', n: 1 },
+    { locator: 'button:has-text("Keep my current plan")', n: 2 },
+  ],
+  clipTo: {
+    locator: '.MuiCard-root:has(:text-is("Current plan"))',
+  },
+}
+```
+
+### A2. `static/img/billing-and-plans/downgrade-preview-zero-due.png`
+
+- **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#when-changes-take-effect`
+- **Precondition:** an active paid subscription. Open the plan switch confirm
+  dialog for a **lower** tier so the preview resolves.
+- **Frame:** the confirm dialog only. **$0 due today** and the effective date
+  must both be legible — this image exists to prove the sentence in the table,
+  and a crop where the amount is readable but the date is not proves half of it.
+- **Alt text:** The downgrade confirmation dialog showing $0 due today and the
+  date the new plan takes effect.
+
+```js
+{
+  out: 'billing-and-plans/downgrade-preview-zero-due.png',
+  path: `/${ORG_SLUG}/billing`,
+  waitFor: 'Current plan',
+  actions: [
+    { click: 'text=Show 2 lower plans', settleMs: 600 },
+    { click: '.MuiCard-root:has-text("Starter") button:has-text("Switch")', settleMs: 2000 },
+  ],
+  clipTo: { locator: '[role="dialog"]' },
+}
+```
+
+### A3–A6. The retention funnel, one shot per step
+
+- **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#the-cancel-dialog`
+- **Precondition:** an org with a live subscription and **no prior winback**
+  (the winback step is once per org, ever — an org that has taken one will skip
+  A5 entirely and the shot cannot be retaken without a fresh org).
+- **Frame:** the dialog only, every step.
+- ⚠️ **Do not complete the funnel.** Close the dialog after each capture. The
+  final step cancels a real subscription.
+
+| # | File | Step | Must be legible |
+| --- | --- | --- | --- |
+| A3 | `retention-survey.png` | Survey | All seven reasons and the optional comment box |
+| A4 | `retention-downsell.png` | Downsell | The named smaller plan and **No thanks, continue** |
+| A5 | `retention-winback.png` | Winback | The **percentage and the month count** — the bound is the point |
+| A6 | `retention-confirm.png` | Confirm | The over-Free-limits warning and **Keep my plan** |
+
+- **Alt text (A3):** The cancellation survey asking why you're leaving, with
+  seven reasons and an optional comment box.
+- **Alt text (A4):** The downsell step offering a smaller paid plan, with a No
+  thanks, continue button.
+- **Alt text (A5):** The winback step offering a percentage discount for a
+  stated number of months.
+- **Alt text (A6):** The cancel confirmation listing what will be over the Free
+  plan's limits, with Keep my plan and the cancel action.
+
+```js
+// A3. The later steps need the previous one answered, so they are separate
+// shots rather than one `actions` chain — a chain that fails halfway leaves
+// you guessing which step broke.
+{
+  out: 'billing-and-plans/retention-survey.png',
+  path: `/${ORG_SLUG}/billing`,
+  waitFor: 'Current plan',
+  actions: [{ click: 'button:has-text("Cancel subscription")', settleMs: 800 }],
+  clipTo: { locator: '[role="dialog"]' },
+}
+// A4/A5/A6 repeat with the survey answered first:
+//   { click: 'text=It’s too expensive', settleMs: 200 },
+//   { click: 'button:has-text("Continue")', settleMs: 1500 },
+// then for A5 add   { click: 'button:has-text("No thanks, continue")', settleMs: 600 }
+// and for A6 add it twice.
+```
+
+### A7. `static/img/billing-and-plans/invoice-tax-line.png`
+
+- **Docs page:** `workspace-and-billing/billing-and-plans/overview.md` → `#sales-tax`
+- **Precondition:** a paid invoice **with a non-zero tax line** on an org whose
+  billing address is in a jurisdiction Aglyn collects in.
+- **Capture:** the Stripe-hosted invoice reached from **Billing history → View**.
+- **Frame:** the invoice's totals block only — subtotal, the **tax line named
+  separately**, total. Crop out the customer address block.
+- ⚠️ **Redact before committing:** the invoice number, the customer name and the
+  address. This is the one shot in the plan that renders real billing data.
+- **Alt text:** An invoice totals block with sales tax listed as its own line
+  between the subtotal and the total.
+
+*(No shot spec — this is on Stripe's domain, outside the harness. Capture by
+hand and redact.)*
+
+## API (AGL-1928, guides)
+
+### A8. `static/img/api/api-keys-card.png`
+
+- **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
+- **Capture:** **Organization → Settings**, scrolled to the **API keys** card,
+  with at least two keys present so the list reads as a list — one named
+  descriptively (`zapier-orders-sync`) to make the guide's naming advice
+  self-evident, and one revoked so the revoked state is visible.
+- **Frame:** the API keys card only.
+- **Callouts:** ① the Create API key button, ② a key's truncated prefix,
+  ③ the last-used column.
+- **Alt text:** The API keys card listing two keys with their scopes, truncated
+  prefixes and last-used times, and a Create API key button.
+
+```js
+{
+  out: 'api/api-keys-card.png',
+  path: `/${ORG_SLUG}/settings`,
+  waitFor: 'API keys',
+  settleMs: 1200,
+  actions: [{ scroll: 'text=API keys', settleMs: 800 }],
+  annotate: [
+    { locator: 'button:has-text("Create API key")', n: 1 },
+    { locator: 'text=/aglyn_sk_[a-z0-9]+…/', n: 2 },
+  ],
+  clipTo: {
+    locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("API keys"))',
+  },
+}
+```
+
+### A9. `static/img/api/create-key-scopes.png`
+
+- **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
+- **Capture:** the **Create API key** dialog with a name typed and **Datasets —
+  read** ticked, so the guide's step 5 matches the image exactly.
+- **Frame:** the dialog only. **All eight scope rows must be in frame** — the
+  three new ones (Orders, Products, Media) are the reason this shot is being
+  retaken, and a crop that stops at five silently documents the old surface.
+- **Callouts:** ① the name field, ② the ticked scope, ③ the three commerce and
+  media scopes as a group.
+- **Alt text:** The Create API key dialog with a descriptive name typed and the
+  Datasets — read scope ticked, showing all eight available scopes.
+
+```js
+{
+  out: 'api/create-key-scopes.png',
+  path: `/${ORG_SLUG}/settings`,
+  waitFor: 'API keys',
+  actions: [
+    { scroll: 'text=API keys', settleMs: 600 },
+    { click: 'button:has-text("Create API key")', settleMs: 800 },
+    { fill: ['[role="dialog"] input[type="text"]', 'zapier-orders-sync'], settleMs: 200 },
+  ],
+  annotate: [
+    { locator: '[role="dialog"] input[type="text"]', n: 1 },
+    { locator: 'label:has-text("Datasets — read")', n: 2 },
+    { locator: 'label:has-text("Orders — read")', n: 3 },
+  ],
+  clipTo: { locator: '[role="dialog"]' },
+}
+```
+
+### A10. `static/img/api/key-shown-once.png`
+
+- **Docs page:** `guides/your-first-api-call.md` → `#step-1-create-a-key`
+- **Capture:** the moment after creating a key, where the full token is shown
+  with its copy button and the "you won't see this again" warning.
+- **Frame:** the reveal panel only.
+- ⚠️ **The token in frame must be from a key you revoke immediately after.**
+  Do not blur a live key and call it redacted — a blur is reversible often
+  enough that the only safe capture is a dead credential.
+- **Alt text:** A newly created API key shown once in full, with a copy button
+  and a warning that it will not be shown again.
+
+*(No shot spec — creating a key is a real write. Capture by hand, then revoke.)*
+
+## Agency workspace (guides)
+
+### A11. `static/img/guides/team-managers-vs-collaborators.png`
+
+- **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
+- **Capture:** **Organization → Team** on an org holding both a workspace
+  manager and a site collaborator, so the two rows sit side by side and the
+  distinction is visible rather than asserted.
+- **Frame:** the members table only.
+- **Callouts:** ① a manager row's scope, ② a collaborator row's scope,
+  ③ the seat counts.
+- **Alt text:** The team members table showing a workspace manager alongside a
+  site collaborator, with their different access scopes and the seat counts.
+
+```js
+{
+  out: 'guides/team-managers-vs-collaborators.png',
+  path: `/${ORG_SLUG}/team`,
+  waitFor: 'Members',
+  settleMs: 1200,
+  clipTo: {
+    locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("Members"))',
+  },
+}
+```
+
+### A12. `static/img/guides/site-members-invite.png`
+
+- **Docs page:** `guides/run-an-agency-workspace.md` → `#step-3-access`
+- **Capture:** a **site's** members card with the invite control open, showing
+  that this grants access to *this site only*.
+- **Frame:** the card plus the open invite control.
+- **Alt text:** A site's members card with the invite control open, granting
+  access to that one site.
+
+```js
+{
+  out: 'guides/site-members-invite.png',
+  path: `/${HOST_BASE}/setup`,
+  waitFor: 'Members',
+  actions: [{ scroll: 'text=Members', settleMs: 800 }],
+  clipTo: {
+    locator: '.MuiCard-root:has(> .MuiCardHeader-root:has-text("Members"))',
+    include: ['[role="dialog"]'],
+  },
+}
+```
+
+## Commerce (AGL-1794, AGL-1873)
+
+### A13. `static/img/commerce/order-charged-back.png`
+
+- **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#a-lost-dispute`
+- **Precondition:** a seeded order carrying `dispute` with a lost outcome and a
+  non-zero `refundedCents`.
+- **Frame:** the order row **and** its detail, so both the **Charged back**
+  status and the reversed amount are in one image. This is the shot that has to
+  show it is *distinct from a refund*, so a frame with only the badge does not
+  do the job.
+- **Callouts:** ① the Charged back status, ② the reversed amount,
+  ③ the Disputes filter.
+- **Alt text:** An order showing Charged back status with the reversed amount,
+  distinct from a refund, and the Disputes filter on the orders list.
+
+```js
+{
+  out: 'commerce/order-charged-back.png',
+  path: `/${HOST_BASE}/commerce/orders`,
+  waitFor: 'Charged back',
+  settleMs: 1500,
+  annotate: [
+    { locator: '.MuiChip-root:has-text("Charged back")', n: 1 },
+    { locator: 'button:has-text("Disputes")', n: 3 },
+  ],
+}
+```
+
+### A14. `static/img/commerce/selling-not-enabled.png`
+
+- **Docs page:** `commerce-and-bookings/commerce/overview.md` → `#orders`
+- **Precondition:** an org on a plan **without** commerce whose site still has
+  the commerce plugin enabled — the exact state the admonition describes, and
+  the whole reason the shot is worth taking.
+- **Capture:** attempting to send a draft order's payment link, so the refusal
+  appears.
+- **Frame:** the refusal message with enough of the draft order around it to
+  show where the customer was.
+- **Alt text:** A draft order refusing to create a payment link with a message
+  that selling is not enabled, on a plan without commerce.
+
+*(No shot spec — needs an org in a deliberately downgraded state. Set up by hand.)*
+
+## Tooltips (AGL-1943)
+
+### A15. `static/img/getting-started/assist-panel-help-tip.png`
+
+- **Docs page:** `getting-started/aglyn-assist.md` → `#what-it-can-do`
+- **Frame:** the Assist panel header with the `?` tooltip **open**.
+- ⚠️ **Flagged surface.** `release_assist` is off by default and the harness
+  signs in as staff, so the **Staff preview** chip will be in frame. Hide it
+  before capturing, and assert it is gone — a staff-only chip published in a
+  customer doc is the AGL-1600 leak.
+- **Alt text:** The Aglyn Assist panel header with its help tooltip open,
+  linking to the documentation.
+
+```js
+{
+  out: 'getting-started/assist-panel-help-tip.png',
+  path: `/${HOST_BASE}`,
+  waitFor: 'Aglyn Assist',
+  actions: [
+    { click: '[aria-label="Open Aglyn Assist"]', settleMs: 800 },
+    // AGL-1600: hide the staff-preview chip, then assert it is really gone.
+    { evaluate: `document.querySelectorAll('.MuiChip-root').forEach(c => { if (c.textContent === 'Staff preview') c.remove() })` },
+    { hover: '[aria-label^="Help: Aglyn Assist"]', settleMs: 600 },
+  ],
+  assertAbsent: 'text=Staff preview',
+  clipTo: {
+    locator: '.MuiPaper-root:has([aria-label="Close Aglyn Assist"])',
+    include: ['[role="tooltip"]'],
+  },
+}
+```
+
+### A16. `static/img/billing-and-plans/lower-tiers-expanded-tip.png`
+
+- **Docs page:** `workspace-and-billing/billing-and-plans/downgrading-and-canceling.md` → `#when-changes-take-effect`
+- **Capture:** the billing plan cards with **lower plans expanded** (the `?`
+  only exists once expanded) and its tooltip open.
+- **Frame:** the disclosure row and the tooltip. The dimmed lower-tier cards
+  should be partly visible beneath, so the image shows *what* was disclosed.
+- **Alt text:** The Show lower plans control expanded, with a help tooltip
+  explaining that a downgrade takes effect at the end of the paid period.
+
+```js
+{
+  out: 'billing-and-plans/lower-tiers-expanded-tip.png',
+  path: `/${ORG_SLUG}/billing`,
+  waitFor: 'Current plan',
+  actions: [
+    { click: 'text=/Looking for something smaller/', settleMs: 600 },
+    { hover: '[aria-label^="Help: Downgrading"]', settleMs: 600 },
+  ],
+  clipTo: {
+    locator: '.MuiStack-root:has(> button[aria-expanded="true"])',
+    include: ['[role="tooltip"]'],
+  },
+}
+```

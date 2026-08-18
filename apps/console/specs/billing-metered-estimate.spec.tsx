@@ -226,13 +226,23 @@ describe('org-library bytes reach the card (the AGL-1473 console half)', () => {
     expect(screen.getByText(/measured but not yet billed/i)).toBeTruthy()
   })
 
-  it('names the org library share, so the split is legible', async () => {
+  it('names the org library share AGAINST ITS OWN ALLOWANCE (AGL-1886)', async () => {
+    // The split was legible from AGL-1473; the allowance is what AGL-1886
+    // added, and it is a different number from the org-wide band in the row
+    // above. Uploads are enforced PER SCOPE against `storagePerHostMb`, so
+    // the org library refuses at ITS cap while the org-wide total is still a
+    // fraction of the band the card otherwise shows. A customer told only the
+    // second is refused at a third of the number they were given.
     mockUsageConfig({ orgLibraryBilledFrom: MONTH })
     seed({ hostMediaBytes: 1 * GB, orgLibraryBytes: Math.round(0.5 * GB) })
     render(<BillingMeteredEstimateComponent org={ORG} hosts={HOSTS} />)
     await waitFor(() => {
-      expect(screen.getByText(/0\.50 GB .*organization library/i)).toBeTruthy()
+      expect(
+        screen.getByText(/0\.50 of .* GB in your organization library/i),
+      ).toBeTruthy()
     })
+    // And it says what the allowance MEANS — that uploads stop there.
+    expect(screen.getByText(/new uploads there stop at it/i)).toBeTruthy()
   })
 
   it('never publishes a low number when the org counter read fails', async () => {

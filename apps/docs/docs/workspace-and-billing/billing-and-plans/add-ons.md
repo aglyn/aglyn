@@ -34,8 +34,16 @@ pick a plan first).
 ## How changes bill
 
 - Adding or removing units shows a **prorated preview** of today's charge before you
-  confirm — the same flow as plan switches.
+  confirm, and takes effect immediately.
 - Removing an add-on credits the unused time onto your next invoice.
+
+:::note Add-ons are not on the plan-switch schedule
+Add-on changes are always immediate and always prorated, in **both** directions.
+Plan switches are not: since Aglyn moved to end-of-cycle downgrades, a *plan*
+downgrade waits for your period end and charges $0 today, while only a plan
+*upgrade* is immediate and prorated. Removing an add-on still credits you today.
+See [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
+:::
 - **Hard caps**: seat and dataset add-ons stop at your plan's maximum (for example,
   Starter tops out at 5 workspace managers). Past the cap, the answer is a plan
   upgrade — the Billing page tells you when you're there.
@@ -43,8 +51,11 @@ pick a plan first).
 ## Plan switches and cancellation
 
 - **Switching plans** keeps your add-on quantities and re-prices them at the new
-  plan's rates in the same prorated update. If the new plan doesn't sell one of your
-  add-ons, it's removed and the switch confirmation says so.
+  plan's rates. If the new plan doesn't sell one of your add-ons, it's removed and
+  the switch confirmation says so. On an **upgrade** this happens today, in the same
+  prorated update as the plan change. On a **downgrade** it happens on the effective
+  date along with the plan — your add-ons keep running, at your current plan's rates,
+  for the rest of the period you already paid for.
 - **Canceling** (or a subscription that dies after failed payments) ends your add-ons
   with the plan — they bill on that subscription, so entitlement enforcement stops
   counting them at the same moment the plan downgrades to Free.

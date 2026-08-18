@@ -35,8 +35,9 @@
  * re-reads the count, and an unanswered aggregate falls back to the loaded
  * rows rather than to 0.
  *
- * No counting RULE moves: `checkQuota` is untouched and this number is not
- * metered by `report-usage`.
+ * No counting RULE moves: the cap resolver is untouched by THIS issue (it
+ * moved in AGL-1775, which is why the fixture allocates) and this number is
+ * not metered by `report-usage`.
  *
  * NO STRIPE PATH IS EXERCISED and no production data is read.
  */
@@ -66,13 +67,25 @@ const aggregate: { count: number | null } = { count: SERVER_REGISTERS }
 const FIRESTORE = {}
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'reg-new' })
 /**
- * Stock `agency` (`posRegisters: 20`) + 30 purchased add-ons: effective
- * limit 50, above the window — the AGL-1738 configuration. Every stock band
- * alone sits under 25, which is exactly why AGL-1716 recorded this card as
- * a negative until the add-on ceiling was confirmed at band + 50.
+ * Stock `agency` (`posRegisters: 20`) + 30 purchased add-ons ALL ASSIGNED TO
+ * THIS SITE: effective limit 50, above the window — the AGL-1738
+ * configuration. Every stock band alone sits under 25, which is exactly why
+ * AGL-1716 recorded this card as a negative until the add-on ceiling was
+ * confirmed at band + 50.
+ *
+ * `registerAllocations` is what makes the 30 land here (AGL-1775): the
+ * purchase is an org POOL now, so a fixture that only bought them would leave
+ * this site on agency's stock 20 and this suite would be testing a different
+ * cap than the one it describes. The single-site merchant who put the whole
+ * purchase on one site is the shape that still reaches 50.
  */
 const ORG_PLAN = {
-  org: { $id: 'org-1', plan: 'agency', seatAddons: { posRegisters: 30 } },
+  org: {
+    $id: 'org-1',
+    plan: 'agency',
+    seatAddons: { posRegisters: 30 },
+    registerAllocations: { 'host-1': 30 },
+  },
   ready: true,
 }
 
@@ -184,7 +197,7 @@ describe('the POS-registers cap is a server aggregate (AGL-1738)', () => {
     // it awaits anything, so there is nothing here to wait FOR.
     expect(
       enqueueSnackbar.mock.calls.some((call) =>
-        String(call[0]).includes('Your plan includes 50 registers'),
+        String(call[0]).includes('This site can run 50 registers'),
       ),
     ).toBe(true)
     // The API would have refused it anyway; the point is that the card

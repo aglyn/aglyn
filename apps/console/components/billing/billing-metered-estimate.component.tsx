@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynOrgBilling } from '@aglyn/aglyn'
+import { resolveOrgEntitlements, type AglynOrgBilling } from '@aglyn/aglyn'
 import {
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
@@ -205,6 +205,20 @@ export function BillingMeteredEstimateComponent(
     : estimateMonthlyUsageCost(snapshots ?? [], org)
   const { included } = estimate
   const orgLibraryGb = (orgLibraryBytes ?? 0) / (1024 * 1024 * 1024)
+  /**
+   * The org library's OWN allowance (AGL-1886), which is not the org-wide
+   * band beside it.
+   *
+   * Uploads are enforced PER SCOPE against `storagePerHostMb` — the upload
+   * route reads the very counter it increments — so the org library fills up
+   * and starts refusing at this number, while the "Storage" row above
+   * compares an org-wide total to `hostLimit × storagePerHostMb`. On any plan
+   * with more than one site those are different numbers, and the one that
+   * stops an upload is this one. Showing only the other is how a customer
+   * ends up refused at 33% of the band the card told them about.
+   */
+  const orgLibraryAllowanceGb =
+    resolveOrgEntitlements(org as never).storagePerHostMb / 1024
   // `UNLIMITED` is Infinity, and a band derived from it stays Infinity —
   // `Number.isFinite` catches both that and a NaN from bad override data.
   const band = (value: number, digits = 0) =>
@@ -290,10 +304,13 @@ export function BillingMeteredEstimateComponent(
           )}
           {orgLibraryGb > 0 ? (
             <Typography variant="caption" color="text.secondary">
-              {`Includes ${orgLibraryGb.toFixed(2)} GB in your organization library.` +
+              {`Includes ${orgLibraryGb.toFixed(2)} of ` +
+                `${band(orgLibraryAllowanceGb, 2)} GB in your organization ` +
+                'library, which has its own allowance — new uploads there ' +
+                'stop at it. ' +
                 (libraryBilled
                   ? ''
-                  : ' Organization-library storage is measured but not yet billed.')}
+                  : 'Organization-library storage is measured but not yet billed.')}
             </Typography>
           ) : null}
           {usageRow(

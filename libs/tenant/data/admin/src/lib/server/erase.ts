@@ -76,10 +76,24 @@ export async function eraseHost(hostId: string): Promise<void> {
     .delete()
     .catch(() => undefined)
   if (orgId) {
+    // The routing entry and the site's POS register seats go in the SAME
+    // write (AGL-1775). `registerAllocations[hostId]` is capacity the org has
+    // paid for and assigned here; a deleted site must return it to the pool
+    // or the org keeps paying $89/mo for a seat pinned to a site that no
+    // longer exists and cannot be reassigned from any surface. Releasing it
+    // by deleting the key rather than by decrementing a counter means the
+    // pool is `purchased - sum(allocations)` by arithmetic and has nothing to
+    // drift out of step with.
     await firestore
       .collection('orgs')
       .doc(orgId)
-      .set({ hosts: { [hostId]: FieldValue.delete() } }, { merge: true })
+      .set(
+        {
+          hosts: { [hostId]: FieldValue.delete() },
+          registerAllocations: { [hostId]: FieldValue.delete() },
+        },
+        { merge: true },
+      )
       .catch(() => undefined)
     // Drop every member's reverse-index row for this host (AGL-844); the
     // members still exist here (recursiveDelete of the org, if any, is later).
@@ -170,6 +184,23 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
  * rows through the SAME function that deletes them. A separate counting pass
  * would be a second enumeration of the sweep list, which is precisely the
  * divergence AGL-1481 exists to remove.
+ *
+ * **`platformRevenue` must NEVER be added to this sweep (AGL-1811).** It is
+ * org-keyed by field — exactly the shape this mechanism eats — and that is
+ * the trap: those rows are per-transaction TAX FILING RECORDS (gross, tax,
+ * jurisdiction) with a statutory retention obligation, and the quarterly
+ * Texas return is their sum. GDPR Art. 17(3)(b) exempts them: erasure does
+ * not extend to records retained for compliance with a legal obligation. An
+ * erased org's rows deliberately outlive it — the
+ * `erase-org-tax-retention.emulator.spec` pins survival, so an over-eager
+ * future sweep fails a test instead of un-filing a tax period.
+ *
+ * **`storefrontTaxCollected` must NEVER be added either (AGL-1904).** Same
+ * shape, same trap, same reason: it carries `orgId` as a field, and its rows
+ * are the record of sales tax charged to shoppers on that org's storefront —
+ * including the tax a `mode: 'stripe'` store collects under AGLYN's own
+ * Texas registration, which Aglyn must be able to account for long after the
+ * merchant has gone.
  */
 async function deleteDocsByOrgId(
   collection: string,

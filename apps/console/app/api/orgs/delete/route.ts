@@ -23,6 +23,7 @@ import {
   lockdownRefusal,
   logOrgActivity,
 } from '@aglyn/tenant-data-admin'
+import { RETENTION_COLLECTION } from '../../_lib/retention'
 
 /**
  * Self-serve organization deletion (AGL-485). This route only sets/clears
@@ -103,6 +104,34 @@ async function handler(request: Request): Promise<Response> {
         : 'Canceled organization deletion',
       { type: 'org', id: orgId },
     )
+    if (requesting) {
+      // Funnel accounting (AGL-1863): account deletion shares the retention
+      // funnel with subscription cancel. A request that arrived without
+      // completing the funnel still works — this endpoint predates the
+      // funnel and staff/tooling call it — but it is recorded as
+      // funnel-skipped so the churn numbers cannot silently exclude it.
+      // Best-effort: the marker must never break a deletion request.
+      const funnelId =
+        typeof body?.funnelId === 'string' && body.funnelId
+          ? String(body.funnelId)
+          : null
+      try {
+        await orgRef
+          .collection(RETENTION_COLLECTION)
+          .doc()
+          .create({
+            kind: 'delete_requested',
+            surface: 'account_delete',
+            funnelSkipped: !funnelId,
+            ...(funnelId ? { funnelId } : {}),
+            plan: (orgSnapshot.get('plan') as string | undefined) ?? null,
+            uid: decoded.uid,
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          })
+      } catch {
+        // Marker write failed — the deletion request itself succeeded.
+      }
+    }
     return Response.json({ ok: true, erasureRequested: requesting }, { status: 200 })
   } catch (error) {
     console.error(error)

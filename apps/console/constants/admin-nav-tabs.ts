@@ -80,6 +80,16 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_MEDIA_QUARANTINE),
     },
     {
+      id: 'nav-tab-admin-health',
+      label: 'Health',
+      href: buildRoute(Route.ADMIN_HEALTH),
+    },
+    {
+      id: 'nav-tab-admin-tax-return',
+      label: 'Sales tax',
+      href: buildRoute(Route.ADMIN_TAX_RETURN),
+    },
+    {
       id: 'nav-tab-admin-audit',
       label: 'Audit log',
       href: buildRoute(Route.ADMIN_AUDIT),

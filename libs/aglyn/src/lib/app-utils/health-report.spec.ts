@@ -20,6 +20,8 @@ import {
   MAX_BACKUP_AGE_DAYS,
   MAX_EXPORT_AGE_DAYS,
   backupsHealth,
+  beaconHealth,
+  billingWebhookHealth,
   exportsHealth,
   healthBody,
   healthHeaders,
@@ -147,14 +149,14 @@ describe('backupsHealth', () => {
     expect(check.states).toEqual({ READY: 1 })
   })
 
-  it('fails on any NOT_AVAILABLE backup — the AGL-1490 gap', () => {
+  it('fails when the NEWEST backup is unusable — the AGL-1490 gap', () => {
     // The 2026-08-02 backup failed silently and sat unnoticed for 11 days.
-    // A fresh READY sibling does NOT excuse it: half the restore points being
-    // gone is exactly the condition that must page someone.
+    // What made it an incident is that it was the NEWEST thing there was:
+    // nothing usable had been produced since. That must still page someone.
     const check = backupsHealth(
       [
         { state: 'NOT_AVAILABLE', snapshotTime: days(11) },
-        { state: 'READY', snapshotTime: days(4) },
+        { state: 'READY', snapshotTime: days(14) },
       ],
       7,
       NOW,
@@ -162,6 +164,52 @@ describe('backupsHealth', () => {
     expect(check.ok).toBe(false)
     expect(check.code).toBe('backup-failed')
     expect(check.states).toEqual({ NOT_AVAILABLE: 1, READY: 1 })
+  })
+
+  it('tolerates aged-out NOT_AVAILABLE backups behind a fresh READY (AGL-1843)', () => {
+    // THE regression test. Managed backups flip READY → NOT_AVAILABLE at ~7
+    // days and then linger for the ~90 days until `expireTime`, so a weekly
+    // schedule that is working perfectly always shows a pile of them beside
+    // one READY backup. The old rule failed on any of them, which made this
+    // check structurally incapable of going green — it alerted continuously
+    // from 2026-08-13 onward while the backups were in fact fine. Production
+    // shape on 2026-08-18, verbatim from `gcloud firestore backups list`.
+    const check = backupsHealth(
+      [
+        { state: 'NOT_AVAILABLE', snapshotTime: days(16) },
+        { state: 'NOT_AVAILABLE', snapshotTime: days(9) },
+        { state: 'READY', snapshotTime: days(2) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.states).toEqual({ NOT_AVAILABLE: 2, READY: 1 })
+    expect(check.newestReadyAgeDays).toBe(2)
+  })
+
+  it('refuses to date an undateable non-READY backup in its own favour', () => {
+    // No `snapshotTime` means it cannot be shown to be older than the newest
+    // READY one, and "assume it aged out" is the assumption that hides a
+    // genuinely broken run.
+    const check = backupsHealth(
+      [{ state: 'NOT_AVAILABLE' }, { state: 'READY', snapshotTime: days(2) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
+  })
+
+  it('still fails when nothing is READY, whatever the aged ones say', () => {
+    const check = backupsHealth(
+      [{ state: 'NOT_AVAILABLE', snapshotTime: days(16) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
   })
 
   it('fails when the newest READY backup exceeds the age budget', () => {
@@ -475,5 +523,172 @@ describe('memoizeWithTtl', () => {
     expect(await probe()).toBe(1)
     clock = 0
     expect(await probe()).toBe(2)
+  })
+})
+
+describe('beaconHealth (AGL-1923)', () => {
+  const LOG = 'client-error-beacon-heartbeat'
+
+  it('is ok when the heartbeat write reached Cloud Logging', () => {
+    const check = beaconHealth({ ok: true }, LOG, 'console-web', 40)
+    expect(check.ok).toBe(true)
+    // No code on success — a body that always carries one teaches whoever
+    // reads it during an incident that the field means nothing.
+    expect(check.code).toBeUndefined()
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(200)
+  })
+
+  it('names the log and the deployment, so the body says what to go and query', () => {
+    const check = beaconHealth({ ok: true }, LOG, 'tenant-web', 40)
+    expect(check.logId).toBe(LOG)
+    expect(check.service).toBe('tenant-web')
+  })
+
+  it('is degraded, with the transport code, when the write was rejected', () => {
+    const check = beaconHealth({ ok: false, code: 'http-403' }, LOG, 'console-web', 40)
+    expect(check.ok).toBe(false)
+    // 403 is the revoked-IAM shape this whole check exists for — the code has
+    // to survive into the body or the alert says "beacon down" and nothing else.
+    expect(check.code).toBe('http-403')
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(503)
+  })
+
+  it('is degraded when the credential could not be minted', () => {
+    const check = beaconHealth({ ok: false, code: 'no-credential' }, LOG, 'console-web', 3)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-credential')
+  })
+
+  it('falls back to a stable code when a failure carries none', () => {
+    expect(beaconHealth({ ok: false }, LOG, 'console-web', 3).code).toBe(
+      'heartbeat-failed',
+    )
+  })
+
+  it('treats an unavailable heartbeat as degraded, never as calm', () => {
+    // "We could not determine whether the beacon works" IS the AGL-1923
+    // condition. A check that reports ok here would be the exact failure it
+    // was built to catch, one layer up.
+    const check = beaconHealth(null, LOG, 'console-web', 4000)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('heartbeat-unavailable')
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(503)
+  })
+
+  it('CLEARS: a degraded verdict does not latch — the next good write is ok', () => {
+    // The AGL-1843 rule, enforced rather than asserted in prose. `backup-state`
+    // sat red for four and a half days because its condition could not be
+    // cleared by any event; this one has no state to carry, so the same inputs
+    // in the other order give the other answer.
+    const red = beaconHealth({ ok: false, code: 'http-429' }, LOG, 'console-web', 40)
+    const green = beaconHealth({ ok: true }, LOG, 'console-web', 40)
+    expect(red.ok).toBe(false)
+    expect(green.ok).toBe(true)
+  })
+})
+
+describe('billingWebhookHealth (AGL-1924)', () => {
+  const HEALTHY = {
+    endpointStatus: 'enabled' as const,
+    undelivered: 0,
+    emitted: 12,
+    processed: 12,
+  }
+
+  it('is ok when the destination is enabled and nothing failed to deliver', () => {
+    const check = billingWebhookHealth(HEALTHY, 90)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(200)
+  })
+
+  it('is ok on a QUIET window — zero events is not a failure', () => {
+    // The AGL-1843 mistake in a new costume: at beta volume a night with no
+    // deliveries is legitimate, and a freshness rule would page on it. The
+    // verdict never keys on absence.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'enabled', undelivered: 0, emitted: 0, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(true)
+  })
+
+  it('goes red when Stripe could not deliver — the AGL-1551 shape', () => {
+    const check = billingWebhookHealth({ ...HEALTHY, undelivered: 7, processed: 0 }, 90)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('deliveries-failing')
+    expect(healthHttpStatus(healthStatus({ billingWebhook: check }))).toBe(503)
+  })
+
+  it('goes red on ONE failed delivery — there is no organic baseline', () => {
+    expect(billingWebhookHealth({ ...HEALTHY, undelivered: 1 }, 90).ok).toBe(false)
+  })
+
+  it('goes red when the destination is disabled, even with zero failures', () => {
+    // Total silent failure: Stripe stops ATTEMPTING, so `undelivered` reads
+    // zero and a delivery-only rule would call this healthy.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'disabled', undelivered: 0, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('endpoint-disabled')
+  })
+
+  it('goes red when the destination is gone entirely', () => {
+    const check = billingWebhookHealth(
+      { endpointStatus: 'missing', undelivered: 0, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('endpoint-missing')
+  })
+
+  it('reports the endpoint problem in preference to the delivery count', () => {
+    // The more actionable statement, and it EXPLAINS the other number.
+    const check = billingWebhookHealth(
+      { endpointStatus: 'missing', undelivered: 9, emitted: 40, processed: 0 },
+      90,
+    )
+    expect(check.code).toBe('endpoint-missing')
+  })
+
+  it('treats an unavailable census as degraded — unknown is never a pass', () => {
+    // The 2026-08-14 mis-tick: "no contrary evidence" read as "healthy" while
+    // the live endpoint was 400ing every delivery.
+    const check = billingWebhookHealth(null, 6000)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('stripe-unavailable')
+    expect(check.undelivered).toBeNull()
+    expect(check.endpointStatus).toBeNull()
+  })
+
+  it('stays ok when only the Firestore arm is unavailable', () => {
+    // Stripe already answered the question that matters; a Firestore hiccup
+    // must not manufacture a billing page.
+    const check = billingWebhookHealth({ ...HEALTHY, processed: null }, 90)
+    expect(check.ok).toBe(true)
+    expect(check.processed).toBeNull()
+  })
+
+  it('carries emitted and processed WITHOUT letting them move the verdict', () => {
+    // No floor for these exists until the beta produces a baseline, so they
+    // are for the human reading the incident, not for the alarm.
+    const check = billingWebhookHealth({ ...HEALTHY, emitted: 500, processed: 0 }, 90)
+    expect(check.ok).toBe(true)
+    expect(check.emitted).toBe(500)
+    expect(check.processed).toBe(0)
+  })
+
+  it('CLEARS: a red window does not latch — the next clean window is ok', () => {
+    const red = billingWebhookHealth({ ...HEALTHY, undelivered: 3 }, 90)
+    const green = billingWebhookHealth(HEALTHY, 90)
+    expect(red.ok).toBe(false)
+    expect(green.ok).toBe(true)
+  })
+
+  it('describes its own window, so the body needs no external key', () => {
+    expect(billingWebhookHealth(HEALTHY, 90).windowMinutes).toBe(60)
+    expect(billingWebhookHealth(HEALTHY, 90, 15).windowMinutes).toBe(15)
   })
 })

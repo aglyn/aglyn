@@ -134,6 +134,37 @@ function toReportedEvent(
 export const CLIENT_ERROR_LOG_ID = 'client-errors'
 
 /**
+ * The admin credential and project the beacon writes under.
+ *
+ * Extracted (AGL-1923) so the heartbeat below mints its token through the
+ * SAME path the reporter does. That sharing is the whole value of the
+ * heartbeat: the failures it exists to catch — an expired service-account
+ * key, a revoked `logging.logEntries.create`, an exhausted Logging quota —
+ * are environmental, and a heartbeat that acquired its credential some other
+ * way could report healthy while every real report was being dropped.
+ *
+ * Returns null when either half is missing; the caller decides what that
+ * means (the reporter drops the batch, the heartbeat reports degraded).
+ */
+async function beaconLoggingTarget(): Promise<{
+  token: string
+  projectId: string
+} | null> {
+  let token: string | undefined
+  let projectId: string | undefined
+  try {
+    const app = getApp()
+    projectId = (app.options.projectId ??
+      process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
+    token = (await app.options.credential?.getAccessToken())?.access_token
+  } catch {
+    token = undefined
+  }
+  if (!token || !projectId) return null
+  return { token, projectId }
+}
+
+/**
  * Forwards events under the admin service account — via Cloud LOGGING, not
  * the Error Reporting `events:report` API, and the transport is the point:
  * a log entry whose payload carries the `ReportedErrorEvent` `@type` is
@@ -151,16 +182,9 @@ export async function reportClientErrors(
   options: { service: string },
 ): Promise<number> {
   if (!events.length) return 0
-  let token: string | undefined
-  let projectId: string | undefined
-  try {
-    const app = getApp()
-    projectId = (app.options.projectId ??
-      process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']) as string | undefined
-    token = (await app.options.credential?.getAccessToken())?.access_token
-  } catch {
-    token = undefined
-  }
+  const target = await beaconLoggingTarget()
+  const token = target?.token
+  const projectId = target?.projectId
   if (!token || !projectId) {
     console.warn(
       JSON.stringify({ tag: 'AGL-1538:error-beacon', drop: events.length, reason: 'no-credential' }),
@@ -204,5 +228,109 @@ export async function reportClientErrors(
       }),
     )
     return 0
+  }
+}
+
+/**
+ * The log the beacon's heartbeat is written to (AGL-1923).
+ *
+ * DELIBERATELY NOT `client-errors`. The `Client error beacon` alert policy is
+ * a log-match on `logName="…/client-errors" AND severity>=ERROR`, so a
+ * heartbeat written there would page Zach on every probe — building the
+ * alert-fatigue mechanism the heartbeat exists to protect against. A separate
+ * log id at INFO keeps the two streams from ever being confused, and keeps
+ * the payload out of Error Reporting (which ingests on the
+ * `ReportedErrorEvent` `@type`, absent here on purpose).
+ */
+export const BEACON_HEARTBEAT_LOG_ID = 'client-error-beacon-heartbeat'
+
+/** What a heartbeat attempt proved, for the health verdict to reduce. */
+export interface BeaconHeartbeatResult {
+  /** Did the entry actually reach Cloud Logging? */
+  ok: boolean
+  /** A stable code on failure — never a raw error message. */
+  code?: string
+}
+
+/**
+ * Write one heartbeat entry through the beacon's own transport (AGL-1923).
+ *
+ * ## Why this exists
+ *
+ * `reportClientErrors` is fail-soft by design and must stay that way — it may
+ * never turn an observed error into a served one. But every one of its
+ * failure paths ends in a `console.warn` to the Vercel runtime log, which
+ * retains about an hour and drains nowhere (AGL-1799). So the beacon can fail
+ * completely and the only readings anyone has are "Error Reporting shows zero
+ * errors" and "the log-match policy is silent" — which are exactly the
+ * readings a clean launch produces. **A dead beacon is indistinguishable from
+ * zero errors.**
+ *
+ * A log-match policy can only ever report presence. The fix is a signal whose
+ * ABSENCE is detectable, and the cheapest one that needs no new vendor is a
+ * write that a health endpoint can grade synchronously: this returns whether
+ * the write landed, `/api/health/error-beacon` turns that into the 200/503
+ * contract the sibling health checks already speak, and the existing uptime
+ * check + alert + email path becomes the listener. The uptime probe is what
+ * winds the dead-man's switch, so there is no cron to forget.
+ *
+ * ## What it can and cannot prove
+ *
+ * It proves the credential mints, the IAM grant still covers
+ * `logging.logEntries.create`, the Logging API answers, and the quota is not
+ * exhausted — the whole environmental failure class AGL-1923 names. It does
+ * NOT prove a browser can reach `/api/errors`, and it does not prove the
+ * payload shape Error Reporting ingests on, because it deliberately does not
+ * write that shape.
+ *
+ * ## Clearing
+ *
+ * The condition it raises is an EVENT, not a state: the next successful write
+ * clears it, within one probe TTL. Nothing here can latch (AGL-1843).
+ *
+ * Never throws. A heartbeat that could 500 a health endpoint would be a
+ * monitoring probe that causes the outage it reports.
+ */
+export async function writeBeaconHeartbeat(options: {
+  service: string
+}): Promise<BeaconHeartbeatResult> {
+  const target = await beaconLoggingTarget()
+  if (!target) return { ok: false, code: 'no-credential' }
+  try {
+    const response = await fetch('https://logging.googleapis.com/v2/entries:write', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${target.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        logName: `projects/${target.projectId}/logs/${BEACON_HEARTBEAT_LOG_ID}`,
+        resource: { type: 'global' },
+        entries: [
+          {
+            severity: 'INFO',
+            jsonPayload: {
+              // No `@type`: this must not be ingested by Error Reporting.
+              tag: 'AGL-1923:beacon-heartbeat',
+              service: options.service,
+              version: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
+              environment: process.env['VERCEL_ENV'] ?? 'development',
+            },
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(REPORT_TIMEOUT_MS),
+    })
+    // The STATUS only. The health body is public and a Google error message
+    // can carry project ids and resource paths — the same rule the backups
+    // probe follows.
+    return response.ok ? { ok: true } : { ok: false, code: `http-${response.status}` }
+  } catch (error) {
+    // Codes, not messages: `TimeoutError` for the 4s abort, whatever the
+    // fetch layer names for a transport failure.
+    return {
+      ok: false,
+      code: `transport-${String((error as { name?: string })?.name ?? 'unknown')}`,
+    }
   }
 }

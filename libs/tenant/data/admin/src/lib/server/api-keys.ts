@@ -43,6 +43,16 @@ export const API_SCOPES = [
   'contacts:read',
   'sites:read',
   'forms:read',
+  // Commerce and media reads (AGL-1928). Each is separate from `sites:read`
+  // for the same reason `forms:read` is: a key handed to a fulfilment or
+  // accounting integration needs the order history and nothing else, and a
+  // key that syncs a catalogue into a PIM should not thereby be able to read
+  // every form submission a site has ever taken. Read-only on purpose —
+  // writes here move money or stock and want their own decision, in the same
+  // change that ships them (the AGL-899 rule for `contacts:write`).
+  'orders:read',
+  'products:read',
+  'media:read',
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]

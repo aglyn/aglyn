@@ -17,6 +17,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import AssistPanelComponent from '../../components/assist-panel.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import PlatformLockdownGate from '../../components/platform-lockdown-gate.component'
@@ -47,6 +48,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <MainLayout>
           <SecondaryNavBarComponent />
           {children}
+          {/* Aglyn Assist (AGL-1860): the floating helper on every console
+              page — this is the one slot above every route boundary, same
+              reason the secondary app bar lives here. Release-flag gated
+              inside the component (hidden entirely when released off). */}
+          <AssistPanelComponent />
         </MainLayout>
       </PlatformLockdownGate>
     </AuthenticatedLayout>

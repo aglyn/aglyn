@@ -54,6 +54,15 @@ export interface PlatformRevenueTaxLine {
   taxabilityReason: string | null
   /** The tax rate id, resolvable to a jurisdiction in the dashboard. */
   taxRateId: string | null
+  /**
+   * The base the rate was applied to — Stripe's `taxable_amount`, which under
+   * the TX data-processing position is 80% of the charge. This is the
+   * "taxable sales" figure a return reports directly; without it the base
+   * must be re-derived as `amount ÷ rate`, which needs a live Stripe read to
+   * resolve the rate id. Null when the event's shape did not carry it —
+   * `taxReturnSummary` counts such rows out loud rather than guessing.
+   */
+  taxableAmountCents: number | null
 }
 
 /** The per-transaction revenue record `platformRevenue/{invoiceId}` stores. */
@@ -125,11 +134,18 @@ function taxLines(invoice: any): PlatformRevenueTaxLine[] {
       : []
   return entries.map((entry: any) => {
     const rate = entry?.tax_rate_details?.tax_rate ?? entry?.tax_rate
+    // Both generations carry `taxable_amount`; distinguish an absent field
+    // from a genuine zero so the return summary can say which rows cannot
+    // state their base rather than treating them as zero-base sales.
+    const taxableAmount = Number(entry?.taxable_amount ?? NaN)
     return {
       amountCents: asCents(entry?.amount),
       taxabilityReason: asStringOrNull(entry?.taxability_reason),
       taxRateId:
         asStringOrNull(rate) ?? asStringOrNull((rate as any)?.id) ?? null,
+      taxableAmountCents: Number.isFinite(taxableAmount)
+        ? Math.round(taxableAmount)
+        : null,
     }
   })
 }

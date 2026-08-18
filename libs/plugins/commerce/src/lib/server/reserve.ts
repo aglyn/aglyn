@@ -61,6 +61,15 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     // deterministic refusals a merchant fixes out of band, and neither should
     // burn the guest's attempt key.
     const ownerOrg = await getOrgForHost(hostId)
+    // Plan gate, re-asked per request exactly as the storefront checkout
+    // asks it (AGL-1873, the AGL-481 pattern): a lapsed org's storefront
+    // must not keep taking reservation deposits — at the free plan's 0%
+    // transaction fee — through the one shopper-facing commerce door that
+    // skipped the entitlement. Deterministic and merchant-side, so it sits
+    // here above the claim with the readiness check.
+    if (!Aglyn.checkEntitlement(ownerOrg?.org as any, 'commerce')) {
+      return res.status(403).json({ error: 'Reservations are not enabled' })
+    }
     const ownerId = ownerOrg?.org?.ownerUid
     const ownerProfile = ownerId
       ? await firestore.collection('profiles').doc(String(ownerId)).get()

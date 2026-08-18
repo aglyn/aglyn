@@ -41,6 +41,7 @@ export type ReleaseFlagKey =
   | 'release_addon_store'
   | 'release_native_checkout'
   | 'release_edit_bar'
+  | 'release_assist'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -188,6 +189,17 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'until the cross-origin connect flow is verified on a live tenant ' +
       'domain; flipping it off also invalidates every outstanding edit ' +
       'token at the verify site.',
+    defaultEnabled: false,
+  },
+  {
+    key: 'release_assist',
+    label: 'Aglyn Assist',
+    description:
+      'The in-console AI chat helper on every page (AGL-1860): docs-' +
+      'grounded answers with deep links, page-context guidance on Pro+. ' +
+      'OFF by default until the privacy-policy disclosure for stored Q&A ' +
+      'exchanges is live — the data loop records every exchange org-' +
+      'scoped, so the flag must not flip before the legal sitting lands.',
     defaultEnabled: false,
   },
 ]

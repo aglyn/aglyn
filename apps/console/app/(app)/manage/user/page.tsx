@@ -787,10 +787,15 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     async (_event: unknown, value: string) => {
       setTab(value)
       const section = sections.find((entry) => entry.id === value)
-      logEvent(analytics, 'screen_view', {
-        firebase_screen: section?.label ?? value,
-        firebase_screen_class: ManageUser.displayName,
-      })
+      // Undefined whenever Firebase Analytics failed to initialize — see the
+      // matching guard in the host setup page. A pageview must never throw
+      // out of a tab-change handler.
+      if (analytics) {
+        logEvent(analytics, 'screen_view', {
+          firebase_screen: section?.label ?? value,
+          firebase_screen_class: ManageUser.displayName,
+        })
+      }
     },
     [sections, analytics],
   )

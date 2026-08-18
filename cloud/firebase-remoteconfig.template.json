@@ -104,6 +104,13 @@
       },
       "description": "Edit-access admin bar on published sites (admin edit bar, AGL-1302 follow-on). OFF until the cross-origin connect flow is verified on a live tenant domain; flipping off also invalidates outstanding edit tokens.",
       "valueType": "JSON"
+    },
+    "release_assist": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default: the data loop stores org-scoped Q&A, so the privacy-policy disclosure must be live before this flips on.",
+      "valueType": "JSON"
     }
   },
   "version": {

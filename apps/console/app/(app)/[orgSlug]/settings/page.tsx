@@ -19,7 +19,13 @@
 
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
-import { canManageOrg, isValidOrgSlug } from '@aglyn/aglyn'
+import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
+import {
+  canManageOrg,
+  isLiveSubscriptionStatus,
+  isValidOrgSlug,
+  type OrgPlan,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
   AppLink,
@@ -194,7 +200,15 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   // the actual hard-delete runs via the guarded staff pipeline after the
   // 7-day hold and is cancelable until then.
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const deleteRequest = async (action: 'request' | 'cancel') => {
+  // Account deletion shares the retention funnel with subscription cancel
+  // (AGL-1863) — it is the same departure, and a churn breakdown that only
+  // counted one of them would understate churn by exactly the orgs that
+  // deleted instead of canceling.
+  const [deleteFunnelOpen, setDeleteFunnelOpen] = useState(false)
+  const deleteRequest = async (
+    action: 'request' | 'cancel',
+    funnelId?: string | null,
+  ) => {
     const idToken = await (user as any)?.getIdToken?.()
     const response = await fetch('/api/orgs/delete', {
       method: 'POST',
@@ -202,7 +216,11 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
         'Content-Type': 'application/json',
         ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
       },
-      body: JSON.stringify({ orgId: currentOrg?.$id, action }),
+      body: JSON.stringify({
+        orgId: currentOrg?.$id,
+        action,
+        ...(funnelId ? { funnelId } : {}),
+      }),
     })
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
@@ -210,23 +228,21 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
     }
     return response.json()
   }
+  /**
+   * Opens the funnel rather than the old single confirm. The type-the-org-name
+   * gate in the Danger Zone still stands in front of this, so deletion keeps
+   * BOTH guards — the funnel is added friction on the way out, not a
+   * replacement for the one that was already there.
+   */
   const handleRequestDeletion = async () => {
     if (!currentOrg || busy) return
-    const accepted = await confirm({
-      title: 'Delete this organization?',
-      description:
-        "After a 7-day hold, this organization's sites, files, and data " +
-        'are permanently erased and we keep no copy. Export anything you ' +
-        'want during the hold — you can also cancel any time before it ends.',
-      confirmationText: 'Request deletion',
-      confirmationButtonProps: { color: 'error' },
-    })
-      .then(() => true)
-      .catch(() => false)
-    if (!accepted) return
+    setDeleteFunnelOpen(true)
+  }
+  /** The funnel ran to the end and they still want the org gone. */
+  const handleDeleteLeave = async (funnelId: string | null) => {
     setBusy(true)
     try {
-      await deleteRequest('request')
+      await deleteRequest('request', funnelId)
       setDeleteConfirmText('')
       enqueueSnackbar(
         'Deletion requested — your data is erased after a 7-day hold. ' +
@@ -237,6 +253,47 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
       enqueueSnackbar(error?.message ?? 'Could not request deletion', {
         variant: 'error',
       })
+    } finally {
+      setBusy(false)
+    }
+  }
+  /**
+   * The downsell, from the deletion path. Interval is deliberately absent —
+   * the subscription route keeps the subscription's CURRENT interval when the
+   * request does not state one, and this page has no billing toggle to read.
+   */
+  const handleDeleteDownsell = async (targetPlan: OrgPlan) => {
+    setBusy(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/billing/subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId: currentOrg?.$id,
+          action: 'switch',
+          plan: targetPlan,
+        }),
+      })
+      if (!response.ok) {
+        enqueueSnackbar('Could not switch plans — nothing has changed.', {
+          variant: 'warning',
+        })
+        return false
+      }
+      const payload = await response.json().catch(() => ({}))
+      enqueueSnackbar(
+        payload?.scheduled && payload?.effectiveAt
+          ? `Moving to ${targetPlan} on ${new Date(
+              payload.effectiveAt,
+            ).toLocaleDateString()} — your organization stays put.`
+          : `Switched to ${targetPlan} — your organization stays put.`,
+        { variant: 'success' },
+      )
+      return true
     } finally {
       setBusy(false)
     }
@@ -866,6 +923,23 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             undefined is the FREE tier rather than "unknown", so mounting them
             early has them quote a limit against no plan at all. */}
         {currentOrg?.$id && orgReady ? (<PluginWidgetSlot slot="orgSettings" orgId={currentOrg.$id} org={org} />) : null}
+        {/* The deletion half of the leave path (AGL-1863). `orgReady` gates
+            the subscription read: `undefined` while loading would answer "no
+            subscription" and silently drop the downsell and winback steps
+            for a paying org. */}
+        <RetentionFunnelDialog
+          open={deleteFunnelOpen}
+          surface="account_delete"
+          orgId={currentOrg?.$id ?? ''}
+          subscriptionActive={
+            orgReady &&
+            isLiveSubscriptionStatus((org as any)?.subscription?.status)
+          }
+          currentPlan={org?.plan as OrgPlan | undefined}
+          onClose={() => setDeleteFunnelOpen(false)}
+          onDownsell={handleDeleteDownsell}
+          onLeave={handleDeleteLeave}
+        />
       </Container>
     </DashboardLayout>
   )

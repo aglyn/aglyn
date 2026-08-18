@@ -139,16 +139,7 @@ shipping, inventory → get paid; a publisher can sell a plugin and get their sp
 of it in GA4 and the console with staff traffic excluded, nobody undercharged, nothing fail-open,
 and every guard able to go red.
 
-## Workstream G — docs, guides, API surface, and in-product help (Zach, verbatim)
-
-> Don't forget we always need to keep the docs in sync and create new pages and reorganize as
-> necessary, take screenshots of the browser and make as visualized as possible, you also don't
-> always need screenshot the entire page but can screenshot sections of the site of components,
-> maybe even add outlines and text if need to better visualize and make the image more descriptive
-> or helpful. Add more API's to our customer facing API and document it extremely well. Also add
-> helpful how-to guides and walk through guides and make it easy for anybody but also very
-> descriptive for those who are also technical and need reference guides where necessary etc, also
-> make sure we are updating the tooltip documentation tips across Aglyn.
+## Workstream G — docs, guides, API surface, and in-product help
 
 Distilled into work:
 - **Docs stay in sync with every shipped feature** (the standing rule, now with teeth: new features
@@ -169,20 +160,35 @@ Distilled into work:
   `DOCS_HELP_TOPICS` anchors where a "learn more" belongs. Aglyn Assist (Workstream F) mines its
   Q&A data for which tooltips and guides are missing.
 
-## Browser, auth, and env access (Zach, verbatim)
+## Workstream H — GA reports and dependency hygiene
 
-> Don't forget you can use my browser to test and use my authentication session, but first try using
-> the local dev environment or emulator environment, you can use my browser to manage anything such
-> as stripe, google cloud, firebase, aglyn, vercel etc, also when looking for env always double
-> check shared/global envs.
+- **Build numerous GA4 reports** — using Zach's browser session on analytics.google.com (property
+  `Aglyn — Platform`, 302497406). Start from the AGL-1637 click-list (dimension registrations, key
+  events, internal-traffic filter activation), then build the reports themselves: funnel
+  explorations (signup → publish → purchase; pricing-CTA per tier via `content_id`), revenue
+  (purchase/refund net), retention/churn (cancellation event, downsell funnel once AGL-1859 ships),
+  traffic split by `content_group` (marketing/docs/console), UTM acquisition, Web Vitals (RUM),
+  audiences (by plan via `org_plan` user property; by ICP proxy where derivable). Record every
+  report/audience created on AGL-1637 so the GA workspace state is reproducible.
+- **Fix ALL Dependabot alerts and PRs** — `gh api repos/aglyn/aglyn/dependabot/alerts` for the
+  alert list, `gh pr list --author app/dependabot` for the PRs. Triage each: security alerts first
+  (upgrade, or document why not exploitable in our usage), then version-bump PRs (rebase/merge the
+  safe ones through the normal gate — never merge a dependency bump ungated; a major bump gets its
+  own verification pass). ⚠️ Lockfile lore applies: never blanket-rename or hand-edit lockfiles;
+  one bump per commit where risk is nontrivial. Close obsolete PRs with a reason.
 
-Operational notes on that grant: the browser is ONE resource — serialize browser tasks, never fan
+## Browser, auth, and env access
+
+The grant is in the mandate below (verbatim). Operational notes on that grant: the browser is ONE resource — serialize browser tasks, never fan
 them out to concurrent agents; never enter credentials/API keys into fields (read them from where
 they already are); `vercel env ls` CANNOT see team-level shared envs (use the REST API or the
 dashboard — a "missing" var may be shared-but-unlinked, which is invisible at runtime until linked
 per-project: the exact AGL-1636/AGL-1846 failure, twice).
 
-## The mandate, in Zach's own words (2026-08-17 — verbatim, so nothing gets lost again)
+## The mandate — Zach's consolidated directive, verbatim (2026-08-17)
+
+This is the canonical text, confirmed by Zach as the complete concatenated directive. Every
+workstream above is its distillation; when in doubt, THIS text wins.
 
 > once the background agents are done and the promotion gate is done. Write me a new command to
 > start in a new session, making note that we need to make sure we are completing everything in the
@@ -202,15 +208,28 @@ per-project: the exact AGL-1636/AGL-1846 failure, twice).
 > smaller subscription tier or a short term discount etc. All of Stripe and staff needs to be
 > polished and ready to go. Let's make sure our console and besigner actually match the features we
 > promote in our product mockups/screenshots, don't change the screenshots just make our feature
-> match more similar to what we are advertising. Add a new console ai generative chat bot helper
-> tool persisted on every page to assist with direction or how to do things, direct them to
-> documentation or help them use aglyn or to automate current view etc create a new element or
-> change the screen design or build page content or build an entire site for them or update
-> attribute value in besigner etc, the expanse of this tool can be entirely up to you, remember we
-> need to make it easy for all 3 of our ICPs, Multi-Site orgs, agencies, and beginner mom and pop or
-> fresh business looking to get started etc. We need to make sure it is easy for someone who doesn't
-> know code and even easier for someone who does know code. We may need to make this a paid feature
-> to keep from costing us too much money and keep our profit margins high, provide all limitations
-> to possibly make a free version available. We will also want to use the data and questions and
-> answers to help better build our docs so we will need to store that info and allow us to learn
-> from it to improve docs and the ai tool.
+> match more similar to what we are advertising. Don't forget you can use my browser to test and use
+> my authentication session, but first try using the local dev environment or emulator environment,
+> you can use my browser to manage anything such as stripe, google cloud, firebase, aglyn, vercel
+> etc, also when looking for env always double check shared/global envs. Don't forget we always need
+> to keep the docs in sync and create new pages and reorganize as necessary, take screenshots of the
+> browser and make as visualized as possible, you also don't always need screenshot the entire page
+> but can screenshot sections of the site of components, maybe even add outlines and text if need to
+> better visualize and make the image more descriptive or helpful. Add more API's to our customer
+> facing API and document it extremely well. Also add helpful how-to guides and walk through guides
+> and make it easy for anybody but also very descriptive for those who are also technical and need
+> reference guides where necessary etc, also make sure we are updating the tooltip documentation
+> tips across Aglyn. Fix all of the dependabot alerts and prs etc.
+>
+> Also build numerous reports for us in GA, and it can use my browser to do it. Also Add a new
+> console ai generative chat bot helper tool persisted on every page to assist with direction or how
+> to do things, direct them to documentation or help them use aglyn or to automate current view etc
+> create a new element or change the screen design or build page content or build an entire site for
+> them or update attribute value in besigner etc, the expanse of this tool can be entirely up to
+> you, remember we need to make it easy for all 3 of our ICPs, Multi-Site orgs, agencies, and
+> beginner mom and pop or fresh business looking to get started etc. We need to make sure it is easy
+> for someone who doesn't know code and even easier for someone who does know code. We may need to
+> make this a paid feature to keep from costing us too much money and keep our profit margins high,
+> provide all limitations to possibly make a free version available. We will also want to use the
+> data and questions and answers to help better build our docs so we will need to store that info
+> and allow us to learn from it to improve docs and the ai tool.

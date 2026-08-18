@@ -53,6 +53,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Add search to your site',
     excerpt: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   },
+  aglynAssist: {
+    path: '/getting-started/aglyn-assist',
+    title: 'Aglyn Assist',
+    excerpt: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
+  },
   aiAssist: {
     path: '/marketing-and-automation/ai-assist/overview',
     title: 'AI Assist',
@@ -206,7 +211,7 @@ export const DOCS_HELP_TOPICS = {
   downgradingAndCanceling: {
     path: '/workspace-and-billing/billing-and-plans/downgrading-and-canceling',
     title: 'Downgrading, canceling & your data',
-    excerpt: 'What happens to your sites, files, and data when you downgrade, cancel, or delete — and how to export first.',
+    excerpt: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',
   },
   dragDropHierarchy: {
     path: '/building-sites/besigner/drag-drop-hierarchy',
@@ -403,6 +408,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Password-protect a screen',
     excerpt: 'Require a password to view a specific screen.',
   },
+  platformHealth: {
+    path: '/staff-console/platform-health',
+    title: 'Platform health',
+    excerpt: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
+  },
   pluginManagerApi: {
     path: '/developers/plugins/reference/plugin-manager-api',
     title: 'Plugin-manager API reference',
@@ -452,6 +462,16 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/besigner/responsive-styling',
     title: 'Responsive styling & custom CSS',
     excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
+  },
+  runAnAgencyWorkspace: {
+    path: '/guides/run-an-agency-workspace',
+    title: 'Run an agency workspace',
+    excerpt: 'Set up one Aglyn workspace to build and hand off many client sites — templates, collaborator seats, per-site access, domains, backups and billing.',
+  },
+  salesTaxReturn: {
+    path: '/staff-console/sales-tax-return',
+    title: 'Sales tax return (Texas)',
+    excerpt: 'The quarterly Texas return — pick a period, read the Form 01-114 figures, check the rows that need attention, and export the working papers.',
   },
   sandboxSecurity: {
     path: '/developers/plugins/reference/sandbox-security',
@@ -568,6 +588,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Workflows, Actions & Webhooks',
     excerpt: 'Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.',
   },
+  yourFirstApiCall: {
+    path: '/guides/your-first-api-call',
+    title: 'Your first API call',
+    excerpt: 'Create an API key in the console, make your first request, read the response, handle the four errors you will actually hit, and page through a whole dataset.',
+  },
 } as const satisfies Record<string, DocsHelpTopic>
 
 export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
@@ -580,11 +605,12 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
+  aglynAssist: ['#what-it-can-do', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
-  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#platform-fees', '#related'],
+  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#manage', '#related'],
   buildABlog: ['#1-create-a-collection', '#delete-a-collection', '#2-write-entries', '#scheduling', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#category-filtering', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#build-your-own-pager', '#4-publish--syndicate', '#tips', '#related'],
@@ -593,7 +619,7 @@ export const DOCS_HELP_ANCHORS = {
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
-  commerce: ['#products-hub', '#inventory', '#orders', '#shipping--taxes', '#destination-coverage', '#dropshipping', '#related'],
+  commerce: ['#products-hub', '#inventory', '#orders', '#a-lost-dispute', '#shipping--taxes', '#destination-coverage', '#dropshipping', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
@@ -610,7 +636,7 @@ export const DOCS_HELP_ANCHORS = {
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it'],
-  downgradingAndCanceling: ['#downgrading-to-a-lower-plan', '#canceling-your-subscription', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
+  downgradingAndCanceling: ['#when-changes-take-effect', '#downgrading-to-a-lower-plan', '#pending-downgrade', '#keep-my-current-plan', '#what-changes-on-a-downgrade', '#canceling-your-subscription', '#the-cancel-dialog', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
   editFromTheLiveSite: ['#call-it-up', '#connect-your-access', '#the-bar', '#good-to-know', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
@@ -647,6 +673,7 @@ export const DOCS_HELP_ANCHORS = {
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#tips', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
+  platformHealth: ['#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#csp-violations', '#re-checking', '#related'],
   pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#billing--billing-webhook-hooks-server', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
   plugins: ['#install--upgrade', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
@@ -657,6 +684,8 @@ export const DOCS_HELP_ANCHORS = {
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
+  runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
+  salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#the-figures', '#refunds', '#all-jurisdictions', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
@@ -680,6 +709,7 @@ export const DOCS_HELP_ANCHORS = {
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#related'],
+  yourFirstApiCall: ['#step-1-create-a-key', '#step-2-check-the-key', '#step-3-your-first-request', '#in-javascript', '#step-4-write-something', '#idempotency', '#step-5-page-through-everything', '#the-four-errors-you-will-hit', '#where-to-go-next', '#related'],
 } as const satisfies Partial<
   Record<DocsHelpTopicKey, readonly `#${string}`[]>
 >

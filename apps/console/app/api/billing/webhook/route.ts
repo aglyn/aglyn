@@ -579,8 +579,12 @@ async function handler(request: Request): Promise<Response> {
           // never lands here. AWAITED, unlike the cosmetic writes around
           // it: a lost row here is a wrong tax return, and the doc id makes
           // the redelivery this may cause converge instead of duplicate.
+          // ONE decomposition for both consumers below: the tax record and
+          // the GA `purchase` read the same gross/tax split, so the two can
+          // never drift apart (AGL-1872).
+          const revenue =
+            type === 'invoice.paid' ? platformInvoiceRevenue(object) : null
           if (type === 'invoice.paid') {
-            const revenue = platformInvoiceRevenue(object)
             if (revenue) {
               const { invoiceId, ...recorded } = revenue
               await firebaseAdmin
@@ -597,7 +601,17 @@ async function handler(request: Request): Promise<Response> {
             }
           }
           if (type === 'invoice.paid') {
-            const paidCents = Number(object?.amount_paid ?? amount)
+            // NET of tax (AGL-1872): `amount_paid` became tax-INCLUSIVE the
+            // day AGL-1811 landed, and the tax is the Comptroller's money,
+            // not revenue — GA reporting it as revenue would overstate by
+            // exactly the amount held for the state. Same settlement as the
+            // marketplace's AGL-1639: `value` is the platform's own take,
+            // and no `tax` param beside it. An untaxed invoice has
+            // `taxCents: 0`, so nothing moves for pre-tax history.
+            const paidCents = Math.max(
+              0,
+              Number(object?.amount_paid ?? amount) - (revenue?.taxCents ?? 0),
+            )
             // The line that describes the SUBSCRIPTION, not whatever sorted
             // first: an invoice carries proration lines, credits and one-off
             // items, and a mid-cycle switch bills the proration against the
@@ -752,9 +766,23 @@ async function handler(request: Request): Promise<Response> {
               },
               { merge: true },
             )
+            // The delta is a GROSS delta — Stripe refunds tax alongside the
+            // charge — while the `purchase` reported NET of tax (AGL-1872).
+            // Scale by the row's own net/gross ratio so a full refund nets
+            // exactly what the purchase put in; a pre-tax row has
+            // `taxCents: 0` and scales by 1.
+            const rowGrossCents = Number(revenueSnapshot.get('grossCents') ?? 0)
+            const rowTaxCents = Number(revenueSnapshot.get('taxCents') ?? 0)
+            const netDeltaCents =
+              rowGrossCents > 0 && rowTaxCents > 0
+                ? Math.round(
+                    (deltaCents * (rowGrossCents - rowTaxCents)) /
+                      rowGrossCents,
+                  )
+                : deltaCents
             void sendGa4Refund({
               transactionId: invoiceId,
-              value: deltaCents / 100,
+              value: netDeltaCents / 100,
               currency: String(object?.currency ?? 'usd'),
               items: [],
               // No browser is present at refund time and the charge carries

@@ -63,8 +63,11 @@ async function dispatch(
         // Only top-level resources belong here. Form submissions are a
         // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
         // deliberately absent — advertising `forms` 404'd every client that
-        // read this list (AGL-898).
-        resources: ['datasets', 'contacts', 'sites'],
+        // read this list (AGL-898). Orders and products (AGL-1928) are
+        // site-scoped for the same reason and stay out for the same reason;
+        // `media` earns its place because `/v1/media` — the ORGANIZATION
+        // library — really is a top-level path.
+        resources: ['datasets', 'contacts', 'sites', 'media'],
       },
       { headers },
     )

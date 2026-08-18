@@ -106,6 +106,9 @@ describe('platformInvoiceRevenue decomposes a paid invoice (AGL-1811)', () => {
         amountCents: 660,
         taxabilityReason: 'taxable_basis_reduced',
         taxRateId: 'txr_tx_state',
+        // The 80% base itself — the "taxable sales" figure the TX return
+        // reports, carried on the row so filing needs no Stripe read.
+        taxableAmountCents: 8000,
       },
     ])
     expect(record!.customerAddress).toEqual({
@@ -143,6 +146,9 @@ describe('platformInvoiceRevenue decomposes a paid invoice (AGL-1811)', () => {
     })
     expect(record!.taxCents).toBe(208)
     expect(record!.taxLines[0].taxRateId).toBe('txr_expanded')
+    // The middle generation's entries carry no `taxable_amount` here — the
+    // absence must store as null (unknown base), never 0 (a zero-base sale).
+    expect(record!.taxLines[0].taxableAmountCents).toBeNull()
   })
 
   it('an UNTAXED invoice records zeros, not an absence — shaped from the live Feb invoice', () => {

@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
+  checkHostRegisterQuota,
   checkQuota,
   createResourceUid,
   nameSearchKey,
@@ -251,6 +252,11 @@ const RESOURCES: Record<string, {
   // POS registers (AGL-472): the `posRegisters` cap becomes enforceable
   // by routing register creation here. `pos` gates access to POS at all
   // (Pro+); `posRegisters` caps how many named registers a host runs.
+  //
+  // `quotaKey` is kept for the label/shape, but the CAP is resolved by
+  // `checkHostRegisterQuota` below, not by `checkQuota` on this key
+  // (AGL-1775) — the purchased seats are an org pool allocated per site, so
+  // the org-level value is the plan cap alone.
   register: {
     collection: 'registers',
     quotaKey: 'posRegisters',
@@ -413,12 +419,25 @@ async function handler(request: Request): Promise<Response> {
           : resourceKey === 'screen'
             ? billableScreenIds(screenRows, routingMap).size
             : (await collectionRef.count().get()).data().count
-      const quota = checkQuota(org, resource.quotaKey as any, used)
+      // Registers are the one quota whose cap is not the org-level value
+      // (AGL-1775). `seatAddons.posRegisters` is an org POOL and
+      // `org.registerAllocations` says which site holds each seat, so a
+      // `checkQuota(org, 'posRegisters', …)` here would read the plan cap with
+      // no pool in it and refuse a site the seats it is invoiced for. This is
+      // the enforcement point the decision moved onto the allocation; it did
+      // not move anywhere else.
+      const quota =
+        resourceKey === 'register'
+          ? checkHostRegisterQuota(org, hostId, used)
+          : checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
         return Response.json({
           error:
-            `Your plan includes ${quota.limit} ${resource.label} — ` +
-            'upgrade in Billing for more',
+            resourceKey === 'register'
+              ? `This site can run ${quota.limit} ${resource.label} — ` +
+                'assign another register seat to it in Billing, or buy one'
+              : `Your plan includes ${quota.limit} ${resource.label} — ` +
+                'upgrade in Billing for more',
         }, { status: 403 })
       }
     }

@@ -21,6 +21,10 @@ import {
   encodeActivity,
   parseActivity,
 } from './session-activity'
+// Shared, not a local copy: an empty duplicate cookie at another scope used to
+// shadow the real heartbeat here, which reads as `at: 0` and quietly disables
+// the AGL-697 idle-logout control (AGL-1259 fixed the session route only).
+import { readCookie } from '../read-cookie'
 
 // lockdown-423: exempt — account-scoped read of the caller's own auth activity; no org
 // context. The session mint/exchange carry the lockdown gate for auth.
@@ -54,19 +58,6 @@ function activityCookie(request: Request, valueMs: number): string {
     'SameSite=Lax',
     ...(onWorkspaceDomain ? [`Domain=.${WORKSPACE_DOMAIN}`, 'Secure'] : []),
   ].join('; ')
-}
-
-function readCookie(request: Request, name: string): string | undefined {
-  const raw = request.headers.get('cookie')
-  if (!raw) return undefined
-  for (const pair of raw.split(';')) {
-    const index = pair.indexOf('=')
-    if (index < 0) continue
-    if (pair.slice(0, index).trim() === name) {
-      return pair.slice(index + 1).trim()
-    }
-  }
-  return undefined
 }
 
 async function handler(request: Request): Promise<Response> {

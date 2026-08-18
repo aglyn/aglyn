@@ -319,6 +319,43 @@ describe('invoice.paid reaches sendGa4Purchase with the right object (AGL-1684)'
     expect(sent.stripeCustomerId).toBe('cus_own_1')
   })
 
+  it('a TAXED invoice reports NET of tax — the state\'s money is not revenue (AGL-1872)', async () => {
+    // The measured live TX computation (AGL-1811): $100.00 charge + 8.25% on
+    // the $80.00 data-processing base = $6.60 tax, amount_paid $106.60. GA
+    // must book the $100.00 — the $6.60 is held for the Comptroller. The
+    // scalar `tax: 0` beside a populated `total_taxes[]` is the live
+    // account's real shape; reading the scalar instead of the array would
+    // report gross here and pass on any untaxed fixture.
+    const post = loadWebhook()
+    await post(
+      signed(
+        invoiceEvent({
+          ...ANNUAL_INVOICE,
+          id: 'in_ga_taxed',
+          amount_due: 10660,
+          amount_paid: 10660,
+          total: 10660,
+          tax: 0,
+          total_taxes: [
+            {
+              amount: 660,
+              tax_behavior: 'exclusive',
+              tax_rate_details: { tax_rate: 'txr_tx_state' },
+              taxability_reason: 'taxable_basis_reduced',
+              taxable_amount: 8000,
+            },
+          ],
+          automatic_tax: { enabled: true, status: 'complete' },
+        }),
+      ),
+    )
+    expect(mockGa4Calls).toHaveLength(1)
+    expect(mockGa4Calls[0].value).toBe(100)
+    // The line item carries the same net figure — GA sums items into
+    // item-scoped revenue, and the two must agree.
+    expect(mockGa4Calls[0].items[0].price).toBe(100)
+  })
+
   it('a RENEWAL — no ga_client_id on the subscription — still sends, seeded for the fallback', async () => {
     const post = loadWebhook()
     const { subscription_details, ...renewal } = ANNUAL_INVOICE

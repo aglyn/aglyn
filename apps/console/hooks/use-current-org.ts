@@ -32,6 +32,30 @@ import useOrgScope from './use-org-scope'
  * originally learned the hard way (AGL-216 transient permission-denied,
  * AGL-887 a stale noDocument tombstone rendering a Business workspace as
  * Free). State clears whenever the org scope changes (AGL-591).
+ *
+ * ## On a route the URL does not scope to a workspace, this returns an org
+ * anyway — on purpose (AGL-1916)
+ *
+ * `useOrgScope().currentOrg` falls back, in order, to the workspace subdomain,
+ * then a remembered selection, then the user's FIRST org. So on the picker
+ * (`/`), `/manage/*` and `/admin/*` this hook answers with a real org doc and
+ * a truthy `plan`, and `ready` goes true for it.
+ *
+ * Making it return `undefined` there was considered and REJECTED. Org-less
+ * pages still need an org to ACT on: Manage Account browses that org's media
+ * library, the user menu's Billing row has to land somewhere, the assist
+ * thread is keyed per org. Blanking the hook would break those in exchange for
+ * fixing a class the callers can gate themselves — and would do it invisibly,
+ * as a behaviour change in a hook 30-odd call sites share.
+ *
+ * The rule instead, unchanged from AGL-1130 and now written where the fallback
+ * actually lives: **the fallback is fine for an ACTION and wrong for a CLAIM.**
+ * Anything that STATES something about "your workspace" — a plan badge, a
+ * wordmark, an Upgrade CTA, a quota or billing banner — must gate on
+ * `useUrlNamesOrg()` first, because only the URL can say which workspace the
+ * page is about. AGL-1130 applied that to the chrome (top bar, user menu, org
+ * switcher, `useBranding`); AGL-1916 found `QuotaWarningsBanner` had been left
+ * off the list and was announcing a seats limit over the workspace picker.
  */
 export function useCurrentOrg(): {
   org: Partial<AglynOrgBilling> | undefined

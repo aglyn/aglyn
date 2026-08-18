@@ -588,6 +588,34 @@ describe('link mode (AGL-1312)', () => {
     expect(screen.queryAllByRole('link')).toHaveLength(0)
     expect(screen.getByText('Two')).toBeTruthy()
   })
+
+  it('keeps the landing tab and its panel when an EARLIER link dies', () => {
+    // The live /changelog shape (AGL-1312 smoke): tab 1 points at a screen
+    // AGL-1313 unpublished, tab 2 is the page we are on, tab 3 navigates.
+    //
+    // The landing tab must stay tab 2. Treating the dead link as "no link"
+    // would move landing to tab 1 — whose panel does not exist — and the
+    // panel the reader is actually looking at would vanish. It would also
+    // disagree with `deferLazyPanelNodes`, which reads the raw tabLink
+    // props server-side and cannot resolve a screen id at all.
+    renderSite(
+      <TabsElement
+        labels={'Blog\nChangelog\nNewsroom'}
+        tabLink1="screen-deleted"
+        tabLink3="screen-newsroom"
+      >
+        <TabPanelElement label="Changelog">{'Changelog body'}</TabPanelElement>
+      </TabsElement>,
+    )
+    expect(screen.getByText('Changelog body')).toBeTruthy()
+    expect(
+      document.getElementById('tab-changelog')?.getAttribute('aria-current'),
+    ).toBe('page')
+    // And the dead tab is NOT the one marked as the current page.
+    expect(
+      document.getElementById('tab-blog')?.getAttribute('aria-current'),
+    ).toBeNull()
+  })
 })
 
 describe('link authoring surface (AGL-1312)', () => {

@@ -29,13 +29,34 @@ import {
 } from '@mui/material'
 import {
   buildDocsUrl,
+  type DocsHelpAnchor,
   DOCS_HELP_TOPICS,
   type DocsHelpTopicKey,
 } from '../constants/docs-links'
 
-export interface DocsHelpTipProps {
+export interface DocsHelpTipProps<
+  K extends DocsHelpTopicKey = DocsHelpTopicKey,
+> {
   /** Registry key of the docs page this affordance explains. */
-  topic: DocsHelpTopicKey
+  topic: K
+  /**
+   * Heading on that page to land on, rather than its top (AGL-1943).
+   *
+   * Type-checked against the page's real headings, exactly as `docsHelp()`'s
+   * `anchor` is — so a docs restructure that renames the heading is a compile
+   * error here rather than a link that quietly drops the reader at the top of
+   * a long page and lets them believe they're in the right place.
+   *
+   * Worth having because the pages this tip points at have grown: the billing
+   * lifecycle page is now four distinct subjects, and "open the docs" is a
+   * materially worse answer than "open the section that explains the dialog
+   * you are standing in".
+   */
+  anchor?: DocsHelpAnchor<K>
+  /** Override the tooltip title (defaults to the topic's docs page title). */
+  title?: string
+  /** Override the tooltip excerpt (defaults to the topic's docs excerpt). */
+  excerpt?: string
   sx?: SxProps
 }
 
@@ -43,10 +64,15 @@ export interface DocsHelpTipProps {
  * Unobtrusive question-mark affordance that surfaces a docs excerpt on hover
  * and deep-links to the full documentation page in a new tab (AGL-599).
  */
-export function DocsHelpTip(props: DocsHelpTipProps) {
-  const { topic, sx } = props
-  const { path, title, excerpt } = DOCS_HELP_TOPICS[topic]
-  const href = buildDocsUrl(path)
+export function DocsHelpTip<K extends DocsHelpTopicKey>(
+  props: DocsHelpTipProps<K>,
+) {
+  const { topic, anchor, sx } = props
+  const topicEntry = DOCS_HELP_TOPICS[topic]
+  const { path } = topicEntry
+  const title = props.title ?? topicEntry.title
+  const excerpt = props.excerpt ?? topicEntry.excerpt
+  const href = `${buildDocsUrl(path)}${anchor ?? ''}`
 
   return (
     <Tooltip

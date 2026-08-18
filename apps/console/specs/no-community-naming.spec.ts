@@ -103,6 +103,14 @@ const ALLOWED = new Map<string, string>([
     'Generated from the docs; the entry is the support/community forum page.',
   ],
   [
+    'apps/console/constants/assist-docs-index.generated.ts',
+    'The second generated docs artifact (AGL-1860) — Aglyn Assist’s ' +
+      'retrieval index, which carries docs PROSE rather than just anchors, ' +
+      'so it inherits the word from every forum page indexed above: ' +
+      'support-and-community, enterprise/support-tiers, invite-teammates. ' +
+      'Forum meaning throughout; verified no occurrence is marketplace-sense.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/support-and-community.md',
     'The forum’s own documentation page.',
   ],

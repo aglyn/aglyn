@@ -421,10 +421,73 @@ export interface OrgSeatAddons {
   datasets?: number
   /** Extra sites beyond the plan's `hostLimit` (AGL-68/524). */
   hosts?: number
-  /** Extra POS registers beyond the plan's `posRegisters` (AGL-329/524). */
+  /**
+   * Extra POS registers beyond the plan's `posRegisters` (AGL-329/524).
+   *
+   * A POOL, not a raise (AGL-1775). `posRegisters` is enforced PER SITE, so
+   * folding this quantity into the org-level entitlement handed every site
+   * the whole purchase — one $89/mo register bought 20 registers on a
+   * 20-site org. Since AGL-1775 the quantity here is the size of an org-level
+   * pool and `registerAllocations` says which site each purchased seat is
+   * assigned to. Nothing reads this as a per-site number; use
+   * `resolveHostRegisterCap`.
+   */
   posRegisters?: number
   /** Event Calendar org-wide toggle, 0/1 (AGL-145/524). */
   eventCalendar?: number
+}
+
+/**
+ * Which SITE each purchased POS register seat is assigned to (AGL-1775):
+ * `{ [hostId]: seats }`, drawn from the org-level pool
+ * `seatAddons.posRegisters`.
+ *
+ * WHY IT LIVES ON THE ORG DOC. The pool is org-level and the entitlement it
+ * modifies is resolved from this same document, so a caller that can resolve
+ * entitlements at all already holds the allocation — there is no second read
+ * to fail and no separate loading state in which a host could resolve to
+ * something other than its plan cap. That property is the point: the
+ * `checkQuota(undefined)` = Free-tier lesson inverted, where an absent
+ * allocation must mean the PLAN's cap and never the pooled total.
+ *
+ * AN ENTITLEMENT INPUT, and therefore Admin-SDK-only — it is denied to every
+ * client in `cloud/firebase-firestore.rules` alongside `seatAddons` and
+ * `entitlements`. A client that could write this could assign itself the
+ * whole pool on every site, which is the defect AGL-1775 exists to close.
+ *
+ * A host id absent from the map holds ZERO purchased seats and resolves to
+ * the plan cap alone. Deleting a site deletes its key, which returns its
+ * seats to the pool — the pool is `seatAddons.posRegisters` minus the sum of
+ * this map, so a released key is available capacity by arithmetic rather
+ * than by a separate counter that could drift.
+ */
+export type OrgRegisterAllocations = Record<string, number>
+
+/**
+ * An org's acknowledged consent to metered storage overage, and its bound
+ * (AGL-1886).
+ *
+ * Zach's condition on billing org-library storage from today was, verbatim:
+ * "also give overage protection and usage alerts, so customers don't get a
+ * surprise bill." This is the protection half. Consent is explicit
+ * (`acknowledgedAt` is stamped server-side when a manager accepts in Billing)
+ * and BOUNDED (`monthlyCeilingUsd`) — an acknowledgement is never consent to
+ * an open-ended amount, so uploads are refused again at the ceiling.
+ *
+ * @see apps/console/utils/storage-overage.ts for the hard-vs-soft-cap
+ * decision and why the bound is part of the consent rather than beside it.
+ */
+export interface OrgStorageOverage {
+  /** When a manager accepted metered storage. Absent = not acknowledged. */
+  acknowledgedAt?: ITimestamp | null
+  /** The uid that accepted, for the audit trail. */
+  acknowledgedBy?: string | null
+  /**
+   * The monthly storage-overage spend the org agreed to. A missing or
+   * malformed value resolves to `STORAGE_OVERAGE_DEFAULT_CEILING_USD`, never
+   * to unbounded — the one direction this must not fail in.
+   */
+  monthlyCeilingUsd?: number
 }
 
 /**
@@ -469,6 +532,21 @@ export interface OrgSubscription {
    */
   interval?: 'month' | 'year'
   currentPeriodEnd?: ITimestamp
+  /**
+   * A downgrade scheduled for the current period end (AGL-1862). Set by
+   * `/api/billing/subscription` when a switch walks DOWN the self-serve
+   * ladder — the Stripe subscription schedule owns the transition, this is
+   * the manager-gated mirror the billing page renders. `null` (not absent)
+   * once released, so a merge clears it. Rides inside `subscription` because
+   * `pickOrgBillingFields` drops any other top-level key.
+   */
+  pendingDowngrade?: {
+    plan: string
+    interval: 'month' | 'year'
+    /** ISO timestamp of the period end the schedule flips at. */
+    effectiveAt: string | null
+    scheduleId: string
+  } | null
   /**
    * Negotiated custom price as a **monthly-normalized** USD figure (AGL-1110),
    * set when an enterprise org bills at an ad-hoc amount rather than a plan's
@@ -555,6 +633,12 @@ export interface AglynOrgBilling extends AglynDocument {
   enabledPlugins?: string[]
   /** Purchased addon seats (AGL-112); billed monthly per seat. */
   seatAddons?: OrgSeatAddons
+  /**
+   * POS register seats assigned out of the org pool (AGL-1775). An
+   * ENTITLEMENT INPUT: it raises a per-site cap, so it is Admin-SDK-only.
+   * @see OrgRegisterAllocations
+   */
+  registerAllocations?: OrgRegisterAllocations
   stripeCustomerId?: string
   subscription?: OrgSubscription
   /**

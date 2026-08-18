@@ -105,9 +105,33 @@ describe('explicit shades pass through byte-identical (AGL-1297)', () => {
   })
 
   it('keeps an explicitly provided sub-AA contrastText', () => {
-    // Console authors white-on-brand-blue (2.4:1) on purpose.
-    expect(consoleThemeLight.palette.primary.contrastText).toBe('#FFFFFF')
+    // Explicit still means explicit. Console USED to author
+    // white-on-brand-blue at 2.4:1 here; AGL-1293 deleted that literal
+    // rather than weakening this rule, so the case is proved on a synthetic
+    // palette instead of on the console's own.
+    const theme = createResponsiveTheme({
+      themeOptions: {
+        palette: {
+          mode: 'light',
+          primary: { main: '#00b0ff', contrastText: '#FFFFFF' },
+        },
+      },
+    })
+    expect(theme.palette.primary.contrastText).toBe('#FFFFFF')
     expect(wcagRatio('#FFFFFF', '#00b0ff')).toBeLessThan(4.5)
+  })
+
+  it('no longer authors a sub-AA contrastText on the console primary (AGL-1293)', () => {
+    // Zach, 2026-08-18: "text uses should be computed and use the
+    // primary.contrastText". The literal is gone from console.theme.ts, so
+    // this is MUI's computation against the AA contrastThreshold.
+    expect((consoleOptions.palette as any).primary.contrastText).toBeUndefined()
+    expect(
+      wcagRatio(consoleThemeLight.palette.primary.contrastText, '#00b0ff'),
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      wcagRatio(consoleThemeDark.palette.primary.contrastText, '#00b0ff'),
+    ).toBeGreaterThanOrEqual(4.5)
   })
 })
 
@@ -257,8 +281,17 @@ describe('console blast radius (AGL-1297)', () => {
           expect(meetsAa(color.light, backgrounds)).toBe(true)
         }
 
-        // contrastText is authored on every console colour: untouched.
-        expect(color.contrastText).toBe(inputPalette[key].contrastText)
+        // contrastText is authored on every console colour EXCEPT primary,
+        // whose literal AGL-1293 deleted so the value is computed. Authored
+        // ones stay untouched; the computed one has to clear AA on its main.
+        if (inputPalette[key].contrastText) {
+          expect(color.contrastText).toBe(inputPalette[key].contrastText)
+        } else {
+          expect(key).toBe('primary')
+          expect(wcagRatio(color.contrastText, main)).toBeGreaterThanOrEqual(
+            4.5,
+          )
+        }
       },
     )
 
