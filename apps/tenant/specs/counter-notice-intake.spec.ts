@@ -129,6 +129,30 @@ jest.mock('../utils/get-host', () => ({
 }))
 
 import { GET, POST } from '../app/api/counter-notice/route'
+
+/**
+ * AGL-2016: this intake's contact addresses and its `<title>` come from the
+ * operator's configuration. Assertions below that expect an address at all
+ * hold only because this configures one — unset is a first-class state and
+ * renders prose instead.
+ */
+const setOperator = (values: Record<string, string>): void => {
+  for (const key of [
+    'NEXT_PUBLIC_OPERATOR_NAME',
+    'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
+    'NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL',
+  ]) {
+    delete process.env[key]
+  }
+  for (const [key, value] of Object.entries(values)) process.env[key] = value
+}
+const AGLYN_OPERATED = {
+  NEXT_PUBLIC_OPERATOR_NAME: 'Aglyn LLC',
+  NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL: 'support@aglyn.com',
+}
+beforeEach(() => setOperator(AGLYN_OPERATED))
+afterEach(() => setOperator(AGLYN_OPERATED))
+
 import {
   COUNTER_NOTICE_MAX_BUSINESS_DAYS,
   COUNTER_NOTICE_MIN_BUSINESS_DAYS,
@@ -438,5 +462,64 @@ describe('a counter-notice about a site we cannot resolve is still recorded', ()
     expect(response.status).toBe(200)
     expect(notices()).toHaveLength(1)
     expect(theNotice().hostId).toBeNull()
+  })
+})
+
+describe('AGL-2016 · the §512(g) statements name the right service provider', () => {
+  /**
+   * The served page with runs of whitespace collapsed.
+   *
+   * The consent clause is wrapped across source lines, so the raw bytes carry
+   * a newline and indentation mid-sentence. Asserting on the raw string would
+   * make this guard sensitive to reflowing a template literal — it would go
+   * red on a formatting change and, worse, could be "fixed" by loosening the
+   * assertion until it stopped checking the sentence at all.
+   */
+  const form = async (): Promise<string> => {
+    const response = await GET(
+      new Request('https://site.example.com/api/counter-notice'),
+    )
+    expect(response.status).toBe(200)
+    return (await response.text()).replace(/\s+/g, ' ')
+  }
+
+  afterEach(() => setOperator(AGLYN_OPERATED))
+
+  it('makes a self-hoster\'s subscriber consent to THEIR jurisdiction', async () => {
+    // The most severe item in this issue, and not a branding leak.
+    // §512(g)(3)(D) requires the subscriber to consent to the district of the
+    // SERVICE PROVIDER. Hardcoded to "Aglyn", a self-hosted install collected
+    // a sworn statement naming a company with no relationship to the dispute
+    // — arguably a defective counter-notice, which would mean the put-back
+    // clock the operator is running never validly started.
+    setOperator({
+      NEXT_PUBLIC_OPERATOR_NAME: 'Bramble Studio GmbH',
+      NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL: 'hello@bramble.example',
+    })
+    const body = await form()
+    expect(body).toContain(
+      'any judicial district in which Bramble Studio GmbH may be found',
+    )
+    expect(body.toLowerCase()).not.toContain('aglyn')
+  })
+
+  it('still names us on our own deployment', async () => {
+    const body = await form()
+    expect(body).toContain(
+      'any judicial district in which Aglyn LLC may be found',
+    )
+    expect(body).toContain('Counter-notice — Aglyn LLC')
+  })
+
+  it('names the operator generically rather than naming us when unconfigured', async () => {
+    setOperator({})
+    const body = await form()
+    expect(body).toContain(
+      'any judicial district in which the operator of this site may be found',
+    )
+    expect(body.toLowerCase()).not.toContain('aglyn')
+    // And the title loses the suffix rather than gaining a placeholder: a
+    // sworn document with no publisher named beats one naming the wrong one.
+    expect(body).toContain('<title>Counter-notice</title>')
   })
 })

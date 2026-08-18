@@ -208,6 +208,19 @@ beforeEach(() => {
   })
 })
 
+// AGL-2016: the contact line on these notices is operator configuration, not
+// a constant. This is the AGLYN-OPERATED shape — the self-host and
+// unconfigured shapes are proved at the source, in
+// libs/aglyn/src/lib/app-utils/{lockdown,media-quarantine}.spec.ts.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+})
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+})
+
 describe('AGL-1512 · the role gate', () => {
   it('rejects a non-staff caller', async () => {
     mockDecodedToken['staff'] = false

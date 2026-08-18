@@ -94,9 +94,55 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+// AGL-2016: the operator-facing half of the chrome the two §512 intakes
+// share. This route still carries its own HTML shell (AGL-1983 left adopting
+// the shared one as a follow-up), but the strings that name a party must have
+// exactly one definition or they drift — which is how `support@aglyn.com`
+// came to be declared in four places.
+import {
+  contactHtml,
+  contactText,
+  EXAMPLE_URL,
+  NO_CHANNEL_ADVICE,
+  operatorTitleSuffix,
+} from '../_legal-intake/chrome'
 import { getHost } from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The lede — who this form reaches, and what they can do about the report.
+ *
+ * Was: *"Tell us about a site hosted by **Aglyn** that is phishing … or
+ * otherwise breaking **our** Acceptable Use Policy."* Two claims, both false
+ * on every deployment but ours, on a page that ships with the software and is
+ * served unauthenticated: that Aglyn hosts the reported site, and that Aglyn's
+ * AUP governs it. A copyright holder reading that sends their §512 notice to
+ * us, about material we cannot see and have no right to remove, while their
+ * clock runs.
+ *
+ * Configured, it names the operator and reads as it always did. Unconfigured,
+ * it says so plainly and tells the reporter to find the operator another way
+ * (AGL-2016). That is deliberately unhelpful-sounding: a form that silently
+ * routes a legal notice to the wrong entity is worse than one that admits it
+ * does not know where the notice should go, because the first consumes the
+ * reporter's time before failing and the second does not.
+ *
+ * Note the AUP sentence drops entirely when unconfigured rather than being
+ * genericised. "Breaking the operator's acceptable use policy" asserts such a
+ * policy exists; on a bare install it may not.
+ */
+function operatorLede(): string {
+  const operator = Aglyn.operatorIdentity()
+  if (!operator.configured) {
+    return `<p class="lede">${Aglyn.OPERATOR_UNCONFIGURED_NOTICE}</p>`
+  }
+  const name = escapeHtml(operator.name)
+  return `<p class="lede">Tell us about a site hosted by ${name} that is
+phishing, hosting malware, infringing copyright, or otherwise breaking the
+acceptable use policy for this service. You do not need an account, and you do
+not have to tell us who you are.</p>`
+}
 
 /** Reports accepted per IP per window before throttling. */
 export const REPORT_RATE_MAX = 5
@@ -223,16 +269,13 @@ function formHtml(options: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Report abuse — Aglyn</title>
+<title>Report abuse${operatorTitleSuffix()}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
 <main>
 <h1>Report abuse</h1>
-<p class="lede">Tell us about a site hosted by Aglyn that is phishing, hosting
-malware, infringing copyright, or otherwise breaking our Acceptable Use
-Policy. You do not need an account, and you do not have to tell us who you
-are.</p>
+${operatorLede()}
 ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
 <div class="note"><strong>If someone is in immediate danger, contact your local
 emergency services first.</strong> We act quickly, but we are not an emergency
@@ -243,7 +286,7 @@ service.</div>
     <p class="hint">The full address, starting with https://</p>
     <input id="url" name="url" type="text" inputmode="url" required
            value="${escapeHtml(reportedUrl)}"
-           placeholder="https://example.aglyn.app/page">
+           placeholder="${escapeHtml(EXAMPLE_URL)}">
   </div>
 
   <fieldset>
@@ -310,7 +353,7 @@ service.</div>
 </form>
 <footer>
   <p>We read every report. If you would rather email us, write to
-  <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a>.</p>
+  ${contactHtml('support')}.</p>
 </footer>
 </main>
 </body>
@@ -324,7 +367,7 @@ function receiptHtml(reference: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Report received — Aglyn</title>
+<title>Report received${operatorTitleSuffix()}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
@@ -340,7 +383,7 @@ function receiptHtml(reference: string): string {
   share your details with the site's owner unless the law requires it — a
   copyright notice is the exception, because the site owner has a right to
   respond to one.</p>
-  <p>Follow-up: <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a></p>
+  <p>Follow-up: ${contactHtml('support')}</p>
 </footer>
 </main>
 </body>
@@ -432,17 +475,19 @@ export async function POST(request: Request): Promise<Response> {
   if (!rate.allowed) {
     // Hand them another route rather than a wall — the refusal must not be
     // the last thing a real reporter sees.
+    const contact = contactText('support')
     const message =
       `You have sent several reports from this connection recently. ` +
-      `Please wait a few minutes, or email ${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} ` +
-      `so nothing is lost.`
+      (contact
+        ? `Please wait a few minutes, or email ${contact} so nothing is lost.`
+        : `Please wait a few minutes. ${NO_CHANNEL_ADVICE}`)
     const retryAfter = Math.max(
       1,
       Math.ceil((rate.resetMs - Date.now()) / 1000) || 60,
     )
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 429, headers: { 'retry-after': String(retryAfter) } },
         )
       : new Response(formHtml({ reportedUrl: '', error: message }), {
@@ -547,12 +592,14 @@ export async function POST(request: Request): Promise<Response> {
     })
   } catch (error) {
     console.error('abuse report write failed', error)
-    const message =
-      `We could not record your report just now. Please email ` +
-      `${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} so it is not lost.`
+    const contact = contactText('support')
+    const message = contact
+      ? `We could not record your report just now. Please email ` +
+        `${contact} so it is not lost.`
+      : `We could not record your report just now. ${NO_CHANNEL_ADVICE}`
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 503 },
         )
       : html(formHtml({ reportedUrl: report.url, error: message }), 503)

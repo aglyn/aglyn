@@ -44,6 +44,21 @@ import {
   normalizeMediaQuarantine,
 } from './media-quarantine'
 
+// AGL-2016: the contact line these notices carry is the OPERATOR's, resolved
+// from configuration. Every assertion below that names `support@aglyn.com` is
+// therefore an assertion about AGLYN-OPERATED behaviour, and it only holds
+// because this block configures it — which is the point. Without it they
+// would read `undefined`, and before AGL-2016 they read a literal that could
+// never have been anything else.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+})
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+})
+
 describe('AGL-1512 · quarantine keys', () => {
   it('prefers the content hash — the key that survives a re-upload', () => {
     expect(
@@ -273,5 +288,30 @@ describe('AGL-1512 · the owner-facing notice', () => {
     expect(mediaQuarantineNotice({ reason: 'malware', message: '   ' }).body).toBe(
       mediaQuarantineNotice({ reason: 'malware' }).body,
     )
+  })
+})
+
+
+describe('AGL-2016 · the quarantine notice addresses the OPERATOR', () => {
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+  })
+
+  it('names the operator, not Aglyn staff, on a self-hosted install', () => {
+    process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Bramble Studio GmbH'
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'hello@bramble.example'
+    const notice = mediaQuarantineNotice({ reason: 'manual' })
+    expect(notice.contact).toBe('hello@bramble.example')
+    // The body used to read "disabled by Aglyn staff" — a claim about who
+    // acted, on a file Aglyn never stored.
+    expect(notice.body).not.toContain('Aglyn')
+    expect(notice.body).toContain('the operator of this service')
+  })
+
+  it('drops the contact line when no operator is configured', () => {
+    delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+    delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+    expect(mediaQuarantineNotice({ reason: 'manual' }).contact).toBeUndefined()
   })
 })

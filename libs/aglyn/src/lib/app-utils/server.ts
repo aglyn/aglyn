@@ -53,6 +53,10 @@ export * from './form-abuse-ceiling'
 export * from './health-report'
 export * from './support-tiers'
 export * from './release-flags'
+// Who runs THIS deployment, and where its notices go (AGL-2016). Ordered
+// before the four surfaces that print it, all of which used to declare their
+// own `support@aglyn.com` literal.
+export * from './operator-identity'
 export * from './lockdown'
 export * from './media-quarantine'
 export * from './abuse-report'

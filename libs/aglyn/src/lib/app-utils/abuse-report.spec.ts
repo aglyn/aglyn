@@ -28,7 +28,7 @@
 
 import {
   ABUSE_REPORT_CATEGORIES,
-  ABUSE_REPORT_CONTACT_EMAIL,
+  abuseReportContactEmail,
   ABUSE_REPORT_MAX_DETAILS,
   abuseReportCategory,
   type AbuseReportValidation,
@@ -224,12 +224,50 @@ describe('the category catalog', () => {
     }
   })
 
-  it('publishes a contact address that is not an unconfirmed mailbox', () => {
-    // AGL-1973: `abuse@aglyn.com` is not confirmed to exist, and AGL-1577's
-    // default routing would accept and silently discard mail to it. Until
-    // that is settled this surface must not add a fourth place the address is
-    // promised.
-    expect(ABUSE_REPORT_CONTACT_EMAIL).toBe('support@aglyn.com')
+  describe('the published contact address is the OPERATOR of this install', () => {
+    // This block replaces a single assertion that read
+    //   expect(ABUSE_REPORT_CONTACT_EMAIL).toBe('support@aglyn.com')
+    // and which was GREEN on every run while the constant it pinned was
+    // sending third parties' DMCA notices about self-hosted sites to Aglyn
+    // (AGL-2016). It could not have failed: it asserted a literal equals
+    // itself. The three cases below are written so that each can.
+    const KEYS = [
+      'NEXT_PUBLIC_OPERATOR_NAME',
+      'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
+      'NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL',
+    ]
+    const clear = (): void => {
+      for (const key of KEYS) delete process.env[key]
+    }
+    beforeEach(clear)
+    afterEach(clear)
+
+    it('is ours when we are the ones running it', () => {
+      // AGL-1973 still governs WHICH address we configure: `abuse@aglyn.com`
+      // is not confirmed to exist and AGL-1577's default routing would accept
+      // and silently discard mail to it, so production sets `support@`. That
+      // is now a fact about our env, and this is where it is asserted.
+      process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+      process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+      expect(abuseReportContactEmail()).toBe('support@aglyn.com')
+      expect(abuseReportContactEmail('legal')).toBe('support@aglyn.com')
+    })
+
+    it('is the self-hoster\'s, and never ours, on their install', () => {
+      process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Bramble Studio GmbH'
+      process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'hello@bramble.example'
+      process.env.NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL = 'dmca@bramble.example'
+      expect(abuseReportContactEmail()).toBe('hello@bramble.example')
+      // The one that matters: a §512 notice goes to THEIR legal mailbox.
+      expect(abuseReportContactEmail('legal')).toBe('dmca@bramble.example')
+      expect(abuseReportContactEmail()).not.toContain('aglyn')
+      expect(abuseReportContactEmail('legal')).not.toContain('aglyn')
+    })
+
+    it('is null — not an Aglyn address — when nobody configured one', () => {
+      expect(abuseReportContactEmail()).toBeNull()
+      expect(abuseReportContactEmail('legal')).toBeNull()
+    })
   })
 
   it('recognises exactly the four workflow states', () => {

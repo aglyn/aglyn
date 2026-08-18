@@ -64,6 +64,44 @@ It covers:
    image-build time versus read at runtime.
 4. Reverse-proxy setup for the console and the tenant runtime.
 
+## Who runs this install
+
+Two values are **not optional** in the way the keys below are, because leaving
+them out changes what your users and third parties are told about who is
+responsible for your site:
+
+```bash
+NEXT_PUBLIC_OPERATOR_NAME=Bramble Studio GmbH
+NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL=hello@bramble.example
+```
+
+They name you on the public abuse intake (`/api/report-abuse`), the §512
+counter-notice intake (`/api/counter-notice`), the lockdown 503, the media
+quarantine notice and the sanctions 451. These pages ship with the software and
+the first two are unauthenticated — a copyright holder or a browser vendor can
+reach them without an account.
+
+There is deliberately **no fallback to Aglyn's addresses**. Earlier builds
+hardcoded them, which meant a self-hosted deployment published a DMCA intake
+directing statutory notices to Aglyn — about content Aglyn does not host and
+cannot remove. Unset now renders an explicit "not configured" state instead.
+
+Because these are `NEXT_PUBLIC_*`, they are compiled into the client bundles.
+Set them before `docker compose build`, not just before `up`.
+
+### Your DMCA position is your own
+
+The counter-notice flow, the 10–14 business-day put-back clock and the
+repeat-infringer strike ledger all work on your install. Aglyn's designated
+agent registration does not extend to you: §512(c)(2) makes registering an
+agent with the U.S. Copyright Office a *precondition* of the safe harbour
+rather than a formality.
+
+So `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` defaults to unset, unset means the
+product claims nothing, and `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED` must
+be exactly `true` before anything states a registration. Naming an agent never
+implies one.
+
 ## Optional keys
 
 The example env file carries the required Firebase blocks plus a handful of
@@ -85,4 +123,8 @@ disables its feature rather than breaking the stack:
 | Custom-domain self-service | The in-console attach flow is Vercel-specific; self-hosters attach domains at their reverse proxy instead. |
 | Wildcard published-site domains | Host resolution for arbitrary public hostnames currently assumes the hosted platform — plan on per-site proxy rules rather than a single wildcard, and expect this area to improve. |
 | Stripe / Resend / AI assist | Optional keys (see above); the related features degrade gracefully when absent. |
+| Operator identity | Set `NEXT_PUBLIC_OPERATOR_NAME` and `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — the public abuse and §512 intakes name them, there is no Aglyn fallback, and unset renders "not configured". Baked in at image build time. |
+| DMCA designated agent | Not inherited from Aglyn. Register your own with the U.S. Copyright Office; the product asserts a registration only when you set `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true`. |
+| Legal documents | Signup still clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots in the repository. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your own legal origin but does not yet retarget the acceptance flow. |
+| Documentation citations | AI-assist citations deep-link to `docs.aglyn.com` unless `NEXT_PUBLIC_DOCS_ORIGIN` names your own build. |
 | Updates | `git pull && docker compose up --build`, re-running the rules deploy when release notes say rules changed. |

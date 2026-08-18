@@ -86,6 +86,7 @@ import {
   readRequestGeo,
   type RequestGeo,
 } from '@aglyn/aglyn/app-utils/request-geo'
+import { operatorIdentity } from '@aglyn/aglyn/app-utils/operator-identity'
 
 export {
   GEO_COUNTRY_HEADER,
@@ -168,26 +169,55 @@ export function sanctionsVerdict(geo: RequestGeo): SanctionsVerdict {
  * The 451 body. Plain HTML, no scripts and no assets — it has to render on a
  * response the rest of the console's pipeline never touched.
  */
-const BLOCKED_HTML = `<!doctype html>
+/**
+ * The 451 body, built per request so it can name the OPERATOR (AGL-2016).
+ *
+ * Was a module-scope template naming `Aglyn` twice and hardcoding
+ * `support@aglyn.com` as the appeal channel — so a self-hosted console
+ * refusing a visitor told them to appeal to a company that had never heard of
+ * them and could not lift the block.
+ *
+ * ⚠️ The `section 3.6` citation is Aglyn's Terms of Service and is NOT true of
+ * an operator running their own terms. It renders only when the deployment
+ * has configured a legal origin, which is the closest thing to "this operator
+ * publishes terms" the config knows — and it is dropped rather than
+ * genericised, because "see the sanctions section of our terms" asserts such
+ * a section exists. Naming the *right* section for an arbitrary operator is
+ * not something configuration can do; see the note on AGL-2016.
+ */
+const blockedHtml = (): string => {
+  const operator = operatorIdentity()
+  const subject = operator.name ?? 'This service'
+  const appeal = operator.supportEmail
+    ? `If you believe this is a mistake, contact <a href="mailto:${operator.supportEmail}">${operator.supportEmail}</a>.`
+    : ''
+  const terms = operator.legalOrigin
+    ? 'See section 3.6 (Sanctions &amp; Export Control) of our Terms of Service. '
+    : ''
+  return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Unavailable in your region</title></head>
 <body style="font:16px/1.6 system-ui,sans-serif;margin:0;padding:12vh 6vw;color:#1a1a1a;background:#fff">
 <h1 style="font-size:1.5rem;margin:0 0 1rem">Unavailable in your region</h1>
-<p style="max-width:44rem;margin:0 0 1rem">Aglyn cannot be provided in countries and
+<p style="max-width:44rem;margin:0 0 1rem">${subject} cannot be provided in countries and
 regions subject to comprehensive U.S. economic sanctions. This is a legal restriction,
 not a fault with your account.</p>
-<p style="max-width:44rem;margin:0">See section 3.6 (Sanctions &amp; Export Control) of
-our Terms of Service. If you believe this is a mistake, contact
-<a href="mailto:support@aglyn.com">support@aglyn.com</a>.</p>
+<p style="max-width:44rem;margin:0">${terms}${appeal}</p>
 </body></html>`
+}
 
-const BLOCKED_JSON = {
-  error: 'region-unavailable',
-  reason: 'sanctions',
-  detail:
-    'Aglyn is unavailable in countries and regions subject to comprehensive ' +
-    'U.S. economic sanctions (Terms of Service §3.6).',
+const blockedJson = () => {
+  const operator = operatorIdentity()
+  const subject = operator.name ?? 'This service'
+  return {
+    error: 'region-unavailable',
+    reason: 'sanctions',
+    detail:
+      `${subject} is unavailable in countries and regions subject to ` +
+      'comprehensive U.S. economic sanctions' +
+      (operator.legalOrigin ? ' (Terms of Service §3.6).' : '.'),
+  }
 }
 
 /**
@@ -206,9 +236,9 @@ export function sanctionsBlockResponse(kind: 'page' | 'json'): Response {
     'X-Robots-Tag': 'noindex',
   }
   if (kind === 'json') {
-    return Response.json(BLOCKED_JSON, { status: 451, headers })
+    return Response.json(blockedJson(), { status: 451, headers })
   }
-  return new Response(BLOCKED_HTML, {
+  return new Response(blockedHtml(), {
     status: 451,
     headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
   })

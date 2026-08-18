@@ -68,6 +68,45 @@ Fill it in following the comments. Two rules matter:
   time**. Changing one means rebuilding the images, not just restarting.
 - `TOKEN_SIGNING_SECRET` must be identical for console and tenant (compose
   shares one file, so it is). The code fails closed without it.
+- **Set the operator identity.** `NEXT_PUBLIC_OPERATOR_NAME` and
+  `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` are not branding — see below.
+
+### Who runs this install
+
+Fill in the **Operator identity** block. These values name *you* on the pages
+where naming the wrong party has consequences:
+
+| Surface | What it shows |
+| --- | --- |
+| `/api/report-abuse` | Public, unauthenticated. Anyone — a bank's fraud team, a browser vendor, a copyright holder — can reach it and report a site you host. |
+| `/api/counter-notice` | Public. A subscriber whose material you removed sends a §512(g) counter-notice here, **under penalty of perjury**, consenting to the jurisdiction where *you* may be found. |
+| Lockdown 503 | The visitor-facing page a suspended site serves. |
+| Quarantine notice | Shown to the customer whose media file you disabled. |
+| Sanctions 451 | The regional refusal page. |
+
+Before this was configuration, all five printed `Aglyn` and `support@aglyn.com`
+regardless of who ran the install. That meant a self-hosted deployment
+published a DMCA intake directing third parties to send statutory notices to
+Aglyn — about content Aglyn does not host, cannot see and cannot remove, while
+the sender's clock ran. **There is no fallback to Aglyn's addresses.** Leave
+these unset and the pages say so plainly rather than naming somebody else.
+
+Because they are `NEXT_PUBLIC_*`, they are compiled into the client bundles:
+set them **before `docker compose build`**, not just before `up`.
+
+### Your DMCA position is your own
+
+The counter-notice flow, the 10–14 business-day put-back clock and the
+repeat-infringer strike ledger all work on your install. **Aglyn's designated
+agent registration does not extend to you.** 17 U.S.C. §512(c)(2) makes
+registering an agent with the U.S. Copyright Office a *precondition* of the
+safe harbour, not a formality — a provider without one does not get the
+limitation on liability however well it handles notices.
+
+So the `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` values default to unset, and unset
+means the product asserts nothing. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED`
+must be exactly `true` before anything claims a registration, and naming an
+agent never implies one. Fill these in only if you have actually filed.
 
 ## 4. Build and run
 
@@ -113,6 +152,10 @@ domain at your proxy and route it to `tenant:4500`.
 | Resend | Optional. Without `RESEND_API_KEY`, app email (invites, receipts, campaigns) is an inert no-op. |
 | AI assist | Degrades gracefully without an Anthropic key. |
 | Texas sales-tax report | Optional, and blank by default. The staff `/admin/tax-return` report is built around a single US-TX registration. Set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to *your own* Comptroller identifiers to have them appear on the page and in the exported working papers; leave them unset and both surfaces say "not configured" rather than printing anything. They are **server-only** — never prefix either with `NEXT_PUBLIC_`, which would inline them into a client bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
+| Operator identity | **Set it.** `NEXT_PUBLIC_OPERATOR_NAME` / `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` name you on the public abuse and §512 counter-notice intakes, the lockdown 503, the quarantine notice and the sanctions 451. No fallback to Aglyn's addresses exists; unset renders an explicit "not configured" state. Baked in at image **build** time. |
+| DMCA designated agent | Not configured, and not inherited. Aglyn's Copyright Office registration does not cover your deployment; §512(c)(2) makes your own filing a precondition of the safe harbour. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true` is the only thing that makes the product state one, and nothing infers it. |
+| Legal documents / clickwrap | **Still Aglyn's.** Signup clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots committed in this repository, and writes the acceptance into your Firestore. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your legal origin for the surfaces that need one but does **not** yet retarget the acceptance flow — the document hashes pin Aglyn's bytes. Tracked as AGL-2017. |
+| Documentation citations | AI-assist citations deep-link to `https://docs.aglyn.com` unless `NEXT_PUBLIC_DOCS_ORIGIN` points at your own build of `apps/docs`. |
 | Updates | `git pull && docker compose up --build`. Watch the release notes for Firestore rules changes and re-run the deploy scripts when they change. |
 
 ## Local development without Docker

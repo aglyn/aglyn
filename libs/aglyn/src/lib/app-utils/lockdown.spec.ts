@@ -53,6 +53,21 @@ const state = (over: Partial<LockdownState> = {}): LockdownState => ({
   ...over,
 })
 
+// AGL-2016: the contact line these notices carry is the OPERATOR's, resolved
+// from configuration. Every assertion below that names `support@aglyn.com` is
+// therefore an assertion about AGLYN-OPERATED behaviour, and it only holds
+// because this block configures it — which is the point. Without it they
+// would read `undefined`, and before AGL-2016 they read a literal that could
+// never have been anything else.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+})
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+})
+
 describe('toEpochMs', () => {
   it('reads numbers, {seconds}, {_seconds}, toMillis and ISO strings', () => {
     expect(toEpochMs(NOW)).toBe(NOW)
@@ -770,5 +785,37 @@ describe('AGL-1511 · read-only mode', () => {
       'generic',
     )
     expect(lockdownPausedSurfaceForPluginApiPath('')).toBe('generic')
+  })
+})
+
+
+describe('AGL-2016 · the lockdown notice addresses the OPERATOR', () => {
+  // The Aglyn-operated direction is covered by every `contact` assertion
+  // above, which only passes because the top-level `beforeEach` configures
+  // us. This is the other half: without both, the suite passes on a module
+  // that ignores configuration entirely.
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+  })
+
+  it('points a self-hosted site at its own operator, never at us', () => {
+    process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Bramble Studio GmbH'
+    process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'hello@bramble.example'
+    const notice = lockdownNotice(state({ scope: 'org', reason: 'billing' }))
+    expect(notice.contact).toBe('hello@bramble.example')
+    expect(notice.contact).not.toContain('aglyn')
+  })
+
+  it('offers no contact line at all rather than a blank one', () => {
+    // `undefined` is the shape `maintenance` already uses for "no contact
+    // affordance", so the renderers drop the line. An empty string would
+    // render `mailto:` with nothing behind it — a link a locked-out customer
+    // clicks and a mail client that opens addressed to nobody.
+    delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+    delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+    const notice = lockdownNotice(state({ scope: 'org', reason: 'billing' }))
+    expect(notice.contact).toBeUndefined()
+    expect(notice.title).toBe('Account on hold')
   })
 })

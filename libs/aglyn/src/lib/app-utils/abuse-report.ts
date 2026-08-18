@@ -64,21 +64,40 @@
  * actioned into a quarantine or a lockdown without a translation table.
  */
 
+import { operatorContactLine } from './operator-identity'
+
 /** Firestore collection holding intake rows. Staff-read, Admin-SDK-written. */
 export const ABUSE_REPORT_COLLECTION = 'abuseReports'
 
 /**
- * The contact address printed on the form.
+ * The contact address printed on the form — the OPERATOR's, resolved from
+ * configuration (AGL-2016).
  *
- * `support@aglyn.com` and NOT `abuse@aglyn.com`, deliberately. It is the one
- * address both existing notice families already print
- * (`LOCKDOWN_SUPPORT_EMAIL`, `MEDIA_QUARANTINE_SUPPORT_EMAIL`), it is
- * customer-visible on the lockdown 503 today, and it is therefore the address
- * most likely to be real. Printing `abuse@` here would spread an unconfirmed
- * mailbox to one more surface; when AGL-1973 confirms it, this constant is
- * the single place to change.
+ * This was `export const ABUSE_REPORT_CONTACT_EMAIL = 'support@aglyn.com'`,
+ * and the docblock justifying it called itself *"the single place to change"*.
+ * It was the single place to change for **Aglyn**; for every other deployment
+ * it was the single place a third party's DMCA notice got misaddressed to us.
+ * The form it renders on is public and unauthenticated and ships with every
+ * install, so the literal made a self-hoster publish an intake pointing at a
+ * desk that cannot see, let alone remove, the content being reported.
+ *
+ * The original reasoning is preserved because it still governs **Aglyn's**
+ * configured value: `support@` and NOT `abuse@`, because AGL-1973 records
+ * that `abuse@aglyn.com` is not confirmed to deliver and AGL-1577 records
+ * that Gmail default routing accepts mail for non-existent `@aglyn.com`
+ * addresses with bounce suppression on. A published address that silently
+ * drops mail is worse than publishing none. That is now a statement about
+ * what we put in `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`, not about what the
+ * software hardcodes.
+ *
+ * DMCA notices prefer the legal mailbox when the operator has configured a
+ * separate one; see {@link operatorContactLine}.
  */
-export const ABUSE_REPORT_CONTACT_EMAIL = 'support@aglyn.com'
+export function abuseReportContactEmail(
+  kind: 'support' | 'legal' = 'support',
+): string | null {
+  return operatorContactLine(kind).address
+}
 
 /** Maximum characters of reporter prose stored. */
 export const ABUSE_REPORT_MAX_DETAILS = 5000

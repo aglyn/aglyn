@@ -40,6 +40,12 @@
  * underneath another agent's open work.
  */
 
+import {
+  OPERATOR_CONTACT_UNSET,
+  operatorContactLine,
+  operatorIdentity,
+} from '@aglyn/aglyn/server'
+
 /** Escape a string for interpolation into HTML text or an attribute value. */
 export const escapeHtml = (value: string): string =>
   value
@@ -149,15 +155,29 @@ export const PAGE_STYLE = `
  * `noindex` on both the meta and the header: these pages carry sworn
  * statements and legal correspondence, and a search engine that indexed a
  * receipt would publish a dispute neither party asked to have published.
+ *
+ * The title suffix is the OPERATOR of this deployment, not `Aglyn` (AGL-2016).
+ * Both §512 intakes share this shell, so the hardcoded suffix put our name in
+ * the browser tab, the bookmark and the print header of a self-hoster's
+ * counter-notice — the document a subscriber keeps as their record of what
+ * they swore to and who they sent it to. Unconfigured drops the suffix
+ * entirely rather than substituting a placeholder: a legal document with no
+ * publisher named is at least not a legal document naming the wrong one.
  */
+export function operatorTitleSuffix(): string {
+  const operator = operatorIdentity().name
+  return operator ? ` — ${escapeHtml(operator)}` : ''
+}
+
 export function documentHtml(title: string, body: string): string {
+  const suffix = operatorTitleSuffix()
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${escapeHtml(title)} — Aglyn</title>
+<title>${escapeHtml(title)}${suffix}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
@@ -167,6 +187,54 @@ ${body}
 </body>
 </html>`
 }
+
+/**
+ * The operator's contact address, as HTML — a `mailto:` when configured, and
+ * an honest sentence when not (AGL-2016).
+ *
+ * Both intakes offer "if you would rather email us" as the fallback channel,
+ * and both used to hardcode `support@aglyn.com` into it. On a self-host
+ * install that turned the fallback into a misroute: the reporter who did not
+ * trust the form emailed a company with no access to the content.
+ *
+ * Returns prose rather than an empty anchor when unconfigured, because an
+ * `<a href="mailto:">` with nothing behind it is a link a reporter will click,
+ * and a mail client that opens with a blank To: line reads as our bug rather
+ * than as a deployment that never published an address.
+ */
+export function contactHtml(kind: 'support' | 'legal' = 'support'): string {
+  const { address } = operatorContactLine(kind)
+  if (!address) return escapeHtml(OPERATOR_CONTACT_UNSET)
+  const safe = escapeHtml(address)
+  return `<a href="mailto:${safe}">${safe}</a>`
+}
+
+/** Plain-text counterpart of {@link contactHtml}, for JSON and prose bodies. */
+export const contactText = (kind: 'support' | 'legal' = 'support'): string | null =>
+  operatorContactLine(kind).address
+
+/**
+ * What a refusal offers instead of "email us" when no address is configured.
+ *
+ * Both intakes refuse in two places — rate-limited, and write-failed — and
+ * both refusals hand the reporter another route so the wall is not the last
+ * thing a real reporter sees. With no address to hand them, the next best
+ * thing is telling them the thing they wrote still exists and is worth
+ * keeping, which is the part they lose if they close the tab.
+ */
+export const NO_CHANNEL_ADVICE =
+  'This deployment has published no contact address, so keep a copy of what ' +
+  'you wrote and try again shortly.'
+
+/**
+ * The URL placeholder in both intakes' address field.
+ *
+ * Was `https://example.aglyn.app/page` — our apex, shown to someone reporting
+ * a page on somebody else's install. `example.com` is the RFC 2606 reserved
+ * name and belongs to nobody, which is exactly the property a placeholder
+ * needs.
+ */
+export const EXAMPLE_URL = 'https://example.com/page'
 
 /** An HTML response with the no-store/noindex headers both intakes need. */
 export const html = (body: string, status = 200): Response =>
