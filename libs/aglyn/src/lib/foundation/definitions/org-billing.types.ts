@@ -470,6 +470,21 @@ export interface OrgSubscription {
   interval?: 'month' | 'year'
   currentPeriodEnd?: ITimestamp
   /**
+   * A downgrade scheduled for the current period end (AGL-1862). Set by
+   * `/api/billing/subscription` when a switch walks DOWN the self-serve
+   * ladder — the Stripe subscription schedule owns the transition, this is
+   * the manager-gated mirror the billing page renders. `null` (not absent)
+   * once released, so a merge clears it. Rides inside `subscription` because
+   * `pickOrgBillingFields` drops any other top-level key.
+   */
+  pendingDowngrade?: {
+    plan: string
+    interval: 'month' | 'year'
+    /** ISO timestamp of the period end the schedule flips at. */
+    effectiveAt: string | null
+    scheduleId: string
+  } | null
+  /**
    * Negotiated custom price as a **monthly-normalized** USD figure (AGL-1110),
    * set when an enterprise org bills at an ad-hoc amount rather than a plan's
    * list price — e.g. `agency` capability at $2,730/mo. An annual custom deal
