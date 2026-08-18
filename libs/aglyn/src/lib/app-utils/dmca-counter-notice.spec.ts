@@ -38,7 +38,6 @@ import {
   COUNTER_NOTICE_RESTORE_BUSINESS_DAYS,
   COUNTER_NOTICE_STATUSES,
   COUNTER_NOTICE_TERMINAL_STATUSES,
-  addBusinessDays,
   counterNoticeAwaitsRestoration,
   counterNoticeClock,
   isCounterNoticeStatus,
@@ -176,44 +175,6 @@ describe('normalizeNoticeReference', () => {
   })
 })
 
-describe('addBusinessDays', () => {
-  /** A known Monday, Wednesday and Friday in UTC. */
-  const MONDAY = Date.UTC(2026, 7, 17)
-  const FRIDAY = Date.UTC(2026, 7, 21)
-  const SATURDAY = Date.UTC(2026, 7, 22)
-
-  it('steps over the weekend rather than through it', () => {
-    expect(new Date(addBusinessDays(FRIDAY, 1)).getUTCDay()).toBe(1)
-    // Friday + 1 business day is the following Monday, three calendar days on.
-    expect(addBusinessDays(FRIDAY, 1)).toBe(MONDAY + 7 * 86_400_000)
-  })
-
-  it('never lands on a Saturday or a Sunday, from any starting day', () => {
-    // The load-bearing property: an off-by-one in the loop that decremented
-    // before checking the day would land on a weekend and would still pass a
-    // single hand-picked example.
-    for (let start = 0; start < 14; start += 1) {
-      const from = MONDAY + start * 86_400_000
-      for (let days = 1; days <= 20; days += 1) {
-        const day = new Date(addBusinessDays(from, days)).getUTCDay()
-        expect([day, days, start]).not.toEqual([0, days, start])
-        expect([day, days, start]).not.toEqual([6, days, start])
-      }
-    }
-  })
-
-  it('counts from a weekend start without crediting the weekend', () => {
-    // A counter-notice arriving on a Saturday must not have two business days
-    // already behind it before anyone reads it.
-    expect(new Date(addBusinessDays(SATURDAY, 1)).getUTCDay()).toBe(1)
-  })
-
-  it('treats a zero or negative count as no movement', () => {
-    expect(addBusinessDays(MONDAY, 0)).toBe(MONDAY)
-    expect(addBusinessDays(MONDAY, -5)).toBe(MONDAY)
-  })
-})
-
 describe('counterNoticeClock', () => {
   const MONDAY = Date.UTC(2026, 7, 17, 9, 30)
 
@@ -248,6 +209,20 @@ describe('counterNoticeClock', () => {
     expect(COUNTER_NOTICE_RESTORE_BUSINESS_DAYS).toBeLessThanOrEqual(
       COUNTER_NOTICE_MAX_BUSINESS_DAYS,
     )
+  })
+
+  it('never schedules a restoration on a weekend', () => {
+    // The clock borrows `addBusinessDays` from the support-SLA module rather
+    // than restating it, so this is a contract test on that dependency, not a
+    // second copy of its own suite: if it ever stopped skipping weekends, a
+    // customer's site would be scheduled to come back on a Saturday and every
+    // bounds assertion above would still pass.
+    for (let offset = 0; offset < 14; offset += 1) {
+      const clock = counterNoticeClock(MONDAY + offset * 86_400_000)
+      const day = new Date(clock.restoreAtMs).getUTCDay()
+      expect([day, offset]).not.toEqual([0, offset])
+      expect([day, offset]).not.toEqual([6, offset])
+    }
   })
 
   it('is a real delay, not an instant put-back', () => {

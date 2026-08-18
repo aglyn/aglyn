@@ -86,6 +86,18 @@
  * whom, when, and what that obliges us to do next.
  */
 
+/**
+ * The weekend-skipping day arithmetic, borrowed from the support-SLA clock
+ * rather than restated.
+ *
+ * `support-tiers.ts` already needed exactly this — UTC, Saturday and Sunday
+ * skipped, holidays deliberately unknown — and carries the same reasoning
+ * about why a half-right holiday calendar is worse than none. Two copies of a
+ * date rule are two chances to disagree about which day a deadline falls on,
+ * and this one decides when a customer's site comes back.
+ */
+import { addBusinessDays } from './support-tiers'
+
 /** Firestore collection holding counter-notices. Staff-read, Admin-SDK-written. */
 export const DMCA_COUNTER_NOTICE_COLLECTION = 'dmcaCounterNotices'
 
@@ -362,33 +374,6 @@ export function validateCounterNotice(
       acceptService: true,
     },
   }
-}
-
-/**
- * Add `count` business days to an instant, skipping Saturdays and Sundays.
- *
- * UTC throughout, deliberately. The alternative — a local-time calculation —
- * would make the restoration instant depend on the timezone of whichever
- * server ran the arithmetic, so the same counter-notice could produce two
- * different put-back dates on two deploys. A day boundary that is stable is
- * worth more here than one that matches any particular office's calendar,
- * and the window is wide enough to absorb the difference.
- *
- * Holidays are NOT skipped; {@link COUNTER_NOTICE_RESTORE_BUSINESS_DAYS}
- * absorbs them by aiming at the middle of the statutory window. See the
- * module comment.
- */
-export function addBusinessDays(fromMs: number, count: number): number {
-  if (!Number.isFinite(fromMs)) return NaN
-  let remaining = Math.max(0, Math.trunc(count))
-  const cursor = new Date(fromMs)
-  while (remaining > 0) {
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-    const day = cursor.getUTCDay()
-    // 0 = Sunday, 6 = Saturday.
-    if (day !== 0 && day !== 6) remaining -= 1
-  }
-  return cursor.getTime()
 }
 
 /** The three instants §512(g)(2)(C) defines, relative to receipt. */

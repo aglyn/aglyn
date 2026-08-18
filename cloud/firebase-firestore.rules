@@ -575,6 +575,36 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /**
+       * The §512(i) repeat-infringer strike ledger (AGL-1983). One document
+       * per upheld copyright notice, keyed by the abuse report's id.
+       *
+       * There is no catch-all under `orgs/{orgId}` — every subcollection here
+       * is matched explicitly — so this collection was already deny-all by
+       * the absence of a rule. It is written out anyway, because "safe
+       * because nobody wrote a rule" is a property that evaporates the day
+       * somebody adds a convenience wildcard, and this is the ledger that
+       * decides whether an account gets terminated.
+       *
+       * STAFF-READ, and deliberately NOT readable by the org it counts. That
+       * is not secrecy for its own sake: §512(i) also requires that
+       * subscribers be INFORMED of the policy, and they are — by the
+       * published policy, and by the notice staff send on each strike. What
+       * the raw ledger adds is the complainants' identities and the exact
+       * count, and an org that could watch its own count in real time could
+       * time its behaviour against the threshold, which is the one reading
+       * that would make the policy easier rather than harder to game.
+       *
+       * NOBODY-WRITE. A client able to write here could delete its own
+       * strikes, which is the account-termination condition of the entire
+       * safe harbour. Written only by /api/admin/abuse-reports, Admin SDK,
+       * beside its `adminAudit` row.
+       */
+      match /dmcaStrikes/{reportId} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
+
       // SSO domain claims (AGL-1210). Deny ALL client access, read included.
       //
       // The claim token is the only thing standing between an org and a
@@ -1635,6 +1665,32 @@ service cloud.firestore {
     //    in the same act. A bare client write would be a decision with no
     //    record of who made it.
     match /abuseReports/{reportId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    /**
+     * §512(g) counter-notices (AGL-1983). Same posture as `abuseReports`
+     * above, and for sharper versions of the same reasons.
+     *
+     * STAFF-READ, and not readable by the subscriber who filed it even though
+     * it is their own document. There is no authenticated identity on the
+     * intake at all — the filer is by definition someone whose site is down
+     * and who may be locked out of the console entirely — so there is no uid
+     * on the row to match against, and a rule that admitted a reader would be
+     * admitting an unverified claim to be that person. The row also carries
+     * the complainant's side of the dispute once staff work it.
+     *
+     * NOBODY-WRITE, including staff, including the filer. A counter-notice is
+     * a sworn statement: its whole evidentiary value is that the text is
+     * exactly what was submitted, at the time it says. `receivedAt` in
+     * particular is the instant §512(g)(2)(C)'s 10-to-14 business day clock
+     * counts from — a client able to write it could move its own restoration
+     * date, in either direction. Written only by /api/counter-notice and
+     * transitioned only by /api/admin/abuse-reports, both Admin SDK, both
+     * writing an `adminAudit` row for any staff decision.
+     */
+    match /dmcaCounterNotices/{noticeId} {
       allow read: if isStaff();
       allow write: if false;
     }
