@@ -751,7 +751,7 @@ service cloud.firestore {
      * neither consults `suspendedUntilMs`, so a TIMED suspension keeps writes
      * frozen in rules after the server-side helpers consider it expired.
      * Making this one expiry-aware and leaving the org arm as it is would put
-     * two different answers in one file; AGL-1966 carries the question for
+     * two different answers in one file; AGL-1981 carries the question for
      * both scopes. Failing closed is the right way round to be wrong here.
      */
     function hostSuspended(hostId) {
