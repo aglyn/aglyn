@@ -25,6 +25,7 @@ import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
   isLiveSubscriptionStatus,
+  mergeOrgBillingOverOrg,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
@@ -110,8 +111,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     firestore,
     orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
   )
+  // NOT a plain spread (AGL-1991). `useConfirmedDoc` stamps the document id
+  // into its payload, so `orgBilling.$id` is the literal `'stripe'`; spreading
+  // it second made the merged `org.$id` `'stripe'` and every child deriving an
+  // org id from this object read `orgs/stripe/…` — denied, which is what left
+  // the metered estimate card stuck on "Calculating…" on every org.
   const org = useMemo(
-    () => ({ ...(orgDoc ?? {}), ...(orgBilling ?? {}) }),
+    () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
   const { permissions, can, loaded: permissionsLoaded } =

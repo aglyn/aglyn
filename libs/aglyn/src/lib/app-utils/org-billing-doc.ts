@@ -223,3 +223,43 @@ export function hasInlineOrgBilling(
   if (!source) return false
   return ORG_BILLING_MOVED_KEYS.some((key) => source[key] !== undefined)
 }
+
+/**
+ * Merge the manager-gated billing doc over an org doc WITHOUT letting the
+ * billing doc's identity win (AGL-1991).
+ *
+ * The billing page merges `orgs/{orgId}/billing/stripe` over `orgs/{orgId}` so
+ * that every `org.subscription…` reference keeps working after AGL-1028 moved
+ * those keys. The trap: the console's `useConfirmedDoc` stamps the DOCUMENT ID
+ * into the payload it hands back (`{ $id: id, ...payload }`), so the billing
+ * doc arrives carrying `$id === ORG_BILLING_DOC_ID` — the literal string
+ * `'stripe'`. A plain spread puts that second, so the merged object's `$id`
+ * silently became `'stripe'` and every child deriving its org id from it read
+ * `orgs/stripe/…`, which is not an org and is denied by the rules.
+ *
+ * That is why this is a helper and not an inline `$id:` re-assert at the call
+ * site: `useConfirmedDoc` stamping `$id` makes ANY merge of two documents
+ * identity-swapping, so the safe merge belongs somewhere it can be reused and
+ * named rather than re-derived correctly each time.
+ *
+ * The org doc's `$id` wins unconditionally — including when it is absent, in
+ * which case the result carries no `$id` at all rather than inheriting the
+ * billing doc's. A missing org id must read as "unknown", never as a
+ * confidently wrong path.
+ */
+export function mergeOrgBillingOverOrg<
+  TOrg extends Record<string, unknown>,
+  TBilling extends Record<string, unknown>,
+>(
+  orgDoc: TOrg | null | undefined,
+  orgBilling: TBilling | null | undefined,
+): TOrg & Partial<TBilling> {
+  const merged = { ...(orgDoc ?? {}), ...(orgBilling ?? {}) } as Record<
+    string,
+    unknown
+  >
+  // Restore the org document's identity, whatever the billing doc claimed.
+  if (orgDoc && '$id' in orgDoc) merged['$id'] = (orgDoc as Record<string, unknown>)['$id']
+  else delete merged['$id']
+  return merged as TOrg & Partial<TBilling>
+}
