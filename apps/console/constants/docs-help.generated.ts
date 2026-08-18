@@ -211,7 +211,7 @@ export const DOCS_HELP_TOPICS = {
   downgradingAndCanceling: {
     path: '/workspace-and-billing/billing-and-plans/downgrading-and-canceling',
     title: 'Downgrading, canceling & your data',
-    excerpt: 'What happens to your sites, files, and data when you downgrade, cancel, or delete — and how to export first.',
+    excerpt: 'What happens when you downgrade, cancel, or delete — when each takes effect, what the cancel dialog offers you, and how to export first.',
   },
   dragDropHierarchy: {
     path: '/building-sites/besigner/drag-drop-hierarchy',
@@ -616,7 +616,7 @@ export const DOCS_HELP_ANCHORS = {
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],
   designedEmails: ['#create-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it'],
-  downgradingAndCanceling: ['#downgrading-to-a-lower-plan', '#canceling-your-subscription', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
+  downgradingAndCanceling: ['#when-changes-take-effect', '#downgrading-to-a-lower-plan', '#pending-downgrade', '#keep-my-current-plan', '#what-changes-on-a-downgrade', '#canceling-your-subscription', '#the-cancel-dialog', '#deleting-a-single-site', '#deleting-your-organization', '#related'],
   dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
   editFromTheLiveSite: ['#call-it-up', '#connect-your-access', '#the-bar', '#good-to-know', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
