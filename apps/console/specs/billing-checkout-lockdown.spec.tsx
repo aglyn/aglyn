@@ -172,6 +172,15 @@ jest.mock(
   '../components/billing/billing-storage-overage-card.component',
   () => nullCard,
 )
+// AGL-1528's budget card is the same shape and the same hazard: it reads
+// `/api/billing/usage-budget`, the catch-all below answers with the invoices
+// shape, and it renders its own "we couldn't load" Alert — a THIRD
+// `role="alert"` on the page. Stubbed for the same reason as its sibling
+// above, and it will keep being the reason for every card added here.
+jest.mock(
+  '../components/billing/billing-usage-budget-card.component',
+  () => nullCard,
+)
 jest.mock('../components/embedded-checkout-dialog.component', () => nullCard)
 
 import BillingPage from '../app/(app)/[orgSlug]/billing/page'
