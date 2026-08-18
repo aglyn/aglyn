@@ -82,6 +82,8 @@
     "check:legal-drift": "node tools/scripts/legal-doc-diff.mjs",
     "check:index-drift": "node tools/scripts/check-index-drift.mjs",
     "check:standalone-installs": "node tools/scripts/check-standalone-installs.mjs",
+    "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
+    "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "generate:plugin-manifests": "node tools/scripts/generate-plugin-manifests.mjs",

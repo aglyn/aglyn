@@ -84,8 +84,12 @@ commits while preserving the working tree.
 3. **AGL-1620** E2ETEST100 drill coupon expires **2026-08-21**.
 4. Ruling signature (`Platform Docs/Legal/TX_PRIVATE_LETTER_RULING_REQUEST_…md`); §151.0242 publisher
    certification text before the first real plugin sale.
-5. Webfile **RT974186** is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. Residual:
-   confirm on the next correspondence whether the *officer* mailing address got the RA swap (AGL-1812).
+5. The TX Webfile number is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. The
+   number itself is NOT recorded here: this repo is public, and the Comptroller authenticates
+   eSystems taxpayer-access with it. It lives in the console deployment's server-only env as
+   `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` (AGL-2021) — read it from Vercel project env or the
+   Comptroller correspondence, never from source. Residual: confirm on the next correspondence
+   whether the *officer* mailing address got the RA swap (AGL-1812).
 6. AGL-1506/1573 need a drill API key only he can mint; AGL-1133 needs the 07-31 roster ratified.
 7. **AGL-1777** — `main`/`production` have NO branch protection. NX CI stays `disabled_manually`
    (AGL-1776); no workflow builds PRs.

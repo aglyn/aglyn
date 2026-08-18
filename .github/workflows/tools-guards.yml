@@ -68,6 +68,18 @@ on:
       # deleting an install step must trigger the check that would catch it.
       - .github/workflows/nx-ci.yml
       - .github/workflows/tools-guards.yml
+      # AGL-2021: check:no-tax-identifiers scans every TRACKED file, so its
+      # trigger cannot be narrower than the trees a forbidden identifier could
+      # land in. Without these, a commit touching only apps/console — exactly
+      # where the identifiers lived — would not run the guard that catches it.
+      # This does make the workflow run on most pushes; the eight other guards
+      # here are seconds each and the job is secretless, which is the trade
+      # that makes it affordable.
+      - 'apps/**'
+      - 'libs/**'
+      - 'cloud/**'
+      - 'docs/**'
+      - '.claude/**'
   schedule:
     # Daily, 07:53 UTC — off the top of the hour, where GitHub's scheduler
     # congestion is worst, and after the two drift workflows (07:23, 07:41)
@@ -136,3 +148,17 @@ jobs:
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-2021. Two steps, and the order matters: the self-test proves the
+      # comparator can still FAIL (it reconstructs the forbidden Webfile number
+      # from its own digest and asserts the scanner flags it), and only then is
+      # the repo-wide scan's green worth anything. A guard that cannot fail is
+      # the exact false green this repo has been bitten by.
+      #
+      # The `paths:` filter above was widened to apps/libs/cloud/docs/.claude
+      # for this step specifically — a commit touching only apps/console must
+      # trigger the guard that scans apps/console. The daily cron is the
+      # backstop for anything the filter still misses.
+      - run: npm run test:no-tax-identifiers
+
+      - run: npm run check:no-tax-identifiers

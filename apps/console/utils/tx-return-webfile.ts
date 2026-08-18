@@ -48,13 +48,81 @@ import type {
 export const TX_JURISDICTION = 'US-TX'
 
 /**
- * Aglyn's Texas Webfile credentials, shown beside the figures so the filing
- * seat does not need a second window. Public identifiers on the
- * Comptroller's own correspondence — not secrets (the Webfile *password* is
- * not here and must never be).
+ * The filer's Texas registration identifiers — OPERATOR CONFIGURATION, never
+ * source (AGL-2021).
+ *
+ * These used to be two literals in this file, and the comment that justified
+ * them was wrong on the fact that mattered. It said they were "public
+ * identifiers on the Comptroller's own correspondence — not secrets (the
+ * Webfile *password* is not here and must never be)". There is no separate
+ * Webfile password protecting the account.
+ *
+ * The Comptroller's eSystems "Add Webfile Access" flow calls the Webfile number
+ * a "Personal Identification Code" and takes exactly three inputs to attach a
+ * taxpayer account to a profile: the 11-digit taxpayer number, the Webfile
+ * number, and agreement to the terms. No password, no mailed PIN, no prior
+ * payment amount, no identity check. Anyone may create the profile.
+ *
+ * So the taxpayer number is the semi-public half (the Comptroller's own Sales
+ * Taxpayer Search returns it) and the Webfile number is the authenticating
+ * half. The pair is a credential — and this repository is public and
+ * Apache-2.0. The old comment is why it looked safe to hardcode.
+ *
+ * They are also not ours to ship: a self-host operator's build must never
+ * carry Aglyn LLC's filing identifiers, and their own belong to them.
+ *
+ * They therefore arrive on the PAYLOAD, from server-only env read in
+ * `apps/console/app/api/admin/tax-return/route.ts` — deliberately NOT
+ * `NEXT_PUBLIC_*`, which Next inlines into a client chunk that is served
+ * unauthenticated. Reaching them requires the staff gate on that route.
+ *
+ * Absent is a first-class state. See `taxReturnRegistration`.
  */
-export const TX_WEBFILE_NUMBER = 'RT974186'
-export const TX_TAXPAYER_NUMBER = '32077682212'
+export interface TaxReturnRegistration {
+  webfileNumber: string | null
+  taxpayerNumber: string | null
+}
+
+/**
+ * What the working papers print where a registration number goes when the
+ * deployment has not configured one.
+ *
+ * NOT an empty string, and NOT a placeholder that could be mistaken for a
+ * number. This CSV is evidence someone files a return from; a blank cell reads
+ * as "nobody filled it in yet" and a fake one reads as fact. Either can end up
+ * transcribed onto a return signed under penalty of perjury, so the file says
+ * what is actually true and names the fix.
+ */
+export const TX_REGISTRATION_UNSET =
+  'NOT CONFIGURED — set TX_WEBFILE_NUMBER / TX_TAXPAYER_NUMBER'
+
+/**
+ * The registration as the surfaces should treat it: present only when it is
+ * really present.
+ *
+ * A whitespace-only env var is the shape a half-finished `.env` actually takes,
+ * and it would otherwise satisfy a truthiness check and print as a blank cell —
+ * exactly the failure `TX_REGISTRATION_UNSET` exists to prevent. So it is
+ * trimmed and treated as absent.
+ */
+export function taxReturnRegistration(
+  payload: TaxReturnPayload | null,
+): TaxReturnRegistration & { configured: boolean } {
+  const clean = (value: unknown): string | null => {
+    const text = typeof value === 'string' ? value.trim() : ''
+    return text.length ? text : null
+  }
+  const webfileNumber = clean(payload?.registration?.webfileNumber)
+  const taxpayerNumber = clean(payload?.registration?.taxpayerNumber)
+  return {
+    webfileNumber,
+    taxpayerNumber,
+    // BOTH, not either: a return filed with half a registration is not filable,
+    // and a surface that reads "configured" on one number invites someone to
+    // hunt the other one up by hand at the worst possible moment.
+    configured: Boolean(webfileNumber && taxpayerNumber),
+  }
+}
 
 /** First taxable sales date on the registration — no period precedes it. */
 export const TX_FIRST_TAXABLE_PERIOD = { year: 2026, quarter: 3 }
@@ -110,6 +178,12 @@ export interface TaxReturnPayload {
   rows: TaxReturnRow[]
   /** AGL-1904. Absent on a payload predating it. */
   storefront?: StorefrontTaxSection | null
+  /**
+   * AGL-2021. The filer's Texas registration, from server-only env on the
+   * route. Optional because an unconfigured deployment is a legitimate state,
+   * not an error — read it through `taxReturnRegistration`.
+   */
+  registration?: TaxReturnRegistration | null
 }
 
 /**
@@ -457,13 +531,16 @@ function csvCell(value: unknown): string {
 export function taxReturnCsv(payload: TaxReturnPayload | null): string {
   if (!payload) return ''
   const verdict = taxReturnAttention(payload)
+  const registration = taxReturnRegistration(payload)
   const lines: string[][] = [
     ['Aglyn — Texas sales tax return working papers'],
     ['Period', payload.period ?? ''],
     ['Period start (UTC)', payload.summary?.periodStart ?? ''],
     ['Period end (UTC, exclusive)', payload.summary?.periodEnd ?? ''],
-    ['Taxpayer number', TX_TAXPAYER_NUMBER],
-    ['Webfile number', TX_WEBFILE_NUMBER],
+    // AGL-2021: from the payload, and honestly absent when unconfigured —
+    // never a blank cell, never a placeholder that reads as a real number.
+    ['Taxpayer number', registration.taxpayerNumber ?? TX_REGISTRATION_UNSET],
+    ['Webfile number', registration.webfileNumber ?? TX_REGISTRATION_UNSET],
     [],
     ['Webfile figures (Texas only)'],
     ['Item', 'Line', 'Amount (USD)', 'Note'],

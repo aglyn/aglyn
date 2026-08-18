@@ -23,14 +23,32 @@ import {
   taxReturnCsvFilename,
   taxReturnJurisdictionRows,
   taxReturnPeriodOptions,
+  taxReturnRegistration,
   taxReturnWebfileLines,
   TX_JURISDICTION,
+  TX_REGISTRATION_UNSET,
   type TaxReturnPayload,
 } from './tx-return-webfile'
+
+/**
+ * A SYNTHETIC registration (AGL-2021).
+ *
+ * Deliberately not-a-real-number, and that is the point of the whole issue:
+ * this spec previously asserted Aglyn LLC's actual Webfile number as a string
+ * literal, which is how it survived the first removal attempt — the constants
+ * went, the spec still pinned them, and they came back. A spec must prove the
+ * MECHANISM (whatever is configured reaches the CSV), never the value. If this
+ * fixture ever needs to be a real number for a test to pass, the test is wrong.
+ */
+const FAKE_REGISTRATION = {
+  webfileNumber: 'RT000000',
+  taxpayerNumber: '00000000000',
+}
 
 /** A clean period: two Texas invoices, nothing unreadable. */
 function cleanPayload(): TaxReturnPayload {
   return {
+    registration: { ...FAKE_REGISTRATION },
     period: '2026-Q3',
     truncated: false,
     undatedRows: 0,
@@ -244,14 +262,16 @@ describe('taxReturnJurisdictionRows', () => {
 })
 
 describe('taxReturnCsv', () => {
-  it('carries the figures, the credentials and the findings', () => {
+  it('carries the figures, the configured registration and the findings', () => {
     const payload = cleanPayload()
     payload.summary.attention.rowsMissingAddress = 2
     payload.truncated = true
     const csv = taxReturnCsv(payload)
     expect(csv).toContain('2026-Q3')
-    expect(csv).toContain('RT974186')
-    expect(csv).toContain('32077682212')
+    // The MECHANISM: whatever the payload carries reaches the file. Asserted
+    // against the fixture's own value, never against a real registration.
+    expect(csv).toContain(`Webfile number,${FAKE_REGISTRATION.webfileNumber}`)
+    expect(csv).toContain(`Taxpayer number,${FAKE_REGISTRATION.taxpayerNumber}`)
     expect(csv).toContain('Total Texas sales,100.00')
     expect(csv).toContain('Rows needing attention,3')
     expect(csv).toContain('BLOCKING,1,Period exceeded the row cap')
@@ -275,6 +295,80 @@ describe('taxReturnCsv', () => {
 
   it('is empty with no payload rather than emitting a header that looks filed', () => {
     expect(taxReturnCsv(null)).toBe('')
+  })
+})
+
+/**
+ * The registration is CONFIGURATION, not source (AGL-2021).
+ *
+ * Two things have to hold, and they pull in opposite directions: a configured
+ * deployment must get its own real numbers into the working papers, and an
+ * unconfigured one must get something that cannot be mistaken for a number.
+ */
+describe('taxReturnRegistration / the CSV registration lines', () => {
+  it('carries whatever is configured — not a value baked into the module', () => {
+    // The positive control that would still pass if someone re-added a literal
+    // default, so it is paired with the assertion below.
+    const payload = cleanPayload()
+    payload.registration = {
+      webfileNumber: 'RT123456',
+      taxpayerNumber: '11111111111',
+    }
+    const csv = taxReturnCsv(payload)
+    expect(csv).toContain('Webfile number,RT123456')
+    expect(csv).toContain('Taxpayer number,11111111111')
+    // ...and the fixture's value is NOWHERE in it. A module-level default
+    // would survive the assertions above; it cannot survive this one.
+    expect(csv).not.toContain(FAKE_REGISTRATION.webfileNumber)
+    expect(csv).not.toContain(FAKE_REGISTRATION.taxpayerNumber)
+  })
+
+  it('says NOT CONFIGURED rather than printing a blank into a filing document', () => {
+    const payload = cleanPayload()
+    payload.registration = null
+    const csv = taxReturnCsv(payload)
+    expect(csv).toContain(`Webfile number,${TX_REGISTRATION_UNSET}`)
+    expect(csv).toContain(`Taxpayer number,${TX_REGISTRATION_UNSET}`)
+    // The failure this exists to prevent: a trailing-comma blank cell that a
+    // preparer reads as "not filled in yet" and types a number into by hand.
+    expect(csv).not.toContain('Webfile number,\n')
+    expect(csv).not.toContain('Taxpayer number,\n')
+  })
+
+  it('treats a whitespace-only value as absent, not as a blank number', () => {
+    const payload = cleanPayload()
+    payload.registration = { webfileNumber: '   ', taxpayerNumber: '' }
+    expect(taxReturnRegistration(payload)).toEqual({
+      webfileNumber: null,
+      taxpayerNumber: null,
+      configured: false,
+    })
+    expect(taxReturnCsv(payload)).toContain(
+      `Webfile number,${TX_REGISTRATION_UNSET}`,
+    )
+  })
+
+  it('is not "configured" on half a registration', () => {
+    const payload = cleanPayload()
+    payload.registration = {
+      webfileNumber: 'RT123456',
+      taxpayerNumber: null,
+    }
+    const registration = taxReturnRegistration(payload)
+    expect(registration.webfileNumber).toBe('RT123456')
+    expect(registration.configured).toBe(false)
+    // The half that IS set still reaches the file; only the missing half
+    // reports absent. Half a registration is not a licence to print nothing.
+    const csv = taxReturnCsv(payload)
+    expect(csv).toContain('Webfile number,RT123456')
+    expect(csv).toContain(`Taxpayer number,${TX_REGISTRATION_UNSET}`)
+  })
+
+  it('reports absent on a payload predating AGL-2021', () => {
+    const payload = cleanPayload()
+    delete payload.registration
+    expect(taxReturnRegistration(payload).configured).toBe(false)
+    expect(taxReturnRegistration(null).configured).toBe(false)
   })
 })
 

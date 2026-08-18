@@ -56,6 +56,35 @@ import {
  */
 const ROW_CAP = 2000
 
+/**
+ * The filer's Texas registration identifiers (AGL-2021).
+ *
+ * SERVER-ONLY env, on purpose, and the reason is the whole point of the issue:
+ * the Webfile number is what the Comptroller's eSystems calls a "Personal
+ * Identification Code" and uses to authenticate a profile claiming access to a
+ * taxpayer account. A `NEXT_PUBLIC_*` var would be inlined into a client chunk
+ * that Next serves without authentication — republishing the credential this
+ * change exists to un-publish. Read here instead, behind the `staff` gate
+ * below, so the only way to see it is to be allowed to see it.
+ *
+ * No defaults. An unconfigured deployment — every self-host operator, on day
+ * one — reports absent and the surfaces say so; see `TX_REGISTRATION_UNSET`.
+ */
+function taxRegistrationFromEnv(): {
+  webfileNumber: string | null
+  taxpayerNumber: string | null
+} {
+  const read = (name: string): string | null => {
+    const value = process.env[name]
+    const text = typeof value === 'string' ? value.trim() : ''
+    return text.length ? text : null
+  }
+  return {
+    webfileNumber: read('TX_WEBFILE_NUMBER'),
+    taxpayerNumber: read('TX_TAXPAYER_NUMBER'),
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -131,6 +160,8 @@ async function handler(request: Request): Promise<Response> {
       period,
       summary,
       truncated,
+      /** AGL-2021 — operator config, not source. Null when unconfigured. */
+      registration: taxRegistrationFromEnv(),
       /**
        * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
        * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe

@@ -112,6 +112,7 @@ domain at your proxy and route it to `tenant:4500`.
 | Stripe | Optional. Without `STRIPE_SECRET_KEY`, commerce checkout and paid platform plans are unavailable; the rest of the platform runs. |
 | Resend | Optional. Without `RESEND_API_KEY`, app email (invites, receipts, campaigns) is an inert no-op. |
 | AI assist | Degrades gracefully without an Anthropic key. |
+| Texas sales-tax report | Optional, and blank by default. The staff `/admin/tax-return` report is built around a single US-TX registration. Set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to *your own* Comptroller identifiers to have them appear on the page and in the exported working papers; leave them unset and both surfaces say "not configured" rather than printing anything. They are **server-only** — never prefix either with `NEXT_PUBLIC_`, which would inline them into a client bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
 | Updates | `git pull && docker compose up --build`. Watch the release notes for Firestore rules changes and re-run the deploy scripts when they change. |
 
 ## Local development without Docker
