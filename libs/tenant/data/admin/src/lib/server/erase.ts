@@ -194,6 +194,13 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
  * erased org's rows deliberately outlive it — the
  * `erase-org-tax-retention.emulator.spec` pins survival, so an over-eager
  * future sweep fails a test instead of un-filing a tax period.
+ *
+ * **`storefrontTaxCollected` must NEVER be added either (AGL-1904).** Same
+ * shape, same trap, same reason: it carries `orgId` as a field, and its rows
+ * are the record of sales tax charged to shoppers on that org's storefront —
+ * including the tax a `mode: 'stripe'` store collects under AGLYN's own
+ * Texas registration, which Aglyn must be able to account for long after the
+ * merchant has gone.
  */
 async function deleteDocsByOrgId(
   collection: string,

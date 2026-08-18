@@ -430,12 +430,6 @@ export function storefrontTaxSummary(
       summary.attention.nonUsdRows += 1
     }
     if (!asRowDate(row.paidAt)) summary.attention.rowsMissingPaidAt += 1
-    // A taxed row that cannot state the base the rate was applied to. Counted
-    // for EVERY bucket, because "we collected $8.25 and cannot say on what"
-    // is the same defect whoever the money belongs to.
-    if (tax > 0 && statedBases.length === 0) {
-      summary.attention.rowsMissingTaxableBase += 1
-    }
 
     // The bucket is chosen from the STORED classification, and an unfamiliar
     // one falls through to `rowsUnclassified` rather than defaulting into a
@@ -454,6 +448,15 @@ export function storefrontTaxSummary(
     if (!bucket) {
       summary.attention.rowsUnclassified += 1
       continue
+    }
+
+    // A taxed row that cannot state the base the rate was applied to —
+    // counted ONLY for Stripe-computed tax. A manual-mode row has no Stripe
+    // base by construction (Stripe was never told the amount was tax), so
+    // flagging it here would raise a permanent alarm about a figure that can
+    // never exist, and an alarm that is always on is an alarm nobody reads.
+    if (mode === 'stripe-automatic' && tax > 0 && statedBases.length === 0) {
+      summary.attention.rowsMissingTaxableBase += 1
     }
 
     summary.transactionCount += 1

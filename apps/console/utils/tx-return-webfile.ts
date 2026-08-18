@@ -39,7 +39,10 @@
  * renders what it returns; the spec feeds it fixtures.
  */
 
-import type { TaxReturnSummary } from './server/tx-return'
+import type {
+  StorefrontTaxSummary,
+  TaxReturnSummary,
+} from './server/tx-return'
 
 /** The jurisdiction key the TX return is filed from. */
 export const TX_JURISDICTION = 'US-TX'
@@ -70,6 +73,34 @@ export interface TaxReturnRow {
   refundedCents: number
 }
 
+/** One row of the storefront listing (AGL-1904). */
+export interface StorefrontTaxRow {
+  id: string
+  hostId: string | null
+  orgId: string | null
+  paidAt: string | null
+  taxMode: string | null
+  taxLiability: string | null
+  grossCents: number
+  taxCents: number
+  taxableSalesCents: number
+  state: string | null
+  country: string | null
+}
+
+/**
+ * The storefront half of the response (AGL-1904) — tax charged on MERCHANTS'
+ * sales, which for a `mode: 'stripe'` store Stripe computes against AGLYN's
+ * registrations because the Checkout Session is created on Aglyn's own
+ * platform account. Optional so a payload from before AGL-1904 still reads.
+ */
+export interface StorefrontTaxSection {
+  summary: StorefrontTaxSummary
+  truncated: boolean
+  undatedRows: number
+  rows: StorefrontTaxRow[]
+}
+
 /** The `/api/admin/tax-return` response. */
 export interface TaxReturnPayload {
   period: string
@@ -77,6 +108,26 @@ export interface TaxReturnPayload {
   truncated: boolean
   undatedRows: number
   rows: TaxReturnRow[]
+  /** AGL-1904. Absent on a payload predating it. */
+  storefront?: StorefrontTaxSection | null
+}
+
+/**
+ * Texas storefront tax that Stripe computed against AGLYN's registrations.
+ *
+ * The one figure that decides whether this period can be filed from the
+ * Webfile lines alone: it is money sitting in Aglyn's balance under Aglyn's
+ * Texas registration, and it is NOT in `summary`, which sums Aglyn's own
+ * sales only. Deliberately excludes `merchantManual` — a merchant's own
+ * configured rate never touched Aglyn's registrations.
+ */
+export function storefrontTexasAglynLiableCents(
+  payload: TaxReturnPayload | null,
+): number {
+  const bucket = payload?.storefront?.summary?.aglynLiable
+  const texas = bucket?.byJurisdiction?.[TX_JURISDICTION]
+  const cents = Number(texas?.taxCollectedCents ?? 0)
+  return Number.isFinite(cents) ? cents : 0
 }
 
 /** `12345` → `"123.45"`. Dollars, because a return is filed in dollars. */
@@ -170,6 +221,52 @@ export function taxReturnAttentionItems(
       detail:
         'Summed at face value with the dollar rows. A return is filed in ' +
         'dollars — convert these before relying on the totals.',
+    },
+    {
+      // AGL-1904, and BLOCKING on purpose. Every storefront checkout is
+      // created on Aglyn's own platform account, so a `mode: 'stripe'`
+      // store's shopper is charged tax Stripe computes against AGLYN's
+      // registrations — measured, not inferred. That money is in Aglyn's
+      // balance and is NOT in the Webfile lines below, which sum Aglyn's own
+      // sales only. Filing those lines without deciding what to do with this
+      // figure is exactly the shortfall an auditor finds.
+      //
+      // It states the mechanics and asks for a decision. It does NOT assert a
+      // marketplace-facilitator position — that attaches by operation of law
+      // and belongs to counsel, not to this report.
+      id: 'storefrontAglynLiableTax',
+      severity: 'blocking',
+      count: storefrontTexasAglynLiableCents(payload),
+      label: 'Texas storefront tax collected under Aglyn’s registration',
+      detail:
+        'Cents. Charged to shoppers on merchants’ storefront sales, computed ' +
+        'by Stripe Tax against AGLYN’s registrations (the session is created ' +
+        'on Aglyn’s platform account), and settled into Aglyn’s balance. It ' +
+        'is NOT included in Items 1–3 below. Decide with counsel how it is ' +
+        'reported before filing — do not file as if it were zero.',
+    },
+    {
+      id: 'storefrontUnclassified',
+      severity: 'blocking',
+      count: Number(
+        payload.storefront?.summary?.attention?.rowsUnclassified ?? 0,
+      ),
+      label: 'Storefront rows with an unrecognised tax mode',
+      detail:
+        'Not counted in any storefront bucket, so they are in no figure at ' +
+        'all. Classify them before filing.',
+    },
+    {
+      id: 'storefrontMissingTaxableBase',
+      severity: 'review',
+      count: Number(
+        payload.storefront?.summary?.attention?.rowsMissingTaxableBase ?? 0,
+      ),
+      label: 'Storefront rows with tax but no stated base',
+      detail:
+        'Tax was collected but Stripe’s taxable_amount could not be read, so ' +
+        'the storefront taxable-sales figure understates the base. Re-read ' +
+        'the session in Stripe with the tax breakdown expanded.',
     },
     {
       id: 'rowsMissingPaidAt',
@@ -278,6 +375,35 @@ export function taxReturnWebfileLines(
       label: 'Texas transactions',
       dollars: payload ? String(tx?.transactionCount ?? 0) : null,
       note: 'Invoices in the period with a Texas billing address.',
+    },
+    {
+      // AGL-1904. Stated as its own line rather than folded into Item 1 or 2:
+      // this report does not decide how storefront receipts are reported, and
+      // adding them to a Webfile item would be deciding it silently.
+      item: '—',
+      label: 'Texas storefront tax under Aglyn’s registration (NOT in Items 1–3)',
+      dollars: payload
+        ? centsToDollars(storefrontTexasAglynLiableCents(payload))
+        : null,
+      note:
+        'Collected from shoppers on merchants’ sales and held in Aglyn’s ' +
+        'balance. Excluded from every item above. Its treatment on the ' +
+        'return is a question for counsel — see AGL-1904.',
+    },
+    {
+      item: '—',
+      label: 'Texas storefront tax under the MERCHANT’s own rate (not Aglyn’s)',
+      dollars: payload
+        ? centsToDollars(
+            payload.storefront?.summary?.merchantManual?.byJurisdiction?.[
+              TX_JURISDICTION
+            ]?.taxCollectedCents ?? 0,
+          )
+        : null,
+      note:
+        'A manual-mode store’s own configured rate. Aglyn’s registrations ' +
+        'played no part in computing it. Shown so it is visibly NOT the line ' +
+        'above — the two must never be added together.',
     },
   ]
 }

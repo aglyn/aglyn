@@ -683,6 +683,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Storefront commerce tax records (AGL-1904), written by the commerce
+    // webhook and read only by the same staff tax-return route. Deny ALL
+    // client access: a row carries a shopper's address beside the amounts,
+    // and it names the merchant's org — one merchant must never be able to
+    // read another's sales.
+    //
+    // Same retention rule as `platformRevenue` above and for the same
+    // reason: these are TAX records, they are org-keyed by FIELD (exactly the
+    // shape the erasure sweep eats), and they must NEVER be added to an
+    // org-keyed deletion pass.
+    match /storefrontTaxCollected/{stripeObjectId} {
+      allow read, write: if false;
+    }
+
     // Hosts and everything under them (content-hardening review,
     // 2026-07-07: tenant sites read through the Admin SDK, so no public
     // read). Access resolves through the org membership projection
@@ -1073,18 +1087,10 @@ service cloud.firestore {
         // /api/hosts/collections owns both. The dedicated block below
         // re-grants the non-identity updates the console still makes
         // client-side (template assignment, categories).
-        // `registers` joins update and delete (AGL-1775). It was excluded from
-        // create only, which is not denial: the POS register add-on is a
-        // per-org POOL allocated per site, the billing rollup reads these
-        // docs, and an editor who can rewrite or delete one can re-allocate
-        // registers the org is billed for. Same shape as AGL-1367 — a
-        // document the invoice is computed from is a document the customer
-        // must not be able to write. Allocation is an Admin-SDK route, so
-        // denying the client changes nothing about the product.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
-              'templates', 'collections', 'datasets', 'orders', 'registers',
+              'templates', 'collections', 'datasets', 'orders',
               'counters', 'analytics', 'members', 'mediaTombstones']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
@@ -1095,8 +1101,8 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
-              'datasets', 'orders', 'registers', 'counters', 'analytics',
-              'members', 'mediaTombstones']));
+              'datasets', 'orders', 'counters', 'analytics', 'members',
+              'mediaTombstones']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in

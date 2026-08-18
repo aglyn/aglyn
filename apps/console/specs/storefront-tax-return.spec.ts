@@ -46,6 +46,12 @@ import {
   storefrontTaxSummary,
   type StorefrontTaxReturnRowInput,
 } from '../utils/server/tx-return'
+import {
+  storefrontTexasAglynLiableCents,
+  taxReturnAttention,
+  taxReturnWebfileLines,
+  type TaxReturnPayload,
+} from '../utils/tx-return-webfile'
 
 const Q3_2026 = {
   start: new Date(Date.UTC(2026, 6, 1)),
@@ -229,5 +235,94 @@ describe('storefrontTaxSummary (AGL-1904)', () => {
         Q3_2026,
       ),
     ).not.toThrow()
+  })
+})
+
+/**
+ * The filing surface, which is where the fix has to actually land: a period
+ * can read "clean" and be filed while Aglyn holds Texas storefront tax that
+ * appears on no line of the return. That is the shortfall an auditor finds,
+ * so the figure is BLOCKING rather than informational.
+ */
+describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', () => {
+  const basePayload: TaxReturnPayload = {
+    period: '2026-Q3',
+    truncated: false,
+    undatedRows: 0,
+    rows: [],
+    summary: {
+      periodStart: Q3_2026.start.toISOString(),
+      periodEnd: Q3_2026.end.toISOString(),
+      transactionCount: 1,
+      totalSalesCents: 10000,
+      taxableSalesCents: 8000,
+      taxCollectedCents: 660,
+      byJurisdiction: {
+        'US-TX': {
+          transactionCount: 1,
+          totalSalesCents: 10000,
+          taxableSalesCents: 8000,
+          taxCollectedCents: 660,
+        },
+      },
+      refunds: {
+        rowsRefundedInPeriod: 0,
+        refundedGrossCents: 0,
+        estimatedRefundedTaxCents: 0,
+      },
+      attention: {
+        untaxedRows: 0,
+        rowsMissingTaxableBase: 0,
+        rowsMissingAddress: 0,
+        nonUsdRows: 0,
+        rowsMissingPaidAt: 0,
+      },
+    },
+  }
+
+  const withStorefront = (rows: StorefrontTaxReturnRowInput[]): TaxReturnPayload => ({
+    ...basePayload,
+    storefront: {
+      summary: storefrontTaxSummary(rows, Q3_2026),
+      truncated: false,
+      undatedRows: 0,
+      rows: [],
+    },
+  })
+
+  it('a period with no storefront section reads exactly as it did before', () => {
+    const verdict = taxReturnAttention(basePayload)
+    expect(verdict.clean).toBe(true)
+    expect(storefrontTexasAglynLiableCents(basePayload)).toBe(0)
+  })
+
+  it('Aglyn-liable storefront tax BLOCKS the period and names the amount', () => {
+    const payload = withStorefront([AGLYN_LIABLE_ROW])
+    expect(storefrontTexasAglynLiableCents(payload)).toBe(825)
+    const verdict = taxReturnAttention(payload)
+    expect(verdict.clean).toBe(false)
+    const item = verdict.items.find(
+      (entry) => entry.id === 'storefrontAglynLiableTax',
+    )
+    expect(item).toMatchObject({ severity: 'blocking', count: 825 })
+  })
+
+  it('a manual-mode storefront sale does NOT block, and is not Aglyn-liable', () => {
+    const payload = withStorefront([MANUAL_ROW])
+    expect(storefrontTexasAglynLiableCents(payload)).toBe(0)
+    expect(taxReturnAttention(payload).clean).toBe(true)
+  })
+
+  it('the Webfile lines state both figures, separately, outside Items 1–3', () => {
+    const lines = taxReturnWebfileLines(withStorefront([AGLYN_LIABLE_ROW, MANUAL_ROW]))
+    const aglynLine = lines.find((line) => line.label.includes('under Aglyn'))
+    const merchantLine = lines.find((line) => line.label.includes('MERCHANT'))
+    expect(aglynLine?.dollars).toBe('8.25')
+    expect(merchantLine?.dollars).toBe('8.00')
+    // Items 1–3 are untouched: the storefront money is stated beside the
+    // return, never folded into a form item this report has no authority to
+    // decide the treatment of.
+    expect(lines.find((line) => line.item === 'Item 1')?.dollars).toBe('100.00')
+    expect(lines.find((line) => line.item === 'Item 2')?.dollars).toBe('80.00')
   })
 })
