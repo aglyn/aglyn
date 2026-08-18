@@ -42,6 +42,7 @@ import {
   meteredPriceId,
   type AddonKind,
 } from '../../../../utils/server/billing-addons'
+import { RETENTION_COLLECTION } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
@@ -295,6 +296,39 @@ async function handler(request: Request): Promise<Response> {
           ...(releasedSchedule ? { pendingDowngrade: null } : {}),
         },
       } as never)
+      if (action === 'cancel') {
+        // Funnel accounting (AGL-1863). The retention funnel is not a wall —
+        // a direct API cancel still works, because Stripe-dashboard/support
+        // cancellations must keep working — but it is not invisible either:
+        // a cancel that did not come through the funnel is RECORDED as
+        // funnel-skipped, so the churn numbers can never silently exclude
+        // the cancels that bypassed the survey. Best-effort: the marker must
+        // never break a cancel.
+        const funnelId =
+          typeof body?.funnelId === 'string' && body.funnelId
+            ? String(body.funnelId)
+            : null
+        try {
+          await firebaseAdmin
+            .app()
+            .firestore()
+            .collection('orgs')
+            .doc(orgId)
+            .collection(RETENTION_COLLECTION)
+            .doc()
+            .create({
+              kind: 'cancel_completed',
+              surface: 'subscription_cancel',
+              funnelSkipped: !funnelId,
+              ...(funnelId ? { funnelId } : {}),
+              plan: (org.get('plan') as string | undefined) ?? null,
+              uid: decoded.uid,
+              createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            })
+        } catch {
+          // Marker write failed — the cancel itself already succeeded.
+        }
+      }
       return Response.json({
         ok: true,
         cancelAtPeriodEnd: updated.cancel_at_period_end === true,
