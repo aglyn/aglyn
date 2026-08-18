@@ -19,26 +19,36 @@
  * The browser-pinned override, and the two ways it silently stops working
  * (AGL-2065).
  *
+ * AGL-2087 renamed the call these assertions read: the raw
+ * `setDefaultEventParameters` now goes through the single owner
+ * `setAnalyticsDefaultParams`, because `page_title` needed the same API and
+ * two raw callers race each other at boot. Every property below is unchanged
+ * — the clear on the negative branch is still a clear, and still has to
+ * consult the override.
+ *
  * `internal-traffic-flag.spec.ts` pins the CLAIMS predicate. This file pins
  * how the override composes with it, because both failure modes here type-check
  * perfectly, keep that spec green, and produce no error at runtime — they just
  * report a drill session as a paying customer, permanently, since a GA4 data
  * filter is not retroactive.
  *
- * **1. A second `setDefaultEventParameters` call.** The obvious way to add an
- * override is a separate `if (override) setDefaultEventParameters(...)` next to
+ * **1. A second default-parameters call.** The obvious way to add an
+ * override is a separate `if (override) setAnalyticsDefaultParams(...)` next to
  * the existing effect. It works until the token resolves — and then the claims
  * branch, which CLEARS the parameter explicitly on its negative path (the
  * console does not remount across a re-auth, AGL-664), wipes it, precisely in
  * the case the override exists for: a non-staff test account.
  *
  * That is also a RACE, not only a logic error, and the reason this is now a
- * shared invariant (AGL-2087): `setDefaultEventParameters` ASSIGNS rather than
- * merges before gtag is wrapped, so two callers during boot means whichever
- * loses silently drops the other's params. AGL-2087 folds `page_title` into
- * the same object for that reason. So what is pinned is that the whole file
- * has exactly ONE call site and every write goes through the helper in front
- * of it — a property a new param inherits without anyone remembering to.
+ * shared invariant (AGL-2087): the raw `setDefaultEventParameters` ASSIGNS
+ * rather than merges before gtag is wrapped, so two callers during boot means
+ * whichever loses silently drops the other's params. AGL-2087 folds
+ * `page_title` into the same composed object for that reason, written from a
+ * DIFFERENT effect — which is why the raw API is now behind one merging owner
+ * and this file must not name it in code at all. What is pinned here is the
+ * half that is local: within this effect the parameter has exactly ONE call
+ * site and every write goes through the helper in front of it, so a new
+ * branch inherits the override rule without anyone remembering to.
  *
  * **2. Effect order.** The override can be read synchronously, so unlike the
  * token it can land before the console's manual `page_view`. That only holds
@@ -107,20 +117,30 @@ describe('the internal-traffic override (AGL-2065)', () => {
     )
   })
 
-  it('writes the default parameters from exactly ONE call site', () => {
+  it('writes this parameter from exactly ONE call site, behind the owner', () => {
     // Failure mode 1, and a shared invariant rather than tidiness (AGL-2087).
-    // `setDefaultEventParameters` ASSIGNS rather than merges before gtag is
-    // wrapped, so two callers racing during boot means whichever loses
-    // silently drops the other's params — and dropping `traffic_type` puts our
-    // own browsing back into the launch metrics, irreversibly. It is also the
-    // logic bug: a clear that did not consult the override would wipe it the
-    // moment a non-staff token resolved, which is the exact session the
-    // override exists for.
-    const wholeFile = argumentsOf(source, 'setDefaultEventParameters')
-    expect(wholeFile).toHaveLength(1)
+    // The raw `setDefaultEventParameters` ASSIGNS rather than merges before
+    // gtag is wrapped, so two callers racing during boot means whichever
+    // loses silently drops the other's params — and dropping `traffic_type`
+    // puts our own browsing back into the launch metrics, irreversibly. It is
+    // also the logic bug: a clear that did not consult the override would
+    // wipe it the moment a non-staff token resolved, which is the exact
+    // session the override exists for.
+    //
+    // Two levels, and both are needed. The raw API is gone from this file
+    // entirely — `page_title` wanted it too, from a DIFFERENT effect, which
+    // is a collision no per-effect discipline can see — so every write goes
+    // through the merging owner in `utils/analytics-default-params.ts`
+    // (pinned by `analytics-default-params.spec.ts`). Within this effect the
+    // parameter still has exactly one call site, so a fourth branch inherits
+    // the override rule rather than restating it.
+    expect(argumentsOf(source, 'setDefaultEventParameters')).toHaveLength(0)
+    expect(
+      argumentsOf(trafficEffect(), 'setAnalyticsDefaultParams'),
+    ).toHaveLength(1)
     // And that one call is the composed helper, not a literal.
     expect(trafficEffect()).toMatch(
-      /const\s+stamp\s*=\s*\(internal:\s*boolean\)\s*=>\s*\n?\s*setDefaultEventParameters/,
+      /const\s+stamp\s*=\s*\(internal:\s*boolean\)\s*=>\s*\n?\s*setAnalyticsDefaultParams/,
     )
   })
 
@@ -167,6 +187,6 @@ describe('the internal-traffic override (AGL-2065)', () => {
     // It has to agree with a setting in the GA UI that nothing here can
     // typecheck against, so there is exactly one definition of it and this
     // file is not allowed to be the second.
-    expect(source).not.toMatch(/setDefaultEventParameters\(\{\s*traffic_type:/)
+    expect(source).not.toMatch(/setAnalyticsDefaultParams\(\{\s*traffic_type:/)
   })
 })

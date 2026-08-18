@@ -31,7 +31,6 @@ import { NoSsr } from '@mui/material'
 import {
   type Analytics,
   logEvent,
-  setDefaultEventParameters,
   setUserId,
   setUserProperties,
 } from 'firebase/analytics'
@@ -42,7 +41,11 @@ import { useOrgPlans } from '../../hooks/use-org-plans'
 import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
-import { buildConsolePageViewParams } from '../../utils/page-view-params'
+import {
+  buildConsolePageTitle,
+  buildConsolePageViewParams,
+} from '../../utils/page-view-params'
+import { setAnalyticsDefaultParams } from '../../utils/analytics-default-params'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 import {
   getSessionHealth,
@@ -182,7 +185,7 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // total traffic, and GA4 data filters are NOT retroactive — an event that
   // ships unstamped is unstamped forever.
   //
-  // `setDefaultEventParameters` rather than a param threaded through
+  // Default event parameters rather than a param threaded through
   // `trackEvent`: the filter matches per EVENT, and the events that would leak
   // are exactly the ones no call site writes — `page_view` below, plus the
   // `session_start` / `first_visit` / `user_engagement` that the SDK sends on
@@ -223,9 +226,9 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // negative branch clears the parameter explicitly (the console does not
   // remount across a re-auth, AGL-664), so an override set separately would be
   // wiped the moment the token resolved to a customer — the exact session it
-  // exists for. And `setDefaultEventParameters` ASSIGNS rather than merges
-  // before gtag is wrapped (AGL-2087), so a second caller is a race as well as
-  // a logic error. See `stamp` below.
+  // exists for. And the underlying SDK call ASSIGNS rather than merges before
+  // gtag is wrapped (AGL-2087), so a second caller is a race as well as a
+  // logic error. See `stamp` below.
   useEffect(() => {
     // `analyticsEnvironmentForcesInternal` (AGL-2067) is the escape hatch's
     // other half: a non-production build only reaches this component at all
@@ -236,8 +239,8 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     const override =
       readInternalTrafficOverride() || analyticsEnvironmentForcesInternal()
 
-    // ONE call site, and it is a shared invariant now rather than a tidiness
-    // preference (AGL-2087). `@firebase/analytics`:
+    // ONE call site for this parameter, and it is a shared invariant rather
+    // than a tidiness preference. `@firebase/analytics`:
     //
     //   function setDefaultEventParameters(customParams) {
     //     if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
@@ -248,11 +251,18 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     // merging into it, so two callers racing during boot means whichever
     // loses silently drops the other's params. Dropping `traffic_type` puts
     // our own browsing back into the launch metrics, irreversibly — a GA4
-    // data filter is not retroactive. AGL-2087 folds `page_title` in here for
-    // the same reason; keeping every write behind this one function is what
-    // makes that a one-line change rather than a fourth race.
+    // data filter is not retroactive.
+    //
+    // Which is why this writes through `setAnalyticsDefaultParams` rather
+    // than the SDK directly (AGL-2087). One call site inside THIS effect is
+    // not enough once a second concern wants the same API — `page_title`
+    // does, from the `page_view` effect below — because the collision is
+    // between effects, not within one. The owner in
+    // `utils/analytics-default-params.ts` keeps the composed set and re-sends
+    // all of it, so neither concern can drop the other's keys, and a third
+    // cannot either.
     const stamp = (internal: boolean) =>
-      setDefaultEventParameters({
+      setAnalyticsDefaultParams({
         [INTERNAL_TRAFFIC_PARAM]: internal ? INTERNAL_TRAFFIC_VALUE : undefined,
       })
 
@@ -322,8 +332,38 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // outside the `AnalyticsEventParams` union — no call site writes it, so
   // there are no keys for the compiler to settle, and adding it would put a
   // name in the taxonomy that the taxonomy does not govern.
+  //
+  // ## The same title also rides EVERY other hit (AGL-2087)
+  //
+  // An explicit param fixes `page_view` and nothing else. gtag builds
+  // `page_title` from `document.title` for every hit it assembles, so the
+  // badge still reached the two raw `screen_view` calls (`hosts/[host]/setup`,
+  // `manage/user` — their own `firebase_screen` params are authored strings
+  // and were never the problem) and the `session_start` / `first_visit` /
+  // `user_engagement` the SDK sends with no call site at all.
+  //
+  // `setAnalyticsDefaultParams` is how that is closed, and the indirection is
+  // the entire point: the raw `setDefaultEventParameters` REPLACES the pending
+  // default set during boot rather than merging into it, so a second caller
+  // added here would have silently dropped the `traffic_type` stamp set by the
+  // effect above — un-excluding our own traffic from metrics no data filter
+  // can repair afterwards. One owner composes both keys into one object; see
+  // `utils/analytics-default-params.ts`.
+  //
+  // Refreshed here rather than in an effect of its own because this one
+  // already runs on mount and on every route change, which is when the title
+  // changes for any reason other than the badge — and the badge is precisely
+  // what is being stripped out. `undefined` on an empty title, matching the
+  // builder's omission rule.
+  //
+  // Set BEFORE the event, though the ordering is not load-bearing: an
+  // explicit param beats a default, so `buildConsolePageViewParams` still
+  // decides this hit's own `page_title`.
   useEffect(() => {
     if (typeof window === 'undefined') return
+    setAnalyticsDefaultParams({
+      page_title: buildConsolePageTitle(document.title) || undefined,
+    })
     logEvent(
       analytics,
       'page_view',

@@ -75,9 +75,33 @@ export function buildConsolePageViewParams(
   href: string,
   title?: string,
 ): Record<string, unknown> {
-  const pageTitle = stripUnreadBadge(title ?? '').trim()
+  const pageTitle = buildConsolePageTitle(title)
   return sanitizeEventParams({
     page_location: href,
     ...(pageTitle ? { page_title: pageTitle } : {}),
   })
+}
+
+/**
+ * The reported form of a tab title: badge stripped, trimmed, `''` when there
+ * is nothing worth reporting.
+ *
+ * Split out of the builder above for AGL-2087, which needs the same value for
+ * a second destination — `setDefaultEventParameters`, so that the two raw
+ * `screen_view` calls and the SDK's automatic `session_start` / `first_visit`
+ * / `user_engagement` stop reading the badge off `document.title` too. The
+ * `page_view` param keeps precedence over the default (an explicit param on
+ * an event always wins), so the builder is unchanged in behaviour; this is
+ * one rule with two readers rather than two rules that agree today.
+ *
+ * `''` is the "omit it" signal at BOTH destinations, for the same measured
+ * reason: Next 16 streams metadata for a route whose `generateMetadata`
+ * awaits I/O, so the title can arrive after hydration. On the event the key
+ * is left out; on the default set the key is patched to `undefined`. Either
+ * way GA4 falls back to its own reading, which is no worse than the behaviour
+ * before any of this existed — and better than pinning an empty string as a
+ * dimension value.
+ */
+export function buildConsolePageTitle(title?: string): string {
+  return stripUnreadBadge(title ?? '').trim()
 }

@@ -850,7 +850,10 @@ why the code half landed ahead of the GA-side filter.
 
 `apps/console/components/layouts/firebase-app.layout.tsx` sets
 `traffic_type: 'internal'` through Firebase's **`setDefaultEventParameters`**,
-and the choice of API is the load-bearing part. GA4's internal-traffic filter
+and the choice of API is the load-bearing part. Since AGL-2087 the write goes
+via the single owner `apps/console/utils/analytics-default-params.ts`, because
+`page_title` needed the same API from a different effect and two raw callers
+race each other at boot — see §11. GA4's internal-traffic filter
 matches per EVENT, and the events that would otherwise leak are precisely the
 ones no call site writes: the manual `page_view`, plus the `session_start`,
 `first_visit` and `user_engagement` the SDK sends on its own. A param threaded
@@ -878,7 +881,10 @@ pins the impersonation case explicitly.
 Cleared explicitly on the negative branch, because the console does not remount
 across a re-auth (AGL-664): a staff session followed by a customer signing in on
 the same document would otherwise keep the stamp and quietly delete a real user
-from every report.
+from every report. The clear survives the move to the shared owner — a key
+patched to `undefined` stays in the composed object as `undefined` rather than
+being dropped from it, which is the difference between clearing a stamp and
+leaving the previous value standing.
 
 **Known gap, accepted:** the first `page_view` of a cold load races the token
 read and goes out unstamped — the same window in which `user_id` is also still
@@ -1120,7 +1126,9 @@ one — would throw `already-exists` if analytics were ever initialized on it.
 outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.
 They are legal — Firebase treats `screen_view` and the `firebase_` prefix
 specially — but they are the one class of console event neither the compiler nor
-the sanitizer sees.
+the sanitizer sees. Their own `firebase_screen` / `firebase_screen_class` values
+are authored strings and were never the problem; what rode alongside them was
+the ambient `page_title`, closed by AGL-2087 in §11.
 
 ### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
 
@@ -1164,15 +1172,47 @@ itself, and `apps/console/app/page-title.spec.ts` fails on any `page.tsx`
 whose only titling ancestor is the root layout — inheriting that default IS
 the bug, so the root is deliberately excluded as a provider.
 
-**What is NOT fixed, and why.** gtag attaches `page_title` from
-`document.title` to *every* hit, so the badge still reaches the two raw
-`screen_view` calls and the SDK's automatic `session_start` / `first_visit` /
-`user_engagement`. The mechanism that would cover them is
-`setDefaultEventParameters`, the same one the `traffic_type` stamp uses — but
-before gtag is wrapped it **replaces** rather than merges
-(`_setDefaultEventParametersForInit(customParams)`, a bare assignment), so a
-second caller racing the first at boot would silently drop the internal-traffic
-stamp. That is a worse failure than the one it fixes. Tracked separately.
+**The rest of the hits, and the one owner that closes them (AGL-2087).** An
+explicit param fixes `page_view` and nothing else: gtag attaches `page_title`
+from `document.title` to *every* hit it assembles, so the badge still reached
+the two raw `screen_view` calls and the SDK's automatic `session_start` /
+`first_visit` / `user_engagement`, which no call site writes at all.
+
+The only mechanism that rides those is `setDefaultEventParameters` — the same
+one the `traffic_type` stamp uses (§8), and *not* safe to call twice:
+
+```js
+function setDefaultEventParameters(customParams) {
+  if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
+  else _setDefaultEventParametersForInit(customParams)   // bare ASSIGNMENT
+}
+```
+
+Before gtag is wrapped — the whole boot window, which is exactly when both
+effects first run — it **replaces** the pending default set instead of merging
+into it. A second caller added naively would have dropped `traffic_type`
+silently: the events still ship, GA4's internal-traffic filter just stops
+matching them, our own browsing rejoins the launch metrics, and a data filter is
+not retroactive. That is a worse failure than the fragmentation being fixed,
+which is why AGL-2060 stopped where it did.
+
+So there is exactly one owner: `apps/console/utils/analytics-default-params.ts`
+keeps the composed set and re-sends **all** of it on every update. Each concern
+patches only its own keys and cannot express "drop everyone else's", and the
+bare-assignment branch is handed the full object, which is what it wants. The
+`page_title` patch is refreshed from the same effect that fires the `page_view`
+— already running on mount and on every route change — using
+`buildConsolePageTitle`, the same helper the event param goes through, so the
+stripping rule has one definition and two readers. An explicit param beats a
+default, so the `page_view` hit is unchanged.
+
+`apps/console/specs/analytics-default-params.spec.ts` asserts the composed set
+carries `traffic_type` **and** a stripped `page_title` at once, that neither
+survives at the other's expense across an update or a clear, and — the part
+that keeps the design true for a contributor who has read none of this — that
+this module is the only place in `apps/console` whose *code* names
+`setDefaultEventParameters` at all. Prose about the API is exempt; the guard
+strips comments first.
 
 **Also measured, and worth knowing.** Next 16 streams metadata for any route
 whose `generateMetadata` awaits I/O. On

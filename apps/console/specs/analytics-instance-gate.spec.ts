@@ -78,7 +78,12 @@ describe('the analytics instance gate (AGL-1979)', () => {
     expect(ungated).not.toMatch(/logEvent\s*\(/)
     expect(ungated).not.toMatch(/setUserId\s*\(/)
     expect(ungated).not.toMatch(/setUserProperties\s*\(/)
+    // Renamed by AGL-2087: the raw SDK call now lives behind the single
+    // owner in `utils/analytics-default-params.ts`. Both spellings are
+    // refused here, so re-importing the raw API into this component — the
+    // race AGL-2087 exists to prevent — cannot land ungated either.
     expect(ungated).not.toMatch(/setDefaultEventParameters\s*\(/)
+    expect(ungated).not.toMatch(/setAnalyticsDefaultParams\s*\(/)
     // The transport closes over the instance and `deliver()` commits to it
     // before it can fail, so registering one that cannot deliver is worse
     // than registering none (AGL-1516).
@@ -97,7 +102,7 @@ describe('the analytics instance gate (AGL-1979)', () => {
       'logEvent',
       'setUserId',
       'setUserProperties',
-      'setDefaultEventParameters',
+      'setAnalyticsDefaultParams',
       'configureAnalyticsTransport',
     ]) {
       expect(bindings).toContain(`${api}(`)
