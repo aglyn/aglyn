@@ -88,11 +88,20 @@ type FeatureKey = keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
  * (AGL-2079); the exclusion list is the part that keeps it honest.
  */
 export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
-  // True on all eight tiers and read by nothing (AGL-2082). A checklist row
-  // that is ticked on every card answers no purchase question.
+  // True on all eight tiers (AGL-2082), so a checklist row here would be
+  // ticked on every card and answer no purchase question.
+  //
+  // NOT dead, despite reading like it: `tools/marketing/build-pricing-tables.mts`
+  // renders it as an "Interactions ✓ everywhere" row on the PUBLIC pricing
+  // compare table, and the Free plan card bullets it. `true` on every tier
+  // IS the AGL-577 decision — basic interactions are free, `actions` is the
+  // paid tier — not the absence of one. It is excluded from this GRID
+  // because a comparison grid and a marketing table have different jobs, and
+  // it stays in the flag set because deleting it would silently drop that
+  // public row.
   interactions:
     'Included on every plan — presentational interactions are a besigner ' +
-    'primitive, not a tier.',
+    'primitive, not a tier. Sold as universal on the public pricing table.',
   // False on all eight tiers: a paid add-on resolved through the org
   // `entitlements` override, not something a plan carries. A row would read
   // as "no plan includes this", which is true and useless — the add-on is

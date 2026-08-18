@@ -96,6 +96,18 @@ export interface OrgFeatureFlags {
    * alerts. Included on ALL plans — pure client-side DOM with no server
    * cost. The `actions` flag below gates the powerful automation steps
    * (server dispatch, runJs, analytics, overlays, raw HTML).
+   *
+   * `true` on all eight tiers, and NO code gates on it — which makes it look
+   * dead, and it has now been filed as dead once (AGL-2082). It is not.
+   * `tools/marketing/build-pricing-tables.mts` reads its value to emit the
+   * "Interactions" row on the public /pricing compare table, ticked on every
+   * plan, and the Free plan card bullets it. That row is the claim that a
+   * hover-to-open menu is not a paid feature — a real competitive statement,
+   * and the reason `true` everywhere is a DECISION rather than a default.
+   *
+   * So: do not delete it as dead weight. Deleting it silently removes a
+   * public pricing row while the Figma frames still carry it in all four
+   * responsive variants, which is a pricing call and not a cleanup.
    */
   interactions?: boolean
   /** Event → action automation builder (AGL-148). */
