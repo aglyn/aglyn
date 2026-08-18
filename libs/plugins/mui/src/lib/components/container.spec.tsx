@@ -177,3 +177,94 @@ describe('Container preset (AGL-1435)', () => {
     ).toBe('Xl')
   })
 })
+
+/**
+ * MUI's stock breakpoint scale. Nothing else may reach a Container's
+ * `maxWidth` — that is the whole of AGL-1298. `1328` is a CONTENT width
+ * (1280 plus the Container's own 24px gutters), never a breakpoint, and it
+ * is the number this standard exists to keep out.
+ */
+const STOCK_BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl']
+
+/** True for a stock breakpoint key, or the explicit full-bleed opt-out. */
+const isStockWidth = (value: unknown) =>
+  value === false ||
+  (typeof value === 'string' && STOCK_BREAKPOINTS.includes(value))
+
+describe('the three width cases the standard now has (AGL-1298)', () => {
+  const field = schema.attributes?.find((a: any) => a.name === 'maxWidth') as any
+  const prose = presets.find((p) => p.$id.endsWith('.prose'))
+
+  it('every offered width is a STOCK breakpoint, never a bespoke number', () => {
+    for (const option of field.options) {
+      expect(isStockWidth(option.value)).toBe(true)
+    }
+  })
+
+  it('RED on purpose: the same predicate REJECTS the values this ban targets', () => {
+    // A guard that only ever sees passing input proves nothing. These are
+    // the exact shapes the corpus carried before the sweep — 144 containers
+    // at `1328px`, and the mega-menu Stacks still at `1392px`.
+    expect(isStockWidth('1328px')).toBe(false)
+    expect(isStockWidth(1328)).toBe(false)
+    expect(isStockWidth('1392px')).toBe(false)
+    expect(isStockWidth('')).toBe(false)
+    expect(isStockWidth(null)).toBe(false)
+  })
+
+  it('SECTION: the default preset is XL — Zach confirmed it 2026-08-18', () => {
+    // "XL is fine for the default page width on the marketing site, I like
+    // that." The /pricing audit measured 8/8 sections on `maxWidthXl`, so
+    // the earlier premise that the site was "designed with LG" was off by
+    // one step and the default does NOT move.
+    expect(presets[0].data.props).toEqual({ maxWidth: 'xl' })
+  })
+
+  it('PROSE: a distinct preset at MD, which actually renders at md', () => {
+    expect(prose?.displayName).toBe('Prose Container')
+    expect(prose?.data.props).toEqual({ maxWidth: 'md' })
+    expect(renderedMaxWidth(<Container {...(prose?.data.props as any)} />)).toBe(
+      'Md',
+    )
+  })
+
+  it('no preset ships a hardcoded pixel width or an sx cap', () => {
+    for (const preset of presets) {
+      const props = preset.data.props as Record<string, unknown> | undefined
+      expect(isStockWidth(props?.['maxWidth'])).toBe(true)
+      expect(props?.['sx']).toBeUndefined()
+    }
+  })
+
+  it('MIDDLE: LG stays available and is claimed by no preset', () => {
+    // The deliberate middle case for a wide-but-text-led section. If it ever
+    // becomes a preset default, that should be a decision, not a drift.
+    expect(field.options.map((o: any) => o.value)).toContain('lg')
+    expect(
+      presets.map((preset) => (preset.data.props as any)?.maxWidth),
+    ).not.toContain('lg')
+  })
+
+  it('records the measure in the help text, so nobody "corrects" MD to LG', () => {
+    expect(field.description).toContain('900px')
+    expect(field.description).toContain('65–75')
+    // Stated honestly rather than rounded to fit the decision. Content width
+    // is the breakpoint minus 24px of gutter either side; characters per
+    // line estimated at the usual 0.5em average advance:
+    //
+    //          content   @16px   @18px
+    //   sm       552      ~69     ~61
+    //   md       852     ~106     ~95
+    //   lg      1152     ~144    ~128
+    //   xl      1488     ~186    ~165
+    //
+    // MD is the narrowest SECTION-scale stock width — it is not a width
+    // that hits 65–75 characters on its own. The reading band is reached
+    // with an inner measure inside the prose container (AGL-1307 uses 760px
+    // on the article body), which is a typography decision rather than a
+    // container width. LG at ~128–144 characters is not a prose width by
+    // any reading of it, which is why the ruling is MD and not "one step
+    // down from XL".
+    expect(900 - 48).toBeLessThan(1200 - 48)
+  })
+})

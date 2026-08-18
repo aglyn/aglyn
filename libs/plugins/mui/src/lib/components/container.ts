@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
+  mdiTextBoxOutline,
   mdiViewArrayOutline,
 } from '@aglyn/shared-data-mdi'
 import MuiContainer, { type ContainerProps } from '@mui/material/Container'
@@ -79,10 +80,15 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
       name: 'maxWidth',
       description:
         'The width this section stops growing at. New containers start at ' +
-        'XL (1536px), the standard for full-width page sections. Clearing ' +
-        'the field falls back to the MUI default of LG (1200px). There is ' +
-        'no "Default" option: "Fluid Responsive" is the only way to render ' +
-        'edge-to-edge, and it has to be chosen on purpose.',
+        'XL (1536px), the standard for full-width page sections. Long-form ' +
+        'prose — legal pages, docs, blog and changelog bodies — uses MD ' +
+        '(900px), which lands near the 65–75 characters a line that reads ' +
+        'comfortably; the "Prose Container" preset starts there. LG (1200px) ' +
+        'is the deliberate middle case for a wide but text-led section, not ' +
+        'a default to spread. Clearing the field falls back to the MUI ' +
+        'default of LG. There is no "Default" option: "Fluid Responsive" is ' +
+        'the only way to render edge-to-edge, and it has to be chosen on ' +
+        'purpose.',
       component: Aglyn.FieldComponentType.SELECT,
       label: 'Max Width',
       // Every value here is a real, persistable one. The list used to open
@@ -121,6 +127,30 @@ export const presets: Aglyn.PresetSchema[] = [
       // Relying on MUI's implicit `lg` is what made "what does no value mean"
       // an open question in the first place (AGL-1435).
       props: { maxWidth: 'xl' },
+    },
+  },
+  {
+    // AGL-1298, Zach 2026-08-18: "Use the mui breakpoints, XL, LG, MD, SM,
+    // XS". XL is confirmed as the marketing default and stays. The prose
+    // case is MD on READING grounds, not as "one step down" — at XL a
+    // paragraph runs 110–120 characters a line, and even LG (1200px) is far
+    // past the 65–75 the eye tracks without losing its place. MD is the
+    // stock breakpoint that lands in that band, so the standard grows a
+    // third case without growing a bespoke number: the 1328px ban holds
+    // because 1328 is a content width, not a breakpoint.
+    $id: generatePresetId(ID, 'prose'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Prose Container',
+    icon: {
+      path: mdiTextBoxOutline.path,
+      sx: { color: '#2196f3' },
+    },
+    category: Aglyn.ComponentCategory.LAYOUT,
+    data: {
+      $id: null,
+      componentId: ID,
+      pluginId: BUNDLE_ID,
+      props: { maxWidth: 'md' },
     },
   },
 ]
