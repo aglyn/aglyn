@@ -229,7 +229,8 @@ Work this list, not the tree.
   ⚠️ the Organizations card reads `users/{uid}/orgs` at **`limit(50)`** —
   a person in more than fifty workspaces is silently truncated.
 - **`profiles/{uid}`** — world-readable handle, display name, Stripe Connect
-  account. **Not reachable from the user tree** (AGL-1970).
+  account. **Not reachable from the user tree**, so a walk still misses it on an
+  ACCESS request; `eraseUser` deletes it explicitly (AGL-1970).
 - Storage `users/{uid}/` — avatar
 
 **Under each workspace they belong to**
@@ -249,7 +250,9 @@ Work this list, not the tree.
 - `stripeCustomers`, `apiIdempotency`
 - **`supportTickets` + `messages`** — subject, body, `authorEmail`. **Not
   swept by any erasure** (AGL-1971)
-- **`publisherProfiles`, `publisherHandles`** (AGL-1970)
+- `publisherProfiles`, `publisherHandles` — swept by `eraseOrg` (AGL-1970), but
+  still list them on an **access** request: an erasure reaching them says
+  nothing about a tree walk finding them.
 - `marketplacePurchases`, `marketplaceListings/{id}/reviews/{authorUid}`,
   `marketplaceReports`
 - `contactSuppressions` — a hashed do-not-contact record, if any
@@ -301,7 +304,8 @@ comfortably outlives the response window.
 | We cannot export a person's data. Access and portability are answered by hand. | AGL-1974 |
 | We do not know that `privacy@aglyn.com` receives mail. | AGL-1973 |
 | A staff erasure of a **person** has no button. | AGL-1977 |
-| Erasure does not reach `profiles`, `publisherProfiles`, `publisherHandles` or `supportTickets`. **Until those are fixed, an erasure we describe as complete is not.** Say "we have deleted your account and workspace data" — not "we hold nothing about you". | AGL-1970, AGL-1971 |
+| ~~Erasure does not reach `profiles`, `publisherProfiles` or `publisherHandles`.~~ **Closed 2026-08-18 (AGL-1970)** — all three are swept, and a surviving marketplace listing leaves only a content-free tombstone. | AGL-1970 |
+| Erasure does not reach `supportTickets`. **Until that is fixed, an erasure we describe as complete is not.** Say "we have deleted your account and workspace data" — not "we hold nothing about you". | AGL-1971 |
 | Assist Q&A has no retention period. | AGL-1972 |
 | Restriction and objection have no product representation. | — |
 | There is no DSAR register. | AGL-1974 |

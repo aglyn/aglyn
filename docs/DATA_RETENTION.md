@@ -117,14 +117,28 @@ has a sweep in `eraseOrg` or is a defect.
 | `platformRevenue`, `storefrontTaxCollected` | **never, deliberately** | tax records — see below |
 | `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
 | **`supportTickets` + `messages`** | **NO — defect 3** | subject, body (≤5000 chars), `authorEmail` |
-| **`profiles/{uid}`** | **NO — defect 1** | handle, display name, `stripeAccountId` |
-| **`publisherProfiles`, `publisherHandles`** | **NO — defect 2** | handle, display name, `stripeAccountId` |
+| `profiles/{uid}` | yes (AGL-1970), by `eraseUser` | handle, display name, `stripeAccountId` |
+| `publisherHandles` | yes (AGL-1970) | handle reservations **and every rename tombstone** |
+| `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone | handle, display name, `stripeAccountId`, `publisherAgreement` |
 | `adminAudit` | n/a — it *is* the erasure record | ids and counts; some rows carry `email` |
 
 `marketplaceListings`, `marketplacePurchases`, `marketplaceReports` and
 `revocations` also outlive an erasure. That is AGL-1448's parked Tier 3 product
 decision — an erased org's listing is something buyers paid for — and it is a
 decision, not an oversight. It still needs making.
+
+**AGL-1970 made that decision cost something measurable rather than making it.**
+`eraseOrg` now reports `listingsRetained` — how many listings still name the
+erased org — in its result and in the `org.erased` audit row, so an erasure that
+leaves something standing says so instead of reporting a clean success. It also
+decides the one case that could not wait: an org with a surviving listing keeps
+a `publisherProfiles/{orgId}` document, but only as `{ erased: true, erasedAt }`.
+No handle, no display name, no `publisherAgreement`, and **no
+`stripeAccountId`** — the tombstone is "an internal record that the erasure
+happened", which is precisely what Privacy Policy §5 reserves, and it carries no
+byte that sentence calls content. An org with no surviving listing keeps nothing
+at all. Both branches, and the emptiness of the tombstone, are pinned by
+`erase-publisher-identity.emulator.spec.ts`.
 
 ### Deliberately retained past erasure
 
@@ -202,8 +216,8 @@ Each of these is a defect, not a note. Filed rather than narrated.
 
 | # | Divergence | Filed |
 | --- | --- | --- |
-| 1 | **`profiles/{uid}` survives `eraseUser`.** World-readable (`allow read: if true`), carries `handle`, `displayName` and `stripeAccountId` — a Stripe Connect payout destination. Nothing anywhere deletes it. Privacy Policy §5 says the erasure is "a genuine recursive delete and we keep no copy of the erased content". | **AGL-1970** |
-| 2 | **`publisherProfiles/{orgId}` and `publisherHandles/{handle}` survive `eraseOrg`.** Same shape one level up: keyed by org id and by handle, both top-level, both world-readable, both carrying the payout account. `eraseOrg`'s field-keyed sweep list does not include them. | **AGL-1970** |
+| 1 | ~~**`profiles/{uid}` survives `eraseUser`.**~~ **CLOSED 2026-08-18.** `eraseUser` now `recursiveDelete`s `profiles/{uid}` before the auth record and reports `deleted.profile` in the audit row. | **AGL-1970** |
+| 2 | ~~**`publisherProfiles/{orgId}` and `publisherHandles/{handle}` survive `eraseOrg`.**~~ **CLOSED 2026-08-18.** Handles — live reservation and rename tombstones alike — are swept by `orgId` field; the profile is deleted, or reduced to a content-free `{ erased: true }` tombstone when a listing outlives it. Both pinned by `erase-publisher-identity.emulator.spec.ts`, whose negative control proves a bystander publisher's profile, handle and payout id are untouched. | **AGL-1970** |
 | 3 | **`supportTickets` survives both erasures.** Top-level, `orgId` as a field, with a `messages` subcollection carrying `authorEmail` and up to 5000 characters of customer prose. `grep -c supportTickets erase.ts` returns `0`. The highest-PII-density collection outside the org tree is the one with no sweep. | **AGL-1971** |
 | 4 | **Assist Q&A has no retention period at all.** `orgs/{orgId}/assistExchanges/{id}` stores the user's `question` and the model's `answer` **verbatim** plus the asking `uid`, with no `expiresAt`, no TTL and no prune. It is reachable by the cascade, so an erasure clears it — but until the org is erased it is kept forever, and Assist is gated on a privacy-policy disclosure for exactly this data (`release_assist`, AGL-1909). A disclosure that states a period we do not enforce is worse than the gap. | **AGL-1972** |
 | 5 | **`privacy@aglyn.com` may not exist.** It is the intake address in Privacy Policy §7, §9, §11 and §13 and the data-importer contact in DPA Annex A. The Drive open-items list records that only `noreply@` and `info@` were live at drafting; `security@`, `legal@`, `abuse@` and `dmca@` are in the same unconfirmed state and each is load-bearing in a published document. | **AGL-1973** |

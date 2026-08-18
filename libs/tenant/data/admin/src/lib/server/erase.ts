@@ -400,6 +400,103 @@ async function eraseOrgSlugs(
 }
 
 /**
+ * What an erasure did with `publisherProfiles/{orgId}` (AGL-1970).
+ *
+ * Three outcomes rather than a boolean, because the third one is a decision
+ * the audit row has to be able to state: a listing the erased org published
+ * can outlive it, and a listing whose publisher document is simply gone is
+ * unattributable in a way nobody chose.
+ */
+export type PublisherProfileDisposition = 'absent' | 'deleted' | 'tombstoned'
+
+/**
+ * Drop the org's PUBLIC marketplace identity — the profile and every handle
+ * it reserved (AGL-1970).
+ *
+ * Both survived every erasure until now, and both are `allow read: if true`
+ * (`cloud/firebase-firestore.rules`, `match /publisherProfiles/{orgId}`). This
+ * is the AGL-1448 shape with one twist that is the whole reason it was missed:
+ * `publisherProfiles` is keyed by the org id **as the document id**, so it is
+ * invisible to `deleteDocsByOrgId` *and* to a reader scanning this file for
+ * the field-keyed sweep list. Nothing prompts you to notice it.
+ *
+ * What survived is not cosmetic. `stripeAccountId` is a **payout
+ * destination** — written server-side only after Connect onboarding/KYC and
+ * trusted by every checkout path — so an erased org stayed world-readable with
+ * a live payment-account identifier attached to a dead identity. That is the
+ * `stripeCustomers` correlation AGL-1448 removed, pointing the other way.
+ *
+ * `publisherHandles` is the easy half and goes unconditionally: it carries
+ * `orgId` as a FIELD, so `deleteDocsByOrgId` fits exactly, and it is a **live
+ * reservation** — `claimPublisherHandle` refuses a handle another org's row
+ * names, so a ghost holds a marketplace name against a real customer with no
+ * way to appeal. That is the `ssoDomains` argument verbatim, and absence is
+ * again the only state that both stops the read and releases the name. Rename
+ * tombstones (`{ orgId, movedTo }`) carry the same `orgId` and go with it, and
+ * the field bound is what makes that safe: re-claiming a tombstone FULL-
+ * REPLACES it with the new owner's `{ orgId }`, so a handle this org renamed
+ * away from and somebody else has since taken does not match the query.
+ *
+ * **The profile is the half with a genuine tension, and it is resolved here
+ * rather than deferred.** `marketplaceListings` outlives an erasure — that is
+ * AGL-1448's parked Tier 3 product decision, an erased org's listing being
+ * something buyers paid for — so deleting the publisher document outright can
+ * leave a listing attributed to nothing. So:
+ *
+ *   - **No surviving listing** → `recursiveDelete` the profile. `deleted`.
+ *     `recursiveDelete` and not `delete`: `publish-plugin` keeps its daily
+ *     publish-rate window at `publisherProfiles/{orgId}/meta/publishWindow`,
+ *     and a document delete would orphan it under a path with no owner.
+ *   - **A listing survives** → the same `recursiveDelete`, then a minimal
+ *     `{ erased: true, erasedAt }` in its place. `tombstoned`. The tombstone
+ *     carries no `handle`, no `displayName`, no `bio`/`avatarUrl`/`website`,
+ *     no `publisherAgreement` and — the point — no `stripeAccountId`. It is
+ *     "an internal record that the erasure happened", which is exactly what
+ *     the Privacy Policy §5 sentence reserves; every byte the sentence calls
+ *     content is gone either way. Readers already handle it: with no `handle`,
+ *     `resolvePublisherProfile` returns `null`, which is the pre-existing
+ *     "this org has no profile" path.
+ *
+ * The count of surviving listings is returned either way, so an erasure that
+ * left something standing SAYS SO in its audit row instead of reporting a
+ * clean success — the Tier 3 decision is still open, and an erasure is the
+ * one place its cost is measurable.
+ */
+async function eraseOrgPublisherIdentity(
+  orgId: string,
+  dryRun = false,
+): Promise<{
+  handles: number
+  profile: PublisherProfileDisposition
+  listingsRetained: number
+}> {
+  const firestore = firebaseAdmin.app().firestore()
+  const handles = await deleteDocsByOrgId('publisherHandles', orgId, dryRun)
+  const profileRef = firestore.collection('publisherProfiles').doc(orgId)
+  const [profileSnapshot, listings] = await Promise.all([
+    profileRef.get(),
+    // `profileId` is the listing's publishing-org id (AGL-652) — the same
+    // value as this profile's document id, under the older field name.
+    firestore.collection('marketplaceListings').where('profileId', '==', orgId).get(),
+  ])
+  const listingsRetained = listings.size
+  if (!profileSnapshot.exists) {
+    return { handles, profile: 'absent', listingsRetained }
+  }
+  if (dryRun) {
+    return {
+      handles,
+      profile: listingsRetained ? 'tombstoned' : 'deleted',
+      listingsRetained,
+    }
+  }
+  await firestore.recursiveDelete(profileRef)
+  if (!listingsRetained) return { handles, profile: 'deleted', listingsRetained }
+  await profileRef.set({ erased: true, erasedAt: FieldValue.serverTimestamp() })
+  return { handles, profile: 'tombstoned', listingsRetained }
+}
+
+/**
  * The steps of `eraseOrg` after the hold check, named so a failed attempt can
  * say WHERE it stopped (AGL-1455).
  *
@@ -476,6 +573,17 @@ export interface EraseOrgResult {
   stripeIndex?: number
   /** Slugs released — the current one AND every tombstone (AGL-1448). */
   slugs?: number
+  /** Marketplace handle reservations released (AGL-1970) — id-keyed, public. */
+  publisherHandles?: number
+  /** What became of the org's public publisher profile (AGL-1970). */
+  publisherProfile?: PublisherProfileDisposition
+  /**
+   * Marketplace listings that OUTLIVE this erasure and still name the org
+   * (AGL-1970/AGL-1448 Tier 3). Reported rather than deleted: an erasure that
+   * leaves something standing has to say so, and this is the number that makes
+   * the parked listing-survival decision cost something measurable.
+   */
+  listingsRetained?: number
 }
 
 /**
@@ -593,12 +701,14 @@ async function recordErasureFailure(entry: {
  *   2. Nothing is written. This step used to persist a final JSON export of
  *      the org and host trees to `erasures/{orgId}/…` and abort if it could
  *      not — see the note below for why it is gone (AGL-1443).
- *   3. Revoke the org's API credentials (AGL-1444) and its public routing —
- *      SSO domains and custom console domains (AGL-1448). All three are
- *      top-level collections keyed by something other than the org id, so the
- *      org-tree delete cannot reach them; doing them before the content
- *      delete also closes the mid-erasure window, in which a credential or a
- *      domain still resolves to a half-deleted workspace.
+ *   3. Revoke the org's API credentials (AGL-1444), its public routing — SSO
+ *      domains and custom console domains (AGL-1448) — and its public
+ *      marketplace identity: the publisher profile and every handle it
+ *      reserved (AGL-1970). All of them are top-level collections keyed by
+ *      something other than a path under the org, so the org-tree delete
+ *      cannot reach them; doing them before the content delete also closes
+ *      the mid-erasure window, in which a credential, a domain or a public
+ *      publisher page still resolves to a half-deleted workspace.
  *   4. Delete each host (eraseHost), org-level Storage, the Stripe customer
  *      AND its local reverse index, member back-references, then the org tree
  *      and every slug the org ever held — tombstones included (AGL-1448).
@@ -699,6 +809,16 @@ export async function eraseOrg(
     progress.ssoDomains = await eraseOrgSsoDomains(orgId, dryRun)
     progress.consoleDomains = await releaseOrgConsoleDomains(orgId, dryRun)
     progress.apiIdempotency = await eraseOrgIdempotencyKeys(orgId, dryRun)
+
+    // The org's PUBLIC marketplace identity (AGL-1970). Here rather than with
+    // the Stripe step, though it carries a payout id, because `publisherHandles`
+    // is a live name reservation and belongs with the other reservations this
+    // step releases — and because the profile is world-readable, so the sooner
+    // it stops resolving the smaller the mid-erasure window.
+    const publisher = await eraseOrgPublisherIdentity(orgId, dryRun)
+    progress.publisherHandles = publisher.handles
+    progress.publisherProfile = publisher.profile
+    progress.listingsRetained = publisher.listingsRetained
 
     // Hosts (Storage + routing + Firestore trees).
     step = 'hosts'
@@ -852,7 +972,13 @@ export interface EraseUserResult {
   /** Orgs that must be handed over or deleted first. */
   blockers?: UserErasureBlocker[]
   /** What was actually removed, for the audit row and the caller's message. */
-  deleted?: { subcollections: string[]; authRecord: boolean; photo: boolean }
+  deleted?: {
+    subcollections: string[]
+    authRecord: boolean
+    photo: boolean
+    /** `profiles/{uid}` — the world-readable public identity (AGL-1970). */
+    profile: boolean
+  }
 }
 
 /**
@@ -873,8 +999,9 @@ export interface EraseUserResult {
  *      keeps their email and no host projection keeps granting them access.
  *      This runs BEFORE the profile delete: a half-erased account that still
  *      appears on a roster is worse than one not yet started.
- *   3. Delete the profile subtree, the avatar, then the auth record last —
- *      once that is gone there is no uid to retry with.
+ *   3. Delete the `users/{uid}` subtree, the avatar, the world-readable
+ *      `profiles/{uid}` public identity (AGL-1970), then the auth record last
+ *      — once that is gone there is no uid to retry with.
  */
 export async function eraseUser(uid: string): Promise<EraseUserResult> {
   const firestore = firebaseAdmin.app().firestore()
@@ -937,6 +1064,34 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
 
   await firestore.recursiveDelete(userRef)
 
+  // `profiles/{uid}` — the person's PUBLIC identity (AGL-1970).
+  //
+  // A separate top-level collection keyed by the uid AS THE DOCUMENT ID, so
+  // `recursiveDelete(users/{uid})` above never reaches it and no reader
+  // scanning this function for a sweep list is prompted to notice it. It is
+  // `allow read: if true` in the rules and carries `handle`, `displayName`,
+  // and `stripeAccountId`/`stripeChargesEnabled` — a Stripe Connect payout
+  // destination written server-side after KYC. An erased person therefore
+  // stayed publicly listed with a live payment-account identifier attached,
+  // which Privacy Policy §5 ("a genuine recursive delete… we keep no copy of
+  // the erased content") says in terms does not happen.
+  //
+  // No tombstone, unlike the org's publisher profile: the only reader of the
+  // display name is the support forum's author rendering, and a forum post
+  // losing its author name is the intended outcome of erasing its author.
+  //
+  // `recursiveDelete` rather than `delete` — nothing writes a subcollection
+  // under a profile today, and a document delete would silently orphan the
+  // first thing that does.
+  let profile = false
+  try {
+    const profileRef = firestore.collection('profiles').doc(uid)
+    profile = (await profileRef.get()).exists
+    await firestore.recursiveDelete(profileRef)
+  } catch (error) {
+    console.error(`eraseUser: public profile delete failed for ${uid}`, error)
+  }
+
   // Auth record LAST: once it is gone there is no uid to retry with, and
   // `authForPool` is required because a project-level delete cannot see an
   // SSO account at all (AGL-1122).
@@ -958,10 +1113,10 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
       action: 'user.erased',
       target: `users/${uid}`,
       before: { orgs: candidates.length },
-      after: { subcollections, authRecord, photo },
+      after: { subcollections, authRecord, photo, profile },
       at: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
 
-  return { ok: true, deleted: { subcollections, authRecord, photo } }
+  return { ok: true, deleted: { subcollections, authRecord, photo, profile } }
 }
