@@ -1001,6 +1001,73 @@ They are legal — Firebase treats `screen_view` and the `firebase_` prefix
 specially — but they are the one class of console event neither the compiler nor
 the sanitizer sees.
 
+### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
+
+Zach read the Firebase overview report on 2026-08-18 and found one console
+page reported as three rows:
+
+| Page title and screen class | Views |
+| -- | -- |
+| Secure Platform Console – Aglyn | 6.2K |
+| **(4)** Secure Platform Console – Aglyn | 2.2K |
+| **(5)** Secure Platform Console – Aglyn | 1.7K |
+
+Two separate defects, one dimension.
+
+**The badge.** `notifications-menu.component.tsx` writes the unread count into
+`document.title` — a real feature, "Unread count in tab title", on by default
+and in the console tour. GA4 builds `page_title` from `document.title` **at
+the instant the hit fires**, so a per-user, per-moment counter became a
+reporting dimension value. Views for a page were divided across an unbounded
+set of rows, and because the count correlates with engagement, the most active
+users fragmented the most.
+
+The console now passes `page_title` explicitly on its `page_view`, stripped by
+`stripUnreadBadge` in `apps/console/utils/notification-alerts.ts` — the exact
+inverse of the `unreadBadge` that writes it, living beside it so the writer and
+the reporter cannot drift on the `\d+\+?` shape (the badge caps at `(99+)`, and
+a pattern without the `\+?` would leave it on exactly the busiest accounts).
+The badge itself is untouched: only its reflection in analytics goes away.
+
+**The generic row.** The 6.2K is mostly *history*, not a live bug. Until
+2026-07-28 the console had exactly ONE titled layout — the root — because
+pages titled themselves through `NextPageTitle`, which renders via `next/head`
+and **is inert in the App Router**. Every console route therefore reported the
+root default. AGL-1059 fixed it by adding 61 layouts in one commit (`4b5567f`),
+so most of that row predates the fix. GA4 dimension values are not retroactive;
+it will never repair.
+
+One route had been missed: `(auth)/sso`, a client component with no layout
+beside it, still answered with the root default in production. It now titles
+itself, and `apps/console/app/page-title.spec.ts` fails on any `page.tsx`
+whose only titling ancestor is the root layout — inheriting that default IS
+the bug, so the root is deliberately excluded as a provider.
+
+**What is NOT fixed, and why.** gtag attaches `page_title` from
+`document.title` to *every* hit, so the badge still reaches the two raw
+`screen_view` calls and the SDK's automatic `session_start` / `first_visit` /
+`user_engagement`. The mechanism that would cover them is
+`setDefaultEventParameters`, the same one the `traffic_type` stamp uses — but
+before gtag is wrapped it **replaces** rather than merges
+(`_setDefaultEventParametersForInit(customParams)`, a bare assignment), so a
+second caller racing the first at boot would silently drop the internal-traffic
+stamp. That is a worse failure than the one it fixes. Tracked separately.
+
+**Also measured, and worth knowing.** Next 16 streams metadata for any route
+whose `generateMetadata` awaits I/O. On
+`/{org}/marketplace/{listingId}`, whose social card does a Firestore read,
+`</head>` lands at byte 40934 with **no `<title>` in it** and the real title
+arrives at byte 80279 of 83383 — hydration, and so the `page_view`, can beat
+it. That is why an empty title omits the `page_title` key rather than sending
+`''`: an empty string would report those views under an empty title, whereas
+omitting lets GA4 fall back to its own reading. Routes with static or
+non-awaiting metadata are unaffected — `/signin` ships its title at byte 6669,
+well inside the head.
+
+**Prefer `page_location` or `content_group` over page title** in reports
+regardless. Paths are stable; titles are authored strings that change without
+notice, and everything above is a demonstration of that.
+
 ---
 
 ## GA UI configuration
