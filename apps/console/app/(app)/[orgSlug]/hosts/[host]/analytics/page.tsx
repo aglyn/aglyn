@@ -21,6 +21,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import HostAnalyticsCard from '../../../../../../components/analytics/host-analytics-card.component'
+import ScreensAnalyticsTable from '../../../../../../components/analytics/screens-analytics-table.component'
 import CampaignGlanceCard from '../../../../../../components/dashboard/campaign-glance-card.component'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -63,6 +64,8 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
           <HostAnalyticsCard hostId={hostId} />
+          {/* Per-screen comparison (AGL-1844), Pro-gated inside. */}
+          <ScreensAnalyticsTable hostId={hostId} />
           <PluginWidgetSlot slot="commerceGlance" hostId={hostId} />
           <CampaignGlanceCard hostId={hostId} />
         </Stack>

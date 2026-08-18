@@ -44,6 +44,8 @@ interface DayStat {
   paths: Record<string, number>
   referrers: Record<string, number>
   devices: Record<string, number>
+  /** Campaign labels (AGL-1844): `source`/`medium`/`campaign` → value → n. */
+  utm: Record<string, Record<string, number>>
 }
 
 /**
@@ -85,6 +87,7 @@ export function HostAnalyticsCard(props: {
         paths: {},
         referrers: {},
         devices: {},
+        utm: {},
       },
       read: async (id) => {
         const snapshot = await getDoc(
@@ -97,6 +100,10 @@ export function HostAnalyticsCard(props: {
           paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
           referrers: (snapshot.get('referrers') ?? {}) as Record<string, number>,
           devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
+          utm: (snapshot.get('utm') ?? {}) as Record<
+            string,
+            Record<string, number>
+          >,
         }
       },
     }).then((stats) => {
@@ -144,6 +151,23 @@ export function HostAnalyticsCard(props: {
     },
     {},
   )
+  // Campaign attribution (AGL-1844): the two UTM dimensions worth a list —
+  // source says who sent the traffic, campaign says which push; medium is
+  // recorded in the day docs but rarely earns list space (it repeats
+  // 'email'/'cpc'), so it stays available without a section here.
+  const topUtm = (param: 'source' | 'campaign') =>
+    Object.entries(
+      (days ?? []).reduce<Record<string, number>>((acc, day) => {
+        for (const [value, count] of Object.entries(day.utm[param] ?? {})) {
+          acc[value] = (acc[value] ?? 0) + count
+        }
+        return acc
+      }, {}),
+    )
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+  const topUtmSources = topUtm('source')
+  const topUtmCampaigns = topUtm('campaign')
   const deviceSum = Object.values(deviceTotals).reduce(
     (sum, count) => sum + count,
     0,
@@ -326,10 +350,51 @@ export function HostAnalyticsCard(props: {
               ))}
             </Stack>
           ) : null}
-          {/* Per-screen teaser (AGL-153). */}
+          {topUtmSources.length ? (
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2">
+                {'Top campaign sources (UTM)'}
+              </Typography>
+              {topUtmSources.map(([value, count]) => (
+                <Stack
+                  key={value}
+                  direction="row"
+                  sx={{ justifyContent: 'space-between' }}
+                >
+                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
+                    {value}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {count.toLocaleString()}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          ) : null}
+          {topUtmCampaigns.length ? (
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2">{'Top campaigns (UTM)'}</Typography>
+              {topUtmCampaigns.map(([value, count]) => (
+                <Stack
+                  key={value}
+                  direction="row"
+                  sx={{ justifyContent: 'space-between' }}
+                >
+                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
+                    {value}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {count.toLocaleString()}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          ) : null}
+          {/* Per-screen teaser (AGL-153, table AGL-1844). */}
           <Typography variant="caption" color="text.secondary">
-            {'Per-screen breakdowns live on each screen\u2019s view page ' +
-              '(Pro plans).'}
+            {'Per-screen breakdowns live in the Screens table on the ' +
+              'analytics page and on each screen\u2019s view page (Pro ' +
+              'plans).'}
           </Typography>
           {topPaths.length ? (
             <Stack spacing={0.5}>
