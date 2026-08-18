@@ -22,6 +22,12 @@ import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
+import {
+  applyNativeCheckoutParams,
+  nativeCheckoutStripeHeaders,
+  readCheckoutSessionPayload,
+  resolveNativeCheckoutMode,
+} from './native-checkout'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -503,6 +509,21 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
 
+    // The Payment Element (AGL-1944), LAST and touching nothing above it. Every
+    // figure the shopper is charged — line prices, the discount coupon, the tax
+    // construction, the shipping rates, the fee — was decided before this line
+    // and is identical on both checkout paths. This swaps the redirect's URL
+    // pair for `ui_mode` + `return_url` and stops. Off unless the flag is on for
+    // this org AND a publishable key exists; see `resolveNativeCheckoutMode`.
+    const nativeMode = await resolveNativeCheckoutMode(
+      String(ownerOrg?.org?.id ?? ''),
+    )
+    if (nativeMode.native) {
+      applyNativeCheckoutParams(
+        params,
+        `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
+      )
+    }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -515,6 +536,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // one, covering the window where the claim is written but the
           // response never arrives.
           ...stripeKeyHeader('session'),
+          // Empty on the hosted path (AGL-1944).
+          ...nativeCheckoutStripeHeaders(nativeMode),
         },
         body: params.toString(),
       },
@@ -522,9 +545,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const session = (await response.json()) as {
       url?: string
       id?: string
+      client_secret?: string
       error?: any
     }
-    if (!response.ok || !session.url) {
+    // `!session.url` was the liveness check and a `ui_mode` session has no url,
+    // so it moves with the mode (AGL-1944) — otherwise every successful native
+    // session reads as a Stripe failure: a 502 at the shopper, a released claim,
+    // and a real Checkout Session left open on the merchant's account.
+    const payload = response.ok
+      ? readCheckoutSessionPayload(session, nativeMode)
+      : null
+    if (!payload) {
       console.error('Stripe cart checkout error', session.error)
       // The checkout did not happen — hand the key back so one flaky moment
       // does not lock this cart out. The retry re-derives the same derived
@@ -533,7 +564,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(502).json({ error: 'Checkout failed' })
     }
     // Recoverable checkout (AGL-296): email captured before the redirect
-    // makes abandonment actionable (AGL-323 sends the recovery emails).
+    // makes abandonment actionable (AGL-323 sends the recovery emails). Written
+    // for the native path too, and it matters MORE there: a shopper who
+    // abandons an in-page form never leaves the store, so this row is the only
+    // trace that a cart reached checkout at all.
     await hostRef
       .collection('checkouts')
       .doc(String(session.id))
@@ -547,7 +581,6 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)
-    const payload = { url: session.url }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error: any) {
