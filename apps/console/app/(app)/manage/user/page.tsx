@@ -373,6 +373,34 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     try {
       await setDoc(userRef, { photoUrl: cleaned }, { merge: true })
       await updateProfile(user, { photoURL: cleaned || null })
+      // Neither of the two writes above is what a COLLEAGUE reads (AGL-1976).
+      // Every member surface — Team, the member detail page, activity,
+      // presence — feeds `MemberAvatar` from `orgs/{id}/members/{uid}.photoURL`,
+      // because none of them can read another person's auth record: an SSO
+      // member's lives in a per-org pool (AGL-1122). That row is
+      // `allow write: if false`, so the fan-out is a route.
+      //
+      // Deliberately NOT fatal to the save. The two writes above have already
+      // committed and the picture is live on this person's own surfaces; a
+      // roster fan-out that failed is a stale colleague view, which the next
+      // save repairs. Rolling back a committed avatar to report it would be
+      // worse than saying so.
+      const idToken = await user.getIdToken()
+      const response = await fetch('/api/account/photo', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ photoUrl: cleaned }),
+      })
+      if (!response.ok) {
+        console.error('[manage/user] roster photo fan-out failed', response.status)
+        return void enqueueSnackbar(
+          'Profile image saved — your team may still see the old one for a while.',
+          { variant: 'warning', persist: false },
+        )
+      }
       enqueueSnackbar('Profile image saved', { variant: 'success' })
     } catch (error) {
       console.error(error)
