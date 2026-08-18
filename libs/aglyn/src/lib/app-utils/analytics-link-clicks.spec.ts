@@ -158,6 +158,67 @@ describe('what counts as a CTA (AGL-1562)', () => {
   })
 })
 
+describe('tier qualification — the plan in the CTA href (AGL-1858)', () => {
+  it('qualifies content_id with the destination plan, so five "Choose" buttons become five rows', () => {
+    // The live pricing page's shape: identical labels, no authored section,
+    // the tier stated only in the href — which the console page_view then
+    // strips (its sanitizer reduces URLs to origin + pathname), so this is
+    // the ONLY place the tier survives the click.
+    const link = paint(
+      '<a id="target" class="MuiButton-root" ' +
+        'href="https://app.localhost/signup?plan=starter&interval=month">Choose</a>',
+    )
+
+    expect(classify(link)?.params).toMatchObject({
+      content_id: 'Choose:plan=starter',
+    })
+  })
+
+  it('two identically-labelled tier CTAs are now distinguishable', () => {
+    const starter = paint(
+      '<a id="target" class="MuiButton-root" href="/signup?plan=starter">CHOOSE</a>',
+    )
+    const first = classify(starter)?.params.content_id
+    const scale = paint(
+      '<a id="target" class="MuiButton-root" href="/signup?plan=scale">CHOOSE</a>',
+    )
+    const second = classify(scale)?.params.content_id
+    expect(first).toBe('CHOOSE:plan=starter')
+    expect(second).toBe('CHOOSE:plan=scale')
+    expect(first).not.toBe(second)
+  })
+
+  it('composes with an authored section — every tier of the id survives', () => {
+    const link = paint(
+      '<div data-analytics-section="pricing">' +
+        '<a id="target" role="button" href="/signup?plan=pro">Start Pro</a></div>',
+    )
+    expect(classify(link)?.params).toMatchObject({
+      content_id: 'pricing:Start Pro:plan=pro',
+    })
+  })
+
+  it('ONLY the plan key is read — the rest of the query stays out of GA', () => {
+    // A general query capture would be the token/address smuggling the
+    // sanitizer's URL reduction exists to stop.
+    const link = paint(
+      '<a id="target" class="MuiButton-root" ' +
+        'href="/signup?email=someone%40example.com&code=SECRET">Start free</a>',
+    )
+    const id = classify(link)?.params.content_id
+    expect(id).toBe('Start free')
+    expect(id).not.toContain('example.com')
+    expect(id).not.toContain('SECRET')
+  })
+
+  it('a CTA without a plan is exactly what it was before', () => {
+    const link = paint(
+      '<a id="target" class="MuiButton-root" href="https://app.localhost/signup">Start free</a>',
+    )
+    expect(classify(link)?.params).toMatchObject({ content_id: 'Start free' })
+  })
+})
+
 describe('what counts as an outbound click', () => {
   it('reports the destination domain and which link it was', () => {
     const link = paint(
