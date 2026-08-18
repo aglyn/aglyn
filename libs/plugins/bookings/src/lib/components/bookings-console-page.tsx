@@ -20,6 +20,7 @@ import { checkQuota } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -353,6 +354,15 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
           >
             {'Add service'}
           </Button>
+          {/* The cap, standing rather than only on refusal (AGL-2113).
+              `services.length` is the same count `handleAdd` hands to
+              `checkQuota`, so the readout and the gate cannot disagree. */}
+          <QuotaReadoutComponent
+            ready={org != null}
+            used={services.length}
+            limit={checkQuota(org, 'servicesPerHost', services.length).limit}
+            noun="service"
+          />
         </Stack>
       </CardDisplay>
 

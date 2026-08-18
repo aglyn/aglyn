@@ -19,6 +19,7 @@
 import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
 import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -1066,6 +1067,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             </Button>
           </Stack>
         )}
+        {/* The per-dataset record cap, standing rather than only on refusal
+            (AGL-2113). `recordCount` is the dataset's real size — the same
+            number `handleOpenRecord` and the importer hand to `checkQuota`,
+            not the loaded window (AGL-1716). */}
+        {selected ? (
+          <QuotaReadoutComponent
+            ready={org != null}
+            used={recordCount}
+            limit={checkQuota(org, 'recordsPerDataset', recordCount).limit}
+            noun="record"
+          />
+        ) : null}
         {selected && records.length > 0 ? (
           <Stack direction="row" spacing={1}>
             <TextField
