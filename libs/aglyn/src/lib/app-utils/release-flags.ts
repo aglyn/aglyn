@@ -197,9 +197,20 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description:
       'The in-console AI chat helper on every page (AGL-1860): docs-' +
       'grounded answers with deep links, page-context guidance on Pro+. ' +
-      'OFF by default until the privacy-policy disclosure for stored Q&A ' +
-      'exchanges is live — the data loop records every exchange org-' +
-      'scoped, so the flag must not flip before the legal sitting lands.',
+      'OFF by default, and blocked on TWO published legal artifacts ' +
+      '(AGL-1909), neither of which is a repo file — both are live besigner ' +
+      'pages, so publication is what satisfies them: (1) the privacy-policy ' +
+      'disclosure for stored Q&A, because the data loop records every ' +
+      'exchange org-scoped under orgs/{orgId}/assistExchanges; and (2) the ' +
+      'Anthropic row on /legal/subprocessors, which was deliberately ' +
+      'REMOVED on 2026-08-13 (subprocessorsV2a-20260813) on the premise ' +
+      'that no production key existed — so the page is not merely ' +
+      'incomplete without it, it is affirmatively wrong. NOTE the real ' +
+      'trigger is ANTHROPIC_API_KEY, not this flag: /api/ai/assist (the ' +
+      'besigner copy assistant, AGL-89/130/169) carries no release flag at ' +
+      'all and sends customer site content to Anthropic on the key plus a ' +
+      'Pro entitlement alone. Setting the key in production therefore makes ' +
+      'Anthropic a subprocessor whether or not this flag is ever flipped.',
     defaultEnabled: false,
   },
 ]

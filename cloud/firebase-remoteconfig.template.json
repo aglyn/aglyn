@@ -109,7 +109,7 @@
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
       },
-      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default: the data loop stores org-scoped Q&A, so the privacy-policy disclosure must be live before this flips on.",
+      "description": "Aglyn Assist, the in-console AI chat helper (AGL-1860). OFF by default and blocked on two PUBLISHED legal artifacts (AGL-1909): the privacy-policy disclosure for the org-scoped Q&A the data loop stores, and the Anthropic row on /legal/subprocessors, which was deliberately removed on 2026-08-13 on the premise that no production key existed. Note the real trigger is ANTHROPIC_API_KEY, not this flag: /api/ai/assist (the besigner copy assistant) carries no release flag and sends customer content to Anthropic on the key plus a Pro entitlement alone.",
       "valueType": "JSON"
     }
   },
