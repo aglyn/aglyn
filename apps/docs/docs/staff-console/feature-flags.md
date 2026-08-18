@@ -107,11 +107,21 @@ sequenceDiagram
 
 ### A flag is not always sufficient on its own
 
-`release_native_checkout` (in-page Stripe checkout, AGL-1132) is gated on the flag **and**
-on `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` being set. An embedded Checkout session returns a
-client secret and no redirect URL, so a browser that cannot mount the form has nowhere to
-send the buyer — flipping the flag without the key would turn Upgrade into a dead button.
-The route requires both and otherwise serves the redirect.
+`release_native_checkout` (in-page Stripe checkout, AGL-1132 and AGL-1944) is gated on the
+flag **and** on `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` being set. A `ui_mode` Checkout
+session returns a client secret and no redirect URL, so a browser that cannot mount the
+form has nowhere to send the buyer — flipping the flag without the key would turn Upgrade
+into a dead button, and a storefront's Buy button into one too. Both surfaces require both
+and otherwise serve the redirect.
+
+The key is **per Vercel project**, and the two surfaces do not share one. Measured
+2026-08-18: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is set on `aglyn-console` and is set
+**nowhere on `aglyn-tenant`**, which is the project that serves customer storefronts. So
+turning this flag on today changes the console and changes nothing at all on a storefront
+— which is safe, and is also why "I flipped it and nothing happened" is the expected
+report until the key is promoted to a team-shared variable and linked to both projects
+(the pattern `STRIPE_SECRET_KEY` already follows). Note that `vercel env ls` cannot see
+team-shared variables; check through the REST API.
 
 Worth copying whenever a flag turns on a path that needs configuration the flag does not
 itself provide: gate on the capability, not just on the intent.

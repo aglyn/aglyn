@@ -149,6 +149,39 @@ template** does the same for `/collections/{slug}`.
 Both buy buttons and the cart's **Checkout** redirect to **Stripe-hosted
 Checkout**, then back to your site with a success/cancelled marker:
 
+### Paying without leaving your site
+
+There is a second checkout that keeps the shopper on your own pages: instead
+of sending them to `checkout.stripe.com`, the card form opens **in place**,
+below the Buy or Checkout button, styled with your site's theme. Leaving the
+store mid-purchase is one of the most common places a cart gets abandoned, so
+this exists to remove that step.
+
+**Rolling out.** In-page checkout is **off by default** and is switched on per
+workspace by Aglyn staff (release flag *In-page checkout*). Until it is on for
+your workspace, checkout behaves exactly as described above — the redirect is
+what your shoppers see.
+
+Nothing else about a sale changes when it is on, and that is deliberate:
+
+- **The price, tax, shipping and any coupon are computed by the same code.**
+  The in-page form is the same Stripe Checkout Session as the redirect, just
+  drawn by us instead of by Stripe — so the two cannot quote different totals.
+- **Your order is still created by Stripe's webhook, never by the browser.**
+  If a shopper pays and immediately closes the tab, the order, the stock
+  decrement, the receipt and the gift-card or licence-key steps all still
+  happen. If they pay and then refresh the page, none of it happens twice.
+- **A declined card stays on the form.** The basket, address and payment
+  method the shopper already entered are kept, with the decline shown beside
+  them, so they can try another card without starting over. Cards that ask for
+  a bank verification step (3-D Secure) show that challenge in place.
+- **Abandoned in-page checkouts are still recoverable** and still feed the
+  abandoned-cart emails, the same as an abandoned redirect.
+
+A shopper who cancels the in-page form is returned to the store with their
+cart intact.
+
+
 - Prices are always re-read from your catalog server-side — the browser can't
   alter them.
 - **One-time** purchases (and *all* cart checkouts) create a payment; the

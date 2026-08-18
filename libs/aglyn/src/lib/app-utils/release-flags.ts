@@ -173,10 +173,17 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     key: 'release_native_checkout',
     label: 'In-page checkout',
     description:
-      'Pay for a plan without leaving the console — Stripe embedded ' +
-      'Checkout instead of a redirect to checkout.stripe.com (AGL-1132). ' +
-      'OFF by default: the redirect is the proven path, and this one cannot ' +
-      'be verified without putting a real card through it.',
+      'Pay without leaving the page, instead of a redirect to ' +
+      'checkout.stripe.com. TWO surfaces: the console plan checkout uses ' +
+      'embedded Checkout (AGL-1132), and a merchant storefront uses the ' +
+      'Payment Element on the merchant\u2019s own domain (AGL-1944) \u2014 ' +
+      'which is the half that costs conversions, since leaving the store ' +
+      'mid-purchase is where carts get abandoned. Both keep the webhook as ' +
+      'the only thing that fulfils. OFF by default: the redirect is the ' +
+      'proven path, and neither surface can be verified without putting a ' +
+      'real card through it. Also gated on a publishable key being set, ' +
+      'per surface \u2014 so flipping this alone degrades to the redirect ' +
+      'rather than to a dead button.',
     defaultEnabled: false,
   },
   {
