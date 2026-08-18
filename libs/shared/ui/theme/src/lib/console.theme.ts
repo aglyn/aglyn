@@ -43,21 +43,35 @@ const colorScheme = {
     // component was already opting into is now `primary`, so nothing has to
     // opt out of a primary that was really a surface tone. Whole colour
     // objects moved, so each keeps the contrastText it shipped with.
-    // `contrastText` is deliberately ABSENT (AGL-1293, Zach 2026-08-18:
-    // "text uses should be computed and use the primary.contrastText"). It
-    // used to be the literal `#FFFFFF`, which is 2.43:1 on `#00b0ff` — every
-    // filled primary button, chip and badge in the product, below even the
-    // 3:1 non-text bar. Leaving the slot empty hands it to MUI's
-    // `getContrastText()` against the AA `contrastThreshold`
-    // `createResponsiveTheme` now sets, which computes ink at 8.65:1. That
-    // computation is what reaches a tenant's generated palette too; a
-    // hardcoded swap never would.
+    // ⚠️ KNOWN, DELIBERATE ACCESSIBILITY EXCEPTION — do not "fix" this.
     //
-    // `main` stays `#00b0ff`: it is the brand colour and it is only ever a
-    // FILL or a border here. Rendered as text it is handled by
-    // `accentTextColor` → `primary.dark`.
+    // AGL-1293 deleted this literal so MUI would compute it, and the computed
+    // answer is dark ink (8.65:1). That shipped, and it made every filled
+    // primary button in the product dark-on-blue. Shown that exact tradeoff —
+    // darken the brand blue, or keep it and accept sub-AA white — Zach chose,
+    // verbatim, 2026-08-18:
+    //
+    //   "don't change the current blue and leave it as white text"
+    //
+    // So `main` stays the brand `#00b0ff` and `contrastText` is authored back
+    // to white. The cost is stated, not hidden: white on `#00b0ff` measures
+    // **2.43:1**, which misses the 4.5:1 AA text bar and the 3:1 non-text bar
+    // alike. It is a business decision about the brand, taken with the number
+    // in hand.
+    //
+    // Scope: this pairing ONLY — `primary.contrastText` `#FFFFFF` on
+    // `#00b0ff`, i.e. the foreground of a FILLED primary surface. It is
+    // registered in `DOCUMENTED_CONTRAST_EXCEPTIONS` (`util/accent-text.ts`)
+    // keyed on all four of those values, so changing the blue, the white, or
+    // the slot reds the audit again instead of inheriting the waiver.
+    //
+    // Everything else AGL-1293 did stands. `primary.main` rendered AS TEXT is
+    // still wrong at 2.43:1 and still routes through `accentTextColor` →
+    // `primary.dark` (`#0077ad`); the AA `contrastThreshold` still governs
+    // every computed pairing, ours and every tenant-generated palette.
     primary: {
       main: '#00b0ff',
+      contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',
@@ -138,12 +152,14 @@ const colorScheme = {
     },
   },
   dark: {
-    // Computed, not authored — see the light scheme's note. `#00b0ff` is the
-    // same brand blue in both schemes, so the computed pairing is the same
-    // ink, and the two dark-mode white-on-blue button fills AGL-1293
-    // measured at 2.43:1 stop being the only failures dark mode had.
+    // ⚠️ The same known exception as the light scheme — see that note for
+    // Zach's words and the measured 2.43:1. `#00b0ff` is the same brand blue
+    // in both schemes, so the decision and the number are identical; carrying
+    // it here too is what keeps a filled primary button from flipping ink
+    // when the user switches to dark.
     primary: {
       main: '#00b0ff',
+      contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',

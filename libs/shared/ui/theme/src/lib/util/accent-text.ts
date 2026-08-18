@@ -90,6 +90,71 @@ export type PaletteContrastViolation = {
   ratio: number
   /** The bar it had to clear. */
   required: number
+  /**
+   * Set only when this exact pairing matches a
+   * {@link DOCUMENTED_CONTRAST_EXCEPTIONS} entry: the human decision that
+   * knowingly accepts the measured ratio. Excluded from the default result;
+   * surfaced by `includeExempt`.
+   */
+  exemption?: string
+}
+
+/**
+ * Pairings a human has knowingly signed off BELOW the bar.
+ *
+ * This is not a suppression list and it must not become one. Each entry pins
+ * all four coordinates of one pairing — palette key, role, the exact
+ * foreground and the exact background — so it waives a decision, not a slot.
+ * Change the brand blue, change the white, or move the same white onto
+ * `secondary`, and none of them match: the audit reds, which is the point.
+ * A new entry needs a named person, a date, their words, and the measured
+ * ratio, the same as this one.
+ */
+export const DOCUMENTED_CONTRAST_EXCEPTIONS: ReadonlyArray<{
+  color: string
+  role: PaletteContrastViolation['role']
+  value: string
+  against: string
+  reason: string
+}> = [
+  {
+    // AGL-1293. AGL-1293 computed this slot to dark ink (8.65:1) and that
+    // shipped, turning every filled primary button dark-on-blue. Shown the
+    // tradeoff — darken the brand, or keep it and accept sub-AA white — Zach
+    // chose, verbatim, 2026-08-18: "don't change the current blue and leave
+    // it as white text". White on `#00b0ff` is 2.43:1, below the 4.5:1 AA
+    // text bar and below the 3:1 non-text bar. Accepted knowingly.
+    color: 'primary',
+    role: 'contrastText',
+    value: '#FFFFFF',
+    against: '#00b0ff',
+    reason:
+      'AGL-1293 — Zach, 2026-08-18: "don\'t change the current blue and leave it as white text" (white on #00b0ff = 2.43:1, knowingly below AA)',
+  },
+]
+
+/** Case-insensitive exact colour match; nothing fuzzy, nothing normalised away. */
+function sameColor(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+/**
+ * The signed-off reason for this exact pairing, or `undefined`. Exact on all
+ * four coordinates — a near miss is not a match.
+ */
+function documentedExemption(
+  color: string,
+  role: PaletteContrastViolation['role'],
+  value: string,
+  against: string,
+): string | undefined {
+  return DOCUMENTED_CONTRAST_EXCEPTIONS.find(
+    (exception) =>
+      exception.color === color &&
+      exception.role === role &&
+      sameColor(exception.value, value) &&
+      sameColor(exception.against, against),
+  )?.reason
 }
 
 const AUDITED_COLOR_KEYS = [
@@ -107,6 +172,14 @@ export type AuditPaletteContrastOptions = {
   minContrast?: number
   /** Restrict the audit to these palette keys. Default: all accents. */
   colors?: ReadonlyArray<string>
+  /**
+   * Include pairings matched by {@link DOCUMENTED_CONTRAST_EXCEPTIONS},
+   * carrying their `exemption`. Default `false`, so a signed-off decision does
+   * not read as an open defect. Pass `true` to see everything measured — the
+   * spec that proves the exception is still exactly 2.43:1 uses this, so the
+   * waiver documents a number rather than hiding one.
+   */
+  includeExempt?: boolean
 }
 
 /**
@@ -127,9 +200,23 @@ export function auditPaletteContrast(
   palette: Palette | undefined,
   options: AuditPaletteContrastOptions = {},
 ): PaletteContrastViolation[] {
-  const { minContrast = AA_TEXT_CONTRAST, colors = AUDITED_COLOR_KEYS } =
-    options
+  const {
+    minContrast = AA_TEXT_CONTRAST,
+    colors = AUDITED_COLOR_KEYS,
+    includeExempt = false,
+  } = options
   const violations: PaletteContrastViolation[] = []
+  /** Records a measured failure unless a documented decision waives it. */
+  const record = (violation: PaletteContrastViolation) => {
+    const exemption = documentedExemption(
+      violation.color,
+      violation.role,
+      violation.value,
+      violation.against,
+    )
+    if (exemption && !includeExempt) return
+    violations.push(exemption ? { ...violation, exemption } : violation)
+  }
   if (!palette) return violations
   const indexed = palette as unknown as Record<string, PaletteColor | undefined>
   const backgrounds = [
@@ -148,7 +235,7 @@ export function auditPaletteContrast(
       try {
         const ratio = contrastRatio(accent, background)
         if (ratio < minContrast) {
-          violations.push({
+          record({
             color: key,
             role: 'accentText',
             value: accent,
@@ -167,7 +254,7 @@ export function auditPaletteContrast(
     try {
       const ratio = contrastRatio(color.contrastText, color.main)
       if (ratio < minContrast) {
-        violations.push({
+        record({
           color: key,
           role: 'contrastText',
           value: color.contrastText,
@@ -187,9 +274,14 @@ export function auditPaletteContrast(
 export function formatPaletteContrastViolation(
   violation: PaletteContrastViolation,
 ): string {
-  return `${violation.color}.${violation.role} ${violation.value} on ${
+  const measured = `${violation.color}.${violation.role} ${violation.value} on ${
     violation.against
   } is ${violation.ratio.toFixed(2)}:1, below ${violation.required}:1`
+  // The waived line still carries its number, so a reader sees what was
+  // accepted rather than a bare "exempt".
+  return violation.exemption
+    ? `${measured} — KNOWN EXCEPTION: ${violation.exemption}`
+    : measured
 }
 
 export default accentTextColor

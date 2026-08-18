@@ -23,10 +23,15 @@ import {
   consoleThemeLight,
 } from '../console.theme'
 import { createTheme, type Theme } from '../../vendor/mui'
+import MuiButton from '@mui/material/Button'
+import { ThemeProvider } from '@mui/material/styles'
+import { render } from '@testing-library/react'
+import { createElement } from 'react'
 import {
   AA_NON_TEXT_CONTRAST,
   accentTextColor,
   auditPaletteContrast,
+  DOCUMENTED_CONTRAST_EXCEPTIONS,
   formatPaletteContrastViolation,
 } from './accent-text'
 import { AA_TEXT_CONTRAST, contrastRatio } from './accessible-shade'
@@ -35,6 +40,62 @@ import createResponsiveTheme from './create-responsive-theme'
 const LIGHT_BACKGROUNDS = ['#F5F5F5', '#FFFFFF']
 const DARK_BACKGROUNDS = ['#161c21', '#2a3440']
 const BRAND_BLUE = '#00b0ff'
+
+/**
+ * Server-render a real `<Button>` through a real `ThemeProvider` and return
+ * the CSS emotion actually emitted for it.
+ *
+ * Deliberately not a model of MUI's `contrastText` → `--variant-containedColor`
+ * mapping: a hand-written double could not catch MUI changing that mapping,
+ * and the mapping is the thing under test. This is MUI's own component, MUI's
+ * own variant table and emotion's own serializer; only the DOM is absent, and
+ * colours do not need one.
+ */
+function renderButtonCss(
+  theme: Theme,
+  props: Record<string, unknown>,
+): string {
+  const { container, unmount } = render(
+    createElement(
+      ThemeProvider,
+      { theme },
+      createElement(MuiButton, props as any, 'Label'),
+    ),
+  )
+  const button = container.querySelector('button')
+  expect(button).not.toBeNull()
+  // Emotion's generated class is unique to THIS theme+props pair, so scoping
+  // by it keeps one test from reading the stylesheet another test inserted —
+  // emotion's sheet is global and never cleared between renders.
+  const emotionClass = Array.from(button?.classList ?? []).find((name) =>
+    name.includes('-MuiButton-root'),
+  )
+  expect(emotionClass).toBeTruthy()
+  // Under jsdom emotion inserts through the CSSOM, so the `<style>` tag's
+  // textContent is empty and the rules have to be read off the sheet.
+  const rules = Array.from(document.styleSheets)
+    .flatMap((sheet) => {
+      try {
+        return Array.from(sheet.cssRules).map((rule) => rule.cssText)
+      } catch {
+        return []
+      }
+    })
+    .filter((rule) => rule.includes(`.${emotionClass}`))
+  unmount()
+  // Guard the harness itself: with no rules collected every assertion below
+  // would pass vacuously. Forced red once by scoping to a class that no rule
+  // carries.
+  expect(rules.length).toBeGreaterThan(0)
+  return rules.join('\n')
+}
+
+/** Every value the emitted CSS gives one custom property, in source order. */
+function cssVarValues(css: string, name: string): string[] {
+  return (css.match(new RegExp(`${name}:[^;}]*`, 'g')) ?? []).map((decl) =>
+    decl.slice(name.length + 1).trim(),
+  )
+}
 
 /** Run a component styleOverride the way MUI's `styled` would. */
 function runRootOverride(
@@ -110,27 +171,198 @@ describe('the console palette keeps the AGL-1293 contract', () => {
     // The anti-rot spec AGL-1297 established, extended to the values THIS
     // pass computes. A ratio-only assertion would stay green while the whole
     // accent shifted hue; these pin the bytes.
+    //
+    // These are the paths Zach's white-text decision does NOT touch: the
+    // accent rendered as TEXT on a light surface, in both schemes. They are
+    // still computed and still AA.
     expect(consoleThemeLight.palette.primary.dark).toBe('#0077ad')
     expect(consoleThemeDark.palette.primary.dark).toBe('rgb(76, 199, 255)')
-    expect(consoleThemeLight.palette.primary.contrastText).toBe(
+  })
+})
+
+describe('filled primary buttons carry WHITE text — Zach, 2026-08-18', () => {
+  // The decision, verbatim: "don't change the current blue and leave it as
+  // white text". AGL-1293 had deleted this literal so MUI computed dark ink,
+  // which shipped in `11f597b82` and put dark text on the brand blue. Only
+  // this one token comes back.
+
+  it('the token is authored white in BOTH schemes, in options and in the theme', () => {
+    expect((consoleOptions.palette as any).primary.contrastText).toBe('#FFFFFF')
+    expect((consoleOptionsDark.palette as any).primary.contrastText).toBe(
+      '#FFFFFF',
+    )
+    // And it survives `createResponsiveTheme` byte-identical — AGL-1297's
+    // contrastText walk only repairs shades it DERIVED, so an authored value
+    // must pass straight through rather than being "healed" back to ink.
+    expect(consoleThemeLight.palette.primary.contrastText).toBe('#FFFFFF')
+    expect(consoleThemeDark.palette.primary.contrastText).toBe('#FFFFFF')
+  })
+
+  it('a rendered contained button paints WHITE on the brand blue, both schemes', () => {
+    for (const theme of [consoleThemeLight, consoleThemeDark]) {
+      const css = renderButtonCss(theme, {
+        variant: 'contained',
+        color: 'primary',
+      })
+      // The label colour: MUI's contained variant reads this var, and the
+      // per-colour variant fills it from `palette.primary.contrastText`.
+      expect(css).toContain('color: var(--variant-containedColor)')
+      expect(new Set(cssVarValues(css, '--variant-containedColor'))).toEqual(
+        new Set(['#FFFFFF']),
+      )
+      // The fill is untouched — `#00b0ff` is still the brand, exactly as Zach
+      // asked ("don't change the current blue"). The second value is the
+      // hover shade, which is `primary.dark` and unchanged by this pass.
+      expect(cssVarValues(css, '--variant-containedBg')).toContain(BRAND_BLUE)
+    }
+  })
+
+  it('INVERTED: the same harness on the PRE-decision palette paints ink', () => {
+    // The assertion above only means something if it can distinguish. This
+    // rebuilds the palette exactly as `c03a2d754` shipped it — the literal
+    // deleted so MUI computes — and renders it through the same helper. It
+    // comes out `rgba(0, 0, 0, 0.87)`: dark text on the brand blue, which is
+    // the production regression Zach's decision reverses.
+    const asShipped = createResponsiveTheme({
+      themeOptions: {
+        ...consoleOptions,
+        palette: {
+          ...(consoleOptions.palette as any),
+          primary: { main: BRAND_BLUE },
+        },
+      },
+    })
+    const css = renderButtonCss(asShipped, {
+      variant: 'contained',
+      color: 'primary',
+    })
+    expect(cssVarValues(css, '--variant-containedColor')).toContain(
       'rgba(0, 0, 0, 0.87)',
     )
-    expect(consoleThemeDark.palette.primary.contrastText).toBe(
-      'rgba(0, 0, 0, 0.87)',
+    expect(cssVarValues(css, '--variant-containedColor')).not.toContain(
+      '#FFFFFF',
     )
   })
 
-  it('on-primary foreground is computed, and clears AA in both schemes', () => {
-    // The literal `#FFFFFF` (2.43:1) is gone from console.theme.ts.
-    expect((consoleOptions.palette as any).primary.contrastText).toBeUndefined()
-    expect(
-      (consoleOptionsDark.palette as any).primary.contrastText,
-    ).toBeUndefined()
-    for (const theme of [consoleThemeLight, consoleThemeDark]) {
-      expect(
-        contrastRatio(theme.palette.primary.contrastText, BRAND_BLUE),
-      ).toBeGreaterThanOrEqual(AA_TEXT_CONTRAST)
+  it('and the TEXT variant still takes the computed accent, not white', () => {
+    // The half of AGL-1293 that stays. A text button is text on the PAGE, so
+    // it keeps the computed AA shade; only the filled foreground reverted.
+    const css = renderButtonCss(consoleThemeLight, {
+      variant: 'text',
+      color: 'primary',
+    })
+    expect(cssVarValues(css, '--variant-textColor')).toContain('#0077ad')
+    expect(cssVarValues(css, '--variant-textColor')).not.toContain('#FFFFFF')
+    expect(cssVarValues(css, '--variant-textColor')).not.toContain(BRAND_BLUE)
+  })
+
+  it('states the cost rather than hiding it: 2.43:1, below both bars', () => {
+    const ratio = contrastRatio('#FFFFFF', BRAND_BLUE)
+    expect(Number(ratio.toFixed(2))).toBe(2.43)
+    expect(ratio).toBeLessThan(AA_TEXT_CONTRAST)
+    expect(ratio).toBeLessThan(AA_NON_TEXT_CONTRAST)
+  })
+
+  it('the audit still MEASURES it — the waiver hides no number', () => {
+    for (const palette of [consoleThemeLight.palette, consoleThemeDark.palette]) {
+      const [measured, ...rest] = auditPaletteContrast(palette, {
+        colors: ['primary'],
+        includeExempt: true,
+      })
+      expect(rest).toEqual([])
+      expect(measured.role).toBe('contrastText')
+      expect(measured.value).toBe('#FFFFFF')
+      expect(measured.against).toBe(BRAND_BLUE)
+      expect(Number(measured.ratio.toFixed(2))).toBe(2.43)
+      expect(measured.exemption).toContain(
+        "don't change the current blue and leave it as white text",
+      )
+      expect(formatPaletteContrastViolation(measured)).toContain(
+        'KNOWN EXCEPTION',
+      )
     }
+  })
+})
+
+describe('the exemption is scoped to ONE pairing and cannot widen', () => {
+  const white = (main: string, key = 'primary') =>
+    auditPaletteContrast(
+      createResponsiveTheme({
+        themeOptions: {
+          palette: {
+            mode: 'light',
+            [key]: { main, contrastText: '#FFFFFF' },
+          } as any,
+        },
+      }).palette,
+      { colors: [key] },
+    ).filter((violation) => violation.role === 'contrastText')
+
+  it('RED 5: the SAME white on a DIFFERENT blue is not covered', () => {
+    // One digit off the brand blue. The waiver names `#00b0ff`, so this is a
+    // new decision nobody made, and it reds.
+    const violations = white('#00b1ff')
+    expect(violations).toHaveLength(1)
+    expect(violations[0].value).toBe('#FFFFFF')
+    // Sanity: the exempted blue in the identical harness returns nothing.
+    expect(white(BRAND_BLUE)).toEqual([])
+  })
+
+  it('RED 6: the SAME pairing on a DIFFERENT palette slot is not covered', () => {
+    // Exactly `#FFFFFF` on exactly `#00b0ff`, but as `secondary`. The
+    // exemption is keyed on the slot too, so it does not travel.
+    const violations = white(BRAND_BLUE, 'secondary')
+    expect(violations).toHaveLength(1)
+    expect(violations[0].color).toBe('secondary')
+    expect(violations[0].exemption).toBeUndefined()
+  })
+
+  it('RED 7: it waives contrastText only — the SAME two colours in the accentText role red', () => {
+    // Constructed so all THREE other coordinates collide with the waiver:
+    // white foreground, brand-blue background, `primary`. Only the role
+    // differs — this is `primary.dark` white text ON a brand-blue page, which
+    // nobody signed off. A role-blind exemption would swallow it silently, so
+    // this is the case that makes the role check load-bearing rather than
+    // decorative.
+    const theme = createResponsiveTheme({
+      themeOptions: {
+        palette: {
+          mode: 'light',
+          primary: {
+            main: BRAND_BLUE,
+            dark: '#FFFFFF',
+            contrastText: '#FFFFFF',
+          },
+          background: { default: BRAND_BLUE, paper: BRAND_BLUE },
+        },
+      },
+    })
+    const violations = auditPaletteContrast(theme.palette, {
+      colors: ['primary'],
+    })
+    // One entry per background, and both backgrounds are the brand blue.
+    expect(violations.map((violation) => violation.role)).toEqual([
+      'accentText',
+      'accentText',
+    ])
+    expect(violations[0]).toMatchObject({
+      value: '#FFFFFF',
+      against: BRAND_BLUE,
+      color: 'primary',
+    })
+    expect(violations[0].exemption).toBeUndefined()
+  })
+
+  it('the registered exception list is exactly one entry', () => {
+    // A suppression list grows quietly. This pins it so a second waiver has
+    // to be argued for in review rather than appended.
+    expect(DOCUMENTED_CONTRAST_EXCEPTIONS).toHaveLength(1)
+    expect(DOCUMENTED_CONTRAST_EXCEPTIONS[0]).toMatchObject({
+      color: 'primary',
+      role: 'contrastText',
+      value: '#FFFFFF',
+      against: BRAND_BLUE,
+    })
   })
 })
 

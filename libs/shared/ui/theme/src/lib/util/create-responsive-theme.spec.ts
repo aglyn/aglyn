@@ -105,33 +105,32 @@ describe('explicit shades pass through byte-identical (AGL-1297)', () => {
   })
 
   it('keeps an explicitly provided sub-AA contrastText', () => {
-    // Explicit still means explicit. Console USED to author
-    // white-on-brand-blue at 2.4:1 here; AGL-1293 deleted that literal
-    // rather than weakening this rule, so the case is proved on a synthetic
-    // palette instead of on the console's own.
-    const theme = createResponsiveTheme({
-      themeOptions: {
-        palette: {
-          mode: 'light',
-          primary: { main: '#00b0ff', contrastText: '#FFFFFF' },
-        },
-      },
-    })
-    expect(theme.palette.primary.contrastText).toBe('#FFFFFF')
+    // Explicit means explicit — the invariant this rule exists for. Console
+    // authors white-on-brand-blue at 2.4:1 deliberately (Zach, 2026-08-18:
+    // "don't change the current blue and leave it as white text"), so the
+    // pass-through is load-bearing, not hypothetical: AGL-1297's contrastText
+    // walk must NOT "heal" it back to ink.
+    expect(consoleThemeLight.palette.primary.contrastText).toBe('#FFFFFF')
+    expect(consoleThemeDark.palette.primary.contrastText).toBe('#FFFFFF')
     expect(wcagRatio('#FFFFFF', '#00b0ff')).toBeLessThan(4.5)
   })
 
-  it('no longer authors a sub-AA contrastText on the console primary (AGL-1293)', () => {
-    // Zach, 2026-08-18: "text uses should be computed and use the
-    // primary.contrastText". The literal is gone from console.theme.ts, so
-    // this is MUI's computation against the AA contrastThreshold.
-    expect((consoleOptions.palette as any).primary.contrastText).toBeUndefined()
+  it('but a DERIVED contrastText on the same blue is still computed to ink', () => {
+    // The half of AGL-1293 that stands. Drop the authored literal and the
+    // computation — MUI's `getContrastText` against the AA
+    // `contrastThreshold` this factory now defaults to — picks ink at 8.65:1.
+    // So console's white is a deliberate override of a working computation,
+    // not a computation that never ran.
+    const derived = createResponsiveTheme({
+      themeOptions: {
+        palette: { mode: 'light', primary: { main: '#00b0ff' } },
+      },
+    })
+    expect(derived.palette.primary.contrastText).toBe('rgba(0, 0, 0, 0.87)')
     expect(
-      wcagRatio(consoleThemeLight.palette.primary.contrastText, '#00b0ff'),
+      wcagRatio(derived.palette.primary.contrastText, '#00b0ff'),
     ).toBeGreaterThanOrEqual(4.5)
-    expect(
-      wcagRatio(consoleThemeDark.palette.primary.contrastText, '#00b0ff'),
-    ).toBeGreaterThanOrEqual(4.5)
+    expect((consoleOptions.palette as any).primary.contrastText).toBe('#FFFFFF')
   })
 })
 
