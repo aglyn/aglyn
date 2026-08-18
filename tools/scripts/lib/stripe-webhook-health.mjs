@@ -87,6 +87,46 @@ export const PLATFORM_WEBHOOK_URL = 'https://app.aglyn.com/api/billing/webhook'
 export const EVENT_RETENTION_DAYS = 30
 
 /**
+ * How long after Stripe creates an event its FIRST delivery attempt may
+ * plausibly take to be recorded, in seconds. Anything slower means an earlier
+ * attempt failed and a retry is what landed.
+ *
+ * This constant is the fix for AGL-1906's blind spot, so it is worth being
+ * precise about why it can see what `delivery_success` cannot.
+ *
+ * `delivery_success=false` is a TERMINAL state: it selects events that are
+ * still pending or have failed EVERY attempt. An event that 400s three times
+ * and then succeeds on the fourth reads back as `delivery_success: true` and
+ * is, to that filter, indistinguishable from one that succeeded immediately.
+ * That is not a bug in the filter — the test-mode account's 21 events stuck at
+ * `pending_webhooks: 1` prove it still reports real failures — it simply
+ * answers "did this event ever get through?", not "did every attempt succeed?".
+ * The Stripe Dashboard's error rate answers the second question, because its
+ * denominator is delivery ATTEMPTS, and that is the whole reconciliation.
+ *
+ * The recoverable half of the attempt history is in our own data.
+ * `route.ts` claims `stripeEvents/{id}` with `receivedAt: new Date()` AFTER
+ * signature verification, and DELETES that claim when a handler throws, so the
+ * stamp always records the attempt that actually got through. The distance
+ * from `event.created` to `receivedAt` is therefore the delivery lag, and a
+ * lag of hours is a retry — i.e. proof of failed attempts Stripe's event list
+ * will never name.
+ *
+ * Calibration, from the live account on 2026-08-18: the five deliveries that
+ * succeeded first time landed in 1.0–3.7s. The one that did not —
+ * `evt_1U49XtDYHP4psn7hA9VHPnZz`, the AGL-1551 event whose three 400s ARE the
+ * Dashboard's three failures — landed 16,665s (4h 37m) late. Two minutes sits
+ * three orders of magnitude clear of the healthy band and still below Stripe's
+ * first automatic retry, so it separates the two without straddling either.
+ *
+ * A manual dashboard replay cannot make this cry wolf: replaying an event that
+ * already succeeded hits the idempotency claim and leaves the original
+ * `receivedAt` in place, so only a replay of a genuinely failed delivery moves
+ * the stamp — which is exactly the case worth flagging.
+ */
+export const RETRY_LAG_SECONDS = 120
+
+/**
  * Resolve the window actually backed by data, and say what narrowed it.
  *
  * @param {object} input
@@ -141,6 +181,13 @@ const UNKNOWN = 'unknown'
  *        `stripeEvents` document ids found in Firestore. Omit when the
  *        Firestore arm did not run — the verdict then reports `unknown`,
  *        never `pass`.
+ * @param {Array<{id: string, receivedAt: number|null}>} [input.processedEvents]
+ *        The same documents WITH their `receivedAt` stamp, in unix seconds.
+ *        Supplying it enables `delivery.retries`, the only arm that can see a
+ *        delivery that failed and was later retried into success — the exact
+ *        case `delivery_success` reports as clean. Ids here are unioned into
+ *        the processed set, so a caller may pass this instead of
+ *        `processedEventIds`.
  * @param {boolean} input.firestoreChecked
  * @param {boolean} [input.expectLivemode] Whether the key is a live-mode key.
  * @param {number} input.windowStart Unix seconds, inclusive.
@@ -152,6 +199,7 @@ export function assessWebhookHealth({
   events = [],
   failedEventIds = [],
   processedEventIds = [],
+  processedEvents = null,
   firestoreChecked = false,
   expectLivemode = true,
   windowStart = 0,
@@ -159,6 +207,15 @@ export function assessWebhookHealth({
 } = {}) {
   const failed = new Set(failedEventIds)
   const processed = new Set(processedEventIds)
+  /** event id -> `receivedAt` in unix seconds, for the retry arm below. */
+  const receivedAt = new Map()
+  for (const entry of processedEvents ?? []) {
+    if (!entry?.id) continue
+    processed.add(entry.id)
+    receivedAt.set(entry.id, entry.receivedAt ?? null)
+  }
+  /** Whether the caller supplied stamps at all — absent is `unknown`, not pass. */
+  const lagAvailable = Array.isArray(processedEvents)
   const findings = []
   const add = (check, level, message, detail) =>
     findings.push(detail === undefined
@@ -276,18 +333,26 @@ export function assessWebhookHealth({
     )
   }
 
+  // `delivery_success` is TERMINAL-state only, and the message says so.
+  //
+  // The first wording here read "Stripe reports 0 failed deliveries", which is
+  // how a reader gets to "the endpoint has a 0% error rate" — a claim this arm
+  // cannot support and the Dashboard flatly contradicted at 30%. Both were
+  // right: this counts EVENTS never delivered, the Dashboard counts ATTEMPTS.
+  // `delivery.retries` below is the arm that covers the difference.
   const failedInWindow = deliverable.filter((event) => failed.has(event.id))
   if (failedInWindow.length === 0) {
     add(
       'delivery.failures',
       PASS,
-      `Stripe reports 0 failed deliveries across ${deliverable.length} deliverable event(s)`,
+      `0 of ${deliverable.length} deliverable event(s) failed EVERY delivery attempt` +
+        ' (per-attempt failures are delivery.retries, not this check)',
     )
   } else {
     add(
       'delivery.failures',
       FAIL,
-      `Stripe reports ${failedInWindow.length} failed deliver(ies)`,
+      `${failedInWindow.length} event(s) never delivered — pending, or failed every attempt`,
       failedInWindow.map((event) => ({ id: event.id, type: event.type })),
     )
   }
@@ -335,6 +400,72 @@ export function assessWebhookHealth({
     }
   }
 
+  // ---- Did any delivery need a RETRY to get through? --------------------
+  //
+  // The arm AGL-1906 shipped without, and the reason its "0.00% error rate"
+  // read as a contradiction of the Dashboard's 30%.
+  //
+  // Neither number was wrong. This audit's denominator is EVENTS and it scores
+  // an event on its final state; the Dashboard's denominator is delivery
+  // ATTEMPTS and it scores every one. An event that 400s three times and then
+  // succeeds is 0% here and 75% there, and the three real failures — the ones
+  // that mattered, because each was a mirror that did not run when it should
+  // have — were visible only in the second reading.
+  //
+  // `RETRY_LAG_SECONDS` explains how the gap is recovered from our own
+  // `receivedAt` stamp. Restricted to events that HAVE a document, because one
+  // that has none is already `processing.coverage`'s finding and would
+  // otherwise be reported twice under two different names.
+  const withDocuments = deliverable.filter((event) => processed.has(event.id))
+  const lagOf = (event) => {
+    const stamp = receivedAt.get(event.id)
+    return typeof stamp === 'number' ? stamp - event.created : null
+  }
+  const retried = withDocuments
+    .map((event) => ({ event, lag: lagOf(event) }))
+    .filter((row) => row.lag !== null && row.lag > RETRY_LAG_SECONDS)
+  const unstamped = withDocuments.filter((event) => lagOf(event) === null)
+  if (!firestoreChecked || !lagAvailable) {
+    add(
+      'delivery.retries',
+      UNKNOWN,
+      'No receivedAt stamps available — per-ATTEMPT failures are UNVERIFIED' +
+        ' (delivery.failures only sees events that failed every attempt)',
+    )
+  } else if (withDocuments.length === 0) {
+    add(
+      'delivery.retries',
+      UNKNOWN,
+      'No delivered event in the window to measure delivery lag against',
+    )
+  } else if (unstamped.length > 0) {
+    add(
+      'delivery.retries',
+      UNKNOWN,
+      `${unstamped.length} of ${withDocuments.length} stripeEvents document(s) carry no receivedAt — lag not computable`,
+      unstamped.map((event) => ({ id: event.id, type: event.type })),
+    )
+  } else if (retried.length === 0) {
+    add(
+      'delivery.retries',
+      PASS,
+      `All ${withDocuments.length} delivered event(s) landed on the first attempt (within ${RETRY_LAG_SECONDS}s)`,
+    )
+  } else {
+    add(
+      'delivery.retries',
+      FAIL,
+      `${retried.length} of ${withDocuments.length} delivered event(s) only landed on a RETRY — earlier attempt(s) failed`,
+      retried.map((row) => ({
+        id: row.event.id,
+        type: row.event.type,
+        lagSeconds: Math.round(row.lag),
+        created: new Date(row.event.created * 1000).toISOString(),
+        receivedAt: new Date(receivedAt.get(row.event.id) * 1000).toISOString(),
+      })),
+    )
+  }
+
   const errorRate =
     deliverable.length > 0 ? failedInWindow.length / deliverable.length : null
   const unprocessedCount = firestoreChecked
@@ -355,6 +486,29 @@ export function assessWebhookHealth({
       deliverableEvents: deliverable.length,
       failedDeliveries: failedInWindow.length,
       errorRate,
+      // What `errorRate` is a rate OF, carried beside the number so it cannot
+      // be quoted without it. AGL-1906's "0.00% error rate" was read as the
+      // Dashboard's error rate; they share a name and share neither their
+      // numerator nor their denominator. Whoever reads this next gets both
+      // definitions in the same object as the figure.
+      errorRateBasis: {
+        denominator: 'events of a subscribed type, created in the window',
+        denominatorValue: deliverable.length,
+        numerator: 'events that are pending or failed EVERY delivery attempt',
+        numeratorValue: failedInWindow.length,
+        countsRetriedAttempts: false,
+        notComparableTo:
+          'the Stripe Dashboard error rate, whose denominator is delivery ATTEMPTS' +
+          ' (retries included) against this one destination — see delivery.retries',
+      },
+      retriedEvents: lagAvailable && firestoreChecked ? retried.length : null,
+      maxDeliveryLagSeconds:
+        lagAvailable && firestoreChecked && withDocuments.length > 0
+          ? withDocuments.reduce(
+              (max, event) => Math.max(max, lagOf(event) ?? 0),
+              0,
+            )
+          : null,
       unprocessedEvents: unprocessedCount,
       processingGapRate,
       byType: Object.fromEntries(
