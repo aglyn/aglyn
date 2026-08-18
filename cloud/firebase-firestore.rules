@@ -727,6 +727,50 @@ service cloud.firestore {
         get(/databases/$(database)/documents/hosts/$(hostId))
           .data.get('orgId', null));
     }
+    /**
+     * HOST-scope lockdown (AGL-1965). The org arm above has existed since
+     * AGL-210/238; this one was never written, so a host-scope takedown was a
+     * takedown of everything EXCEPT the client SDK.
+     *
+     * `/admin/lockdown` at host scope stamps `hosts/{hostId}.suspendedAt` and
+     * that stopped two of the three write paths: the public site (the tenant
+     * middleware rewrites to `/api/locked`) and every Admin-SDK route (38
+     * `lockdownRefusal()` sites). Publishing is neither — it is a direct
+     * browser Firestore write (`screen-publishing.ts` sets
+     * `hosts/{hostId}/screens/{screenId}` and the host doc's `screens` map),
+     * and `screens` is not in the frozen-key list on the host update below. So
+     * an admin/editor with a live session could keep editing a phishing site
+     * staff had just suspended, and republish it.
+     *
+     * Free of charge: `hostMemberRole` and `hostOrgSuspended` already `get()`
+     * this same document, and identical get()s inside one evaluation are
+     * billed once. Ordered first in `hostWritesFrozen` so the cheap arm
+     * short-circuits before the org arm's second get.
+     *
+     * Mirrors `orgSuspendedById` deliberately, including its blind spot:
+     * neither consults `suspendedUntilMs`, so a TIMED suspension keeps writes
+     * frozen in rules after the server-side helpers consider it expired.
+     * Making this one expiry-aware and leaving the org arm as it is would put
+     * two different answers in one file; AGL-1966 carries the question for
+     * both scopes. Failing closed is the right way round to be wrong here.
+     */
+    function hostSuspended(hostId) {
+      return get(/databases/$(database)/documents/hosts/$(hostId))
+        .data.get('suspendedAt', null) != null;
+    }
+    /**
+     * The single predicate every host write rule below asks. Both scopes
+     * freeze content writes; `suspendedMode: 'read-only'` (AGL-1511) is a
+     * suspension too — the site keeps SERVING and stops accepting writes,
+     * which is exactly this.
+     *
+     * Staff are never subject to it: `isStaff()` stays the first disjunct of
+     * every rule, which is the un-panic invariant — the people who set the
+     * lock must be able to work inside it and lift it.
+     */
+    function hostWritesFrozen(hostId) {
+      return hostSuspended(hostId) || hostOrgSuspended(hostId);
+    }
     match /hosts/{hostId} {
       // Queries must be membership-constrained (the console filters on
       // memberRoles.{uid}), which these rules admit.
@@ -785,8 +829,16 @@ service cloud.firestore {
       // customer's own switch: a security takedown the site's editors could
       // clear from the client SDK would not be a takedown. Written only by
       // /api/admin/lockdown through the Admin SDK.
+      //
+      // Freezing the KEYS was only ever half of it (AGL-1965). `screens` is
+      // the live screen directory and it is deliberately NOT in the list
+      // above — publishing writes it from the browser — so while suspension
+      // was unreadable by any rule, a suspended site's editor could not
+      // shorten their own takedown and could still republish through it.
+      // `hostWritesFrozen` is the other half: the whole non-staff branch now
+      // stands down while `suspendedAt` is set, at host scope as well as org.
       allow update: if isStaff() ||
-        (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+        (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
@@ -798,7 +850,7 @@ service cloud.firestore {
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['disabledPlugins'])));
       allow delete: if isStaff() ||
-        (hostMemberRole(hostId) == 'admin' && !hostOrgSuspended(hostId));
+        (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
       // resources enforces screensPerHost / sharedLayoutsPerHost (and the
       // owning org's suspension) server-side. Their `versions` (and any
@@ -853,31 +905,31 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['kind']) &&
             !(('deletedAt' in resource.data) &&
               request.resource.data.diff(resource.data).affectedKeys()
                 .hasAny(['deletedAt'])));
         allow delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       match /layouts/{layoutId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       // Reusable components (AGL-679) now carry editing history like screens
@@ -891,12 +943,12 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       // Templates (AGL-666): saved starting points for pages, components and
@@ -912,11 +964,11 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            !request.resource.data.diff(resource.data)
              .affectedKeys().hasAny(['source']));
         allow delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
@@ -952,7 +1004,7 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow read: if isStaff() || canWriteHostContent(hostId);
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            !request.resource.data.diff(resource.data)
              .affectedKeys().hasAny(['status']));
       }
@@ -1071,7 +1123,7 @@ service cloud.firestore {
         // and the dedicated block above owns the reasoning and re-grants the
         // one thing the console still writes — the status-frozen update.
         allow create: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
@@ -1101,7 +1153,7 @@ service cloud.firestore {
         // the same clobber has happened a third time — the coverage spec
         // host-subcollection-write-deny-coverage is what catches it.
         allow update: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'members', 'mediaTombstones']));
@@ -1112,7 +1164,7 @@ service cloud.firestore {
         // it would take single-entry deletes with it; the block below
         // re-grants those (rules OR, so a dedicated allow still wins).
         allow delete: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
               'datasets', 'orders', 'registers', 'counters', 'analytics',
               'members', 'mediaTombstones']));
@@ -1143,7 +1195,7 @@ service cloud.firestore {
       // rules to make it the only writer.
       match /collections/{collectionId} {
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['slug', 'kind']));
       }
@@ -1152,7 +1204,7 @@ service cloud.firestore {
       // stay editor-writable here (rules OR, so a dedicated allow wins).
       match /collections/{collectionId}/entries/{entryId} {
         allow create, update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
     }
 

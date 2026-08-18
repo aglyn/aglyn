@@ -211,6 +211,12 @@ const OTHER_ORG = 'org-other'
 const SUSPENDED_ORG = 'org-suspended'
 const HOST = 'host-a'
 const SUSPENDED_HOST = 'host-suspended'
+// A host suspended at HOST scope, inside a perfectly healthy org (AGL-1965).
+// The distinction is the whole test: SUSPENDED_HOST is frozen because its ORG
+// is, and every rule below has read the org's flag since AGL-238. This one is
+// the scope a support person actually reaches for when one site is the problem
+// and the customer's other sites are innocent.
+const LOCKED_HOST = 'host-locked'
 
 const OWNER = 'uid-owner'
 const EDITOR = 'uid-editor' // hostAccess: HOST=editor
@@ -353,6 +359,37 @@ beforeEach(async () => {
       memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
     })
     await setDoc(doc(db, 'hosts', SUSPENDED_HOST, 'screens', 's1'), { name: 'X' })
+    // Host-scope lockdown (AGL-1965), seeded exactly as /api/admin/lockdown
+    // leaves it: the flags land on the HOST document and the org is untouched.
+    // `suspendedMode: 'read-only'` is the harder of the two modes — the site
+    // keeps serving, so nothing else in the stack is refusing anything, and
+    // rules are the only thing standing between a suspended site and a fresh
+    // publish.
+    await setDoc(doc(db, 'hosts', LOCKED_HOST), {
+      displayName: 'Locked', orgId: ORG,
+      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
+      screens: { 's1': { versionId: 'v1', path: '/' } },
+      suspendedAt: new Date(), suspendedReasonCode: 'abuse',
+      suspendedMessage: 'Suspended pending review',
+      suspendedMode: 'read-only',
+    })
+    await setDoc(doc(db, 'hosts', LOCKED_HOST, 'screens', 's1'), { name: 'Home' })
+    await setDoc(doc(db, 'hosts', LOCKED_HOST, 'screens', 's1', 'versions', 'v1'), {
+      screenId: 's1', nodes: { root: {} },
+    })
+    await setDoc(doc(db, 'hosts', LOCKED_HOST, 'variables', 'var-1'), {
+      name: 'v', value: '1',
+    })
+    await setDoc(doc(db, 'hosts', LOCKED_HOST, 'collections', 'col-1'), {
+      slug: 'posts', kind: 'blog',
+    })
+    await setDoc(
+      doc(db, 'hosts', LOCKED_HOST, 'collections', 'col-1', 'entries', 'e1'),
+      { title: 'Post' },
+    )
+    await setDoc(doc(db, 'hosts', LOCKED_HOST, 'templates', 'tpl-1'), {
+      kind: 'page', displayName: 'Hero',
+    })
   })
 })
 
@@ -2926,10 +2963,27 @@ describe('the staff host takedown keys are not the site\'s to write (AGL-1507)',
         displayName: 'Innocent', suspendedAt: deleteField(),
       }),
     )
-    // The asymmetry the design pins: the customer's own maintenance switch
-    // still works on a host under staff takedown, and so does ordinary
-    // authoring — the deny is four keys, not the document.
-    await mustAllow(
+    // This assertion used to read the other way round, and it was the clearest
+    // statement of AGL-1965 anywhere in the repo. It said: "the customer's own
+    // maintenance switch still works on a host under staff takedown, and so
+    // does ORDINARY AUTHORING — the deny is four keys, not the document."
+    //
+    // That was true and it was the defect. Freezing four keys stops a site
+    // lifting its own takedown; it does not stop the site being republished
+    // through one, because `screens` is not among the four and publishing is a
+    // client write. A suspended phishing site kept accepting content.
+    //
+    // The document is now the unit, at host scope as it has always been at org
+    // scope (`hostWritesFrozen`), so the customer's own switch goes with it —
+    // which is the correct reading of a takedown, and is exactly what a
+    // suspended ORG's editors have got since AGL-238.
+    //
+    // The consequence for the loop above is worth saying out loud: while the
+    // flags are SET, those denies now have two causes, so the key list alone
+    // is no longer what they prove. The key list keeps an independent proof in
+    // `editors and site admins cannot set any suspended* key`, which runs
+    // against a HEALTHY host where the freeze is not firing.
+    await mustDeny(
       'the editor flipping maintenance on a taken-down host',
       updateDoc(doc(authed(EDITOR), 'hosts', HOST), { maintenance: true }),
     )
@@ -2941,6 +2995,222 @@ describe('the staff host takedown keys are not the site\'s to write (AGL-1507)',
         suspendedMessage: deleteField(), suspendedUntilMs: deleteField(),
       }),
     )
+  })
+})
+
+/**
+ * AGL-1965: a host-scope takedown that actually takes the site down.
+ *
+ * The block above proves an editor cannot rewrite the takedown FLAGS. This one
+ * proves the takedown MEANS something — which, until `hostSuspended()` existed,
+ * it did not for the client SDK. `hosts/{hostId}.suspendedAt` was read by the
+ * tenant middleware and by 38 `lockdownRefusal()` sites in Admin-SDK routes,
+ * and by no rule at all; publishing is a direct browser write, and `screens`
+ * is deliberately not a frozen key. So the site staff had just suspended kept
+ * accepting content, and could be republished through the lock.
+ *
+ * Both directions, because the failure mode of a fix here is worse than the
+ * hole: a rule that froze every host would take publishing away from every
+ * paying customer, and would pass any test that only checked the deny.
+ *
+ * The fixture is the sharp case on purpose — LOCKED_HOST sits in the HEALTHY
+ * org, so nothing `hostOrgSuspended()` reads is set, and `suspendedMode` is
+ * `read-only`, so the site is still serving and rules are the only refusal
+ * left in the stack.
+ */
+describe('a host-scope suspension freezes the client SDK too (AGL-1965)', () => {
+  const editor = () => authed(EDITOR)
+  const admin = () => authed(OWNER)
+  const staff = () => authed(STAFF, { staff: true })
+
+  it('the org arm is genuinely not what is doing the work', async () => {
+    // If this ever fails, every deny below could be the AGL-238 org rule
+    // firing and the new host arm could be absent — the green that proves
+    // nothing. Read with rules ON, as the editor: reads stay open under
+    // suspension by design.
+    const org = await getDoc(doc(editor(), 'orgs', ORG))
+    assert.equal(
+      org.data().suspendedAt ?? null, null,
+      'LOCKED_HOST\'s org is suspended in the fixture — the host-scope ' +
+        'assertions below would pass on the org rule alone.',
+    )
+    const host = await getDoc(doc(editor(), 'hosts', LOCKED_HOST))
+    assert.ok(
+      host.data().suspendedAt != null,
+      'LOCKED_HOST is not suspended in the fixture — nothing is under test.',
+    )
+  })
+
+  it('the republish path is refused end to end', async () => {
+    // The two writes `screen-publishing.ts` makes, which are the whole
+    // point: the screen document and the host doc\'s live `screens` map.
+    await mustDeny(
+      'an editor republishing a screen on a suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST, 'screens', 's1'), {
+        name: 'Your bank needs you to sign in',
+      }),
+    )
+    await mustDeny(
+      'an editor moving the live `screens` pointer on a suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST), {
+        screens: { s1: { versionId: 'v2', path: '/' } },
+      }),
+    )
+    // And the canvas save underneath it — a merge-set on an existing version
+    // doc, which is a rules UPDATE and stays open on every plan (AGL-1369).
+    // Open on every plan is not open under suspension.
+    await mustDeny(
+      'an editor saving canvas nodes on a suspended site',
+      setDoc(
+        doc(editor(), 'hosts', LOCKED_HOST, 'screens', 's1', 'versions', 'v1'),
+        { nodes: { root: { text: 'phish' } } },
+        { merge: true },
+      ),
+    )
+  })
+
+  it('every other client write path on the site is refused as well', async () => {
+    await mustDeny(
+      'a catch-all subcollection update on a suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST, 'variables', 'var-1'), {
+        value: '2',
+      }),
+    )
+    // NOT `variables` for the create arm: `variables` is on the catch-all's
+    // create exclusion list already (AGL-473), so a deny there would have
+    // passed before this change too and proved nothing about it. `mediaFolders`
+    // is on none of the three lists, so the freeze is the only thing that can
+    // refuse it.
+    await mustDeny(
+      'a catch-all subcollection create on a suspended site',
+      setDoc(doc(editor(), 'hosts', LOCKED_HOST, 'mediaFolders', 'f1'), {
+        name: 'Uploads',
+      }),
+    )
+    await mustDeny(
+      'a catch-all subcollection delete on a suspended site',
+      deleteDoc(doc(editor(), 'hosts', LOCKED_HOST, 'variables', 'var-1')),
+    )
+    // `collections/{id}` and its `entries` have dedicated blocks that re-grant
+    // past the catch-all — sibling matches are OR'd and the looser one wins,
+    // so a fix applied only to the catch-all would leave these two open.
+    await mustDeny(
+      'a collection update on a suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST, 'collections', 'col-1'), {
+        categories: ['x'],
+      }),
+    )
+    await mustDeny(
+      'a collection entry create on a suspended site',
+      setDoc(
+        doc(editor(), 'hosts', LOCKED_HOST, 'collections', 'col-1', 'entries', 'e2'),
+        { title: 'Free gift card' },
+      ),
+    )
+    await mustDeny(
+      'a template update on a suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST, 'templates', 'tpl-1'), {
+        displayName: 'Renamed',
+      }),
+    )
+    await mustDeny(
+      'a screen delete on a suspended site',
+      deleteDoc(doc(editor(), 'hosts', LOCKED_HOST, 'screens', 's1')),
+    )
+    // Deleting the site is not a way out of a takedown: it would destroy the
+    // evidence staff suspended it to look at, and free the subdomain to be
+    // claimed again.
+    await mustDeny(
+      'a site admin deleting the suspended host outright',
+      deleteDoc(doc(admin(), 'hosts', LOCKED_HOST)),
+    )
+  })
+
+  it('a normal site publishes exactly as before — the fix breaks nothing', async () => {
+    // The negative control for the whole change. Every deny above would also
+    // pass with `hostWritesFrozen()` hard-wired to true, which would take
+    // publishing away from every paying customer.
+    await mustAllow(
+      'an editor updating a screen on a healthy site',
+      updateDoc(doc(editor(), 'hosts', HOST, 'screens', 'screen-1'), {
+        name: 'Home v2',
+      }),
+    )
+    await mustAllow(
+      'an editor moving the live `screens` pointer on a healthy site',
+      updateDoc(doc(editor(), 'hosts', HOST), {
+        screens: { 'screen-1': { versionId: 'v1', path: '/' } },
+      }),
+    )
+    await mustAllow(
+      'an editor saving canvas nodes on a healthy site',
+      setDoc(
+        doc(editor(), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'),
+        { nodes: { root: { text: 'hello' } } },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'an editor updating a variable on a healthy site',
+      updateDoc(doc(editor(), 'hosts', HOST, 'variables', 'var-1'), { value: '2' }),
+    )
+    // The create twin of the deny above, on the same collection, so the pair
+    // isolates the freeze rather than the AGL-473 create exclusions.
+    await mustAllow(
+      'an editor creating a media folder on a healthy site',
+      setDoc(doc(editor(), 'hosts', HOST, 'mediaFolders', 'f1'), {
+        name: 'Uploads',
+      }),
+    )
+    await mustAllow(
+      'an editor creating a collection entry on a healthy site',
+      setDoc(
+        doc(editor(), 'hosts', HOST, 'collections', 'col-h', 'entries', 'e1'),
+        { title: 'Post' },
+      ),
+    )
+    await mustAllow(
+      'a site admin deleting a screen on a healthy site',
+      deleteDoc(doc(admin(), 'hosts', HOST, 'screens', 'screen-1')),
+    )
+  })
+
+  it('staff still work inside the lock — the un-panic invariant', async () => {
+    // Support has to be able to act on a suspended site, and to lift the
+    // suspension. A freeze that caught staff would make the lock one-way.
+    await mustAllow(
+      'staff editing a screen on a suspended site',
+      updateDoc(doc(staff(), 'hosts', LOCKED_HOST, 'screens', 's1'), {
+        name: 'Removed by Aglyn',
+      }),
+    )
+    await mustAllow(
+      'staff clearing the host-scope takedown',
+      updateDoc(doc(staff(), 'hosts', LOCKED_HOST), {
+        suspendedAt: deleteField(), suspendedReasonCode: deleteField(),
+        suspendedMessage: deleteField(), suspendedMode: deleteField(),
+      }),
+    )
+  })
+
+  it('the site cannot shorten or lift its own host-scope takedown', async () => {
+    // Restating AGL-1507's guarantee against THIS fixture, because it is what
+    // stops the freeze being a one-line bypass: an editor who could clear
+    // `suspendedAt` would unfreeze everything the block above just denied.
+    for (const uid of [OWNER, EDITOR]) {
+      await mustDeny(
+        `${uid} clearing suspendedAt on their own suspended site`,
+        updateDoc(doc(authed(uid), 'hosts', LOCKED_HOST), {
+          suspendedAt: deleteField(),
+        }),
+      )
+      await mustDeny(
+        `${uid} shortening their own suspension to expire immediately`,
+        updateDoc(doc(authed(uid), 'hosts', LOCKED_HOST), {
+          suspendedUntilMs: 1,
+        }),
+      )
+    }
   })
 })
 
