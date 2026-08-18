@@ -1958,6 +1958,63 @@ export function resolveBrandingProfile(
 }
 
 /**
+ * The value of the `<meta name="generator">` tag and of the `x-powered-by`
+ * header on published sites (AGL-2088) — the canonical CMS signal WordPress,
+ * Squarespace, Drupal and Ghost all ship, and the thing tech-stack detectors
+ * key on.
+ *
+ * Deliberately VERSIONLESS. The accidental headers this replaced carried
+ * `1.0.0-alpha.0` and a Node version, which dated every deployment and named
+ * our runtime to no consumer. A detector needs the product name and nothing
+ * else.
+ */
+export const PLATFORM_GENERATOR_NAME = 'Aglyn'
+
+/**
+ * May this org's published pages say they were built with Aglyn? (AGL-2088)
+ *
+ * The gate for the `<meta name="generator">` tag and the `x-powered-by`
+ * header. It reads the SAME entitlement `resolveBrandingProfile` reads —
+ * `whiteLabel` — rather than inventing a parallel one, so an agency's
+ * concealment promise has exactly one definition.
+ *
+ * WHY `whiteLabel` AND NOT `showBranding`. The "Made with Aglyn" badge is
+ * gated on `removeBranding`, which every plan above free grants, so reusing
+ * that gate would confine the signal to free-tier sites — the corpus this
+ * exists to build would be almost empty on day one. The two promises are also
+ * different in kind: `removeBranding` buys a page with no Aglyn credit on it,
+ * an aesthetic commitment about what a VISITOR sees; `whiteLabel` buys
+ * concealment of who built the site, which is the promise a machine-readable
+ * fingerprint actually breaks. A paying customer on a mid plan has bought a
+ * clean page, not anonymity.
+ *
+ * ⚠️ AN UNRESOLVED ORG SUPPRESSES, and this is the whole reason the function
+ * exists instead of a bare `!checkEntitlement(org, 'whiteLabel')` at each call
+ * site. `resolveOrgEntitlements(null)` resolves to the FREE plan — a loading
+ * default answering a question it was never asked — so a null org reads as
+ * "no white-label" and would EMIT. That null is not hypothetical: the tenant's
+ * `getOrgBilling` fails open with `org: null` on a Firestore error, so a
+ * transient read failure on an Agency site would have stamped the generator
+ * tag onto it. The asymmetry decides the direction: suppressing wrongly costs
+ * us one detection sample, emitting wrongly breaks a paid promise on a
+ * customer's own domain. So the org must be PRESENT and lack the entitlement;
+ * absent is not the same as free here.
+ */
+export function showsPlatformAttribution(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  // `{}` is treated as unresolved alongside `null`, and that is not
+  // pedantry: no org doc that was actually READ is empty — the converter
+  // yields `$id` at minimum — so an empty object only ever arrives from a
+  // placeholder or a loading default, the same shape `useBranding` hands back
+  // before its read lands. It resolves to the free plan like every other
+  // absent org, which is the right default for a quota and the wrong one for
+  // a disclosure.
+  if (!org || Object.keys(org).length === 0) return false
+  return !checkEntitlement(org, 'whiteLabel')
+}
+
+/**
  * Whether the org has actually **configured** a white-label brand (AGL-1110) —
  * a non-empty product name or logo. White-label chrome should activate only
  * when this is true, not merely because the plan grants the `whiteLabel`

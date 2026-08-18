@@ -112,6 +112,25 @@ const TENANT_HOST_PARAM = 'tenantHost'
 const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
 
 /**
+ * The `x-powered-by` value (AGL-2088). A LITERAL, not an import.
+ *
+ * The canonical definition is `PLATFORM_GENERATOR_NAME` in
+ * `libs/aglyn/.../plan-entitlements.ts`, and the `<meta name="generator">` tag
+ * reads it from there. This file cannot: middleware runs in the edge runtime,
+ * and every other middleware in the repo — console included — imports only
+ * app-local `constants/` or the root `security-origins`, precisely so a
+ * server-only graph (firebase-admin, the entitlement resolvers) never gets
+ * dragged into an edge bundle.
+ *
+ * The copy is kept honest by assertion rather than by hope:
+ * `platform-fingerprint-headers.spec.ts` imports the lib constant and asserts
+ * the header this middleware actually emits equals it, so a rename in one
+ * place fails a test instead of quietly shipping two different names to
+ * detectors that key on the string.
+ */
+const PLATFORM_GENERATOR_NAME = 'Aglyn'
+
+/**
  * Lockdown verdict at the REQUEST level (AGL-1501). The edge runtime cannot
  * query Firestore (see the `cname--` sentinel above), so the verdict comes
  * from this deployment's own Node route — the same fetch-a-verdict pattern
@@ -129,7 +148,10 @@ const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
  * loader's own lockdown branch is the defence in depth behind this.
  */
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
-const lockdownVerdicts = new Map<string, { at: number; blocked: boolean }>()
+const lockdownVerdicts = new Map<
+  string,
+  { at: number; blocked: boolean; attribution: boolean }
+>()
 
 /**
  * Should this request be replaced by the 503 notice? (AGL-1511)
@@ -145,15 +167,27 @@ const lockdownVerdicts = new Map<string, { at: number; blocked: boolean }>()
  * verdict route meeting a newer middleware fails toward the shipped
  * behaviour rather than toward serving a locked site.
  */
-async function hostLockdownVerdict(
+async function hostVerdict(
   origin: string,
   tenantHost: string,
-): Promise<boolean> {
+): Promise<{ blocked: boolean; attribution: boolean }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
-    return cached.blocked
+    return { blocked: cached.blocked, attribution: cached.attribution }
   }
   let blocked = false
+  // Platform attribution (AGL-2088) rides on the SAME verdict — the route
+  // already holds the host and org docs the answer needs, so a header that
+  // honours the `whiteLabel` entitlement costs no additional edge round trip.
+  //
+  // ⚠️ THE TWO FIELDS FAIL IN OPPOSITE DIRECTIONS, and the initialisers above
+  // and here are the whole mechanism. `blocked` starts false so an unreachable
+  // verdict keeps customer sites serving — an outage is not a takedown.
+  // `attribution` starts false so the same unreachable verdict emits NOTHING:
+  // a fetch that throws, a non-200, unparseable JSON, or a response from an
+  // older deployment that has no `attribution` field at all must never be read
+  // as "this site is not white-labelled". Only an explicit `true` emits.
+  let attribution = false
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -163,14 +197,16 @@ async function hostLockdownVerdict(
       const data = (await response.json().catch(() => null)) as {
         locked?: boolean
         mode?: string
+        attribution?: boolean
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
+      attribution = data?.attribution === true
     }
   } catch {
-    // Fail open.
+    // Fail open on the lock, closed on the attribution.
   }
-  lockdownVerdicts.set(tenantHost, { at: Date.now(), blocked })
-  return blocked
+  lockdownVerdicts.set(tenantHost, { at: Date.now(), blocked, attribution })
+  return { blocked, attribution }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -308,7 +344,8 @@ export const middleware: NextMiddleware = async (req, event) => {
   // matched path — pages, sitemap, robots, manifest, feeds — before any
   // cached HTML can answer. Checked ahead of the SEO rewrites on purpose so
   // a taken-down site stops advertising its content too.
-  if (await hostLockdownVerdict(req.nextUrl.origin, tenantHost)) {
+  const verdict = await hostVerdict(req.nextUrl.origin, tenantHost)
+  if (verdict.blocked) {
     const lockedUrl = req.nextUrl.clone()
     lockedUrl.pathname = '/api/locked'
     lockedUrl.search = ''
@@ -465,6 +502,32 @@ export const middleware: NextMiddleware = async (req, event) => {
     `${tenantImgSrcDirective(process.env.NODE_ENV === 'production')}; ` +
       reportingDirectives(secureTransport),
   )
+  // The deliberate, versionless platform fingerprint (AGL-2088), replacing the
+  // accidental `x-aglyn-package-version` / `x-aglyn-process-version` pair that
+  // shipped from `next.config` on every response of every site regardless of
+  // entitlement.
+  //
+  // WHY THE MIDDLEWARE IS THE ONLY PLACE THIS CAN GO. A build-time
+  // `headers()` rule has no request and so no host. A server component cannot
+  // set response headers at all. A route handler could, but published pages
+  // are not route handlers. That leaves this function, which is also the first
+  // layer that knows which site it is serving.
+  //
+  // ISR-safe, unlike the AGL-1228 nonce that had to be removed from this same
+  // response: the value is a constant, and the per-host decision comes from a
+  // verdict memoized OUTSIDE the page cache. Middleware runs ahead of the
+  // cache on every request, so a site that white-labels tomorrow stops sending
+  // the header within the verdict TTL — it does not have to wait for cached
+  // HTML to expire. (The `<meta name="generator">` tag IS baked into that
+  // cached HTML and lags by the page's `revalidate`; the header is the faster
+  // half of the pair, not the slower.)
+  //
+  // `x-powered-by` rather than a bespoke name: it is the field detectors
+  // already parse, and `poweredByHeader: false` in the shared config means
+  // Next emits no value of its own to collide with.
+  if (verdict.attribution) {
+    response.headers.set('x-powered-by', PLATFORM_GENERATOR_NAME)
+  }
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })

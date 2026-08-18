@@ -34,6 +34,26 @@
  * locked HOST is locked for every visitor including staff (this is the
  * public site, not the console), and a visitor's identity plays no part in
  * whether a website serves.
+ *
+ * ## It also answers `attribution` (AGL-2088)
+ *
+ * A SECOND boolean rides along on the same response: may this host's
+ * responses carry `x-powered-by: Aglyn`? It lives here rather than in a
+ * route of its own for one reason — this route already loads the host and
+ * the org doc the answer needs, so the middleware pays nothing for it,
+ * while a second verdict route would double the edge round trip on every
+ * request of every published site to decide a header.
+ *
+ * Same disclosure posture as `locked`: it is a boolean about a public
+ * website, derived from a plan, and the site's own HTML already carries the
+ * matching `<meta name="generator">`. Nothing about the org's plan, its
+ * identity or its entitlements is in the body.
+ *
+ * ⚠️ Every early return below answers `attribution: false`. Unknown host,
+ * thrown error, missing org — all suppress. `showsPlatformAttribution`
+ * enforces the same rule on the org it is handed; these are the branches
+ * that never reach it. A verdict route that fails open on THIS field would
+ * put the header on a white-labelled site during a Firestore blip.
  */
 
 import {
@@ -43,6 +63,7 @@ import {
   normalizeHostLockdown,
   normalizeOrgLockdown,
   resolveLockdown,
+  showsPlatformAttribution,
 } from '@aglyn/aglyn/server'
 import { getPlatformLockdown } from '@aglyn/tenant-data-admin'
 import { getHost } from '../../../utils/get-host'
@@ -59,10 +80,15 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const hostRes = await getHost({ host })
     if (!hostRes.host) {
-      // Unknown host: not locked — the normal 404 flow owns this case.
-      return Response.json({ locked: false }, { status: 200 })
+      // Unknown host: not locked — the normal 404 flow owns this case. No org,
+      // so no attribution either; there is nothing here to fingerprint.
+      return Response.json(
+        { locked: false, attribution: false },
+        { status: 200 },
+      )
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
+    const attribution = showsPlatformAttribution(orgRes.org)
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -72,7 +98,7 @@ export async function GET(request: Request): Promise<Response> {
       Date.now(),
     )
     if (!state) {
-      return Response.json({ locked: false }, { status: 200 })
+      return Response.json({ locked: false, attribution }, { status: 200 })
     }
     // READ-ONLY (AGL-1511): the site keeps serving. The verdict still says
     // `locked: true` — it is describing the LOCK, not the middleware's
@@ -86,6 +112,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json(
       {
         locked: true,
+        attribution,
         mode: lockdownMode(state),
         reason: state.reason,
         title: notice.title,
@@ -103,7 +130,14 @@ export async function GET(request: Request): Promise<Response> {
     )
   } catch (error) {
     console.error('[lockdown-verdict] failed', error)
-    // Fail open: the middleware treats any non-locked answer as "serve".
-    return Response.json({ locked: false }, { status: 200 })
+    // Fail open on the LOCK: the middleware treats any non-locked answer as
+    // "serve", because an unreachable verdict is an outage, not a takedown.
+    // Fail CLOSED on the attribution, in the same breath and for the opposite
+    // reason: serving a site we could not price is recoverable, stamping the
+    // platform's name on a site that paid to hide it is not.
+    return Response.json(
+      { locked: false, attribution: false },
+      { status: 200 },
+    )
   }
 }
