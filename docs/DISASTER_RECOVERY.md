@@ -176,6 +176,18 @@ are overwritten to snapshot state; documents created in `(default)` AFTER the
 snapshot are left in place and must be cleaned up manually if unwanted. This
 leg is NOT rehearsed (no bucket exists).
 
+⚠️ **Merge-by-id resurrects erased data, and the DPA says it must not.** Live
+DPA §11 promises *"a deletion instruction survives any restoration — data
+deleted at Customer's instruction and later restored from a backup will be
+deleted again."* Nothing implements that (AGL-1975), so it is a manual step and
+it is the **last step of any restore or import**: find every `org.erased` /
+`user.erased` row in `adminAudit` with `at >= <snapshot time>` (`/admin/audit`,
+or query directly) and re-run each erasure —
+`node tools/scripts/erase-tenant.mjs --org <orgId> --confirm --actor <uid>`.
+Full procedure in [`docs/BREACH_NOTIFICATION.md`](BREACH_NOTIFICATION.md)
+§"After any restore". Note the audit rows are only 90 days hot, so a restore
+from the oldest 90-day export may have no list left to replay.
+
 ## The weekly GCS export (AGL-1843) — what runs, how to run it by hand
 
 Set up 2026-08-17 because of the `NOT_AVAILABLE` flip: managed backups were

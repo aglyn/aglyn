@@ -389,7 +389,22 @@ Tracked in **AGL-1148**:
 - **Stored samples** now accrue in Cloud Monitoring automatically; the
   availability figure can be read from the uptime dashboards once a quarter of
   history exists.
-- An incident-response and comms process, and whoever updates the status page
-  during one.
+- ~~An incident-response and comms process.~~ Written as
+  [`docs/INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) — severity levels tied to
+  the checks in the table above, who is on point (Zach, no rotation), and the
+  comms rules. What is still missing from it is the **status page's
+  incident-post mechanism**: the page shows live health only, so incident comms
+  today are email to affected customers. That file specifies the cheapest
+  honest version and why it works (`aglyn-docs` is a separate Vercel project,
+  so a push updates the status page while the console is down).
 - The uptime percentage itself, plus SLA credit terms — the commercial half,
-  and the part that must not be guessed.
+  and the part that must not be guessed. Four options with their tradeoffs are
+  laid out in [`docs/INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md) §"The SLA
+  decision"; the number remains AGL-1148 and remains Zach's. The constraint
+  worth carrying back here: the alert path's ~20-minute floor (5 min probe memo
+  + 5 min check period + ~10 min sustained failure) means **nothing shorter is
+  even visible**, against a 43-minute monthly budget at 99.9%.
+
+A data breach is a different process with a statutory clock — see
+[`docs/BREACH_NOTIFICATION.md`](BREACH_NOTIFICATION.md), whose §0 is built on
+the honest-gaps list above.
