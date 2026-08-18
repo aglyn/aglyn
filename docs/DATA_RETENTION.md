@@ -214,19 +214,32 @@ sits inside it (98 ≥ 90 ≥ 7). The claim is therefore correct as a privacy
 statement. It is wrong as a *recoverability* statement, and that direction is
 `DISASTER_RECOVERY.md`'s problem, not this file's.
 
-**One DPA promise here has no mechanism.** Live DPA §11: *"a deletion
-instruction survives any restoration — data deleted at Customer's instruction
-and later restored from a backup will be deleted again."* Nothing in
-`DISASTER_RECOVERY.md` Procedures A–D re-applies erasures after a restore, and
-nothing enumerates which erasures fall inside a restored snapshot's window. The
-`adminAudit` `org.erased` rows are the only record, and they are 90 days hot —
-long enough to cover the 7-day PITR window and the ≤7-day usable backup, and
-**not** long enough to cover a 90-day-old GCS export. Worse: **import is
-merge-by-id, not replace** (`DISASTER_RECOVERY.md` Procedures C and D), so
-importing an old export into `(default)` silently resurrects every document an
-erasure deleted. Filed as **AGL-1975**;
-`docs/BREACH_NOTIFICATION.md` §"After any restore" carries the interim manual
-step.
+**That DPA promise now has a mechanism (AGL-1975, 2026-08-18).** Live DPA §11:
+*"a deletion instruction survives any restoration — data deleted at Customer's
+instruction and later restored from a backup will be deleted again."* Nothing
+implemented it, and **import is merge-by-id, not replace**
+(`DISASTER_RECOVERY.md` Procedures C and D), so importing an old export into
+`(default)` silently resurrected every document an erasure deleted — during an
+incident, with nothing anywhere saying so.
+
+`tools/scripts/replay-erasures.mjs` is now a numbered step of Procedures C and
+D. It reads the `org.erased`/`user.erased` rows at or after the snapshot
+instant, re-runs `eraseOrg`/`eraseUser` for whichever targets are standing
+again — never a second copy of the cascade — and reinstates `erasureRequestedAt`
+from the audit row first, since an org whose customer asked *after* the
+snapshot returns with no request and `eraseOrg` correctly refuses one of those.
+Pinned by `replay-erasures.emulator.spec.ts`, which stages the merge-by-id
+accident for real and holds two negative controls: an erasure *before* the
+snapshot is out of window, and a live org carrying an ordinary audit row inside
+the window is not erased.
+
+**What is still open**: the rows are 90 days hot before the archiver moves them
+to Storage. That covers the 7-day PITR window and the ≤7-day usable managed
+backup; it does **not** cover a 90-day-old GCS export, where the erasure record
+and the export can age out within days of each other. The script refuses to
+call that clean — `incomplete: 'audit-window'`, non-zero exit — rather than
+printing an empty list, but the fix is to grow the window or read the archive.
+Tracked as gap 5 of `DISASTER_RECOVERY.md`.
 
 ## Third parties
 
@@ -249,8 +262,9 @@ Each of these is a defect, not a note. Filed rather than narrated.
 | 4 | **Assist Q&A has no retention period at all.** `orgs/{orgId}/assistExchanges/{id}` stores the user's `question` and the model's `answer` **verbatim** plus the asking `uid`, with no `expiresAt`, no TTL and no prune. It is reachable by the cascade, so an erasure clears it — but until the org is erased it is kept forever, and Assist is gated on a privacy-policy disclosure for exactly this data (`release_assist`, AGL-1909). A disclosure that states a period we do not enforce is worse than the gap. | **AGL-1972** |
 | 5 | **`privacy@aglyn.com` may not exist.** It is the intake address in Privacy Policy §7, §9, §11 and §13 and the data-importer contact in DPA Annex A. The Drive open-items list records that only `noreply@` and `info@` were live at drafting; `security@`, `legal@`, `abuse@` and `dmca@` are in the same unconfirmed state and each is load-bearing in a published document. | **AGL-1973** |
 | 6 | **No personal-data export exists.** The Privacy Policy grants a portability right (§7, GDPR Art. 20) and there is no "download my data" path for a person or an org. Site export is Pro+ and deliberately excludes PII. A DSAR access request is answered by hand today. | **AGL-1974** |
-| 7 | **No deletion-instruction replay after a restore**, and **DPA §7.2's subprocessor change-notification mechanism does not exist**. Both are published DPA commitments with nothing behind them. | **AGL-1975** |
-| 8 | ~~**Staff user erasure has no button.**~~ **CLOSED 2026-08-18.** `/admin/users/[uid]` carries an **Erase account** card: super-staff only (matching the route, so the UI cannot offer a button that 403s), a required reason, a typed `DELETE`, and the `owns-orgs` blockers rendered by name. It states in the largest words on the card that — unlike org erasure — there is **no 7-day hold**. `erase-org-cli.mjs` now names the page that exists. Pinned by `staff-user-erase-card.spec.tsx` (which asserts the card is MOUNTED, not merely written) and `admin-user-erase-route.spec.ts`. | **AGL-1977** |
+| 7 | ~~**No deletion-instruction replay after a restore.**~~ **CLOSED 2026-08-18.** `tools/scripts/replay-erasures.mjs` is step 4 of `DISASTER_RECOVERY.md` Procedures C and D. Residual: the 90-day hot `adminAudit` window does not cover the oldest GCS export — the script reports that as `incomplete` and exits non-zero rather than printing an empty list. Gap 5 of `DISASTER_RECOVERY.md`. | **AGL-1975** |
+| 7b | **DPA §7.2's subprocessor change-notification mechanism does not exist** — no notice period, no subscribe control, no objection path. Split out because it is a **legal-page publication**, not a repo change: `/legal/subprocessors` needs a dated changelog, a stated notice period and an objection address, published in the same batch as the new subprocessor rows. | **AGL-1990** |
+| 8 | **Staff user erasure has no button.** `eraseUser` is reachable only by hand-crafting `POST /api/admin/users/manage {action:'erase'}` with a super-staff token — and `erase-org-cli.mjs:117` points operators at a "staff console → Users → Erase" button that does not exist. | **AGL-1977** |
 | 9 | `apiIdempotency` has no TTL and is reaped only by an erasure, so replay keys accumulate against a live org indefinitely. Low severity (a replay key names an org and a record id and authorises nothing) but it is retention without a period. | **AGL-1978** |
 | 10 | `orgs/{orgId}/retention` — the churn survey — stores up to 500 characters of free text with no period. Org-scoped, so the cascade takes it; noted because a free-text field is where a person types something we did not ask for. | **AGL-1978** |
 | 11 | `/PRIVACY_POLICY.md` at the repo root is a 2021-dated stub that names `privacy@aglyn.com` and nothing else. It is not the published policy, is not referenced by anything, and is exactly the sort of file a reader trusts. | **AGL-1978** |

@@ -234,32 +234,39 @@ that the notification was late.
   established becomes the thing you have to retract.
 - **One voice.** Every external word about a breach comes from Zach.
 
-## After any restore — the step DPA §11 requires and nothing implements
+## After any restore — the step DPA §11 requires
 
 Live DPA §11 promises: *"a deletion instruction survives any restoration — data
 deleted at Customer's instruction and later restored from a backup will be
-deleted again."* **Nothing does this automatically** (AGL-1975). Until it is
-built, it is a manual step and it belongs at the end of every restore in
-`DISASTER_RECOVERY.md` Procedures A–D:
+deleted again."* It is one command, and the restore is not finished without it
+(AGL-1975). It is step 4 of `DISASTER_RECOVERY.md` Procedures C and D:
 
 ```bash
-# 1. Note the snapshot time of whatever you restored or imported.
-# 2. Find every erasure that completed AFTER that snapshot — those targets are
-#    resurrected by a merge-by-id import and must be erased again.
-#    /admin/audit → filter on "erased", or query adminAudit where
-#    action in ('org.erased','user.erased') and at >= <snapshotTime>.
-# 3. Re-run each one:
-node tools/scripts/erase-tenant.mjs --org <orgId> --confirm --actor <your-uid>
+# --since is the SNAPSHOT time of whatever you restored or imported, not the
+# time of the restore. Plans by default; --confirm executes.
+node tools/scripts/replay-erasures.mjs --since <snapshot ISO8601>
+node tools/scripts/replay-erasures.mjs --since <snapshot ISO8601> --confirm \
+  --actor <your-uid>
 ```
+
+It reads the `org.erased`/`user.erased` rows at or after that instant, checks
+which targets are standing again, and re-runs the real `eraseOrg`/`eraseUser`
+for those — reinstating `erasureRequestedAt` from the audit row first, since an
+org whose customer asked after the snapshot comes back with no request on it.
+A person who owns a workspace the restore also brought back is reported
+`BLOCKED` rather than force-erased: erase the workspace first, then re-run.
 
 ⚠️ **Import is merge-by-id, not replace.** Importing an old export into
 `(default)` silently brings back every document an erasure deleted, alongside
 the recovery you ran it for. This is the single most likely way that promise
 gets broken, and it happens during an incident when nobody is reading a DPA.
 
-⚠️ The `adminAudit` erasure rows are **90 days hot** before archival. A 90-day
-GCS export and the record of erasures inside its window can age out within days
-of each other, so a restore from the oldest export may have no list to replay.
+⚠️ **An empty list is not automatically a clean bill.** The `adminAudit`
+erasure rows are **90 days hot** before archival, so a 90-day GCS export and
+the record of erasures inside its window can age out within days of each other.
+The script prints `THIS ANSWER IS INCOMPLETE` and exits 1 in that case; read
+`adminAudit-archive/` in Storage before telling anyone the instruction
+survived.
 
 ## Afterwards
 
@@ -279,7 +286,7 @@ of each other, so a restore from the oldest export may have no list to replay.
 | **We would very likely not detect a data breach ourselves.** No server-error-rate monitoring; runtime logs retain ~60 minutes and drain nowhere. Detection is primarily an inbound report. | AGL-1921, AGL-1799 |
 | **We cannot name the regulator to notify inside 72 hours** for an EU/UK data subject. No Art. 27 representative, no lead authority. | AGL-1980 |
 | `security@aglyn.com` — the published disclosure address, and therefore our primary detection channel — is **not confirmed to receive mail**. | AGL-1973 |
-| Deletion does not survive a restore automatically; the step above is manual. | AGL-1975 |
+| ~~Deletion does not survive a restore automatically.~~ **Closed 2026-08-18 (AGL-1975)** — `replay-erasures.mjs` is a numbered step of the restore procedures. Residual: it reads the 90-day hot `adminAudit` window and cannot see the Storage archive, so a restore from the oldest GCS export is reported `incomplete` rather than clean. | AGL-1975 |
 | No credential-rotation runbook. The list in §2.3 is the closest thing. | — |
 | No on-call rotation. Overnight detection waits for morning. | AGL-1148 |
 | The status page has no incident-post mechanism. | AGL-1102 |
