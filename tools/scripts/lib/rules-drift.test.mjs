@@ -632,6 +632,11 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      // AGL-2025 — the source-side hardcoded-colour ratchet. Registered here
+      // for the same reason as the seven above: its only homes are this
+      // workflow and a developer's memory.
+      'test:hardcoded-colours',
+      'check:hardcoded-colours',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -653,6 +658,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:hardcoded-colours',
+      'check:hardcoded-colours',
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

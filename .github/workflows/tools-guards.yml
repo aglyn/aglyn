@@ -64,6 +64,14 @@ on:
       - main
     paths:
       - 'tools/**'
+      # AGL-2025: `check:hardcoded-colours` sweeps apps/ libs/ cloud/, so its
+      # trigger has to be the code it measures. Watching only `tools/**` is
+      # what made the retired-colour census structurally unable to see the 161
+      # literals in `libs/plugins` — a guard that runs only when the guard
+      # changes cannot catch a regression in the thing it guards.
+      - 'apps/**'
+      - 'libs/**'
+      - 'cloud/**'
       # The scripts themselves are defined here.
       - package.json
       - package-lock.json
@@ -182,3 +190,10 @@ jobs:
       - run: npm run test:no-tax-identifiers
 
       - run: npm run check:no-tax-identifiers
+      # AGL-2025. Unlike every step above, these two are about the CONTENT of
+      # apps/ and libs/, not about tools/ — which is why the `paths:` filter
+      # gained those two roots. A colour pinned into `libs/plugins` cannot
+      # trigger a workflow that only watches `tools/**`.
+      - run: npm run test:hardcoded-colours
+
+      - run: npm run check:hardcoded-colours
