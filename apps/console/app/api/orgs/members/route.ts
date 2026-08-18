@@ -173,11 +173,11 @@ async function handler(request: Request): Promise<Response> {
       }
       // Resolve the target account by uid or email.
       let targetUid = String(body?.uid ?? '')
-      let email: string | null = null
-      let displayName: string | null = null
+      let email: string | undefined
+      let displayName: string | undefined
       // Mirrored onto the roster so member surfaces can show a face
       // (AGL-1126) — they cannot read a tenant-pool auth record themselves.
-      let photoURL: string | null = null
+      let photoURL: string | undefined
       try {
         // Across ALL auth pools (AGL-1122). An SSO user lives in their org's
         // GCIP tenant pool, so the project-level lookup returned
@@ -196,9 +196,18 @@ async function handler(request: Request): Promise<Response> {
           throw missing
         }
         targetUid = found.record.uid
-        email = found.record.email ?? null
-        displayName = found.record.displayName ?? null
-        photoURL = found.record.photoURL ?? null
+        // ABSENT, never null, when the auth record carries nothing (AGL-1961).
+        // This block also runs for an EXISTING member — `upsert` is the
+        // role-change path — and `upsertOrgMember` documents `null` as "clear
+        // the stored value" while `undefined` leaves it alone. An SSO member's
+        // tenant auth record holds neither name nor photo (measured on
+        // `zach@aglyn.com`: `displayName: null`, `photoURL: undefined`), so
+        // `?? null` meant changing someone's role silently erased the roster
+        // identity `backfillMemberIdentity` had put there for them (AGL-1131)
+        // — the only copy any member surface can read (AGL-1122).
+        email = found.record.email || undefined
+        displayName = found.record.displayName || undefined
+        photoURL = found.record.photoURL || undefined
       } catch (lookupError) {
         // Only a genuinely-missing account is the "invite them instead" 404.
         // Anything else (transient Admin SDK failure, misconfig) must NOT be

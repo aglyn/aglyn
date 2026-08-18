@@ -36,6 +36,7 @@ import {
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  consumeRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgDoc,
@@ -50,6 +51,34 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 
 const HOST_ROLES = new Set<HostAccessRole>(['admin', 'editor', 'viewer'])
+
+/**
+ * How fast one person may put invite mail in front of arbitrary addresses,
+ * and how fast one org may (AGL-1907).
+ *
+ * `create` and `resend` are the only two authenticated paths in the product
+ * that send a message from `noreply@aglyn.com` to an address the caller
+ * types, and before this they had no limiter of any kind. The seat quota is
+ * not one: `checkSeatQuota` is skipped entirely for a site-scoped invite
+ * (`isOrgWideMember` is false when `role` is editor/viewer and `allHosts` is
+ * false), so `{action:'create', role:'viewer', allHosts:false, hostAccess:{}}`
+ * loops over an address list unbounded. `resend` never had a quota at all.
+ * On Sep 1 the signup door opens to anyone, which turns that into a same-day
+ * spam cannon aimed at our own sending domain — and a burnt domain
+ * reputation is not a bill we can pay off, it is every future customer's
+ * transactional mail going to spam.
+ *
+ * Generous on purpose, because the expensive failure here is the GREEN one.
+ * A refused legitimate onboarding is a launch-morning support ticket, so
+ * these sit far above any plausible human burst: an admin adding a ten-person
+ * team lands nowhere near 30, and a free org — `managersPerOrg: 1`,
+ * `membersPerHost: 1` — has essentially no legitimate reason to send a third.
+ * The org key is the one that binds a script, since a scripted farm can mint
+ * accounts but every invite it sends is still charged to one workspace.
+ */
+const INVITE_SEND_LIMIT_PER_ACTOR = 30
+const INVITE_SEND_LIMIT_PER_ORG = 60
+const INVITE_SEND_WINDOW_MS = 60 * 60 * 1000
 
 /**
  * Org invites (AGL-234) for people without Aglyn accounts yet. Admins
@@ -133,6 +162,71 @@ async function handler(request: Request): Promise<Response> {
       org: (await getOrgDoc(orgId)) ?? undefined,
     })
     if (locked) return locked
+
+    /**
+     * Rate-gate the two paths that SEND (AGL-1907). Returns the 429, or null
+     * to proceed.
+     *
+     * Placed here rather than inside `sendInviteEmail` so a refusal happens
+     * before any write: gating the send alone would leave an invite row
+     * created and no message, which reads to the admin as a silent failure.
+     * Called after the role check and after the body is validated — a request
+     * that was never going to send must not burn a token, the same ordering
+     * `/api/orgs/create` pins.
+     *
+     * Both keys are consumed on every attempt, not short-circuited: an actor
+     * who is under their own cap must still be counted against their org's,
+     * or two admins could take the org to 2× the org limit between them.
+     *
+     * Deliberately NOT staff-bypassed. Staff bypass is the un-panic invariant
+     * for lockdown — a human needs a way back in — but nobody is locked out
+     * by an invite throttle, and a compromised staff session is exactly the
+     * one that should not have an uncapped sending path.
+     */
+    const inviteSendRefusal = async (): Promise<Response | null> => {
+      const [perActor, perOrg] = await Promise.all([
+        consumeRateLimit(`org-invite:${decoded.uid}`, {
+          limit: INVITE_SEND_LIMIT_PER_ACTOR,
+          windowMs: INVITE_SEND_WINDOW_MS,
+        }),
+        consumeRateLimit(`org-invite-org:${orgId}`, {
+          limit: INVITE_SEND_LIMIT_PER_ORG,
+          windowMs: INVITE_SEND_WINDOW_MS,
+        }),
+      ])
+      // `.allowed`, not the result object — a truthiness check would be
+      // permanently true and the limit would never bite (the defect
+      // AGL-1534's spec pins by name).
+      const over = !perActor.allowed ? perActor : !perOrg.allowed ? perOrg : null
+      if (!over) return null
+      // Observable to the customer AND to staff without a Firestore query:
+      // the org activity feed is the surface a support conversation already
+      // starts from. Fire-and-forget — the refusal is the control.
+      // `target` is REQUIRED — omitting it is a type error, and this call
+      // shipped without one. The refusal is org-scoped: it happens before any
+      // invite row exists, so there is no invite to point at.
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        'Invite sending paused — too many invites in a short time',
+        { type: 'org', id: orgId },
+      )
+      return Response.json(
+        {
+          error:
+            'Too many invites in a short time — wait a while and try again. ' +
+            'Nothing was sent.',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(
+              Math.max(1, Math.ceil((over.resetMs - Date.now()) / 1000)),
+            ),
+          },
+        },
+      )
+    }
 
     /**
      * The org's slug, for the deep link on admin notifications (AGL-1116).
@@ -226,6 +320,12 @@ async function handler(request: Request): Promise<Response> {
       if (!isOrgRole(role) || role === 'owner') {
         return Response.json({ error: 'Role must be admin, editor, or viewer' }, { status: 400 })
       }
+      // Sending gate (AGL-1907) — after the role check and the body
+      // validation, before the dedup read and the write. The seat quota
+      // below does NOT cover this path: a site-scoped viewer invite skips
+      // `isOrgWideMember` entirely and would otherwise be unbounded.
+      const invitesThrottled = await inviteSendRefusal()
+      if (invitesThrottled) return invitesThrottled
       const hostAccess: Record<string, HostAccessRole> = {}
       for (const [hostId, hostRole] of Object.entries(
         (body?.hostAccess ?? {}) as Record<string, unknown>,
@@ -360,6 +460,13 @@ async function handler(request: Request): Promise<Response> {
       if (invite['acceptedAt']) {
         return Response.json({ error: 'Invite already accepted' }, { status: 409 })
       }
+      // Sending gate (AGL-1907). `resend` had no quota of ANY kind — not even
+      // the seat check, since the row already exists — so one pending invite
+      // could be re-mailed to the same address without limit. Shares the two
+      // budgets with `create`: what is being bounded is messages leaving our
+      // domain, not rows.
+      const resendThrottled = await inviteSendRefusal()
+      if (resendThrottled) return resendThrottled
       const emailed = await sendInviteEmail(
         String(invite['email']),
         String(invite['role'] ?? 'viewer'),
@@ -438,8 +545,14 @@ async function handler(request: Request): Promise<Response> {
         email,
         // AGL-1131 — read from wherever the provider put them. An SSO user
         // accepting an invite joined the roster nameless and faceless.
-        displayName: resolveIdpDisplayName(decoded) || null,
-        photoURL: resolveIdpPhotoUrl(decoded) || null,
+        //
+        // `undefined`, not `null`, when the assertion carries nothing
+        // (AGL-1961): `upsertOrgMember` treats `null` as "clear it". This
+        // branch is not gated on the member being new — an existing member
+        // re-accepting an invite would otherwise have the name and photo
+        // already on their row wiped by a provider that simply sends neither.
+        displayName: resolveIdpDisplayName(decoded) || undefined,
+        photoURL: resolveIdpPhotoUrl(decoded) || undefined,
         invitedBy: invite['invitedBy'] ?? null,
       })
       await invitesRef.doc(inviteId).set(

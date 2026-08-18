@@ -46,6 +46,51 @@ export interface PooledUserRecord {
   record: UserRecord
   /** GCIP tenant id, or null when the user is in the project-level pool. */
   tenantId: string | null
+  /**
+   * Other pools that ALSO hold this uid (AGL-1962). Normally absent: a uid is
+   * unique within a pool, and the pools are meant to hold different people.
+   *
+   * It is populated when the same uid turns up in more than one pool, which
+   * means something minted a custom token for one pool's uid against another
+   * pool — `signInWithCustomToken` CREATES the account when the uid is absent,
+   * so the mistake manufactures an empty shadow account rather than failing.
+   * Measured on production: `IHumyGGhGxZKjVV26qCRx5Okf573` existed in both the
+   * project pool and `aglyn-org-y5v14`, the project copy created by
+   * `/api/presence/token` minting an SSO user's tenant uid at project level.
+   *
+   * These are NOT deduplicated. Both records genuinely exist in Firebase, and
+   * collapsing them would hide the shadow — which outranks its twin in every
+   * `findUserByUidAcrossPools` caller, since that helper checks the project
+   * pool first. Staff need to see it to delete it.
+   */
+  uidAlsoInPools?: (string | null)[]
+}
+
+/**
+ * Flag every uid that appears in more than one pool, in place of hiding it.
+ *
+ * Pure and total, so a spec can drive it without Firebase. Callers must pass
+ * the rows they intend to show together — a collision it cannot see is one
+ * it cannot report.
+ */
+export function markCrossPoolUidCollisions(
+  users: PooledUserRecord[],
+): PooledUserRecord[] {
+  const poolsByUid = new Map<string, (string | null)[]>()
+  for (const user of users) {
+    const pools = poolsByUid.get(user.record.uid) ?? []
+    pools.push(user.tenantId)
+    poolsByUid.set(user.record.uid, pools)
+  }
+  return users.map((user) => {
+    const pools = poolsByUid.get(user.record.uid) ?? []
+    if (pools.length < 2) return user
+    // Everyone holding this uid EXCEPT this row's own pool. Compared by
+    // index, not by value: two rows from the same pool would be a Firebase
+    // impossibility, but filtering by value would silently drop a real one.
+    const others = pools.filter((_, index) => index !== pools.indexOf(user.tenantId))
+    return { ...user, uidAlsoInPools: others }
+  })
 }
 
 /**
@@ -198,7 +243,10 @@ export async function listUsersAcrossPools(
     }
   }
   return {
-    users,
+    // Marked only here, where every pool's rows are in hand (AGL-1962). The
+    // earlier return above carries project rows alone, and a uid cannot
+    // collide with itself inside one pool, so there is nothing to find there.
+    users: markCrossPoolUidCollisions(users),
     nextPageToken: null,
     tenantsIncluded: true,
     tenantTruncated,

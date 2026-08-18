@@ -949,9 +949,10 @@ decision. The SDK fires once per document load; the layout's effect fires on
 mount **and** on every `usePathname` change, so it is a superset. Suppressing
 the layout's instead would have dropped every client-side navigation and halved
 console pageviews, with reports that looked entirely healthy. `firebase-services.tsx`
-therefore calls `initializeAnalytics(app, { config: { send_page_view: false } })`,
-which is the only form that can pass the flag, and
-`analytics-page-view.spec.tsx` pins it.
+therefore calls `initializeAnalytics(app, CONSOLE_ANALYTICS_OPTIONS)` — the only
+form that can pass the flag, carrying `send_page_view: false` alongside
+`content_group` — and `analytics-page-view.spec.tsx` pins it, including that the
+boot never takes the config-less `getAnalytics` door.
 
 Attribution does not move: the surviving hit is sent from the same document at
 mount, so `document.referrer` — which gtag resolves into `page_referrer` itself,
@@ -962,6 +963,37 @@ external referrer at that moment.
 query-string-only navigation, so paginated and filtered views do not re-report.
 An event per filter change would burn the per-session budget for a breakdown
 nobody reads.
+
+### That boot can be lost, and losing it used to crash the console (AGL-1979)
+
+`initializeAnalytics(app, options)` throws `already-initialized` unless the
+options match the ones the instance was first created with. Matching is a true
+recursive `deepEqual`, so re-entry with an equal literal is safe — remounts,
+StrictMode's double invoke and Fast Refresh all cannot cause this. What can is
+**an options-less initialization getting there first**: `getAnalytics()` is one
+door, and `@firebase/remote-config` is the other with no help from us, since
+`addExperimentToAnalytics` calls `analyticsProvider.getImmediate({ optional:
+true })` and `optional` only suppresses the throw, not the initialization. The
+conflict is then permanent for that document, and the tag that survives is the
+config-less one — **no `content_group`, and the startup `page_view` back**.
+
+Two consequences the code now holds:
+
+- the config is one module-scope object, so re-entry matches by identity, and
+  the provider falls back to `getAnalytics(app)` on a throw. A degraded
+  instance beats `undefined`, and the conflict is logged rather than swallowed;
+- **`useAnalytics()` can still return `undefined`** — it is typed as always
+  returning an `Analytics` and strictNullChecks is off repo-wide, so nothing
+  makes a call site consider it. `logEvent(undefined, …)` reads `.app` and
+  throws out of an effect; that was the top Cloud Error Reporting group. Every
+  console binding therefore lives in `AnalyticsBindings`, a child mounted only
+  when an instance exists. Guarding call sites one at a time was tried first
+  (526608b9) and got half applied — which is the whole argument for a gate.
+
+Worth knowing for anything that ever adds a second Firebase app: the SDK's
+`initializationPromisesMap` is module-scope and keyed by **appId**, so a second
+`FirebaseApp` sharing the primary's `appId` — `use-presence.ts` builds exactly
+one — would throw `already-exists` if analytics were ever initialized on it.
 
 **Still open:** two raw `logEvent(analytics, 'screen_view', …)` calls live
 outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.

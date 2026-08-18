@@ -173,10 +173,17 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     key: 'release_native_checkout',
     label: 'In-page checkout',
     description:
-      'Pay for a plan without leaving the console — Stripe embedded ' +
-      'Checkout instead of a redirect to checkout.stripe.com (AGL-1132). ' +
-      'OFF by default: the redirect is the proven path, and this one cannot ' +
-      'be verified without putting a real card through it.',
+      'Pay without leaving the page, instead of a redirect to ' +
+      'checkout.stripe.com. TWO surfaces: the console plan checkout uses ' +
+      'embedded Checkout (AGL-1132), and a merchant storefront uses the ' +
+      'Payment Element on the merchant\u2019s own domain (AGL-1944) \u2014 ' +
+      'which is the half that costs conversions, since leaving the store ' +
+      'mid-purchase is where carts get abandoned. Both keep the webhook as ' +
+      'the only thing that fulfils. OFF by default: the redirect is the ' +
+      'proven path, and neither surface can be verified without putting a ' +
+      'real card through it. Also gated on a publishable key being set, ' +
+      'per surface \u2014 so flipping this alone degrades to the redirect ' +
+      'rather than to a dead button.',
     defaultEnabled: false,
   },
   {
@@ -197,9 +204,20 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description:
       'The in-console AI chat helper on every page (AGL-1860): docs-' +
       'grounded answers with deep links, page-context guidance on Pro+. ' +
-      'OFF by default until the privacy-policy disclosure for stored Q&A ' +
-      'exchanges is live — the data loop records every exchange org-' +
-      'scoped, so the flag must not flip before the legal sitting lands.',
+      'OFF by default, and blocked on TWO published legal artifacts ' +
+      '(AGL-1909), neither of which is a repo file — both are live besigner ' +
+      'pages, so publication is what satisfies them: (1) the privacy-policy ' +
+      'disclosure for stored Q&A, because the data loop records every ' +
+      'exchange org-scoped under orgs/{orgId}/assistExchanges; and (2) the ' +
+      'Anthropic row on /legal/subprocessors, which was deliberately ' +
+      'REMOVED on 2026-08-13 (subprocessorsV2a-20260813) on the premise ' +
+      'that no production key existed — so the page is not merely ' +
+      'incomplete without it, it is affirmatively wrong. NOTE the real ' +
+      'trigger is ANTHROPIC_API_KEY, not this flag: /api/ai/assist (the ' +
+      'besigner copy assistant, AGL-89/130/169) carries no release flag at ' +
+      'all and sends customer site content to Anthropic on the key plus a ' +
+      'Pro entitlement alone. Setting the key in production therefore makes ' +
+      'Anthropic a subprocessor whether or not this flag is ever flipped.',
     defaultEnabled: false,
   },
 ]

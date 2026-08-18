@@ -75,6 +75,8 @@ import BillingAddonsCardComponent, {
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../../components/billing/billing-plan-cards.component'
+import BillingRegisterAllocationsCardComponent from '../../../../components/billing/billing-register-allocations-card.component'
+import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
@@ -962,6 +964,42 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               ),
             },
             {
+              size: { xs: 12 },
+              children: (
+                // Where metered storage is TURNED ON (AGL-1957, for AGL-1886).
+                // `mediaStorageGate` refuses an upload past the included band
+                // with "turn it on in Billing", and until this card existed
+                // there was nothing in Billing to turn on — so the soft cap
+                // could not be exercised by anyone and the refusal pointed at
+                // a dead end. Directly under the meters that show the usage
+                // this governs.
+                <Box id="storage-overage">
+                  <CardDisplay
+                    header={'Storage limit'}
+                    subheader={
+                      'Choose whether uploads may go past your included ' +
+                      'storage, and the most you are willing to be billed ' +
+                      'for it in a month.'
+                    }
+                    help={docsHelp('billing', {
+                      anchor: '#storage-overage',
+                      excerpt:
+                        'Uploads past your included storage are refused ' +
+                        'unless you turn on metered storage, which carries a ' +
+                        'monthly spend limit you set.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <BillingStorageOverageCardComponent
+                      orgId={orgId}
+                      canManage={can('billing.manage')}
+                    />
+                  </CardDisplay>
+                </Box>
+              ),
+            },
+            {
               size: { xs: 12, md: 8 },
               children: (
                 <CardDisplay
@@ -1100,6 +1138,38 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         contentGutterY
                       >
                         <BillingAddonsCardComponent
+                          orgId={orgId}
+                          canManage={can('billing.manage')}
+                        />
+                      </CardDisplay>
+                    </Box>
+                  ),
+                },
+                {
+                  size: { xs: 12 },
+                  children: (
+                    // Where purchased register seats get DEPLOYED (AGL-1947).
+                    // Buying the add-on above is only half the transaction:
+                    // `posRegisters` is an org-level pool since AGL-1775, and
+                    // until this card existed a merchant could pay $89/mo for
+                    // a seat with nowhere to put it. Directly beneath the
+                    // add-on that sells it, and under the same `#addons`
+                    // region the registers card and the route's own 409 both
+                    // point at ("Billing → Add-ons").
+                    <Box id="register-seats">
+                      <CardDisplay
+                        header={'POS register seats'}
+                        subheader={
+                          'Each purchased seat lets one site run one more ' +
+                          'register. Move seats between sites at any time.'
+                        }
+                        help={docsHelp('addOns', {
+                          anchor: '#assigning-register-seats',
+                        })}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        <BillingRegisterAllocationsCardComponent
                           orgId={orgId}
                           canManage={can('billing.manage')}
                         />

@@ -191,6 +191,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 interface StripeCall {
   url: string
   idempotencyKey: string | null
+  /** The form body, so the session's own metadata can be asserted (AGL-1953). */
+  body: URLSearchParams
 }
 
 const stripeCalls: StripeCall[] = []
@@ -207,7 +209,11 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   }
   const idempotencyKey =
     (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
-  stripeCalls.push({ url: target, idempotencyKey })
+  stripeCalls.push({
+    url: target,
+    idempotencyKey,
+    body: new URLSearchParams(String(init?.body ?? '')),
+  })
   // Stripe replays a prior response for a repeated key rather than creating a
   // second session. Reproduced so a test can tell "we never called twice" from
   // "we called twice but Stripe absorbed it" — only the first is a real fix,
@@ -323,6 +329,56 @@ beforeEach(() => {
 })
 
 // ---------------------------------------------------------------------------
+
+/**
+ * A POS card sale says on the Stripe object how much of it was tax
+ * (AGL-1953).
+ *
+ * The whole basket goes over as ONE "In-store purchase" line at
+ * `totals.totalCents`, so the origin tax this handler computes is invisible to
+ * Stripe: `total_details.amount_tax` is 0 and nothing on the session says any
+ * part of the charge was tax. The figure survived on the order document, but
+ * no reader of the Stripe object could decompose it — including
+ * `recordStorefrontTax`, which reads exactly this key and was therefore
+ * filing every POS card sale as `taxMode: 'none'`.
+ */
+describe('the POS card sale tax witness (AGL-1953)', () => {
+  /** 8.25% of a $4.00 item is 33 cents — a figure no other total here shares. */
+  const TAXED_STORE = {
+    tax: {
+      mode: 'manual',
+      origin: { country: 'US', state: 'TX' },
+      rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }],
+    },
+  }
+
+  it('states the tax in the session metadata', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(stripeCalls[0].body.get('metadata[taxCents]')).toBe('33')
+    // The charge itself is unchanged — this is a witness, not a second tax.
+    expect(stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'))
+      .toBe('433')
+  })
+
+  /** It agrees with the order document, which is the other half of the join. */
+  it('agrees with the figure stored on the order', async () => {
+    docs.set('hosts/host-1/settings/store', TAXED_STORE)
+    await post({ payment: 'link' })
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+    expect(stripeCalls[0].body.get('metadata[taxCents]')).toBe(
+      String(orderDocs()[0]?.totals?.taxCents),
+    )
+  })
+
+  /** A store that charges no tax says so explicitly rather than omitting it. */
+  it('says zero when the store configured no tax', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(stripeCalls[0].body.get('metadata[taxCents]')).toBe('0')
+  })
+})
 
 describe('POS sale idempotency (AGL-1691)', () => {
   it('takes a card sale and returns a Checkout URL', async () => {

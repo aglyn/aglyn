@@ -20,6 +20,7 @@
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
+import DataExportCard from '../../../../components/data-export-card.component'
 import {
   canManageOrg,
   isLiveSubscriptionStatus,
@@ -853,6 +854,12 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       id: 'danger',
                       label: 'Delete',
                       content: (
+        <Stack spacing={3}>
+          {/* AGL-1974. This tab has told owners to "export anything you want
+              to keep first" since it existed, and there was nothing to export
+              with — one of six surfaces giving that instruction. The answer
+              now sits in the same panel as the instruction. */}
+          <DataExportCard user={user as never} orgId={currentOrg?.$id} />
           <CardDisplay
             header={'Delete organization'}
             help={docsHelp('downgradingAndCanceling', {
@@ -910,6 +917,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
               </Stack>
             )}
           </CardDisplay>
+        </Stack>
                       ),
                     },
                   ]

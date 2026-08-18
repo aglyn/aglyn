@@ -20,7 +20,9 @@ import {
   currentRateLimitDegradation,
   DEGRADATION_DOC_PREFIX,
   RATE_LIMIT_COLLECTION,
+  recordSignupRefusal,
   resetRateLimitDegradationForTests,
+  SIGNUP_REFUSAL_DOC_PREFIX,
 } from './rate-limit-store'
 
 /**
@@ -233,5 +235,96 @@ describe('AGL-1679 · a degraded window leaves a durable record', () => {
     // …and once more if it is still going a minute later.
     await consumeRateLimit('ip-1', opts(firestore, 10_000 + 60_001))
     expect(console.error).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('recordSignupRefusal (AGL-1907)', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const refusalDocs = (firestore: ReturnType<typeof fakeFirestore>) =>
+    [...firestore.docs.entries()].filter(([path]) =>
+      path.startsWith(`${RATE_LIMIT_COLLECTION}/${SIGNUP_REFUSAL_DOC_PREFIX}`),
+    )
+
+  it('writes a minute-bucketed marker carrying the reason', async () => {
+    const firestore = fakeFirestore()
+    recordSignupRefusal('uid', { firestore, now: 1_755_100_830_000 })
+    await settle()
+
+    const entries = refusalDocs(firestore)
+    expect(entries).toHaveLength(1)
+    const [path, doc] = entries[0]
+    // Bucketed DOWN to the minute — 830_000ms lands in the 800_000 bucket.
+    expect(path).toBe(
+      `${RATE_LIMIT_COLLECTION}/${SIGNUP_REFUSAL_DOC_PREFIX}1755100800000`,
+    )
+    expect(doc['refusals']).toBe(1)
+    expect(doc['byReason']).toEqual({ uid: 1 })
+  })
+
+  it('merges concurrent instances into one bucket and sums per reason', async () => {
+    const firestore = fakeFirestore()
+    for (let i = 0; i < 3; i += 1) {
+      recordSignupRefusal('uid', { firestore, now: 1_755_100_800_000 + i })
+      await settle()
+    }
+    for (let i = 0; i < 2; i += 1) {
+      recordSignupRefusal('ip', { firestore, now: 1_755_100_820_000 + i })
+      await settle()
+    }
+
+    const entries = refusalDocs(firestore)
+    expect(entries).toHaveLength(1)
+    expect(entries[0][1]['refusals']).toBe(5)
+    expect(entries[0][1]['byReason']).toEqual({ uid: 3, ip: 2 })
+  })
+
+  it('stamps refusedAtMs — NOT lastAtMs, which would blind the AGL-1693 probe', async () => {
+    // The rate-limiter health check queries this same collection with
+    // `where('lastAtMs','>=',cutoff).orderBy(...).limit(N)`. A refusal marker
+    // carrying `lastAtMs` would be swept into that result and, under a flood,
+    // could fill the limit and push the real degradation markers out of it.
+    const firestore = fakeFirestore()
+    recordSignupRefusal('ip', { firestore, now: 1_755_100_830_000 })
+    await settle()
+
+    const doc = refusalDocs(firestore)[0][1]
+    expect(doc['refusedAtMs']).toBe(1_755_100_830_000)
+    expect(doc['lastAtMs']).toBeUndefined()
+    expect(Object.keys(doc)).not.toContain('lastAtMs')
+  })
+
+  it('never throws when the store is down — the 429 still ships', async () => {
+    const firestore = fakeFirestore()
+    firestore.failFrom()
+    expect(() =>
+      recordSignupRefusal('uid', { firestore, now: 1_755_100_800_000 }),
+    ).not.toThrow()
+    await settle()
+    expect(refusalDocs(firestore)).toHaveLength(0)
+  })
+
+  it('carries a TTL so markers do not accumulate forever', async () => {
+    const firestore = fakeFirestore()
+    recordSignupRefusal('uid', { firestore, now: 1_755_100_800_000 })
+    await settle()
+    const expiresAt = refusalDocs(firestore)[0][1]['expiresAt'] as Date
+    expect(expiresAt).toBeInstanceOf(Date)
+    expect(expiresAt.getTime()).toBe(
+      1_755_100_800_000 + 7 * 24 * 60 * 60 * 1000,
+    )
+  })
+
+  it('stores no identifiers — no uid, no IP, no key', async () => {
+    // The body this feeds is public. Nothing but counts may reach it.
+    const firestore = fakeFirestore()
+    recordSignupRefusal('ip', { firestore, now: 1_755_100_800_000 })
+    await settle()
+    expect(Object.keys(refusalDocs(firestore)[0][1]).sort()).toEqual([
+      'byReason',
+      'expiresAt',
+      'firstRefusedAtMs',
+      'refusals',
+      'refusedAtMs',
+    ])
   })
 })

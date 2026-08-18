@@ -161,6 +161,17 @@ jest.mock('../components/billing/billing-addons-card.component', () => ({
   default: () => null,
   ADDON_LABELS: {},
 }))
+// AGL-1957's card joined the page after this spec was written and was the one
+// sibling left real. It reads `/api/billing/storage-overage`, which the
+// catch-all below answers with the invoices shape, so its state stays empty and
+// it renders its "we couldn't load your storage settings" Alert — a second
+// `role="alert"` on the page, which is fatal here: this spec identifies the
+// notice BY that role, so every assertion either matched two elements or found
+// one where it required none.
+jest.mock(
+  '../components/billing/billing-storage-overage-card.component',
+  () => nullCard,
+)
 jest.mock('../components/embedded-checkout-dialog.component', () => nullCard)
 
 import BillingPage from '../app/(app)/[orgSlug]/billing/page'

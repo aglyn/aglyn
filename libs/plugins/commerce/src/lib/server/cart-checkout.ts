@@ -21,6 +21,13 @@ import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readCartId } from './cart-cookie'
+import { resolveManualTaxRateId } from './manual-tax-rate'
+import {
+  applyNativeCheckoutParams,
+  nativeCheckoutStripeHeaders,
+  readCheckoutSessionPayload,
+  resolveNativeCheckoutMode,
+} from './native-checkout'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -416,11 +423,69 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     )
     CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
 
-    // Stripe Tax when opted in (manual destination tax lands with the
-    // AGL-296 checkout, which knows the address before the session).
+    // Taxes (AGL-1953). This block used to be the `stripe` line alone, and a
+    // `manual`-mode store — the mode the AGL-285 zone editor leaves a merchant
+    // in by default — collected tax on a buy-now sale and NOTHING on a cart
+    // sale of the same goods. Same store, same shopper, same items, two totals
+    // depending on which button was pressed, with the merchant left owing the
+    // destination tax they never charged.
+    //
+    // The manual tax rides a real Stripe Tax Rate on each taxable line rather
+    // than buy-now's `line_items[1]` product line (AGL-1711). That is not a
+    // gratuitous difference: THIS path applies its discounts, coupons and gift
+    // cards as session-level Stripe coupons, which spread across every line,
+    // so a fake tax line would be discounted along with the goods. Stripe
+    // applies a tax rate AFTER the discount — measured, see
+    // `manual-tax-rate.ts` — so the arithmetic stays right and
+    // `total_details.amount_tax` becomes real, which is what lets the webhook
+    // record the tax with no metadata snapshot to keep in step.
+    //
+    // `automatic_tax.enabled` stays false on a manual sale, so
+    // `storefront-tax.ts` still classifies it `manual` and it is never summed
+    // into the Aglyn-liable figure (AGL-1904).
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
     if (taxSettings.mode === 'stripe') {
       params.set('automatic_tax[enabled]', 'true')
+    } else if (taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax) {
+      // Origin-based, exactly as buy-now resolves it: the cart collects the
+      // shopper's address inside Stripe Checkout, so there is no destination
+      // to resolve against before the session exists. Destination-based manual
+      // tax is AGL-296's checkout, and taxing by origin here is what makes the
+      // two paths agree — which is the whole point of this issue.
+      //
+      // `pricesIncludeTax` stores charge no separate tax on ANY path (buy-now
+      // skips it the same way); the tax is already inside the displayed price.
+      const rate = CommerceModel.resolveTaxRate(
+        taxSettings,
+        taxSettings.origin ?? {},
+      )
+      // Tax-exempt products are excluded per LINE, which a single session-wide
+      // figure could not express — a cart mixing a taxable chair with an exempt
+      // download must tax only the chair.
+      const taxableIndexes = cart.lines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => !productsById.get(line.productId)?.taxExempt)
+        .map(({ index }) => index)
+      if (rate && rate.pct > 0 && taxableIndexes.length > 0) {
+        const taxRateId = await resolveManualTaxRateId({
+          hostRef,
+          taxPct: rate.pct,
+          taxLabel: rate.label || `Tax (${rate.pct}%)`,
+          headers: stripeKeyHeader('tax-rate'),
+        })
+        if (!taxRateId) {
+          // A VISIBLE refusal, never a fallback to an untaxed session — that
+          // silent under-collection is this issue. Nothing was sold, so the
+          // key goes back and the same button works once Stripe does
+          // (AGL-1697); the retry re-derives the same digest, so Stripe
+          // replays any rate the first run did mint.
+          await claim.release()
+          return res.status(502).json({ error: 'Checkout failed' })
+        }
+        for (const index of taxableIndexes) {
+          params.set(`line_items[${index}][tax_rates][0]`, taxRateId)
+        }
+      }
     }
 
     const referer = String(req.headers.referer ?? '')
@@ -444,6 +509,21 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     params.set('metadata[cartId]', cartId)
     params.set('metadata[feeCents]', String(Math.max(0, feeCents)))
 
+    // The Payment Element (AGL-1944), LAST and touching nothing above it. Every
+    // figure the shopper is charged — line prices, the discount coupon, the tax
+    // construction, the shipping rates, the fee — was decided before this line
+    // and is identical on both checkout paths. This swaps the redirect's URL
+    // pair for `ui_mode` + `return_url` and stops. Off unless the flag is on for
+    // this org AND a publishable key exists; see `resolveNativeCheckoutMode`.
+    const nativeMode = await resolveNativeCheckoutMode(
+      String(ownerOrg?.org?.id ?? ''),
+    )
+    if (nativeMode.native) {
+      applyNativeCheckoutParams(
+        params,
+        `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
+      )
+    }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -456,6 +536,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // one, covering the window where the claim is written but the
           // response never arrives.
           ...stripeKeyHeader('session'),
+          // Empty on the hosted path (AGL-1944).
+          ...nativeCheckoutStripeHeaders(nativeMode),
         },
         body: params.toString(),
       },
@@ -463,9 +545,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     const session = (await response.json()) as {
       url?: string
       id?: string
+      client_secret?: string
       error?: any
     }
-    if (!response.ok || !session.url) {
+    // `!session.url` was the liveness check and a `ui_mode` session has no url,
+    // so it moves with the mode (AGL-1944) — otherwise every successful native
+    // session reads as a Stripe failure: a 502 at the shopper, a released claim,
+    // and a real Checkout Session left open on the merchant's account.
+    const payload = response.ok
+      ? readCheckoutSessionPayload(session, nativeMode)
+      : null
+    if (!payload) {
       console.error('Stripe cart checkout error', session.error)
       // The checkout did not happen — hand the key back so one flaky moment
       // does not lock this cart out. The retry re-derives the same derived
@@ -474,7 +564,10 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(502).json({ error: 'Checkout failed' })
     }
     // Recoverable checkout (AGL-296): email captured before the redirect
-    // makes abandonment actionable (AGL-323 sends the recovery emails).
+    // makes abandonment actionable (AGL-323 sends the recovery emails). Written
+    // for the native path too, and it matters MORE there: a shopper who
+    // abandons an in-page form never leaves the store, so this row is the only
+    // trace that a cart reached checkout at all.
     await hostRef
       .collection('checkouts')
       .doc(String(session.id))
@@ -488,7 +581,6 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)
-    const payload = { url: session.url }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error: any) {

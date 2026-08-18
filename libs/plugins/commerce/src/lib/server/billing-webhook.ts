@@ -467,22 +467,47 @@ async function stripeGet(
  * are debited from the PLATFORM's balance while the merchant keeps the
  * transfer — a merchant paid in full for a sale the shopper's bank took back,
  * with Aglyn out the principal. The decision (AGL-1794): the merchant eats
- * their share, by a `transfers/{id}/reversals` call for the portion that was
- * actually transferred — the allocation every marketplace on destination
- * charges uses, and the one `refund.ts` already applies on the refund door
- * via `reverse_transfer`. The platform still eats Stripe's dispute fee,
- * DELIBERATELY: that is the cost of owning the payment relationship, not the
- * merchant's loss, which is why no fee figure appears here or anywhere on the
- * order.
+ * their share, by a `transfers/{id}/reversals` call keyed off the charge's
+ * transfer. The platform still eats Stripe's dispute fee, DELIBERATELY: that
+ * is the cost of owning the payment relationship, not the merchant's loss,
+ * which is why no fee figure appears here or anywhere on the order.
  *
- * PROPORTIONAL, NEVER MORE. The merchant received `transfer.amount` (the
- * charge minus the application fee), so their share of the reversed principal
- * is `reversedCents × transfer.amount ÷ charge.amount`, FLOORED, then capped
+ * GROSS, NOT NET — the money question, settled on evidence (AGL-1794).
+ *
+ * Stripe transfers the FULL charge to the connected account and debits the
+ * `application_fee_amount` at the DESTINATION, so `transfer.amount` equals
+ * `charge.amount` and the merchant's own balance transaction reads
+ * `amount 10000, fee 500, net 9500` (measured in test mode; AGL-1951 caught
+ * the fixture here modelling it backwards). The proportional share below is
+ * therefore the WHOLE principal, and the merchant hands back the gross while
+ * Aglyn keeps its commission.
+ *
+ * That asymmetry with the refund door is deliberate, not an oversight.
+ * `refund.ts` sends `refund_application_fee: 'true'` alongside
+ * `reverse_transfer`, so a REFUND returns Aglyn's commission; this door sends
+ * no such flag, so a CHARGEBACK does not. The market was surveyed before
+ * choosing: Shopify Payments, Etsy, eBay, PayPal and Square all take the gross
+ * back from the seller and none return the platform's cut on a chargeback,
+ * and most add a dispute fee on top ($15 Shopify, $20 eBay, $20 PayPal) that
+ * Aglyn does not pass on. Stripe itself documents only the mechanism — the
+ * `refund_application_fee` switch on a reversal — and takes no position on
+ * which way to flip it, advising platforms to price the application fee to
+ * absorb dispute costs rather than recover them per incident. Reversing NET
+ * is the minority practice (Eventbrite is the clean example, and it absorbs
+ * the bank fees too). **Do not add `refund_application_fee` to the POST below
+ * without re-deciding the policy** — it is the one-parameter switch between
+ * this and handing the commission back, and the reversal amount does not
+ * change when it flips, so nothing else in the wire shape would give it away.
+ *
+ * PROPORTIONAL, NEVER MORE. The share of the reversed principal is
+ * `reversedCents × transfer.amount ÷ charge.amount`, FLOORED, then capped
  * at what the transfer has left (`amount − amount_reversed`) — a transfer
  * partially reversed by an earlier `reverse_transfer` refund cannot be pulled
- * below its own remainder from here. The reversal CAN drive the connected
- * account negative, which Stripe recovers from future payouts; that is the
- * policy, recorded on the order timeline in words the merchant can read.
+ * below its own remainder from here. The ratio is 1 on an untouched transfer,
+ * by the measurement above; it earns its keep on a partially-refunded one.
+ * The reversal CAN drive the connected account negative, which Stripe recovers
+ * from future payouts; that is the policy, recorded on the order timeline in
+ * words the merchant can read.
  *
  * IDEMPOTENT BY THE ORDER DOCUMENT, with the transfer itself as the crash
  * window's backstop. `dispute.reversedTransferCents` present — 0 included —
@@ -2050,6 +2075,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           0,
           Math.round(Number(object?.total_details?.amount_shipping ?? 0) || 0),
         )
+        // Tax joins shipping in the fold (AGL-1953). `draft-order.ts` now
+        // declares tax — a Stripe Tax Rate for a `manual` store, whose figure
+        // it already froze into `totals`, or `automatic_tax` for a `stripe`
+        // one, whose figure ONLY Stripe knows and which would otherwise arrive
+        // inside `amount_total` with nothing recording it. The same AGL-1698
+        // shape shipping was added for.
+        //
+        // Byte-identical for everything that came before: a POS card sale
+        // prices its tax into the single "In-store purchase" line and reports
+        // `amount_tax` 0 here (its own figure stays on the order, and its
+        // AGL-1953 witness is metadata, not this field), and a draft composed
+        // by a store with no tax reports 0 too.
+        const stripeTaxCents = Math.max(
+          0,
+          Math.round(Number(object?.total_details?.amount_tax ?? 0) || 0),
+        )
         const chargedTotalCents = Number(object?.amount_total ?? NaN)
         // `shipping_details` ONLY, unlike the cart branch's
         // `?? customer_details` fallback: that address is the BILLING one, and
@@ -2074,11 +2115,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
-              ...(shippingCents > 0
+              ...(shippingCents > 0 || stripeTaxCents > 0
                 ? {
                     totals: {
                       ...(lifted.totals ?? {}),
-                      shippingCents,
+                      ...(shippingCents > 0 ? { shippingCents } : {}),
+                      // Stripe's figure REPLACES the frozen one rather than
+                      // adding to it: on a manual draft the two are the same
+                      // number computed twice (we set the rate Stripe applied),
+                      // so summing would double the tax on the record.
+                      ...(stripeTaxCents > 0
+                        ? { taxCents: stripeTaxCents }
+                        : {}),
                       // Stripe's own figure, for the AGL-1698 reason: the
                       // frozen total is what the draft was priced at, and only
                       // `amount_total` is the money that moved.

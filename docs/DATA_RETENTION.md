@@ -1,0 +1,347 @@
+<!--
+ Copyright 2026 Aglyn LLC — Apache-2.0
+-->
+
+# Data retention schedule (AGL-1915)
+
+What Aglyn keeps, for how long, and why — reconciled against what the
+**published** Privacy Policy and DPA actually say. Every period below is either
+enforced by a mechanism named in the Evidence column or is explicitly marked as
+having no mechanism.
+
+Companions: `docs/PRIVACY_REQUESTS.md` (how a person exercises a right),
+`docs/BREACH_NOTIFICATION.md`, `docs/DISASTER_RECOVERY.md`,
+`docs/STORAGE_MANUAL_CONFIG.md`, `docs/FIRESTORE_MANUAL_CONFIG.md`.
+
+## Read this before you edit anything here
+
+**The published page is the authority; this file is the reconciliation.** The
+legal text is besigner content on `aglyn.com/legal/*`, published first and
+re-captured into `apps/console/constants/legal/{version}/*.txt` afterwards
+(`apps/console/constants/legal-documents.ts` explains why that ordering is not
+a preference). The DPA, Cookie Policy and Subprocessors list have **no repo
+copy at all** — the live page is their only authority.
+
+So a divergence between this file and a published page is never resolved by
+editing this file to match. It is resolved by deciding which one is wrong,
+fixing that one, and — if it is the page — publishing before re-capturing.
+
+**Two structural hazards shape everything below.** Both are properties of the
+database, not of any one feature:
+
+1. **A path-scoped cascade is blind to a field-keyed collection.** `eraseOrg`
+   finishes with `recursiveDelete(orgRef)`, which reaches everything under
+   `orgs/{orgId}/…` and nothing else. A top-level collection whose documents
+   merely *carry* `orgId` — `apiKeys`, `ssoDomains`, `consoleDomains`,
+   `apiIdempotency`, `stripeCustomers`, `orgSlugs` — is structurally invisible
+   to it and needs its own bounded sweep
+   (`libs/tenant/data/admin/src/lib/server/erase.ts:163`, AGL-1444/AGL-1448).
+   **The same blind spot applies to an access request**, which is the part
+   nobody expects: an enumeration built by walking `orgs/{orgId}` and
+   `users/{uid}` answers a "what do you hold about me" question with the same
+   omissions a deletion would have. `docs/PRIVACY_REQUESTS.md` §"Where to look"
+   is the checklist that closes it.
+2. **Some data is deliberately not deleted.** Tax records and the do-not-contact
+   list are retained *because* a law requires it, and an over-eager future sweep
+   would un-file a tax period or resurrect a number someone asked us to stop
+   calling. Those are listed under "Deliberately retained" with the specs that
+   pin them.
+
+## Firestore
+
+Sorted by whether a mechanism enforces the period.
+
+### Enforced by a live TTL policy
+
+Verified against `gcloud firestore fields ttls list --project=aglyn-main
+--database='(default)'` on 2026-08-18 — all five `ACTIVE`.
+
+| Collection group | Field | Period | Contents | Evidence |
+| --- | --- | --- | --- | --- |
+| `analytics` | `expiresAt` | **400 days** | Per-day pageview/serve/redirect counters on hosts and orgs. Counts, not identities. | `analytics-retention.ts:58` (AGL-1844) |
+| `screenAnalytics` | `expiresAt` | **400 days** | Same, per screen. | same |
+| `mediaTombstones` | `expiresAt` | **7 days** | DAM undo records. Each holds a deleted media document **verbatim** — alt text, tags, custom metadata, `visibleTo` scope tokens. Bounded to the bucket's 7-day soft-delete window because a tombstone that outlives the bytes it addresses can only produce a failed restore while still being a copy of customer data. | `media-tombstone.ts:93` (AGL-1467) |
+| `cspViolationDaily` | `expiresAt` | **60 days** | CSP violation counters — one doc per (day × app × directive × disposition × blocked origin). Never report bodies. | `csp-aggregate.ts:101` (AGL-1799) |
+| `rateLimits` | `expiresAt` | window-scoped; degradation markers **30 days**, signup refusals **7 days** | IP-keyed counters and refusal markers. | `rate-limit-store.ts:84,257` |
+
+`docs/FIRESTORE_MANUAL_CONFIG.md` lists three of these five. `analytics` and
+`screenAnalytics` are live and undocumented there, and the `cspViolationDaily`
+row still reads "TTL not yet enabled in gcloud as of 2026-08-17" — it is
+enabled. Corrected in that file with this change.
+
+### Declared and written, but the gcloud policy is OWED
+
+These three have `expiresAt` stamped by every writer and a `fieldOverrides`
+entry in `cloud/firebase-firestore.indexes.json`, so nothing is at risk from an
+index deploy. **The `gcloud firestore fields ttls update` command has not been
+run**, so the timestamps are currently inert. They are listed separately rather
+than in the table above because the difference between "a period is written
+down" and "a period is enforced" is exactly the AGL-1496 defect, and a schedule
+that blurs the two is worse than one that admits the gap. Commands in
+`docs/FIRESTORE_MANUAL_CONFIG.md`; move these rows up when they read `ACTIVE`.
+
+| Collection group | Field | Period | Contents | Evidence |
+| --- | --- | --- | --- | --- |
+| `assistExchanges` | `expiresAt` | **180 days** | The **verbatim** half of an Assist exchange: the question, the answer, the asking `uid`, the host. | `assist-usage.ts` `ASSIST_EXCHANGE_RETENTION_DAYS` (AGL-1972) |
+| `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
+| `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
+
+`apps/console/specs/retention-ttl-config.spec.ts` asserts all eight policies as
+a three-part configuration — declared in the index file, documented with a
+gcloud command, and actually stamped by **every** writer. It cannot see the
+live project; that read-back is the `ttls list` command below.
+
+### Enforced by a scheduled job
+
+| Data | Period | Mechanism | Evidence |
+| --- | --- | --- | --- |
+| `adminAudit` | **90 days hot, then 365 days archived** — ~15 months end to end | `/api/admin/audit-archive`, daily 03:00 UTC, moves rows to `adminAudit-archive/{yyyy-MM}/*.jsonl` in the media bucket and deletes them from Firestore. The bucket's lifecycle rule then deletes at age 365. | `audit-archive/route.ts:24`, `cloud/media-bucket-lifecycle.json` |
+| Org erasure | **7-day reversible hold**, then permanent | `erasureRequestedAt` + `ERASURE_HOLD_MS`; `/api/admin/run-erasures` daily 04:00 UTC. The hold is re-verified inside `eraseOrg` — the cron cannot skip it and neither can the manual script. | `erase.ts:32,659` (AGL-485) |
+
+### Retained for the life of the workspace, then erased by the cascade
+
+Everything under `orgs/{orgId}/…` and `hosts/{hostId}/…`: screens, layouts,
+components, versions, datasets and records, contacts and lists, media
+documents, forms and submissions, orders, webhooks, invites, members, roles,
+usage and apiUsage rollups, installs, activity, `pluginSettings`, and the
+churn-funnel `retention` subcollection. No per-collection period; they live as
+long as the workspace does and die with `recursiveDelete(orgRef)`.
+
+Two exceptions now sit under the org and DO have a period, both created by
+splitting a document rather than by shortening one: `assistExchanges` (below)
+and `churnSurveyDetails`, which holds the churn survey's free text so that it
+can expire at 365 days while the survey's closed-set `reason` — the breakdown
+the retention funnel exists to produce — stays for the life of the workspace.
+A TTL deletes documents, so a period on the survey itself would have taken the
+reason with it; that is the general shape of both splits.
+
+The same is true of everything under `users/{uid}/…` — profile, org
+memberships, host memberships, notifications, passkeys, `legalAcceptances` —
+which `eraseUser` removes with `recursiveDelete(userRef)`
+(`erase.ts:938`, AGL-1140).
+
+**Aglyn Assist writes four subcollections and all four are under the org**, so
+the cascade reaches them with no extra sweep:
+`orgs/{orgId}/assistExchanges/{id}`, `orgs/{orgId}/assistSignals/{id}`,
+`orgs/{orgId}/assistUsage/{month}`,
+`orgs/{orgId}/counters/assistMessagesDaily`. Pinned by
+`apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts` §"assist
+records stay reachable by eraseOrg", which asserts both halves — that every
+written path starts `orgs/{orgId}/`, *and* that `erase.ts` still contains
+`recursiveDelete(orgRef)`, because the first assertion is decorative without
+the second. The spec asserts the COUNT as well as the names, so the next
+collection added cannot slip past it the way `assistSignals` would have.
+
+**Only three of the four are retained for the life of the workspace.**
+AGL-1972 split the exchange in two rather than choosing one period for two
+kinds of data:
+
+- `assistExchanges` holds the question, the answer, the asking `uid` and the
+  host — and expires at **180 days** (see the owed-policy table above).
+- `assistSignals` holds the same id and **no prose and no uid**: the console
+  route, model, tier, token counts, estimated cost, the cited `docsPaths`, the
+  `stopReason` and the thumbs rating. No expiry. This is what the docs-gap
+  mining loop and the cost meters actually read, and it is why 180 days on the
+  prose costs the loop nothing.
+- `assistUsage/{month}` and `counters/assistMessagesDaily` carry no expiry
+  deliberately. They are integers, the monthly rollup is the cost history the
+  pricing decision reads, and the daily counter is ONE document per org keyed
+  by field — a TTL deletes documents, so it could only reap the whole quota
+  state, cap included.
+
+⚠️ **This is the row that no longer matches the published page.** Privacy
+Policy v5 §5 says Assist conversations "are retained for as long as your
+Organization exists". After the 180-day expiry that sentence is wrong — in the
+customer's favour, but wrong. Filed as **AGL-1992**; nothing is actually
+deleted for 180 days after the policy is enabled, so the page has a full
+window to be corrected before any divergence exists in fact.
+
+### Top-level collections the cascade cannot see
+
+Field-keyed or id-keyed, so `recursiveDelete` never reaches them. Each either
+has a sweep in `eraseOrg` or is a defect.
+
+| Collection | Swept? | Contents |
+| --- | --- | --- |
+| `apiKeys` | yes (AGL-1444) | SHA-256 of the token, label, creating uid, scopes |
+| `ssoDomains` | yes (AGL-1448) | domain, GCIP tenant/provider ids, IdP name |
+| `consoleDomains` | yes (AGL-1448) | custom console domain claims |
+| `apiIdempotency` | yes (AGL-1448) | replay keys **and the original response body** — for the REST API a copy of the created record's `values`. 30-day TTL declared (AGL-1978); the sweep is what covers an erasure, the TTL is what bounds a live org |
+| `stripeCustomers` | yes (AGL-1448) | billing-identity → workspace correlation |
+| `orgSlugs` | yes (AGL-1448) | current slug **and every rename tombstone** |
+| `hostIndex` | yes, via `eraseHost` | subdomain/cname routing |
+| `platformRevenue`, `storefrontTaxCollected` | **never, deliberately** | tax records — see below |
+| `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
+| `supportTickets` + `messages` | yes (AGL-1971), by `eraseOrg` — `eraseUser` redacts instead | subject, body (≤5000 chars), `authorEmail` |
+| `profiles/{uid}` | yes (AGL-1970), by `eraseUser` | handle, display name, `stripeAccountId` |
+| `publisherHandles` | yes (AGL-1970) | handle reservations **and every rename tombstone** |
+| `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone | handle, display name, `stripeAccountId`, `publisherAgreement` |
+| `adminAudit` | n/a — it *is* the erasure record | ids and counts; some rows carry `email` |
+
+`marketplaceListings`, `marketplacePurchases`, `marketplaceReports` and
+`revocations` also outlive an erasure. That is AGL-1448's parked Tier 3 product
+decision — an erased org's listing is something buyers paid for — and it is a
+decision, not an oversight. It still needs making.
+
+**AGL-1970 made that decision cost something measurable rather than making it.**
+`eraseOrg` now reports `listingsRetained` — how many listings still name the
+erased org — in its result and in the `org.erased` audit row, so an erasure that
+leaves something standing says so instead of reporting a clean success. It also
+decides the one case that could not wait: an org with a surviving listing keeps
+a `publisherProfiles/{orgId}` document, but only as `{ erased: true, erasedAt }`.
+No handle, no display name, no `publisherAgreement`, and **no
+`stripeAccountId`** — the tombstone is "an internal record that the erasure
+happened", which is precisely what Privacy Policy §5 reserves, and it carries no
+byte that sentence calls content. An org with no surviving listing keeps nothing
+at all. Both branches, and the emptiness of the tombstone, are pinned by
+`erase-publisher-identity.emulator.spec.ts`.
+
+**Support threads are erased by the org and redacted by the person (AGL-1971),
+and the asymmetry is deliberate.** `eraseOrg` `recursiveDelete`s each
+`supportTickets` row so the `messages` subtree goes with it — `deleteDocsByOrgId`
+is *not* used here despite the identical query, because it deletes documents and
+not subtrees, and a batch delete would have orphaned every message under a
+vanished parent. `eraseUser` does **not** delete the thread: a ticket is the
+workspace's support history, so for it Aglyn is the processor and the org is the
+controller, and deleting it on one member's instruction is acting without the
+controller's. It sets `authorId`/`authorEmail` to `null` with
+`authorErased: true` on that person's messages only, leaving the body as the
+org's record. That runs as a **collection-group** query on `messages.authorId`
+so it reaches a workspace the person has since left — a walk over current
+memberships would miss those silently, and the residual would grow with tenure.
+It needs the `COLLECTION_GROUP` override on `messages.authorId` in
+`cloud/firebase-firestore.indexes.json`, added with that change: **until it is
+deployed, `eraseUser` reports `deleted.supportMessagesRedacted: null`**, which
+means "this step did not run", not "there was nothing to redact". Pinned by
+`erase-support-tickets.emulator.spec.ts`.
+
+**No retention exception for support threads, and the alternative was
+weighed.** A closed thread is arguable dispute evidence, the class of argument
+that keeps `platformRevenue` alive. It does not reach: that exemption is GDPR
+Art. 17(3)(b), *records retained to comply with a legal obligation*, and nothing
+is filed from a support ticket. DPA §11 commits the other way in terms. What
+survives as evidence is the `adminAudit` row — the erasure happened, when, at
+whose instruction, and how many threads it destroyed.
+
+### Deliberately retained past erasure
+
+| Collection | Why | Pinned by |
+| --- | --- | --- |
+| `platformRevenue` | Per-transaction **tax filing records** (gross, tax, jurisdiction); the quarterly Texas return is their sum. GDPR Art. 17(3)(b) exempts records kept to comply with a legal obligation. Texas requires four years. It is org-keyed **by field** — exactly the shape `deleteDocsByOrgId` eats — which is the trap. | `erase-org-tax-retention.emulator.spec.ts`; the `$never` note at `erase.ts:188` (AGL-1811) |
+| `storefrontTaxCollected` | Same shape, same reason: sales tax charged to shoppers on an org's storefront, including tax a `mode: 'stripe'` store collects under Aglyn's own Texas registration. | `erase.ts:199` (AGL-1904) |
+| `contactSuppressions` | A do-not-contact record must **keep** the identifier in order to recognise it and avoid contacting it again. Privacy Policy §11 states this in terms: "we will delete it from your account and keep it only on a limited internal do-not-contact list, used for nothing else". | `contact-suppression.ts` (AGL-1592) |
+
+These three are the only intended survivors. Everything else that survives an
+erasure today is a defect, and they are listed below.
+
+## Storage (`gs://aglyn-main.appspot.com`)
+
+Verified live 2026-08-18:
+`gcloud storage buckets describe … --format='value(lifecycle_config,soft_delete_policy)'`.
+
+| Prefix | Period | Note |
+| --- | --- | --- |
+| `orgs/`, `hosts/`, `users/` | life of the workspace/account | **No lifecycle rule may ever name these.** Lifecycle matches on age with no view of Firestore, so an age rule here would delete the bytes behind media documents that still exist. `apps/console/specs/media-bucket-lifecycle.spec.ts` fails the build if one appears. |
+| `adminAudit-archive/` | **365 days** | Applied and live. |
+| `erasures/` | **30 days** | A backstop. Nothing has written this prefix since AGL-1443 and zero objects were ever created in production; the rule exists so a revert or a future writer cannot silently recreate an unbounded prefix. |
+| `marketplaceListings/{id}/preview` | none, deliberately | The live preview image of a published listing. An age rule would 404 the browse card of a listing still for sale. |
+| **Soft delete (whole bucket)** | **7 days** | `retentionDurationSeconds: 604800`. Nothing here frees bytes or removes an object for a week after its rule fires — true of a manual delete too. |
+
+`docs/STORAGE_MANUAL_CONFIG.md` said the lifecycle policy was "NOT YET APPLIED";
+AGL-1496 applied it on 2026-08-13 and the read-back above confirms both rules
+are live. Corrected in that file with this change.
+
+## Backups and residual copies
+
+These are the copies a deletion does **not** immediately reach, and the DPA
+commits to their behaviour, so they belong in a retention schedule rather than
+only in `DISASTER_RECOVERY.md`. Verified live 2026-08-18.
+
+| Copy | Configured | Actually restorable | Evidence |
+| --- | --- | --- | --- |
+| Point-in-time recovery | 7 days (`versionRetentionPeriod: 604800s`) | 7 days | `gcloud firestore databases describe` |
+| Managed weekly backup | **98 days** (14 weeks, `8467200s`) | **effectively ≤ 7 days** — every backup this project has taken flips `READY` → `NOT_AVAILABLE` at ~day 7 with `expireTime` months out (AGL-1843) | `gcloud firestore backups schedules list`; `DISASTER_RECOVERY.md` |
+| Independent GCS export | 90-day bucket lifecycle, weekly Mondays 05:00 UTC | 90 days | `gs://aglyn-main-firestore-exports` (AGL-1843) |
+| Storage soft delete | 7 days | 7 days | bucket `soft_delete_policy` |
+
+The published claim is that residual copies persist "for up to that period" —
+14 weeks — which is the **outer bound of retention**, and every mechanism above
+sits inside it (98 ≥ 90 ≥ 7). The claim is therefore correct as a privacy
+statement. It is wrong as a *recoverability* statement, and that direction is
+`DISASTER_RECOVERY.md`'s problem, not this file's.
+
+**That DPA promise now has a mechanism (AGL-1975, 2026-08-18).** Live DPA §11:
+*"a deletion instruction survives any restoration — data deleted at Customer's
+instruction and later restored from a backup will be deleted again."* Nothing
+implemented it, and **import is merge-by-id, not replace**
+(`DISASTER_RECOVERY.md` Procedures C and D), so importing an old export into
+`(default)` silently resurrected every document an erasure deleted — during an
+incident, with nothing anywhere saying so.
+
+`tools/scripts/replay-erasures.mjs` is now a numbered step of Procedures C and
+D. It reads the `org.erased`/`user.erased` rows at or after the snapshot
+instant, re-runs `eraseOrg`/`eraseUser` for whichever targets are standing
+again — never a second copy of the cascade — and reinstates `erasureRequestedAt`
+from the audit row first, since an org whose customer asked *after* the
+snapshot returns with no request and `eraseOrg` correctly refuses one of those.
+Pinned by `replay-erasures.emulator.spec.ts`, which stages the merge-by-id
+accident for real and holds two negative controls: an erasure *before* the
+snapshot is out of window, and a live org carrying an ordinary audit row inside
+the window is not erased.
+
+**What is still open**: the rows are 90 days hot before the archiver moves them
+to Storage. That covers the 7-day PITR window and the ≤7-day usable managed
+backup; it does **not** cover a 90-day-old GCS export, where the erasure record
+and the export can age out within days of each other. The script refuses to
+call that clean — `incomplete: 'audit-window'`, non-zero exit — rather than
+printing an empty list, but the fix is to grow the window or read the archive.
+Tracked as gap 5 of `DISASTER_RECOVERY.md`.
+
+## Third parties
+
+| Provider | What they hold | Period | Source |
+| --- | --- | --- | --- |
+| Google Analytics (GA4) | Product/site analytics for `aglyn.com`, the console and the docs site. Signals off, ads personalization disabled, email redaction on. | **14 months** | Published Privacy Policy §3 — the only third-party number we publish |
+| Stripe | Customer record, payment methods, charges. Aglyn never receives a card number. | Stripe's own schedule; the customer object is deleted on erasure (`deleteStripeCustomer`, `erase.ts:130`) | |
+| Anthropic | Assist prompt inputs and site content sent for generation. | Provider's own; **we publish no number** | DPA §7.1 names them; the subprocessors row is being published under AGL-1909 |
+| Google Cloud / Firebase, Vercel, Resend | Hosting, datastore, auth, storage, email delivery. | Provider's own | Published subprocessors list |
+
+## Where this diverges from what is published
+
+Each of these is a defect, not a note. Filed rather than narrated.
+
+| # | Divergence | Filed |
+| --- | --- | --- |
+| 1 | ~~**`profiles/{uid}` survives `eraseUser`.**~~ **CLOSED 2026-08-18.** `eraseUser` now `recursiveDelete`s `profiles/{uid}` before the auth record and reports `deleted.profile` in the audit row. | **AGL-1970** |
+| 2 | ~~**`publisherProfiles/{orgId}` and `publisherHandles/{handle}` survive `eraseOrg`.**~~ **CLOSED 2026-08-18.** Handles — live reservation and rename tombstones alike — are swept by `orgId` field; the profile is deleted, or reduced to a content-free `{ erased: true }` tombstone when a listing outlives it. Both pinned by `erase-publisher-identity.emulator.spec.ts`, whose negative control proves a bystander publisher's profile, handle and payout id are untouched. | **AGL-1970** |
+| 3 | ~~**`supportTickets` survives both erasures.**~~ **CLOSED 2026-08-18.** `eraseOrg` recursive-deletes each thread with its `messages`; `eraseUser` redacts `authorId`/`authorEmail` across every workspace, current or former, and keeps the org's thread. Pinned by `erase-support-tickets.emulator.spec.ts`, whose negative controls hold a bystander org's thread and a co-author's email in a redacted thread. **One deployment step outstanding**: the `messages.authorId` `COLLECTION_GROUP` index must be deployed, or the user-side redaction reports `null`. | **AGL-1971** |
+| 4 | ~~**Assist Q&A has no retention period at all.**~~ **CLOSED 2026-08-18.** The exchange is split: `assistExchanges` (question, answer, `uid`) carries `expiresAt` at **180 days**; `assistSignals` (no prose, no uid) carries the docs paths, tokens, cost and rating with no expiry, so the data loop keeps its corpus. Declared in the index file and documented; the gcloud policy is owed. The published page now says something different — that is **AGL-1992**, not this row. | **AGL-1972** |
+| 5 | **`privacy@aglyn.com` may not exist.** It is the intake address in Privacy Policy §7, §9, §11 and §13 and the data-importer contact in DPA Annex A. The Drive open-items list records that only `noreply@` and `info@` were live at drafting; `security@`, `legal@`, `abuse@` and `dmca@` are in the same unconfirmed state and each is load-bearing in a published document. | **AGL-1973** |
+| 6 | ~~**No personal-data export exists.**~~ **CLOSED 2026-08-18.** `/manage/user` → **Download my data** and `/[orgSlug]/settings` → Delete → **Download workspace data** serve machine-readable JSON; `tools/scripts/subject-access.mjs` is the staff path for someone who cannot sign in, and it CALLS the same functions rather than reimplementing them. Secrets are reported as present and never reproduced; an API key's id is withheld because it is the token's SHA-256. **The coverage is held in step with erasure by `personal-data-export-coverage.spec.ts`**, which discovers every collection `erase.ts` names out of its source and fails until each has an explicit disclosure decision — so a new sweep here turns the export red instead of silently under-disclosing. | **AGL-1974** |
+| 7 | ~~**No deletion-instruction replay after a restore.**~~ **CLOSED 2026-08-18.** `tools/scripts/replay-erasures.mjs` is step 4 of `DISASTER_RECOVERY.md` Procedures C and D. Residual: the 90-day hot `adminAudit` window does not cover the oldest GCS export — the script reports that as `incomplete` and exits non-zero rather than printing an empty list. Gap 5 of `DISASTER_RECOVERY.md`. | **AGL-1975** |
+| 7b | **DPA §7.2's subprocessor change-notification mechanism does not exist** — no notice period, no subscribe control, no objection path. Split out because it is a **legal-page publication**, not a repo change: `/legal/subprocessors` needs a dated changelog, a stated notice period and an objection address, published in the same batch as the new subprocessor rows. | **AGL-1990** |
+| 8 | **Staff user erasure has no button.** `eraseUser` is reachable only by hand-crafting `POST /api/admin/users/manage {action:'erase'}` with a super-staff token — and `erase-org-cli.mjs:117` points operators at a "staff console → Users → Erase" button that does not exist. | **AGL-1977** |
+| 9 | ~~`apiIdempotency` has no TTL.~~ **CLOSED 2026-08-18** at **30 days**, and the severity was understated when it was filed: a settled claim stores the **original response body**, which for the REST API is the created record's `values`. It was a permanent second copy of every record created through the API — one that survived the record's own deletion, as `apps/docs/api/conventions.md` advertised in terms. That page moved from "keys never expire" to the 30-day window in the same change. | **AGL-1978** |
+| 10 | ~~The churn survey's free text has no period.~~ **CLOSED 2026-08-18.** Split into `orgs/{orgId}/churnSurveyDetails/{surveyId}` at **365 days**, so the free text expires while the closed-set `reason`, `surface` and `plan` stay for the life of the workspace — the retention funnel's breakdown (AGL-1859/AGL-1863) is what Zach asked for and must not be reaped along with the prose. | **AGL-1978** |
+| 11 | ~~`/PRIVACY_POLICY.md` at the repo root is a 2021-dated stub.~~ **CLOSED 2026-08-18.** Replaced by a pointer to the published pages and an explanation of the publication-first ordering, rather than deleted — a deleted file at an obvious path gets helpfully re-created. Nothing referenced it; confirmed before replacing. | **AGL-1978** |
+| 12 | **Privacy Policy v5 §5 says Assist conversations are retained for the life of the Organization**, which stopped being true when defect 4 was closed with a 180-day expiry. Wrong in the customer's favour, and nothing is actually deleted for 180 days, so the page has a window to be corrected. Publication-first: the page moves, then the snapshot. | **AGL-1992** |
+
+## Reviewing this document
+
+Re-run the reconciliation whenever a legal page is published — the check is
+cheap and the drift is silent. The three commands that produce every live
+number in this file:
+
+```bash
+gcloud firestore fields ttls list --project=aglyn-main --database='(default)'
+gcloud firestore databases describe --database='(default)' --project=aglyn-main \
+  --format="value(pointInTimeRecoveryEnablement,versionRetentionPeriod)"
+gcloud storage buckets describe gs://aglyn-main.appspot.com --project=aglyn-main \
+  --format="value(lifecycle_config,soft_delete_policy)"
+```
+
+Last reconciled **2026-08-18** against Privacy Policy **v4** and the live DPA
+(`dpaV2-20260813`). **Terms v5, a privacy update, new subprocessor rows and an
+Aglyn Assist retention disclosure were publishing on the same day** — every row
+above must be re-read against the published v5 text before it is quoted to a
+customer.

@@ -164,6 +164,17 @@ export function resolveStorageOverage(
   }
 }
 
+/**
+ * One metered GB-month at the price a customer actually pays, markup included.
+ *
+ * The refusal message below, the Billing card's quoted rate (AGL-1957) and the
+ * invoice all have to name the SAME number — a card advertising one price
+ * while the rollup bills another is the surprise bill wearing a disclosure.
+ */
+export function storageOveragePricePerGbUsd(): number {
+  return METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP
+}
+
 /** What an upload past the allowance would cost the customer for the month. */
 export function storageOverageUsd(overageMb: number): number {
   if (!Number.isFinite(overageMb) || overageMb <= 0) return 0
@@ -226,9 +237,8 @@ export function checkStorageCeiling(input: {
         `This upload would take you past your included ${Math.round(
           allowanceMb,
         )} MB of storage. Metered storage costs about ` +
-        `$${(
-          METERED_UNIT_RATES_USD.storagePerGbMonth * METERED_MARKUP
-        ).toFixed(3)}/GB per month — turn it on in Billing to keep ` +
+        `$${storageOveragePricePerGbUsd().toFixed(3)}/GB per month — turn it ` +
+        'on in Billing to keep ' +
         'uploading, and set the monthly limit you want to stay under.',
       projectedOverageUsd,
       ceilingUsd: 0,

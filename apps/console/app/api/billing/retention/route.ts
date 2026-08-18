@@ -29,8 +29,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   assertBoundedWinbackCoupon,
+  CHURN_SURVEY_DETAIL_COLLECTION,
   CHURN_SURVEY_DETAIL_MAX_LENGTH,
   CHURN_SURVEY_REASONS,
+  churnSurveyDetailExpiry,
   downsellTargetPlan,
   RETENTION_COLLECTION,
   RETENTION_SURFACES,
@@ -138,11 +140,27 @@ async function handler(request: Request): Promise<Response> {
         kind: 'churn_survey',
         surface,
         reason,
-        ...(detail ? { detail } : {}),
         plan,
         uid: decoded.uid,
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
+      // The free text lives in its own document so it can expire without
+      // taking the reason breakdown with it (AGL-1978). Written SECOND and
+      // not batched deliberately: if this write fails the survey still
+      // stands and the funnel keeps its number, which is the correct
+      // direction to fail in. A batch would trade that for atomicity nobody
+      // needs — the two are joined by id, and a detail with no survey is the
+      // combination that would actually be wrong.
+      if (detail) {
+        await orgRef
+          .collection(CHURN_SURVEY_DETAIL_COLLECTION)
+          .doc(surveyRef.id)
+          .create({
+            detail,
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: churnSurveyDetailExpiry(),
+          })
+      }
       // The next two steps' TERMS ride the survey response rather than being
       // decided in the browser. The dialog renders what it is told: which tier
       // to offer, what the discount is, and whether the org still has its one

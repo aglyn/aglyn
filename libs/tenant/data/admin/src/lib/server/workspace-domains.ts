@@ -324,3 +324,161 @@ export async function detachWorkspaceDomain(
 export function workspaceDomainsConfigured(): boolean {
   return config() !== null
 }
+
+/**
+ * What a name is ACTUALLY doing on a Vercel project, right now.
+ *
+ * `attachProjectDomain` answers "did the POST succeed", which is a different
+ * question and a much weaker one. A domain can be on the project and still
+ * serve nothing: Vercel accepts the name, then withholds routing and the
+ * certificate until ownership is proven (when the apex is registered to
+ * another Vercel account) or until DNS actually points here. Both states
+ * return a perfectly successful POST.
+ *
+ * That is the gap this exists to close (AGL-1913): the site custom-domain
+ * wizard reported `attached: true` off the POST alone, so "certificate is
+ * still issuing" and "this will never work" rendered as the same green chip,
+ * and the only advice the docs could give was to press the retry button again.
+ *
+ * Three reads, cheapest first, each of which can end the walk:
+ *
+ *  1. `GET /v9/projects/{project}/domains/{name}` — 404 means the name is not
+ *     on this project at all, and `verified: false` means Vercel is holding it
+ *     pending the `verification` challenge it returns alongside.
+ *  2. `GET /v6/domains/{name}/config` — the platform's own DNS check.
+ *     `misconfigured` is authoritative in a way our resolver check is not, and
+ *     `conflicts` names the records answering for the domain that are NOT ours
+ *     — the stale-A-record-shadowing-an-ALIAS case, reported by the platform
+ *     rather than inferred.
+ *  3. `GET /v5/certs?domain={name}` — whether a certificate covers the name
+ *     yet. Only consulted once the first two are clean, and a FAILED cert read
+ *     reports `serving` rather than inventing a problem: an unreachable certs
+ *     API must never turn a healthy domain amber.
+ *
+ * Same never-throws contract as everything else here (property 1 in the header)
+ * — a status probe that could throw would take down the card that renders it.
+ *
+ * `projectId` is a parameter because this serves BOTH Vercel projects: the
+ * console project via `config()`, and the tenant project the site custom-domain
+ * routes attach to. One implementation, per the header — the alternative is a
+ * second copy of these three calls in `apps/console`, which is exactly the
+ * drift this module exists to prevent.
+ */
+export type ProjectDomainState =
+  | 'serving'
+  | 'certificate-pending'
+  | 'ownership-pending'
+  | 'dns-misconfigured'
+  | 'not-attached'
+  | 'skipped'
+  | 'unknown'
+
+/** One challenge record Vercel wants before it will serve the name. */
+export interface ProjectDomainVerification {
+  type: string
+  domain: string
+  value: string
+  reason?: string
+}
+
+export interface ProjectDomainStatus {
+  state: ProjectDomainState
+  domain: string
+  /** Present when `state` is `ownership-pending`; what to add at the registrar. */
+  verification: ProjectDomainVerification[]
+  /**
+   * Records answering for this name that are not ours, as the platform sees
+   * them. A non-empty list on an otherwise-serving domain is the shadowing
+   * case: it resolves correctly some of the time.
+   */
+  conflicts: { type?: string; name?: string; value?: string }[]
+  /** Why, when the state alone does not say it. */
+  detail?: string
+}
+
+function statusFor(
+  domain: string,
+  state: ProjectDomainState,
+  extra: Partial<ProjectDomainStatus> = {},
+): ProjectDomainStatus {
+  return { state, domain, verification: [], conflicts: [], ...extra }
+}
+
+/** Whether any issued certificate's names cover `domain`, wildcards included. */
+function certificateCovers(cns: unknown, domain: string): boolean {
+  if (!Array.isArray(cns)) return false
+  const parent = domain.split('.').slice(1).join('.')
+  return cns.some((name) => {
+    const cn = normalizeHost(String(name ?? ''))
+    return cn === domain || (cn.startsWith('*.') && cn.slice(2) === parent)
+  })
+}
+
+export async function projectDomainStatus(
+  name: string,
+  options: { projectId?: string } = {},
+): Promise<ProjectDomainStatus> {
+  const domain = normalizeHost(name)
+  const settings = config()
+  const projectId = options.projectId ?? settings?.projectId
+  const token = process.env.VERCEL_TOKEN
+  if (!token || !projectId || !domain) return statusFor(domain, 'skipped')
+  const teamId = process.env.VERCEL_TEAM_ID
+  const headers = { Authorization: `Bearer ${token}` }
+
+  try {
+    const attached = await fetch(
+      `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}${query(teamId)}`,
+      { headers, signal: deadline() },
+    )
+    if (attached.status === 404) return statusFor(domain, 'not-attached')
+    if (!attached.ok) {
+      return statusFor(domain, 'unknown', { detail: String(attached.status) })
+    }
+    const payload = await attached.json().catch(() => null)
+    if (payload?.verified === false) {
+      return statusFor(domain, 'ownership-pending', {
+        verification: Array.isArray(payload?.verification)
+          ? payload.verification
+          : [],
+      })
+    }
+
+    const configured = await fetch(
+      `https://api.vercel.com/v6/domains/${encodeURIComponent(domain)}/config${query(teamId)}`,
+      { headers, signal: deadline() },
+    )
+    if (!configured.ok) {
+      return statusFor(domain, 'unknown', { detail: String(configured.status) })
+    }
+    const dns = await configured.json().catch(() => null)
+    const conflicts = Array.isArray(dns?.conflicts) ? dns.conflicts : []
+    if (dns?.misconfigured === true) {
+      return statusFor(domain, 'dns-misconfigured', { conflicts })
+    }
+
+    const certs = await fetch(
+      `https://api.vercel.com/v5/certs?domain=${encodeURIComponent(domain)}${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ''}`,
+      { headers, signal: deadline() },
+    )
+    // A certs read that did not answer must not turn a healthy domain amber.
+    if (!certs.ok) return statusFor(domain, 'serving', { conflicts })
+    const issued = await certs.json().catch(() => null)
+    const covered =
+      Array.isArray(issued?.certs) &&
+      issued.certs.some((cert: { cns?: unknown }) =>
+        certificateCovers(cert?.cns, domain),
+      )
+    return statusFor(domain, covered ? 'serving' : 'certificate-pending', {
+      conflicts,
+    })
+  } catch (error) {
+    const aborted =
+      (error as { name?: string })?.name === 'TimeoutError' ||
+      (error as { name?: string })?.name === 'AbortError'
+    console.error('[workspace-domains] status threw', domain, error)
+    return statusFor(domain, 'unknown', {
+      detail: aborted ? 'timeout' : 'network',
+    })
+  }
+}

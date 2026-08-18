@@ -52,6 +52,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
+import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -205,7 +206,22 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         body: JSON.stringify({ uid, ...payload }),
       })
       const body = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(body?.error ?? 'Request failed')
+      if (!response.ok) {
+        // The failure BODY, not just its message (AGL-1977). `erase` answers
+        // `owns-orgs` with a `blockers` list precisely so a caller can name
+        // the workspaces that need handing over; flattening the response to
+        // `new Error(body.error)` threw that away, leaving the only actionable
+        // refusal in the endpoint reading as a generic failure.
+        const failure = Object.assign(
+          new Error(body?.error ?? 'Request failed'),
+          {
+            skippedReason: body?.skippedReason,
+            blockers: body?.blockers,
+            status: response.status,
+          },
+        )
+        throw failure
+      }
       return body
     },
     [uid, user],
@@ -588,6 +604,24 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       }}
                     />
                   </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: (
+                  // AGL-1977. `eraseUser` has existed since AGL-1140 and
+                  // nothing in the console called it; a staff member honouring
+                  // an erasure request had to hand-craft an authenticated POST.
+                  // The card gates itself on `staffRole === 'super'`, which is
+                  // what the route demands.
+                  <StaffUserEraseCard
+                    uid={detail.user.uid}
+                    subjectLabel={detail.user.email ?? detail.user.uid}
+                    isSelf={(user as any)?.uid === detail.user.uid}
+                    onErase={async (reason) => {
+                      await callManage({ action: 'erase', reason })
+                    }}
+                  />
                 ),
               },
               {

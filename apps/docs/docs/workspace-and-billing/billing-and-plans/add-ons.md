@@ -22,14 +22,42 @@ pick a plan first).
 | Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | $3/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
 | Extra datasets | Additional shared datasets across the workspace | $2/mo | $2/mo | $1/mo | $1/mo | $1/mo | $1/mo |
 | Extra sites | Publish more sites than your plan includes | $10/mo | $8/mo | $5/mo | $5/mo | $4/mo | $3/mo |
-| POS registers | Additional point-of-sale registers/locations | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo |
+| POS registers | One extra point-of-sale register, assigned to one site | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo | $89/mo |
 | Event Calendar | The event manager + calendar elements, workspace-wide | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo | $9/mo |
 
 - **Prices are per unit per month.** On annual billing, add-ons bill yearly alongside
   your plan (12× the monthly price) — a subscription has one billing interval.
-- **POS registers** also require a plan with POS (Pro and above).
+- **POS registers** also require a plan with POS (Pro and above), and each one is
+  assigned to a specific site — see [Assigning register seats](#assigning-register-seats).
 - **Event Calendar** is a single workspace-wide toggle, not a per-site charge — see
   [Events calendar](../../content-and-data/events/overview.md).
+
+## Assigning register seats
+
+Unlike every other add-on, a POS register seat is bought **once for your workspace**
+and then **assigned to one site**. Buying a seat does not raise the register limit
+everywhere — it adds one register's worth of capacity that you place where you need it.
+
+Your plan already gives every site a register allowance on its own (Pro 1, Business 2,
+Advanced 5). A seat is added on top of that, for the one site you assign it to.
+
+To assign one, go to **Billing → POS register seats**, directly under Plan add-ons.
+The card shows how many seats you've **purchased**, how many are **assigned**, and how
+many are **unassigned**, then lets you add or remove seats per site.
+
+- **Seats are reassignable.** Moving a seat between sites is immediate and costs
+  nothing — you're not buying or cancelling anything, just relocating capacity.
+- **Taking a seat off a busy site doesn't delete anything.** If the site is running
+  more registers than it can after the move, the extra ones stay set up but stop
+  taking sales until you assign seats back or remove them. The console warns you
+  before the move, with the number affected.
+- **Deleting a site returns its seats to the pool** automatically, in the same action
+  that removes the site. There's nothing to reclaim by hand.
+- **You need the Manage billing permission** to move seats, the same permission that
+  buys them.
+
+If every purchased seat is already assigned and a site needs another register, either
+move a seat off a site that isn't using it, or buy another seat under Plan add-ons.
 
 ## How changes bill
 

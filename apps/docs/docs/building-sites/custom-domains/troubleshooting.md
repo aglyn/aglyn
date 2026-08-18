@@ -42,23 +42,47 @@ If **Verify & connect** won't go green, it's almost always DNS. Work through the
 
 ## Verified but not serving?
 
-Verification and attachment are separate steps under one button. If DNS verified but
-the platform attachment failed, the domain chip reads **"— attachment pending"** —
-press **Retry attachment** on the card. The same button (labeled **Re-attach** on a
-healthy domain) also re-runs attachment if the site serves certificate errors; a
-successful run confirms that SSL provisions shortly.
+Verification and attachment are separate steps under one button, and the chip next to
+your domain says which one you are waiting on — see the
+[chip table](connect-a-domain.md#after-it-connects) for all of them. The three that come
+up most:
+
+- **"— issuing certificate"** is not a problem. DNS is right and the domain is attached;
+  the certificate takes a few minutes. Press **Check status** rather than reconnecting.
+  A security warning in the browser during this window is expected and goes away on its
+  own.
+- **"— ownership check needed"** means your domain is registered to another account on
+  our hosting platform. The card prints a `TXT` record — add it at your registrar exactly
+  as shown, then press **Re-attach**. Nothing else will release the domain.
+- **"— not attached"** means the domain is saved on your site but not on the serving
+  platform. Press **Retry attachment**. If it keeps returning, the domain is held
+  somewhere else and support needs the domain name to release it.
 
 If connecting answers *"That domain is already connected to another site"*, the domain
 is attached to a different Aglyn site — every domain can serve only one. Disconnect it
 there first.
 
+## The site loads for some people and not others
+
+That is almost always two records answering for the same name — typically an `A` record
+left behind by a previous host sitting next to a correct `ALIAS`. DNS hands out one or
+the other, so it looks fine every time *you* try it.
+
+Aglyn names the offending records: **Verify & connect** warns about addresses that are
+not ours, and the card keeps showing them under the chip afterwards, **even while the
+domain is live**. Delete them at your registrar; nothing needs reconnecting once they are
+gone.
+
 ## Still stuck?
 
 Confirm the record resolves from your machine (`dig www.example.com CNAME` or
-`dig example.com A`), then press **Verify & connect** again. Remember that Aglyn checks
-DNS **at connect time only** — a record you change after connecting isn't re-checked,
-so a site that stops resolving after a DNS edit needs the record fixed (or the domain
-disconnected and reconnected), not more waiting.
+`dig example.com A`), then press **Verify & connect** again.
+
+Two different checks run, and it helps to know which one you are reading. **Verify &
+connect** is the one that decides whether a domain may be connected at all, and it runs
+only when you press it. **Check status** asks the serving platform what the domain is
+doing right now — including whether DNS still points here — so a record you changed after
+connecting shows up there rather than needing a disconnect and reconnect.
 
 ## Related
 

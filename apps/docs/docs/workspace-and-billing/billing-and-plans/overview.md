@@ -95,6 +95,35 @@ Nothing here guarantees that a price or feature set will remain the same.
   up as an overage on the usage rollup rather than as mail your customers never receive.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
+## Storage overage
+
+Each site includes a fixed amount of storage. What happens when you reach it depends on
+one setting, and **you are the one who decides it** — from
+**Billing → Storage limit**.
+
+- **Leave it off (the default).** Uploads past your included storage are refused. You are
+  never billed for storage overage, because the files are never accepted. Nothing you
+  have already uploaded is affected.
+- **Turn it on.** Uploads keep working past the included allowance and the extra storage
+  is metered on your next invoice — and you set a **monthly limit** at the same time.
+  Once a month's storage overage would pass that limit, uploads are refused again. The
+  limit is part of the agreement: turning metered storage on is never consent to an
+  unbounded amount.
+
+You can change the limit or turn metered storage off at any time, including while you are
+over your included allowance. Turning it off deletes nothing — the files stay, and only
+*new* uploads past the allowance are refused.
+
+Metered storage is only available on plans that meter infrastructure. Free plans have a
+fixed storage cap with no metering, and Enterprise storage is unlimited, so neither has
+anything to turn on.
+
+:::tip No surprise bills
+Between the opt-in and the monthly limit, storage cannot appear on an invoice you did not
+agree to in advance. The [usage alerts](#usage-meters) at 80% and 100% of your allowance
+arrive before either one matters.
+:::
+
 ## Seats
 
 - **Team seats** (workspace-wide) and per-site **collaborator seats** are metered and

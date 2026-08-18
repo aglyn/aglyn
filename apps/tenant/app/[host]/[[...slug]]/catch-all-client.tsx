@@ -711,6 +711,59 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           )
         })()
       ) : null}
+      {props.showBranding ? (
+        // "Report abuse" (AGL-1964), beside the credit badge and deliberately
+        // quieter than it.
+        //
+        // WHY HERE. A bank's fraud team or a browser vendor looking at a
+        // phishing page needs one thing first: who hosts this, and how do I
+        // tell them. The credit badge already answers the first half on every
+        // site that carries it, and until now the second half had no answer at
+        // all — which is how a report ends up at a registrar or Safe Browsing
+        // instead of at us, and how `*.aglyn.app` gets blocked wholesale.
+        //
+        // WHY GATED ON `showBranding` rather than shown on every site. The two
+        // populations line up almost exactly: the badge shows on free plans,
+        // and free open signup is the abuse surface AGL-1907 inventories —
+        // minutes from signup to arbitrary content on `{sub}.aglyn.app`. A
+        // customer who paid to remove branding bought a clean page, and
+        // putting a permanent "report this site" control on it would be both a
+        // broken promise and an insinuation. They are not left uncovered: the
+        // route answers on EVERY origin we serve, so a reporter who knows the
+        // path reaches it from any site, and the marketing site publishes it.
+        //
+        // WHY SAME-ORIGIN. The href is a bare path, never an aglyn.com URL. On
+        // a white-labelled brand an absolute link would announce who really
+        // hosts the site — the one thing white-label is sold to hide — and a
+        // relative path leaks nothing while going to exactly the same place.
+        //
+        // WHY NO `?url=` ON THE HREF. Reading `window.location.href` here
+        // would render '' on the server and the real URL on the client, which
+        // is a hydration mismatch on every page that shows the badge. The
+        // route reads the same-origin `Referer` instead — which is exactly the
+        // page being reported — so the prefill costs no client state and
+        // cannot desync. `rel` keeps `nofollow` and drops `noreferrer` for
+        // that reason; the header goes to our own origin and nowhere else.
+        <a
+          href="/api/report-abuse"
+          rel="nofollow"
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            left: 12,
+            zIndex: 2147483000,
+            padding: '4px 8px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontFamily: 'system-ui, sans-serif',
+            color: '#fff',
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            textDecoration: 'none',
+          }}
+        >
+          Report abuse
+        </a>
+      ) : null}
     </Aglyn.ScreenLinkContext.Provider>
     </Aglyn.SiteContext.Provider>
   )

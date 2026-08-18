@@ -159,15 +159,21 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 
 - A fresh create returns **`201`**; a replay of a key we've already seen returns
   **`200`** with the original record. Use the status to tell them apart.
-- Keys are scoped to the **dataset you post to** and to the **operation**, and
-  **never expire** — a key really is single-use forever. Use a UUID per logical
-  operation, and don't reuse one key across datasets: the second dataset treats it as
-  a separate operation and creates its own record. Reusing one key for a create *and*
-  a delete is likewise two separate operations, so a delete never replays a create's
-  record.
-- The replay is the **original response**, replayed verbatim. It keeps working after
-  the record has been edited or deleted — a retry never re-creates a record you have
-  since removed.
+- Keys are scoped to the **dataset you post to** and to the **operation**, and are
+  remembered for **30 days**. Use a UUID per logical operation, and don't reuse one
+  key across datasets: the second dataset treats it as a separate operation and
+  creates its own record. Reusing one key for a create *and* a delete is likewise two
+  separate operations, so a delete never replays a create's record.
+- After 30 days a key is forgotten, and re-sending it is a **new** operation that
+  creates a new record. This window is far longer than any retry — Stripe's
+  equivalent is 24 hours — and it exists because a stored replay holds a copy of the
+  record it created. Keeping that copy forever would mean a record you deleted lived
+  on in our replay store indefinitely, which is not something an idempotency key
+  should buy you. If you need a durable "only ever one of these" rule, that is a
+  uniqueness constraint in your own data, not an idempotency key.
+- The replay is the **original response**, replayed verbatim. Within the window it
+  keeps working after the record has been edited or deleted — a retry never
+  re-creates a record you have since removed.
 - If a request with the same key is **still in flight**, the second one is refused
   with a `409 conflict` (`code: "idempotency_in_progress"`) rather than served. That
   refusal is deliberate: letting it through is exactly the duplicate the key exists

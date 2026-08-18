@@ -67,7 +67,19 @@ interface AdminUser {
    * actions on it are not the same operation as on a project user.
    */
   tenantId?: string | null
+  /**
+   * Other pools holding this same uid (AGL-1962). A uid is unique only
+   * WITHIN a pool, so this is never normal — it means a custom token was
+   * minted for one pool's uid against another, and `signInWithCustomToken`
+   * created an empty shadow account instead of refusing. Both rows are real
+   * records and neither is deduplicated away; the row says which is which.
+   */
+  uidAlsoInPools?: (string | null)[] | null
 }
+
+/** How a pool reads in a sentence — the project pool has no tenant id. */
+const poolLabel = (tenantId: string | null) =>
+  tenantId ? `SSO tenant ${tenantId}` : 'the project pool'
 
 /**
  * Staff users admin (AGL-204): account listing with staff-claim and
@@ -304,7 +316,15 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                             uid: record.uid,
                           })}
                         >
-                          {record.email ?? record.displayName ?? record.uid}
+                          {/* An account with neither address nor name used to
+                              fall back to the bare uid, which reads as an
+                              ordinary row and is what made a shadow account
+                              look like a duplicate listing (AGL-1962). Say
+                              that the address is missing instead — the uid is
+                              still on the chip beside it. */}
+                          {record.email ??
+                            record.displayName ??
+                            'No email on this account'}
                         </AppLink>
                         <Chip
                           size="small"
@@ -327,6 +347,22 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                             color="primary"
                             variant="outlined"
                             label={`SSO · ${record.tenantId}`}
+                            sx={{ ml: 1 }}
+                          />
+                        ) : null}
+                        {/* Two rows, one uid, two pools (AGL-1962). They are
+                            NOT merged: both records exist in Firebase, and
+                            the project-pool copy is the one that wins every
+                            uid lookup, so hiding it would hide the bug. Name
+                            the other pool so staff can tell which row is the
+                            real account and which is the shadow. */}
+                        {record.uidAlsoInPools?.length ? (
+                          <Chip
+                            size="small"
+                            color="warning"
+                            label={`same uid in ${record.uidAlsoInPools
+                              .map(poolLabel)
+                              .join(', ')}`}
                             sx={{ ml: 1 }}
                           />
                         ) : null}

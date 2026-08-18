@@ -365,6 +365,136 @@ export function signupsHealth(
 }
 
 /**
+ * Refused org creations, reduced to a health verdict (AGL-1907).
+ *
+ * `signupsHealth` above counts the signups that SUCCEEDED. That is the right
+ * alarm for a wave that gets through, and the wrong one for a wave that is
+ * being contained: when the AGL-1534 limiter starts refusing, org-creation
+ * volume goes *down*, so the check that watches volume reads calmer at exactly
+ * the moment scripted pressure arrives. The 429s are the signature. Before the
+ * doors open on Sep 1 this is also the only thing that can answer "has the
+ * limiter ever actually fired in production" — a control nobody has seen
+ * refuse is a control nobody has tested.
+ *
+ * Counted from `rateLimits/signupRefused_{minuteBucket}` markers, which carry
+ * per-reason counts and no identifiers. This is a separate check rather than
+ * more fields on `SignupsCheck` so the AGL-1536 verdict keeps its meaning
+ * exactly: a creation wave and a refusal wave are different events with
+ * different responses (feature-lock the signups door vs. leave the limiter to
+ * do its job and go read the refusal reasons).
+ *
+ * Pure on purpose, like its siblings: the route queries, this decides.
+ */
+export interface SignupRefusalMarker {
+  /** Refused attempts merged into this minute bucket. */
+  refusals?: number
+  /** Split by which cap refused: `{ uid?: n, ip?: n }`. */
+  byReason?: Record<string, number>
+  /** When the most recent refusal in this bucket happened. */
+  refusedAtMs?: number
+}
+
+export interface SignupRefusalsCheck extends HealthCheck {
+  /**
+   * Refused org creations inside the trailing window. A COUNT only — the
+   * endpoint is public, and the limiter's keys are a uid and a hashed client
+   * IP. Null when the query itself failed.
+   */
+  refusedSignups: number | null
+  /**
+   * Which cap did the refusing. A run that is almost all `ip` is one address
+   * hammering; a run that is almost all `uid` is many accounts each pushing
+   * past three, which is the distributed shape. Null when the query failed.
+   */
+  refusedByReason: Record<string, number> | null
+  /** Minutes since the most recent refusal, so the body dates itself. */
+  minutesSinceLast: number | null
+  /** The trailing window the count covers, so the body is self-describing. */
+  windowMinutes: number
+  /** The count above which this reports degraded. */
+  threshold: number
+}
+
+/**
+ * Trailing window the refusal count covers. One hour, matching the limiter's
+ * own window (`org-create` is 3/h and 10/h) so the number is readable against
+ * the caps that produced it.
+ */
+export const SIGNUP_REFUSAL_WINDOW_MINUTES = 60
+
+/**
+ * Degraded above 50 refusals/hour.
+ *
+ * Not zero, unlike the limiter-degradation alarm: a refusal is the system
+ * working, and a real person who fumbles a workspace slug four times in an
+ * hour produces one. The number that means something is *sustained* refusal.
+ * Calibrated the same way AGL-1536's was: production holds single-digit orgs
+ * (2026-08), so organic refusals are ~zero per hour, and 50 is far above any
+ * plausible human while being reached in under a minute by a script. One
+ * determined address can generate this alone — that is intended, because "one
+ * address is hammering the signup door" is worth an email even though the
+ * limiter is containing it.
+ */
+export const MAX_SIGNUP_REFUSALS_PER_WINDOW = 50
+
+export function signupRefusalsHealth(
+  markers: SignupRefusalMarker[] | null,
+  ms: number,
+  now: number = Date.now(),
+  threshold: number = MAX_SIGNUP_REFUSALS_PER_WINDOW,
+  windowMinutes: number = SIGNUP_REFUSAL_WINDOW_MINUTES,
+): SignupRefusalsCheck {
+  // A failed query is degraded, not ok — the same rule `signupsHealth` and
+  // `rateLimitsHealth` follow. An alarm that cannot see the thing it watches
+  // must not report calm.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'refusals-unavailable',
+      refusedSignups: null,
+      refusedByReason: null,
+      minutesSinceLast: null,
+      windowMinutes,
+      threshold,
+    }
+  }
+
+  let refusedSignups = 0
+  let newestAtMs: number | null = null
+  const refusedByReason: Record<string, number> = {}
+  for (const marker of markers) {
+    refusedSignups += marker.refusals ?? 0
+    for (const [reason, count] of Object.entries(marker.byReason ?? {})) {
+      // `Number(...) || 0` rather than a bare add: these come out of Firestore
+      // and a corrupt field must not turn the total into NaN, which compares
+      // false against the threshold and would report calm forever.
+      refusedByReason[reason] =
+        (refusedByReason[reason] ?? 0) + (Number(count) || 0)
+    }
+    const at = marker.refusedAtMs
+    if (typeof at === 'number' && (newestAtMs === null || at > newestAtMs)) {
+      newestAtMs = at
+    }
+  }
+
+  const over = refusedSignups > threshold
+  return {
+    ok: !over,
+    ms,
+    ...(over ? { code: 'signup-refusal-wave' } : {}),
+    refusedSignups,
+    refusedByReason,
+    minutesSinceLast:
+      newestAtMs === null
+        ? null
+        : Math.max(0, Math.floor((now - newestAtMs) / 60_000)),
+    windowMinutes,
+    threshold,
+  }
+}
+
+/**
  * Rate-limiter degradation, reduced to a health verdict (AGL-1693).
  *
  * `consumeRateLimit` fails SOFT: when the Firestore counter is unreachable it
@@ -758,4 +888,98 @@ export function billingWebhookHealth(
     return { ...base, ok: false, code: 'deliveries-failing' }
   }
   return { ...base, ok: true }
+}
+
+/**
+ * Is every interval we can SELL also an interval we can BILL? (AGL-1931)
+ *
+ * The metered item is what turns reported usage into money. It is attached
+ * from an env-configured price id that is keyed by billing interval —
+ * `STRIPE_PRICE_METERED` for monthly, `STRIPE_PRICE_METERED_YEARLY` for
+ * annual — because Stripe forbids one subscription mixing
+ * `recurring.interval`.
+ *
+ * When one of those ids is missing, `meteredPriceId(interval)` returns null
+ * and every subscription-mutating path does the only safe thing: it attaches
+ * nothing and carries on. Failing a checkout over it would be worse. But the
+ * result is a subscription that accrues usage against a meter and carries no
+ * item to bill it, and NOTHING about that is visible — the plan is right, the
+ * entitlements are right, the invoice looks right, and the only trace is
+ * revenue that never arrives.
+ *
+ * That is the defect shape this check exists to end. The absence of a price
+ * was indistinguishable from "correctly no overage", so it hid behind a
+ * `console.warn` on a server log nobody reads. Here it is a 503 on the same
+ * probe the uptime check and alert email already watch.
+ *
+ * ## Why ASYMMETRY is the loudest code
+ *
+ * One interval configured and the other not means one cohort of customers is
+ * billed for overage and the other silently is not — off the same meter, on
+ * the same plans, with no screen anywhere showing the difference. It cannot
+ * be a deliberate state: there is no product reason to meter monthly
+ * subscribers and exempt annual ones.
+ *
+ * ## Why BOTH missing is still red, but only with Stripe configured
+ *
+ * Both unset with no `STRIPE_SECRET_KEY` is simply an unprovisioned
+ * deployment — local dev, a fresh preview — where no money is at stake and
+ * going red would train everyone to ignore this check. That is the exact
+ * reasoning the checkout and subscription routes already apply to their
+ * warning, and it is preserved here.
+ *
+ * But both unset while Stripe IS configured is a deployment that can take
+ * money and cannot bill a single unit of overage on ANY interval. That is
+ * the same revenue loss, merely total instead of partial, and the earlier
+ * code treated it as calm because it only ever compared the two ids to each
+ * other. Comparing them to Stripe's presence instead is what closes it.
+ */
+export interface MeteredPricingFacts {
+  /** Whether this deployment holds a Stripe secret key at all. */
+  stripeConfigured: boolean
+  /** `STRIPE_PRICE_METERED` — the monthly metered price — is set. */
+  monthly: boolean
+  /** `STRIPE_PRICE_METERED_YEARLY` — the annual metered price — is set. */
+  yearly: boolean
+}
+
+export interface MeteredPricingCheck extends HealthCheck {
+  stripeConfigured: boolean
+  monthly: boolean
+  yearly: boolean
+  /**
+   * The interval that would accrue unbilled usage, named so the body says
+   * which cohort is affected without anyone re-deriving it from two booleans.
+   */
+  unbilledInterval: 'month' | 'year' | 'both' | null
+}
+
+export function meteredPricingHealth(
+  facts: MeteredPricingFacts,
+  ms: number,
+): MeteredPricingCheck {
+  const base = {
+    ms,
+    stripeConfigured: facts.stripeConfigured,
+    monthly: facts.monthly,
+    yearly: facts.yearly,
+  }
+
+  // Unprovisioned: no Stripe, no money, no alarm.
+  if (!facts.stripeConfigured) {
+    return { ...base, ok: true, code: 'stripe-unconfigured', unbilledInterval: null }
+  }
+  if (facts.monthly && facts.yearly) {
+    return { ...base, ok: true, unbilledInterval: null }
+  }
+  if (!facts.monthly && !facts.yearly) {
+    return { ...base, ok: false, code: 'metered-price-missing', unbilledInterval: 'both' }
+  }
+  // Exactly one. The AGL-1931 shape.
+  return {
+    ...base,
+    ok: false,
+    code: 'metered-price-asymmetric',
+    unbilledInterval: facts.yearly ? 'month' : 'year',
+  }
 }

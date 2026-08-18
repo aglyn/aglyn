@@ -20,6 +20,13 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { resolveManualTaxRateId } from './manual-tax-rate'
+import {
+  applyNativeCheckoutParams,
+  nativeCheckoutStripeHeaders,
+  readCheckoutSessionPayload,
+  resolveNativeCheckoutMode,
+} from './native-checkout'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -281,53 +288,23 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return derived ? { 'Idempotency-Key': derived } : {}
     }
 
+    // Minting and caching now live in `manual-tax-rate.ts` (AGL-1953), which
+    // the cart path needs too — two copies of a money-shaped cache is how two
+    // paths quietly diverge. Behaviour here is unchanged.
     let recurringTaxRateId = ''
     if (isSubscription && taxCents > 0) {
-      // ≤4 decimal places, which is all Stripe accepts on a tax rate.
-      const percentage = Math.round(taxPct * 10000) / 10000
-      const displayLabel = taxLabel.slice(0, 50)
-      const cacheKey = `p${Math.round(percentage * 10000)}-${encodeURIComponent(
-        displayLabel,
-      )}`
-      const cacheRef = hostRef.collection('stripeTaxRates').doc(cacheKey)
-      const cached = await cacheRef.get()
-      recurringTaxRateId = String(cached.get('taxRateId') ?? '')
+      recurringTaxRateId =
+        (await resolveManualTaxRateId({
+          hostRef,
+          taxPct,
+          taxLabel,
+          headers: stripeKeyHeader('tax-rate'),
+        })) ?? ''
       if (!recurringTaxRateId) {
-        const rateResponse = await fetch('https://api.stripe.com/v1/tax_rates', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            ...stripeKeyHeader('tax-rate'),
-          },
-          body: new URLSearchParams({
-            display_name: displayLabel,
-            percentage: String(percentage),
-            inclusive: 'false',
-          }).toString(),
-        })
-        const taxRate = (await rateResponse.json()) as {
-          id?: string
-          error?: any
-        }
-        if (!rateResponse.ok || !taxRate.id) {
-          console.error('Stripe tax rate error', taxRate.error)
-          // Nothing was sold — hand the key back so the same button works
-          // once Stripe does (AGL-1697).
-          await claim.release()
-          return res.status(502).json({ error: 'Checkout failed' })
-        }
-        recurringTaxRateId = String(taxRate.id)
-        // Best-effort: the rate exists either way, and two concurrent misses
-        // racing this write just means one orphan rate on the dashboard.
-        await cacheRef
-          .set({
-            taxRateId: recurringTaxRateId,
-            pct: percentage,
-            label: displayLabel,
-            createdAtMs: Date.now(),
-          })
-          .catch(() => undefined)
+        // Nothing was sold — hand the key back so the same button works
+        // once Stripe does (AGL-1697).
+        await claim.release()
+        return res.status(502).json({ error: 'Checkout failed' })
       }
     }
 
@@ -537,6 +514,26 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       )
       CommerceModel.appendCheckoutShippingParams(params, shippingPlan.options)
     }
+    // The Payment Element (AGL-1944), and the LAST thing done to the params on
+    // purpose. Everything above — price, coupon, tax, shipping, the Connect
+    // destination, the fee, every metadata key the webhook reads — is computed
+    // identically for both checkout paths, and this rewrite touches none of it:
+    // it swaps the redirect's URL pair for `ui_mode` + `return_url` and stops.
+    // A native session that priced differently from the hosted one would be the
+    // under-collection AGL-1944 warns about, and the only defence that actually
+    // holds is that there is nowhere for the two to diverge.
+    //
+    // Off unless the flag is on for this org AND a publishable key exists, so
+    // the default remains the redirect — see `resolveNativeCheckoutMode`.
+    const nativeMode = await resolveNativeCheckoutMode(
+      String(ownerOrg?.org?.id ?? ''),
+    )
+    if (nativeMode.native) {
+      applyNativeCheckoutParams(
+        params,
+        `${backUrl}${separator}order=success&session_id={CHECKOUT_SESSION_ID}`,
+      )
+    }
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
       {
@@ -550,19 +547,32 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           // subscription — covering the window where the claim is written
           // but the response never arrives.
           ...stripeKeyHeader('session'),
+          // Empty on the hosted path, so its request is byte-identical to the
+          // one this handler sent before AGL-1944 (AGL-1944).
+          ...nativeCheckoutStripeHeaders(nativeMode),
         },
         body: params.toString(),
       },
     )
-    const session = (await response.json()) as { url?: string; error?: any }
-    if (!response.ok || !session.url) {
+    const session = (await response.json()) as {
+      url?: string
+      id?: string
+      client_secret?: string
+      error?: any
+    }
+    // `!session.url` was the liveness check, and a `ui_mode` session HAS no
+    // url — so the check moves with the mode rather than staying behind and
+    // reading every successful native session as a Stripe failure (AGL-1944).
+    const payload = response.ok
+      ? readCheckoutSessionPayload(session, nativeMode)
+      : null
+    if (!payload) {
       console.error('Stripe checkout error', session.error)
       // Nothing was sold — hand the key back so one flaky moment does not
       // lock this product out for the shopper.
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
-    const payload = { url: session.url }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error) {

@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v4'
+export const LEGAL_DOCUMENT_VERSION = 'v6'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -182,20 +182,167 @@ export interface LegalDocumentManifestEntry {
  * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
  * Same capture method as v1–v3, proven against the v3 hashes before this set
  * was taken.
+ *
+ * v5 (2026-08-18, AGL-1794 + AGL-1860): again one snapshot cycle for two
+ * changes, for the same reason v4 was.
+ *
+ *   - AGL-1794, Terms §10: a new §10.6 "Chargebacks and Payment Disputes"
+ *     AND a rewrite of §10.1 and §10.2. The new clause makes the transfer
+ *     reversal contractual — a lost dispute is recovered from the merchant's
+ *     SHARE (the implemented proportional maths, not the gross charge), a
+ *     reversal may take the connected balance below zero, and the two caps
+ *     already true in code (never more than the merchant received, never
+ *     twice for one purchase) become merchant protections rather than
+ *     implementation details. Aglyn keeps bearing the processor's dispute fee
+ *     and does not recharge the platform transaction fee on a reversed sale,
+ *     with headroom to change that under **§4.7** — the fee-change right.
+ *     NOT §5.1, which is the right to change the SERVICES; an earlier draft
+ *     anchored a money term to a features clause and it was caught on review.
+ *
+ *     §10.1/§10.2 are the correction that clause made unavoidable. Live §10.1
+ *     said "you — not Aglyn — are the merchant of record" and §10.2 said
+ *     "Aglyn does not process, hold, or disburse your sales proceeds". Both
+ *     are false: every storefront checkout is a DESTINATION CHARGE on the
+ *     platform account with no `on_behalf_of` (`cart-checkout.ts`,
+ *     `checkout.ts` one-time and subscription, `draft-order.ts`, `reserve.ts`,
+ *     `pos-order.ts`), so Aglyn's account is the settlement account and
+ *     Aglyn's balance is what a dispute debits. §10.1 is now "You Are the
+ *     Seller" and drops `marketplace` from its feature list, pointing
+ *     marketplace sales at the Marketplace Publisher Agreement — live §10.1
+ *     had been flatly contradicting MPA §8.1/§8.3 on the same charge model.
+ *     §10.2 is now "How Payments Are Processed and Paid Out" and describes the
+ *     real flow, including that a refund gives back Aglyn's platform fee
+ *     (`refund.ts`'s `refund_application_fee: 'true'`), which was disclosed
+ *     nowhere.
+ *
+ *     ⚠️ The rewrite deliberately states the MECHANICS and NO LABEL: it does
+ *     not assert who the merchant of record is for storefront sales. Declaring
+ *     it drags the marketplace-facilitator sales-tax question with it, and
+ *     nobody has decided that. §10.3's "collection and remittance of all
+ *     applicable taxes" is UNTOUCHED for the same reason — changing it would
+ *     be a tax allocation between Aglyn and its customers, which is the most
+ *     dangerous edit available here. Both are recorded as open counsel
+ *     questions on AGL-1794, not as oversights.
+ *
+ *     Also in the same publish: §2's Services definition and §12.3 now say
+ *     "the Aglyn marketplace" (AGL-975), because a fresh snapshot carrying the
+ *     old adjective would red the naming guard on a file that has no
+ *     exemption and cannot be given one.
+ *
+ *   - AGL-1860, Privacy §2 and §5: the Aglyn Assist disclosure, which is that
+ *     feature's legal precondition. §2's `**AI features.**` paragraph now
+ *     names Anthropic as the provider ("currently", not "e.g." — the
+ *     subprocessor register is exhaustive now, so "e.g." reads as an
+ *     undisclosed set), names Assist, and encodes the confirm-before-write
+ *     guardrail. A second paragraph discloses what an Assist exchange retains
+ *     — question, answer, console page, token count, thumbs rating — that it
+ *     is org-scoped and accessible to staff, and enumerates three purposes
+ *     including METERING, because per-org cost telemetry exists purely for
+ *     billing and a policy silent about it would be silent about the one
+ *     field that does. §5 adds the retention sentence, published in the strong
+ *     form only because it was verified against landed code: all three Assist
+ *     collections are true subcollections of `orgs/{orgId}` and `eraseOrg`'s
+ *     `recursiveDelete(orgRef)` reaches them. No new deletion mechanism was
+ *     invented — §5 routes to the §7 that already exists, which is the
+ *     AGL-1592 lesson.
+ *
+ * Same publication-first ordering as every prior set: the besigner edits were
+ * published, the live pages confirmed serving them, and only then were these
+ * snapshots captured. The capture method was re-proven byte-for-byte against
+ * the v4 terms + privacy pins AND the `2026-08-14.1` publisher-agreement pin
+ * before this set was taken.
+ *
+ * v6 (2026-08-18, AGL-1987 + AGL-1992): a CORRECTION OF PUBLISHED TEXT, taken
+ * the same day v5 published. Both documents were wrong on the live page, in
+ * opposite directions, and both errors were about a number.
+ *
+ *   - AGL-1987, Terms §10.6 and §10.2: the lost-dispute clawback is GROSS, and
+ *     v5 published the opposite. ⚠️ THE v5 NOTE ABOVE IS ITSELF WRONG and is
+ *     left standing as the record of what shipped: it says a lost dispute is
+ *     recovered from the merchant's "SHARE (the implemented proportional
+ *     maths, not the gross charge)" and that Aglyn "does not recharge the
+ *     platform transaction fee on a reversed sale". Neither is what the code
+ *     does. Stripe transfers the FULL charge to the connected account and
+ *     debits `application_fee_amount` at the DESTINATION, so `transfer.amount`
+ *     equals `charge.amount`, the proportional share is the WHOLE principal,
+ *     and the merchant hands back the gross while Aglyn keeps its commission.
+ *     The asymmetry is deliberate: `refund.ts` sends
+ *     `refund_application_fee: 'true'`, the dispute door sends no such flag.
+ *
+ *     THREE sentences were defective, not the one AGL-1987 quotes, and the
+ *     third is the one a careless correction leaves behind:
+ *       1. "the portion of the disputed amount that was transferred or payable
+ *          to you" — reads as the merchant's net share.
+ *       2. "does not recharge you the platform transaction fee (Section 4.3)
+ *          on a reversed sale" — flatly false; the clause AGL-1987 was filed
+ *          for.
+ *       3. "We will not recover from you more than the amount you received for
+ *          the sale" — A CAP THE CODE BREAKS AS READ. The merchant's economic
+ *          receipt is $95 and the reversal takes $100. Deleting only (2) would
+ *          have left a cap contradicting the corrected opening.
+ *     §10.2's "recover YOUR SHARE of a refunded, disputed, or otherwise
+ *     reversed sale" was corrected in the same pass for the same reason — not
+ *     false, but it re-created the ambiguity one subsection earlier. §10.2's
+ *     refund-door sentence ("we give back our platform transaction fee on the
+ *     refunded amount") is UNTOUCHED and correct.
+ *
+ *     ⚠️ The clause says "platform transaction fee (Section 4.3)", NOT
+ *     "commission", though AGL-1987 named "commission" as must-survive. The
+ *     Terms define the fee at §4.3 and have never used "commission"; an
+ *     undefined synonym for a defined money term is how a dispute over which
+ *     one governs starts. Zach's call, recorded on the issue.
+ *
+ *     ⚠️ NOT ESTABLISHED, and it is a real limitation: no Stripe dispute has
+ *     been exercised end to end. `transfer.amount === charge.amount` is
+ *     measured in TEST MODE only. The behaviour is pinned by two guards proven
+ *     red on purpose (`33b391969`, which is comment-and-guard only — it
+ *     changed no behaviour, so gross is what has always shipped), and
+ *     `docs.aglyn.com` already states the split publicly. If a real dispute
+ *     behaves differently this clause changes and costs another bump.
+ *
+ *   - AGL-1992, Privacy §5 and §2: AGL-1972 gave Assist conversations a
+ *     180-day TTL (`ASSIST_EXCHANGE_RETENTION_DAYS`, verified on `origin/main`
+ *     at capture time, not read from a plan), which made v5's "retained for as
+ *     long as your Organization exists" false the day after it published. §5
+ *     now describes the SPLIT, because that is what makes the short period
+ *     honest rather than a loss: `assistExchanges` (question, answer, uid —
+ *     180 days) versus `assistSignals` (docs paths, model, cost, rating — no
+ *     prose, NO uid — life of the Organization). §2's "Retention and deletion
+ *     follow the same rules as the rest of your Organization's data" became
+ *     the opposite of true and is neutralised to "are described in Section 5"
+ *     rather than restating the number twice — two copies of a number is how
+ *     the register drifted before.
+ *
+ *     The error ran in the customer's favour (we delete SOONER than promised)
+ *     and nothing diverges in fact for 180 days — the gcloud TTL policy is
+ *     declared and OWED, not enabled (`docs/FIRESTORE_MANUAL_CONFIG.md`), so
+ *     no exchange has been deleted. That window is why this was correctable
+ *     rather than urgent, and it is not an argument for leaving it.
+ *
+ * One bump for both documents, as v4 and v5 were, because every bump re-pins
+ * clickwrap and forces re-acceptance — and this is the SECOND re-consent in
+ * one day. AGL-1990's DPA and Subprocessors edits published in the same sitting
+ * and are deliberately NOT here: neither page is acceptance-pinned, so they
+ * cost no bump and have no hash.
+ *
+ * Publication-first as always. The capture method was re-proven byte-for-byte
+ * against the v5 terms + privacy pins AND the `2026-08-18.1`
+ * publisher-agreement pin before this set was taken. The publisher agreement is
+ * UNCHANGED by this pass and must not be bumped for consistency.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '1ae10b9074cb2e175dd7553180c0bb9a0d77a88c3a263a102a5c6a4c143a1ec2',
-    bytes: 33295,
+      '391b3460c01461651ab0ac4921f1d879a95a2b4223c1e1f01889ece2359980d4',
+    bytes: 35966,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '96b24414fb39209be36c804cec72d11341474edfadc279f7b252f1431f1906a9',
-    bytes: 12912,
+      'e6796516e30e636024f2c544b286b4fa6b7cfe74a36595ba3a00cb8b8b75f3f5',
+    bytes: 14699,
   },
 ]

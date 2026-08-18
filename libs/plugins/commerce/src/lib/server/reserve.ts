@@ -169,6 +169,30 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
       createdAtMs: now,
     } satisfies CommerceModel.HostReservation)
 
+    // TAX: a reservation deliberately computes NONE, in either mode
+    // (AGL-1953). This is a stated decision, not the omission it looks like.
+    //
+    // Two reasons, and either alone would be enough:
+    //
+    //  1. **A stay is not goods.** The AGL-285 zone editor configures a SALES
+    //     tax rate, and lodging is a different regime — occupancy/hotel tax,
+    //     with its own rates, its own registration and its own return. Nothing
+    //     the merchant typed into that editor is the right number for a night,
+    //     and applying it would be confidently wrong rather than merely
+    //     absent. Stripe Tax has the same problem from the other side: it
+    //     needs a lodging tax code this handler does not send, so
+    //     `automatic_tax` here would compute a goods rate on a room.
+    //  2. **This charge is usually a DEPOSIT.** `chargeCents` is
+    //     `quote.depositCents || quote.totalCents`, so taxing it would apply a
+    //     whole stay's tax to a fraction of it, with the balance collected off
+    //     the platform entirely.
+    //
+    // So the merchant collects lodging tax at the property, which is where
+    // that regime is administered anyway. `commerce-reservation` is already in
+    // `storefront-tax-record.ts`'s SESSION_TYPES, so the day this path does
+    // compute tax it is recorded without further wiring — the absence here is
+    // the decision, not a missing hookup. Proper lodging-tax support is filed
+    // separately rather than guessed at here.
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin

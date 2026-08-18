@@ -55,6 +55,24 @@ export * from './support-tiers'
 export * from './release-flags'
 export * from './lockdown'
 export * from './media-quarantine'
+export * from './abuse-report'
+// The other three quarters of §512 (AGL-1983): the put-back procedure that
+// answers a notice, and the strike ledger that conditions the safe harbour.
+export * from './dmca-counter-notice'
+export * from './repeat-infringer'
+// `addBusinessDays` is defined by BOTH './support-tiers' and
+// './dmca-counter-notice', so two `export *` made the name ambiguous and
+// TS2308'd this barrel — and with it every tsconfig that reads it.
+//
+// Resolved the way the compiler suggests, by naming a winner, rather than by
+// deleting one of the two. They are behaviourally equivalent today but they
+// answer to different masters: one is our support SLA, the other is the
+// §512(g)(2)(C) put-back clock. Collapsing them would mean a later tweak to
+// the support window silently moving a statutory legal deadline. Neither
+// module imports the name from this barrel — the DMCA spec imports it from
+// './dmca-counter-notice' directly — so this only decides the barrel, and
+// nothing observable changes.
+export { addBusinessDays } from './support-tiers'
 export * from './org-override-reason'
 export * from './host-tokens'
 export * from './variables'

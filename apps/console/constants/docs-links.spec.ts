@@ -26,6 +26,10 @@ import {
 
 const REPO_ROOT = join(__dirname, '../../..')
 const GENERATOR = join(REPO_ROOT, 'tools/scripts/generate-docs-help.mjs')
+const ASSIST_INDEX_GENERATOR = join(
+  REPO_ROOT,
+  'tools/scripts/generate-assist-docs-index.mjs',
+)
 
 describe('docs help registry', () => {
   it('has a well-formed base URL with no trailing slash', () => {
@@ -86,6 +90,32 @@ describe('docs help registry', () => {
       const detail = `${error.stdout ?? ''}${error.stderr ?? ''}`.trim()
       throw new Error(
         `Docs help registry is stale.\n${detail}\nRegenerate: node tools/scripts/generate-docs-help.mjs`,
+      )
+    }
+  })
+
+  // The SECOND generated docs artifact, and until now the unguarded one
+  // (AGL-1988). `assist-docs-index.generated.ts` is the corpus Aglyn Assist
+  // retrieves from, and its generator has always had a `--check` mode that
+  // nothing called — so the index could drift from apps/docs indefinitely
+  // and the only symptom would be the assistant citing a heading that no
+  // longer exists, or missing a page that does. That is a quiet failure on
+  // the feature's whole reason to exist, so it gets the same gate its
+  // sibling has.
+  it('the Assist retrieval index is in sync with apps/docs', () => {
+    expect(existsSync(ASSIST_INDEX_GENERATOR)).toBe(true)
+    let error: (Error & { stdout?: Buffer; stderr?: Buffer }) | undefined
+    try {
+      execFileSync('node', [ASSIST_INDEX_GENERATOR, '--check'], {
+        cwd: REPO_ROOT,
+      })
+    } catch (caught) {
+      error = caught as typeof error
+    }
+    if (error) {
+      const detail = `${error.stdout ?? ''}${error.stderr ?? ''}`.trim()
+      throw new Error(
+        `Aglyn Assist's docs index is stale — the assistant is retrieving from an out-of-date copy of the documentation.\n${detail}\nRegenerate: node tools/scripts/generate-assist-docs-index.mjs`,
       )
     }
   })

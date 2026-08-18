@@ -324,6 +324,19 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         'metadata[type]': 'commerce-draft',
         'metadata[hostId]': hostId,
         'metadata[orderId]': orderRef.id,
+        // The tax WITNESS (AGL-1953). The whole sale goes over as one
+        // "In-store purchase" line at `totals.totalCents`, so the origin tax
+        // computed above is invisible to Stripe: `total_details.amount_tax`
+        // is 0 and nothing on the session says any part of the charge was
+        // tax. The figure survived on the order document, but no downstream
+        // reader of the Stripe object could decompose it — including
+        // `recordStorefrontTax`, which reads exactly this key and was
+        // therefore recording every POS card sale as `taxMode: 'none'`.
+        //
+        // A witness only: the `commerce-draft` webhook branch does not
+        // rebuild totals from the session (it folds in shipping alone), so
+        // this cannot double-count against the stored order.
+        'metadata[taxCents]': String(Math.max(0, taxCents)),
       })
       const response = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',

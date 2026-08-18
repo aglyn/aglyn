@@ -24,7 +24,10 @@ import {
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   mdiChatQuestionOutline,
+  mdiChevronDown,
+  mdiChevronUp,
   mdiClose,
+  mdiOpenInNew,
   mdiSend,
   mdiThumbDownOutline,
   mdiThumbUpOutline,
@@ -34,12 +37,15 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
+  Collapse,
   Drawer,
   Fab,
   IconButton,
   Link,
+  Paper,
   Stack,
   TextField,
   Tooltip,
@@ -58,8 +64,9 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
-import useOrgScope from '../hooks/use-org-scope'
+import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
 import useReleaseFlags, { useReleaseFlag } from '../hooks/use-release-flags'
+import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 
 /**
  * Aglyn Assist (AGL-1860, phase 1 — answer + guide): the floating chat
@@ -68,11 +75,49 @@ import useReleaseFlags, { useReleaseFlag } from '../hooks/use-release-flags'
  * adds page-context awareness. The panel never answers the entitlement
  * question from a loading default — capability messaging waits for
  * `useCurrentOrg().ready` (the checkQuota(undefined)=Free lesson).
+ *
+ * ## It also never runs against an org the URL did not name (AGL-1934)
+ *
+ * `useCurrentOrg()` deliberately keeps a fallback — org-less pages still need
+ * an org to ACT on — so on the workspace picker it answers with a real org
+ * and a truthy plan: a remembered selection, or simply the user's first. This
+ * panel used to gate on nothing but `orgId` being present, which that
+ * fallback always satisfies. The result was the whole component running for a
+ * workspace nobody opened: the entitlement decided by its plan, the upgrade
+ * nudge pitched on its behalf, the session thread filed under its id, and —
+ * the reason this ranked High rather than cosmetic — every question POSTed
+ * with its `orgId`, so the message was METERED to it. Billing data attributed
+ * to the wrong customer.
+ *
+ * The gate is AGL-1130's `useUrlNamesOrg()`, the same predicate AGL-1916
+ * applied to `QuotaWarningsBanner` on the same page, plus the positive
+ * contradiction check that goes with it. It is expressed once, as
+ * `scopedOrgId`, so that no send path can reach `orgId` around it — and the
+ * server refuses an unscoped request independently (`assistScopeRefusal` in
+ * `app/api/assist/chat/route.ts`), because a metering boundary the client
+ * alone decides is not a boundary.
  */
 
 interface AssistDocLink {
   title: string
   url: string
+}
+
+/**
+ * A level-2 proposal, exactly as the server resolved it (AGL-1988).
+ *
+ * Every field here is inert. There is no method, no endpoint and no body,
+ * because the server type has none: the assistant proposes, the user
+ * confirms, and confirming NAVIGATES. The destination form's own submit
+ * button stays the only thing that writes.
+ */
+interface AssistProposal {
+  id: string
+  label: string
+  outcome: string
+  href: string
+  values: Array<{ name: string; value: string }>
+  prefill: boolean
 }
 
 interface AssistMessage {
@@ -81,6 +126,9 @@ interface AssistMessage {
   exchangeId?: string | null
   feedback?: 'up' | 'down'
   docs?: AssistDocLink[]
+  proposal?: AssistProposal | null
+  /** Set once the user acts on or waves away the card, so it does not linger. */
+  proposalResolved?: boolean
 }
 
 interface AssistQuotaInfo {
@@ -155,11 +203,169 @@ export function renderAssistText(text: string): JSX.Element {
   )
 }
 
+/**
+ * Split an answer into its plain layer and its technical tail (AGL-1988).
+ *
+ * Aglyn's users run from first-time business owners to working developers,
+ * and they get the same message. Two modes would be the obvious build and
+ * the wrong one — it asks a beginner to label themselves before they have a
+ * question, and asks a developer to opt in to being taken seriously. So the
+ * model writes one answer with a technical paragraph at the end, and the
+ * panel collapses it: the beginner never has to read past the plain steps,
+ * the developer never has to ask for the route or the field name.
+ *
+ * Degrades to "no tail" when the marker is absent, which is the common case
+ * and not a failure — plenty of answers have nothing technical to add.
+ */
+export function splitAssistDisclosure(text: string): {
+  plain: string
+  technical: string
+} {
+  const match = text.match(/(?:^|\n)[ \t]*Under the hood:[ \t]*/)
+  if (!match || match.index === undefined) return { plain: text, technical: '' }
+  const plain = text.slice(0, match.index).trimEnd()
+  const technical = text.slice(match.index + match[0].length).trim()
+  // An answer that is ONLY a technical tail is still the answer. Collapsing
+  // the whole thing would show the user an empty bubble with a toggle.
+  if (!plain || !technical) return { plain: text, technical: '' }
+  return { plain, technical }
+}
+
+/** The collapsed developer layer. */
+function UnderTheHood({ technical }: { technical: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Link
+        component="button"
+        type="button"
+        variant="caption"
+        underline="hover"
+        onClick={() => setOpen((prior) => !prior)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+      >
+        Under the hood
+        <MdiIcon
+          path={open ? mdiChevronUp.path : mdiChevronDown.path}
+          sx={{ fontSize: 14 }}
+        />
+      </Link>
+      <Collapse in={open} unmountOnExit>
+        <Typography
+          variant="caption"
+          component="div"
+          color="text.secondary"
+          sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        >
+          {renderAssistText(technical)}
+        </Typography>
+      </Collapse>
+    </Box>
+  )
+}
+
+/**
+ * The confirm card — the whole of "automate current view", and the whole of
+ * its boundary.
+ *
+ * The assistant proposes; this card is the human confirmation; confirming
+ * navigates. There is deliberately no submit path anywhere in this
+ * component, and no network call: a chat assistant that writes without
+ * consent is a far worse launch story than one that only advises, and the
+ * cheapest way to be sure it cannot is for the code that could do it not to
+ * exist. `assist-panel-proposal.spec.tsx` greps this file for exactly that.
+ *
+ * The copy is held to the same standard. While `prefill` is false — no
+ * console page reads `assist_*` params yet — the card says it will open the
+ * page and lists the values to use. It does not say it filled anything in,
+ * because a form that comes up empty after that promise is worse than no
+ * card at all.
+ */
+function ProposalCard({
+  proposal,
+  onConfirm,
+  onDismiss,
+}: {
+  proposal: AssistProposal
+  onConfirm: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ mt: 1, p: 1.5, borderRadius: 2, bgcolor: 'background.paper' }}
+    >
+      <Typography variant="subtitle2">{proposal.label}</Typography>
+      <Typography variant="caption" color="text.secondary" component="div">
+        Opens {proposal.outcome}.
+      </Typography>
+      {proposal.values.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" component="div">
+            {proposal.prefill ? 'Filled in for you:' : 'Values to use:'}
+          </Typography>
+          <Stack component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {proposal.values.map(({ name, value }) => (
+              <Typography key={name} component="li" variant="caption">
+                {name}: <strong>{value}</strong>
+              </Typography>
+            ))}
+          </Stack>
+        </Box>
+      )}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ mt: 1 }}
+      >
+        Aglyn Assist only opens the page. Nothing is saved until you fill the
+        form in and submit it yourself.
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+        <AppLink
+          componentVariant="button"
+          href={proposal.href}
+          variant="contained"
+          size="small"
+          onClick={onConfirm}
+          startIcon={<MdiIcon path={mdiOpenInNew.path} />}
+        >
+          Take me there
+        </AppLink>
+        <Button size="small" color="inherit" onClick={onDismiss}>
+          No thanks
+        </Button>
+      </Stack>
+    </Paper>
+  )
+}
+
 export function AssistPanelComponent() {
   const verdict = useReleaseFlag('release_assist')
   const { isStaff } = useReleaseFlags()
   const { org, orgId, ready: orgReady } = useCurrentOrg()
-  const { orgSlug } = useOrgScope()
+  const { orgSlug, pathOrgSlug, currentOrg } = useOrgScope()
+  // Whether the URL itself scopes this page to a workspace (AGL-1130), and
+  // whether the org that answered contradicts the one it names — a shared
+  // link to a workspace you are not in wears a URL that appears to justify
+  // the fallback. POSITIVE contradiction only (AGL-1916): `slug` is optional
+  // on the membership row, and a legacy row without one must not silence the
+  // assistant on a route that is perfectly legitimate.
+  const namesOrg = useUrlNamesOrg()
+  const wrongOrg = Boolean(
+    pathOrgSlug && currentOrg?.slug && currentOrg.slug !== pathOrgSlug,
+  )
+  /**
+   * The org this panel may speak for, act as, and be METERED against — or
+   * `undefined` where the page named none. Every use of the org below goes
+   * through this rather than `orgId`, so a send path cannot be added later
+   * that quietly reaches around the gate; the thread key, the two POST
+   * bodies and the render gate all read the same value.
+   */
+  const scopedOrgId = namesOrg && !wrongOrg ? orgId : undefined
+  /** Path slug for building `/[orgSlug]/…` links (AGL-621). */
+  const billingSlug = useOrgSlug()
   const hostId = useContext(HostIdContext)
   const pathname = usePathname()
   const { data: user } = useUser()
@@ -173,22 +379,25 @@ export function AssistPanelComponent() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Thread is per-org, session-persisted; switching orgs swaps threads.
+  // Keyed on the SCOPED org (AGL-1934): gating only the render would still
+  // load — and, on the next keystroke, save — a thread under the fallback
+  // org's key on every mount of a page that named no workspace.
   useEffect(() => {
-    setMessages(loadThread(orgId))
+    setMessages(loadThread(scopedOrgId))
     setQuota(null)
-  }, [orgId])
+  }, [scopedOrgId])
 
   useEffect(() => {
-    saveThread(orgId, messages)
+    saveThread(scopedOrgId, messages)
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [orgId, messages])
+  }, [scopedOrgId, messages])
 
   const entitled = orgReady && checkEntitlement(org as never, 'aiAssist')
 
   const send = useCallback(async () => {
     const question = input.trim()
-    if (!question || busy || !orgId) return
+    if (!question || busy || !scopedOrgId) return
     setBusy(true)
     setInput('')
     const history = messages
@@ -228,7 +437,7 @@ export function AssistPanelComponent() {
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
-          orgId,
+          orgId: scopedOrgId,
           question,
           history,
           // Page context rides along; the server drops it for free orgs
@@ -274,16 +483,25 @@ export function AssistPanelComponent() {
             patchAnswer((message) => ({ ...message, text: message.text + text }))
           } else if (event.type === 'done') {
             const docs = (event.docs as AssistDocLink[] | undefined) ?? []
+            // Server-resolved and inert: an id from the closed set attached
+            // to the view the question was asked from, plus a destination
+            // this client did not choose. Null on every turn that proposed
+            // nothing, which is most of them.
+            const proposal = (event.proposal as AssistProposal | null) ?? null
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
               docs,
+              proposal,
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
             trackEvent('assistant_message_sent', {
               tier: entitled ? 'entitled' : 'free',
               grounded: docs.length > 0,
             })
+            if (proposal) {
+              trackEvent('assistant_proposal_shown', { action: proposal.id })
+            }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
           }
@@ -301,16 +519,29 @@ export function AssistPanelComponent() {
     hostId,
     input,
     messages,
-    orgId,
+    scopedOrgId,
     orgSlug,
     pathname,
     user,
   ])
 
+  /**
+   * Retire a card once it has been acted on or waved away. Local state only
+   * — there is nothing to tell the server, because the proposal was never
+   * anything the server was waiting on.
+   */
+  const resolveProposal = useCallback((index: number) => {
+    setMessages((prior) =>
+      prior.map((entry, i) =>
+        i === index ? { ...entry, proposalResolved: true } : entry,
+      ),
+    )
+  }, [])
+
   const sendFeedback = useCallback(
     async (index: number, feedback: 'up' | 'down') => {
       const message = messages[index]
-      if (!message?.exchangeId || !orgId) return
+      if (!message?.exchangeId || !scopedOrgId) return
       setMessages((prior) =>
         prior.map((entry, i) => (i === index ? { ...entry, feedback } : entry)),
       )
@@ -326,7 +557,7 @@ export function AssistPanelComponent() {
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           body: JSON.stringify({
-            orgId,
+            orgId: scopedOrgId,
             exchangeId: message.exchangeId,
             feedback,
           }),
@@ -338,12 +569,16 @@ export function AssistPanelComponent() {
         })
       }
     },
-    [enqueueSnackbar, messages, orgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, user],
   )
 
   // A released-off feature does not exist (staff preview excepted) — and
-  // without an org there is nothing to meter or record against.
-  if (!verdict.visible || !orgId) return null
+  // without an org IN SCOPE there is nothing to meter or record against
+  // (AGL-1934). `scopedOrgId`, never `orgId`: the fallback org is always
+  // present, which is exactly why gating on it announced and billed the
+  // assistant on the workspace picker. Every hook above has already run, so
+  // this early return costs no hook-order hazard.
+  if (!verdict.visible || !scopedOrgId) return null
 
   return (
     <>
@@ -457,7 +692,9 @@ export function AssistPanelComponent() {
                   >
                     {message.role === 'assistant' ? (
                       message.text ? (
-                        renderAssistText(message.text)
+                        renderAssistText(
+                          splitAssistDisclosure(message.text).plain,
+                        )
                       ) : (
                         <CircularProgress size={14} />
                       )
@@ -465,6 +702,27 @@ export function AssistPanelComponent() {
                       message.text
                     )}
                   </Typography>
+                  {message.role === 'assistant' &&
+                    splitAssistDisclosure(message.text).technical && (
+                      <UnderTheHood
+                        technical={splitAssistDisclosure(message.text).technical}
+                      />
+                    )}
+                  {message.role === 'assistant' &&
+                    message.proposal &&
+                    !message.proposalResolved && (
+                      <ProposalCard
+                        proposal={message.proposal}
+                        onConfirm={() => {
+                          trackEvent('assistant_proposal_confirmed', {
+                            action: message.proposal?.id ?? '',
+                          })
+                          resolveProposal(index)
+                          setOpen(false)
+                        }}
+                        onDismiss={() => resolveProposal(index)}
+                      />
+                    )}
                   {message.role === 'assistant' && message.exchangeId && (
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                       <IconButton
@@ -505,12 +763,19 @@ export function AssistPanelComponent() {
             {quota && quota.period === 'day' && (
               <Typography variant="caption" color="text.secondary">
                 {quota.remaining} of {quota.limit} free messages left today
-                {orgSlug ? (
+                {/* `useOrgSlug()`, not `useOrgScope().orgSlug` — the latter
+                    is the SUBDOMAIN slug, which is null on `app.aglyn.com`,
+                    so this upgrade link silently vanished on every apex org
+                    route: the one place a capped free workspace is told it
+                    is capped, with no way to act on it. Safe to fall back to
+                    the resolved org's slug here because the render gate
+                    above has already established the URL names it. */}
+                {billingSlug ? (
                   <>
                     {' — '}
                     <AppLink
                       componentVariant="naked"
-                      href={`/${orgSlug}/billing`}
+                      href={`/${billingSlug}/billing`}
                     >
                       upgrade for more
                     </AppLink>

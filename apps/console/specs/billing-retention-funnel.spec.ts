@@ -208,6 +208,13 @@ function retentionDocs(): Array<Record<string, unknown>> {
     .map(([, data]) => data)
 }
 
+/** Every stored doc under `orgs/org-1/churnSurveyDetails/` (AGL-1978). */
+function detailDocs(): Array<Record<string, unknown>> {
+  return [...mockStoredDocs.entries()]
+    .filter(([path]) => path.startsWith('orgs/org-1/churnSurveyDetails/'))
+    .map(([, data]) => data)
+}
+
 beforeEach(() => {
   mockStoredDocs = new Map()
   mockAutoId = 0
@@ -272,9 +279,14 @@ describe('/api/billing/retention — survey (AGL-1863)', () => {
       kind: 'churn_survey',
       surface: 'subscription_cancel',
       reason: 'too_expensive',
-      detail: 'the pro tier price jumped',
       plan: 'pro',
       uid: 'u-1',
+    })
+    // The free text moved off the survey document (AGL-1978) so it can
+    // expire without taking the reason breakdown with it.
+    expect(docs[0].detail).toBeUndefined()
+    expect(detailDocs()[0]).toMatchObject({
+      detail: 'the pro tier price jumped',
     })
   })
 
@@ -307,8 +319,54 @@ describe('/api/billing/retention — survey (AGL-1863)', () => {
       reason: 'other',
       detail: 'x'.repeat(2000),
     })
-    const [doc] = retentionDocs()
+    const [doc] = detailDocs()
     expect(String(doc.detail).length).toBe(500)
+  })
+
+  it('the free text carries an expiry, and the SURVEY does not', async () => {
+    // The separation, asserted in both directions (AGL-1978). An expiry on
+    // the survey would reap the `reason` breakdown the retention funnel
+    // exists to produce — Zach's twice-given directive — and a survey with
+    // no expiry on its free text is the gap this closes. Testing only one
+    // side would pass while the other silently regressed.
+    const post = loadRoute(ROUTE)
+    const before = Date.now()
+    await call(post, {
+      action: 'survey',
+      surface: 'subscription_cancel',
+      reason: 'other',
+      detail: 'my card number is on file and I want it gone',
+    })
+
+    const [survey] = retentionDocs()
+    expect(survey.expiresAt).toBeUndefined()
+
+    const [detail] = detailDocs()
+    // A Date, not an epoch number: a TTL policy silently governs nothing
+    // when handed a number (`bookings.expiresAtMs` is the documented
+    // non-target).
+    expect(detail.expiresAt).toBeInstanceOf(Date)
+    const ahead = (detail.expiresAt as Date).getTime() - before
+    const day = 24 * 60 * 60 * 1000
+    // 365 days, allowing for the clock moving during the call. The lower
+    // bound is what fails if the period is ever zeroed or stamped in the
+    // past — the within-period control for this collection.
+    expect(ahead).toBeGreaterThan(364 * day)
+    expect(ahead).toBeLessThanOrEqual(366 * day)
+  })
+
+  it('a survey with no free text writes no detail document at all', async () => {
+    // Absent stays absent. An empty-string detail document would be a
+    // retention record of nothing, and would make the collection's count a
+    // lie about how many people actually typed something.
+    const post = loadRoute(ROUTE)
+    await call(post, {
+      action: 'survey',
+      surface: 'subscription_cancel',
+      reason: 'not_using_enough',
+    })
+    expect(retentionDocs()).toHaveLength(1)
+    expect(detailDocs()).toHaveLength(0)
   })
 })
 

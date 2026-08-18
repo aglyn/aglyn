@@ -84,10 +84,16 @@ import {
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
+  meteredPricingHealth,
   WEBHOOK_FAILURE_WINDOW_MINUTES,
   type BillingWebhookCheck,
   type BillingWebhookFacts,
 } from '@aglyn/aglyn/server'
+// Read through the SAME helper the attach paths use (AGL-1931). A guard that
+// reads its own copy of the env key names is a guard that keeps reporting
+// green after somebody renames one — it would be asserting its own literals,
+// not the configuration the checkout actually resolves.
+import { meteredPriceId } from '../../../../utils/server/billing-addons'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 
@@ -209,8 +215,31 @@ const billingProbe = memoizeWithTtl<BillingWebhookCheck>(
   },
 )
 
+/**
+ * Pure env read — no network, no memoisation needed (AGL-1931).
+ *
+ * Deliberately NOT inside `billingProbe`'s 5-minute TTL: that memo exists to
+ * bound Stripe call volume, and folding a free check into it would mean a
+ * corrected env var still reported red for five minutes after the redeploy
+ * that fixed it.
+ */
+function meteredPricingProbe() {
+  const startedAt = Date.now()
+  return meteredPricingHealth(
+    {
+      stripeConfigured: Boolean(process.env['STRIPE_SECRET_KEY']),
+      monthly: Boolean(meteredPriceId('month')),
+      yearly: Boolean(meteredPriceId('year')),
+    },
+    Date.now() - startedAt,
+  )
+}
+
 export async function GET(): Promise<Response> {
-  const checks = { billingWebhook: await billingProbe() }
+  const checks = {
+    billingWebhook: await billingProbe(),
+    meteredPricing: meteredPricingProbe(),
+  }
   const status = healthStatus(checks)
   return Response.json(
     healthBody({

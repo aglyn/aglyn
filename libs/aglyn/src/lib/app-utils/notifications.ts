@@ -73,6 +73,28 @@ export type AglynNotificationType =
   // STOPPED accepting. Filing it under the muted bucket would guarantee it
   // reaches nobody on exactly the sites busy enough to trip it.
   | 'system.formSubmissionsPaused'
+  // An outsider reported one of our sites for phishing, malware or CSAM
+  // (AGL-1964). `system` for the AGL-1088 reason and, again, more sharply
+  // than most: this notification goes to STAFF, not to a customer, and its
+  // subject is somebody else's site. There is no bucket a recipient could
+  // mute it into that would be honest — nobody has opted into being told a
+  // stranger is being phished through our platform, and nobody should be able
+  // to opt out of it either.
+  //
+  // Only the urgent categories raise one, and only on a first report. See the
+  // fan-out in apps/tenant/app/api/report-abuse/route.ts for why: a flood of
+  // alerts IS the flood, and the alert it would cost us is the phishing one.
+  | 'system.abuseReportUrgent'
+  // The §512(g) counter-notice (AGL-1983), and the one place the "only urgent
+  // categories raise a notification" restraint above is deliberately not
+  // applied. Every counter-notice carries a statutory deadline that is
+  // ALREADY RUNNING when it arrives — the clock counts from the subscriber's
+  // submission, not from our attention — so there is no low-value tail of
+  // these to drown out the important ones, and the one that goes unread is a
+  // customer locked out of their own work plus an unmet obligation under
+  // §512(g)(2)(A). Raised on first submission only, like the one above, so a
+  // resubmitting customer cannot re-alert.
+  | 'system.dmcaCounterNotice'
 
 export interface AglynNotification {
   $id?: string
@@ -109,6 +131,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.signInMethodRemoved': 'Sign-in method removed',
     'system.scopeDrift': 'Resources missing a sharing scope',
     'system.formSubmissionsPaused': 'Form submissions paused',
+    'system.abuseReportUrgent': 'Urgent abuse report',
+    'system.dmcaCounterNotice': 'DMCA counter-notice',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

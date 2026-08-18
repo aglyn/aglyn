@@ -575,6 +575,36 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /**
+       * The §512(i) repeat-infringer strike ledger (AGL-1983). One document
+       * per upheld copyright notice, keyed by the abuse report's id.
+       *
+       * There is no catch-all under `orgs/{orgId}` — every subcollection here
+       * is matched explicitly — so this collection was already deny-all by
+       * the absence of a rule. It is written out anyway, because "safe
+       * because nobody wrote a rule" is a property that evaporates the day
+       * somebody adds a convenience wildcard, and this is the ledger that
+       * decides whether an account gets terminated.
+       *
+       * STAFF-READ, and deliberately NOT readable by the org it counts. That
+       * is not secrecy for its own sake: §512(i) also requires that
+       * subscribers be INFORMED of the policy, and they are — by the
+       * published policy, and by the notice staff send on each strike. What
+       * the raw ledger adds is the complainants' identities and the exact
+       * count, and an org that could watch its own count in real time could
+       * time its behaviour against the threshold, which is the one reading
+       * that would make the policy easier rather than harder to game.
+       *
+       * NOBODY-WRITE. A client able to write here could delete its own
+       * strikes, which is the account-termination condition of the entire
+       * safe harbour. Written only by /api/admin/abuse-reports, Admin SDK,
+       * beside its `adminAudit` row.
+       */
+      match /dmcaStrikes/{reportId} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
+
       // SSO domain claims (AGL-1210). Deny ALL client access, read included.
       //
       // The claim token is the only thing standing between an org and a
@@ -713,19 +743,110 @@ service cloud.firestore {
     function canWriteHostContent(hostId) {
       return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
+    /**
+     * Is the `suspended*` family on this document an ACTIVE suspension right
+     * now? (AGL-1981.)
+     *
+     * The one definition of "suspended" both scopes ask, so the org arm
+     * (AGL-210/238) and the host arm (AGL-1965) cannot drift into saying
+     * different things about the same field family — which is exactly why
+     * AGL-1965 declined to make its arm expiry-aware on its own.
+     *
+     * `suspendedUntilMs` is an optional expiry, documented as one on both
+     * `organization.types.ts` and `platform.types.ts`, and honoured
+     * server-side by `isLockdownActive()` since AGL-1512: past it, the tenant
+     * middleware stops rewriting to `/api/locked` and the 38
+     * `lockdownRefusal()` sites stop refusing. Rules read only `suspendedAt`,
+     * so a TIMED suspension came back to life everywhere EXCEPT the client
+     * SDK, and publishing is a client write — the customer got their site
+     * back and could not edit it, with no error that said why. Since AGL-1983
+     * this is also the put-back mechanism: a §512(g) counter-notice restores
+     * access by stamping this field, so an expiry that never fires makes the
+     * restoration clock theatre.
+     *
+     * Two directions of caution, both deliberate:
+     *
+     *  - **No expiry means indefinite**, not expired. Written as "NOT (a
+     *    numeric expiry that has passed)" rather than "the expiry is in the
+     *    future" precisely so an ABSENT field cannot read as a lapsed one.
+     *    The tempting `data.get('suspendedUntilMs', 0) > request.time` form is
+     *    that bug, and it would lift every open-ended takedown on the
+     *    platform.
+     *  - **A malformed expiry keeps the lock.** The field is Admin-SDK-only,
+     *    so a non-number can only arrive through our own bug; `is number`
+     *    makes that case leave the suspension standing. Failing closed is the
+     *    right way round to be wrong here.
+     *
+     * The bypass this opens if the deny-lists ever slip is worth naming: once
+     * rules read `suspendedUntilMs`, WRITING it is lifting the suspension. It
+     * is frozen against clients on the org doc and the host doc alike
+     * (AGL-1507/1517), and the rules suite re-proves that against the timed
+     * fixture rather than trusting the list.
+     */
+    function suspensionActive(carrier) {
+      return carrier.get('suspendedAt', null) != null &&
+        !(carrier.get('suspendedUntilMs', null) is number &&
+          carrier.get('suspendedUntilMs', 0) <= request.time.toMillis());
+    }
     // Suspension write-block (AGL-210/238): a staff-suspended org keeps
     // read access but cannot mutate content. Fail-open when the org doc
     // is missing (pre-org hosts) so legacy data never locks up.
     function orgSuspendedById(orgId) {
       return orgId != null &&
         exists(/databases/$(database)/documents/orgs/$(orgId)) &&
-        get(/databases/$(database)/documents/orgs/$(orgId))
-          .data.get('suspendedAt', null) != null;
+        suspensionActive(
+          get(/databases/$(database)/documents/orgs/$(orgId)).data);
     }
     function hostOrgSuspended(hostId) {
       return orgSuspendedById(
         get(/databases/$(database)/documents/hosts/$(hostId))
           .data.get('orgId', null));
+    }
+    /**
+     * HOST-scope lockdown (AGL-1965). The org arm above has existed since
+     * AGL-210/238; this one was never written, so a host-scope takedown was a
+     * takedown of everything EXCEPT the client SDK.
+     *
+     * `/admin/lockdown` at host scope stamps `hosts/{hostId}.suspendedAt` and
+     * that stopped two of the three write paths: the public site (the tenant
+     * middleware rewrites to `/api/locked`) and every Admin-SDK route (38
+     * `lockdownRefusal()` sites). Publishing is neither — it is a direct
+     * browser Firestore write (`screen-publishing.ts` sets
+     * `hosts/{hostId}/screens/{screenId}` and the host doc's `screens` map),
+     * and `screens` is not in the frozen-key list on the host update below. So
+     * an admin/editor with a live session could keep editing a phishing site
+     * staff had just suspended, and republish it.
+     *
+     * Free of charge: `hostMemberRole` and `hostOrgSuspended` already `get()`
+     * this same document, and identical get()s inside one evaluation are
+     * billed once. Ordered first in `hostWritesFrozen` so the cheap arm
+     * short-circuits before the org arm's second get.
+     *
+     * Mirrors `orgSuspendedById` deliberately, and now shares its definition
+     * of "suspended" outright: AGL-1981 moved the `suspendedAt`-plus-expiry
+     * test into `suspensionActive()` and pointed both arms at it, so the blind
+     * spot this comment used to record — neither arm consulting
+     * `suspendedUntilMs`, leaving a timed suspension frozen in rules forever
+     * after the server considered it served — is closed at both scopes in one
+     * move, which is the only way it could be closed without the file saying
+     * two different things about one field.
+     */
+    function hostSuspended(hostId) {
+      return suspensionActive(
+        get(/databases/$(database)/documents/hosts/$(hostId)).data);
+    }
+    /**
+     * The single predicate every host write rule below asks. Both scopes
+     * freeze content writes; `suspendedMode: 'read-only'` (AGL-1511) is a
+     * suspension too — the site keeps SERVING and stops accepting writes,
+     * which is exactly this.
+     *
+     * Staff are never subject to it: `isStaff()` stays the first disjunct of
+     * every rule, which is the un-panic invariant — the people who set the
+     * lock must be able to work inside it and lift it.
+     */
+    function hostWritesFrozen(hostId) {
+      return hostSuspended(hostId) || hostOrgSuspended(hostId);
     }
     match /hosts/{hostId} {
       // Queries must be membership-constrained (the console filters on
@@ -785,8 +906,16 @@ service cloud.firestore {
       // customer's own switch: a security takedown the site's editors could
       // clear from the client SDK would not be a takedown. Written only by
       // /api/admin/lockdown through the Admin SDK.
+      //
+      // Freezing the KEYS was only ever half of it (AGL-1965). `screens` is
+      // the live screen directory and it is deliberately NOT in the list
+      // above — publishing writes it from the browser — so while suspension
+      // was unreadable by any rule, a suspended site's editor could not
+      // shorten their own takedown and could still republish through it.
+      // `hostWritesFrozen` is the other half: the whole non-staff branch now
+      // stands down while `suspendedAt` is set, at host scope as well as org.
       allow update: if isStaff() ||
-        (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+        (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['memberRoles', 'orgId', 'admins', 'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
@@ -798,7 +927,7 @@ service cloud.firestore {
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['disabledPlugins'])));
       allow delete: if isStaff() ||
-        (hostMemberRole(hostId) == 'admin' && !hostOrgSuspended(hostId));
+        (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
       // resources enforces screensPerHost / sharedLayoutsPerHost (and the
       // owning org's suspension) server-side. Their `versions` (and any
@@ -853,31 +982,31 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['kind']) &&
             !(('deletedAt' in resource.data) &&
               request.resource.data.diff(resource.data).affectedKeys()
                 .hasAny(['deletedAt'])));
         allow delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       match /layouts/{layoutId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       // Reusable components (AGL-679) now carry editing history like screens
@@ -891,12 +1020,12 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
           allow update, delete: if isStaff() ||
-            (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
         }
       }
       // Templates (AGL-666): saved starting points for pages, components and
@@ -912,11 +1041,11 @@ service cloud.firestore {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            !request.resource.data.diff(resource.data)
              .affectedKeys().hasAny(['source']));
         allow delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
       // Secret-/PII-bearing subcollections are carved out of the viewer-
       // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
@@ -952,7 +1081,7 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow read: if isStaff() || canWriteHostContent(hostId);
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            !request.resource.data.diff(resource.data)
              .affectedKeys().hasAny(['status']));
       }
@@ -1071,7 +1200,7 @@ service cloud.firestore {
         // and the dedicated block above owns the reasoning and re-grants the
         // one thing the console still writes — the status-frozen update.
         allow create: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
@@ -1101,7 +1230,7 @@ service cloud.firestore {
         // the same clobber has happened a third time — the coverage spec
         // host-subcollection-write-deny-coverage is what catches it.
         allow update: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'members', 'mediaTombstones']));
@@ -1112,7 +1241,7 @@ service cloud.firestore {
         // it would take single-entry deletes with it; the block below
         // re-grants those (rules OR, so a dedicated allow still wins).
         allow delete: if isStaff() ||
-          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+          ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
               'datasets', 'orders', 'registers', 'counters', 'analytics',
               'members', 'mediaTombstones']));
@@ -1143,7 +1272,7 @@ service cloud.firestore {
       // rules to make it the only writer.
       match /collections/{collectionId} {
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['slug', 'kind']));
       }
@@ -1152,7 +1281,7 @@ service cloud.firestore {
       // stay editor-writable here (rules OR, so a dedicated allow wins).
       match /collections/{collectionId}/entries/{entryId} {
         allow create, update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
     }
 
@@ -1501,6 +1630,67 @@ service cloud.firestore {
     // projections and revalidate cached pages — a bare client write would be
     // a lockdown that looks set and enforces nothing.
     match /lockdowns/{lockdownId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Public abuse reports (AGL-1964) — the intake the lockdown levers above
+    // never had. Written by POST /api/report-abuse, which is unauthenticated
+    // by design: the people who find a phishing site on `*.aglyn.app` are a
+    // bank's fraud team, a browser vendor or Safe Browsing, and none of them
+    // has an account here.
+    //
+    // Staff-only READS, for both of the reasons `marketplaceReports` is
+    // staff-only and one more. A row can name its reporter, and letting the
+    // reported party see who reported them invites retaliation — sharper here
+    // than on a marketplace listing, because a DMCA notice carries a real
+    // legal name by statute. And the collection as a whole is a map of which
+    // sites are under suspicion, which would tell an abuser whether they had
+    // been noticed yet.
+    //
+    // Writes closed to EVERYONE including staff clients, the /lockdowns and
+    // /contactSuppressions posture rather than `marketplaceReports`'s. Two
+    // reasons, and the first is the load-bearing one:
+    //
+    //  - **The reporter is not authenticated, so the document id is the only
+    //    thing standing between the queue and a forgery.** The route derives
+    //    it from a one-way hash of (url, category, reporter IP) precisely so
+    //    one source reporting one page repeatedly merges into one row instead
+    //    of looking like a groundswell. A client that could choose its own id
+    //    could manufacture that groundswell against a competitor's site — and
+    //    the queue's whole value is that a human believes it.
+    //  - A staff status change (`open` → `actioned`) is not one document
+    //    write: it is the moment a lockdown or a quarantine gets justified, so
+    //    it goes through an Admin-SDK route that writes the `adminAudit` row
+    //    in the same act. A bare client write would be a decision with no
+    //    record of who made it.
+    match /abuseReports/{reportId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    /**
+     * §512(g) counter-notices (AGL-1983). Same posture as `abuseReports`
+     * above, and for sharper versions of the same reasons.
+     *
+     * STAFF-READ, and not readable by the subscriber who filed it even though
+     * it is their own document. There is no authenticated identity on the
+     * intake at all — the filer is by definition someone whose site is down
+     * and who may be locked out of the console entirely — so there is no uid
+     * on the row to match against, and a rule that admitted a reader would be
+     * admitting an unverified claim to be that person. The row also carries
+     * the complainant's side of the dispute once staff work it.
+     *
+     * NOBODY-WRITE, including staff, including the filer. A counter-notice is
+     * a sworn statement: its whole evidentiary value is that the text is
+     * exactly what was submitted, at the time it says. `receivedAt` in
+     * particular is the instant §512(g)(2)(C)'s 10-to-14 business day clock
+     * counts from — a client able to write it could move its own restoration
+     * date, in either direction. Written only by /api/counter-notice and
+     * transitioned only by /api/admin/abuse-reports, both Admin SDK, both
+     * writing an `adminAudit` row for any staff decision.
+     */
+    match /dmcaCounterNotices/{noticeId} {
       allow read: if isStaff();
       allow write: if false;
     }

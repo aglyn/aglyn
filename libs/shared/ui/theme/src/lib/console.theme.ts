@@ -18,7 +18,6 @@
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
-import { accentTextColor } from './util/accent-text'
 import createResponsiveTheme, {
   createResponsiveCssVarTheme,
 } from './util/create-responsive-theme'
@@ -43,21 +42,9 @@ const colorScheme = {
     // component was already opting into is now `primary`, so nothing has to
     // opt out of a primary that was really a surface tone. Whole colour
     // objects moved, so each keeps the contrastText it shipped with.
-    // `contrastText` is deliberately ABSENT (AGL-1293, Zach 2026-08-18:
-    // "text uses should be computed and use the primary.contrastText"). It
-    // used to be the literal `#FFFFFF`, which is 2.43:1 on `#00b0ff` — every
-    // filled primary button, chip and badge in the product, below even the
-    // 3:1 non-text bar. Leaving the slot empty hands it to MUI's
-    // `getContrastText()` against the AA `contrastThreshold`
-    // `createResponsiveTheme` now sets, which computes ink at 8.65:1. That
-    // computation is what reaches a tenant's generated palette too; a
-    // hardcoded swap never would.
-    //
-    // `main` stays `#00b0ff`: it is the brand colour and it is only ever a
-    // FILL or a border here. Rendered as text it is handled by
-    // `accentTextColor` → `primary.dark`.
     primary: {
       main: '#00b0ff',
+      contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',
@@ -138,12 +125,9 @@ const colorScheme = {
     },
   },
   dark: {
-    // Computed, not authored — see the light scheme's note. `#00b0ff` is the
-    // same brand blue in both schemes, so the computed pairing is the same
-    // ink, and the two dark-mode white-on-blue button fills AGL-1293
-    // measured at 2.43:1 stop being the only failures dark mode had.
     primary: {
       main: '#00b0ff',
+      contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#e040fb',
@@ -260,27 +244,12 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        // AGL-1293. MUI's own variants set `--variant-textColor` and
-        // `--variant-outlinedColor` to `palette[color].main` — i.e. they
-        // paint the BRAND colour as normal-size text. For this palette that
-        // is `#00b0ff` at 2.43:1 on white. Both vars move to the computed
-        // accent-text shade; `--variant-outlinedBorder` and
-        // `--variant-containedBg` are left on `main`, because a border and a
-        // fill owe 3:1, not 4.5:1, and the brand colour is meant to be seen
-        // there.
-        root: ({ theme, ownerState }) => {
-          const accent = accentTextColor(theme, ownerState?.color)
-          return {
-            '&a[disabled], &.disabled': {
-              pointerEvents: 'none',
-              textDecoration: 'none',
-              filter: 'grayscale(1) opacity(0.65)',
-            },
-            ...(accent && {
-              '--variant-textColor': accent,
-              '--variant-outlinedColor': accent,
-            }),
-          }
+        root: {
+          '&a[disabled], &.disabled': {
+            pointerEvents: 'none',
+            textDecoration: 'none',
+            filter: 'grayscale(1) opacity(0.65)',
+          },
         },
       },
     },
@@ -314,43 +283,12 @@ const baseOptions: ThemeOptions = {
         color: 'primary',
       },
       styleOverrides: {
-        // AGL-1293. A Link is text by definition, so `color="primary"`
-        // resolving to `palette.primary.main` is always the wrong bar. Only
-        // the PaletteColor keys are rewritten — `inherit`, `textPrimary`,
-        // `textSecondary` and `textDisabled` return undefined from
-        // `accentTextColor` and keep MUI's resolution.
-        root: ({ theme, ownerState }) => {
-          const accent = accentTextColor(theme, ownerState?.color)
-          return {
-            '&[disabled], &.disabled': {
-              pointerEvents: 'none',
-              textDecoration: 'none',
-              filter: 'grayscale(1) opacity(0.65)',
-            },
-            ...(accent && { color: accent }),
-          }
-        },
-      },
-    },
-    // AGL-1293. `textColor="primary"` paints the SELECTED tab label
-    // `palette.primary.main`. The indicator underneath it keeps `main` — it
-    // is non-text and owes 3:1 — so the brand colour still reads as the
-    // selection cue.
-    MuiTab: {
-      styleOverrides: {
-        root: ({ theme, ownerState }) => {
-          // Brackets, not dots: `textColor` comes from an index signature and
-          // `json-editor` compiles this file under
-          // `noPropertyAccessFromIndexSignature` (paths resolve to source, so
-          // a consumer's flags check its dependencies). Dot access reds that
-          // build while this project's own stays green — AGL-1323, and the
-          // same trap create-responsive-theme.ts already carries a note for.
-          const textColor = ownerState?.['textColor']
-          const accent =
-            textColor === 'primary' || textColor === 'secondary'
-              ? accentTextColor(theme, textColor)
-              : undefined
-          return accent ? { '&.Mui-selected': { color: accent } } : {}
+        root: {
+          '&[disabled], &.disabled': {
+            pointerEvents: 'none',
+            textDecoration: 'none',
+            filter: 'grayscale(1) opacity(0.65)',
+          },
         },
       },
     },

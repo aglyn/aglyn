@@ -87,6 +87,15 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
         'accounts',
         new URLSearchParams({
           type: 'express',
+          // Explicit capabilities (AGL-1994, mirroring the marketplace twin
+          // hardened by AGL-1547): without them the account's abilities
+          // depend on unverified dashboard platform-profile defaults, and
+          // the storefront charge is a DESTINATION charge — checkout.ts
+          // sends `payment_intent_data[transfer_data][destination]`, which
+          // requires the destination to hold `transfers`. A merchant
+          // onboarded without it takes money that can never pay out.
+          'capabilities[card_payments][requested]': 'true',
+          'capabilities[transfers][requested]': 'true',
           'metadata[profileId]': decoded.uid,
           'metadata[purpose]': 'commerce',
           ...(decoded.email ? { email: decoded.email } : {}),
@@ -101,12 +110,25 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
 
     const account = await stripe(`accounts/${accountId}`)
     const chargesEnabled = Boolean(account?.charges_enabled)
+    // Payout readiness rides along (AGL-1994): the sale gate stays on
+    // charges_enabled — that is what Stripe checks at charge time — but
+    // charges-yes/payouts-no was invisible to the storefront, because
+    // commerce wrote only `stripeChargesEnabled`. Recording
+    // `payouts_enabled` is what lets a console surface warn a merchant
+    // BEFORE the first sale strands funds in a Connect account that
+    // cannot pay them out.
+    const payoutsEnabled = Boolean(account?.payouts_enabled)
     await profileRef.set(
-      { stripeChargesEnabled: chargesEnabled },
+      {
+        stripeChargesEnabled: chargesEnabled,
+        stripePayoutsEnabled: payoutsEnabled,
+      },
       { merge: true },
     )
     if (chargesEnabled) {
-      return res.status(200).json({ accountId, chargesEnabled: true })
+      return res
+        .status(200)
+        .json({ accountId, chargesEnabled: true, payoutsEnabled })
     }
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`

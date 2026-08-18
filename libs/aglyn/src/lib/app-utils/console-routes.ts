@@ -36,6 +36,12 @@ export enum Route {
   // file. Its own page rather than a panel on Lockdown because the input is
   // an asset, not a scope — the two forms share no field but the reason.
   ADMIN_MEDIA_QUARANTINE = '/admin/media-quarantine',
+  // The INPUT to the two levers above (AGL-1964). Lockdown and quarantine are
+  // both things an operator does after learning there is a problem; until
+  // this page there was no way for anyone outside the company to say there
+  // was one. Reports arrive from the unauthenticated form the tenant runtime
+  // serves at /api/report-abuse on every origin.
+  ADMIN_ABUSE_REPORTS = '/admin/abuse-reports',
   // The probes, on a screen (AGL-1900). /api/health/{backups,rate-limits,
   // signups} and /api/admin/email-health each answered a bad-day question to
   // a curl and to nothing else; this is where an operator reads them.
@@ -216,6 +222,7 @@ export interface RoutePayload {
   [Route.ADMIN_COUPONS]: undefined
   [Route.ADMIN_LOCKDOWN]: undefined
   [Route.ADMIN_MEDIA_QUARANTINE]: undefined
+  [Route.ADMIN_ABUSE_REPORTS]: undefined
   [Route.ADMIN_HEALTH]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined

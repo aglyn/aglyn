@@ -39,11 +39,20 @@
  */
 
 const mockCountGet = jest.fn()
+const mockRefusalGet = jest.fn()
 const queries: {
   collection: string
   field: string
   op: string
   cutoffMs: number
+}[] = []
+/** AGL-1907 marker listings, kept apart so the AGL-1536 counts stay exact. */
+const refusalQueries: {
+  collection: string
+  field: string
+  op: string
+  cutoffMs: number
+  limit: number
 }[] = []
 
 jest.mock('firebase-admin/app', () => ({
@@ -55,12 +64,35 @@ jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
   getFirestore: () => ({
     collection: (collection: string) => ({
-      where: (field: string, op: string, cutoff: { ms: number }) => ({
+      where: (field: string, op: string, cutoff: { ms: number } | number) => ({
+        // AGL-1536: the org-creation aggregation.
         count: () => ({
           get: () => {
-            queries.push({ collection, field, op, cutoffMs: cutoff.ms })
+            queries.push({
+              collection,
+              field,
+              op,
+              cutoffMs: (cutoff as { ms: number }).ms,
+            })
             return mockCountGet()
           },
+        }),
+        // AGL-1907: the refusal-marker listing. A distinct chain, so a route
+        // that issued the wrong one would fail here rather than quietly
+        // reading the other check's data.
+        orderBy: () => ({
+          limit: (max: number) => ({
+            get: () => {
+              refusalQueries.push({
+                collection,
+                field,
+                op,
+                cutoffMs: cutoff as number,
+                limit: max,
+              })
+              return mockRefusalGet()
+            },
+          }),
         }),
       }),
     }),
@@ -71,7 +103,17 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {},
+  RATE_LIMIT_COLLECTION: 'rateLimits',
+  SIGNUP_REFUSAL_DOC_PREFIX: 'signupRefused_',
 }))
+
+/** A refusal marker as Firestore hands it back. */
+const marker = (id: string, refusals: number, byReason: Record<string, number>) => ({
+  id,
+  data: () => ({ refusals, byReason, refusedAtMs: Date.now() - 60_000 }),
+})
+
+const refusalsOf = (...docs: unknown[]) => async () => ({ docs })
 
 type RouteModule = typeof import('../app/api/health/signups/route')
 
@@ -84,12 +126,19 @@ const countOf = (count: number) => async () => ({ data: () => ({ count }) })
 
 beforeEach(() => {
   mockCountGet.mockReset()
+  mockRefusalGet.mockReset()
+  // A quiet hour is the default so every AGL-1536 test below reads the
+  // verdict it was written for.
+  mockRefusalGet.mockImplementation(refusalsOf())
   queries.length = 0
+  refusalQueries.length = 0
   delete process.env['SIGNUP_ALARM_MAX_PER_HOUR']
+  delete process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR']
 })
 
 afterAll(() => {
   delete process.env['SIGNUP_ALARM_MAX_PER_HOUR']
+  delete process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR']
 })
 
 describe('AGL-1536 · /api/health/signups', () => {
@@ -190,5 +239,150 @@ describe('AGL-1536 · /api/health/signups', () => {
     const response = await route.HEAD()
     expect(response.status).toBe(200)
     expect(queries).toHaveLength(0)
+    expect(refusalQueries).toHaveLength(0)
+  })
+})
+
+describe('AGL-1907 · /api/health/signups reports REFUSED creations too', () => {
+  it('ALLOWS legitimate use: a quiet hour is 200 and says zero', async () => {
+    // The green direction. If this check could not be shown to pass, it would
+    // be a launch-morning outage wearing an alarm's clothes.
+    mockCountGet.mockImplementation(countOf(1))
+    mockRefusalGet.mockImplementation(refusalsOf())
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.status).toBe('ok')
+    expect(body.checks.signupRefusals).toMatchObject({
+      ok: true,
+      refusedSignups: 0,
+      windowMinutes: 60,
+      threshold: 50,
+    })
+    expect(body.checks.signups.ok).toBe(true)
+  })
+
+  it('ALLOWS a person who fumbled into the 429 a few times', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockRefusalGet.mockImplementation(
+      refusalsOf(marker('signupRefused_1', 4, { uid: 4 })),
+    )
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(200)
+    expect((await response.json()).checks.signupRefusals.ok).toBe(true)
+  })
+
+  it('REFUSES: a sustained run of 429s is a 503 with the reason split', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockRefusalGet.mockImplementation(
+      refusalsOf(
+        marker('signupRefused_2', 40, { ip: 38, uid: 2 }),
+        marker('signupRefused_1', 20, { ip: 20 }),
+      ),
+    )
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body.status).toBe('degraded')
+    expect(body.checks.signupRefusals).toMatchObject({
+      code: 'signup-refusal-wave',
+      refusedSignups: 60,
+      refusedByReason: { ip: 58, uid: 2 },
+    })
+    // The point of the whole check: creations read CALM while this is
+    // happening, because the limiter is doing its job.
+    expect(body.checks.signups.ok).toBe(true)
+  })
+
+  it('queries markers by refusedAtMs — never lastAtMs, which is AGL-1693 territory', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    const before = Date.now()
+    await (await freshRoute()).GET()
+    expect(refusalQueries).toHaveLength(1)
+    expect(refusalQueries[0]).toMatchObject({
+      collection: 'rateLimits',
+      field: 'refusedAtMs',
+      op: '>=',
+    })
+    expect(refusalQueries[0].field).not.toBe('lastAtMs')
+    expect(refusalQueries[0].cutoffMs).toBeGreaterThanOrEqual(
+      before - 3_600_000,
+    )
+    // Cost-bounded like every probe in this family.
+    expect(refusalQueries[0].limit).toBeGreaterThan(0)
+  })
+
+  it('ignores a foreign document that happens to carry refusedAtMs', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    mockRefusalGet.mockImplementation(
+      refusalsOf(
+        marker('degraded_1', 999, { ip: 999 }),
+        marker('signupRefused_1', 3, { ip: 3 }),
+      ),
+    )
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(200)
+    expect((await response.json()).checks.signupRefusals.refusedSignups).toBe(3)
+  })
+
+  it('SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR=-1 forces the red without a single 429', async () => {
+    process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR'] = '-1'
+    mockCountGet.mockImplementation(countOf(0))
+    mockRefusalGet.mockImplementation(refusalsOf())
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(503)
+    expect((await response.json()).checks.signupRefusals).toMatchObject({
+      code: 'signup-refusal-wave',
+      refusedSignups: 0,
+      threshold: -1,
+    })
+  })
+
+  it('an unparsable override falls back to the shared default', async () => {
+    process.env['SIGNUP_REFUSAL_ALARM_MAX_PER_HOUR'] = 'fifty'
+    mockCountGet.mockImplementation(countOf(0))
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(200)
+    expect((await response.json()).checks.signupRefusals.threshold).toBe(50)
+  })
+
+  it('a failed marker query is a 503, never calm — and leaks no error detail', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    mockRefusalGet.mockRejectedValue(
+      new Error('7 PERMISSION_DENIED: projects/aglyn-main/rateLimits'),
+    )
+    const response = await (await freshRoute()).GET()
+    expect(response.status).toBe(503)
+    const body = await response.json()
+    expect(body.checks.signupRefusals.code).toBe('refusals-unavailable')
+    expect(body.checks.signupRefusals.refusedSignups).toBeNull()
+    expect(JSON.stringify(body)).not.toContain('PERMISSION_DENIED')
+  })
+
+  it('memoises independently — a hammered endpoint costs one of each query', async () => {
+    mockCountGet.mockImplementation(countOf(2))
+    const route = await freshRoute()
+    await route.GET()
+    await route.GET()
+    await route.GET()
+    expect(queries).toHaveLength(1)
+    expect(refusalQueries).toHaveLength(1)
+  })
+
+  it('publishes counts only — no uid, no IP, no limiter key', async () => {
+    mockCountGet.mockImplementation(countOf(0))
+    mockRefusalGet.mockImplementation(
+      refusalsOf(marker('signupRefused_1', 2, { uid: 2 })),
+    )
+    const body = await (await (await freshRoute()).GET()).json()
+    expect(Object.keys(body.checks.signupRefusals).sort()).toEqual([
+      'minutesSinceLast',
+      'ms',
+      'ok',
+      'refusedByReason',
+      'refusedSignups',
+      'threshold',
+      'windowMinutes',
+    ])
   })
 })

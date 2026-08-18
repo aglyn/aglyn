@@ -55,10 +55,27 @@ const poolApi = (users: Map<string, any>) => ({
     }
     return found
   }),
-  listUsers: jest.fn(async () => ({
-    users: [...users.values()],
-    pageToken: undefined,
-  })),
+  /**
+   * Paginates for real (AGL-1962). This used to ignore `pageSize` and
+   * `pageToken` and hand back every user with no token, which made the
+   * pagination ordering in `listUsersAcrossPools` untestable: no page could
+   * ever carry a cursor, so the early return before the tenant loop was
+   * never taken and no assertion about repeated pages could fail. A double
+   * that cannot express the shape of the bug cannot guard against it.
+   */
+  listUsers: jest.fn(async (pageSize?: number, pageToken?: string) => {
+    const all = [...users.values()]
+    const start = pageToken ? Number(pageToken) : 0
+    const size = pageSize ?? all.length
+    const slice = all.slice(start, start + size)
+    const next = start + size
+    return {
+      users: slice,
+      // Firebase omits the token on the last page — that absence is the
+      // signal `listUsersAcrossPools` keys the tenant append off.
+      pageToken: next < all.length ? String(next) : undefined,
+    }
+  }),
 })
 
 jest.mock('./firebase-admin', () => ({
@@ -90,6 +107,7 @@ import {
   findUserByUidAcrossPools,
   listStaffUidsAcrossPools,
   listUsersAcrossPools,
+  markCrossPoolUidCollisions,
   resetAuthTenantCache,
 } from './auth-pools'
 
@@ -171,6 +189,146 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
     expect(page.users.map((entry) => entry.tenantId)).toEqual([null, 't1'])
     expect(page.tenantsIncluded).toBe(true)
     expect(page.tenantTruncated).toEqual([])
+  })
+
+  /**
+   * AGL-1962. Zach saw an SSO account listed twice. One candidate cause was
+   * the tenant pools being re-appended on every page: the staff page appends
+   * each new page to the ones already loaded, so a tenant user attached to
+   * more than one page would be re-listed once per "Load more".
+   *
+   * The tenant append is guarded behind the project pool being exhausted,
+   * and these hold that guard in place. Forced red by deleting the
+   * `if (page.pageToken) return { ... }` early return in
+   * `listUsersAcrossPools`: the first assertion then reports
+   * ['p1','p2','sso1'] instead of ['p1','p2'], and the concatenation below
+   * carries 'sso1' twice.
+   */
+  it('withholds tenant users from every page but the last', async () => {
+    projectUsers.set('p1', userRecord('p1', 'p1@example.com'))
+    projectUsers.set('p2', userRecord('p2', 'p2@example.com'))
+    projectUsers.set('p3', userRecord('p3', 'p3@example.com'))
+    tenantUsers.set(
+      't1',
+      new Map([['sso1', userRecord('sso1', 'sso@example.com')]]),
+    )
+    const first = await listUsersAcrossPools(2)
+    expect(first.users.map((entry) => entry.record.uid)).toEqual(['p1', 'p2'])
+    expect(first.tenantsIncluded).toBe(false)
+    expect(first.nextPageToken).not.toBeNull()
+  })
+
+  it('lists an SSO account exactly once across repeated pagination', async () => {
+    for (const uid of ['p1', 'p2', 'p3', 'p4', 'p5']) {
+      projectUsers.set(uid, userRecord(uid, `${uid}@example.com`))
+    }
+    tenantUsers.set(
+      't1',
+      new Map([['sso1', userRecord('sso1', 'sso@example.com')]]),
+    )
+    // Exactly what the page does: keep loading while a cursor comes back,
+    // appending each payload to the rows already on screen.
+    const accumulated: string[] = []
+    let token: string | null | undefined
+    let pages = 0
+    do {
+      const page = await listUsersAcrossPools(2, token ?? undefined)
+      accumulated.push(...page.users.map((entry) => entry.record.uid))
+      token = page.nextPageToken
+      pages += 1
+    } while (token && pages < 10)
+
+    expect(pages).toBeGreaterThan(2)
+    expect(accumulated.filter((uid) => uid === 'sso1')).toHaveLength(1)
+    expect(accumulated).toEqual(['p1', 'p2', 'p3', 'p4', 'p5', 'sso1'])
+  })
+
+  /**
+   * The other half of the guard, and the one that matters most: two people
+   * who share an address across pools are two accounts, not one row shown
+   * twice. Deduplicating by email would "fix" the reported symptom by
+   * deleting a real user from the staff console — strictly worse than the
+   * bug, and invisible until someone cannot find an account.
+   *
+   * Forced red by keying the returned rows on `record.email`.
+   */
+  it('keeps two DISTINCT accounts that share an email across pools', async () => {
+    projectUsers.set('p1', userRecord('p1', 'shared@example.com'))
+    tenantUsers.set(
+      't1',
+      new Map([['t1u1', userRecord('t1u1', 'shared@example.com')]]),
+    )
+    const page = await listUsersAcrossPools(200)
+    expect(page.users.map((entry) => entry.record.uid)).toEqual(['p1', 't1u1'])
+    expect(page.users.map((entry) => entry.tenantId)).toEqual([null, 't1'])
+    // Distinct uids in distinct pools, so nothing to flag — the collision
+    // marker must not fire merely because an address repeats.
+    expect(page.users.every((entry) => !entry.uidAlsoInPools)).toBe(true)
+  })
+
+  /**
+   * The shape actually found on production: ONE uid in TWO pools, because
+   * `/api/presence/token` minted an SSO user's GCIP-tenant uid against the
+   * project pool and `signInWithCustomToken` created the missing account
+   * rather than refusing. Both records are real; both stay listed; each is
+   * told which other pool holds its twin.
+   *
+   * Forced red by dropping the `markCrossPoolUidCollisions` call from
+   * `listUsersAcrossPools` — both `uidAlsoInPools` assertions then read
+   * undefined.
+   */
+  it('flags one uid living in two pools instead of merging the rows', async () => {
+    const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+    // The project copy is the empty shadow: no address at all, which is why
+    // the staff page fell back to printing its uid.
+    projectUsers.set(uid, userRecord(uid, undefined as any))
+    tenantUsers.set(
+      'aglyn-org-y5v14',
+      new Map([[uid, userRecord(uid, 'zach@aglyn.com')]]),
+    )
+    const page = await listUsersAcrossPools(200)
+
+    expect(page.users).toHaveLength(2)
+    expect(page.users.map((entry) => entry.tenantId)).toEqual([
+      null,
+      'aglyn-org-y5v14',
+    ])
+    // Each row names the OTHER pool, never its own.
+    expect(page.users[0].uidAlsoInPools).toEqual(['aglyn-org-y5v14'])
+    expect(page.users[1].uidAlsoInPools).toEqual([null])
+  })
+})
+
+describe('markCrossPoolUidCollisions (AGL-1962)', () => {
+  const entry = (uid: string, tenantId: string | null) =>
+    ({ record: { uid } as any, tenantId }) as any
+
+  it('leaves ordinary rows untouched', () => {
+    const marked = markCrossPoolUidCollisions([
+      entry('a', null),
+      entry('b', 't1'),
+    ])
+    expect(marked.every((row) => !row.uidAlsoInPools)).toBe(true)
+  })
+
+  it('reports every other pool when a uid is in three', () => {
+    const marked = markCrossPoolUidCollisions([
+      entry('a', null),
+      entry('a', 't1'),
+      entry('a', 't2'),
+    ])
+    expect(marked[0].uidAlsoInPools).toEqual(['t1', 't2'])
+    expect(marked[1].uidAlsoInPools).toEqual([null, 't2'])
+    expect(marked[2].uidAlsoInPools).toEqual([null, 't1'])
+  })
+
+  it('never drops a row', () => {
+    const marked = markCrossPoolUidCollisions([
+      entry('a', null),
+      entry('a', 't1'),
+      entry('b', null),
+    ])
+    expect(marked.map((row) => row.record.uid)).toEqual(['a', 'a', 'b'])
   })
 })
 

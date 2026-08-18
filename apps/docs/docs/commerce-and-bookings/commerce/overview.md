@@ -85,6 +85,15 @@ already received it into:
 - **The sale was paid out to you at the time of the charge.** When a dispute is
   lost, that payout is reversed — the amount is pulled back from your connected
   Stripe account, not absorbed by Aglyn.
+- **The full sale amount comes back, not the amount after our commission.** On
+  a $100 sale you received $95 and Aglyn kept $5; a lost dispute pulls back the
+  whole $100, because that is what the shopper's bank took. This is the same
+  treatment Shopify, Etsy, eBay, PayPal and Square apply to a chargeback, and
+  it is **different from a refund you issue yourself** — on a refund, Aglyn's
+  commission is returned to you.
+- **Aglyn pays the dispute fee.** Card networks charge a fee (around $15) on
+  every lost dispute on top of the sale amount. That one is ours, not yours,
+  and it never appears on your order or your payout.
 - **You are notified** when the reversal happens, so the first you hear of it is
   not a shortfall in a payout you were expecting.
 - **The reversal can push your Stripe balance negative** if you have already

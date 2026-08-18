@@ -190,12 +190,22 @@ paid for). Whatever that decision is, it has to take this object with it —
 deleting the Storage object here without the Firestore document, or the other
 way round, is the AGL-1443 shape again in the opposite direction.
 
-### Current bucket settings (verified 2026-08-12)
+### Current bucket settings (lifecycle re-verified 2026-08-18)
 
-Lifecycle: **none**, as measured on 2026-08-12.
-`cloud/media-bucket-lifecycle.json` ships with AGL-1443 and is **NOT YET
-APPLIED** — run the command in §2. The deadline is ~2026-10-30, when
-`adminAudit-archive/` first materialises.
+Lifecycle: **APPLIED**. It was `none` when measured on 2026-08-12 — AGL-1496
+filed that gap and applied `cloud/media-bucket-lifecycle.json` on 2026-08-13.
+Read back on 2026-08-18, both rules are live:
+
+```
+$ gcloud storage buckets describe gs://aglyn-main.appspot.com \
+    --format='value(lifecycle_config)' --project=aglyn-main
+rule=[{'action': {'type': 'Delete'}, 'condition': {'age': 365, 'matchesPrefix': ['adminAudit-archive/']}},
+      {'action': {'type': 'Delete'}, 'condition': {'age': 30, 'matchesPrefix': ['erasures/']}}]
+```
+
+Soft delete is `retentionDurationSeconds: 604800` (7 days), also read back the
+same day. The retention schedule these two settings implement is
+[`docs/DATA_RETENTION.md`](DATA_RETENTION.md).
 
 `gs://aglyn-main.appspot.com` — location `US`, CORS as in
 `cloud/storage-cors.json` (confirmed byte-identical to the live config, and

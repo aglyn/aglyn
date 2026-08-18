@@ -55,6 +55,7 @@ type AnalyticsSettings = { config?: Record<string, unknown> }
 const initializeAnalytics = jest.fn(
   (_app: unknown, _options?: AnalyticsSettings) => ({}),
 )
+const getAnalytics = jest.fn((_app: unknown) => ({}))
 
 jest.mock('firebase/app-check', () => ({
   __esModule: true,
@@ -63,10 +64,17 @@ jest.mock('firebase/app-check', () => ({
 }))
 jest.mock('firebase/analytics', () => ({
   __esModule: true,
-  // Deliberately NO `getAnalytics`: if the provider ever falls back to it,
-  // this mock makes that a hard failure instead of a silent regression.
   initializeAnalytics: (...args: Parameters<typeof initializeAnalytics>) =>
     initializeAnalytics(...args),
+  // The provider DOES have a `getAnalytics` fallback now (AGL-1979) — it is
+  // how a conflicting re-init still yields a usable instance instead of the
+  // `undefined` every consumer then dereferenced. It is spied rather than
+  // omitted because the point this file protects is that the fallback stays a
+  // FALLBACK: `getAnalytics` cannot pass `config`, so reaching it on a healthy
+  // boot would silently drop `send_page_view: false` and `content_group` and
+  // every assertion below would still pass.
+  getAnalytics: (...args: Parameters<typeof getAnalytics>) =>
+    getAnalytics(...args),
 }))
 jest.mock('firebase/remote-config', () => ({
   __esModule: true,
@@ -112,6 +120,7 @@ function mountProvider(): void {
 describe('console analytics boot (AGL-1643)', () => {
   beforeEach(() => {
     initializeAnalytics.mockClear()
+    getAnalytics.mockClear()
   })
 
   it('suppresses the SDK startup page_view so the layout owns pageviews', () => {
@@ -140,5 +149,17 @@ describe('console analytics boot (AGL-1643)', () => {
     // Config-level, so it rides every hit on the Firebase-injected tag —
     // the manual page_view, the taxonomy events, and the SDK's automatics.
     expect(options?.config?.content_group).toBe('console')
+  })
+
+  it('never boots through `getAnalytics` — the config-less door (AGL-1979)', () => {
+    // `getAnalytics(app)` takes no options at all, so a boot that goes
+    // through it configures the tag with neither `send_page_view: false` nor
+    // `content_group` — the exact tag a poisoned app leaves behind. It is
+    // reachable only from the provider's catch, and on a healthy boot nothing
+    // throws, so nothing may reach it.
+    mountProvider()
+
+    expect(initializeAnalytics).toHaveBeenCalled()
+    expect(getAnalytics).not.toHaveBeenCalled()
   })
 })

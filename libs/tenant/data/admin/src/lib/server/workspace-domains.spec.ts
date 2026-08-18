@@ -345,3 +345,218 @@ describe('it never takes the caller down with it (AGL-1136)', () => {
     expect(fetchMock.mock.calls[0][1].signal).toBeDefined()
   })
 })
+
+/**
+ * `projectDomainStatus` — the difference between "the POST succeeded" and "the
+ * domain is serving" (AGL-1913).
+ *
+ * Every payload shape below was read off the REAL Vercel API before this was
+ * written, not guessed:
+ *
+ *     GET /v9/projects/{p}/domains/demo.aglyn.com  → 200 {"verified":true,…}
+ *     GET /v9/projects/{p}/domains/{unknown}       → 404
+ *     GET /v6/domains/demo.aglyn.com/config        → {"misconfigured":false,
+ *                                                     "conflicts":[],…}
+ *     GET /v6/domains/example.com/config           → {"misconfigured":true,…}
+ *     GET /v5/certs?domain=demo.aglyn.com          → {"certs":[{"cns":["*.aglyn.com"],…}]}
+ *
+ * The states that matter are the two that used to be indistinguishable from
+ * success: `not-attached` (the POST answered `domain_already_in_use` because
+ * the name is on SOMEONE ELSE'S project) and `ownership-pending` (accepted,
+ * then withheld pending a TXT challenge). Both returned `attached: true`.
+ */
+describe('projectDomainStatus (AGL-1913)', () => {
+  /** Routes by URL so a test states only the answers it cares about. */
+  function route(answers: {
+    domain?: () => unknown
+    config?: () => unknown
+    certs?: () => unknown
+  }) {
+    return (url: string) => {
+      if (url.includes('/certs?')) {
+        return Promise.resolve((answers.certs ?? (() => respond(200, { certs: [] })))())
+      }
+      if (url.includes('/config')) {
+        return Promise.resolve(
+          (answers.config ?? (() => respond(200, { misconfigured: false, conflicts: [] })))(),
+        )
+      }
+      return Promise.resolve((answers.domain ?? (() => respond(200, { verified: true })))())
+    }
+  }
+
+  it('reports serving when the name is on the project, DNS is clean and a cert covers it', async () => {
+    fetchMock.mockImplementation(
+      route({
+        certs: () =>
+          respond(200, { certs: [{ cns: ['demo.example.com'] }] }),
+      }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    expect(await projectDomainStatus('demo.example.com')).toEqual({
+      state: 'serving',
+      domain: 'demo.example.com',
+      verification: [],
+      conflicts: [],
+    })
+  })
+
+  it('accepts a WILDCARD certificate as covering the name', async () => {
+    // `*.aglyn.com` is what the real API returns for `demo.aglyn.com`; an
+    // exact-match-only test would have reported a live domain as pending.
+    fetchMock.mockImplementation(
+      route({ certs: () => respond(200, { certs: [{ cns: ['*.example.com'] }] }) }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    expect((await projectDomainStatus('demo.example.com')).state).toBe('serving')
+  })
+
+  it('does NOT accept a wildcard one level up as covering a deeper name', async () => {
+    // `*.example.com` covers `demo.example.com`, never `a.b.example.com`.
+    fetchMock.mockImplementation(
+      route({ certs: () => respond(200, { certs: [{ cns: ['*.example.com'] }] }) }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    expect((await projectDomainStatus('a.b.example.com')).state).toBe(
+      'certificate-pending',
+    )
+  })
+
+  it('separates certificate-pending from serving', async () => {
+    fetchMock.mockImplementation(
+      route({ certs: () => respond(200, { certs: [] }) }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    expect((await projectDomainStatus('demo.example.com')).state).toBe(
+      'certificate-pending',
+    )
+  })
+
+  it('reports not-attached on a 404, which is the false green attach used to swallow', async () => {
+    fetchMock.mockImplementation(route({ domain: () => respond(404, {}) }) as never)
+    const { projectDomainStatus } = await load()
+    expect(await projectDomainStatus('someone-elses.example')).toEqual({
+      state: 'not-attached',
+      domain: 'someone-elses.example',
+      verification: [],
+      conflicts: [],
+    })
+    // The walk stops: no point asking DNS about a name we do not hold.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('surfaces the ownership challenge rather than calling it attached', async () => {
+    fetchMock.mockImplementation(
+      route({
+        domain: () =>
+          respond(200, {
+            verified: false,
+            verification: [
+              {
+                type: 'TXT',
+                domain: '_vercel.example.com',
+                value: 'vc-domain-verify=…',
+                reason: 'pending_domain_verification',
+              },
+            ],
+          }),
+      }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    const status = await projectDomainStatus('example.com')
+    expect(status.state).toBe('ownership-pending')
+    expect(status.verification[0]).toMatchObject({
+      type: 'TXT',
+      domain: '_vercel.example.com',
+    })
+  })
+
+  it('reports dns-misconfigured, with the conflicting records the platform names', async () => {
+    // The stale-A-shadowing-an-ALIAS shape, as `/v6/…/config` reports it.
+    fetchMock.mockImplementation(
+      route({
+        config: () =>
+          respond(200, {
+            misconfigured: true,
+            conflicts: [{ type: 'A', name: 'example.com', value: '203.0.113.9' }],
+          }),
+      }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    const status = await projectDomainStatus('example.com')
+    expect(status.state).toBe('dns-misconfigured')
+    expect(status.conflicts).toEqual([
+      { type: 'A', name: 'example.com', value: '203.0.113.9' },
+    ])
+  })
+
+  it('carries conflicts through on a domain that IS serving', async () => {
+    // Serving today, intermittently wrong tomorrow — the customer has to be
+    // told even though nothing is failing yet.
+    fetchMock.mockImplementation(
+      route({
+        config: () =>
+          respond(200, {
+            misconfigured: false,
+            conflicts: [{ type: 'A', name: 'example.com', value: '203.0.113.9' }],
+          }),
+        certs: () => respond(200, { certs: [{ cns: ['example.com'] }] }),
+      }) as never,
+    )
+    const { projectDomainStatus } = await load()
+    const status = await projectDomainStatus('example.com')
+    expect(status.state).toBe('serving')
+    expect(status.conflicts).toHaveLength(1)
+  })
+
+  it('reports serving when the CERTS read fails — an unreachable API is not a customer problem', async () => {
+    fetchMock.mockImplementation(route({ certs: () => respond(500, {}) }) as never)
+    const { projectDomainStatus } = await load()
+    expect((await projectDomainStatus('demo.example.com')).state).toBe('serving')
+  })
+
+  it('reports unknown, not serving, when the project read fails', async () => {
+    fetchMock.mockImplementation(route({ domain: () => respond(500, {}) }) as never)
+    const { projectDomainStatus } = await load()
+    expect(await projectDomainStatus('demo.example.com')).toMatchObject({
+      state: 'unknown',
+      detail: '500',
+    })
+  })
+
+  it('queries the project it is GIVEN, not the console one', async () => {
+    // The tenant custom-domain routes attach to a different project; a status
+    // that always asked about the console project would report every customer
+    // domain as not-attached.
+    fetchMock.mockImplementation(route({}) as never)
+    const { projectDomainStatus } = await load()
+    await projectDomainStatus('demo.example.com', { projectId: 'prj_tenant' })
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.vercel.com/v9/projects/prj_tenant/domains/demo.example.com?teamId=team_test',
+    )
+    expect(fetchMock.mock.calls[2][0]).toContain('teamId=team_test')
+  })
+
+  it('is skipped, not failed, without a token', async () => {
+    fetchMock.mockImplementation(route({}) as never)
+    const { projectDomainStatus } = await load({ VERCEL_TOKEN: undefined })
+    expect(await projectDomainStatus('demo.example.com')).toMatchObject({
+      state: 'skipped',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('never throws, whatever the API does', async () => {
+    for (const impl of [
+      () => Promise.reject(new Error('ECONNREFUSED')),
+      () => Promise.reject(Object.assign(new Error('t'), { name: 'TimeoutError' })),
+      () => undefined,
+    ]) {
+      fetchMock.mockImplementation(impl as never)
+      const { projectDomainStatus } = await load()
+      await expect(projectDomainStatus('demo.example.com')).resolves.toMatchObject({
+        domain: 'demo.example.com',
+      })
+    }
+  })
+})

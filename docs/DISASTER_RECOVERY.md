@@ -176,6 +176,39 @@ are overwritten to snapshot state; documents created in `(default)` AFTER the
 snapshot are left in place and must be cleaned up manually if unwanted. This
 leg is NOT rehearsed (no bucket exists).
 
+⚠️ **Merge-by-id resurrects erased data, and the DPA says it must not.** Live
+DPA §11 promises *"a deletion instruction survives any restoration — data
+deleted at Customer's instruction and later restored from a backup will be
+deleted again."* This is where that promise is kept or broken, so the copy-back
+above has a **fourth step and the restore is not finished without it**:
+
+```bash
+# 4. Re-apply every erasure the import brought back (AGL-1975). --since is the
+#    instant the RESTORED SNAPSHOT was taken, not the instant of the restore.
+#    Plans by default; --confirm executes. Exits non-zero if anything is
+#    blocked or the window predates the 90-day hot audit span.
+node tools/scripts/replay-erasures.mjs --since <snapshot ISO8601>
+node tools/scripts/replay-erasures.mjs --since <snapshot ISO8601> --confirm \
+  --actor <your uid>
+```
+
+It reads the `org.erased` / `user.erased` rows in `adminAudit` at or after the
+snapshot instant, checks whether each target is standing again, and re-runs
+`eraseOrg`/`eraseUser` for the ones that are — the same functions the cron
+calls, never a second copy of the cascade. It reinstates `erasureRequestedAt`
+from the audit row first, because an org whose customer asked AFTER the
+snapshot comes back with no request on it and `eraseOrg` correctly refuses one
+of those. A person who owns a workspace the restore also brought back is
+reported `BLOCKED`, not force-erased: erase the workspace first (it usually has
+its own row in the same list) and run it again.
+
+**An empty list is not automatically a clean bill.** Audit rows are 90 days hot
+before `/api/admin/audit-archive` moves them to Storage, which covers the 7-day
+PITR window and the ≤7-day usable managed backup but *not* a 90-day-old GCS
+export. A `--since` older than that prints `THIS ANSWER IS INCOMPLETE` and
+exits 1; read `adminAudit-archive/` before telling anyone the deletion
+instruction survived.
+
 ## The weekly GCS export (AGL-1843) — what runs, how to run it by hand
 
 Set up 2026-08-17 because of the `NOT_AVAILABLE` flip: managed backups were
@@ -249,7 +282,20 @@ gcloud firestore import gs://aglyn-main-firestore-exports/<PREFIX> \
 
 # 3. Import is a long-running operation; poll and then verify exactly as in
 #    Procedure A steps 3–4.
+
+# 4. REQUIRED after a 2b merge into (default) — re-apply every erasure the
+#    import resurrected (AGL-1975, DPA §11). The export prefix IS the snapshot
+#    time; the script accepts it in either `T05-00-00Z` or `T05:00:00Z` form.
+node tools/scripts/replay-erasures.mjs --since <PREFIX>
+node tools/scripts/replay-erasures.mjs --since <PREFIX> --confirm --actor <uid>
 ```
+
+Step 4 is not optional after 2b and is explained under Procedure C. It is
+**skippable after 2a only because a fresh database serves nobody** — the
+moment that database is copied back into `(default)`, the copy-back is a
+Procedure C import and carries the same step. A 90-day-old export is exactly
+the case where the erasure rows may already have aged out of `adminAudit`; the
+script says so and exits non-zero rather than reporting an empty list.
 
 Two honest caveats, both measured elsewhere but not here: the import leg has
 **never been rehearsed** (gap 3), and an imported database rebuilds indexes
@@ -320,3 +366,15 @@ dated so this never matters.
 4. **Client-side database override not built** — browser SDK is pinned to
    `(default)`; acceptable while the copy-back path is the documented end
    state.
+5. **Erasure replay depends on the 90-day hot audit window — AGL-1975,
+   partially closed 2026-08-18.** `tools/scripts/replay-erasures.mjs` now
+   re-applies the erasures an import resurrects (Procedures C step 4 and D
+   step 4), pinned by
+   `libs/tenant/data/admin/src/lib/server/replay-erasures.emulator.spec.ts`.
+   What is **not** closed: it reads `adminAudit` from Firestore, and rows older
+   than 90 days have been moved to `adminAudit-archive/` in Storage. A restore
+   from the oldest 90-day GCS export can therefore land in a window with no
+   erasure list left to read. The script refuses to call that clean — it prints
+   `THIS ANSWER IS INCOMPLETE` and exits 1 — but the honest fix is one of two
+   things, neither done: grow the hot window past the longest restore point, or
+   teach the script to read the Storage archive.

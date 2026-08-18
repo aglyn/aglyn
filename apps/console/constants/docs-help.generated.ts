@@ -28,6 +28,11 @@ export interface DocsHelpTopic {
 }
 
 export const DOCS_HELP_TOPICS = {
+  abuseReports: {
+    path: '/staff-console/abuse-reports',
+    title: 'Abuse reports',
+    excerpt: 'The public abuse-report queue — where outside reports land, how to triage by severity, which lever answers which report, and the CSAM and DMCA paths that are not takedown buttons.',
+  },
   account: {
     path: '/workspace-and-billing/signing-in-and-sessions',
     title: 'Signing In & Sessions',
@@ -600,17 +605,18 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // Heading anchors present on each topic's docs page. Only topics with H2–H4
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
-  account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#closing-your-account'],
+  abuseReports: ['#where-reports-come-from', '#triage-by-severity', '#csam', '#which-lever', '#statuses', '#disclosure', '#dmca', '#counter-notices', '#counter-notice-clock', '#counter-notice-steps', '#repeat-infringers', '#repeat-infringer-threshold', '#known-gaps', '#related'],
+  account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity', '#downloading-your-data', '#downloading-a-whole-workspace', '#closing-your-account'],
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
-  addOns: ['#what-you-can-add', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
+  addOns: ['#what-you-can-add', '#assigning-register-seats', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
-  aglynAssist: ['#what-it-can-do', '#message-limits', '#feedback', '#privacy'],
+  aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
-  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#sales-tax', '#platform-fees', '#related'],
+  billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#storage-overage', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#manage', '#related'],
   buildABlog: ['#1-create-a-collection', '#delete-a-collection', '#2-write-entries', '#scheduling', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#category-filtering', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#build-your-own-pager', '#4-publish--syndicate', '#tips', '#related'],
@@ -620,7 +626,7 @@ export const DOCS_HELP_ANCHORS = {
   catalog: ['#products-options-and-variants', '#billing-modes-and-subscriptions', '#categories-and-tags', '#collections', '#slugs', '#related'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
   commerce: ['#products-hub', '#inventory', '#orders', '#a-lost-dispute', '#shipping--taxes', '#destination-coverage', '#dropshipping', '#related'],
-  commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
+  commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
@@ -705,7 +711,7 @@ export const DOCS_HELP_ANCHORS = {
   termReference: ['#platform--accounts', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],
   textEditing: ['#edit-inline', '#rich-text', '#the-text-attribute', '#bindings-in-text', '#related'],
   themeBuilder: ['#edit-your-theme', '#related'],
-  troubleshooting: ['#checklist', '#verified-but-not-serving', '#still-stuck', '#related'],
+  troubleshooting: ['#checklist', '#verified-but-not-serving', '#the-site-loads-for-some-people-and-not-others', '#still-stuck', '#related'],
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#related'],

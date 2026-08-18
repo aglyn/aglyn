@@ -22,6 +22,7 @@ import {
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  projectDomainStatus,
 } from '@aglyn/tenant-data-admin'
 
 /**
@@ -221,21 +222,68 @@ async function handler(request: Request): Promise<Response> {
         .catch(() => undefined)
       return Response.json({ error: payload?.error?.message ?? 'Vercel attach failed' }, { status: 502 })
     }
+
+    // What the POST said is not what the customer gets (AGL-1913).
+    //
+    // Two states come back from a SUCCESSFUL add and mean the domain serves
+    // nothing:
+    //
+    //  - `domain_already_in_use` was tolerated above as idempotency, but it is
+    //    also the answer when the name is on a DIFFERENT project — including
+    //    one outside this account. `projectDomainStatus` asks whether the name
+    //    is on OUR project rather than inferring it from an error code, so the
+    //    tolerated 409 stops doubling as a green light for a domain we do not
+    //    hold.
+    //  - Vercel accepts a name whose apex belongs to another Vercel account and
+    //    then withholds routing and the certificate until a TXT challenge is
+    //    answered. That returned `attached: true` and a green chip forever.
+    //
+    // `unknown`/`skipped` fall through to the previous behaviour: a status API
+    // that could not answer must not block an otherwise-successful attach.
+    const status = await projectDomainStatus(domain, { projectId })
+    const serves =
+      status.state !== 'not-attached' &&
+      status.state !== 'ownership-pending' &&
+      status.state !== 'dns-misconfigured'
+    if (status.state === 'not-attached') {
+      await hostSnapshot.ref
+        .set({ cnameAttachmentPending: true }, { merge: true })
+        .catch(() => undefined)
+      return Response.json({
+        error:
+          'That domain is already registered to another account on our ' +
+          'hosting platform, so it could not be attached. Contact support ' +
+          'with the domain name.',
+        state: status.state,
+      }, { status: 409 })
+    }
     await hostSnapshot.ref
       .set(
         {
-          cnameAttachmentPending:
-            firebaseAdmin.firestore.FieldValue.delete(),
+          cnameAttachmentPending: serves
+            ? firebaseAdmin.firestore.FieldValue.delete()
+            : // Not a lie about the attach: it landed. But the field is what
+              // `liveCustomDomain` reads to decide whether it is safe to send
+              // visitors here, and a domain awaiting an ownership challenge or
+              // pointed elsewhere is exactly what that guard exists for.
+              true,
         },
         { merge: true },
       )
       .catch(() => undefined)
 
     // Query-preserving edge redirect from the platform subdomain (AGL-1273).
+    //
+    // Only once the domain actually serves. Registering it against a domain
+    // that does not is how a working site loses BOTH its addresses: the
+    // subdomain stops serving because it now redirects, and the destination
+    // has no certificate and no routing. The app-level redirect already
+    // refuses on `cnameAttachmentPending` (`liveCustomDomain`); this is the
+    // edge-level twin of that refusal, which had none.
     const subdomain = String(hostSnapshot.get('subdomain') ?? '')
       .trim()
       .toLowerCase()
-    if (subdomain) {
+    if (subdomain && serves) {
       const redirected = await upsertSubdomainRedirect({
         token,
         projectId,
@@ -255,7 +303,14 @@ async function handler(request: Request): Promise<Response> {
         )
         .catch(() => undefined)
     }
-    return Response.json({ attached: true }, { status: 200 })
+    return Response.json({
+      attached: true,
+      // The wizard renders these rather than a bare tick: which of "still
+      // issuing", "prove ownership", and "DNS points elsewhere" it is.
+      state: status.state,
+      verification: status.verification,
+      conflicts: status.conflicts,
+    }, { status: 200 })
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Attach failed' }, { status: 500 })

@@ -30,6 +30,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   resolveStorageOverage,
+  storageOveragePricePerGbUsd,
   STORAGE_OVERAGE_DEFAULT_CEILING_USD,
 } from '../../../../utils/storage-overage'
 
@@ -113,6 +114,10 @@ async function handler(request: Request): Promise<Response> {
           defaultCeilingUsd: STORAGE_OVERAGE_DEFAULT_CEILING_USD,
           maxCeilingUsd: STORAGE_OVERAGE_MAX_CEILING_USD,
           includedStoragePerSiteMb: entitlements.storagePerHostMb,
+          // The card quotes a price before asking for consent, and it must be
+          // the rate the rollup bills (AGL-1957) — so it is served from the
+          // same constants rather than duplicated into the client bundle.
+          pricePerGbUsd: storageOveragePricePerGbUsd(),
         },
         { status: 200 },
       )

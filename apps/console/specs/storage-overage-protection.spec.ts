@@ -37,6 +37,7 @@ import {
   checkStorageCeiling,
   mediaStorageGate,
   resolveStorageOverage,
+  storageOveragePricePerGbUsd,
   storageOverageUsd,
   STORAGE_OVERAGE_DEFAULT_CEILING_USD,
   usageAlertApproachPct,
@@ -237,6 +238,17 @@ describe('the media ingress gate (AGL-1886)', () => {
     expect(over.code).toBe('overage_ceiling_reached')
   })
 
+  it('prices the refusal from the SAME rate the card quotes (AGL-1957)', () => {
+    // The Billing card names a price before asking for consent, and it reads
+    // that price from `storageOveragePricePerGbUsd()` via the route. If the
+    // refusal message computed its own, the two could drift and a customer
+    // would agree to one rate and be refused in the language of another.
+    const gate = mediaStorageGate({ org: proOrg(), usedMb: PRO_SCOPE_MB + 512 })
+    expect(gate.error).toContain(
+      `$${storageOveragePricePerGbUsd().toFixed(3)}/GB`,
+    )
+  })
+
   it('keeps the AGL-471 off-by-one exactly where it was', () => {
     // `usedMb` includes the incoming file and the integer cap is INCLUSIVE.
     // A change here would silently move every plan's storage limit by 1 MB,
@@ -247,5 +259,101 @@ describe('the media ingress gate (AGL-1886)', () => {
     expect(
       mediaStorageGate({ org: proOrg(), usedMb: PRO_SCOPE_MB + 0.5 }).allowed,
     ).toBe(false)
+  })
+})
+
+describe('the consent ROUND TRIP: surface → store → gate (AGL-1957)', () => {
+  /**
+   * The gap AGL-1957 found was not in the gate and not in the route — each was
+   * correct alone. It was that **nothing connected them**: the route is the
+   * only writer of `org.storageOverage` and it had no caller, so the branch
+   * every test above exercises with a hand-built org was unreachable in the
+   * running product.
+   *
+   * The suite above proves the gate honours a consent. This one proves the
+   * consent the surface actually produces is the one the gate reads — which is
+   * the assertion that would have failed before the card existed, and the one
+   * that fails again if either side renames its field.
+   */
+
+  /** Exactly what `/api/billing/storage-overage` writes on `acknowledge`. */
+  const writtenByAcknowledge = (ceilingUsd: number) => ({
+    // `FieldValue.serverTimestamp()` resolves to a Timestamp on read; the
+    // resolver only asks whether it is truthy, so any stamp models it.
+    acknowledgedAt: new Date('2026-08-18T12:00:00Z'),
+    acknowledgedBy: 'uid-admin',
+    monthlyCeilingUsd: ceilingUsd,
+  })
+
+  it('NEGATIVE CONTROL: no opt-in means the bytes are refused, so nothing bills', () => {
+    // An org that never reached the card cannot be billed a cent of storage
+    // overage — not because billing skips it, but because the upload never
+    // landed. `report-usage` bills whatever bytes are stored and does NOT
+    // consult the acknowledgement, so this refusal is the ONLY thing standing
+    // between a metered org and an invoice line. That is why it is asserted
+    // here and not left to the rollup.
+    const gate = mediaStorageGate({
+      org: proOrg(),
+      usedMb: PRO_SCOPE_MB + 4096,
+    })
+    expect(gate.allowed).toBe(false)
+    expect(gate.code).toBe('overage_optin_required')
+  })
+
+  it('POSITIVE CONTROL: the acknowledgement the route writes DOES open the gate', () => {
+    // Without this, the suite would pass by refusing everything — a guard that
+    // only tests refusal is satisfied by a product that can never be used, and
+    // that is precisely the state AGL-1957 found. Forced red by writing
+    // `{ acknowledged: true }` instead of `acknowledgedAt` (the shape the
+    // route's response body uses, and the natural typo): `resolveStorageOverage`
+    // reads it as NOT acknowledged, the gate keeps refusing, and every
+    // customer who clicked "Turn on metered storage" stays hard-capped with a
+    // stored consent nothing reads.
+    const gate = mediaStorageGate({
+      org: proOrg(writtenByAcknowledge(40)),
+      usedMb: PRO_SCOPE_MB + 4096,
+    })
+    expect(gate.allowed).toBe(true)
+    expect(gate.status).toBe(200)
+    expect(gate.projectedOverageUsd).toBeGreaterThan(0)
+  })
+
+  it('the ceiling the customer TYPED is the ceiling enforced', () => {
+    // The card sends the number from its field; the route stores it; the gate
+    // bounds on it. A $2 consent must not be enforced as the $25 default —
+    // that would bill an org twelve times what it agreed to.
+    const org = proOrg(writtenByAcknowledge(2))
+    expect(resolveStorageOverage(org).monthlyCeilingUsd).toBe(2)
+    // ~59 GB of overage ≈ $2.00; well past it must refuse.
+    const over = mediaStorageGate({
+      org,
+      usedMb: PRO_SCOPE_MB + 1024 * 1024,
+    })
+    expect(over.allowed).toBe(false)
+    expect(over.code).toBe('overage_ceiling_reached')
+    expect(over.ceilingUsd).toBe(2)
+  })
+
+  it('revoke returns the org to the refusing state', () => {
+    // `revoke` deletes the whole `storageOverage` field, so the org is
+    // indistinguishable from one that never opted in — and is refused again
+    // immediately, which is what makes withdrawal real rather than cosmetic.
+    const revoked = proOrg()
+    expect(resolveStorageOverage(revoked).acknowledged).toBe(false)
+    expect(
+      mediaStorageGate({ org: revoked, usedMb: PRO_SCOPE_MB + 4096 }).code,
+    ).toBe('overage_optin_required')
+  })
+
+  it('the route’s own ceiling bound is inside what the resolver will honour', () => {
+    // The card offers $1–$5000 because the route allows it. If the route ever
+    // permitted a ceiling the resolver then rewrote, the customer would agree
+    // to one number and be enforced at another.
+    for (const ceiling of [1, 25, 5000]) {
+      expect(
+        resolveStorageOverage(proOrg(writtenByAcknowledge(ceiling)))
+          .monthlyCeilingUsd,
+      ).toBe(ceiling)
+    }
   })
 })

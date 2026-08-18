@@ -45,6 +45,7 @@ const mockCreateOrganization = jest.fn()
 const mockGraceAllows = jest.fn()
 const mockEnforceSanctions = jest.fn()
 const mockConsumeRateLimit = jest.fn()
+const mockRecordSignupRefusal = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -73,6 +74,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     typeof decoded['impersonatedBy'] === 'string',
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   meterOrgEmail: jest.fn(async () => undefined),
+  recordSignupRefusal: (...args: unknown[]) => mockRecordSignupRefusal(...args),
   OrgSlugTakenError: class OrgSlugTakenError extends Error {},
   signupProvisioningGraceAllows: (...args: unknown[]) =>
     mockGraceAllows(...args),
@@ -248,5 +250,81 @@ describe('AGL-1534 · /api/orgs/create is rate limited', () => {
     expect(response.status).toBe(403)
     expect(await response.json()).toMatchObject({ reason: 'email-unverified' })
     expect(mockConsumeRateLimit).not.toHaveBeenCalled()
+  })
+})
+
+describe('AGL-1907 · a refused signup is recorded, not just refused', () => {
+  it('REFUSES and records: a per-uid 429 books the refusal as `uid`', async () => {
+    mockConsumeRateLimit.mockImplementation(async (key: string) =>
+      key.startsWith('org-create:') ? denied(3) : allowed(10),
+    )
+    const response = await post()
+    expect(response.status).toBe(429)
+    // Without this the AGL-1536 alarm reads CALM through a contained wave:
+    // it counts orgs that were created, and a limiter that is biting makes
+    // that number go down.
+    expect(mockRecordSignupRefusal).toHaveBeenCalledTimes(1)
+    expect(mockRecordSignupRefusal).toHaveBeenCalledWith('uid')
+  })
+
+  it('REFUSES and records: a per-IP 429 books the refusal as `ip`', async () => {
+    // The reason split is the diagnosis — one address hammering vs. many
+    // accounts — so booking the wrong one is a silent misdiagnosis.
+    mockConsumeRateLimit.mockImplementation(async (key: string) =>
+      key.startsWith('org-create-ip:') ? denied(10) : allowed(3),
+    )
+    const response = await post()
+    expect(response.status).toBe(429)
+    expect(mockRecordSignupRefusal).toHaveBeenCalledWith('ip')
+  })
+
+  it('ALLOWS: a legitimate create records NOTHING', async () => {
+    // The green direction. A recorder that fired on success would bury the
+    // signal under normal signups and make the alarm meaningless.
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockRecordSignupRefusal).not.toHaveBeenCalled()
+  })
+
+  it('ALLOWS: a degraded (fail-soft) limiter still creates and records nothing', async () => {
+    mockConsumeRateLimit.mockResolvedValue({ ...allowed(3), degraded: true })
+    const response = await post()
+    expect(response.status).toBe(200)
+    expect(mockRecordSignupRefusal).not.toHaveBeenCalled()
+  })
+
+  it('records nothing for the refusals that are not rate limits', async () => {
+    // 451 and 423 are different events with different responses; folding them
+    // into the signup-pressure count would make it unreadable.
+    mockEnforceSanctions.mockReturnValue(
+      Response.json({ error: 'unavailable' }, { status: 451 }),
+    )
+    expect((await post()).status).toBe(451)
+    expect(mockRecordSignupRefusal).not.toHaveBeenCalled()
+
+    mockEnforceSanctions.mockReturnValue(null)
+    mockLockdownRefusal.mockResolvedValue(
+      Response.json({ error: 'locked' }, { status: 423 }),
+    )
+    expect((await post()).status).toBe(423)
+    expect(mockRecordSignupRefusal).not.toHaveBeenCalled()
+  })
+
+  it('the recorder is never awaited — a slow breadcrumb cannot delay the 429', async () => {
+    // Fire-and-forget by contract: the refusal IS the control.
+    let settled = false
+    mockRecordSignupRefusal.mockImplementation(() => {
+      const pending = new Promise((resolve) => setTimeout(resolve, 50))
+      void pending.then(() => {
+        settled = true
+      })
+      return pending
+    })
+    mockConsumeRateLimit.mockImplementation(async (key: string) =>
+      key.startsWith('org-create:') ? denied(3) : allowed(10),
+    )
+    const response = await post()
+    expect(response.status).toBe(429)
+    expect(settled).toBe(false)
   })
 })

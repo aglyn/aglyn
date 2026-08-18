@@ -97,6 +97,42 @@ The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
 environment variable (default `60`; set `0` to disable).
 :::
 
+## Downloading your data
+
+**Manage Account → Close account → Download my data** gives you a machine-readable JSON
+copy of everything we hold about you: your profile and contact details, your workspace
+memberships, your passkeys, your public publisher handle, and the support messages you
+wrote. It is the same file we would send if you asked us in writing.
+
+It is deliberately scoped to *you*. A workspace is shared, so your colleagues' details
+are not in it — a support thread you took part in contributes only the messages you
+wrote yourself, not the replies. To take a whole workspace with you, use the workspace
+export below instead.
+
+**It never contains a secret.** API keys, webhook secrets, password hashes and payment
+links are listed as *present* rather than reproduced, so the file tells you what exists
+without becoming something you can lose. An API key's identifier is withheld too,
+because that identifier is derived from the key itself.
+
+The file opens with a `coverage` section naming every place we looked and what was done
+with each — including the two things that are deliberately *not* included, and why. If
+something you expected is missing, that section is where to check first.
+
+### Downloading a whole workspace
+
+Owners and admins can export an entire workspace from **Settings → Delete → Download
+workspace data**: its sites and their content, datasets, contacts, orders, form
+submissions, members, support threads, custom domains and billing identifiers.
+
+Do this **before** deleting a workspace. Deletion keeps no copy, and the 7-day hold is
+the window in which this export is still possible.
+
+:::note What survives a deletion
+Sales-tax records for transactions on your storefront are kept after an erasure, because
+tax law requires it. They are included in the export — it is the one place you can see
+what remains.
+:::
+
 ## Closing your account
 
 **Manage Account → Close account** permanently deletes your personal account. It removes

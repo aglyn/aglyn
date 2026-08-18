@@ -160,7 +160,19 @@ export async function recordStorefrontTax(
       // told is tax (AGL-1711), so the session's own metadata snapshot is the
       // only witness to it. A cart session carries no such line at all.
       manualTaxCents = Math.max(0, Number(object?.metadata?.taxCents ?? 0)) || 0
-      if (object?.automatic_tax?.enabled === true) {
+      // Expanded whenever Stripe COMPUTED tax on this session — which since
+      // AGL-1953 includes a `manual`-mode cart or draft order, where the tax
+      // rides a real Tax Rate and Stripe therefore states a `taxable_amount`
+      // for it. Gated on the delivered `amount_tax` rather than done
+      // unconditionally so the buy-now and POS constructions, which report 0
+      // there and answer from metadata, still cost no extra Stripe read.
+      const stripeStatedTax = Number(
+        object?.total_details?.amount_tax ?? 0,
+      )
+      if (
+        object?.automatic_tax?.enabled === true ||
+        (Number.isFinite(stripeStatedTax) && stripeStatedTax > 0)
+      ) {
         taxSource = (await expandedSession(String(object?.id ?? ''))) ?? object
       }
     } else if (

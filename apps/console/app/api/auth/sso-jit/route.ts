@@ -203,8 +203,14 @@ async function handler(request: Request): Promise<Response> {
       allHosts: invite ? invite.get('allHosts') === true : true,
       hostAccess: invite ? (invite.get('hostAccess') ?? {}) : {},
       email,
-      displayName: idpName || null,
-      photoURL: idpPhoto || null,
+      // Absent, not null, when the assertion carries nothing (AGL-1961) —
+      // `upsertOrgMember` reads `null` as "clear the stored value". Latent
+      // here today, because the already-a-member early return above means
+      // this only ever runs on a first join, but the shape is the one that
+      // erased roster identity from the members route, and leaving it here
+      // is an invitation to reintroduce it.
+      displayName: idpName || undefined,
+      photoURL: idpPhoto || undefined,
       invitedBy: invite ? (invite.get('invitedBy') ?? null) : 'sso',
     })
     if (invite) {

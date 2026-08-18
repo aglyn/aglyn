@@ -35,13 +35,28 @@ import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import {
+  Suspense,
   forwardRef,
+  lazy,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+
+/**
+ * The Payment Element (AGL-1944), lazily. Stripe.js and its React wrapper are
+ * a large dependency and the flag is OFF, so a static import would ship the
+ * whole SDK in the bundle of every page carrying a cart — which is most pages
+ * on a storefront — to serve a path no shopper currently reaches.
+ */
+const StorefrontPaymentElement = lazy(() =>
+  import('./storefront-payment-element').then((module) => ({
+    default: module.StorefrontPaymentElement,
+  })),
+)
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
@@ -110,6 +125,14 @@ function CartLines(props: {
     'idle' | 'sending' | 'error' | 'paused' | 'ask'
   >('idle')
   const [message, setMessage] = useState('')
+  /**
+   * The in-page checkout session (AGL-1944). Null unless the server chose
+   * native mode, which needs both the release flag and a publishable key.
+   */
+  const [nativeCheckout, setNativeCheckout] = useState<{
+    clientSecret: string
+    publishableKey: string
+  } | null>(null)
   /**
    * In-progress quantity edits, keyed by line, as the raw field text
    * (AGL-1772). The field used to POST /api/commerce/cart on every
@@ -223,6 +246,34 @@ function CartLines(props: {
         }),
       })
       const payload = await response.json().catch(() => ({}))
+      // In-page payment (AGL-1944). Checked BEFORE the redirect branch: a
+      // native session carries a client secret and no url, and if a server ever
+      // sent both, navigating away would silently discard the form.
+      //
+      // `begin_checkout` is reported on BOTH paths, and from the same place, so
+      // the GA4 funnel does not develop a hole the day the flag flips — a
+      // storefront whose `begin_checkout` count halved would look like a
+      // conversion collapse rather than a checkout that stopped redirecting.
+      if (response.ok && payload?.clientSecret && payload?.publishableKey) {
+        trackEvent(
+          'begin_checkout',
+          buildBeginCheckoutParams({
+            value: (cart?.subtotalCents ?? 0) / 100,
+            items: (cart?.lines ?? []).map((line) => ({
+              item_id: line.productId,
+              item_name: line.name,
+              price: line.unitAmountCents / 100,
+              quantity: line.quantity,
+            })),
+          }),
+        )
+        setNativeCheckout({
+          clientSecret: String(payload.clientSecret),
+          publishableKey: String(payload.publishableKey),
+        })
+        setStatus('idle')
+        return
+      }
       if (response.ok && payload?.url) {
         // GA4 checkout funnel (AGL-1561, converted by AGL-1591). This used to
         // call `window.gtag` raw with `value`/`currency` only, so the same
@@ -450,8 +501,28 @@ function CartLines(props: {
         }
         onClick={handleCheckout}
       >
-        {status === 'sending' ? 'Redirecting…' : checkoutLabel || 'Checkout'}
+        {status === 'sending'
+          ? // "Redirecting" stops being true the moment the form opens in
+            // place (AGL-1944).
+            nativeCheckout
+            ? 'Opening…'
+            : 'Redirecting…'
+          : checkoutLabel || 'Checkout'}
       </Button>
+      {nativeCheckout ? (
+        <Suspense fallback={<StorefrontPaymentElementFallback />}>
+          <StorefrontPaymentElement
+            clientSecret={nativeCheckout.clientSecret}
+            publishableKey={nativeCheckout.publishableKey}
+            payLabel={checkoutLabel || 'Pay now'}
+            // The session is left open on cancel, deliberately: it is what the
+            // AGL-323 abandoned-cart recovery emails are built on, and expiring
+            // it would be a write against the merchant's Stripe account made
+            // from a browser.
+            onCancel={() => setNativeCheckout(null)}
+          />
+        </Suspense>
+      ) : null}
     </Box>
   )
 }

@@ -50,8 +50,24 @@ import { isPublishedLegalUrl } from './published-legal-pages'
  * seller of record. The published text says the opposite — Aglyn processes the
  * sale and remits transaction tax — so it is a different document in
  * substance, not a reissue, and re-asking is the point rather than a cost.
+ *
+ * Moved to `2026-08-18.1` on 2026-08-18 (AGL-1840 + AGL-1661). Two body-text
+ * changes: §1 now says "the Aglyn marketplace" (the AGL-975 rename, and the
+ * reason this snapshot must NOT need the AGL-975 naming-guard exemption that
+ * the `2026-08-14.1` one still carries), and §1's cross-reference to
+ * the "End User Licence Agreement"
+ * becomes "License" to match the document that agreement actually is, which
+ * was renamed on the same day.
+ *
+ * ⚠️ Read against the "a typo fix is not a bump" rule above, both edits are
+ * closer to a typo than to substance, and the tension is real. The bump was
+ * taken anyway on Zach's decision (2026-08-18), for a reason the rule does not
+ * cover: the served page changed, so keeping `2026-08-14.1` would leave the
+ * pin below asserting a hash for text nobody is shown any more — a FALSE
+ * RECORD, which is the exact failure the pin exists to detect. The choice is
+ * therefore between a bump and a broken pin, not between a bump and nothing.
  */
-export const PUBLISHER_AGREEMENT_VERSION = '2026-08-14.1'
+export const PUBLISHER_AGREEMENT_VERSION = '2026-08-18.1'
 
 export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
 
@@ -90,10 +106,10 @@ export const PUBLISHER_AGREEMENT_TITLE = 'Marketplace Publisher Agreement'
  * snapshot of unpublished text is a false record.
  */
 export const PUBLISHER_AGREEMENT_SHA256 =
-  'cbf4afe0b5a1fb97a955f8c61c9e041d0a7bd4b115cc0d5270067cc9844d1885'
+  '66b77a737f49c36a2befafb999659ba41f05249ff8134d3834a5c32ffaf57cf4'
 
 /** Byte length of the same snapshot — a cheap second check on the content. */
-export const PUBLISHER_AGREEMENT_BYTES = 12083
+export const PUBLISHER_AGREEMENT_BYTES = 12073
 
 /** Canonical document, on the marketing domain beside the other terms. */
 export const PUBLISHER_AGREEMENT_URL =
