@@ -246,11 +246,29 @@ describe('storefrontTaxRow (AGL-1904)', () => {
       )
       expect(row?.taxMode).toBe('manual')
       expect(row?.taxLiability).toBeNull()
-      // The amount is still recorded — the merchant collected it — but with
-      // NO tax lines, so nothing downstream can sum it into a taxable base
-      // Aglyn would be filing on.
       expect(row?.taxCents).toBe(800)
-      expect(row?.taxLines).toEqual([])
+      // Stripe DID state a base here, and since AGL-1953 it is kept rather
+      // than discarded: the same construction now carries the cart and
+      // draft-order manual paths, and throwing the breakdown away left
+      // `merchantManual.taxableSalesCents` a permanent zero.
+      //
+      // Discarding it was never what protected Aglyn's figure — the
+      // CLASSIFICATION is. `taxMode: 'manual'` sends this row to the
+      // `merchantManual` bucket in `tx-return.ts` and it can reach the
+      // Aglyn-liable one by no path at all, which the two assertions above
+      // are what pin. Restated here so a future reader does not "restore"
+      // the empty array believing it was a safety property.
+      expect(row?.taxLines).toEqual([
+        {
+          amountCents: 800,
+          taxabilityReason: 'standard_rated',
+          taxRateId: 'txr_merchant_configured',
+          taxableAmountCents: 10000,
+          jurisdiction: null,
+          rateState: null,
+          percentage: null,
+        },
+      ])
     })
 
     it('reads a Stripe-Tax subscription renewal from `total_taxes[]`', () => {

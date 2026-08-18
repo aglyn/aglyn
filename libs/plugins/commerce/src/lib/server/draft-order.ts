@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
   buildRoute,
   claimAttempt,
@@ -149,7 +150,8 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     const itemsCents = unitAmountCents * quantity
     const feeCents =
       feePct > 0 ? Math.max(1, Math.round((itemsCents * feePct) / 100)) : 0
-    const totals = CommerceModel.computeOrderTotals(lineItems, { feeCents })
+    // `totals` is built once the tax is known, a few lines down — the store
+    // settings this handler already reads for shipping carry it (AGL-1953).
 
     // Shipping (AGL-1792), from the same settings document the two storefront
     // paths read. This handler contained no `shipping` string at all: a
@@ -182,6 +184,39 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       .get()
     const shippingSettings = storeSettings.get('shipping') as
       CommerceModel.ShippingSettings | undefined
+
+    // Taxes (AGL-1953), from the same settings document. This handler had no
+    // tax code at all in either mode, so a merchant who invoiced a buyer for
+    // the same product they sell on the storefront charged them no tax — the
+    // cart's defect, one door over, and worse here because the merchant
+    // composed this order deliberately and would reasonably assume it matched
+    // their store.
+    //
+    // Origin-based, exactly as buy-now and the cart resolve it. The AGL-1792
+    // note above already established the premise: this dialog collects a
+    // product, a variant, a quantity and an email, so the DESTINATION is as
+    // unknown here as it is in the cart.
+    //
+    // Computed pure and BEFORE the claim so the stored totals can carry it;
+    // the Stripe object it needs is minted below the point of no return.
+    const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
+    const useStripeTax = taxSettings.mode === 'stripe' && !product.taxExempt
+    const manualRate =
+      taxSettings.mode === 'manual' &&
+      !product.taxExempt &&
+      !taxSettings.pricesIncludeTax
+        ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
+        : null
+    const taxCents = manualRate
+      ? CommerceModel.computeTaxCents(itemsCents, manualRate.pct)
+      : 0
+    // Stripe Tax mode leaves this 0 at composition time and the webhook folds
+    // the computed figure in — the same additive shape AGL-1792 used for
+    // shipping, and for the same reason: only Stripe knows it.
+    const totals = CommerceModel.computeOrderTotals(lineItems, {
+      feeCents,
+      taxCents,
+    })
     const shippingPlan =
       (product.type ?? 'physical') === 'physical'
         ? CommerceModel.planCheckoutShipping(
@@ -260,8 +295,32 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       })
     })
 
+    // The tax rate is minted here, BELOW the claim, because it creates a real
+    // Stripe object (AGL-1953). Cached per host, so it is usually a read.
+    let draftTaxRateId = ''
+    if (taxCents > 0 && manualRate) {
+      draftTaxRateId =
+        (await resolveManualTaxRateId({
+          hostRef,
+          taxPct: manualRate.pct,
+          taxLabel: manualRate.label || `Tax (${manualRate.pct}%)`,
+          ...(claim.stripeKey
+            ? { headers: { 'Idempotency-Key': `${claim.stripeKey}-tax-rate` } }
+            : {}),
+        })) ?? ''
+      if (!draftTaxRateId) {
+        // A VISIBLE refusal rather than an untaxed payment link — the silent
+        // under-collection is the defect. The order doc is rolled back the
+        // same way the session failure below rolls it back.
+        await orderRef.delete().catch(() => undefined)
+        await claim.release()
+        return res.status(502).json({ error: 'Payment link creation failed' })
+      }
+    }
     const params = new URLSearchParams({
       mode: 'payment',
+      ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
+      ...(draftTaxRateId ? { 'line_items[0][tax_rates][0]': draftTaxRateId } : {}),
       'line_items[0][quantity]': String(quantity),
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(unitAmountCents),

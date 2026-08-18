@@ -253,8 +253,18 @@ export function storefrontTaxRow(
   // The flag, never the lines — see the module note. A manual-mode
   // subscription renewal carries real Stripe tax rates in `total_taxes[]`,
   // and booking those as Aglyn-collected would be the whole defect restated.
-  const manualLineCents =
-    !automatic && context.kind === 'invoice' ? sumLines(taxLines(source)) : 0
+  //
+  // Read on SESSIONS as well as invoices since AGL-1953: the cart and
+  // draft-order paths now carry their manual tax as a real Stripe Tax Rate on
+  // the line (the construction that survives a session-level coupon), so a
+  // manual session reports a genuine `total_details.amount_tax`. The scalar is
+  // the fallback because `total_details.breakdown` is expandable and absent
+  // unless the recorder re-read it. Buy-now's `line_items[1]` construction
+  // reports 0 in both shapes and still answers from `manualTaxCents` below.
+  const manualLineCents = !automatic
+    ? sumLines(taxLines(source)) ||
+      asCents(source?.total_details?.amount_tax ?? source?.tax)
+    : 0
   const taxCents = automatic
     ? // `total_details.amount_tax` on a session, `total_taxes[]` on an
       // invoice. Prefer the summed lines when they exist (a computed invoice
@@ -306,10 +316,15 @@ export function storefrontTaxRow(
     customerAddress:
       address(source?.customer_details?.address) ??
       address(source?.customer_address),
-    // Manual tax has no Stripe-stated breakdown by construction, and an
-    // invented one would be a base nobody computed. Empty is the honest
-    // answer; the return counts a taxed row with no stated base out loud.
-    taxLines: lines,
+    // Stripe's OWN breakdown, whenever Stripe stated one — never an invented
+    // base. Buy-now's manual construction states none (Stripe was never told
+    // the line was tax) and answers `[]`, which is the honest answer. The
+    // cart, draft-order and subscription-renewal manual paths carry a real
+    // Tax Rate, so Stripe DOES state a `taxable_amount` for them, and keeping
+    // it gives `merchantManual` a real taxable-sales figure instead of a
+    // permanent zero (AGL-1953). It never reaches the Aglyn-liable bucket:
+    // the classification above is the flag, not these lines.
+    taxLines: automatic ? lines : taxLines(source),
     paidAt:
       asDate(source?.status_transitions?.paid_at) ?? asDate(source?.created),
   }

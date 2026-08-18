@@ -2050,6 +2050,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           0,
           Math.round(Number(object?.total_details?.amount_shipping ?? 0) || 0),
         )
+        // Tax joins shipping in the fold (AGL-1953). `draft-order.ts` now
+        // declares tax — a Stripe Tax Rate for a `manual` store, whose figure
+        // it already froze into `totals`, or `automatic_tax` for a `stripe`
+        // one, whose figure ONLY Stripe knows and which would otherwise arrive
+        // inside `amount_total` with nothing recording it. The same AGL-1698
+        // shape shipping was added for.
+        //
+        // Byte-identical for everything that came before: a POS card sale
+        // prices its tax into the single "In-store purchase" line and reports
+        // `amount_tax` 0 here (its own figure stays on the order, and its
+        // AGL-1953 witness is metadata, not this field), and a draft composed
+        // by a store with no tax reports 0 too.
+        const stripeTaxCents = Math.max(
+          0,
+          Math.round(Number(object?.total_details?.amount_tax ?? 0) || 0),
+        )
         const chargedTotalCents = Number(object?.amount_total ?? NaN)
         // `shipping_details` ONLY, unlike the cart branch's
         // `?? customer_details` fallback: that address is the BILLING one, and
@@ -2074,11 +2090,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               customerEmail:
                 object?.customer_details?.email ?? lifted.customerEmail ?? null,
               timeline: CommerceModel.appendOrderEvent(lifted, 'paid'),
-              ...(shippingCents > 0
+              ...(shippingCents > 0 || stripeTaxCents > 0
                 ? {
                     totals: {
                       ...(lifted.totals ?? {}),
-                      shippingCents,
+                      ...(shippingCents > 0 ? { shippingCents } : {}),
+                      // Stripe's figure REPLACES the frozen one rather than
+                      // adding to it: on a manual draft the two are the same
+                      // number computed twice (we set the rate Stripe applied),
+                      // so summing would double the tax on the record.
+                      ...(stripeTaxCents > 0
+                        ? { taxCents: stripeTaxCents }
+                        : {}),
                       // Stripe's own figure, for the AGL-1698 reason: the
                       // frozen total is what the draft was priced at, and only
                       // `amount_total` is the money that moved.

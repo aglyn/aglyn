@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { resolveManualTaxRateId } from './manual-tax-rate'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -281,53 +282,23 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return derived ? { 'Idempotency-Key': derived } : {}
     }
 
+    // Minting and caching now live in `manual-tax-rate.ts` (AGL-1953), which
+    // the cart path needs too — two copies of a money-shaped cache is how two
+    // paths quietly diverge. Behaviour here is unchanged.
     let recurringTaxRateId = ''
     if (isSubscription && taxCents > 0) {
-      // ≤4 decimal places, which is all Stripe accepts on a tax rate.
-      const percentage = Math.round(taxPct * 10000) / 10000
-      const displayLabel = taxLabel.slice(0, 50)
-      const cacheKey = `p${Math.round(percentage * 10000)}-${encodeURIComponent(
-        displayLabel,
-      )}`
-      const cacheRef = hostRef.collection('stripeTaxRates').doc(cacheKey)
-      const cached = await cacheRef.get()
-      recurringTaxRateId = String(cached.get('taxRateId') ?? '')
+      recurringTaxRateId =
+        (await resolveManualTaxRateId({
+          hostRef,
+          taxPct,
+          taxLabel,
+          headers: stripeKeyHeader('tax-rate'),
+        })) ?? ''
       if (!recurringTaxRateId) {
-        const rateResponse = await fetch('https://api.stripe.com/v1/tax_rates', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            ...stripeKeyHeader('tax-rate'),
-          },
-          body: new URLSearchParams({
-            display_name: displayLabel,
-            percentage: String(percentage),
-            inclusive: 'false',
-          }).toString(),
-        })
-        const taxRate = (await rateResponse.json()) as {
-          id?: string
-          error?: any
-        }
-        if (!rateResponse.ok || !taxRate.id) {
-          console.error('Stripe tax rate error', taxRate.error)
-          // Nothing was sold — hand the key back so the same button works
-          // once Stripe does (AGL-1697).
-          await claim.release()
-          return res.status(502).json({ error: 'Checkout failed' })
-        }
-        recurringTaxRateId = String(taxRate.id)
-        // Best-effort: the rate exists either way, and two concurrent misses
-        // racing this write just means one orphan rate on the dashboard.
-        await cacheRef
-          .set({
-            taxRateId: recurringTaxRateId,
-            pct: percentage,
-            label: displayLabel,
-            createdAtMs: Date.now(),
-          })
-          .catch(() => undefined)
+        // Nothing was sold — hand the key back so the same button works
+        // once Stripe does (AGL-1697).
+        await claim.release()
+        return res.status(502).json({ error: 'Checkout failed' })
       }
     }
 
