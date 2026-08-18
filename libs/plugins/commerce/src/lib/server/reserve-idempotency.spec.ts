@@ -141,6 +141,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 interface StripeCall {
   url: string
   idempotencyKey: string | null
+  /** The POST body, so the AGL-1969/AGL-2000 tax decision can be asserted. */
+  params: URLSearchParams
 }
 
 const stripeCalls: StripeCall[] = []
@@ -154,7 +156,11 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   }
   const idempotencyKey =
     (init?.headers?.['Idempotency-Key'] as string | undefined) ?? null
-  stripeCalls.push({ url: target, idempotencyKey })
+  stripeCalls.push({
+    url: target,
+    idempotencyKey,
+    params: new URLSearchParams(String(init?.body ?? '')),
+  })
   if (idempotencyKey && stripeSessionsByKey.has(idempotencyKey)) {
     return {
       ok: true,
@@ -438,5 +444,52 @@ describe('the commerce entitlement gates the reservation door (AGL-1873)', () =>
     const retry = await post({}, { 'idempotency-key': 'attempt-back' })
     expect(retry.status).toBe(200)
     expect(holdDocs()).toHaveLength(1)
+  })
+})
+
+/**
+ * The reservation's no-tax decision, PINNED (AGL-2000, part 3).
+ *
+ * `reserve.ts` carries two stated reasons for charging no tax — a stay is not
+ * goods, and the AGL-285 editor configures a goods SALES rate while lodging is
+ * an occupancy-tax regime with its own rates, registration and return; and the
+ * charge is usually a DEPOSIT, so taxing it would apply a whole stay's tax to a
+ * fraction of it. That reasoning was written down and nothing asserted it, so a
+ * future change adding `automatic_tax` here would have broken nothing. It does
+ * now.
+ *
+ * This pins the DECISION, not the outcome: proper lodging-tax support (AGL-1969)
+ * is expected to change it, and whoever does that should have to come here and
+ * say so.
+ */
+describe('a reservation charges no tax, deliberately (AGL-2000)', () => {
+  it('sends no tax parameter of any kind', async () => {
+    const result = await post()
+    expect(result.status).toBe(200)
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect(session).toBeDefined()
+    // Stripe Tax would compute a GOODS rate on a room — no lodging tax code
+    // is sent, and none could be from here.
+    expect(session?.params.get('automatic_tax[enabled]')).toBeNull()
+    // Nor the merchant's configured sales rate, by either construction.
+    expect(session?.params.get('line_items[0][tax_rates][0]')).toBeNull()
+    expect(session?.params.get('line_items[1][price_data][unit_amount]')).toBeNull()
+    // And no metadata witness claiming a tax that was never charged.
+    expect(session?.params.get('metadata[taxCents]')).toBeNull()
+  })
+
+  // Positive control: the charge itself must still be made, or the assertions
+  // above would hold for a reservation that never took any money.
+  it('still charges for the stay', async () => {
+    await post()
+    const session = stripeCalls.find((call) =>
+      call.url.includes('/checkout/sessions'),
+    )
+    expect(
+      Number(session?.params.get('line_items[0][price_data][unit_amount]')),
+    ).toBeGreaterThan(0)
+    expect(session?.params.get('metadata[type]')).toBe('commerce-reservation')
   })
 })
