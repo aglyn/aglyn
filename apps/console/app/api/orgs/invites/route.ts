@@ -202,10 +202,14 @@ async function handler(request: Request): Promise<Response> {
       // Observable to the customer AND to staff without a Firestore query:
       // the org activity feed is the surface a support conversation already
       // starts from. Fire-and-forget — the refusal is the control.
+      // `target` is REQUIRED — omitting it is a type error, and this call
+      // shipped without one. The refusal is org-scoped: it happens before any
+      // invite row exists, so there is no invite to point at.
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
         'Invite sending paused — too many invites in a short time',
+        { type: 'org', id: orgId },
       )
       return Response.json(
         {

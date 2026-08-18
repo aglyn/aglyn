@@ -319,6 +319,12 @@ describe('AGL-1907 · the red direction: a script is refused', () => {
       'org-1',
       expect.objectContaining({ uid: 'u-admin' }),
       expect.stringMatching(/paused/i),
+      // The fourth argument is REQUIRED by `logOrgActivity` and this call
+      // shipped without one, so the route did not typecheck. Pinned here
+      // rather than left open: an assertion that stops at three arguments is
+      // what let the missing one through in the first place. Org-scoped,
+      // because the refusal happens before any invite row exists.
+      { type: 'org', id: 'org-1' },
     )
   })
 })
