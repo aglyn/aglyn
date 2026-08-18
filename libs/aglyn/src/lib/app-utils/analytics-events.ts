@@ -309,6 +309,19 @@ export interface AnalyticsEventParams {
      */
     surface?: string
   }
+  /**
+   * Custom: no GA4 equivalent. One Aglyn Assist message sent (AGL-1860).
+   * `tier` is the capability tier served (`free` | `entitled`);
+   * `grounded` says whether docs retrieval found sections to cite —
+   * ungrounded questions at volume are the docs-gap signal the data loop
+   * mines. No question text: params carry no user content.
+   */
+  assistant_message_sent: { tier: string; grounded: boolean }
+  /**
+   * Custom: no GA4 equivalent. Explicit thumbs on an Assist answer
+   * (AGL-1860). `feedback` is `up` | `down`.
+   */
+  assistant_feedback: { feedback: string }
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventParams
@@ -610,6 +623,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   aglyn_overlay: true,
   aglyn_experiment: true,
   click: true,
+  assistant_message_sent: true,
+  assistant_feedback: true,
 }
 
 /** The taxonomy, enumerable. */

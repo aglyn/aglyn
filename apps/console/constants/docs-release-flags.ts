@@ -175,6 +175,16 @@ export const FLAG_DOC_PAGES: Partial<
         'A changelog prices the whole product; the admin bar itself carries no price claim anywhere.',
     },
   ],
+  // AGL-1860. The flag closes the console PANEL and the chat ROUTE together
+  // (a released-off feature 404s), so the one page about it is a page about
+  // something nobody can open yet — the admonition treatment, whole-file.
+  release_assist: [
+    {
+      path: 'docs/getting-started/aglyn-assist.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+  ],
 }
 
 /**

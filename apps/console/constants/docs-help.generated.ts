@@ -53,6 +53,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Add search to your site',
     excerpt: 'Drop the Search Box element onto a screen and publish — the built-in search page does the rest.',
   },
+  aglynAssist: {
+    path: '/getting-started/aglyn-assist',
+    title: 'Aglyn Assist',
+    excerpt: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
+  },
   aiAssist: {
     path: '/marketing-and-automation/ai-assist/overview',
     title: 'AI Assist',
@@ -580,6 +585,7 @@ export const DOCS_HELP_ANCHORS = {
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
+  aglynAssist: ['#what-it-can-do', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],

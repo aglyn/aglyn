@@ -84,6 +84,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Path constants, types and field pickers for the manager-gated billing doc (AGL-1028). It computes no figure at all — the `plan` mentions are prose explaining WHY plan/entitlements stayed on the org doc while the Stripe keys moved.',
   'apps/console/utils/server/metered-backfill.ts':
     'Decides WHETHER a subscription gets the metered usage item (AGL-1352) and adds it. It computes no figure — it reads `plan` only to check membership of PAID_PLANS, and the one "revenue" mention is prose about why an unmetered subscription is a problem.',
+  'apps/console/constants/assist-docs-index.generated.ts':
+    'GENERATED retrieval corpus for Aglyn Assist (AGL-1860): every string in it is customer DOCS PROSE lifted verbatim from apps/docs, so "recurring revenue shows up in the Orders tab" and the per-plan allowance tables are the docs talking to a reader, not code. It contains no logic at all — one exported readonly array of {path,title,heading,anchor,text} — so there is nothing here that could derive money from `plan`. Regenerate with tools/scripts/generate-assist-docs-index.mjs; the exemption is this ONE path, so any hand-written file that quotes docs prose still trips the guard.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
