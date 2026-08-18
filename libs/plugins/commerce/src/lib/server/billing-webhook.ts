@@ -229,6 +229,7 @@ interface StripeDispute {
   amount?: number
   /** Unix SECONDS, as every Stripe timestamp is. */
   created?: number
+  charge?: string
   payment_intent?: string
   evidence_details?: { due_by?: number }
 }
@@ -438,6 +439,285 @@ async function recordDisputeClosed(
         customerEmail: order.customerEmail,
       }
     })
+}
+
+/** Stripe failures a redelivery can actually fix. */
+function isTransientStripeStatus(status: number): boolean {
+  return status === 429 || status >= 500
+}
+
+/** One authorized GET against the Stripe API, body parsed either way. */
+async function stripeGet(
+  url: string,
+  stripeKey: string,
+): Promise<{ ok: boolean; status: number; body: any }> {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${stripeKey}` },
+  })
+  const body = await response.json().catch(() => null)
+  return { ok: response.ok, status: response.status, body }
+}
+
+/**
+ * The seller's share of a LOST dispute, pulled back from the connected
+ * account (AGL-1794).
+ *
+ * These are destination charges, so the disputed funds and the dispute fee
+ * are debited from the PLATFORM's balance while the merchant keeps the
+ * transfer — a merchant paid in full for a sale the shopper's bank took back,
+ * with Aglyn out the principal. The decision (AGL-1794): the merchant eats
+ * their share, by a `transfers/{id}/reversals` call for the portion that was
+ * actually transferred — the allocation every marketplace on destination
+ * charges uses, and the one `refund.ts` already applies on the refund door
+ * via `reverse_transfer`. The platform still eats Stripe's dispute fee,
+ * DELIBERATELY: that is the cost of owning the payment relationship, not the
+ * merchant's loss, which is why no fee figure appears here or anywhere on the
+ * order.
+ *
+ * PROPORTIONAL, NEVER MORE. The merchant received `transfer.amount` (the
+ * charge minus the application fee), so their share of the reversed principal
+ * is `reversedCents × transfer.amount ÷ charge.amount`, FLOORED, then capped
+ * at what the transfer has left (`amount − amount_reversed`) — a transfer
+ * partially reversed by an earlier `reverse_transfer` refund cannot be pulled
+ * below its own remainder from here. The reversal CAN drive the connected
+ * account negative, which Stripe recovers from future payouts; that is the
+ * policy, recorded on the order timeline in words the merchant can read.
+ *
+ * IDEMPOTENT BY THE ORDER DOCUMENT, with the transfer itself as the crash
+ * window's backstop. `dispute.reversedTransferCents` present — 0 included —
+ * means this step settled, and a redelivery returns before any Stripe call.
+ * A process killed between the POST landing and the record writing leaves
+ * that marker unset, so the redelivery runs again: it finds the reversal
+ * already sitting on the transfer (`metadata.disputeId`, stamped by the POST
+ * below), ADOPTS it, and creates nothing. Under both, the POST carries an
+ * `Idempotency-Key` derived from the dispute id, so even a delivery that
+ * raced past both reads is handed Stripe's stored response rather than a
+ * second reversal.
+ *
+ * DEFINITIVE failures record `reversedTransferCents: 0` with a timeline note
+ * and DO NOT throw: a charge with no transfer on it, a transfer with nothing
+ * left to reverse, Stripe refusing the request outright. No redelivery fixes
+ * those, and a throw propagates through `runBillingWebhookHandlers` into a
+ * 500 Stripe redelivers forever — the AGL-1743 lesson, applied the same way
+ * `findOrderForDispute` applies it to the missing index. TRANSIENT failures
+ * (a network reject, a 429, a 5xx) throw on purpose: the marker is still
+ * unset, so the redelivery Stripe sends IS the retry, and the settle it
+ * replays is idle so nothing else doubles.
+ *
+ * This runs OUTSIDE the settle transaction and re-reads the order itself,
+ * because it must also run on a redelivery whose settle was idle — the
+ * transient-failure path above depends on exactly that.
+ */
+async function reverseSellerShare(
+  orderRef: FirebaseFirestore.DocumentReference,
+  dispute: StripeDispute,
+): Promise<void> {
+  const disputeId = String(dispute?.id ?? '')
+  if (!disputeId) return
+  const snapshot = await orderRef.get()
+  if (!snapshot.exists) return
+  const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
+  const stored = order.dispute
+  // A different dispute has replaced the record, or the outcome on the books
+  // is not a loss: nothing here to recover.
+  if (stored?.id !== disputeId || stored.outcome !== 'lost') return
+  // The settle marker — see the doc comment. 0 counts.
+  if (stored.reversedTransferCents != null) return
+  const principalCents = Number(stored.reversedCents ?? 0)
+  // The order had nothing left to reverse — it was already fully refunded,
+  // and `refund.ts` sent `reverse_transfer=true` when it was, so the seller's
+  // share already went back by the refund door. No marker and no Stripe call:
+  // the short-circuit is as idempotent as the write and cheaper.
+  if (!(principalCents > 0)) return
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    console.error(
+      'Transfer reversal skipped: STRIPE_SECRET_KEY is not set (AGL-1794)',
+    )
+    return
+  }
+
+  /** Settles the step exactly once, whatever it found. */
+  const settle = async (
+    reversedTransferCents: number,
+    transferReversalId: string | null,
+    note: string,
+  ): Promise<void> => {
+    await firebaseAdmin
+      .app()
+      .firestore()
+      .runTransaction(async (transaction) => {
+        const fresh = await transaction.get(orderRef)
+        if (!fresh.exists) return
+        const current = CommerceModel.liftLegacyOrder(
+          (fresh.data() ?? {}) as never,
+        )
+        const record = current.dispute
+        if (record?.id !== disputeId || record.reversedTransferCents != null) {
+          return
+        }
+        transaction.update(orderRef, {
+          // Written whole, the field's own rule — see `OrderDispute`.
+          dispute: {
+            ...record,
+            reversedTransferCents,
+            ...(transferReversalId ? { transferReversalId } : {}),
+          },
+          timeline: CommerceModel.appendOrderEvent(current, 'dispute', note),
+        })
+      })
+  }
+
+  const chargeId = String(dispute?.charge ?? '')
+  if (!chargeId) {
+    console.error('Dispute carries no charge; seller share not reversed', {
+      disputeId,
+    })
+    await settle(
+      0,
+      null,
+      'Seller share not reversed — no charge on the dispute',
+    )
+    return
+  }
+  const charge = await stripeGet(
+    `https://api.stripe.com/v1/charges/${chargeId}`,
+    stripeKey,
+  )
+  if (!charge.ok) {
+    if (isTransientStripeStatus(charge.status)) {
+      throw new Error(
+        `Stripe charge read failed (${charge.status}) for dispute ${disputeId}`,
+      )
+    }
+    console.error(
+      'Stripe refused the charge read; seller share not reversed',
+      charge.body?.error,
+    )
+    await settle(
+      0,
+      null,
+      'Seller share not reversed — charge not found at Stripe',
+    )
+    return
+  }
+  const transferId = String(charge.body?.transfer ?? '')
+  const chargeAmountCents = Math.round(Number(charge.body?.amount ?? 0))
+  if (!transferId || !(chargeAmountCents > 0)) {
+    // An order from before destination charges, or a charge Stripe holds no
+    // transfer for. Logged, recorded, let go.
+    console.error(
+      'No transfer on the disputed charge; seller share not reversed',
+      {
+        disputeId,
+        chargeId,
+      },
+    )
+    await settle(
+      0,
+      null,
+      'Seller share not reversed — no transfer on the charge',
+    )
+    return
+  }
+  const transfer = await stripeGet(
+    `https://api.stripe.com/v1/transfers/${transferId}`,
+    stripeKey,
+  )
+  if (!transfer.ok) {
+    if (isTransientStripeStatus(transfer.status)) {
+      throw new Error(
+        `Stripe transfer read failed (${transfer.status}) for dispute ${disputeId}`,
+      )
+    }
+    console.error(
+      'Stripe refused the transfer read; seller share not reversed',
+      transfer.body?.error,
+    )
+    await settle(
+      0,
+      null,
+      'Seller share not reversed — transfer not found at Stripe',
+    )
+    return
+  }
+  // The crash window's backstop: the POST landed on a previous delivery and
+  // the record did not. Adopt what exists rather than creating a second one.
+  const existing = ((transfer.body?.reversals?.data ?? []) as any[]).find(
+    (item) => String(item?.metadata?.disputeId ?? '') === disputeId,
+  )
+  if (existing) {
+    const adoptedCents = Math.round(Number(existing.amount ?? 0))
+    await settle(
+      adoptedCents,
+      String(existing.id ?? ''),
+      `$${(adoptedCents / 100).toFixed(2)} seller share reversed for lost dispute`,
+    )
+    return
+  }
+  const transferCents = Math.round(Number(transfer.body?.amount ?? 0))
+  const alreadyReversedCents = Math.round(
+    Number(transfer.body?.amount_reversed ?? 0),
+  )
+  const remainingCents = Math.max(0, transferCents - alreadyReversedCents)
+  const shareCents = Math.min(
+    chargeAmountCents > 0
+      ? Math.floor((principalCents * transferCents) / chargeAmountCents)
+      : 0,
+    remainingCents,
+  )
+  if (!(shareCents > 0)) {
+    console.error(
+      'Transfer has nothing left to reverse; seller share not reversed',
+      { disputeId, transferId, transferCents, alreadyReversedCents },
+    )
+    await settle(
+      0,
+      null,
+      'Seller share already reversed on the transfer — nothing left to pull back',
+    )
+    return
+  }
+  const params = new URLSearchParams({
+    amount: String(shareCents),
+    'metadata[disputeId]': disputeId,
+    'metadata[orderId]': orderRef.id,
+  })
+  const response = await fetch(
+    `https://api.stripe.com/v1/transfers/${transferId}/reversals`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `dispute-reversal-${disputeId}`,
+      },
+      body: params.toString(),
+    },
+  )
+  const reversal = await response.json().catch(() => null)
+  if (!response.ok) {
+    if (isTransientStripeStatus(response.status)) {
+      throw new Error(
+        `Stripe transfer reversal failed (${response.status}) for dispute ${disputeId}`,
+      )
+    }
+    console.error('Stripe refused the transfer reversal', reversal?.error)
+    await settle(
+      0,
+      null,
+      'Seller share not reversed — Stripe refused the reversal',
+    )
+    return
+  }
+  const reversedTransferCents = Math.round(
+    Number(reversal?.amount ?? shareCents),
+  )
+  await settle(
+    reversedTransferCents,
+    String(reversal?.id ?? ''),
+    `$${(reversedTransferCents / 100).toFixed(2)} seller share reversed for lost dispute`,
+  )
 }
 
 /**
@@ -2456,6 +2736,15 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               closedTheOrder: settled.closedTheOrder,
             })
           }
+        }
+        // The platform's side of the money (AGL-1794): pull the seller's
+        // share back from the connected account. OUTSIDE the `recorded` guard
+        // on purpose — a redelivery whose settle was idle is exactly how a
+        // transiently-failed reversal gets its retry — and gated inside on
+        // the order's own `reversedTransferCents` marker, so it runs at most
+        // once per dispute however many times Stripe delivers.
+        if (String(dispute?.status ?? '') === 'lost') {
+          await reverseSellerShare(snapshot.ref, dispute)
         }
       }
     }

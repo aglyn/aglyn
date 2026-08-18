@@ -17,8 +17,11 @@
 
 import {
   buildRoute,
+  checkEntitlement,
   findScreenIdByRoutePath,
+  parseCollectionRoute,
   resolveHostEnabledPlugins,
+  resolveMediaSrc,
   Route,
   SCREEN_ROOT_PATH,
 } from '@aglyn/aglyn/server'
@@ -85,6 +88,7 @@ export async function POST(request: Request): Promise<Response> {
       cname?: string
       displayName?: string
       screens?: Record<string, string>
+      seo?: { favicon?: string }
     }
 
     // Outstanding tokens die the moment the flag flips off — this check is
@@ -120,7 +124,61 @@ export async function POST(request: Request): Promise<Response> {
     const rawPath = typeof body?.path === 'string' ? body.path : '/'
     const normalized =
       rawPath.split('?')[0].replace(/^\/+|\/+$/g, '') || SCREEN_ROOT_PATH
-    const screenId = findScreenIdByRoutePath(hostDoc.screens, normalized)
+    let screenId = findScreenIdByRoutePath(hostDoc.screens, normalized)
+
+    // Collection routes are COMPOSED, not routed (AGL-81/AGL-1400), so the
+    // routing map legitimately misses them: /{collection}/{entry} renders
+    // through the collection's entry TEMPLATE screen, and the paginated /
+    // category list URLs (/{c}/page/2, /{c}/category/x) render the list
+    // screen. Before AGL-1845 the bar called every one of these "Unrouted
+    // page" with no edit link, while the page loader happily served them.
+    // On a map miss, resolve the same way the loader does: the same
+    // parseCollectionRoute, then the collection doc by slug (one read,
+    // editor-only), then the same template-screen fields the compose
+    // pipeline picks (`compose-collection-page.ts`). Best-effort — a
+    // failure here just leaves the honest miss the bar showed before.
+    let collectionName: string | undefined
+    let collectionEntry = false
+    if (!screenId && normalized !== SCREEN_ROOT_PATH) {
+      const collectionRoute = parseCollectionRoute(normalized.split('/'))
+      if (collectionRoute) {
+        try {
+          const collectionQuery = await firestore
+            .collection('hosts')
+            .doc(claims.hostId)
+            .collection('collections')
+            .where('slug', '==', collectionRoute.collectionSlug)
+            .limit(1)
+            .get()
+          const collectionDoc = collectionQuery.docs[0]
+          if (collectionDoc) {
+            const templateScreenId = collectionRoute.entrySlug
+              ? ((collectionDoc.get('entryScreenId') ||
+                  collectionDoc.get('templateScreenId')) as
+                  | string
+                  | undefined)
+              : // A list template is published AT the collection root
+                // (AGL-1387), so prefer the routed screen there; the
+                // stored pointer is the fallback.
+                (findScreenIdByRoutePath(
+                  hostDoc.screens,
+                  collectionRoute.collectionSlug,
+                ) ??
+                ((collectionDoc.get('listScreenId') as string | undefined) ||
+                  undefined))
+            if (templateScreenId && typeof templateScreenId === 'string') {
+              screenId = templateScreenId
+              collectionName =
+                (collectionDoc.get('displayName') as string | undefined) ||
+                collectionRoute.collectionSlug
+              collectionEntry = Boolean(collectionRoute.entrySlug)
+            }
+          }
+        } catch {
+          // No verdict beats a wrong one — the bar keeps the plain miss.
+        }
+      }
+    }
 
     let screenName: string | undefined
     let versionId: string | undefined
@@ -170,12 +228,23 @@ export async function POST(request: Request): Promise<Response> {
     // the subdomain; HostIdProvider resolves it back to the doc id).
     let orgSlug: string | undefined
     let enabledPlugins: string[] = []
+    let screenAnalyticsEntitled = false
     if (hostDoc.orgId) {
       const orgSnapshot = await firestore
         .collection('orgs')
         .doc(hostDoc.orgId)
         .get()
       orgSlug = orgSnapshot.get('slug') as string | undefined
+      // The per-screen stat below is a PAID surface (`screenAnalytics`,
+      // Pro+ — AGL-150 decision: data is always collected, DISPLAY is what
+      // the entitlement gates). Resolved through the same entitlement
+      // resolver the console card uses, off the org doc already read for
+      // the slug — a bar showing per-screen numbers to a Free org would be
+      // a free window onto a paid feature.
+      screenAnalyticsEntitled = checkEntitlement(
+        orgSnapshot.data() as Parameters<typeof checkEntitlement>[0],
+        'screenAnalytics',
+      )
       // Quick links are gated on the HOST's effective plugin set (AGL-1829):
       // the org switchboard minus the per-site deny-list (AGL-1014) minus
       // flagged-off plugins (AGL-422). Rides the org read already paid for
@@ -233,6 +302,54 @@ export async function POST(request: Request): Promise<Response> {
           })}?tab=orders`
         : null
 
+    // Analytics on the bar (AGL-1829 follow-on — "make analytics appear").
+    // The console's full surface is one click away; the bar itself carries
+    // today's first-party pageview counters from the AGL-82 beacon's day
+    // docs. One or two small reads HERE, on the editor-only edit-context
+    // call — anonymous renders still pay nothing. Best-effort: a failed
+    // read yields null ("no verdict"), never a fabricated zero; a MISSING
+    // day doc genuinely means zero views today, which the bar may say.
+    const analyticsUrl = canLink
+      ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_ANALYTICS, {
+          orgSlug: orgSlug as string,
+          host: hostDoc.subdomain as string,
+        })}`
+      : null
+    const todayId = new Date().toISOString().slice(0, 10)
+    let viewsToday: number | null = null
+    try {
+      const daySnapshot = await firestore
+        .collection('hosts')
+        .doc(claims.hostId)
+        .collection('analytics')
+        .doc(todayId)
+        .get()
+      viewsToday = daySnapshot.exists
+        ? Number(daySnapshot.get('total') ?? 0)
+        : 0
+    } catch {
+      viewsToday = null
+    }
+    // Per-screen views ride the AGL-151 attribution docs, and render ONLY
+    // for orgs entitled to the paid per-screen surface — see the
+    // entitlement note above. Unentitled orgs never pay this read either.
+    let screenViewsToday: number | null = null
+    if (screenId && screenAnalyticsEntitled) {
+      try {
+        const screenDaySnapshot = await firestore
+          .collection('hosts')
+          .doc(claims.hostId)
+          .collection('screenAnalytics')
+          .doc(`${screenId}:${todayId}`)
+          .get()
+        screenViewsToday = screenDaySnapshot.exists
+          ? Number(screenDaySnapshot.get('total') ?? 0)
+          : 0
+      } catch {
+        screenViewsToday = null
+      }
+    }
+
     // The connected-as identity's destination (AGL-1829 follow-on): the
     // console's user-level account page. `/manage/user` is deliberately NOT
     // org-scoped (see the Route enum's header note), so it needs no slug —
@@ -242,11 +359,25 @@ export async function POST(request: Request): Promise<Response> {
       Route.MANAGE_USER_SETTINGS,
     )}`
 
+    // The site's own favicon (AGL-1829 follow-on), resolved EXACTLY like
+    // the `[host]` layout's `<link rel="icon">` (AGL-1421): same field,
+    // same resolver, same site-relative form — the bar renders on the same
+    // page that link tag does, so it has the same base URL to resolve
+    // against. Rides the host doc already in hand; no extra read. A site
+    // with nothing configured gets null and the bar shows no icon.
+    const faviconUrl =
+      resolveMediaSrc(hostDoc.seo?.favicon, { hostId: claims.hostId }) ?? null
+
     return Response.json(
       {
         siteName: hostDoc.displayName ?? hostDoc.subdomain,
+        faviconUrl,
         screenId: screenId ?? null,
         screenName: screenName ?? null,
+        // Collection context (AGL-1845): the page is a composed collection
+        // route served by a template screen, not a routed screen of its own.
+        collectionName: collectionName ?? null,
+        collectionEntry,
         versionId: versionId ?? null,
         // True when a version newer than the live pointer exists; null when
         // the answer isn't known (no screen, or the read failed).
@@ -256,6 +387,11 @@ export async function POST(request: Request): Promise<Response> {
         screensUrl,
         inboxUrl,
         ordersUrl,
+        analyticsUrl,
+        // Today's pageview counters (site-wide; per-screen only when the
+        // org's plan carries the paid per-screen surface). null = unknown.
+        viewsToday,
+        screenViewsToday,
         accountUrl,
         expiresAtMs: claims.exp,
       },

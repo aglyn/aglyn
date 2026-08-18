@@ -212,9 +212,16 @@ function HostsContent() {
                     <>
                       <AppLink
                         componentVariant="button"
+                        // `?aglyn-edit` arms the admin bar without the
+                        // chord (AGL-1842): on a foreign CUSTOM domain no
+                        // hint can exist by construction — a console
+                        // visitor is an editor, so the console's own visit
+                        // link is the chord-free path there. Harmless
+                        // everywhere else (same arming the param always
+                        // did).
                         href={`https://${
                           host?.cname || `${host?.subdomain}.aglyn.app`
-                        }`}
+                        }/?aglyn-edit`}
                         target={'_blank'}
                         rel={'nofollow'}
                       >

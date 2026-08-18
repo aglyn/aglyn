@@ -46,6 +46,17 @@ let mockOrgData: FakeDocData | null
 let mockLatestVersionId: string | null
 let mockVersionQueries: number
 let mockFlagFilter: (ids: readonly string[]) => string[]
+// The AGL-82 analytics day docs the stat cluster reads (AGL-1829 follow-on).
+let mockAnalyticsDayData: FakeDocData | null
+let mockAnalyticsDayThrow: boolean
+let mockAnalyticsDayId: string | undefined
+let mockScreenAnalyticsData: FakeDocData | null
+let mockScreenAnalyticsReads: number
+let mockScreenAnalyticsDocId: string | undefined
+// The collection doc the AGL-1845 fallback queries by slug on a map miss.
+let mockCollectionData: FakeDocData | null
+let mockCollectionQueries: number
+let mockCollectionSlugQueried: string | undefined
 
 function docSnapshot(data: FakeDocData | null) {
   return {
@@ -58,8 +69,87 @@ function docSnapshot(data: FakeDocData | null) {
 /**
  * Minimal Firestore double for the exact chains the route walks:
  * a host doc, its screen doc, the screen's versions orderBy+limit
- * query, and the org doc.
+ * query, the org doc, and the AGL-82 analytics day docs (host-wide and
+ * per-screen). Subcollections dispatch BY NAME so a new read the route
+ * grows cannot silently answer with the wrong document.
  */
+function hostSubcollection(sub: string) {
+  if (sub === 'screens') {
+    return {
+      withConverter: () => ({
+        doc: () => ({ get: async () => docSnapshot(mockScreenData) }),
+      }),
+      doc: () => ({
+        collection: (inner: string) => {
+          expect(inner).toBe('versions')
+          return {
+            orderBy: (field: string, direction: string) => ({
+              limit: (count: number) => ({
+                get: async () => {
+                  mockVersionQueries += 1
+                  expect(field).toBe('updatedAt')
+                  expect(direction).toBe('desc')
+                  expect(count).toBe(1)
+                  return {
+                    docs: mockLatestVersionId
+                      ? [{ id: mockLatestVersionId }]
+                      : [],
+                  }
+                },
+              }),
+            }),
+          }
+        },
+      }),
+    }
+  }
+  if (sub === 'analytics') {
+    return {
+      doc: (id: string) => ({
+        get: async () => {
+          if (mockAnalyticsDayThrow) throw new Error('unavailable')
+          mockAnalyticsDayId = id
+          return docSnapshot(mockAnalyticsDayData)
+        },
+      }),
+    }
+  }
+  if (sub === 'collections') {
+    return {
+      where: (field: string, op: string, value: string) => {
+        expect(field).toBe('slug')
+        expect(op).toBe('==')
+        return {
+          limit: (count: number) => ({
+            get: async () => {
+              expect(count).toBe(1)
+              mockCollectionQueries += 1
+              mockCollectionSlugQueried = value
+              return {
+                docs: mockCollectionData
+                  ? [docSnapshot(mockCollectionData)]
+                  : [],
+              }
+            },
+          }),
+        }
+      },
+    }
+  }
+  if (sub === 'screenAnalytics') {
+    return {
+      doc: (id: string) => ({
+        get: async () => {
+          mockScreenAnalyticsReads += 1
+          mockScreenAnalyticsDocId = id
+          return docSnapshot(mockScreenAnalyticsData)
+        },
+      }),
+    }
+  }
+  throw new Error(`Unexpected host subcollection: ${sub}`)
+}
+
 function mockFirestore() {
   return {
     collection: (name: string) => ({
@@ -71,28 +161,7 @@ function mockFirestore() {
       }),
       doc: () => ({
         get: async () => docSnapshot(name === 'orgs' ? mockOrgData : mockHostData),
-        collection: () => ({
-          withConverter: () => ({
-            doc: () => ({ get: async () => docSnapshot(mockScreenData) }),
-          }),
-          doc: () => ({
-            collection: () => ({
-              orderBy: (field: string, direction: string) => ({
-                limit: (count: number) => ({
-                  get: async () => {
-                    mockVersionQueries += 1
-                    expect(field).toBe('updatedAt')
-                    expect(direction).toBe('desc')
-                    expect(count).toBe(1)
-                    return {
-                      docs: mockLatestVersionId ? [{ id: mockLatestVersionId }] : [],
-                    }
-                  },
-                }),
-              }),
-            }),
-          }),
-        }),
+        collection: hostSubcollection,
       }),
     }),
   }
@@ -144,6 +213,15 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     mockLatestVersionId = 'v-live'
     mockVersionQueries = 0
     mockFlagFilter = (ids) => [...ids]
+    mockAnalyticsDayData = { total: 128 }
+    mockAnalyticsDayThrow = false
+    mockAnalyticsDayId = undefined
+    mockScreenAnalyticsData = { total: 12 }
+    mockScreenAnalyticsReads = 0
+    mockScreenAnalyticsDocId = undefined
+    mockCollectionData = null
+    mockCollectionQueries = 0
+    mockCollectionSlugQueried = undefined
   })
 
   it('reports draft changes when a newer version than the live pointer exists', async () => {
@@ -191,6 +269,129 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     const payload = await (await POST(contextRequest())).json()
     expect(payload.ordersUrl).toBeNull()
     expect(payload.inboxUrl).not.toBeNull()
+  })
+
+  it("resolves the site's favicon exactly like the layout's icon link", async () => {
+    // Same field, same resolver as AGL-1421: a `media:` reference becomes
+    // the site-relative CDN path the bar's page can resolve.
+    mockHostData = { ...mockHostData, seo: { favicon: 'media:host-1/fav1' } }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.faviconUrl).toBe('/api/media/cdn/host-1/fav1')
+  })
+
+  it('sends null — not a broken href — when the site set no favicon', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.faviconUrl).toBeNull()
+  })
+
+  it('links the console analytics surface through the real route table', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.analyticsUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/analytics',
+    )
+  })
+
+  it("reports today's site pageviews from the AGL-82 day doc", async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBe(128)
+    // The doc read is TODAY's UTC day id — the live counter, not history.
+    expect(mockAnalyticsDayId).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  it('reports zero (not null) when no day doc exists yet', async () => {
+    mockAnalyticsDayData = null
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBe(0)
+  })
+
+  it('reports null — no verdict — when the day-doc read fails', async () => {
+    mockAnalyticsDayThrow = true
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.viewsToday).toBeNull()
+  })
+
+  it('withholds the per-screen stat AND its read from an unentitled org', async () => {
+    // The default org has no plan → free → no screenAnalytics entitlement.
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBeNull()
+    expect(mockScreenAnalyticsReads).toBe(0)
+  })
+
+  it('serves the per-screen stat to a Pro org from the AGL-151 doc', async () => {
+    mockOrgData = { ...mockOrgData, plan: 'pro' }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBe(12)
+    expect(mockScreenAnalyticsReads).toBe(1)
+    expect(mockScreenAnalyticsDocId).toBe(
+      `screen-1:${new Date().toISOString().slice(0, 10)}`,
+    )
+  })
+
+  it('downgrades the per-screen stat with a dead subscription, plan field intact', async () => {
+    // `org.plan` is NOT entitlement (AGL-247): a canceled subscription must
+    // read as free even while the stale plan field still says pro.
+    mockOrgData = {
+      ...mockOrgData,
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+    }
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenViewsToday).toBeNull()
+    expect(mockScreenAnalyticsReads).toBe(0)
+  })
+
+  it('resolves a collection ENTRY route to its entry template screen (AGL-1845)', async () => {
+    // `/blog/aglyn-is-in-early-access` is composed, not in the routing map —
+    // before the fix this was "Unrouted page" with no edit link.
+    mockCollectionData = { displayName: 'Blog', entryScreenId: 'screen-1' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/aglyn-is-in-early-access'))
+    ).json()
+    expect(mockCollectionSlugQueried).toBe('blog')
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.screenName).toBe('About')
+    expect(payload.collectionName).toBe('Blog')
+    expect(payload.collectionEntry).toBe(true)
+    // Edit this page deep-links the TEMPLATE's besigner.
+    expect(payload.editUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
+    )
+  })
+
+  it('falls back to the legacy templateScreenId pointer (pre-AGL-1400 docs)', async () => {
+    mockCollectionData = { displayName: 'Blog', templateScreenId: 'screen-1' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/some-post'))
+    ).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.collectionEntry).toBe(true)
+  })
+
+  it('resolves a paginated LIST route to the routed list screen', async () => {
+    // `/blog/page/2` misses the map, but the list template is published AT
+    // the collection root (AGL-1387) — prefer that routed screen.
+    mockHostData = { ...mockHostData, screens: { 'screen-1': 'blog' } }
+    mockCollectionData = { displayName: 'Blog', listScreenId: 'screen-9' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/page/2'))
+    ).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.collectionName).toBe('Blog')
+    expect(payload.collectionEntry).toBe(false)
+  })
+
+  it('leaves a genuinely unrouted path unrouted when no collection matches', async () => {
+    mockHostData = { ...mockHostData, screens: {} }
+    const payload = await (await POST(contextRequest())).json()
+    expect(mockCollectionQueries).toBe(1)
+    expect(payload.screenId).toBeNull()
+    expect(payload.collectionName).toBeNull()
+  })
+
+  it('never queries collections when the routing map already answers', async () => {
+    const payload = await (await POST(contextRequest())).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(mockCollectionQueries).toBe(0)
   })
 
   it('refuses a bad token with 401 before any read', async () => {

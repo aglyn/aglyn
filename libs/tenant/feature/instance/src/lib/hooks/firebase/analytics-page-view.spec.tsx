@@ -131,4 +131,14 @@ describe('console analytics boot (AGL-1643)', () => {
     expect(options).not.toHaveProperty('send_page_view')
     expect(options).toHaveProperty('config')
   })
+
+  it("stamps content_group: 'console' on the tag config (AGL-1857)", () => {
+    mountProvider()
+
+    const [, options] = initializeAnalytics.mock.calls[0]
+    // The one-click marketing/docs/console split in GA4 standard reports.
+    // Config-level, so it rides every hit on the Firebase-injected tag —
+    // the manual page_view, the taxonomy events, and the SDK's automatics.
+    expect(options?.config?.content_group).toBe('console')
+  })
 })

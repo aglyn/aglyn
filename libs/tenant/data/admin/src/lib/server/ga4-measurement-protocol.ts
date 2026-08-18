@@ -282,6 +282,133 @@ export async function sendGa4Purchase(
 }
 
 /**
+ * Send one GA4 `refund` — revenue that came back (AGL-1850). Never throws.
+ *
+ * Both `purchase` senders were one-directional, so GA revenue could only
+ * ever go UP: a refunded invoice or marketplace sale stayed on the books
+ * forever, drifting GA away from Stripe by exactly the refund volume. GA4's
+ * native `refund` event is built for this — sent with the ORIGINAL
+ * purchase's `transaction_id`, GA nets the two against each other in every
+ * revenue report.
+ *
+ * `transaction_id` is therefore the one field that carries the whole
+ * mechanism: the invoice id for a subscription refund, the checkout session
+ * id for a marketplace one — whatever the matching `purchase` reported,
+ * never the refund's own charge or event id.
+ *
+ * `value` is what actually came back, in the SAME accounting the purchase
+ * used. For a subscription that is `amount_refunded` (the purchase reported
+ * `amount_paid`, all ours); for a marketplace sale it is the platform-net
+ * share (the purchase reported our net per AGL-1639, so refunding the gross
+ * would net MORE than the sale ever reported). The caller owns that
+ * arithmetic because the caller holds the ledger; this sender ships whatever
+ * number it is handed.
+ *
+ * Same claiming rules as `purchase` (the caller discriminates, this module
+ * transmits), same client-id capture-or-synthesize fallback, same
+ * fire-and-forget posture — a throw would un-claim the Stripe event.
+ */
+export async function sendGa4Refund(
+  input: Ga4PurchaseInput,
+): Promise<Ga4SendResult> {
+  const credentials = ga4Credentials()
+  if (!credentials) {
+    return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
+  }
+  const clientId =
+    input.clientId ||
+    (input.stripeCustomerId ? synthesizeClientId(input.stripeCustomerId) : '')
+  if (!clientId) {
+    return { sent: false, synthesizedClientId: false, reason: 'no-client-id' }
+  }
+  const synthesizedClientId = !input.clientId
+  const params = sanitizeEventParams({
+    transaction_id: input.transactionId,
+    currency: String(input.currency || 'USD').toUpperCase(),
+    value: input.value,
+    ...(input.billingInterval
+      ? { billing_interval: input.billingInterval }
+      : {}),
+    items: input.items,
+  })
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'refund',
+    params,
+    clientId,
+    userId: input.userId,
+    log: {
+      tag: 'AGL-1850:ga4-refund',
+      transactionId: input.transactionId,
+    },
+  })
+  return { ...result, synthesizedClientId }
+}
+
+/**
+ * Send one `subscription_cancelled` — the churn half of the funnel
+ * (AGL-1851). Never throws.
+ *
+ * Every event instruments the way INTO revenue and nothing the way out, so
+ * GA could not answer churn rate, plan-tier churn mix or tenure at
+ * cancellation. Sent server-side for the same reason `purchase` is: a
+ * subscription ends with no browser present — portal cancellations at
+ * period end, dunning exhaustion, staff action — so a client event is not a
+ * weaker option, it is no option.
+ *
+ * A CUSTOM name, deliberately. GA4's only subscription-cancel vocabulary
+ * (`app_store_subscription_cancel`) is reserved for app-store data sources
+ * and a web hit wearing it is dropped, which is silence, not pollution —
+ * the worse failure. The params need dimension registration to report on
+ * (AGL-1637): `plan` — the plan being LEFT, never the `free` the org mirror
+ * writes; `billing_interval` — the churn half of the AGL-1640 annual-mix
+ * metric; `tenure_days` — whole days from the subscription's `created` to
+ * when it actually ended, the "how long do they stay" number.
+ */
+export async function sendGa4SubscriptionCancelled(input: {
+  /** The plan tier the org is LEAVING (metadata/price-derived, not `free`). */
+  plan: string
+  /** `monthly` | `annual`, when the subscription's price interval said. */
+  billingInterval?: 'monthly' | 'annual'
+  /** Whole days the subscription lived; omitted when timestamps are absent. */
+  tenureDays?: number
+  /** Same capture-or-synthesize contract as `purchase`. */
+  clientId?: string | null
+  userId?: string | null
+  stripeCustomerId?: string | null
+}): Promise<Ga4SendResult> {
+  const credentials = ga4Credentials()
+  if (!credentials) {
+    return { sent: false, synthesizedClientId: false, reason: 'not-configured' }
+  }
+  const clientId =
+    input.clientId ||
+    (input.stripeCustomerId ? synthesizeClientId(input.stripeCustomerId) : '')
+  if (!clientId) {
+    return { sent: false, synthesizedClientId: false, reason: 'no-client-id' }
+  }
+  const synthesizedClientId = !input.clientId
+  const params = sanitizeEventParams({
+    plan: input.plan,
+    ...(input.billingInterval
+      ? { billing_interval: input.billingInterval }
+      : {}),
+    // The sanitizer drops `undefined`, which keeps "not determined" distinct
+    // from a real zero-day tenure.
+    tenure_days: input.tenureDays,
+  })
+  const result = await postGa4Event({
+    credentials,
+    eventName: 'subscription_cancelled',
+    params,
+    clientId,
+    userId: input.userId,
+    log: { tag: 'AGL-1851:ga4-subscription-cancelled' },
+  })
+  return { ...result, synthesizedClientId }
+}
+
+/**
  * Send one `site_published` for a route that went live with no browser
  * involved (AGL-1589). Never throws.
  *

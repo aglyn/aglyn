@@ -29,7 +29,7 @@ import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
@@ -234,14 +234,37 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }
     }
 
+    /**
+     * Idempotency key for ONE buy-now attempt (AGL-1697).
+     *
+     * Minted lazily on the first buy click, retired whenever the purchase
+     * changes shape — a different product, variant, quantity, billing choice
+     * or destination is a different attempt. A retry of THIS attempt presents
+     * the same key, so the server replays the original session instead of
+     * opening a second one (for a subscription product, a second RECURRING
+     * subscription).
+     */
+    const attemptKey = useRef('')
+    useEffect(() => {
+      attemptKey.current = ''
+    }, [resolved?.id, variant?.id, quantity, billing, shipTo])
+
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
       setStatus('sending')
       setMessage('')
+      if (!attemptKey.current) {
+        attemptKey.current =
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }
       try {
         const response = await siteFetch('/api/commerce/checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': attemptKey.current,
+          },
           body: JSON.stringify({
             hostId,
             productId: resolved.id,

@@ -35,7 +35,9 @@ import {
 } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
-import { OrgScopeProvider } from '../../hooks/use-org-scope'
+import { OrgScopeProvider, useOrgScope } from '../../hooks/use-org-scope'
+import { useOrgPlans } from '../../hooks/use-org-plans'
+import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import { buildConsolePageViewParams } from '../../utils/page-view-params'
@@ -221,6 +223,35 @@ function AnalyticsGlobalEvents({ children }) {
       buildConsolePageViewParams(window.location.href),
     )
   }, [pathname, analytics])
+
+  // Org-scoped user properties (AGL-1852): `org_plan` and `org_role` for the
+  // ACTIVE workspace, which is what lets any report or audience split by who
+  // pays. The plan comes through `useOrgPlans` — the org switcher's reader —
+  // so the two semantics that matter are inherited rather than re-derived:
+  // an enterprise override reads "enterprise", and a doc with no `plan`
+  // field means FREE (only paid plans are webhook-written).
+  //
+  // `buildOrgUserProperties` owns the clearing rule and is pinned by
+  // `analytics-user-properties.spec.ts`: every unknown — no org scope, plan
+  // still loading, read failed — resolves to an explicit null (Firebase's
+  // "unset"), never a stale carry-over. GA user properties persist until
+  // overwritten and this document survives re-auth (AGL-664), so the
+  // failure mode of a missing clear is the PREVIOUS session's tier reported
+  // against a new user's behaviour. Same discipline as the traffic_type
+  // stamp above.
+  const { currentOrg } = useOrgScope()
+  const activeOrgId = currentOrg?.$id
+  const orgPlans = useOrgPlans(activeOrgId ? [activeOrgId] : [])
+  useEffect(() => {
+    setUserProperties(
+      analytics,
+      buildOrgUserProperties({
+        orgId: activeOrgId,
+        role: currentOrg?.role,
+        plan: activeOrgId ? orgPlans[activeOrgId] : undefined,
+      }),
+    )
+  }, [analytics, activeOrgId, currentOrg, orgPlans])
 
   useEffect(() => {
     // tenantId here is Firebase Auth's own GCIP multi-tenancy field on the

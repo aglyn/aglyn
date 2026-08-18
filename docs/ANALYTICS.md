@@ -111,6 +111,9 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `add_to_cart` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
 | `aglyn_overlay` | Custom | Tenant (marketing) | `overlay_action`, `overlay_id?` | Engagement — announcement bars and popups |
 | `aglyn_experiment` | Custom | Tenant (marketing) | `experiment_id`, `variant_id`, `experiment_action` | Engagement — experiment exposures/conversions |
+| `refund` | Reserved | **Server** (AGL-1850) | `transaction_id` (the ORIGINAL purchase's), `currency`, `value` | Revenue — nets refunded revenue against `purchase`; without it GA can only ever drift UP from Stripe |
+| `subscription_cancelled` | Custom | **Server** (AGL-1851) | `plan` (the tier being LEFT), `billing_interval?`, `tenure_days?` | Churn rate, plan-tier churn mix, tenure at cancellation |
+| `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642) | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
 (the AGL-1497 door where "Sign in with Google" created the account and bounced
@@ -229,6 +232,51 @@ the share of USERS who ever sent `first_publish: true`, and a user counted
 twice is still one user.
 
 ---
+
+## The 2026-08-17 coverage pass (AGL-1636 sweep), in brief
+
+Six additions in one pass, each with its own spec and Linear issue; the
+decisions in full live on the issues.
+
+- **Real-user Core Web Vitals (AGL-1642)** — `web-vitals` (already a
+  transitive dep of `@firebase/performance`; 2.6KB gz as a lazy chunk) →
+  GA4 events in web.dev's exact shape, from
+  `libs/aglyn/src/lib/app-utils/web-vitals-rum.ts`. Delivery is
+  `window.gtag` on both surfaces, so the tenant consent gate stays
+  structural: no grant, no tag, no hit. Metrics that report before the
+  late-loading tag are held in memory ~60s and flushed when it arrives; a
+  visitor whose tag never appears produces nothing — the hold is NOT the
+  forbidden pre-consent queue (`web-vitals-rum.spec.ts` pins both halves).
+  Console mount: `WebVitalsReporter` in the root layout, the ErrorBeacon
+  shape. The AGL-1582 `traffic_type` stamp rides these hits — Firebase's
+  `setDefaultEventParameters` is a global `gtag('set')`, verified against
+  the SDK's `wrapGtag`.
+- **`refund` (AGL-1850)** — subscription refunds from the platform webhook's
+  `charge.refunded` (charge must carry an invoice AND resolve through the
+  `stripeCustomers` index); `platformRevenue/{invoiceId}` carries a running
+  `refundedCents` so the CUMULATIVE `amount_refunded` becomes a delta.
+  Marketplace full refunds reverse at **platform net** off the ledger split,
+  keyed by the session id; `refundedAt` doubles as the redelivery guard.
+- **`subscription_cancelled` (AGL-1851)** — churn, server-side (no browser
+  is present when a subscription ends). Reports the plan being LEFT, never
+  the `free` the org mirror writes — the assembly spec pins that exact trap.
+- **`org_plan` / `org_role` user properties (AGL-1852)** — the active
+  workspace's tier and role, read through `useOrgPlans` (enterprise
+  override, no-field-means-free). `buildOrgUserProperties` owns the clearing
+  rule: every unknown is an explicit null, because GA user properties
+  persist and the console does not remount across re-auth.
+- **`content_group` (AGL-1857)** — `console` on the `initializeAnalytics`
+  config, `marketing` on `aglyn.com`'s own tag only (discriminated by the
+  platform measurement id — a customer's property gets no group of ours),
+  `docs` via a head `gtag('set')` that covers route-change pageviews
+  (initial hit best-effort; the built HTML renders the set after the
+  preset's config). Built-in Content group dimension — no registration.
+- **CTA tier qualification (AGL-1858)** — a CTA whose destination href
+  carries `?plan=` reports `content_id` as `label:plan=<tier>`, because five
+  of the eight live pricing tier CTAs are labelled Choose/CHOOSE with no
+  authored section. ONLY the `plan` key is read; the spec pins that an email
+  or token in the same query never reaches the dimension. The authored
+  `data-analytics-section` half is a besigner content edit (click-list).
 
 ## Seven decisions worth knowing
 

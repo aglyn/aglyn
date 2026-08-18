@@ -75,6 +75,16 @@ afterEach(() => {
   delete (window as unknown as { gtag?: unknown }).gtag
 })
 
+
+// The classifier returns a union (content click | outbound link); these
+// pricing-CTA cases are all content clicks — narrow once, type-safely, so
+// tsc agrees with what jest already exercises (AGL-1841's lesson: jest
+// never typechecks, so a union access error hides until a full tsc).
+const contentId = (
+  params: { content_id: string } | { link_domain: string } | undefined,
+): string | undefined =>
+  params && 'content_id' in params ? params.content_id : undefined
+
 describe('what counts as a CTA (AGL-1562)', () => {
   it('counts a link built to look like a button, with the label a report can read', () => {
     const link = paint(
@@ -155,6 +165,67 @@ describe('what counts as a CTA (AGL-1562)', () => {
     )
 
     expect(classify(link)?.name).toBe('select_content')
+  })
+})
+
+describe('tier qualification — the plan in the CTA href (AGL-1858)', () => {
+  it('qualifies content_id with the destination plan, so five "Choose" buttons become five rows', () => {
+    // The live pricing page's shape: identical labels, no authored section,
+    // the tier stated only in the href — which the console page_view then
+    // strips (its sanitizer reduces URLs to origin + pathname), so this is
+    // the ONLY place the tier survives the click.
+    const link = paint(
+      '<a id="target" class="MuiButton-root" ' +
+        'href="https://app.localhost/signup?plan=starter&interval=month">Choose</a>',
+    )
+
+    expect(classify(link)?.params).toMatchObject({
+      content_id: 'Choose:plan=starter',
+    })
+  })
+
+  it('two identically-labelled tier CTAs are now distinguishable', () => {
+    const starter = paint(
+      '<a id="target" class="MuiButton-root" href="/signup?plan=starter">CHOOSE</a>',
+    )
+    const first = contentId(classify(starter)?.params)
+    const scale = paint(
+      '<a id="target" class="MuiButton-root" href="/signup?plan=scale">CHOOSE</a>',
+    )
+    const second = contentId(classify(scale)?.params)
+    expect(first).toBe('CHOOSE:plan=starter')
+    expect(second).toBe('CHOOSE:plan=scale')
+    expect(first).not.toBe(second)
+  })
+
+  it('composes with an authored section — every tier of the id survives', () => {
+    const link = paint(
+      '<div data-analytics-section="pricing">' +
+        '<a id="target" role="button" href="/signup?plan=pro">Start Pro</a></div>',
+    )
+    expect(classify(link)?.params).toMatchObject({
+      content_id: 'pricing:Start Pro:plan=pro',
+    })
+  })
+
+  it('ONLY the plan key is read — the rest of the query stays out of GA', () => {
+    // A general query capture would be the token/address smuggling the
+    // sanitizer's URL reduction exists to stop.
+    const link = paint(
+      '<a id="target" class="MuiButton-root" ' +
+        'href="/signup?email=someone%40example.com&code=SECRET">Start free</a>',
+    )
+    const id = contentId(classify(link)?.params)
+    expect(id).toBe('Start free')
+    expect(id).not.toContain('example.com')
+    expect(id).not.toContain('SECRET')
+  })
+
+  it('a CTA without a plan is exactly what it was before', () => {
+    const link = paint(
+      '<a id="target" class="MuiButton-root" href="https://app.localhost/signup">Start free</a>',
+    )
+    expect(classify(link)?.params).toMatchObject({ content_id: 'Start free' })
   })
 })
 

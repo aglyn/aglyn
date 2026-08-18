@@ -317,10 +317,17 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // when the options deep-equal the first call's, and throws only on a
     // CONFLICTING re-init. This is the sole call site, so the options are
     // always these.
+    // `content_group: 'console'` (AGL-1857) rides the same config: it is the
+    // first-class GA4 axis that separates console traffic from `marketing`
+    // (stamped by the tenant runtime on aglyn.com's own tag) and `docs`
+    // (stamped by the Docusaurus head snippet) in standard reports, without
+    // reaching for the Hostname dimension. The console is this provider's
+    // only consumer, verified by grep — the tenant runtime builds its tag in
+    // `site-analytics.tsx` and never passes through here.
     let analytics: Analytics
     try {
       analytics = initializeAnalyticsInstance(app, {
-        config: { send_page_view: false },
+        config: { send_page_view: false, content_group: 'console' },
       })
     } catch (error) {
       console.error(error)

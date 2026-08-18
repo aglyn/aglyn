@@ -19,6 +19,7 @@
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
+import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
   GA_CONSENT_DEFAULT_SNIPPET,
   hostConsentRequired,
@@ -29,6 +30,7 @@ import {
 import Script from 'next/script'
 import type { ReactElement } from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
+import { claimDailyVisit } from './visit-claim'
 
 /**
  * Pageviews already counted this page load, keyed by host and path. Module
@@ -37,6 +39,19 @@ import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
  * pageview once.
  */
 const beaconed = new Set<string>()
+
+/**
+ * The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
+ * pointed at this id, and it is the ONE host whose pageviews should carry
+ * `content_group: 'marketing'` — the first-class GA4 axis that separates
+ * marketing from `console` and `docs` in standard reports without reaching
+ * for the Hostname dimension. A customer's site configures their own
+ * measurement id, and their property gets no opinion of ours stamped on it,
+ * which is why the discriminator is the id itself: same-property IS the
+ * definition of "this is our surface". The id is public in every page the
+ * platform serves, so holding it in source discloses nothing.
+ */
+const PLATFORM_GA_MEASUREMENT_ID = 'G-YW5PG16YTM'
 
 /**
  * Send the pageview beacon (AGL-82), NOT from an effect (AGL-1550).
@@ -62,6 +77,11 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
   if (beaconed.has(key)) return
   beaconed.add(key)
   try {
+    // Campaign attribution (AGL-1844): the three utm labels, straight off
+    // the query string. Marketer-chosen labels on the URL the visitor is
+    // already on — no cookie, no identifier; the collector clamps and caps
+    // their cardinality server-side.
+    const params = new URLSearchParams(window.location.search)
     navigator.sendBeacon(
       '/api/analytics/collect',
       JSON.stringify({
@@ -72,6 +92,17 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
         // External referrer host only; same-site moves are dropped
         // server-side (AGL-138).
         referrer: document.referrer || undefined,
+        utmSource: params.get('utm_source') || undefined,
+        utmMedium: params.get('utm_medium') || undefined,
+        utmCampaign: params.get('utm_campaign') || undefined,
+        // Visitor approximation (AGL-1844): true on the first pageview
+        // this tab sends today. A day string in sessionStorage is the
+        // entire mechanism — see `visit-claim.ts` for the honesty
+        // contract. Claimed only when a beacon is actually sent (the
+        // `beaconed` guard above), so the claim and the pageview travel
+        // together.
+        newVisit: claimDailyVisit(new Date().toISOString().slice(0, 10)) ||
+          undefined,
       }),
     )
   } catch {
@@ -184,6 +215,15 @@ export default function SiteAnalytics({
   // classified click is dropped. `surface` labels this as a tenant published
   // site; the docs app (AGL-1579) installs the same listener with its own.
   installLinkClickTracking({ surface: 'site' })
+  // Real-user Core Web Vitals (AGL-1642), same shape as the click listener:
+  // installed during render, once per page load, delivery through
+  // `window.gtag` so the consent gate above stays structural — a visitor
+  // whose tag never loads produces nothing. The module holds early metrics
+  // briefly because BOTH tag mounts load late by design (`afterInteractive`
+  // here); see `web-vitals-rum.ts` for why that hold is not the forbidden
+  // pre-consent queue. The library itself arrives as a lazy chunk, so the
+  // surface being measured pays nothing on its critical path.
+  installWebVitalsReporting({ surface: 'site' })
 
   const consent = useVisitorConsent(hostId, host, consentRequired)
   const analyticsAllowed = consentRequired
@@ -242,7 +282,12 @@ export default function SiteAnalytics({
               'function gtag(){dataLayer.push(arguments);}' +
               (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
               "gtag('js', new Date());" +
-              `gtag('config', '${gaMeasurementId}');`}
+              // `content_group: 'marketing'` on OUR property only (AGL-1857):
+              // the one-click marketing/docs/console split in GA4 standard
+              // reports. A customer's id passes through untouched.
+              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
+                ? `gtag('config', '${gaMeasurementId}', {'content_group':'marketing'});`
+                : `gtag('config', '${gaMeasurementId}');`)}
           </Script>
           <Script
             id="ga-src"

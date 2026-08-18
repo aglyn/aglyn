@@ -217,7 +217,22 @@ export function classifyLinkClick(
   if (cta) {
     const section = describeSection(anchor)
     const label = describeLinkTarget(anchor)
-    const contentId = [section, label].filter(Boolean).join(':')
+    // Tier qualification (AGL-1858). The pricing page's tier CTAs share a
+    // label — five of eight literally say "Choose" — and carry no authored
+    // section, so `section:label` collapsed every tier into one row and the
+    // per-tier funnel (tier CTA → begin_checkout → purchase) had no top.
+    // The destination href already states the tier (`/signup?plan=pro`), so
+    // a CTA whose target URL carries a `plan` query value is qualified with
+    // it. ONLY `plan`: it is our own tier key, the one value the funnel
+    // already splits on downstream — a general query capture is exactly the
+    // token/address smuggling the sanitizer's URL reduction exists to stop.
+    // This is also the only place the tier survives the click: the console
+    // `page_view` reduces `page_location` to origin + pathname.
+    const plan = url.searchParams.get('plan') || ''
+    const planQualifier = plan ? `plan=${plan.slice(0, 20)}` : ''
+    const contentId = [section, label, planQualifier]
+      .filter(Boolean)
+      .join(':')
     // Never an empty dimension: an unlabelled, unplaced CTA is still a CTA,
     // and the destination path names it well enough to be worth a row.
     return {

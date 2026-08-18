@@ -29,6 +29,14 @@ on:
     - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
     - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
     - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
+    # Weekly Firestore GCS export (AGL-1843) — the independent copy that
+    # exists because the managed backups kept flipping READY → NOT_AVAILABLE
+    # at ~day 7. Mondays 05:00 UTC: the day after the Sunday managed backup,
+    # so the two restore points are staggered rather than snapshots of the
+    # same instant. The route only STARTS the export (a long-running Google
+    # operation); /api/health/backups watches completion via the bucket's
+    # markers, so a run that starts and never finishes still alerts.
+    - cron: '0 5 * * 1' # firestore-export — Mondays 05:00 UTC
     # Weekly, not daily: orphans only appear when a publisher republishes,
     # and each run lists the whole artifacts bucket. A POST with no body
     # DELETES (the route only defaults to a dry run for GET) — see
@@ -72,6 +80,7 @@ on:
           - /api/admin/reap-plugin-artifacts
           - /api/admin/reverify-plugin-versions
           - /api/admin/backfill-scope
+          - /api/admin/firestore-export
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -105,6 +114,7 @@ jobs:
             '0 4 * * *') path=/api/admin/run-erasures ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 6 1 * *') path=/api/billing/usage-email ;;
+            '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;

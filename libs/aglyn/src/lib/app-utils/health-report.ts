@@ -185,6 +185,93 @@ export function backupsHealth(
 }
 
 /**
+ * GCS export freshness, reduced to a health verdict (AGL-1843).
+ *
+ * Exports are NOT managed backups — they are the independent copy that exists
+ * BECAUSE the managed backups proved unreliable (every backup this project
+ * took flipped `READY` → `NOT_AVAILABLE` at roughly one week old, AGL-1843).
+ * A weekly `exportDocuments` run writes portable snapshot files to a GCS
+ * bucket, and this check watches that the newest one is real and recent, so
+ * a managed-backup flip no longer means "one copy only". The two are kept as
+ * SEPARATE checks in the same endpoint precisely so the body says which layer
+ * is degraded rather than blending them into one dishonest verdict.
+ *
+ * The input is the list of `*.overall_export_metadata` completion markers —
+ * Firestore writes exactly one per FINISHED export, so the marker's creation
+ * time is the moment the export completed, not the moment it started. An
+ * export that hangs forever never produces a marker and fails the age rule,
+ * the same trick `backupsHealth` plays with `CREATING`.
+ *
+ * Pure on purpose, like its siblings: the route lists, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface ExportMarker {
+  /** ISO timestamp the completion marker was written — when the export FINISHED. */
+  timeCreated?: string
+}
+
+export interface ExportsCheck extends HealthCheck {
+  /**
+   * Completed exports currently retained. A COUNT only — the endpoint is
+   * public, and bucket names or object paths have no business in it. Null
+   * when the listing itself failed.
+   */
+  exportCount: number | null
+  /** Age of the newest completed export, in days. Null when there is none. */
+  newestExportAgeDays: number | null
+}
+
+/**
+ * Weekly cadence (Mondays, `scheduled-crons.yml`) + one day of slack — the
+ * same budget as `MAX_BACKUP_AGE_DAYS`, for the same reason: a schedule that
+ * stops producing is as broken as one that fails.
+ */
+export const MAX_EXPORT_AGE_DAYS = 8
+
+export function exportsHealth(
+  markers: ExportMarker[] | null,
+  ms: number,
+  now: number = Date.now(),
+): ExportsCheck {
+  // A failed listing is degraded, not ok — same rule as `signupsHealth` and
+  // `rateLimitsHealth`: an alarm that cannot see the thing it watches must
+  // say so rather than report calm.
+  if (markers === null) {
+    return {
+      ok: false,
+      ms,
+      code: 'exports-unavailable',
+      exportCount: null,
+      newestExportAgeDays: null,
+    }
+  }
+
+  const newestMs = markers
+    .map((marker) => Date.parse(marker.timeCreated ?? ''))
+    .filter((time) => Number.isFinite(time))
+    .reduce<number | null>((newest, time) => Math.max(newest ?? time, time), null)
+  const newestExportAgeDays =
+    newestMs === null ? null : Math.round(((now - newestMs) / 86_400_000) * 10) / 10
+
+  // The cron exists, so "no exports" is a failure, not a fresh start — the
+  // first export ran 2026-08-17, before this check first deployed.
+  const code =
+    newestExportAgeDays === null
+      ? 'no-export'
+      : newestExportAgeDays > MAX_EXPORT_AGE_DAYS
+        ? 'export-stale'
+        : undefined
+
+  return {
+    ok: code === undefined,
+    ms,
+    ...(code === undefined ? {} : { code }),
+    exportCount: markers.length,
+    newestExportAgeDays,
+  }
+}
+
+/**
  * Org-creation volume, reduced to a health verdict (AGL-1536).
  *
  * The detection layer over the AGL-1534 rate limit: the limiter bounds each

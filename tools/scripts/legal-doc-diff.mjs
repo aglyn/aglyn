@@ -34,6 +34,19 @@
 //   --folder=ID       resolve Doc ids by listing this Drive folder via the
 //                     API instead of reading local pointer files — for
 //                     machines without the Drive File Stream mount.
+//   --paste           ALSO emit, per checked document, the ready-to-paste
+//                     markdown-lite content block (exported from the Doc as
+//                     `text/markdown` and folded to the besigner dialect)
+//                     into --out, plus a preview of the "On this page" TOC
+//                     the mui Table-of-contents element will derive from it
+//                     (AGL-1162 — the TOC is NOT pasted; it regenerates from
+//                     the body's headings), with an anchor diff against the
+//                     live page so a reworded heading that breaks inbound
+//                     deep links is visible BEFORE the paste. Still
+//                     read-only: the paste and Publish stay human, because
+//                     legal snapshots are publication-first.
+//   --out=DIR         where --paste writes `<slug>.markdown-lite.md`.
+//                     Default: <os tmpdir>/aglyn-legal-paste.
 //
 // Auth: the rules-drift checker's exact env pattern (root .env, self-loaded,
 // already-set env wins) — but NOT its token mint: firebase-admin scopes its
@@ -52,7 +65,8 @@
 //   2  nothing differs but at least one document could not be checked
 //      (unshared Doc, Drive API disabled, missing creds, network, dead page)
 
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -62,9 +76,13 @@ import {
 } from './lib/firebase-rules-api.mjs'
 import { renderUnifiedDiff } from './lib/rules-drift.mjs'
 import {
+  collectTocFromMarkdownLite,
   compareLegalDocument,
+  docMarkdownToMarkdownLite,
+  extractLiveTocAnchors,
   overallExitCode,
   parseGdocPointer,
+  renderTocPreview,
   slugForPointerName,
 } from './lib/legal-doc-diff.mjs'
 
@@ -75,10 +93,12 @@ const DEFAULT_LEGAL_DIR =
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 function parseArgs(argv) {
-  const args = { slugs: [], legalDir: null, folder: null }
+  const args = { slugs: [], legalDir: null, folder: null, paste: false, out: null }
   for (const raw of argv) {
     if (raw.startsWith('--legal-dir=')) args.legalDir = raw.slice('--legal-dir='.length)
     else if (raw.startsWith('--folder=')) args.folder = raw.slice('--folder='.length)
+    else if (raw === '--paste') args.paste = true
+    else if (raw.startsWith('--out=')) args.out = raw.slice('--out='.length)
     else if (raw.startsWith('--')) {
       throw new Error(`unknown flag: ${raw}`)
     } else args.slugs.push(raw)
@@ -184,8 +204,8 @@ async function resolveFromDriveFolder(folderId, token) {
  * @returns {{ ok: true, text: string } | {
  *   ok: false, status: number, detail: string, apiDisabled: boolean }}
  */
-async function exportDocAsText(docId, token) {
-  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(docId)}/export?mimeType=text%2Fplain`
+async function exportDocAsText(docId, token, mimeType = 'text/plain') {
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(docId)}/export?mimeType=${encodeURIComponent(mimeType)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) {
     const raw = await res.text()
@@ -251,6 +271,52 @@ function apiDisabledHelp() {
   ].join('\n')
 }
 
+/**
+ * The --paste emission for one document: export the Doc as `text/markdown`,
+ * fold it to the besigner markdown-lite dialect sliced to the content block,
+ * write it to `<outDir>/<slug>.markdown-lite.md`, and print the TOC the
+ * Table-of-contents element will derive from it — with the anchor delta
+ * against the live page, so a heading rename that kills an inbound deep link
+ * is seen before the paste, not after.
+ *
+ * Failures here never change the drift verdict: the compare already ran on
+ * the plain-text export, and a paste block that cannot be produced is
+ * reported as exactly that.
+ */
+async function emitPasteBlock({ slug, docId, token, liveHtml, outDir }) {
+  const mdSide = await exportDocAsText(docId, token, 'text/markdown')
+  if (!mdSide.ok) {
+    console.log(
+      `PASTE       /legal/${slug} — markdown export failed (HTTP ${mdSide.status}): ${mdSide.detail}`,
+    )
+    return
+  }
+  const block = docMarkdownToMarkdownLite(mdSide.text)
+  if (!block.text) {
+    console.log(`PASTE       /legal/${slug} — markdown export produced no content block`)
+    return
+  }
+  const flags = []
+  if (!block.foundStart) flags.push('no "Last updated:" line — block starts at top of Doc')
+  if (!block.foundEnd) flags.push('no closing "©" line — block runs to end of Doc')
+  mkdirSync(outDir, { recursive: true })
+  const outPath = join(outDir, `${slug}.markdown-lite.md`)
+  writeFileSync(outPath, block.text)
+  const suffix = flags.length ? `  [${flags.join('; ')}]` : ''
+  console.log(
+    `PASTE       /legal/${slug} → ${outPath} (${Buffer.byteLength(block.text)} bytes)${suffix}`,
+  )
+  const toc = collectTocFromMarkdownLite(block.text)
+  if (!toc.length) {
+    console.log('  TOC: the block has no ## / ### headings — the aside will render empty')
+    return
+  }
+  console.log(`  TOC the page will derive (${toc.length} headings):`)
+  for (const line of renderTocPreview(toc, extractLiveTocAnchors(liveHtml ?? ''))) {
+    console.log(`  ${line}`)
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   loadLocalEnv()
@@ -293,6 +359,7 @@ async function main() {
     return 2
   }
 
+  const outDir = args.out || join(tmpdir(), 'aglyn-legal-paste')
   const verdicts = []
   let unsharedCount = 0
   let apiDisabled = false
@@ -334,6 +401,9 @@ async function main() {
         }),
       )
       verdicts.push({ slug, status: 'differs' })
+    }
+    if (args.paste) {
+      await emitPasteBlock({ slug, docId, token, liveHtml: liveSide.html, outDir })
     }
   }
 

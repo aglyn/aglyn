@@ -94,6 +94,26 @@ export interface AttemptScope {
 const COLLECTION = 'apiIdempotency'
 
 /**
+ * One Stripe idempotency key per OBJECT an attempt creates (AGL-1714).
+ *
+ * Stripe's idempotency layer is account-scoped, not endpoint-scoped: it
+ * "compares incoming parameters to those of the original request and errors if
+ * they're not the same". Sending one claim digest unchanged to two endpoints —
+ * a coupon and then the session, a price and then the subscription — therefore
+ * makes the SECOND call fail outright. An attempt that creates more than one
+ * Stripe object derives a key per object from the one digest instead.
+ *
+ * Null-propagating so a keyless attempt (older cached client bundle) sends no
+ * header at all rather than the string `"null:session"`.
+ */
+export function deriveStripeObjectKey(
+  digest: string | null,
+  object: string,
+): string | null {
+  return digest ? `${digest}:${object}` : null
+}
+
+/**
  * Take an exclusive claim on one attempt, so a retry cannot mint a second
  * order, a second purchase or a second Checkout session.
  *

@@ -41,6 +41,29 @@ const config: Config = {
   // only, PII-free by construction. See src/error-beacon.ts.
   clientModules: ['./src/error-beacon.ts'],
 
+  // `content_group: 'docs'` (AGL-1857): the GA4 axis that separates docs
+  // traffic from `marketing` and `console` in standard reports. The gtag
+  // preset below accepts no config params, so the group is queued as a
+  // `gtag('set')` into the SAME dataLayer the preset's snippet creates —
+  // `set` applies to every event processed after it in queue order, which
+  // covers the route-change `page_view`s the drop-off metric is read from.
+  // Whether the FIRST pageview of a session carries it depends on where
+  // Docusaurus renders config headTags relative to the preset's snippet;
+  // best-effort there, and Hostname still separates the domains fully.
+  headTags: [
+    {
+      tagName: 'script',
+      attributes: {},
+      // The canonical gtag queue shape: gtag.js processes `arguments`
+      // objects, NOT plain arrays — `dataLayer.push(['set', …])` is the
+      // classic silent no-op.
+      innerHTML:
+        'window.dataLayer=window.dataLayer||[];' +
+        'function gtag(){dataLayer.push(arguments);}' +
+        "gtag('set',{'content_group':'docs'});",
+    },
+  ],
+
   presets: [
     [
       'classic',

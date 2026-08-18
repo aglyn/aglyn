@@ -23,7 +23,11 @@
 
 /**
  * The admin bar's silent probe (AGL-1829), driven end-to-end in jsdom with
- * a faked iframe handshake:
+ * a faked iframe handshake. Since AGL-1842 the auto path tries the
+ * same-site hint EXCHANGE first, so this suite mocks that exchange to the
+ * 401 an `aglyn.com` marketing host actually gets (no `.aglyn.app` signed
+ * cookie there) — pinning that the v2 probe flow is REACHED and UNCHANGED
+ * behind it:
  *
  * - auto-armed, the bar mounts ONLY a hidden iframe at the console's
  *   `/edit-access?silent=1` — no pill, no visible UI;
@@ -81,11 +85,13 @@ describe('AdminBar silent probe (AGL-1829)', () => {
   beforeEach(() => {
     window.localStorage.clear()
     window.sessionStorage.clear()
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => CONTEXT_RESPONSE,
-    })) as unknown as typeof fetch
+    // The aglyn.com shape: the hint exchange 401s (no signed cookie on this
+    // registrable domain), everything else is the edit-context happy path.
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).includes('/api/edit-access/exchange')
+        ? { ok: false, status: 401, json: async () => ({ error: 'No edit hint' }) }
+        : { ok: true, status: 200, json: async () => CONTEXT_RESPONSE },
+    ) as unknown as typeof fetch
   })
 
   afterEach(() => {
@@ -93,10 +99,18 @@ describe('AdminBar silent probe (AGL-1829)', () => {
     jest.restoreAllMocks()
   })
 
-  it('auto-armed mounts only the hidden silent iframe', () => {
+  it('auto-armed mounts only the hidden silent iframe after the exchange 401', async () => {
     const { container } = renderBar(true)
+    // The exchange goes first (AGL-1842) and nothing shows while it runs.
+    expect(container.querySelector('iframe')).toBeNull()
+    await waitFor(() =>
+      expect(container.querySelector('iframe')).not.toBeNull(),
+    )
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/edit-access/exchange',
+      expect.objectContaining({ method: 'POST' }),
+    )
     const iframe = container.querySelector('iframe')
-    expect(iframe).not.toBeNull()
     const src = iframe?.getAttribute('src') ?? ''
     expect(src.startsWith(`${CONSOLE_ORIGIN}/edit-access?`)).toBe(true)
     expect(src).toContain(`hostId=${HOST}`)
@@ -108,15 +122,24 @@ describe('AdminBar silent probe (AGL-1829)', () => {
 
   it('ignores a token from any origin but the console', async () => {
     const { container } = renderBar(true)
+    await waitFor(() =>
+      expect(container.querySelector('iframe')).not.toBeNull(),
+    )
     postFromOrigin('https://evil.example', TOKEN_MESSAGE)
     // Not redeemed, not stored, still probing.
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      '/api/edit-context',
+      expect.anything(),
+    )
     expect(window.localStorage.getItem(editTokenStorageKey(HOST))).toBeNull()
     expect(container.querySelector('iframe')).not.toBeNull()
   })
 
   it('redeems the console-origin token and renders the bar', async () => {
-    renderBar(true)
+    const { container } = renderBar(true)
+    await waitFor(() =>
+      expect(container.querySelector('iframe')).not.toBeNull(),
+    )
     postFromOrigin(CONSOLE_ORIGIN, TOKEN_MESSAGE)
     await waitFor(() =>
       expect(
@@ -135,19 +158,32 @@ describe('AdminBar silent probe (AGL-1829)', () => {
     expect(stored?.userEmail).toBe('editor@aglyn.com')
   })
 
-  it("tears down to nothing on the console's explicit no", () => {
+  it("tears down to nothing on the console's explicit no", async () => {
     const { container } = renderBar(true)
+    await waitFor(() =>
+      expect(container.querySelector('iframe')).not.toBeNull(),
+    )
     postFromOrigin(CONSOLE_ORIGIN, {
       type: 'aglyn-edit-access-result',
       ok: false,
     })
     expect(container.innerHTML).toBe('')
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      '/api/edit-context',
+      expect.anything(),
+    )
   })
 
-  it('times out to nothing rather than hanging', () => {
+  it('times out to nothing rather than hanging', async () => {
+    // Fake timers BEFORE render so the probe's timeout is faked; the
+    // exchange settles on microtasks, which fake timers leave alone.
     jest.useFakeTimers()
     const { container } = renderBar(true)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
     expect(container.querySelector('iframe')).not.toBeNull()
     act(() => {
       jest.advanceTimersByTime(10_001)

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+export * from './lib/server/analytics-retention'
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
 export * from './lib/server/auth-pools'
@@ -24,7 +25,9 @@ export * from './lib/server/csp-aggregate'
 export * from './lib/server/contact-suppression'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
+export * from './lib/server/edit-access-authz'
 export * from './lib/server/edit-access-token'
+export * from './lib/server/edit-hint-token'
 export * from './lib/server/email-metering'
 export * from './lib/server/erase'
 export * from './lib/server/firebase-admin'

@@ -24,7 +24,7 @@ import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useMemo, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -108,14 +108,36 @@ const ReservationWidget = forwardRef<HTMLDivElement, ReservationWidgetProps>(
       )
     }, [availability, checkInDayMs, checkOutDayMs])
 
+    /**
+     * Idempotency key for ONE reservation attempt (AGL-1697).
+     *
+     * Minted lazily on the first Reserve click, retired whenever the stay
+     * changes shape — different dates, resource or guest are a different
+     * attempt. A retry of THIS attempt presents the same key, so the server
+     * replays the original session URL instead of telling the guest their own
+     * pending hold "just sold out".
+     */
+    const attemptKey = useRef('')
+    useEffect(() => {
+      attemptKey.current = ''
+    }, [checkInDayMs, checkOutDayMs, resourceId, guestName, guestEmail])
+
     const handleReserve = async () => {
       if (!hostId || !resourceId || status === 'sending') return
       setStatus('sending')
       setMessage('')
+      if (!attemptKey.current) {
+        attemptKey.current =
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      }
       try {
         const response = await siteFetch('/api/commerce/reserve', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': attemptKey.current,
+          },
           body: JSON.stringify({
             hostId,
             resourceId,

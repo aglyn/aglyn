@@ -236,6 +236,241 @@ export function compareLegalDocument(liveHtml, docPlainText) {
   return { inSync: live.text === doc.text, live, doc, caveats }
 }
 
+// ---------------------------------------------------------------------------
+// Paste half (AGL-1611 steps 3b–4): turn a Drive `text/markdown` export into
+// the ready-to-paste markdown-lite block, and preview the TOC the besigner
+// Table-of-contents element will derive from it.
+//
+// The publish flow itself stays human — legal snapshots are publication-first,
+// so nothing here writes to besigner or Firestore. The paste target is the ONE
+// Markdown element on each /legal page; its "On this page" aside is NOT pasted
+// separately — the mui TOC element derives it from the pasted body's headings
+// at render time (AGL-1162), which is why the TOC half of this module is a
+// PREVIEW plus an anchor diff rather than a second paste block.
+// ---------------------------------------------------------------------------
+
+/**
+ * Slice raw markdown LINES (blank lines preserved — they are the dialect's
+ * block separators) down to the content block, by the same markers
+ * {@link sliceContentBlock} uses on normalized lines: first `Last updated:`
+ * line (however emphasised) through the first following `©` line.
+ */
+export function sliceMarkdownContentBlock(lines) {
+  const isStart = (line) => /^[#>\s*_]*Last updated:/i.test(line.trim())
+  // A Docs markdown export renders the copyright line italic (`*© …*`,
+  // measured on the real EULA Doc, 2026-08-17), so leading emphasis markers
+  // and escapes are looked through.
+  const isEnd = (line) => /^©/.test(line.trim().replace(/^[\\*_]+/, ''))
+  const start = lines.findIndex(isStart)
+  const foundStart = start >= 0
+  const from = foundStart ? start : 0
+  const end = lines.findIndex((l, i) => i > from && isEnd(l))
+  const foundEnd = end >= 0
+  const to = foundEnd ? end : lines.length - 1
+  return { lines: lines.slice(from, to + 1), foundStart, foundEnd }
+}
+
+/**
+ * Convert a Drive `text/markdown` export of a legal Doc into the besigner
+ * markdown-lite dialect, sliced to the content block, ready to paste into the
+ * page's Markdown element.
+ *
+ * The dialect is `libs/aglyn/src/lib/app-utils/markdown-lite.ts`; the
+ * transforms below exist because a Docs export legitimately differs from it:
+ *
+ * - Google backslash-escapes punctuation (`1\.`, `\-`, `\[`); the dialect has
+ *   NO escapes, so the backslashes must go or they render as text.
+ * - Headings are clamped to `##`/`###` (AGL-1082): `#` becomes `##` — the
+ *   same mapping the console HTML-paste path applies to `<h1>` — and
+ *   `####`–`######` become `###`. Every renderer reads the level as a
+ *   2-or-3 ternary, so an unclamped heading silently renders wrong.
+ * - `*`/`+` bullets and `_`-emphasis fold to the `-` and `*` forms the parser
+ *   recognises; indentation is dropped because the dialect has no nesting.
+ * - Horizontal rules and `~~strikethrough~~` markers vanish — no block or
+ *   inline exists for them, so left alone they would render literally.
+ *
+ * Fenced code blocks pass through VERBATIM: a fence owns its lines
+ * (AGL-974), and "unescaping" a snippet would corrupt it.
+ *
+ * @returns {{ text: string, foundStart: boolean, foundEnd: boolean }}
+ */
+export function docMarkdownToMarkdownLite(markdown) {
+  const rawLines = String(markdown)
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+  const out = []
+  let inFence = false
+  for (const raw of rawLines) {
+    if (/^```/.test(raw.trim())) {
+      inFence = !inFence
+      out.push(raw.trim())
+      continue
+    }
+    if (inFence) {
+      out.push(raw)
+      continue
+    }
+    let line = raw.replace(/\s+$/, '')
+    // Google's escapes: the dialect has none, so `1\.` must become `1.`.
+    line = line.replace(/\\([\\`*_{}[\]()#+\-.!|~<>])/g, '$1')
+    // Underscore emphasis to the asterisk forms the parser recognises, and
+    // strikethrough markers out (no inline exists for them). Conservative:
+    // only spans free of inner underscores, so snake_case identifiers in
+    // prose survive untouched. Before the block-shape checks, so list items
+    // and headings get the same inline folding as prose.
+    line = line
+      .replace(/__([^_]+)__/g, '**$1**')
+      .replace(/(^|[^A-Za-z0-9_])_([^_]+)_(?=$|[^A-Za-z0-9_])/g, '$1*$2*')
+      .replace(/~~([^~]+)~~/g, '$1')
+    const trimmed = line.trim()
+    // Layout, not content: a horizontal rule has no markdown-lite block.
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) continue
+    // Headings, clamped to the dialect's 2|3 (AGL-1082).
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed)
+    if (heading) {
+      const level = heading[1].length
+      line = `${level <= 2 ? '##' : '###'} ${heading[2]}`
+      out.push(line)
+      continue
+    }
+    // Bullets: `* ` and `+ ` fold to `- `; indentation is dropped (the
+    // dialect has no nesting — an indented item is a sibling anyway).
+    const bullet = /^[-*+]\s+(.*)$/.exec(trimmed)
+    if (bullet) {
+      out.push(`- ${bullet[1]}`)
+      continue
+    }
+    const ordered = /^(\d+)[.)]\s+(.*)$/.exec(trimmed)
+    if (ordered) {
+      out.push(`${ordered[1]}. ${ordered[2]}`)
+      continue
+    }
+    out.push(line)
+  }
+  const sliced = sliceMarkdownContentBlock(out)
+  // Collapse the blank-line runs Docs exports love into single separators.
+  const text = sliced.lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+|\n+$/g, '')
+  return {
+    text: text ? `${text}\n` : '',
+    foundStart: sliced.foundStart,
+    foundEnd: sliced.foundEnd,
+  }
+}
+
+/** Inline markers stripped, case and punctuation kept — a TOC label. */
+function inlineTextOf(line) {
+  return line
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .trim()
+}
+
+/**
+ * MIRROR of `slugifyHeading` + the dedupe loop of `collectMarkdownHeadings`
+ * in `libs/aglyn/src/lib/app-utils/markdown-lite.ts` — that TS module is the
+ * source of truth (the tenant renderer derives the real anchors from it), but
+ * it cannot be imported from a node script, so the algorithm is restated here
+ * and PINNED by a test against an anchor measured on the live site
+ * (`#1-pre-release-software`, aglyn.com/legal/eula, 2026-08-17). If the TS
+ * slugifier ever changes, that test is the tripwire.
+ */
+export function slugifyHeadingMirror(text) {
+  return (
+    String(text)
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'section'
+  )
+}
+
+/**
+ * The TOC the mui Table-of-contents element will derive from a pasted
+ * markdown-lite body (AGL-1162): every `##`/`###` heading outside a fence,
+ * with its anchor slug, duplicates suffixed `-2`, `-3`, … in document order.
+ *
+ * @returns {Array<{ level: 2|3, text: string, slug: string }>}
+ */
+export function collectTocFromMarkdownLite(markdownLiteText) {
+  const headings = []
+  const used = new Set()
+  let inFence = false
+  for (const raw of String(markdownLiteText).split('\n')) {
+    const line = raw.trim()
+    if (/^```/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const match = /^(#{2,3})\s+(.*)$/.exec(line)
+    if (!match) continue
+    const text = inlineTextOf(match[2])
+    const base = slugifyHeadingMirror(text)
+    let slug = base
+    let suffix = 1
+    while (used.has(slug)) {
+      suffix += 1
+      slug = `${base}-${suffix}`
+    }
+    used.add(slug)
+    headings.push({ level: match[1].length === 2 ? 2 : 3, text, slug })
+  }
+  return headings
+}
+
+/**
+ * The in-page anchors the live page's TOC links to, in document order,
+ * deduplicated. On the /legal pages the only `href="#…"` links are the
+ * "On this page" aside's (measured on aglyn.com/legal/eula, 2026-08-17), so
+ * this is the live TOC — the baseline a regenerated one is diffed against to
+ * make anchor breakage (an inbound deep link dying to a reworded heading)
+ * visible before the paste.
+ */
+export function extractLiveTocAnchors(html) {
+  const anchors = []
+  const seen = new Set()
+  for (const match of String(html).matchAll(/href="#([^"]+)"/g)) {
+    const anchor = decodeHtmlEntities(match[1])
+    if (seen.has(anchor)) continue
+    seen.add(anchor)
+    anchors.push(anchor)
+  }
+  return anchors
+}
+
+/**
+ * Human-readable TOC preview plus the anchor delta against the live page.
+ * Returns printable lines; an empty `liveAnchors` (page unreadable) yields
+ * the preview alone.
+ */
+export function renderTocPreview(headings, liveAnchors = []) {
+  const lines = headings.map(
+    (h) => `${h.level === 3 ? '    ' : '  '}${h.text}  →  #${h.slug}`,
+  )
+  if (liveAnchors.length) {
+    const next = new Set(headings.map((h) => h.slug))
+    const live = new Set(liveAnchors)
+    const removed = liveAnchors.filter((a) => !next.has(a))
+    const added = headings.map((h) => h.slug).filter((s) => !live.has(s))
+    if (!removed.length && !added.length) {
+      lines.push('  anchors: unchanged from the live page')
+    } else {
+      for (const a of removed)
+        lines.push(`  anchor REMOVED (inbound links to it break): #${a}`)
+      for (const a of added) lines.push(`  anchor added: #${a}`)
+    }
+  }
+  return lines
+}
+
 /**
  * The drift-checker exit-code convention (same as check-rules-drift):
  *   0 every compared document in sync;

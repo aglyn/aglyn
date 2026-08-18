@@ -32,10 +32,12 @@
  * spec-covered branch by branch.
  *
  * Same three rules as the sibling health endpoints — never cached, checks the
- * real thing, cost-bounded. The probe is one metadata-only REST call (backup
+ * real thing, cost-bounded. Each probe is one metadata-only REST call (backup
  * ids and sizes, zero documents) memoised per instance; backups change weekly,
  * so the longer TTL loses nothing. The body carries state COUNTS and an age —
- * never backup ids or resource paths, because this is public.
+ * never backup ids or resource paths, because this is public. Since AGL-1843
+ * the endpoint carries a second, separately-labeled check for the independent
+ * GCS exports — see `exportsProbe` below.
  *
  * The service account authenticates exactly as the rest of the console does;
  * listing backups additionally requires `roles/datastore.backupsViewer`
@@ -47,12 +49,14 @@ import { getApp } from 'firebase-admin/app'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   backupsHealth,
+  exportsHealth,
   healthBody,
   healthHeaders,
   healthHttpStatus,
   healthStatus,
   memoizeWithTtl,
   type BackupsCheck,
+  type ExportsCheck,
 } from '@aglyn/aglyn/server'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
@@ -110,8 +114,64 @@ const backupsProbe = memoizeWithTtl<BackupsCheck>(PROBE_TTL_MS, async () => {
   }
 })
 
+/**
+ * The independent GCS exports, watched as a SEPARATE check (AGL-1843).
+ *
+ * Managed backups have been flipping `READY` → `NOT_AVAILABLE` at ~day 7, so
+ * a weekly `exportDocuments` cron (`/api/admin/firestore-export`) writes a
+ * portable copy to a GCS bucket. This probe lists that bucket's completion
+ * markers — `*.overall_export_metadata`, one per FINISHED export — so the
+ * verdict knows the newest export's age and a managed-backup flip stops
+ * meaning "one copy only". One metadata-only listing (name + timeCreated,
+ * ~13 objects under the 90-day lifecycle), same memoisation, and the body
+ * carries a count and an age — never the bucket name, because this is public.
+ *
+ * The listing needs `storage.objects.list` on the bucket; the service
+ * account's project-level `roles/storage.admin` (pre-existing) covers it.
+ */
+const exportsProbe = memoizeWithTtl<ExportsCheck>(PROBE_TTL_MS, async () => {
+  const startedAt = Date.now()
+  const fail = (code: string): ExportsCheck => ({
+    ok: false,
+    ms: Date.now() - startedAt,
+    code,
+    exportCount: null,
+    newestExportAgeDays: null,
+  })
+  try {
+    void firebaseAdmin
+    const app = getApp()
+    const projectId =
+      app.options.projectId ?? process.env['NEXT_PUBLIC_FIREBASE_PROJECT_ID']
+    const credential = app.options.credential
+    if (!projectId || !credential) return fail('no-credential')
+    const bucket =
+      process.env['FIRESTORE_EXPORT_BUCKET'] ?? `${projectId}-firestore-exports`
+
+    const token = await credential.getAccessToken()
+    const response = await fetch(
+      `https://storage.googleapis.com/storage/v1/b/${bucket}/o?` +
+        'matchGlob=**.overall_export_metadata&fields=items(name,timeCreated)&maxResults=1000',
+      {
+        headers: { Authorization: `Bearer ${token.access_token}` },
+        cache: 'no-store',
+      },
+    )
+    // The status code, never the error body — same rule as the backups probe.
+    if (!response.ok) return fail(`http-${response.status}`)
+
+    const body = (await response.json()) as {
+      items?: { timeCreated?: string }[]
+    }
+    return exportsHealth(body.items ?? [], Date.now() - startedAt)
+  } catch (error) {
+    return fail(String((error as { code?: string })?.code ?? 'unknown'))
+  }
+})
+
 export async function GET(): Promise<Response> {
-  const checks = { backups: await backupsProbe() }
+  const [backups, exports] = await Promise.all([backupsProbe(), exportsProbe()])
+  const checks = { backups, exports }
   const status = healthStatus(checks)
   return Response.json(
     healthBody({

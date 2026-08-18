@@ -66,7 +66,7 @@ import {
 } from '@mui/material'
 import { collection, getCountFromServer } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import fetchSeatCounts from '../../../../utils/fetch-seat-counts'
 import BillingAddonsCardComponent, {
@@ -336,6 +336,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     enqueueSnackbar,
   ])
 
+  /**
+   * One idempotency key per (org, plan, interval) checkout attempt
+   * (AGL-1697), marketplace-style: a double-click or a re-submit after a lost
+   * response presents the SAME key, so the server replays the one session
+   * instead of opening a second subscription checkout. A different plan or
+   * interval is a different attempt and gets its own entry; a completed
+   * checkout navigates away, so the map's lifetime is the attempt's.
+   */
+  const checkoutAttempts = useRef(new Map<string, string>())
+
   const handleUpgrade = useCallback(
     (targetPlan: OrgPlan) => async () => {
       const dequeue = queueLoading()
@@ -388,10 +398,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           return
         }
         const idToken = await (user as any)?.getIdToken?.()
+        const attemptScope = `${orgId}:${targetPlan}:${interval}`
+        const attemptKey =
+          checkoutAttempts.current.get(attemptScope) ??
+          (globalThis.crypto?.randomUUID?.() ??
+            `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+        checkoutAttempts.current.set(attemptScope, attemptKey)
         const response = await fetch('/api/billing/checkout', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            // Stable across a retry of THIS attempt (AGL-1697), so a
+            // double-click cannot open two subscription checkouts.
+            'Idempotency-Key': attemptKey,
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           // The browser's GA client id rides along so the SERVER-side

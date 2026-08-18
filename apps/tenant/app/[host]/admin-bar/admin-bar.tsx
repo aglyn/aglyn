@@ -36,14 +36,22 @@ import {
  *   server-side and resolves the screen serving the current path. Only THEN
  *   does the bar render — nothing on this page ever trusts a client-side
  *   claim of access.
- * - `autoConnect` (AGL-1829): the console's same-site presence hint armed
- *   us. A HIDDEN iframe loads the console's `/edit-access?silent=1`, which
- *   re-verifies the session and this host's edit permission first-party and
- *   postMessages back the same signed token the popup sends — checked
- *   against the ONE console origin this page was built with, exactly like
- *   the popup path. No popup, no gesture needed; if the console answers
- *   "no" (or nothing, within the timeout) the bar renders NOTHING — an
- *   auto-armed bar has no business showing UI to someone it can't verify.
+ * - `autoConnect` (AGL-1829/AGL-1842): the presence hint armed us. FIRST
+ *   the bar tries the same-site EXCHANGE (AGL-1842): a POST to this site's
+ *   own `/api/edit-access/exchange`, carrying the HttpOnly signed hint the
+ *   login-time bounce planted on `.aglyn.app` — the server verifies it and
+ *   re-authorizes this uid for THIS host with the same gate the console's
+ *   token mint applies, answering with the same signed token. That is the
+ *   only silent path that works on `*.aglyn.app`, where the console is
+ *   cross-site. A 401 (no such cookie — the `aglyn.com`/`aglyn.io`
+ *   marketing hosts, whose marker cookie has no signed sibling) falls back
+ *   to the AGL-1829 probe: a HIDDEN iframe loads the console's
+ *   `/edit-access?silent=1`, which re-verifies the session first-party and
+ *   postMessages back the token — checked against the ONE console origin
+ *   this page was built with, exactly like the popup path. A 403 is a
+ *   definitive "no rights here" and renders NOTHING, as does a probe that
+ *   answers "no" (or nothing, within the timeout) — an auto-armed bar has
+ *   no business showing UI to someone it can't verify.
  * - Manual arm without a token: the "Edit this site" pill; clicking it (a
  *   user gesture, so no popup blocker) opens the same page as a popup.
  *
@@ -72,8 +80,16 @@ export interface AdminBarProps {
 
 interface EditContext {
   siteName?: string
+  /** The site's own favicon, resolved like the layout's icon link. */
+  faviconUrl?: string | null
   screenId: string | null
   screenName: string | null
+  /** Set when the page is a composed collection route (AGL-1845): the
+   * collection's display name, with `collectionEntry` telling an entry
+   * apart from a (paginated/filtered) list. `screenName` is then the
+   * TEMPLATE screen serving the route. */
+  collectionName?: string | null
+  collectionEntry?: boolean
   versionId: string | null
   /** True when a version newer than the live pointer exists; null unknown. */
   draftChanges?: boolean | null
@@ -82,12 +98,19 @@ interface EditContext {
   screensUrl?: string | null
   inboxUrl?: string | null
   ordersUrl?: string | null
+  /** The console's host analytics surface, server-built like every link. */
+  analyticsUrl?: string | null
+  /** Today's site-wide pageviews from the first-party beacon; null unknown. */
+  viewsToday?: number | null
+  /** Today's views of THIS screen — present only for Pro+ orgs (AGL-150). */
+  screenViewsToday?: number | null
   /** The console's user-level account page (`/manage/user`) — no org slug. */
   accountUrl?: string | null
 }
 
 type Phase =
   | 'idle'
+  | 'exchanging'
   | 'probing'
   | 'connecting'
   | 'resolving'
@@ -122,8 +145,12 @@ export const BAR_HEIGHT_MOBILE = 44
 export const MOBILE_BREAKPOINT = 640
 
 const BAR_CSS = `
-.aglyn-admin-bar{height:${BAR_HEIGHT}px;gap:14px;padding:0 12px;}
+.aglyn-admin-bar{height:${BAR_HEIGHT}px;gap:12px;padding:0 12px;}
 .aglyn-admin-bar .aglyn-ab-site{overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+.aglyn-admin-bar a:hover{color:#fff;}
+.aglyn-admin-bar .aglyn-ab-user:hover,.aglyn-admin-bar .aglyn-ab-icon-btn:hover{background:rgba(255,255,255,0.1);}
+.aglyn-admin-bar .aglyn-ab-menu a:hover,.aglyn-admin-bar .aglyn-ab-menu button:hover{background:rgba(255,255,255,0.08);color:#f5f7fa;}
+.aglyn-admin-bar a:focus-visible,.aglyn-admin-bar button:focus-visible{outline:2px solid #8ecbff;outline-offset:1px;border-radius:4px;}
 .aglyn-ab-mobile{display:none !important;}
 @media (max-width:${MOBILE_BREAKPOINT - 1}px){
   .aglyn-admin-bar{height:${BAR_HEIGHT_MOBILE}px;gap:8px;padding:0 8px;}
@@ -146,7 +173,9 @@ const barStyle: React.CSSProperties = {
   background: '#111826',
   color: '#f5f7fa',
   fontFamily: 'system-ui, sans-serif',
-  fontSize: 13,
+  // 12px platform-chrome type throughout the bar; the dropdowns bump it
+  // for their taller touch rows.
+  fontSize: 12,
   zIndex: 2147483000,
   boxShadow: '0 1px 6px rgba(0,0,0,0.35)',
 }
@@ -235,30 +264,39 @@ const identityStyle: React.CSSProperties = {
 }
 
 /**
- * The clickable connected-as identity (AGL-1829 follow-on): same quiet grey
- * as the plain span so it reads as identity first, but underlined so it is
- * discoverably a link — to the console's account page, NOT any org surface,
- * and visually distinct from the bordered Disconnect button beside it.
+ * The connected-as identity as a USER MENU trigger (AGL-1829 follow-on):
+ * avatar initial + email + caret, opening the account dropdown. Quiet grey
+ * like the old identity span so it still reads as identity first; the
+ * hover/focus background (BAR_CSS) is what says "button".
  */
-const identityLinkStyle: React.CSSProperties = {
-  ...identityStyle,
-  textDecoration: 'underline',
-  textDecorationColor: 'rgba(139,148,163,0.6)',
-  textUnderlineOffset: 3,
-}
-
-const barButtonStyle: React.CSSProperties = {
+const userButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 7,
   background: 'none',
-  border: '1px solid rgba(245,247,250,0.35)',
-  borderRadius: 5,
-  color: '#f5f7fa',
+  border: 'none',
+  borderRadius: 6,
+  color: '#c3ccd9',
   cursor: 'pointer',
   fontFamily: 'inherit',
   fontSize: 12,
-  fontWeight: 600,
-  lineHeight: '20px',
-  padding: '1px 8px',
+  padding: '3px 6px',
   whiteSpace: 'nowrap',
+}
+
+const avatarStyle: React.CSSProperties = {
+  width: 20,
+  height: 20,
+  borderRadius: '50%',
+  background: '#46536a',
+  color: '#f5f7fa',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  flexShrink: 0,
 }
 
 /** The phone-width ⋯ dropdown: dark like the bar, every row ≥40px tall. */
@@ -330,12 +368,19 @@ export default function AdminBar({
   consoleOrigin,
   autoConnect = false,
 }: AdminBarProps) {
-  const [phase, setPhase] = useState<Phase>(autoConnect ? 'probing' : 'idle')
+  const [phase, setPhase] = useState<Phase>(autoConnect ? 'exchanging' : 'idle')
   const [context, setContext] = useState<EditContext | null>(null)
   const [identity, setIdentity] = useState<string | undefined>(undefined)
   // The phone-width ⋯ menu (AGL-1829 mobile pass). Unmounted while closed,
   // so desktop assertions and screen readers never meet duplicate links.
   const [menuOpen, setMenuOpen] = useState(false)
+  // The desktop user menu (AGL-1829 follow-on): account settings, the host
+  // dashboard and Disconnect behind the connected-as identity. Below the
+  // phone breakpoint this trigger hides and the ⋯ menu carries the same
+  // rows instead — two dropdowns competing for a 44px bar is chrome noise.
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userButtonRef = useRef<HTMLButtonElement | null>(null)
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
   const tokenRef = useRef<StoredEditToken | null>(null)
   const pathRef = useRef<string>('')
@@ -385,6 +430,61 @@ export default function AdminBar({
     const stored = readStoredEditToken(hostId)
     if (stored) void resolveContext(stored)
   }, [hostId, resolveContext])
+
+  // The same-site hint exchange (AGL-1842) — the auto path's first move.
+  // One POST to this site's OWN server; the HttpOnly hint cookie rides it
+  // automatically, so there is nothing for scripts to read or leak. Where
+  // it lands decides everything:
+  //   200 → the same stored-token flow as the popup/probe deliveries;
+  //   403 → a definitive no (known caller, no rights on this host, or a
+  //         disabled/removed account) — silence, no probe;
+  //   anything else (401 no cookie, 404 rollout skew, 5xx, network) → the
+  //         AGL-1829 iframe probe, which is the still-working path on the
+  //         same-site `aglyn.com`/`aglyn.io` marketing hosts.
+  useEffect(() => {
+    if (phase !== 'exchanging') return undefined
+    // A stored token is already being resolved by the effect above — the
+    // exchange would only race it for the same outcome.
+    if (readStoredEditToken(hostId)) return undefined
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch('/api/edit-access/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId }),
+        })
+        if (cancelled) return
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            token?: string
+            expiresAtMs?: number
+            siteName?: string
+            userEmail?: string
+          }
+          if (payload?.token) {
+            const stored: StoredEditToken = {
+              token: payload.token,
+              expiresAtMs: Number(payload.expiresAtMs) || Date.now(),
+              siteName: payload.siteName,
+              userEmail: payload.userEmail,
+            }
+            writeStoredEditToken(hostId, stored)
+            void resolveContext(stored)
+            return
+          }
+          setPhase('probing')
+          return
+        }
+        setPhase(response.status === 403 ? 'silent' : 'probing')
+      } catch {
+        if (!cancelled) setPhase('probing')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [phase, hostId, resolveContext])
 
   // The console's /edit-access page (popup or silent iframe) delivers the
   // token here. Origin-checked against the ONE console origin this page was
@@ -507,6 +607,33 @@ export default function AdminBar({
     }
   }, [phase])
 
+  // Menu dismissal (AGL-1829 follow-on): Escape closes an open dropdown
+  // and returns focus to its trigger — a menu that strands keyboard focus
+  // is a trap on someone else's website — and a pointer press anywhere
+  // outside the bar closes them too. Listeners exist only while a menu is
+  // open; the closed bar adds nothing to the page.
+  useEffect(() => {
+    if (!menuOpen && !userMenuOpen) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (userMenuOpen) userButtonRef.current?.focus()
+      else moreButtonRef.current?.focus()
+      setMenuOpen(false)
+      setUserMenuOpen(false)
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (barRef.current?.contains(event.target as Node)) return
+      setMenuOpen(false)
+      setUserMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [menuOpen, userMenuOpen])
+
   const connect = useCallback(() => {
     setPhase('connecting')
     const url =
@@ -529,6 +656,22 @@ export default function AdminBar({
     tokenRef.current = null
     setPhase('dismissed')
   }, [hostId])
+
+  // The compact stat cluster (AGL-1829 follow-on): today's first-party
+  // pageviews, straight off the edit-context payload — no client reads.
+  // null means "no verdict" (the read failed server-side), and the cluster
+  // then collapses to a plain Analytics link rather than inventing a zero;
+  // the per-screen figure appears only when the server sent one (Pro+).
+  const statsLabel =
+    context?.viewsToday != null
+      ? `${context.viewsToday.toLocaleString()} view${
+          context.viewsToday === 1 ? '' : 's'
+        } today${
+          context.screenViewsToday != null
+            ? ` · ${context.screenViewsToday.toLocaleString()} on this page`
+            : ''
+        }`
+      : null
 
   if (phase === 'dismissed' || phase === 'silent') return null
 
@@ -589,6 +732,28 @@ export default function AdminBar({
         title="Open this site's console dashboard"
       >
         <AglynMark />
+        {/* Two identities, platform then site (AGL-1829 follow-on): the
+            Aglyn mark stays leftmost as platform chrome; the site's own
+            favicon sits with the site's name. Absent or broken, it simply
+            does not render — never a broken-image glyph on someone's
+            website. */}
+        {context?.faviconUrl ? (
+          // A plain <img> is deliberate: this chunk is plain-DOM by design
+          // (no MUI, no Next image loader on other people's websites), and
+          // a 16px favicon has nothing for the optimizer to earn.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={context.faviconUrl}
+            alt=""
+            width={16}
+            height={16}
+            data-aglyn-site-favicon=""
+            style={{ flexShrink: 0, display: 'block', borderRadius: 3 }}
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
+        ) : null}
         <strong className="aglyn-ab-site">
           {context?.siteName ?? 'This site'}
         </strong>
@@ -603,8 +768,21 @@ export default function AdminBar({
           color: '#c3ccd9',
           minWidth: 0,
         }}
+        title={
+          context?.collectionName
+            ? `A ${context.collectionName} ${
+                context.collectionEntry ? 'entry' : 'list page'
+              } rendered by the "${context.screenName ?? 'template'}" screen`
+            : undefined
+        }
       >
-        {context?.screenName ?? 'Unrouted page'}
+        {context?.collectionName
+          ? // A composed collection route (AGL-1845): name the collection
+            // context, then the template screen serving it.
+            `${context.collectionName}${
+              context.collectionEntry ? ' entry' : ''
+            } · ${context.screenName ?? 'Template'}`
+          : (context?.screenName ?? 'Unrouted page')}
       </span>
       {context?.draftChanges === true ? (
         <span
@@ -636,6 +814,27 @@ export default function AdminBar({
         </a>
       ) : null}
       <span style={{ flex: 1, minWidth: 12 }} />
+      {context?.analyticsUrl ? (
+        <a
+          className="aglyn-ab-desktop"
+          style={quietLinkStyle}
+          href={context.analyticsUrl}
+          target="_blank"
+          rel="noreferrer"
+          title="Open this site's analytics"
+          data-aglyn-stats=""
+        >
+          {statsLabel ?? 'Analytics'}
+        </a>
+      ) : statsLabel ? (
+        <span
+          className="aglyn-ab-desktop"
+          style={{ ...quietLinkStyle, cursor: 'default' }}
+          data-aglyn-stats=""
+        >
+          {statsLabel}
+        </span>
+      ) : null}
       {context?.screensUrl ? (
         <a
           className="aglyn-ab-desktop"
@@ -669,40 +868,40 @@ export default function AdminBar({
           Orders
         </a>
       ) : null}
-      {identity ? (
-        context?.accountUrl ? (
-          <a
-            className="aglyn-ab-desktop"
-            style={identityLinkStyle}
-            href={context.accountUrl}
-            target="_blank"
-            rel="noreferrer"
-            title={`Connected as ${identity} — open your account settings`}
-          >
-            {identity}
-          </a>
-        ) : (
-          <span
-            className="aglyn-ab-desktop"
-            style={identityStyle}
-            title={`Connected as ${identity}`}
-          >
-            {identity}
-          </span>
-        )
-      ) : null}
       <button
+        ref={userButtonRef}
         type="button"
-        onClick={disconnect}
-        className="aglyn-ab-desktop"
-        style={barButtonStyle}
-        title="Disconnect edit access in this browser (Cmd/Ctrl+Shift+E reconnects)"
+        onClick={() => {
+          setUserMenuOpen((open) => !open)
+          setMenuOpen(false)
+        }}
+        className="aglyn-ab-desktop aglyn-ab-user"
+        style={userButtonStyle}
+        aria-haspopup="menu"
+        aria-expanded={userMenuOpen}
+        aria-label={
+          identity ? `Account menu — connected as ${identity}` : 'Account menu'
+        }
+        title={identity ? `Connected as ${identity}` : undefined}
+        data-aglyn-user-menu=""
       >
-        Disconnect
+        <span aria-hidden="true" style={avatarStyle}>
+          {identity?.[0] ?? '•'}
+        </span>
+        <span style={{ ...identityStyle, maxWidth: 160 }}>
+          {identity ?? 'Account'}
+        </span>
+        <span aria-hidden="true" style={{ fontSize: 8, color: '#8b94a3' }}>
+          ▼
+        </span>
       </button>
       <button
+        ref={moreButtonRef}
         type="button"
-        onClick={() => setMenuOpen((open) => !open)}
+        onClick={() => {
+          setMenuOpen((open) => !open)
+          setUserMenuOpen(false)
+        }}
         className="aglyn-ab-mobile aglyn-ab-icon-btn"
         aria-label="More admin bar options"
         aria-haspopup="menu"
@@ -737,9 +936,68 @@ export default function AdminBar({
       >
         ×
       </button>
+      {userMenuOpen ? (
+        <div
+          className="aglyn-ab-desktop aglyn-ab-menu"
+          role="menu"
+          aria-label="Account menu"
+          style={{
+            ...menuStyle,
+            fontSize: 13,
+            // Sits just under the bar at whatever height it rendered —
+            // measured, like the page offset, never assumed.
+            top: (barRef.current?.offsetHeight || BAR_HEIGHT) + 4,
+          }}
+        >
+          {identity ? (
+            <span
+              style={{
+                ...menuItemStyle,
+                color: '#8b94a3',
+                cursor: 'default',
+                fontSize: 12,
+              }}
+              title={`Connected as ${identity}`}
+            >
+              {identity}
+            </span>
+          ) : null}
+          {context?.accountUrl ? (
+            <a
+              role="menuitem"
+              style={{ ...menuItemStyle, fontSize: 13 }}
+              href={context.accountUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setUserMenuOpen(false)}
+            >
+              Account settings
+            </a>
+          ) : null}
+          <a
+            role="menuitem"
+            style={{ ...menuItemStyle, fontSize: 13 }}
+            href={context?.consoleUrl ?? consoleOrigin}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => setUserMenuOpen(false)}
+          >
+            Site dashboard
+          </a>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={disconnect}
+            style={{ ...menuItemStyle, fontSize: 13 }}
+            title="Disconnect edit access in this browser (Cmd/Ctrl+Shift+E reconnects)"
+          >
+            Disconnect
+          </button>
+        </div>
+      ) : null}
       {menuOpen ? (
         <div
-          className="aglyn-ab-mobile"
+          className="aglyn-ab-mobile aglyn-ab-menu"
           role="menu"
           aria-label="Admin bar menu"
           style={{
@@ -783,6 +1041,19 @@ export default function AdminBar({
               onClick={() => setMenuOpen(false)}
             >
               Orders
+            </a>
+          ) : null}
+          {context?.analyticsUrl ? (
+            <a
+              role="menuitem"
+              style={menuItemStyle}
+              href={context.analyticsUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={statsLabel ?? undefined}
+              onClick={() => setMenuOpen(false)}
+            >
+              {statsLabel ? `Analytics · ${statsLabel}` : 'Analytics'}
             </a>
           ) : null}
           {identity ? (

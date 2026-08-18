@@ -70,6 +70,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL claim helper (AGL-1697): keyless requests — this spec's case —
+  // get a no-op claim with zero store interaction, so requireActual is exact.
+  claimAttempt: jest.requireActual('@aglyn/aglyn/app-utils/api-idempotency')
+    .claimAttempt,
   // The REAL predicate, not a re-typed triple (AGL-1715). A hand-written mock
   // of a single-source list is the drift this guard exists to prevent: the
   // spec would keep passing while the route's real answer changed.

@@ -36,7 +36,7 @@
  * - × dismisses for this pageview only — storage untouched.
  */
 
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import AdminBar from '../app/[host]/admin-bar/admin-bar'
 import {
   editOptOutStorageKey,
@@ -46,7 +46,9 @@ import {
 const HOST = 'host-1'
 const CONSOLE_ORIGIN = 'https://app.aglyn.com'
 
-const CONTEXT_RESPONSE = {
+// Loosely indexed so per-test overrides can null any field the payload
+// makes nullable (viewsToday, accountUrl, …) without fighting inference.
+const CONTEXT_RESPONSE: Record<string, unknown> = {
   siteName: 'Aglyn Marketing',
   screenId: 'screen-1',
   screenName: 'About',
@@ -57,6 +59,10 @@ const CONTEXT_RESPONSE = {
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
   inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
   ordersUrl: null,
+  analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
+  viewsToday: 128,
+  screenViewsToday: 12,
+  faviconUrl: '/api/media/cdn/host-1/fav1',
   accountUrl: `${CONSOLE_ORIGIN}/manage/user`,
 }
 
@@ -160,6 +166,25 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(brandLink.textContent).toBe('Aglyn Marketing')
   })
 
+  it("shows the site's favicon beside the site name, after the platform mark", async () => {
+    await renderReadyBar()
+    const brandLink = linkByText('Aglyn Marketing')
+    const favicon = brandLink.querySelector('img[data-aglyn-site-favicon]')
+    expect(favicon).not.toBeNull()
+    expect(favicon?.getAttribute('src')).toBe(CONTEXT_RESPONSE.faviconUrl)
+    // Decorative next to the visible site name — never announced twice.
+    expect(favicon?.getAttribute('alt')).toBe('')
+    // Platform first, then site: the Aglyn mark precedes the favicon.
+    const children = Array.from(brandLink.children)
+    expect(children.indexOf(brandLink.querySelector('svg[data-aglyn-mark]')!))
+      .toBeLessThan(children.indexOf(favicon as Element))
+  })
+
+  it('renders no favicon element at all when the site set none', async () => {
+    await renderReadyBar({ faviconUrl: null })
+    expect(document.querySelector('img[data-aglyn-site-favicon]')).toBeNull()
+  })
+
   it('lays out the detail: dashboard link, screen, draft flag, quick links, identity', async () => {
     await renderReadyBar()
     expect(linkByText('Aglyn Marketing').href).toBe(CONTEXT_RESPONSE.consoleUrl)
@@ -173,21 +198,110 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.getByText('editor@aglyn.com')).toBeTruthy()
   })
 
-  it('links the connected-as identity to the console account page, in a new tab', async () => {
+  it('shows the stat cluster and links it to the console analytics surface', async () => {
     await renderReadyBar()
-    const identity = linkByText('editor@aglyn.com')
-    expect(identity.href).toBe(`${CONSOLE_ORIGIN}/manage/user`)
-    expect(identity.target).toBe('_blank')
-    // Disconnect stays a separate control — a button, not part of the link.
-    const disconnect = screen.getByText('Disconnect')
-    expect(disconnect.tagName).toBe('BUTTON')
-    expect(disconnect.closest('a')).toBeNull()
+    const stats = linkByText('128 views today · 12 on this page')
+    expect(stats.href).toBe(CONTEXT_RESPONSE.analyticsUrl)
+    expect(stats.target).toBe('_blank')
   })
 
-  it('falls back to a plain identity span when the server sends no accountUrl', async () => {
+  it('omits the per-screen figure when the server withheld it (not Pro)', async () => {
+    await renderReadyBar({ screenViewsToday: null })
+    expect(linkByText('128 views today')).toBeTruthy()
+    expect(screen.queryByText(/on this page/)).toBeNull()
+  })
+
+  it('collapses to a plain Analytics link when the server had no verdict', async () => {
+    // null is "the read failed", not zero — the bar must not invent a number.
+    await renderReadyBar({ viewsToday: null, screenViewsToday: null })
+    expect(linkByText('Analytics').href).toBe(CONTEXT_RESPONSE.analyticsUrl)
+    expect(screen.queryByText(/views today/)).toBeNull()
+  })
+
+  it('puts the connected-as identity behind a user menu with account, dashboard and Disconnect', async () => {
+    await renderReadyBar()
+    const trigger = screen.getByRole('button', {
+      name: 'Account menu — connected as editor@aglyn.com',
+    })
+    // Identity-first trigger: avatar initial plus the email itself.
+    expect(trigger.textContent).toContain('editor@aglyn.com')
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    // Closed means UNMOUNTED — no hidden duplicate links.
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).toBeNull()
+    expect(screen.queryByText('Disconnect')).toBeNull()
+
+    act(() => {
+      trigger.click()
+    })
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const menu = screen.getByRole('menu', { name: 'Account menu' })
+    const account = within(menu).getByText(
+      'Account settings',
+    ) as HTMLAnchorElement
+    expect(account.href).toBe(`${CONSOLE_ORIGIN}/manage/user`)
+    expect(account.target).toBe('_blank')
+    expect(
+      (within(menu).getByText('Site dashboard') as HTMLAnchorElement).href,
+    ).toBe(CONTEXT_RESPONSE.consoleUrl)
+    expect(within(menu).getByText('Disconnect').tagName).toBe('BUTTON')
+  })
+
+  it('omits the Account settings row when the server sends no accountUrl', async () => {
     await renderReadyBar({ accountUrl: null })
-    const identity = screen.getByText('editor@aglyn.com')
-    expect(identity.closest('a')).toBeNull()
+    act(() => {
+      screen
+        .getByRole('button', {
+          name: 'Account menu — connected as editor@aglyn.com',
+        })
+        .click()
+    })
+    const menu = screen.getByRole('menu', { name: 'Account menu' })
+    expect(within(menu).queryByText('Account settings')).toBeNull()
+    // Dashboard and Disconnect still stand.
+    expect(within(menu).getByText('Site dashboard')).toBeTruthy()
+    expect(within(menu).getByText('Disconnect')).toBeTruthy()
+  })
+
+  it('Escape closes the user menu and hands focus back to its trigger', async () => {
+    await renderReadyBar()
+    const trigger = screen.getByRole('button', {
+      name: 'Account menu — connected as editor@aglyn.com',
+    })
+    act(() => {
+      trigger.click()
+    })
+    expect(screen.getByRole('menu', { name: 'Account menu' })).toBeTruthy()
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' })
+    })
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('a pointer press outside the bar closes the user menu', async () => {
+    await renderReadyBar()
+    act(() => {
+      screen
+        .getByRole('button', {
+          name: 'Account menu — connected as editor@aglyn.com',
+        })
+        .click()
+    })
+    act(() => {
+      fireEvent.pointerDown(document.body)
+    })
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).toBeNull()
+  })
+
+  it('names a composed collection route instead of "Unrouted page" (AGL-1845)', async () => {
+    await renderReadyBar({
+      screenName: 'Blog entry template',
+      collectionName: 'Blog',
+      collectionEntry: true,
+    })
+    expect(screen.getByText('Blog entry · Blog entry template')).toBeTruthy()
+    expect(screen.queryByText('Unrouted page')).toBeNull()
   })
 
   it('hides the draft flag when the server says false', async () => {
@@ -195,8 +309,15 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.queryByText('Draft changes')).toBeNull()
   })
 
-  it('Disconnect clears the token, remembers the opt-out, and unmounts', async () => {
+  it('Disconnect (in the user menu) clears the token, remembers the opt-out, and unmounts', async () => {
     await renderReadyBar()
+    act(() => {
+      screen
+        .getByRole('button', {
+          name: 'Account menu — connected as editor@aglyn.com',
+        })
+        .click()
+    })
     act(() => {
       screen.getByText('Disconnect').click()
     })
