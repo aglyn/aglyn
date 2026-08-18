@@ -43,24 +43,38 @@ always safe.
 
 ## After it connects
 
-- The **Custom Domain** card shows the domain as a **green chip**. If Aglyn verified the
-  DNS but couldn't finish attaching the domain to its serving platform, the chip turns
-  into a warning reading *"your-domain.com — attachment pending"*.
-- **SSL provisions automatically** in the minutes after attachment — there is nothing to
-  upload or renew.
-- A **Retry attachment** button (labeled **Re-attach** once the domain is healthy) sits
-  next to the chip. It re-runs the platform attachment and is always safe to press — a
-  successful retry confirms *"your-domain.com" attached — SSL provisions shortly*. Reach
-  for it if the chip is stuck on *attachment pending* or the domain serves certificate
-  errors.
+The chip next to your domain says what it is actually doing. **SSL provisions
+automatically** — there is nothing to upload or renew — but it takes a few minutes, and
+the chip is how you tell "still working on it" from "stuck".
+
+| Chip | What it means | What to do |
+| --- | --- | --- |
+| `your-domain.com — live` | Attached, DNS resolves here, certificate issued. | Nothing. |
+| `your-domain.com — issuing certificate` | Everything checks out; the certificate is still being issued. | Wait a few minutes and press **Check status**. Until it finishes the domain may show a security warning. |
+| `your-domain.com — ownership check needed` | Your domain is registered to another account on our hosting platform, so it has to be proven yours first. | Add the `TXT` record the card prints, then press **Re-attach**. |
+| `your-domain.com — DNS not pointing here` | Attached, but the domain no longer resolves to us. | Check the record at your registrar — see [troubleshooting](troubleshooting.md). |
+| `your-domain.com — not attached` | Saved here, but not attached to the serving platform, so it serves nothing. | Press **Retry attachment**. If it keeps failing the domain is likely held by another account — contact support with the domain name. |
+| `your-domain.com — attachment pending` | Our attach call never landed, and the platform could not be asked just now. | Press **Retry attachment**. |
+
+Three buttons sit next to the chip:
+
+- **Check status** re-reads the live state. A certificate arrives on its own a few
+  minutes later, and this is how you see that it has.
+- **Retry attachment** (labeled **Re-attach** once the domain is healthy) re-runs the
+  platform attachment. Always safe to press.
+- **Disconnect** releases the domain — see [below](#disconnect).
+
+If other DNS records are answering for the same name, the card says so and names them,
+**even when the domain is live**. That is worth acting on: a leftover record from a
+previous host answers alongside the correct one, and the site then loads for some
+visitors and not others.
 
 <!-- screenshot: custom-domains/connected-chip-and-actions.png per SCREENSHOT_PLAN.md -->
 
-:::note Verification happens at connect time
-Aglyn checks your DNS when you press **Verify & connect**, not continuously. If you later
-change the record at your registrar, the site stops resolving but the console still shows
-the domain as connected — fix the record (or **Disconnect** and reconnect) rather than
-waiting for a status to change on its own.
+:::note Your Aglyn subdomain keeps serving until the domain does
+The redirect from `your-site.aglyn.app` is only set up once the domain actually serves.
+A domain that is attached but waiting on an ownership check or a DNS fix leaves the Aglyn
+subdomain working, so your site always has one address that answers.
 :::
 
 ## Your Aglyn subdomain afterwards
