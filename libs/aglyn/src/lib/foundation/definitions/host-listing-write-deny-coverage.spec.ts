@@ -84,7 +84,7 @@ import {
   declaredFields,
   parseUpdateRule,
   readFieldsOf,
-  seedFields,
+  seedFieldsOfCollection,
 } from './write-deny-coverage.util'
 
 const REPO_ROOT = resolve(__dirname, '../../../../../..')
@@ -193,10 +193,7 @@ describe('every server-owned host field is denied to client writes (AGL-1361)', 
     'export interface AglynHost extends AglynDocument {',
   )
   const inputs = readFieldsOf(resolverSources, 'host')
-  const seeded = seedFields(
-    read(HOST_SEED_FILE),
-    /collection\('hosts'\)\s*\.doc\([^)]*\)\s*\.\s*(?:set|create)\s*\(/,
-  )
+  const seeded = seedFieldsOfCollection(read(HOST_SEED_FILE), 'hosts')
   if (!seeded) {
     throw new Error(
       `Guard cannot parse the host seed write in ${HOST_SEED_FILE}. It is ` +
