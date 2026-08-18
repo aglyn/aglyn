@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
-// The CLIENT barrel, deliberately: this module is isomorphic. The funnel
-// dialog needs the same closed reason set and the same downsell answer the
-// routes enforce, and a second copy on the client is how the two drift until
-// the browser offers a tier the server refuses. Nothing here touches the
-// Admin SDK or Stripe — those live in the route — so the import costs the
-// routes nothing and buys the dialog one source of truth.
-import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn'
+// Isomorphic on purpose: the funnel dialog needs the same closed reason set
+// and the same downsell answer the routes enforce, and a second copy on the
+// client is how the two drift until the browser offers a tier the server
+// refuses. Nothing here touches the Admin SDK or Stripe — those live in the
+// route.
+//
+// Deep import rather than the `@aglyn/aglyn` barrel (AGL-1349/1350). The
+// barrel re-exports `app-utils/index`, which reaches `contexts.ts` and
+// `enabled-plugins-context.ts` — React contexts, client-only — and this
+// module is imported by a SERVER route, so the barrel dragged a client-only
+// module into a server graph. `app-router-graph.spec` caught it. The module
+// this actually wants has no React in it.
+import { SELF_SERVE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 
 /**
  * Retention-funnel primitives (AGL-1863 / AGL-1859 — Zach's twice-given

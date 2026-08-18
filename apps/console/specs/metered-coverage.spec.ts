@@ -86,6 +86,8 @@ const EXEMPT: Record<string, string> = {
     'Changes ONE add-on item\'s quantity (`items[0]`). Stripe leaves unmentioned items alone, so it neither adds nor drops the metered item, and it cannot change the plan or the interval that would decide which metered price applies. Its update emits customer.subscription.updated, so the webhook back-fill covers the subscription anyway.',
   'app/api/admin/org-discount/route.ts':
     'Applies or clears a coupon (`subscriptions/{id}` with `coupon`, and `/discount` to delete). It never sends `items`, so no item is added, re-priced or dropped. Covered by the webhook back-fill like any other subscription update.',
+  'app/api/billing/retention/route.ts':
+    'The retention funnel\'s winback (AGL-1863) attaches a bounded coupon to an EXISTING subscription — `subscriptions/{id}` with `discounts[0][coupon]` and nothing else. Same shape as `admin/org-discount` above: it never sends `items`, so the metered item is neither added nor dropped, and it cannot change the plan or the interval that would decide which metered price applies. Its update emits customer.subscription.updated, so the webhook back-fill covers the subscription anyway. Metering the discount would also be wrong on the merits: a percent-off coupon must not reduce usage overage, which is the floor the offer is margin-checked against.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
