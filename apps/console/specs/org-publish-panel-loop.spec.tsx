@@ -51,8 +51,17 @@ import { fireEvent, render, screen } from '@testing-library/react'
 
 const firestoreCollections: Record<string, any[]> = {}
 
+// The real `useFirestore()` hands back one long-lived Firestore instance, so
+// a hook keyed on its identity re-runs only when the app itself changes it.
+// Returning a fresh `{}` per call made that identity change on EVERY render,
+// which re-fired `useConfirmedDoc`'s effect, which `setState`s unconditionally
+// at its top — an infinite render loop manufactured entirely by the fixture.
+// It surfaced when AGL-2078 gave this panel `useCurrentOrg`, and it does not
+// fail: the loop runs through passive effects and microtasks, which starves
+// jest's real-timer testTimeout, so the suite hangs instead of going red.
+const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
+  useFirestore: () => FIRESTORE,
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
 }))
 
