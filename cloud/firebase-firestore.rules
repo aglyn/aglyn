@@ -1073,10 +1073,18 @@ service cloud.firestore {
         // /api/hosts/collections owns both. The dedicated block below
         // re-grants the non-identity updates the console still makes
         // client-side (template assignment, categories).
+        // `registers` joins update and delete (AGL-1775). It was excluded from
+        // create only, which is not denial: the POS register add-on is a
+        // per-org POOL allocated per site, the billing rollup reads these
+        // docs, and an editor who can rewrite or delete one can re-allocate
+        // registers the org is billed for. Same shape as AGL-1367 — a
+        // document the invoice is computed from is a document the customer
+        // must not be able to write. Allocation is an Admin-SDK route, so
+        // denying the client changes nothing about the product.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
-              'templates', 'collections', 'datasets', 'orders',
+              'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'members', 'mediaTombstones']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
@@ -1087,8 +1095,8 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
-              'datasets', 'orders', 'counters', 'analytics', 'members',
-              'mediaTombstones']));
+              'datasets', 'orders', 'registers', 'counters', 'analytics',
+              'members', 'mediaTombstones']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in
