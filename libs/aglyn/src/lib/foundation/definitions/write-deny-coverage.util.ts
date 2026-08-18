@@ -39,9 +39,48 @@
  * comment names all four AGL-1354 keys, and the listing block's names half its
  * deny-list — so parsing with comments in place would read the explanation of
  * a hole as the fix for it.
+ *
+ * A single left-to-right scan, NOT two regex passes, and that distinction is
+ * load-bearing (AGL-1986). The previous version removed block comments first
+ * and line comments second, so a line comment that merely QUOTED a path opened
+ * a block comment that was never meant to exist:
+ *
+ *     // the name, so `hosts/<hostId>/datasets/*` stayed a client-writable
+ *
+ * The `/` before `*` reads as an opening delimiter, and the strip then ran to
+ * the next closing delimiter 571 lines away, swallowing real rule text — and
+ * with it two closing braces, which left the block walker unable to find the
+ * end of the root `match` and threw `never closes`. Every deny-coverage guard
+ * in this directory failed to RUN, which is the worst way for a guard to fail:
+ * the suite is red, so nobody reads it as coverage, but the thing it protects
+ * (the AGL-1775 `registers` deny-list) is unwatched until someone does.
+ *
+ * Scanning once fixes it in both directions: whichever delimiter appears first
+ * wins, so `/*` inside a line comment is just text, and `//` inside a block
+ * comment cannot eat the block's own terminator.
  */
 export function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const pair = source.slice(index, index + 2)
+    if (pair === '/*') {
+      const end = source.indexOf('*/', index + 2)
+      index = end < 0 ? source.length : end + 2
+      continue
+    }
+    if (pair === '//') {
+      const end = source.indexOf('\n', index + 2)
+      if (end < 0) break
+      // Keep the newline: line numbers and statement separation survive.
+      out += '\n'
+      index = end + 1
+      continue
+    }
+    out += source[index]
+    index += 1
+  }
+  return out
 }
 
 /**
