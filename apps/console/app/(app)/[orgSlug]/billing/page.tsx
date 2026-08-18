@@ -76,6 +76,7 @@ import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
+import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
 import EmbeddedCheckoutDialogComponent from '../../../../components/embedded-checkout-dialog.component'
 import LockdownNotice from '../../../../components/lockdown-notice.component'
@@ -187,6 +188,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const subscriptionActive = isLiveSubscriptionStatus(subscriptionStatus)
   const cancelAtPeriodEnd =
     (org?.subscription as any)?.cancelAtPeriodEnd === true
+  /**
+   * A downgrade waiting for the period end (AGL-1862). The type's doc comment
+   * has always claimed this is "the mirror the billing page renders" — it was
+   * written by the server and read by nothing, so an org that scheduled a
+   * downgrade saw a plan card identical to one that had not. Rendered below,
+   * with the undo beside it.
+   */
+  const pendingDowngrade = (org?.subscription as any)?.pendingDowngrade ?? null
+  // The retention funnel owns the leave path now (AGL-1863).
+  const [funnelOpen, setFunnelOpen] = useState(false)
+  const [funnelImpact, setFunnelImpact] = useState<string[]>([])
 
   const subscriptionRequest = useCallback(
     async (body: Record<string, unknown>) => {
@@ -289,40 +301,32 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [subscriptionRequest, queueLoading])
 
-  // Cancel/resume (AGL-269). Canceling gets a data-impact confirm (AGL-483):
-  // at period end the org resolves to Free; over-limit resources persist.
+  /**
+   * Cancel/resume (AGL-269), asymmetric by design (AGL-1859).
+   *
+   * Canceling opens the retention funnel — survey, downsell, winback, and
+   * only then the cancel (AGL-1863). RESUMING stays one click: friction
+   * belongs on the way out, never on the way back in.
+   *
+   * The over-limit impact (AGL-483) is computed here, before the funnel
+   * opens, and handed to its final step. The single pre-funnel confirm used
+   * to carry that warning, and moving the decision without moving the
+   * warning would have dropped it silently.
+   */
   const handleCancelToggle = useCallback(async () => {
     if (!cancelAtPeriodEnd) {
-      const over = await overLimitSummary('free')
-      const accepted = await confirm({
-        title: 'Cancel subscription?',
-        description:
-          'Your plan runs until the end of the paid period, then this ' +
-          'organization moves to the Free plan. Nothing is deleted' +
-          (over.length ? ` — but you'll be over Free on: ${over.join('; ')}` : '') +
-          '. You can resume any time before it ends.',
-        confirmationText: 'Cancel subscription',
-      })
-        .then(() => true)
-        .catch(() => false)
-      if (!accepted) return
+      setFunnelImpact(await overLimitSummary('free'))
+      setFunnelOpen(true)
+      return
     }
     const dequeue = queueLoading()
     try {
-      const payload = await subscriptionRequest({
-        action: cancelAtPeriodEnd ? 'resume' : 'cancel',
-      })
+      const payload = await subscriptionRequest({ action: 'resume' })
       if (payload) {
-        enqueueSnackbar(
-          payload.cancelAtPeriodEnd
-            ? `Subscription cancels ${
-                payload.currentPeriodEnd
-                  ? new Date(payload.currentPeriodEnd).toLocaleDateString()
-                  : 'at period end'
-              }`
-            : 'Subscription resumed',
-          { variant: 'success', persist: false },
-        )
+        enqueueSnackbar('Subscription resumed', {
+          variant: 'success',
+          persist: false,
+        })
       }
     } finally {
       dequeue()
@@ -330,11 +334,98 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   }, [
     cancelAtPeriodEnd,
     overLimitSummary,
-    confirm,
     subscriptionRequest,
     queueLoading,
     enqueueSnackbar,
   ])
+
+  /**
+   * The funnel ran to the end. The `funnelId` rides along so the cancel is
+   * recorded against the survey that was actually answered instead of as a
+   * skip.
+   */
+  const handleFunnelLeave = useCallback(
+    async (funnelId: string | null) => {
+      const dequeue = queueLoading()
+      try {
+        const payload = await subscriptionRequest({
+          action: 'cancel',
+          ...(funnelId ? { funnelId } : {}),
+        })
+        if (payload) {
+          enqueueSnackbar(
+            `Subscription cancels ${
+              payload.currentPeriodEnd
+                ? new Date(payload.currentPeriodEnd).toLocaleDateString()
+                : 'at period end'
+            }`,
+            { variant: 'success', persist: false },
+          )
+        }
+      } finally {
+        dequeue()
+      }
+    },
+    [subscriptionRequest, queueLoading, enqueueSnackbar],
+  )
+
+  /**
+   * The downsell was accepted — a plan switch DOWN, so the server schedules
+   * it for the period end (AGL-1862) rather than re-pricing today. Said in
+   * those words, because "switched to Starter" would be a lie about a plan
+   * that does not change for another three weeks.
+   */
+  const handleFunnelDownsell = useCallback(
+    async (targetPlan: OrgPlan) => {
+      const dequeue = queueLoading()
+      try {
+        const switched = await subscriptionRequest({
+          action: 'switch',
+          plan: targetPlan,
+          interval,
+        })
+        if (!switched) return false
+        enqueueSnackbar(
+          switched.scheduled && switched.effectiveAt
+            ? `Moving to ${targetPlan} on ${new Date(
+                switched.effectiveAt,
+              ).toLocaleDateString()} — you keep your current plan until then.`
+            : `Plan switched to ${targetPlan}`,
+          { variant: 'success', persist: false },
+        )
+        return true
+      } finally {
+        dequeue()
+      }
+    },
+    [subscriptionRequest, interval, queueLoading, enqueueSnackbar],
+  )
+
+  /**
+   * "Keep my plan" — the undo for a pending downgrade. Switching to the plan
+   * you are already on releases the schedule server-side (AGL-1862); without
+   * a visible control for it, the only way back was to notice the chip and
+   * guess.
+   */
+  const handleKeepCurrentPlan = useCallback(async () => {
+    if (!org?.plan) return
+    const dequeue = queueLoading()
+    try {
+      const payload = await subscriptionRequest({
+        action: 'switch',
+        plan: org.plan,
+        interval,
+      })
+      if (payload) {
+        enqueueSnackbar('Your current plan is staying put.', {
+          variant: 'success',
+          persist: false,
+        })
+      }
+    } finally {
+      dequeue()
+    }
+  }, [org?.plan, subscriptionRequest, interval, queueLoading, enqueueSnackbar])
 
   /**
    * One idempotency key per (org, plan, interval) checkout attempt
@@ -364,22 +455,36 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           })
           if (!preview) return
           const over = await overLimitSummary(targetPlan)
+          // A downgrade and an upgrade are not the same sentence (AGL-1862).
+          // The server already treats them differently — nothing is charged
+          // today and the move lands at the period end — so the confirm has
+          // to SAY that, or the customer clicks expecting an immediate
+          // change and a refund, and gets neither.
+          const effective = preview.periodEnd
+            ? new Date(preview.periodEnd).toLocaleDateString()
+            : 'the end of your billing period'
           const accepted = await confirm({
-            title: `Switch to ${targetPlan}?`,
+            title: preview.downgrade
+              ? `Move down to ${targetPlan}?`
+              : `Switch to ${targetPlan}?`,
             description:
-              `Prorated charge today: $${(preview.amountDueCents / 100).toFixed(2)} ` +
-              `${String(preview.currency).toUpperCase()}; renews ${
-                preview.periodEnd
-                  ? new Date(preview.periodEnd).toLocaleDateString()
-                  : 'at period end'
-              }.` +
+              (preview.downgrade
+                ? `Nothing is charged today, and nothing changes yet. You ` +
+                  `keep ${org?.plan} — and everything you've already paid ` +
+                  `for — until ${effective}, when this organization moves ` +
+                  `to ${targetPlan}. You can keep your current plan any ` +
+                  `time before then.`
+                : `Prorated charge today: $${(preview.amountDueCents / 100).toFixed(2)} ` +
+                  `${String(preview.currency).toUpperCase()}; renews ${effective}.`) +
               (over.length
                 ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
                   `${over.join('; ')}. Nothing is deleted and these keep ` +
                   "working, but you can't add more until you're back under " +
                   'the limit.'
                 : ''),
-            confirmationText: 'Switch plan',
+            confirmationText: preview.downgrade
+              ? 'Schedule the move down'
+              : 'Switch plan',
           })
             .then(() => true)
             .catch(() => false)
@@ -390,10 +495,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             interval,
           })
           if (switched) {
-            enqueueSnackbar(`Plan switched to ${targetPlan}`, {
-              variant: 'success',
-              persist: false,
-            })
+            // A scheduled downgrade has not switched anything yet; saying so
+            // is the difference between a customer who understands their
+            // bill and one who opens a ticket about it.
+            enqueueSnackbar(
+              switched.scheduled && switched.effectiveAt
+                ? `Moving to ${targetPlan} on ${new Date(
+                    switched.effectiveAt,
+                  ).toLocaleDateString()} — you keep your current plan until then.`
+                : `Plan switched to ${targetPlan}`,
+              { variant: 'success', persist: false },
+            )
           }
           return
         }
@@ -710,6 +822,23 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ mt: 1 }}
                     />
                   ) : null}
+                  {/* A scheduled downgrade (AGL-1862) was invisible here
+                      until now, so the plan card looked identical whether or
+                      not the org was dropping a tier at renewal. */}
+                  {pendingDowngrade?.plan ? (
+                    <Chip
+                      label={`moves to ${pendingDowngrade.plan}${
+                        pendingDowngrade.effectiveAt
+                          ? ` on ${new Date(
+                              pendingDowngrade.effectiveAt,
+                            ).toLocaleDateString()}`
+                          : ' at period end'
+                      }`}
+                      size="small"
+                      color="warning"
+                      sx={{ mt: 1 }}
+                    />
+                  ) : null}
                   {/* Renewal + addons (AGL-248). */}
                   {(org?.subscription as any)?.currentPeriodEnd ? (
                     <Typography
@@ -740,11 +869,27 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       >
                         {'Manage payment methods'}
                       </Button>
+                      {/* The undo for a scheduled downgrade (AGL-1862):
+                          switching to the plan you are already on releases
+                          the schedule. Prominent and one click, because it
+                          is the RETAINING action. */}
+                      {pendingDowngrade?.plan ? (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="primary"
+                          onClick={() => void handleKeepCurrentPlan()}
+                        >
+                          {'Keep my current plan'}
+                        </Button>
+                      ) : null}
                       {subscriptionActive ? (
-                        // Cancel/downgrade flow (AGL-269).
+                        // Cancel opens the retention funnel (AGL-1863);
+                        // resume stays one click.
                         <Button
                           size="small"
                           color={cancelAtPeriodEnd ? 'primary' : 'error'}
+                          variant={cancelAtPeriodEnd ? 'contained' : 'text'}
                           onClick={() => void handleCancelToggle()}
                         >
                           {cancelAtPeriodEnd
@@ -1026,6 +1171,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         <EmbeddedCheckoutDialogComponent
           clientSecret={checkoutClientSecret}
           onClose={() => setCheckoutClientSecret(null)}
+        />
+        {/* The leave path (AGL-1863): survey, downsell, winback, and only
+            then the cancel. */}
+        <RetentionFunnelDialog
+          open={funnelOpen}
+          surface="subscription_cancel"
+          orgId={orgId ?? ''}
+          subscriptionActive={subscriptionActive}
+          impact={funnelImpact}
+          onClose={() => setFunnelOpen(false)}
+          onDownsell={handleFunnelDownsell}
+          onLeave={handleFunnelLeave}
         />
       </Container>
     </DashboardLayout>

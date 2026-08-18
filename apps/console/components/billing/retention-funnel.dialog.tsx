@@ -74,6 +74,13 @@ export interface RetentionFunnelDialogProps {
    * discount, so the funnel is survey → confirm for them.
    */
   subscriptionActive?: boolean
+  /**
+   * What the org will be over after leaving (AGL-483) — sites, seats,
+   * datasets. Stated on the FINAL step, where the decision is actually made.
+   * The single pre-funnel confirm used to carry this; moving the decision
+   * without moving the warning would have quietly dropped it.
+   */
+  impact?: string[]
   onClose(): void
   /**
    * Accept the downsell. The caller performs the plan switch — which is a
@@ -114,6 +121,7 @@ export function RetentionFunnelDialog({
   surface,
   orgId,
   subscriptionActive = false,
+  impact = [],
   onClose,
   onDownsell,
   onLeave,
@@ -366,11 +374,21 @@ export function RetentionFunnelDialog({
               : 'Cancel your subscription?'}
           </DialogTitle>
           <DialogContent>
-            <DialogContentText>
-              {surface === 'account_delete'
-                ? 'This starts the deletion of this organization and everything in it. You can cancel the request during the grace period.'
-                : 'Your plan stays active until the end of the paid period, then this organization moves to the Free plan. Nothing is deleted, and you can resume any time before it ends.'}
-            </DialogContentText>
+            <Stack spacing={2}>
+              <DialogContentText>
+                {surface === 'account_delete'
+                  ? 'This starts the deletion of this organization and everything in it. You can cancel the request during the grace period.'
+                  : 'Your plan stays active until the end of the paid period, then this organization moves to the Free plan. Nothing is deleted, and you can resume any time before it ends.'}
+              </DialogContentText>
+              {impact.length ? (
+                <Alert severity="warning">
+                  {`You'll be over the Free plan on: ${impact.join('; ')}. ` +
+                    'Nothing is deleted and these keep working, but you ' +
+                    "won't be able to add more until you're back under the " +
+                    'limit.'}
+                </Alert>
+              ) : null}
+            </Stack>
           </DialogContent>
           <DialogActions>
             <Button onClick={onClose} disabled={busy}>
