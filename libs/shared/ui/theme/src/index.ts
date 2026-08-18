@@ -30,6 +30,7 @@ export * from './lib/components/theme-css-var-provider'
 export * from './lib/hocs/create-with-emotion-client-cache'
 export * from './lib/hocs/create-with-theme-provider'
 
+export * from './lib/util/accent-text'
 export * from './lib/util/accessible-shade'
 export * from './lib/util/create-responsive-theme'
 export * from './lib/util/emotion-cache'

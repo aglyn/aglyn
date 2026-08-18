@@ -31,6 +31,7 @@ import {
   type ThemeOptions,
 } from '../../vendor/mui'
 import {
+  AA_TEXT_CONTRAST,
   accessibleShade,
   contrastRatio,
   meetsContrast,
@@ -53,12 +54,32 @@ function resolveTonalOffsets(tonalOffset: TonalOffset | undefined) {
   }
 }
 
+/**
+ * MUI's own `getContrastText` rule: take white while white still clears the
+ * threshold, otherwise take ink.
+ *
+ * At {@link AA_TEXT_CONTRAST} this pairing can never come out sub-AA, and
+ * that is provable rather than hopeful — both candidates fail 4.5:1 only for
+ * a background whose relative luminance is simultaneously above 0.1833 (so
+ * white fails) and below 0.175 (so black fails), which is empty. MUI's stock
+ * `contrastThreshold` of 3 targets the NON-TEXT bar and does leave sub-AA
+ * pairings behind: `#E53935` keeps white at 4.23:1, `#1e88e5` at 3.68:1.
+ */
 function getContrastTextColor(background: string, contrastThreshold: number) {
-  return getContrastRatio(background, ContrastText.DARK) >= (contrastThreshold ?? 3)
+  return (
+    getContrastRatio(background, ContrastText.DARK) >=
+    (contrastThreshold ?? AA_TEXT_CONTRAST)
+  )
     ? ContrastText.DARK
     : ContrastText.LIGHT
 }
-function addShade(paletteColor: PaletteColor, shade: string, variant: string | undefined, tonalOffset: TonalOffset) {
+function addShade(
+  paletteColor: PaletteColor,
+  shade: string,
+  variant: string | undefined,
+  tonalOffset: TonalOffset,
+  contrastThreshold: number,
+) {
   // Custom palette colors (tertiary, surface) are optional in host themes.
   if (!paletteColor?.main) return
   const { light: tonalOffsetLight, dark: tonalOffsetDark } =
@@ -74,17 +95,32 @@ function addShade(paletteColor: PaletteColor, shade: string, variant: string | u
     } else if (shade === 'dark') {
       paletteColor.dark = darken(paletteColor.main, tonalOffsetDark)
     } else if (shade === 'contrastText') {
+      // AGL-1293: this used to be handed `tonalOffsetDark` (0.3) as the
+      // contrast threshold. Every colour clears 0.3:1, so the branch could
+      // not fail — it returned WHITE for every accent, including
+      // `surface.main` `#F8F9FA`, where white is 1.05:1. The threshold has
+      // to be the palette's real one.
       paletteColor.contrastText = getContrastTextColor(
         paletteColor.main,
-        tonalOffsetDark,
+        contrastThreshold,
       )
     }
   }
 }
-function addShadeVariants(paletteColor: PaletteColor, tonalOffset?: TonalOffset) {
-  addShade(paletteColor, 'dark', undefined, tonalOffset)
-  addShade(paletteColor, 'light', undefined, tonalOffset)
-  addShade(paletteColor, 'contrastText', undefined, tonalOffset)
+function addShadeVariants(
+  paletteColor: PaletteColor,
+  tonalOffset: TonalOffset | undefined,
+  contrastThreshold: number,
+) {
+  addShade(paletteColor, 'dark', undefined, tonalOffset, contrastThreshold)
+  addShade(paletteColor, 'light', undefined, tonalOffset, contrastThreshold)
+  addShade(
+    paletteColor,
+    'contrastText',
+    undefined,
+    tonalOffset,
+    contrastThreshold,
+  )
 }
 
 /**
@@ -267,9 +303,30 @@ export function createResponsiveTheme(
   options: CreateResponsiveThemeOptions,
 ): Theme {
   const { themeOptions, responsiveFontSizesOptions } = options
-  let theme = createTheme(themeOptions)
-  addShadeVariants(theme.palette.tertiary, theme.palette.tonalOffset)
-  addShadeVariants(theme.palette.surface, theme.palette.tonalOffset)
+  // AGL-1293: every theme this factory builds — ours AND every palette a
+  // tenant generates — targets the AA text bar when MUI computes
+  // `contrastText`, unless the author deliberately says otherwise. MUI's
+  // stock default is 3, the NON-TEXT bar, which is why `getContrastText()`
+  // was handing back sub-AA pairings on mid-tone accents.
+  const themeOptionsWithAaContrast: ThemeOptions = {
+    ...themeOptions,
+    palette: {
+      contrastThreshold: AA_TEXT_CONTRAST,
+      ...themeOptions?.palette,
+    },
+  }
+  let theme = createTheme(themeOptionsWithAaContrast)
+  const contrastThreshold = theme.palette.contrastThreshold ?? AA_TEXT_CONTRAST
+  addShadeVariants(
+    theme.palette.tertiary,
+    theme.palette.tonalOffset,
+    contrastThreshold,
+  )
+  addShadeVariants(
+    theme.palette.surface,
+    theme.palette.tonalOffset,
+    contrastThreshold,
+  )
   // `tint` is deliberately absent from BOTH shade passes (AGL-1244). It is a
   // group of string leaves rather than a PaletteColor — no `main` to ramp
   // from, no `contrastText` to pair — so `addShadeVariants` would no-op and
