@@ -19,6 +19,9 @@ name: Tools guards
 #                             destroyed (AGL-1778)
 #  - test:standalone-installs the enumerated-standalone-packages policy
 #                             (AGL-1781)
+#  - test:release-version     the semver/bump/changelog rules a release
+#                             depends on (AGL-2089) — a wrong bump does not
+#                             throw, it just mints a wrong number forever
 #  - check:standalone-installs  asserts every nested package with its own
 #                             lockfile has an install step in nx-ci.yml. That
 #                             file is currently disabled; the check still
@@ -61,13 +64,36 @@ on:
       - main
     paths:
       - 'tools/**'
+      # AGL-2025: `check:hardcoded-colours` sweeps apps/ libs/ cloud/, so its
+      # trigger has to be the code it measures. Watching only `tools/**` is
+      # what made the retired-colour census structurally unable to see the 161
+      # literals in `libs/plugins` — a guard that runs only when the guard
+      # changes cannot catch a regression in the thing it guards.
+      - 'apps/**'
+      - 'libs/**'
+      - 'cloud/**'
       # The scripts themselves are defined here.
       - package.json
       - package-lock.json
+      # test:ttl-policies compares the TTL script against this doc's table, so
+      # a doc-only edit must trigger the guard that would catch the mismatch.
+      - docs/FIRESTORE_MANUAL_CONFIG.md
       # check:standalone-installs asserts against nx-ci.yml's text — an edit
       # deleting an install step must trigger the check that would catch it.
       - .github/workflows/nx-ci.yml
       - .github/workflows/tools-guards.yml
+      # AGL-2021: check:no-tax-identifiers scans every TRACKED file, so its
+      # trigger cannot be narrower than the trees a forbidden identifier could
+      # land in. Without these, a commit touching only apps/console — exactly
+      # where the identifiers lived — would not run the guard that catches it.
+      # This does make the workflow run on most pushes; the eight other guards
+      # here are seconds each and the job is secretless, which is the trade
+      # that makes it affordable.
+      - 'apps/**'
+      - 'libs/**'
+      - 'cloud/**'
+      - 'docs/**'
+      - '.claude/**'
   schedule:
     # Daily, 07:53 UTC — off the top of the hour, where GitHub's scheduler
     # congestion is worst, and after the two drift workflows (07:23, 07:41)
@@ -131,8 +157,43 @@ jobs:
 
       - run: npm run test:deploy-guard
 
+      # AGL-2014 — holds tools/scripts/set-firestore-ttl.mjs to the TTL table in
+      # docs/FIRESTORE_MANUAL_CONFIG.md. The script is the only reproducible way
+      # a self-host install gets TTL policies, and it had drifted to one of the
+      # documented eight. Triggered by the `docs/FIRESTORE_MANUAL_CONFIG.md`
+      # path added above, so editing the doc alone still runs it.
+      - run: npm run test:ttl-policies
+
       - run: npm run test:erase-cli
 
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-2089. The versioning rules that decide what number a release
+      # carries. Pure string logic, no git — so it runs anywhere, and its
+      # dangerous failure mode is a plausible-looking wrong bump rather than a
+      # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
+      # rest, so deleting this step turns both drift workflows red.
+      - run: npm run test:release-version
+
+      # AGL-2021. Two steps, and the order matters: the self-test proves the
+      # comparator can still FAIL (it reconstructs the forbidden Webfile number
+      # from its own digest and asserts the scanner flags it), and only then is
+      # the repo-wide scan's green worth anything. A guard that cannot fail is
+      # the exact false green this repo has been bitten by.
+      #
+      # The `paths:` filter above was widened to apps/libs/cloud/docs/.claude
+      # for this step specifically — a commit touching only apps/console must
+      # trigger the guard that scans apps/console. The daily cron is the
+      # backstop for anything the filter still misses.
+      - run: npm run test:no-tax-identifiers
+
+      - run: npm run check:no-tax-identifiers
+      # AGL-2025. Unlike every step above, these two are about the CONTENT of
+      # apps/ and libs/, not about tools/ — which is why the `paths:` filter
+      # gained those two roots. A colour pinned into `libs/plugins` cannot
+      # trigger a workflow that only watches `tools/**`.
+      - run: npm run test:hardcoded-colours
+
+      - run: npm run check:hardcoded-colours

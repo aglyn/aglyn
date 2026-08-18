@@ -16,8 +16,10 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { checkSeatQuota, createResourceUid } from '@aglyn/aglyn/server'
+import { createResourceUid } from '@aglyn/aglyn/server'
 import {
+  collaboratorSeatRefusal,
+  collaboratorSeatRefusalResponse,
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
   firebaseAdmin,
@@ -118,21 +120,22 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Already a member' }, { status: 409 })
       }
 
-      // Seat quota (AGL-112): enforced for every org — a plan-less org
-      // resolves as `free`, not unmetered. Addons raise the limit up to the
-      // hard max, beyond which upgrading is the only path.
+      // Seat quota (AGL-112), re-sourced by AGL-2068. It used to count
+      // `hosts/{hostId}/members` — a DISPLAY roster only this route writes —
+      // so it could not see a collaborator admitted by an org invite or by
+      // `/api/orgs/members`, and under-counted even on the one door it
+      // guarded. The count is now the org roster + pending invites, which is
+      // where every door lands. Early refusal only: the hard cap is the
+      // transaction inside `grantHostAccess` (and inside invite acceptance,
+      // for the address that has no account yet).
       {
-        const memberCount = (await membersRef.count().get()).data().count
-        const quota = checkSeatQuota(org as any, 'members', memberCount)
-        if (!quota.allowed) {
-          return Response.json({
-            error: quota.upgradeRequired
-              ? `Collaborator limit reached (${quota.limit}) — upgrade ` +
-                'your plan to add more collaborators'
-              : `Collaborator seats full (${quota.limit}) — add seats for ` +
-                `$${quota.addonPriceUsd}/mo each from Billing`,
-          }, { status: 403 })
-        }
+        const refusal = await collaboratorSeatRefusal({
+          orgId,
+          org: org as any,
+          hostIds: [hostId],
+          self: { email },
+        })
+        if (refusal) return refusal
       }
 
       // Known account → org membership scoped to this host (projected
@@ -226,6 +229,11 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   } catch (error) {
+    // A seat refusal raised from inside the grant transaction is a 403, not a
+    // fault (AGL-2068) — losing it to the 500 below would tell the admin the
+    // product broke when it in fact held the line.
+    const seatRefusal = collaboratorSeatRefusalResponse(error)
+    if (seatRefusal) return seatRefusal
     console.error(error)
     return Response.json({ error: 'Member operation failed' }, { status: 500 })
   }

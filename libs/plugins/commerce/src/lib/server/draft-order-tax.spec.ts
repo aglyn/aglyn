@@ -346,13 +346,38 @@ describe('the other tax modes on a draft order', () => {
     expect(orderDoc()?.totals?.taxCents ?? 0).toBe(0)
   })
 
-  /** A merchant who configured nothing gets the link they always got. */
-  it('sends no tax of any kind when none is configured', async () => {
-    const { body } = await runDraft({ settings: null })
+  /**
+   * A merchant who DECIDED not to collect gets the link they always got
+   * (AGL-1999). This case used to be spelled `settings: null` — an absent
+   * document — and that is now the refusal below, not this.
+   */
+  it('sends no tax of any kind when the store decided not to collect', async () => {
+    const { body } = await runDraft({ settings: { tax: { mode: 'none' } } })
     expect(body?.get('automatic_tax[enabled]')).toBeNull()
     expect(body?.get('line_items[0][tax_rates][0]')).toBeNull()
     expect(stripeCalls('/v1/tax_rates')).toBe(0)
     expect(orderDoc()?.totals?.taxCents ?? 0).toBe(0)
+  })
+
+  /**
+   * THE AGL-1999 DEFECT. Nothing seeds `settings/store`, so a merchant who
+   * never opened the Taxes card had `mode: undefined` — which matched neither
+   * `'stripe'` nor `'manual'`, took no branch, computed no tax, and invoiced
+   * the customer an untaxed total with nobody told.
+   */
+  it('REFUSES a draft order when nobody has decided about tax', async () => {
+    const { result, body } = await runDraft({ settings: null })
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('sales tax')
+    // Nothing was minted and no order was written — the refusal is complete.
+    expect(body).toBeNull()
+    expect(orderDoc()).toBeUndefined()
+  })
+
+  /** The same for a settings doc that exists but states no mode. */
+  it('REFUSES when the settings doc exists with an empty tax map', async () => {
+    const { result } = await runDraft({ settings: { tax: {} } })
+    expect(result.status).toBe(409)
   })
 
   /** Tax already inside the price: adding a rate would charge it twice. */

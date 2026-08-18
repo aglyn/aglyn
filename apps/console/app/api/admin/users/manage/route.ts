@@ -25,6 +25,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   passwordResetThrottleMessage,
+  setClaimsInOwningPool,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -276,7 +277,17 @@ async function handler(request: Request): Promise<Response> {
       // signed in with the OLD password keeps working. Revoking is the
       // difference between "changed the password" and "took back the
       // account" — which is the point of the action.
-      await auth.revokeRefreshTokens(uid)
+      //
+      // `targetAuth`, not `auth` (AGL-2005). `auth` is the PROJECT pool — it
+      // is the right receiver for verifying the CALLER's token above and the
+      // wrong one for touching the target, whose uid may only exist inside a
+      // GCIP tenant. The password landed in the tenant pool one line up while
+      // the revocation went to the project pool, so for an SSO account the
+      // credential changed and every existing session stayed valid: the exact
+      // half-done state this call exists to prevent. Not hypothetical — the
+      // AGL-1962 audit found a `tokensValidAfterTime` of 2026-08-14 sitting on
+      // the forged project-pool twin while the real account's never moved.
+      await targetAuth.revokeRefreshTokens(uid)
       const notified = await sendPasswordChangedNotice({
         email: target.email,
         origin,
@@ -295,6 +306,12 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const requestedRole = String(body?.role ?? '')
+    // Claim writes go through `setClaimsInOwningPool` (AGL-1993) rather than
+    // the `targetAuth` resolved above. Same pool in the ordinary case, but it
+    // re-resolves at write time and RETURNS the pool it wrote to, so the audit
+    // row below can record it — a uid alone does not identify an account when
+    // the same uid can exist in two pools.
+    let claimWrite: Awaited<ReturnType<typeof setClaimsInOwningPool>> = null
     if (action === 'setRole') {
       if (!STAFF_ROLES.includes(requestedRole as any)) {
         return Response.json({ error: 'Unknown role' }, { status: 400 })
@@ -302,13 +319,13 @@ async function handler(request: Request): Promise<Response> {
       if (decoded.uid === uid && requestedRole !== 'super') {
         return Response.json({ error: 'You cannot demote yourself' }, { status: 400 })
       }
-      await targetAuth.setCustomUserClaims(uid, {
+      claimWrite = await setClaimsInOwningPool(uid, {
         ...(target.customClaims ?? {}),
         staff: true,
         staffRole: requestedRole,
       })
     } else if (action === 'grantStaff' || action === 'revokeStaff') {
-      await targetAuth.setCustomUserClaims(uid, {
+      claimWrite = await setClaimsInOwningPool(uid, {
         ...(target.customClaims ?? {}),
         staff: action === 'grantStaff',
         // Grants default to the least-privileged role (AGL-206).
@@ -326,6 +343,11 @@ async function handler(request: Request): Promise<Response> {
         actorUid: decoded.uid,
         action: `user.${action}`,
         target: `users/${uid}`,
+        // WHICH pool the claim landed in (AGL-1993). `null` is the project
+        // pool; a tenant id means an SSO identity. Recorded because a staff
+        // grant on an identity in a CUSTOMER's tenant is exactly the row a
+        // staff-access review needs to see.
+        targetTenantId: claimWrite ? claimWrite.tenantId : (found.tenantId ?? null),
         before,
         after: {
           staff:

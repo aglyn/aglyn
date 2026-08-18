@@ -372,6 +372,29 @@ export interface HostErrorScreens {
   unavailable?: ScreenUid
 }
 
+/**
+ * The error slots, as a value (AGL-2092).
+ *
+ * The console card enumerated these separately and so did nothing else, which
+ * was fine while the list was only a list. It stopped being only a list when
+ * `kind: 'error'` made an assigned screen stop counting against
+ * `screensPerHost`: the number of slots is now the BOUND on how many screens a
+ * host can take off its plan that way, so the bound and the pickers have to be
+ * the same four things or the exemption is unbounded in one of them.
+ *
+ * `ERROR_SCREEN_MAX_PER_HOST` is `.length` of this, deliberately — adding a
+ * fifth status here widens the exemption to five, which is correct and is the
+ * only way it should ever widen.
+ */
+export const HOST_ERROR_SCREEN_SLOTS = [
+  'notFound',
+  'unauthorized',
+  'forbidden',
+  'unavailable',
+] as const
+
+export type HostErrorScreenSlot = (typeof HOST_ERROR_SCREEN_SLOTS)[number]
+
 export type ScreenUid = string
 export type ScreenSlug = string
 export type VersionUid = string

@@ -36,6 +36,8 @@ import {
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  collaboratorSeatRefusal,
+  collaboratorSeatRefusalResponse,
   consumeRateLimit,
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -379,6 +381,27 @@ async function handler(request: Request): Promise<Response> {
           }, { status: 403 })
         }
       }
+      // Collaborator seats (AGL-2068) — the OTHER branch of the same
+      // question, and the one nothing has ever asked. A site-scoped invite
+      // becomes a COLLABORATOR, metered per host against `membersPerHost`;
+      // `isOrgWideMember` is false for exactly that shape, so the manager gate
+      // above deliberately skips it and no other gate existed. A free org
+      // (`membersPerHost: 1`) could invite an unlimited number of people to
+      // full access on its site. Skipped when reusing a pending row, for the
+      // same reason the manager gate is — it already counts toward `used`.
+      if (
+        !reusing &&
+        Object.keys(hostAccess).length &&
+        !isOrgWideMember({ role, allHosts: body?.allHosts === true, hostAccess })
+      ) {
+        const seatRefusal = await collaboratorSeatRefusal({
+          orgId,
+          org: ((await getOrgDoc(orgId)) ?? {}) as any,
+          hostIds: Object.keys(hostAccess),
+          self: { email },
+        })
+        if (seatRefusal) return seatRefusal
+      }
       const inviteId = reusing
         ? existingPending.docs[0].id
         : createResourceUid()
@@ -585,6 +608,11 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // Acceptance is the hard cap for a site-scoped invite (AGL-2068):
+    // `upsertOrgMember` raises the refusal from inside the grant transaction,
+    // which is what makes N simultaneous accepts land as one.
+    const seatRefusal = collaboratorSeatRefusalResponse(error)
+    if (seatRefusal) return seatRefusal
     console.error(error)
     return Response.json({ error: 'Invite operation failed' }, { status: 500 })
   }

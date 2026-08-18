@@ -18,7 +18,27 @@
 import type { AglynHost, ScreenUid } from '@aglyn/aglyn'
 import type { CollectionTemplateRoute } from './collection-templates'
 
-const TENANT_PRODUCTION_ROOT = 'aglyn.app'
+/**
+ * The apex that assigned site subdomains hang off — `{subdomain}.aglyn.app` on
+ * Aglyn's cloud, the operator's own apex on a self-host install (AGL-2022).
+ *
+ * This was a bare `'aglyn.app'` literal while `NEXT_PUBLIC_TENANT_DOMAIN` —
+ * the same value, same default — was already read by
+ * `app/api/screens/revalidate/route.ts` and `utils/server/org-lockdown.ts`.
+ * So a self-hoster who set it got a console that revalidated and locked down
+ * their apex while every "View live" link and every site address it displayed
+ * still named `aglyn.app`: our infrastructure, printed to their users, for
+ * sites we do not serve. Configured value first, our value only as the
+ * default, so a self-host install is never pointed at our origin.
+ *
+ * Dot notation is load-bearing: this module reaches client components
+ * (`host-switcher-nav`), and Next inlines `NEXT_PUBLIC_*` into the browser
+ * bundle by substituting `process.env.NAME` textually. The bracket form the
+ * two server-side readers use is never substituted, and would read
+ * `undefined` in the browser.
+ */
+const TENANT_PRODUCTION_ROOT =
+  process.env.NEXT_PUBLIC_TENANT_DOMAIN || 'aglyn.app'
 
 // Preview consoles link to the tenant preview deployment, which carries
 // no tenant subdomain and resolves the host via the ?tenantHost= override.

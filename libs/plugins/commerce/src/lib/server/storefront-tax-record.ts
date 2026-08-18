@@ -81,7 +81,22 @@ const SESSION_TYPES = new Set([
   'commerce-order',
   'commerce-reservation',
   'commerce-draft',
+  // A paid service booking (AGL-2000). It carries no tax by a stated
+  // decision (`bookings/server.ts`), but it is a storefront sale and it was
+  // absent from this set entirely — so it was not merely untaxed, it did not
+  // appear in the record that would let anyone NOTICE it was untaxed or
+  // reconcile it later. An untaxed sale that is recorded reads
+  // `taxMode: 'none'`; an unrecorded one reads as nothing at all.
+  'booking-payment',
 ])
+
+/**
+ * Session types whose zero tax is a decision taken HERE, not by the merchant
+ * (AGL-2000). Their rows are filed even at `taxMode: 'none'`, so an untaxed
+ * service or stay is reconcilable instead of merely missing. See the note at
+ * the `taxMode === 'none'` gate below.
+ */
+const PLATFORM_UNTAXED_TYPES = new Set(['booking-payment', 'commerce-reservation'])
 
 function stripeKey(): string {
   return String(process.env.STRIPE_SECRET_KEY ?? '')
@@ -193,7 +208,19 @@ export async function recordStorefrontTax(
     // A `stripe-automatic` row is kept even at zero tax — that a Stripe Tax
     // sale answered "not collecting" is itself the audit answer to why a
     // jurisdiction is absent from the return.
-    if (row.taxMode === 'none') return null
+    //
+    // EXCEPT where the absence is AGLYN'S decision rather than the merchant's
+    // (AGL-2000). A zero-tax commerce sale means the merchant configured no
+    // tax — their call, their liability, nothing here to explain. A booking or
+    // a reservation is untaxed because THIS CODEBASE decided not to compute a
+    // goods rate on a service or a room (`bookings/server.ts`, `reserve.ts`),
+    // and that is exactly the kind of absence somebody has to be able to find
+    // later: it is the platform answering a tax question on a merchant's
+    // revenue. Dropping those rows made the decision invisible in the one
+    // place anyone would go looking for it.
+    if (row.taxMode === 'none' && !PLATFORM_UNTAXED_TYPES.has(metadataType)) {
+      return null
+    }
 
     const documentId = String(object?.id ?? '')
     if (!documentId) return null

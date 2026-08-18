@@ -37,6 +37,7 @@ import {
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { EntitlementGatedCard } from './entitlement-gate.component'
 
 export interface ReviewsModerationCardProps {
   hostId: string
@@ -46,6 +47,10 @@ export interface ReviewsModerationCardProps {
  * Review moderation (AGL-324): pending queue with approve/reject and
  * inline seller replies; approved reviews render on the product-reviews
  * block with the aggregate in JSON-LD.
+ *
+ * Gated on `productReviews` since AGL-2080. `server/reviews.ts:108` enforces
+ * it, and this card rendered identically on Free — an operator could work a
+ * moderation queue whose approvals the renderer would never honour.
  */
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
@@ -75,6 +80,16 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
     })
 
   return (
+    <EntitlementGatedCard
+      hostId={hostId}
+      feature="productReviews"
+      header={'Review moderation'}
+      upsell={
+        'Verified-buyer reviews let customers rate what they bought and ' +
+        'show the star aggregate on your product pages and in search ' +
+        'results.'
+      }
+    >
     <CardDisplay header={'Review moderation'} contentGutterX contentGutterY>
       <Stack spacing={1}>
         <TextField
@@ -169,6 +184,7 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
         )}
       </Stack>
     </CardDisplay>
+    </EntitlementGatedCard>
   )
 }
 ReviewsModerationCard.displayName = 'ReviewsModerationCard'

@@ -50,6 +50,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
+import {
+  EntitlementUpsell,
+  useCommerceEntitlement,
+} from './entitlement-gate.component'
 
 export interface ProductEditorDialogProps {
   hostId: string
@@ -92,6 +96,25 @@ function comboLabel(options: Record<string, string> | undefined): string {
 export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const { hostId, product, seedFromCache, seedUnreadable, open, onClose } =
     props
+
+  /**
+   * Field-level entitlement gates (AGL-2080). Both of these were fully
+   * configurable by an unentitled org and refused only at checkout — by
+   * `server/checkout.ts:149` for subscriptions and `:157` /
+   * `cart-checkout.ts:156` for gift cards. The operator saw a saved product;
+   * the buyer saw the refusal.
+   *
+   * `ready && !entitled`, never `!entitled`. `checkEntitlement(undefined)`
+   * resolves the FREE tier rather than "unknown", so gating on the raw call
+   * would disable these controls at a PAYING org for the render or two its
+   * org doc is in flight. Erring open for that window costs nothing — the
+   * server enforces regardless — while erring closed is a paying customer
+   * told they cannot use what they bought.
+   */
+  const subs = useCommerceEntitlement(hostId, 'storefrontSubscriptions')
+  const gifts = useCommerceEntitlement(hostId, 'giftCards')
+  const subsLocked = subs.ready && !subs.entitled
+  const giftsLocked = gifts.ready && !gifts.entitled
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -716,6 +739,31 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               'one-time or “Both”, or the Type to physical.'}
           </Alert>
         ) : null}
+        {/* One linked upsell for both locked selectors (AGL-2080). The
+            helper text under each control names the plan, but a disabled
+            MenuItem is only visible with the menu open and neither is a
+            path anywhere — Zach's retention directive wants the upgrade
+            prominent and one-click, so the link lives here, beside the
+            controls it unlocks. */}
+        {subsLocked || giftsLocked ? (
+          <EntitlementUpsell
+            planLabel={undefined}
+            upgradeHref={subsLocked ? subs.upgradeHref : gifts.upgradeHref}
+          >
+            {subsLocked && giftsLocked
+              ? `Subscription products (${subs.planLabel ?? 'higher plan'}) ` +
+                `and gift cards (${gifts.planLabel ?? 'higher plan'}) are ` +
+                'not on your plan. You can still save this product — those ' +
+                'two options stay locked until you upgrade.'
+              : subsLocked
+                ? `Subscription products are on ${subs.planLabel ?? 'a higher plan'}. ` +
+                  'A subscription saved without it is refused at checkout, ' +
+                  'so the option stays locked here instead.'
+                : `Gift cards are on ${gifts.planLabel ?? 'a higher plan'}. ` +
+                  'A gift-card product saved without it is refused at ' +
+                  'checkout, so the option stays locked here instead.'}
+          </EntitlementUpsell>
+        ) : null}
         <Stack direction="row" spacing={2}>
           <TextField
             label="When out of stock"
@@ -741,10 +789,24 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             size="small"
             select
             sx={{ minWidth: 130 }}
-            helperText="Gift cards issue a code"
+            helperText={
+              giftsLocked
+                ? `Gift cards are on ${gifts.planLabel ?? 'a higher plan'}`
+                : 'Gift cards issue a code'
+            }
           >
             <MenuItem value="standard">{'Standard'}</MenuItem>
-            <MenuItem value="gift">{'Gift card'}</MenuItem>
+            {/* Disabled, never removed (AGL-2080). A product saved as a gift
+                card before the plan lapsed still has `giftCard: true`, and a
+                MUI select whose value is absent from its options renders
+                blank — the next edit would silently rewrite the product to
+                Standard. Locking the option refuses NEW configuration
+                without rewriting existing data. */}
+            <MenuItem value="gift" disabled={giftsLocked}>
+              {giftsLocked
+                ? `Gift card — ${gifts.planLabel ?? 'upgrade'} plan`
+                : 'Gift card'}
+            </MenuItem>
           </TextField>
           <TextField
             label="Tax"
@@ -815,12 +877,25 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             size="small"
             select
             sx={{ minWidth: 180 }}
-            helperText="Subscriptions bill until cancelled"
+            helperText={
+              subsLocked
+                ? `Subscriptions are on ${subs.planLabel ?? 'a higher plan'}`
+                : 'Subscriptions bill until cancelled'
+            }
           >
             <MenuItem value="once">{'One-time purchase'}</MenuItem>
-            <MenuItem value="month">{'Monthly subscription'}</MenuItem>
-            <MenuItem value="year">{'Yearly subscription'}</MenuItem>
-            <MenuItem value="both">{'Both — buyer chooses'}</MenuItem>
+            {/* Same rule as the gift-card option above: disabled, not
+                removed, so an existing subscription product keeps its
+                interval instead of being silently reset to one-time. */}
+            <MenuItem value="month" disabled={subsLocked}>
+              {'Monthly subscription'}
+            </MenuItem>
+            <MenuItem value="year" disabled={subsLocked}>
+              {'Yearly subscription'}
+            </MenuItem>
+            <MenuItem value="both" disabled={subsLocked}>
+              {'Both — buyer chooses'}
+            </MenuItem>
           </TextField>
           {current.subscription && current.subscriptionOptional ? (
             <TextField

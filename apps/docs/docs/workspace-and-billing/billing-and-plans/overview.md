@@ -97,32 +97,63 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 ## Storage overage
 
-Each site includes a fixed amount of storage. What happens when you reach it depends on
-one setting, and **you are the one who decides it** — from
-**Billing → Storage limit**.
+Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a
+wall:
 
-- **Leave it off (the default).** Uploads past your included storage are refused. You are
-  never billed for storage overage, because the files are never accepted. Nothing you
-  have already uploaded is affected.
-- **Turn it on.** Uploads keep working past the included allowance and the extra storage
-  is metered on your next invoice — and you set a **monthly limit** at the same time.
-  Once a month's storage overage would pass that limit, uploads are refused again. The
-  limit is part of the agreement: turning metered storage on is never consent to an
-  unbounded amount.
+- **Uploads keep working.** You are never stopped from adding files because you reached
+  your included storage.
+- **The extra storage is billed** on your monthly invoice, at about $0.034 per GB per
+  month — our cost plus 30%, the same rate shown in **Billing → Storage cap**.
+- **We tell you before it happens.** You get an alert as you approach your included
+  storage and another when you cross it, so the invoice is never the first you hear of
+  it. See [usage meters](#usage-meters).
 
-You can change the limit or turn metered storage off at any time, including while you are
-over your included allowance. Turning it off deletes nothing — the files stay, and only
-*new* uploads past the allowance are refused.
+### If you would rather uploads stopped
 
-Metered storage is only available on plans that meter infrastructure. Free plans have a
-fixed storage cap with no metering, and Enterprise storage is unlimited, so neither has
-anything to turn on.
+Set a **monthly storage cap** in **Billing → Storage cap**. This is optional and off
+unless you choose it. Once a month's storage overage would pass the amount you set,
+new uploads are refused and you are never billed above that number.
+
+You can change or remove the cap at any time, including while you are over your included
+allowance. Nothing is ever deleted — a cap only affects *new* uploads, and removing one
+takes effect immediately.
+
+:::info Free plans are never billed for storage
+On the Free plan there is no storage overage at all. Your included storage is a fixed
+cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
+so there is nothing to cap and nothing to configure. Enterprise storage is unlimited, so
+it has no overage either.
+:::
 
 :::tip No surprise bills
-Between the opt-in and the monthly limit, storage cannot appear on an invoice you did not
-agree to in advance. The [usage alerts](#usage-meters) at 80% and 100% of your allowance
-arrive before either one matters.
+Two things prevent one, and they work in different ways. The **alerts** at 80% and 100%
+of your allowance mean nobody first learns about overage from an invoice. The optional
+**cap** means anyone who wants a hard ceiling can have one, at a number they choose.
 :::
+
+## Usage budget
+
+A **usage budget** is a monthly amount you choose, plus the percentages of it you want to
+hear about — the same shape as a Google Cloud billing budget. Set it in
+**Billing → Monthly usage budget**.
+
+- **It warns, it never limits.** Passing a budget sends a notification and an email.
+  Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
+  actually stop, that is the [storage cap](#storage-overage) above — a different control,
+  deliberately kept separate.
+- **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
+  own, including percentages above 100 so a runaway month keeps speaking. Up to six.
+- **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.
+  Climbing to the next percentage alerts again, and every percentage resets when the month
+  does.
+- **Both channels.** Alerts arrive in the console notification menu **and** by email to
+  your workspace owners and admins, so you do not have to be signed in to find out.
+- **The figure is the invoice's own.** Budget alerts quote the same metered total the
+  billing page shows and the invoice charges — totalled once a day, so the first days of a
+  month may show no total yet.
+
+Changing the amount clears the alert history for the month, so a budget you lower starts
+warning you against the new number straight away.
 
 ## Seats
 

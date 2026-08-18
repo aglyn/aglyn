@@ -85,9 +85,8 @@ import {
   taxReturnCsvFilename,
   taxReturnJurisdictionRows,
   taxReturnPeriodOptions,
+  taxReturnRegistration,
   taxReturnWebfileLines,
-  TX_TAXPAYER_NUMBER,
-  TX_WEBFILE_NUMBER,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
 
@@ -143,6 +142,7 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   }, [isStaff, user, period])
 
   const verdict = useMemo(() => taxReturnAttention(payload), [payload])
+  const registration = useMemo(() => taxReturnRegistration(payload), [payload])
   const webfileLines = useMemo(() => taxReturnWebfileLines(payload), [payload])
   const jurisdictions = useMemo(
     () => taxReturnJurisdictionRows(payload),
@@ -218,13 +218,30 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 >
                   {'Export working papers (CSV)'}
                 </Button>
+                {/*
+                  AGL-2021. The registration comes from server-only env via the
+                  staff-gated route, so it is absent on any deployment that has
+                  not configured one. Says so in words rather than rendering
+                  "Webfile number " with nothing after it — a filer copying a
+                  number off this corner must never be handed a blank.
+                */}
                 <Stack sx={{ ml: { sm: 'auto' } }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {`Webfile number ${TX_WEBFILE_NUMBER}`}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {`Taxpayer number ${TX_TAXPAYER_NUMBER}`}
-                  </Typography>
+                  {registration.configured ? (
+                    <>
+                      <Typography variant="caption" color="text.secondary">
+                        {`Webfile number ${registration.webfileNumber}`}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {`Taxpayer number ${registration.taxpayerNumber}`}
+                      </Typography>
+                    </>
+                  ) : (
+                    <Typography variant="caption" color="warning.main">
+                      {
+                        'Registration not configured — set TX_WEBFILE_NUMBER and TX_TAXPAYER_NUMBER'
+                      }
+                    </Typography>
+                  )}
                 </Stack>
               </Stack>
               {loading ? <LinearProgress sx={{ mt: 2 }} /> : null}

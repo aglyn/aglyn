@@ -99,6 +99,14 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The real hook resolves through two async `getDoc` round-trips, so it
+  // returns nulls on first render and these specs never await past that.
+  // Modelling the resolved shape here would fabricate a link the real
+  // render cannot have yet (AGL-2080 added this call).
+  useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
+  // A paying, settled plan, so the entitlement gate never refuses for the
+  // AGL-1064 reason instead of the subscription-stock one under test.
+  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],

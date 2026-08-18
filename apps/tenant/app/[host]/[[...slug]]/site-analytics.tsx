@@ -21,6 +21,14 @@ import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
+  INTERNAL_TRAFFIC_FORCED_SNIPPET,
+  INTERNAL_TRAFFIC_GTAG_SNIPPET,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
+import {
+  analyticsEnvironmentForcesInternal,
+  analyticsMayEmit,
+} from '@aglyn/aglyn/app-utils/analytics-environment'
+import {
   GA_CONSENT_DEFAULT_SNIPPET,
   hostConsentRequired,
   isAnalyticsAllowed,
@@ -274,13 +282,61 @@ export default function SiteAnalytics({
 
           NOT declared when the host runs their own CMP (`consent.disabled`):
           their solution owns the default, and a second one racing it would
-          overwrite their visitor's answer with ours. */}
-      {gaMeasurementId && analyticsAllowed ? (
+          overwrite their visitor's answer with ours.
+
+          THE INTERNAL-TRAFFIC STAMP (AGL-2064) sits between the shim and
+          `gtag('js')` for two independent reasons, and both have to hold.
+
+          It is a CONSTANT string, evaluated in the browser. These pages are
+          ISR-cached — one document is served to every visitor — so a
+          server-side branch on "is this us" would bake one browser's answer
+          into the cache for everyone, and a first-client-render branch would
+          break hydration. Emitting identical bytes and letting the browser
+          decide at runtime is the only shape that is both correct and
+          cacheable. `readInternalTrafficOverride` is the same decision in
+          TypeScript for the console, which is client-only and needs no such
+          care.
+
+          It runs BEFORE `gtag('config', …)`, and that ordering is the point.
+          The hits that leak on this surface are the ones no call site writes
+          — `session_start`, `first_visit`, `user_engagement`, and the
+          automatic `page_view` — and a `gtag('set', …)` applies to every hit
+          processed after it in queue order. After the config call it would
+          miss the session's first pageview, which for a marketing visit is
+          usually the entire session.
+
+          ONLY on our own measurement id. A customer's site configures its own,
+          and their property gets no opinion of ours stamped on it: wrongly
+          flagging a real visitor erases them from every report and a GA4 data
+          filter is not retroactive, so the id equality is the guard that keeps
+          the expensive direction unreachable.
+
+          `analyticsMayEmit()` on the render condition (AGL-2067) is the OTHER
+          half, and it is the half that needs nobody's click: a stamp only
+          separates our traffic once the GA4 data filter exists, while a tag
+          that was never mounted sends nothing today. `next dev` and Vercel
+          preview builds resolve `aglyn.com`'s host document and its platform
+          measurement id exactly as production does, so without this they
+          reported as real visits. When the escape hatch deliberately re-enables
+          a non-production build, the stamp becomes UNCONDITIONAL rather than
+          opt-in — a build that emits because someone asked it to is ours by
+          definition, and the hatch must not reopen the hole it stands beside.
+      */}
+      {gaMeasurementId && analyticsAllowed && analyticsMayEmit() ? (
         <>
           <Script id="ga-init" strategy="afterInteractive">
             {'window.dataLayer=window.dataLayer||[];' +
               'function gtag(){dataLayer.push(arguments);}' +
               (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
+              // Internal-traffic stamp (AGL-2064), OUR property only. See the
+              // block comment below the JSX for why this is a constant string
+              // evaluated in the browser and why its position in the snippet
+              // is the whole of its correctness.
+              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
+                ? analyticsEnvironmentForcesInternal()
+                  ? INTERNAL_TRAFFIC_FORCED_SNIPPET
+                  : INTERNAL_TRAFFIC_GTAG_SNIPPET
+                : '') +
               "gtag('js', new Date());" +
               // `content_group: 'marketing'` on OUR property only (AGL-1857):
               // the one-click marketing/docs/console split in GA4 standard

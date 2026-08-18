@@ -139,33 +139,53 @@ async function handler(request: Request): Promise<Response> {
     })
     if (locked) return locked
 
-    {
-      // Enforced for every org — a plan-less org resolves as `free`
-      // (hostLimit 1), not unmetered.
-      const owned = await firestore
+    // Enforced for every org — a plan-less org resolves as `free`
+    // (hostLimit 1), not unmetered.
+    //
+    // COUNTED AND CLAIMED IN ONE TRANSACTION (AGL-2063). This used to be an
+    // aggregation `count()` followed by an unconditional `.set()` on a fresh
+    // random id, which is the create-time-quota shape AGL keeps relearning: N
+    // concurrent POSTs all read `count: 0`, all pass, and all create. A free
+    // org walked away with N sites for a `hostLimit` of 1, and every one of
+    // them costs `INFRA_COGS_PER_SITE_USD` a month with no invoice behind it.
+    //
+    // The transaction reads `orgs/{id}.hosts` — the directory map
+    // `registerOrgHost` maintains and `erase` prunes — and the count is the
+    // LARGER of that map and the pre-read aggregation. Neither alone is
+    // enough, and the reason each is here is different:
+    //
+    // - The aggregation is authoritative for history. An org whose sites
+    //   predate the directory map would otherwise read as zero and be handed
+    //   a free extra site.
+    // - The map is authoritative for CONCURRENCY, because it is written
+    //   inside this same transaction. The loser of a race re-reads it on
+    //   retry, sees the winner's id, and is refused — which the aggregation,
+    //   read before the transaction opened, can never do.
+    const hostId = createResourceUid()
+    const preCount = (
+      await firestore
         .collection('hosts')
         .where('orgId', '==', orgMembership.orgId)
         .count()
         .get()
+    ).data().count
+    const orgRef = firestore.collection('orgs').doc(orgMembership.orgId)
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    const claim = await firestore.runTransaction(async (tx) => {
+      const fresh = await tx.get(orgRef)
+      const directory = fresh.get('hosts')
+      const mapped =
+        directory && typeof directory === 'object'
+          ? Object.values(directory as Record<string, unknown>).filter(Boolean)
+              .length
+          : 0
       const quota = checkQuota(
-        org as any,
+        (fresh.data() ?? org) as any,
         'hostLimit',
-        owned.data().count,
+        Math.max(preCount, mapped),
       )
-      if (!quota.allowed) {
-        return Response.json({
-          error:
-            `Site limit reached (${quota.limit}) — upgrade or add extra ` +
-            'sites from Billing',
-        }, { status: 403 })
-      }
-    }
-
-    const hostId = createResourceUid()
-    await firestore
-      .collection('hosts')
-      .doc(hostId)
-      .set({
+      if (!quota.allowed) return { allowed: false as const, limit: quota.limit }
+      tx.set(hostRef, {
         displayName,
         subdomain,
         orgId: orgMembership.orgId,
@@ -173,6 +193,27 @@ async function handler(request: Request): Promise<Response> {
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
+      // The claim itself. `set(…, { merge: true })` deep-merges the map, so
+      // this adds one key without disturbing the org's other fields — and it
+      // is what makes a concurrent create see this site on its retry.
+      // `registerOrgHost` below writes the same key again, idempotently.
+      tx.set(
+        orgRef,
+        {
+          hosts: { [hostId]: true },
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      return { allowed: true as const, limit: quota.limit }
+    })
+    if (!claim.allowed) {
+      return Response.json({
+        error:
+          `Site limit reached (${claim.limit}) — upgrade or add extra ` +
+          'sites from Billing',
+      }, { status: 403 })
+    }
     // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
     await registerOrgHost(orgMembership.orgId, hostId, subdomain)
     // No starter seeding here (AGL-687). Starters render from the code

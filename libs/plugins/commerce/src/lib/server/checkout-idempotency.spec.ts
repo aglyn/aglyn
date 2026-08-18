@@ -234,6 +234,10 @@ const MANUAL_TAX = {
 
 /** Rates that DIFFER by destination, so the server must ask (AGL-1721). */
 const ZONED_SHIPPING = {
+  // AGL-1999: this fixture is about SHIPPING, so it states a tax decision
+  // rather than leaving one unmade — an undecided store refuses before the
+  // shipping ask is ever reached.
+  tax: { mode: 'none' },
   shipping: {
     zones: [
       { id: 'us', name: 'United States', countries: ['US'] },
@@ -266,7 +270,8 @@ beforeEach(() => {
     status: 'active',
     variants: [{ id: 'default', priceUsd: 40, inventory: null }],
   })
-  docs.set('hosts/host-1/settings/store', {})
+  // AGL-1999: "no tax" is now an explicit decision, not an absent doc.
+  docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_live_merchant',
     stripeChargesEnabled: true,

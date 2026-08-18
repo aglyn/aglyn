@@ -15,6 +15,28 @@
  * limitations under the License.
  */
 
+import { operatorIdentity } from '../../app-utils/operator-identity'
+
+/**
+ * Who to contact about THIS deployment, in the browser-console greeting
+ * (AGL-2016).
+ *
+ * The banner used to end with *"you may send an email to 'info@aglyn.com'"* on
+ * every install. On a self-hosted console that is an invitation, printed by
+ * the operator's own product to the operator's own developers, to take their
+ * support question to a company with no access to the system.
+ *
+ * The ASCII art and the copyright line stay, and deliberately: this is
+ * Apache-2.0 software and attribution to the authors is correct however it is
+ * deployed. What changes is the sentence that confuses *authorship* with
+ * *operation* — the project's URL is ours, the support channel is the
+ * operator's. Unconfigured prints neither rather than falling back to ours.
+ */
+function operatorGreetingLine(): string {
+  const support = operatorIdentity().supportEmail
+  return support ? `\nFor help with this deployment, email '${support}'.` : ''
+}
+
 const y = new Date().getFullYear()
 export const CONSOLE_GREETING_STYLES =
   'font-family:"Courier New",monospace;color:#E040FB;font-size:12px;'
@@ -31,12 +53,11 @@ d88P     888  "Y88888 888  "Y88888 888  888       88888888 88888888  "Y8888P"
              Y8b d88P     Y8b d88P
               "Y88P"       "Y88P"
 
-                            Copyright (c) ${y} Aglyn LLC. All Rights Reserved.
+                     Aglyn — open source, Apache-2.0. Copyright (c) ${y} Aglyn LLC.
 
 Hello there, Friend! 👋
-
-For detailed information please visit 'https://aglyn.com' or you may send an
-email to 'info@aglyn.com'.
+${operatorGreetingLine()}
+For the software itself, visit 'https://aglyn.com'.
 
 — Aglyn Engineering Team
 `

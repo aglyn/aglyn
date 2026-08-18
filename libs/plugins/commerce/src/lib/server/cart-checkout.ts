@@ -444,7 +444,26 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // `storefront-tax.ts` still classifies it `manual` and it is never summed
     // into the Aglyn-liable figure (AGL-1904).
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
-    if (taxSettings.mode === 'stripe') {
+    // AGL-1999: an unset tax mode is NOT a decision, and it must not sell.
+    // `mode` was `undefined` for every store whose owner never opened the
+    // Taxes card — the default state of every new storefront — and each
+    // branch below tested for a specific string, so no branch was taken, no
+    // tax was computed, and the shopper was charged an untaxed total. See
+    // `commerce-tax-decision.ts` for why refusing beats defaulting to either
+    // mode. `mode: 'none'` is the explicit opt-out and passes straight
+    // through.
+    const taxDecision = CommerceModel.storefrontTaxDecision({
+      settings: taxSettings,
+    })
+    if (taxDecision.kind === 'undecided') {
+      // BELOW the claim on this path, so release it: the merchant fixes the
+      // setting and the shopper retries under the same key (AGL-1697).
+      await claim.release()
+      return res
+        .status(409)
+        .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
+    }
+    if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
     } else if (taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax) {
       // Origin-based, exactly as buy-now resolves it: the cart collects the

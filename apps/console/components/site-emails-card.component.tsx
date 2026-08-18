@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -73,16 +74,22 @@ export function SiteEmailsCard() {
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
-  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422). The only thing read
-  // off `org` here is `enabledPlugins`, and that check fails OPEN — an org
-  // with no explicit list shows every plugin (see below), which is exactly
-  // what an undefined `org` produces. So the loading window shows the card
-  // and the loaded state may only ever REMOVE it; there is no window in
-  // which this tells anyone a feature is off. Catalogued and left alone once
-  // already in 854dc2c66, which called it out by name as "looked like a hit
-  // and is not". A `ready` gate here would only make the card flash.
+  // EXEMPT from `no-unguarded-loading-hook` (AGL-1422) for the PLUGIN read
+  // only. `enabledPlugins` fails OPEN — an org with no explicit list shows
+  // every plugin (see below), which is exactly what an undefined `org`
+  // produces — so the loading window shows the card and the loaded state may
+  // only ever REMOVE it. Catalogued and left alone once already in
+  // 854dc2c66, which called it out by name as "looked like a hit and is
+  // not". A `ready` gate on that read would only make the card flash.
+  //
+  // `ready` IS taken for the entitlement read added in AGL-2081, because
+  // that one fails the other way: `checkEntitlement(undefined)` resolves the
+  // FREE tier, so an ungated read would tell a paying site its abandoned-cart
+  // email cannot send for as long as the org doc is in flight. Same hook,
+  // two reads, opposite loading defaults — which is the whole reason the
+  // exemption is scoped in this comment rather than to the hook.
   // eslint-disable-next-line aglyn/no-unguarded-loading-hook
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const [opening, setOpening] = useState<string | null>(null)
   const [resetting, setResetting] = useState<string | null>(null)
 
@@ -223,6 +230,25 @@ export function SiteEmailsCard() {
                     <Typography variant="caption" color="text.secondary">
                       {email.description}
                     </Typography>
+                    {/* A template that cannot send must not read like one
+                        that can (AGL-2081). `abandoned-cart` has always been
+                        listed and designable on every plan while the cron
+                        refuses to send it without the entitlement, so a site
+                        could design it, publish it, and wait forever. */}
+                    {orgReady &&
+                    email.requiresFeature &&
+                    !Aglyn.checkEntitlement(
+                      org as never,
+                      email.requiresFeature as never,
+                    ) ? (
+                      <Typography variant="caption" color="warning.main">
+                        {`Not sent on your plan — needs ${
+                          Aglyn.planLabelGrantingFeature(
+                            email.requiresFeature as never,
+                          ) ?? 'a higher plan'
+                        }. You can design it now; it starts sending when you upgrade.`}
+                      </Typography>
+                    ) : null}
                   </Stack>
                   <Stack sx={{ flexShrink: 0, alignItems: 'flex-end' }}>
                     {email.control === 'besigner' ? (

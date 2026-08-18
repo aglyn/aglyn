@@ -25,7 +25,7 @@ import { readIdpProfile } from '../hooks/use-presence'
  * `firebase.sign_in_attributes`.
  *
  * The claim shapes below are the ones actually observed on
- * `zach@aglyn.com` (SAML, `saml.aglyn-workspace`) and on the Google account,
+ * `member@example.com` (SAML, `saml.aglyn-workspace`) and on the Google account,
  * read off the live tokens rather than invented.
  */
 function tokenFor(claims: Record<string, unknown>): string {
@@ -41,18 +41,18 @@ function tokenFor(claims: Record<string, unknown>): string {
 describe('readIdpProfile (AGL-675)', () => {
   it('reads a SAML name out of sign_in_attributes', () => {
     const token = tokenFor({
-      email: 'zach@aglyn.com',
+      email: 'member@example.com',
       firebase: {
         sign_in_provider: 'saml.aglyn-workspace',
         sign_in_attributes: {
-          firstName: 'Zach',
-          lastName: 'Gover',
-          phoneNumber: '+1 (512) 222-8232',
-          email: 'zach@aglyn.com',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          phoneNumber: '+1 (555) 010-7788',
+          email: 'member@example.com',
         },
       },
     })
-    expect(readIdpProfile(token).displayName).toBe('Zach Gover')
+    expect(readIdpProfile(token).displayName).toBe('Ada Lovelace')
   })
 
   /**
@@ -63,7 +63,7 @@ describe('readIdpProfile (AGL-675)', () => {
   it('returns no photo when the assertion carries none', () => {
     const token = tokenFor({
       firebase: {
-        sign_in_attributes: { firstName: 'Zach', lastName: 'Gover' },
+        sign_in_attributes: { firstName: 'Ada', lastName: 'Lovelace' },
       },
     })
     expect(readIdpProfile(token).photoURL).toBe('')
@@ -99,13 +99,13 @@ describe('readIdpProfile (AGL-675)', () => {
 
   it('finds nothing in a Google token, which needs no fallback', () => {
     const token = tokenFor({
-      name: 'Zach Gover',
+      name: 'Ada Lovelace',
       picture: 'https://lh3.googleusercontent.com/a/abc=s96-c',
       firebase: { sign_in_provider: 'google.com' },
     })
     // The top-level claims ARE resolvable, and harmlessly so — the hook
     // prefers the user object, which is already populated for OAuth.
-    expect(readIdpProfile(token).displayName).toBe('Zach Gover')
+    expect(readIdpProfile(token).displayName).toBe('Ada Lovelace')
   })
 
   it('never throws on a token it cannot read', () => {

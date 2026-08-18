@@ -21,8 +21,8 @@ import {
   getOrgForUser,
   isImpersonationSession,
   lockdownRefusal,
+  recordAssistFeedback,
 } from '@aglyn/tenant-data-admin'
-import { recordAssistFeedback } from '../../_lib/assist-usage'
 
 /**
  * Aglyn Assist thumbs feedback (AGL-1860 data loop). Membership-gated: the

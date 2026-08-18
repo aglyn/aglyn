@@ -850,7 +850,10 @@ why the code half landed ahead of the GA-side filter.
 
 `apps/console/components/layouts/firebase-app.layout.tsx` sets
 `traffic_type: 'internal'` through Firebase's **`setDefaultEventParameters`**,
-and the choice of API is the load-bearing part. GA4's internal-traffic filter
+and the choice of API is the load-bearing part. Since AGL-2087 the write goes
+via the single owner `apps/console/utils/analytics-default-params.ts`, because
+`page_title` needed the same API from a different effect and two raw callers
+race each other at boot — see §11. GA4's internal-traffic filter
 matches per EVENT, and the events that would otherwise leak are precisely the
 ones no call site writes: the manual `page_view`, plus the `session_start`,
 `first_visit` and `user_engagement` the SDK sends on its own. A param threaded
@@ -878,17 +881,141 @@ pins the impersonation case explicitly.
 Cleared explicitly on the negative branch, because the console does not remount
 across a re-auth (AGL-664): a staff session followed by a customer signing in on
 the same document would otherwise keep the stamp and quietly delete a real user
-from every report.
+from every report. The clear survives the move to the shared owner — a key
+patched to `undefined` stays in the composed object as `undefined` rather than
+being dropped from it, which is the difference between clearing a stamp and
+leaving the previous value standing.
 
 **Known gap, accepted:** the first `page_view` of a cold load races the token
 read and goes out unstamped — the same window in which `user_id` is also still
 unset, so it is an existing condition rather than a new one. Every later hit in
-the session carries the stamp.
+the session carries the stamp. The *override* path below closes this for a
+browser that has opted in, because a localStorage read is synchronous and a
+token read is not.
 
-**Still needs Zach:** the parameter does nothing until the data filter exists,
-and `traffic_type` should be registered as a dimension to verify it. Create the
-filter in **Testing** mode first — an Active filter permanently and
-irrecoverably discards matching data. Click-list on AGL-1637.
+### 8b. Claims are not enough — the browser-pinned override (AGL-2064/AGL-2065)
+
+The claims predicate is correct and covers about half the traffic. Two
+populations it cannot reach, and could not be widened to reach:
+
+- **Logged-out browsing of the marketing surface.** `aglyn.com`, `/pricing`,
+  `/legal/*` and every published test site are served by the tenant runtime,
+  which has no account to consult. This is the larger half: it needs no
+  sign-in, so it happens all day.
+- **Drills that REQUIRE a non-staff account.** The marketplace publisher drill
+  cannot be run by staff at all — the thing being exercised is a publisher
+  installing their own unreviewed version. Those sessions emit `sign_up`,
+  `org_created`, `host_created`, `site_published` and `begin_checkout`, and
+  widening the predicate to catch them would flag by identity, which is the
+  point of the drill.
+
+So there is a second, **opt-in** mechanism that asks a different question —
+*is this BROWSER ours* — and never consults the account:
+
+> Visit any surface with **`?aglyn_internal=1`**. Take it back off with
+> `?aglyn_internal=0`.
+
+It is remembered in `localStorage` under `aglyn_traffic_type` and survives
+reloads, client-side navigations, sign-outs and re-auth. `localStorage` is
+**origin-scoped**, so the opt-in must be done **once per surface**:
+
+| Surface | Where to do it |
+| --- | --- |
+| Console | `https://app.aglyn.com/?aglyn_internal=1` |
+| Marketing / tenant | `https://aglyn.com/?aglyn_internal=1` |
+| Docs | `https://docs.aglyn.com/?aglyn_internal=1` |
+| Local dev | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
+
+Being per-origin is a feature as much as a cost: it is what makes it
+impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
+property while we click through their published site.
+
+**Three implementations, one definition.** `INTERNAL_TRAFFIC_PARAM` /
+`INTERNAL_TRAFFIC_VALUE` and both readers live in
+`libs/aglyn/src/lib/app-utils/internal-traffic.ts`:
+
+- The **console** calls `readInternalTrafficOverride()` and ORs it into the
+  claims predicate, inside the one `setDefaultEventParameters` call.
+- The **tenant runtime** inlines `INTERNAL_TRAFFIC_GTAG_SNIPPET` — a
+  *constant* string of JavaScript — into its `ga-init` block, between the
+  `dataLayer` shim and `gtag('config', …)`. Constant because these pages are
+  ISR-cached and the served bytes must not vary by visitor; positioned there
+  because `gtag('set', …)` applies to hits processed *after* it, and the hits
+  that leak are the automatic ones.
+- **`apps/docs`** carries a verbatim copy of the same string in its
+  `headTags`, because a Docusaurus app cannot import from `libs/` (AGL-1595).
+  `apps/console/specs/docs-internal-traffic-snippet.spec.ts` fails if the two
+  drift — a stale copy would run without error and stamp a parameter nobody
+  filters on.
+
+**On our measurement id only.** The tenant stamp is emitted only when the
+resolved id is `G-YW5PG16YTM`. A customer's property gets no opinion of ours:
+wrongly flagging a real visitor erases them from every report, and that is the
+expensive direction.
+
+### 8c. Non-production builds do not report at all (AGL-2067)
+
+The stamp only helps once the filter is Active, and a filter is not
+retroactive. So localhost and preview traffic is handled by not emitting:
+
+| Environment | Emits? |
+| --- | --- |
+| `NODE_ENV !== 'production'` (any dev server, jest, local e2e) | **no** |
+| Vercel **preview** (`NODE_ENV` *is* `production` there) | **no** |
+| Vercel production | yes |
+| Unknown deploy env + `NODE_ENV === 'production'` — **self-host** | **yes**, deliberately |
+
+`libs/aglyn/src/lib/app-utils/analytics-environment.ts` holds the predicate.
+The console's `FirebaseServicesProvider` skips `initializeAnalytics` outright
+and the tenant runtime drops the tag from its render condition — *not*
+initialized rather than initialized-and-suppressed, because a resident tag
+reports on its own (the AGL-1608 lesson).
+
+`VERCEL_ENV` is server-only, so each app maps it into the client bundle as
+`NEXT_PUBLIC_DEPLOY_ENV` through its own `next.config` `env` block. Relying on
+Vercel's "automatically expose System Environment Variables" project setting
+would be a gate no spec in this repo can see.
+
+Self-host emits on purpose: those builds point at the operator's own Firebase
+project and their own GA property, and silencing a customer's analytics to fix
+our leak is the worse failure.
+
+**Escape hatch.** `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD=1` re-enables a
+silenced build for DebugView work, and such a build stamps
+`traffic_type: 'internal'` on **every** hit unconditionally — it emits only
+because someone asked it to. A *production* build with the flag set never
+blanket-stamps; that would delete every paying customer from every report.
+
+**This is why the archived Marketing property reads the way it does.** Its
+whole year-to-date history is 30 views / 6 users, ~24 of them `/signin` on
+Vercel *preview* URLs of the console. Preview traffic reaching a production
+property was not a risk — it was most of what that property ever recorded.
+
+### 8d. What is left for Zach to click
+
+The **Internal Traffic** data filter **exists** in property 302497406 and is
+currently in **Testing** mode. Zach set it Active on 2026-08-18 and reverted it
+to Testing the same day, deliberately, because the coverage above was expanding
+while it was on.
+
+Remaining, and all of it is his click — nothing in this repo can do it:
+
+1. **Verify in Testing mode.** With the filter in Testing, `Test data filter
+   name` is available as a dimension in reports and DebugView. Confirm it
+   matches a staff session, an impersonation session and an opted-in
+   logged-out marketing session, and that an ordinary customer session is
+   **not** matched. Both directions — a filter verified in one direction only
+   is the one that erases real users.
+2. **Register `traffic_type` as a custom dimension** if it is not already, so
+   the match is visible in standard reports rather than only in DebugView.
+3. **Set it Active** once (1) passes. ⚠️ An Active filter **permanently and
+   irrecoverably discards** everything it matches. It is not retroactive in
+   either direction: data already collected is not re-filtered, and data
+   discarded while Active cannot be recovered.
+4. **Opt each browser in, once per origin** — the three URLs in §8b. This is
+   the step most likely to be forgotten, and forgetting it is silent.
+
+Click-list on AGL-1637.
 
 ### 9. Crashlytics cannot be integrated, and the equivalent already is
 
@@ -999,7 +1126,108 @@ one — would throw `already-exists` if analytics were ever initialized on it.
 outside the taxonomy, in `hosts/[host]/setup/page.tsx` and `manage/user/page.tsx`.
 They are legal — Firebase treats `screen_view` and the `firebase_` prefix
 specially — but they are the one class of console event neither the compiler nor
-the sanitizer sees.
+the sanitizer sees. Their own `firebase_screen` / `firebase_screen_class` values
+are authored strings and were never the problem; what rode alongside them was
+the ambient `page_title`, closed by AGL-2087 in §11.
+
+### 11. `page_title` is sent explicitly, and is not the tab title (AGL-2060)
+
+Zach read the Firebase overview report on 2026-08-18 and found one console
+page reported as three rows:
+
+| Page title and screen class | Views |
+| -- | -- |
+| Secure Platform Console – Aglyn | 6.2K |
+| **(4)** Secure Platform Console – Aglyn | 2.2K |
+| **(5)** Secure Platform Console – Aglyn | 1.7K |
+
+Two separate defects, one dimension.
+
+**The badge.** `notifications-menu.component.tsx` writes the unread count into
+`document.title` — a real feature, "Unread count in tab title", on by default
+and in the console tour. GA4 builds `page_title` from `document.title` **at
+the instant the hit fires**, so a per-user, per-moment counter became a
+reporting dimension value. Views for a page were divided across an unbounded
+set of rows, and because the count correlates with engagement, the most active
+users fragmented the most.
+
+The console now passes `page_title` explicitly on its `page_view`, stripped by
+`stripUnreadBadge` in `apps/console/utils/notification-alerts.ts` — the exact
+inverse of the `unreadBadge` that writes it, living beside it so the writer and
+the reporter cannot drift on the `\d+\+?` shape (the badge caps at `(99+)`, and
+a pattern without the `\+?` would leave it on exactly the busiest accounts).
+The badge itself is untouched: only its reflection in analytics goes away.
+
+**The generic row.** The 6.2K is mostly *history*, not a live bug. Until
+2026-07-28 the console had exactly ONE titled layout — the root — because
+pages titled themselves through `NextPageTitle`, which renders via `next/head`
+and **is inert in the App Router**. Every console route therefore reported the
+root default. AGL-1059 fixed it by adding 61 layouts in one commit (`4b5567f`),
+so most of that row predates the fix. GA4 dimension values are not retroactive;
+it will never repair.
+
+One route had been missed: `(auth)/sso`, a client component with no layout
+beside it, still answered with the root default in production. It now titles
+itself, and `apps/console/app/page-title.spec.ts` fails on any `page.tsx`
+whose only titling ancestor is the root layout — inheriting that default IS
+the bug, so the root is deliberately excluded as a provider.
+
+**The rest of the hits, and the one owner that closes them (AGL-2087).** An
+explicit param fixes `page_view` and nothing else: gtag attaches `page_title`
+from `document.title` to *every* hit it assembles, so the badge still reached
+the two raw `screen_view` calls and the SDK's automatic `session_start` /
+`first_visit` / `user_engagement`, which no call site writes at all.
+
+The only mechanism that rides those is `setDefaultEventParameters` — the same
+one the `traffic_type` stamp uses (§8), and *not* safe to call twice:
+
+```js
+function setDefaultEventParameters(customParams) {
+  if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
+  else _setDefaultEventParametersForInit(customParams)   // bare ASSIGNMENT
+}
+```
+
+Before gtag is wrapped — the whole boot window, which is exactly when both
+effects first run — it **replaces** the pending default set instead of merging
+into it. A second caller added naively would have dropped `traffic_type`
+silently: the events still ship, GA4's internal-traffic filter just stops
+matching them, our own browsing rejoins the launch metrics, and a data filter is
+not retroactive. That is a worse failure than the fragmentation being fixed,
+which is why AGL-2060 stopped where it did.
+
+So there is exactly one owner: `apps/console/utils/analytics-default-params.ts`
+keeps the composed set and re-sends **all** of it on every update. Each concern
+patches only its own keys and cannot express "drop everyone else's", and the
+bare-assignment branch is handed the full object, which is what it wants. The
+`page_title` patch is refreshed from the same effect that fires the `page_view`
+— already running on mount and on every route change — using
+`buildConsolePageTitle`, the same helper the event param goes through, so the
+stripping rule has one definition and two readers. An explicit param beats a
+default, so the `page_view` hit is unchanged.
+
+`apps/console/specs/analytics-default-params.spec.ts` asserts the composed set
+carries `traffic_type` **and** a stripped `page_title` at once, that neither
+survives at the other's expense across an update or a clear, and — the part
+that keeps the design true for a contributor who has read none of this — that
+this module is the only place in `apps/console` whose *code* names
+`setDefaultEventParameters` at all. Prose about the API is exempt; the guard
+strips comments first.
+
+**Also measured, and worth knowing.** Next 16 streams metadata for any route
+whose `generateMetadata` awaits I/O. On
+`/{org}/marketplace/{listingId}`, whose social card does a Firestore read,
+`</head>` lands at byte 40934 with **no `<title>` in it** and the real title
+arrives at byte 80279 of 83383 — hydration, and so the `page_view`, can beat
+it. That is why an empty title omits the `page_title` key rather than sending
+`''`: an empty string would report those views under an empty title, whereas
+omitting lets GA4 fall back to its own reading. Routes with static or
+non-awaiting metadata are unaffected — `/signin` ships its title at byte 6669,
+well inside the head.
+
+**Prefer `page_location` or `content_group` over page title** in reports
+regardless. Paths are stable; titles are authored strings that change without
+notice, and everything above is a demonstration of that.
 
 ---
 

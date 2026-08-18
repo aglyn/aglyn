@@ -55,9 +55,20 @@
 //                         carrying every event in WEBHOOK_EVENTS
 //   delivery.evidence     the window contains at least one real delivery — a
 //                         0% error rate over an empty window is not evidence
-//   delivery.failures     Stripe reports no failed delivery in the window
+//   delivery.failures     no event is pending or has failed EVERY attempt
+//   delivery.retries      no event needed a RETRY to land, i.e. no individual
+//                         attempt failed (see RETRY_LAG_SECONDS)
 //   processing.coverage   every deliverable event has a `stripeEvents` document,
 //                         i.e. the signature verified and the handler ran
+//
+// `delivery.failures` and `delivery.retries` are two different questions and
+// the split is load-bearing. The first is scored per EVENT on its final state,
+// which is all `delivery_success` can report; the second is scored per
+// ATTEMPT, which is what the Stripe Dashboard's error rate counts. Running
+// only the first is how this audit reported 0.00% on 2026-08-18 while the
+// Dashboard reported 30% for the same destination over an overlapping window —
+// both correct, measuring different things, and the three failures the second
+// number was made of were real.
 //
 // A NOTE ON `delivery_success`, because it reads stronger than it is: the
 // filter is ACCOUNT-WIDE, not per destination, and an event of an unsubscribed
@@ -82,6 +93,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import {
   EVENT_RETENTION_DAYS,
   PLATFORM_WEBHOOK_URL,
+  RETRY_LAG_SECONDS,
   assessWebhookHealth,
   resolveWindow,
 } from './lib/stripe-webhook-health.mjs'
@@ -203,7 +215,7 @@ async function main() {
   const events = await collect('events', window)
   const failures = await collect('events', { ...window, delivery_success: 'false' })
 
-  let processedEventIds = []
+  const processedEvents = []
   let firestoreChecked = false
   let firestoreError = null
   if (!skipFirestore) {
@@ -230,7 +242,25 @@ async function main() {
           if (!refs.length) continue
           const snapshots = await firestore.getAll(...refs)
           for (const snapshot of snapshots) {
-            if (snapshot.exists) processedEventIds.push(snapshot.id)
+            if (!snapshot.exists) continue
+            // `receivedAt` comes along, not just the id. It is what makes a
+            // FAILED-THEN-RETRIED delivery visible: `route.ts` stamps it after
+            // signature verification and deletes the claim when a handler
+            // throws, so it dates the attempt that got through, and its
+            // distance from `event.created` is the delivery lag. Reading only
+            // `.exists` — the first version of this audit — cannot tell a
+            // first-attempt success from one that took three 400s and four
+            // hours to arrive, which is precisely the gap between this audit's
+            // 0% and the Dashboard's 30%.
+            const stamp = snapshot.get('receivedAt')
+            const date = stamp?.toDate ? stamp.toDate() : stamp ? new Date(stamp) : null
+            processedEvents.push({
+              id: snapshot.id,
+              receivedAt:
+                date && !Number.isNaN(date.getTime())
+                  ? Math.floor(date.getTime() / 1000)
+                  : null,
+            })
           }
         }
         firestoreChecked = true
@@ -251,7 +281,7 @@ async function main() {
       created: event.created,
     })),
     failedEventIds: failures.map((event) => event.id),
-    processedEventIds,
+    processedEvents,
     firestoreChecked,
     expectLivemode: keyMode === 'live',
     windowStart,
@@ -270,6 +300,7 @@ async function main() {
     stripeKeyMode: keyMode,
     envFilesLoaded,
     endpointUrl,
+    retryLagThresholdSeconds: RETRY_LAG_SECONDS,
     firestore: firestoreChecked ? 'checked' : `skipped: ${firestoreError}`,
     ...result,
   }
@@ -299,18 +330,58 @@ async function main() {
   }
   const { summary } = result
   console.log('')
+  // Every rate below names its own denominator ON THE SAME LINE, and the
+  // Dashboard comparison is spelled out rather than left to the reader.
+  //
+  // The old output printed a bare `error rate: 0.00%`. It was accurate and it
+  // was still misread — as the Stripe Dashboard's error rate for this
+  // destination, which was simultaneously showing 30% and counting something
+  // else. A figure whose denominator is not beside it will be compared against
+  // whichever denominator the reader already has in mind.
   console.log(
-    `  events in window: ${summary.totalEvents}   deliverable (subscribed types): ${summary.deliverableEvents}`,
+    `  window: ${iso(windowStart)} → ${iso(until)} (${(
+      (until - windowStart) / 86_400
+    ).toFixed(1)} days, ${keyMode} mode)`,
   )
   console.log(
-    `  failed deliveries: ${summary.failedDeliveries}   error rate: ${
-      summary.errorRate === null ? 'n/a (no deliveries)' : `${(summary.errorRate * 100).toFixed(2)}%`
+    `  events in window: ${summary.totalEvents}   of a subscribed type: ${summary.deliverableEvents}`,
+  )
+  console.log(
+    `  never delivered (pending, or failed every attempt): ${summary.failedDeliveries}`,
+  )
+  console.log(
+    `  → event failure rate: ${
+      summary.errorRate === null
+        ? 'n/a (no deliveries)'
+        : `${(summary.errorRate * 100).toFixed(2)}%`
+    }  = ${summary.failedDeliveries}/${summary.deliverableEvents} EVENTS of a subscribed type`,
+  )
+  console.log(
+    `  → delivered only on a retry: ${
+      summary.retriedEvents === null ? 'UNVERIFIED' : summary.retriedEvents
+    }${
+      summary.maxDeliveryLagSeconds === null
+        ? ''
+        : `   slowest delivery: ${summary.maxDeliveryLagSeconds}s after the event`
     }`,
   )
   console.log(
     `  unprocessed (no stripeEvents doc): ${
       summary.unprocessedEvents === null ? 'UNVERIFIED' : summary.unprocessedEvents
     }`,
+  )
+  console.log('')
+  console.log(
+    '  NOT the Stripe Dashboard error rate: that one divides failed ATTEMPTS by',
+  )
+  console.log(
+    `  total ATTEMPTS on ${endpointUrl}, so retries count in both`,
+  )
+  console.log(
+    `  halves of it. An event that failed twice and then succeeded is 0% above`,
+  )
+  console.log(
+    `  and 67% there. \`delivery.retries\` is the arm that covers the difference.`,
   )
   if (Object.keys(summary.byType).length) {
     console.log('')

@@ -32,12 +32,14 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 
 /** The `get` payload of `/api/billing/storage-overage`. */
 interface StorageOverageState {
-  acknowledged: boolean
-  monthlyCeilingUsd: number
+  /** Whether the customer has chosen a monthly cap. Absent by default. */
+  capSet: boolean
+  /** The cap in force, or `null` when uncapped. */
+  monthlyCapUsd: number | null
   /** Whether the plan meters infra overage at all. */
   metered: boolean
-  defaultCeilingUsd: number
-  maxCeilingUsd: number
+  defaultCapUsd: number
+  maxCapUsd: number
   includedStoragePerSiteMb: number
   /** One metered GB-month, markup included — the rate the invoice uses. */
   pricePerGbUsd: number
@@ -50,46 +52,45 @@ export interface BillingStorageOverageCardProps {
 }
 
 /**
- * Turn on metered storage, and set the monthly bound (AGL-1957, for AGL-1886).
+ * The customer's optional monthly storage cap (AGL-1957, for AGL-1886;
+ * inverted 2026-08-18).
  *
- * ## What was actually broken
+ * ## What this card is now
  *
- * AGL-1886 built a soft cap with an acknowledged opt-in, and wired the gate
- * into all four media ingress paths: past the included allowance,
- * `mediaStorageGate` refuses with `overage_optin_required` and a message that
- * says *"turn it on in Billing to keep uploading"*. **There was nothing in
- * Billing to turn on.** `/api/billing/storage-overage` — the only writer of
- * `org.storageOverage`, and the only way to give that consent — had zero
- * callers in the repo.
+ * Zach, 2026-08-18, verbatim: *"it should be a control by the end user, to
+ * prevent overage or usage alerts rather, we just want to minimize churn"*.
  *
- * So the soft cap could never be exercised by anybody. Every metered org was
- * held at the hard cap AGL-1886 was opened to escape, and was told to go
- * somewhere that did not exist. This card is that somewhere.
+ * So this card offers a cap and nothing is gated behind it. Storage past a
+ * metered plan's included band **bills by default**; `usage-alerts` warns at
+ * 80% and again at the band so the invoice is never the first anyone hears of
+ * it. A customer who would rather be stopped than billed sets a number here,
+ * and then — and only then — uploads are refused, citing their own limit.
  *
- * The reassuring half of the finding, and it is worth stating because it is
- * the property Zach's condition asked for: nobody was ever billed for storage
- * they had not agreed to. The gate fails CLOSED, so the missing surface cost
- * revenue and sent customers into a dead end — it did not produce a surprise
- * bill. Had the gate defaulted the other way, the same missing surface would
- * have been silent billing.
+ * ## What it used to be, and why that was wrong
  *
- * ## Why the ceiling is edited here and enforced there
+ * It used to be a consent switch: `mediaStorageGate` refused every metered
+ * org past its band until a manager clicked "Turn on metered storage". That
+ * failed closed on the whole customer base — AGL-1957 found the route had no
+ * caller at all, so no org could give the consent, so no org could store past
+ * its band, so Aglyn collected nothing for capacity it would happily sell.
  *
- * The route owns every refusal: a ceiling outside $1–$5000, a plan that does
- * not meter, a missing permission. This card sends the number and renders the
- * route's own answer, rather than pre-validating against constants that would
- * then be a second source of truth for what a legal ceiling is. The one
- * client-side check is `type="number"` on the field, which is a keyboard
- * affordance and not an enforcement.
+ * The trade it made was churn for churn: it avoided bill shock by making the
+ * product stop working. Alerts plus an optional cap avoid both.
  *
- * ## Why turning it off is never gated
+ * ## Why the cap is edited here and enforced there
  *
- * `revoke` is available on every plan and at every usage level, including to
- * an org already over its allowance and to a plan that stopped metering.
- * Withdrawing consent must never be harder than giving it, or an org that
- * changed its mind would be stuck accruing — so the "off" control renders
- * whenever an acknowledgement exists, even in the states where the "on"
- * control does not.
+ * The route owns every refusal: a cap outside $1–$5000, a plan that never
+ * bills for storage, a missing permission. This card sends the number and
+ * renders the route's own answer, rather than pre-validating against
+ * constants that would then be a second source of truth. The one client-side
+ * check is `type="number"`, which is a keyboard affordance, not enforcement.
+ *
+ * ## Why clearing the cap is never gated
+ *
+ * `clearCap` is available on every plan and at every usage level. A customer
+ * who capped themselves and now needs the files in must not have to argue
+ * with a precondition to take the brakes off — so the "remove" control
+ * renders whenever a cap exists, including on a plan that stopped metering.
  */
 export default function BillingStorageOverageCardComponent({
   orgId,
@@ -151,14 +152,31 @@ export default function BillingStorageOverageCardComponent({
         if (cancelled) return
         if (!outcome.ok) return void setLoadState('error')
         const next = outcome.payload as StorageOverageState
+        // A consent screen that cannot name the price MUST NOT ask for
+        // consent. Both of these numbers appear in the sentence someone
+        // agrees to, and neither has a safe default: a defaulted 0 would
+        // quote "$0.000 per GB" to a person about to accept a charge, and a
+        // missing allowance renders "NaN MB". A wrong price is worse than an
+        // error, so a payload that cannot state the terms is a LOAD FAILURE.
+        //
+        // `strictNullChecks` is off repo-wide, so nothing at compile time
+        // objects to reading `.toFixed()` off an absent field — this check is
+        // the only thing standing between a thinner payload and a billing
+        // page that either white-screens or misquotes the rate.
+        if (
+          !Number.isFinite(Number(next?.pricePerGbUsd)) ||
+          !Number.isFinite(Number(next?.includedStoragePerSiteMb))
+        ) {
+          return void setLoadState('error')
+        }
         setState(next)
-        // Seed the field from what is in force: the acknowledged ceiling, or
-        // the default the route would apply if none is sent.
+        // Seed the field from what is in force: the cap they set, or the
+        // default the route would apply if none is sent.
         setCeilingInput(
           String(
-            next.acknowledged && next.monthlyCeilingUsd > 0
-              ? next.monthlyCeilingUsd
-              : next.defaultCeilingUsd,
+            next.capSet && next.monthlyCapUsd != null && next.monthlyCapUsd > 0
+              ? next.monthlyCapUsd
+              : next.defaultCapUsd,
           ),
         )
         setLoadState('loaded')
@@ -174,24 +192,24 @@ export default function BillingStorageOverageCardComponent({
     }
   }, [orgId, user, sendRequest, retryNonce])
 
-  const acknowledge = useCallback(async () => {
+  const setCap = useCallback(async () => {
     setBusy(true)
     const dequeue = queueLoading()
     try {
       const outcome = await sendRequest({
-        action: 'acknowledge',
-        monthlyCeilingUsd: Number(ceilingInput),
+        action: 'setCap',
+        capUsd: Number(ceilingInput),
       })
       if (!outcome.ok) return
       enqueueSnackbar(
-        `Metered storage is on, capped at $${Number(
-          outcome.payload?.monthlyCeilingUsd ?? 0,
+        `Storage cap set. Uploads stop once overage reaches $${Number(
+          outcome.payload?.monthlyCapUsd ?? 0,
         ).toFixed(2)} a month.`,
         { variant: 'success', persist: false },
       )
       setRetryNonce((nonce) => nonce + 1)
     } catch {
-      enqueueSnackbar('Could not update your storage limit', {
+      enqueueSnackbar('Could not update your storage cap', {
         variant: 'warning',
         persist: false,
       })
@@ -201,18 +219,21 @@ export default function BillingStorageOverageCardComponent({
     }
   }, [ceilingInput, queueLoading, sendRequest, enqueueSnackbar])
 
-  const revoke = useCallback(async () => {
+  const clearCap = useCallback(async () => {
     // The loading overlay must drop BEFORE the confirm dialog opens — it sits
     // above the dialog and swallows the Confirm click (AGL-535). So the
     // confirm runs first and `queueLoading` only wraps the write.
+    //
+    // Confirmed rather than instant because removing the cap is the direction
+    // that can raise a bill. Setting one never is, so it is a plain click.
     const accepted = await confirm({
-      title: 'Turn off metered storage?',
+      title: 'Remove your storage cap?',
       description:
-        'New uploads past your included storage will be refused again, and ' +
-        'you will not be billed for storage overage. Nothing is deleted — ' +
-        'files you have already stored stay exactly where they are, and you ' +
-        'can turn this back on at any time.',
-      confirmationText: 'Turn it off',
+        'Uploads past your included storage will keep working and the extra ' +
+        'storage will be billed on your monthly invoice, with no ceiling. ' +
+        'You will still be alerted as you approach and cross your included ' +
+        'allowance, and you can set a cap again at any time.',
+      confirmationText: 'Remove the cap',
     })
       .then(() => true)
       .catch(() => false)
@@ -221,16 +242,15 @@ export default function BillingStorageOverageCardComponent({
     setBusy(true)
     const dequeue = queueLoading()
     try {
-      const outcome = await sendRequest({ action: 'revoke' })
+      const outcome = await sendRequest({ action: 'clearCap' })
       if (!outcome.ok) return
       enqueueSnackbar(
-        'Metered storage is off. Uploads past your included storage will be ' +
-          'refused.',
+        'Storage cap removed. Extra storage is billed on your monthly invoice.',
         { variant: 'success', persist: false },
       )
       setRetryNonce((nonce) => nonce + 1)
     } catch {
-      enqueueSnackbar('Could not turn off metered storage', {
+      enqueueSnackbar('Could not remove your storage cap', {
         variant: 'warning',
         persist: false,
       })
@@ -268,51 +288,52 @@ export default function BillingStorageOverageCardComponent({
   }
 
   const {
-    acknowledged,
+    capSet,
     metered,
-    monthlyCeilingUsd,
-    maxCeilingUsd,
+    monthlyCapUsd,
+    maxCapUsd,
     includedStoragePerSiteMb,
     pricePerGbUsd,
   } = state
 
-  // A plan with a fixed band has no metered line for consent to attach to, so
-  // there is nothing to turn on. Say that plainly rather than rendering a
-  // control the route would refuse with a 409 — but keep the "off" switch
-  // below reachable for an org that acknowledged and then moved plans.
-  const nothingToTurnOn = !metered && !acknowledged
+  // A plan that never bills for storage has no overage for a cap to bound, so
+  // there is nothing to configure. Say that plainly rather than rendering a
+  // control the route would refuse with a 409 — but keep the "remove" control
+  // below reachable for an org that capped itself and then moved plans.
+  const nothingToCap = !metered && !capSet
 
   return (
     <Stack spacing={2}>
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Chip
-          label={acknowledged ? 'Metered storage on' : 'Metered storage off'}
+          label={capSet ? 'Monthly cap set' : 'No cap — extra storage bills'}
           size="small"
-          color={acknowledged ? 'primary' : 'default'}
+          color={capSet ? 'primary' : 'default'}
         />
-        {acknowledged ? (
-          <Chip
-            label={`$${monthlyCeilingUsd.toFixed(2)}/mo limit`}
-            size="small"
-          />
+        {capSet && monthlyCapUsd != null ? (
+          <Chip label={`$${monthlyCapUsd.toFixed(2)}/mo cap`} size="small" />
         ) : null}
       </Stack>
 
-      {nothingToTurnOn ? (
+      {nothingToCap ? (
         <Alert severity="info">
           Your plan gives each site a fixed{' '}
-          {Math.round(includedStoragePerSiteMb)} MB of storage, so there is
-          nothing to meter and nothing to turn on. Uploads stop at that limit
-          and you are never charged for storage. Upgrade above to store more.
+          {Math.round(includedStoragePerSiteMb)} MB of storage. Uploads stop at
+          that limit and you are <strong>never charged</strong> for storage, so
+          there is no overage to cap. Upgrade above to store more.
         </Alert>
-      ) : !acknowledged ? (
+      ) : !capSet ? (
         <>
           <Typography variant="body2" color="text.secondary">
             Each site includes {Math.round(includedStoragePerSiteMb)} MB. Past
-            that, uploads are <strong>refused</strong> unless you turn on
-            metered storage — it costs about ${pricePerGbUsd.toFixed(3)} per GB
-            a month, and you will never be billed more than the limit you set
-            here.
+            that, uploads <strong>keep working</strong> and the extra storage
+            is billed at about ${pricePerGbUsd.toFixed(3)} per GB a month. We
+            alert you as you approach your included storage and again when you
+            cross it, so nothing arrives as a surprise.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            If you would rather uploads stopped than be billed, set a monthly
+            cap. This is optional — most people leave it off.
           </Typography>
           <Stack
             direction="row"
@@ -320,21 +341,21 @@ export default function BillingStorageOverageCardComponent({
             sx={{ alignItems: 'flex-start', flexWrap: 'wrap', rowGap: 2 }}
           >
             <TextField
-              label="Monthly limit (USD)"
+              label="Monthly cap (USD)"
               type="number"
               size="small"
               value={ceilingInput}
               disabled={!canManage || busy}
               onChange={(event) => setCeilingInput(event.target.value)}
-              slotProps={{ htmlInput: { min: 1, max: maxCeilingUsd, step: 1 } }}
-              helperText={`Between $1 and $${maxCeilingUsd}. We stop accepting uploads at this amount.`}
+              slotProps={{ htmlInput: { min: 1, max: maxCapUsd, step: 1 } }}
+              helperText={`Between $1 and $${maxCapUsd}. We stop accepting uploads once your storage overage reaches this amount.`}
             />
             <Button
-              variant="contained"
+              variant="outlined"
               disabled={!canManage || busy}
-              onClick={acknowledge}
+              onClick={setCap}
             >
-              Turn on metered storage
+              Set a monthly cap
             </Button>
           </Stack>
         </>
@@ -344,13 +365,15 @@ export default function BillingStorageOverageCardComponent({
             {metered
               ? `Uploads past your included ${Math.round(
                   includedStoragePerSiteMb,
-                )} MB per site are accepted and billed at about $${pricePerGbUsd.toFixed(
+                )} MB per site are billed at about $${pricePerGbUsd.toFixed(
                   3,
-                )} per GB a month, up to $${monthlyCeilingUsd.toFixed(
+                )} per GB a month — until your storage overage reaches $${(
+                  monthlyCapUsd ?? 0
+                ).toFixed(
                   2,
-                )} a month. Past that, uploads are refused — you are never billed above this limit.`
-              : `Your plan no longer meters storage, so this setting is not ` +
-                `charging you anything. You can safely turn it off.`}
+                )} a month, where you asked us to stop accepting uploads.`
+              : `Your plan no longer bills for storage, so this cap is not ` +
+                `doing anything. You can safely remove it.`}
           </Typography>
           <Stack
             direction="row"
@@ -360,21 +383,21 @@ export default function BillingStorageOverageCardComponent({
             {metered ? (
               <>
                 <TextField
-                  label="Monthly limit (USD)"
+                  label="Monthly cap (USD)"
                   type="number"
                   size="small"
                   value={ceilingInput}
                   disabled={!canManage || busy}
                   onChange={(event) => setCeilingInput(event.target.value)}
-                  slotProps={{ htmlInput: { min: 1, max: maxCeilingUsd, step: 1 } }}
-                  helperText={`Between $1 and $${maxCeilingUsd}.`}
+                  slotProps={{ htmlInput: { min: 1, max: maxCapUsd, step: 1 } }}
+                  helperText={`Between $1 and $${maxCapUsd}.`}
                 />
                 <Button
                   variant="outlined"
                   disabled={!canManage || busy}
-                  onClick={acknowledge}
+                  onClick={setCap}
                 >
-                  Save limit
+                  Save cap
                 </Button>
               </>
             ) : null}
@@ -382,9 +405,9 @@ export default function BillingStorageOverageCardComponent({
               variant="text"
               color="warning"
               disabled={!canManage || busy}
-              onClick={revoke}
+              onClick={clearCap}
             >
-              Turn off metered storage
+              Remove cap
             </Button>
           </Stack>
         </>
@@ -392,7 +415,7 @@ export default function BillingStorageOverageCardComponent({
 
       {!canManage ? (
         <Typography variant="caption" color="text.secondary">
-          You need the Manage billing permission to change your storage limit.
+          You need the Manage billing permission to change your storage cap.
         </Typography>
       ) : null}
     </Stack>

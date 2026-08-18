@@ -130,6 +130,32 @@ jest.mock('../utils/get-host', () => ({
 
 import { GET, POST } from '../app/api/report-abuse/route'
 
+/**
+ * AGL-2016: the addresses and the entity name on this page are the OPERATOR's,
+ * from configuration. The assertions below that expect `support@aglyn.com` are
+ * therefore assertions about the AGLYN-OPERATED shape, and they hold only
+ * because this configures it. The self-host and unconfigured shapes are
+ * exercised in their own describe at the bottom of this file — all three are
+ * needed, because a suite that only ever sets our values passes unchanged on a
+ * route that ignores configuration, which is the bug this issue is about.
+ */
+const AGLYN_OPERATED = {
+  NEXT_PUBLIC_OPERATOR_NAME: 'Aglyn LLC',
+  NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL: 'support@aglyn.com',
+}
+const OPERATOR_KEYS = [
+  'NEXT_PUBLIC_OPERATOR_NAME',
+  'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
+  'NEXT_PUBLIC_OPERATOR_LEGAL_EMAIL',
+]
+const setOperator = (values: Record<string, string>): void => {
+  for (const key of OPERATOR_KEYS) delete process.env[key]
+  for (const [key, value] of Object.entries(values)) process.env[key] = value
+}
+
+beforeEach(() => setOperator(AGLYN_OPERATED))
+afterEach(() => setOperator(AGLYN_OPERATED))
+
 const reports = () =>
   Object.entries(mockStore).filter(([path]) => path.startsWith('abuseReports/'))
 
@@ -509,5 +535,93 @@ describe('a storage failure is not silent', () => {
     const body = await response.json()
     expect(body.contact).toBe('support@aglyn.com')
     expect(body.received).toBeUndefined()
+  })
+})
+
+describe('AGL-2016 · the intake addresses the operator of THIS deployment', () => {
+  const form = async (): Promise<string> => {
+    const response = await GET(
+      new Request('https://site.example.com/api/report-abuse'),
+    )
+    expect(response.status).toBe(200)
+    return response.text()
+  }
+
+  describe('SELF-HOST — ours absent, theirs present', () => {
+    beforeEach(() =>
+      setOperator({
+        NEXT_PUBLIC_OPERATOR_NAME: 'Bramble Studio GmbH',
+        NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL: 'hello@bramble.example',
+      }),
+    )
+
+    it('names the self-hoster and mentions Aglyn nowhere on the page', async () => {
+      const body = await form()
+      expect(body).toContain('Bramble Studio GmbH')
+      expect(body).toContain('mailto:hello@bramble.example')
+      // The whole point. Not "the constant changed" — nothing anywhere in the
+      // served bytes may name us: not the title, not the lede, not the
+      // mailto, not the URL placeholder.
+      expect(body.toLowerCase()).not.toContain('aglyn')
+    })
+
+    it('does not claim we host the reported site or that our AUP governs it', async () => {
+      const body = await form()
+      expect(body).not.toContain('hosted by Aglyn')
+      expect(body).not.toContain('our Acceptable Use Policy')
+      expect(body).toContain('hosted by Bramble Studio GmbH')
+    })
+
+    it('hands a throttled reporter THEIR address, not ours', async () => {
+      mockAllowed = false
+      const refused = await POST(jsonPost(PHISHING))
+      expect(refused.status).toBe(429)
+      const body = await refused.json()
+      expect(body.contact).toBe('hello@bramble.example')
+      expect(body.error).toContain('hello@bramble.example')
+      expect(body.error).not.toContain('aglyn')
+      mockAllowed = true
+    })
+  })
+
+  describe('AGLYN-OPERATED — our configuration, unchanged', () => {
+    it('still renders our name and our address', async () => {
+      const body = await form()
+      expect(body).toContain('hosted by Aglyn LLC')
+      expect(body).toContain('mailto:support@aglyn.com')
+      expect(body).toContain('Report abuse — Aglyn LLC')
+    })
+  })
+
+  describe('UNCONFIGURED — honest, not blank and not ours', () => {
+    beforeEach(() => setOperator({}))
+
+    it('says the deployment published no contact address', async () => {
+      const body = await form()
+      expect(body).toContain('has not published who operates it')
+      expect(body.toLowerCase()).not.toContain('aglyn')
+    })
+
+    it('renders no mailto at all rather than an empty one', async () => {
+      // An `<a href="mailto:">` is a link a reporter clicks, opening a mail
+      // client addressed to nobody — which reads as our bug rather than as a
+      // deployment that never published an address.
+      const body = await form()
+      expect(body).not.toContain('mailto:"')
+      expect(body).not.toContain('mailto:<')
+      expect(body).not.toContain('mailto:>')
+    })
+
+    it('still serves the form, because the report is still worth capturing', async () => {
+      // Refusing to accept reports would be the wrong failure: the row is
+      // written into the OPERATOR's Firestore and their staff surface reads
+      // it. What is missing is a published address, not the queue.
+      const body = await form()
+      for (const id of ['phishing', 'csam', 'malware', 'dmca']) {
+        expect(body).toContain(`value="${id}"`)
+      }
+      const accepted = await POST(jsonPost(PHISHING))
+      expect(accepted.status).toBe(200)
+    })
   })
 })

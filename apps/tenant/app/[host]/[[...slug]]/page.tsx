@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
+import { hostShowsPlatformAttribution } from '../../../utils/platform-attribution'
 import CatchAllClient from './catch-all-client'
 import { loadPageData } from './load-page-data'
 import PageBodyBoundary from './page-body-boundary'
@@ -654,12 +655,40 @@ function buildJsonLd(props: Props): string[] {
   return ld
 }
 
+/**
+ * `<meta name="generator" content="Aglyn" />` on published pages (AGL-2088).
+ *
+ * The canonical CMS signal — WordPress, Squarespace, Drupal and Ghost all ship
+ * one, and it is how tech-stack detectors identify most of the field. Aglyn
+ * emitted no generator tag anywhere, which is why Wappalyzer reports a live
+ * Aglyn site as "Next.js, React, Emotion, Vercel" and never as Aglyn.
+ *
+ * WHY IT SITS HERE and not in `buildMetadata`. That function has five early
+ * returns (membership, maintenance, members-only, content, screen) and gains
+ * more as surfaces are added; threading one field through each is precisely
+ * the per-surface re-derivation the branding resolvers exist to prevent, and a
+ * branch someone forgets is a branch that silently stops carrying the tag.
+ * Applied once, after, it covers every branch including ones not yet written.
+ *
+ * WHY IT SITS HERE and not in the root layout's static `metadata`, which would
+ * be a one-line change: that metadata is unconditional, and this tag must not
+ * appear on a white-labelled site under any circumstances. There is no request
+ * or host at that layer to gate on — the same reason the version headers could
+ * not be gated in `next.config`.
+ *
+ * The gate FAILS CLOSED inside `hostShowsPlatformAttribution`; see the ⚠️ there
+ * for why an unresolved org must not read as "not white-labelled".
+ */
 export async function generateMetadata({
   params,
 }: CatchAllPageProps): Promise<Metadata> {
   const { host, slug } = await params
   const result = await loadPageData(host, slug ?? [])
-  return 'props' in result ? buildMetadata(result.props) : {}
+  if (!('props' in result)) return {}
+  const metadata = buildMetadata(result.props)
+  return (await hostShowsPlatformAttribution(host))
+    ? { ...metadata, generator: Aglyn.PLATFORM_GENERATOR_NAME }
+    : metadata
 }
 
 /**

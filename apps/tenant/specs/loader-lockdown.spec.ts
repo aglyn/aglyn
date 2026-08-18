@@ -101,6 +101,18 @@ beforeEach(() => {
   mockGetOrgBilling.mockResolvedValue({ org: { $id: 'org-1' } })
 })
 
+// AGL-2016: the lockdown notice's contact line is operator configuration.
+// This is the AGLYN-OPERATED shape; the self-host and unconfigured shapes are
+// covered at the source in libs/aglyn/src/lib/app-utils/lockdown.spec.ts.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+})
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
+})
+
 describe('tenant loader lockdown branch (AGL-1501)', () => {
   it('CONTROL — nothing locked serves the page', async () => {
     const result: any = await loadPageData('acme', [])

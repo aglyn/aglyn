@@ -140,7 +140,7 @@ export function ReusableComponentsProvider(
           { variant: 'info', persist: false },
         )
       }
-      if (!hasEntitlement('reusable-components', org)) {
+      if (!hasEntitlement('reusableComponents', org)) {
         return void enqueueSnackbar(
           'Reusable components require a Starter plan — see Billing to upgrade',
           { variant: 'warning', persist: false },

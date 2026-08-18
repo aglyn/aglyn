@@ -23,6 +23,8 @@
  */
 
 import {
+  checkSeatQuota,
+  countCollaboratorSeats,
   createResourceUid,
   generateOrgSlug,
   hasOrgPermission,
@@ -32,8 +34,10 @@ import {
   projectMemberScopeTokens,
   scopeTokensForHost,
   type AglynOrganization,
+  type AglynOrgBilling,
   type AglynOrgCustomRole,
   type AglynOrgMember,
+  type CollaboratorSeatEntry,
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
@@ -716,6 +720,199 @@ export async function logOrgActivity(
     .catch(() => undefined)
 }
 
+/**
+ * A collaborator seat refusal, raised from INSIDE the grant transaction
+ * (AGL-2068).
+ *
+ * An exception rather than a return value because it has to travel out of
+ * `upsertOrgMember` / `grantHostAccess`, whose contract is "make it so" and
+ * which four routes already call as a bare `await`. Returning a verdict would
+ * have let every existing call site ignore it silently, which is the shape of
+ * the bug being fixed.
+ */
+export class CollaboratorSeatLimitError extends Error {
+  readonly hostId: string
+  readonly limit: number
+  readonly upgradeRequired: boolean
+  readonly addonPriceUsd: number | null
+  constructor(
+    hostId: string,
+    quota: {
+      limit: number
+      upgradeRequired: boolean
+      addonPriceUsd: number | null
+    },
+  ) {
+    super(collaboratorSeatMessage(quota))
+    this.name = 'CollaboratorSeatLimitError'
+    this.hostId = hostId
+    this.limit = quota.limit
+    this.upgradeRequired = quota.upgradeRequired
+    this.addonPriceUsd = quota.addonPriceUsd
+  }
+}
+
+/**
+ * The two refusal strings, verbatim from `/api/hosts/members` where they have
+ * always lived. Kept byte-identical on purpose: this is now the ONE place
+ * they are produced, and any client or spec matching "Collaborator limit
+ * reached" must keep matching.
+ */
+function collaboratorSeatMessage(quota: {
+  limit: number
+  upgradeRequired: boolean
+  addonPriceUsd: number | null
+}): string {
+  return quota.upgradeRequired
+    ? `Collaborator limit reached (${quota.limit}) — upgrade ` +
+        'your plan to add more collaborators'
+    : `Collaborator seats full (${quota.limit}) — add seats for ` +
+        `$${quota.addonPriceUsd}/mo each from Billing`
+}
+
+/**
+ * Everyone who could be holding a collaborator seat in this org: the whole
+ * roster plus every un-accepted invite (AGL-2068).
+ *
+ * Both collections in full, rather than a `where('hostAccess.X','!=',null)`:
+ * the predicate that decides a seat is `isOrgWideMember`, which reads three
+ * fields and treats an ABSENT `allHosts` as org-wide. Firestore cannot
+ * express "field absent" in a filter, so a query-side count gets the legacy
+ * rows wrong in the direction that over-charges. These collections are
+ * bounded by the very caps being enforced, so reading them whole is cheap and
+ * — inside a transaction — is exactly the lock that serialises concurrent
+ * grants.
+ */
+async function readSeatEntries(
+  orgRef: FirebaseFirestore.DocumentReference,
+  read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>,
+): Promise<CollaboratorSeatEntry[]> {
+  const [members, invites] = await Promise.all([
+    read(orgRef.collection('members')),
+    read(orgRef.collection('invites').where('acceptedAt', '==', null)),
+  ])
+  return [
+    // The uid is the DOCUMENT ID on the roster and is not a field, so it has
+    // to be put back or every legacy row without a mirrored email identifies
+    // nobody and silently stops consuming its seat.
+    ...members.docs.map(
+      (doc) => ({ uid: doc.id, ...doc.data() }) as CollaboratorSeatEntry,
+    ),
+    ...invites.docs.map((doc) => doc.data() as CollaboratorSeatEntry),
+  ]
+}
+
+/**
+ * The hard cap itself, evaluated against the POST-state and inside the same
+ * transaction that performs the grant (AGL-2068).
+ *
+ * A create-time quota that reads, decides, and then writes is not a cap —
+ * this repo has now relearned that three times in one day (AGL-1390 laundering
+ * a count, AGL-2057 the assist cap, AGL-2063 the site limit): N concurrent
+ * requests all read the same pre-count, all pass, and all land. Doing the
+ * read through the transaction is what fixes it. Firestore tracks the read
+ * SET, so a second grant that read the same roster cannot commit — it retries,
+ * re-reads a roster that now holds the first grant, and refuses.
+ *
+ * Only NEWLY granted hosts are charged. Changing an existing collaborator's
+ * role on a site they already reach re-writes the same seat, and refusing that
+ * would strand an over-limit org unable to even demote its way back.
+ */
+async function assertCollaboratorSeats(options: {
+  orgRef: FirebaseFirestore.DocumentReference
+  org: Partial<AglynOrgBilling>
+  hostIds: string[]
+  self: { uid?: string | null; email?: string | null }
+  read: (query: FirebaseFirestore.Query) => Promise<FirebaseFirestore.QuerySnapshot>
+}): Promise<void> {
+  const { orgRef, org, hostIds, self, read } = options
+  if (!hostIds.length) return
+  const entries = await readSeatEntries(orgRef, read)
+  for (const hostId of hostIds) {
+    const used = countCollaboratorSeats(entries, hostId, self)
+    const quota = checkSeatQuota(org, 'members', used)
+    if (!quota.allowed) throw new CollaboratorSeatLimitError(hostId, quota)
+  }
+}
+
+/**
+ * Which hosts a membership is about to reach for the FIRST time as a scoped
+ * collaborator — the set the seat cap is charged for.
+ *
+ * Empty when the resulting membership is org-wide: a manager already reaches
+ * every host and pays for it with a manager seat.
+ */
+function newlyScopedHosts(options: {
+  role: OrgRole | undefined
+  allHosts: boolean
+  hostAccess: Record<string, unknown>
+  existing: Partial<AglynOrgMember> | undefined
+}): string[] {
+  const { role, allHosts, hostAccess, existing } = options
+  if (isOrgWideMember({ role, allHosts, hostAccess } as Partial<AglynOrgMember>)) {
+    return []
+  }
+  const prior = (existing?.hostAccess ?? {}) as Record<string, unknown>
+  return Object.keys(hostAccess).filter((hostId) => !prior[hostId])
+}
+
+/**
+ * Turn a seat refusal into the 403 the four admitting routes return, or null
+ * when the error is something else and must keep propagating to the 500.
+ *
+ * Lives here beside `emailUnverifiedResponse` and `lockdownRefusal` so a
+ * route's catch block is one line and cannot accidentally mask a real fault.
+ */
+export function collaboratorSeatRefusalResponse(
+  error: unknown,
+): Response | null {
+  if (!(error instanceof CollaboratorSeatLimitError)) return null
+  return Response.json(
+    {
+      error: error.message,
+      code: 'collaborator_seat_limit',
+      limit: error.limit,
+      upgradeRequired: error.upgradeRequired,
+    },
+    { status: 403 },
+  )
+}
+
+/**
+ * The same cap, asked BEFORE anything is written (AGL-2068).
+ *
+ * Not the enforcement — the transaction inside the grant is. This exists so
+ * the two doors that only ever create an INVITE (`/api/hosts/members` for an
+ * address with no account yet, and `/api/orgs/invites` create) refuse at the
+ * point the admin is looking at, rather than mailing someone a link that will
+ * be refused when they click it. A race here over-reserves invites; it cannot
+ * over-grant access, because access is only ever granted through the
+ * transactional path.
+ */
+export async function collaboratorSeatRefusal(options: {
+  orgId: string
+  org: Partial<AglynOrgBilling>
+  hostIds: string[]
+  self?: { uid?: string | null; email?: string | null }
+}): Promise<Response | null> {
+  const { orgId, org, hostIds, self } = options
+  if (!hostIds.length) return null
+  try {
+    await assertCollaboratorSeats({
+      orgRef: firestore().collection('orgs').doc(orgId),
+      org,
+      hostIds,
+      self: self ?? {},
+      read: (query) => query.get(),
+    })
+  } catch (error) {
+    const refusal = collaboratorSeatRefusalResponse(error)
+    if (refusal) return refusal
+    throw error
+  }
+  return null
+}
+
 export interface UpsertOrgMemberOptions {
   orgId: string
   uid: string
@@ -775,6 +972,25 @@ export async function upsertOrgMember(
       .collection('members')
       .doc(uid)
     const existing = await tx.get(memberRef)
+    // Collaborator seat cap (AGL-2068), inside this transaction and before
+    // any write. This is the door `/api/orgs/members` and invite ACCEPTANCE
+    // come through, and neither metered `membersPerHost` at all — both gate
+    // on `isOrgWideMember`, which is false for exactly the site-scoped
+    // collaborator this charges for. The roster read below joins this
+    // transaction's read set, so concurrent accepts serialise instead of all
+    // passing the same pre-count.
+    await assertCollaboratorSeats({
+      orgRef: db.collection('orgs').doc(orgId),
+      org: orgSnapshot.data() as Partial<AglynOrgBilling>,
+      hostIds: newlyScopedHosts({
+        role,
+        allHosts: allHosts ?? false,
+        hostAccess: hostAccess ?? {},
+        existing: existing.data() as Partial<AglynOrgMember> | undefined,
+      }),
+      self: { uid, email },
+      read: (query) => tx.get(query),
+    })
     tx.set(
       memberRef,
       {
@@ -947,6 +1163,29 @@ export async function grantHostAccess(options: {
     const org = orgSnapshot.data() as AglynOrganization
     const memberRef = orgRef.collection('members').doc(uid)
     const existing = await tx.get(memberRef)
+    // Collaborator seat cap (AGL-2068). This door DID meter, but against
+    // `hosts/{hostId}/members` — a display roster only its own route writes,
+    // so it could not see anyone admitted by invite or by `/api/orgs/members`
+    // and under-counted even when it fired. The count now comes off the org
+    // roster + pending invites, which is where every door lands.
+    await assertCollaboratorSeats({
+      orgRef,
+      org: orgSnapshot.data() as Partial<AglynOrgBilling>,
+      // Asked of the membership AS IT STANDS, not of the merged shape.
+      // `grantHostAccess` never touches `role` or `allHosts`, so someone who
+      // is already a manager stays one and keeps paying a manager seat — and
+      // a legacy pre-`allHosts` row, which `isOrgWideMember` reads as org-wide
+      // precisely so it is not locked out, must not be re-classified into a
+      // collaborator seat by the act of writing a host key onto it.
+      hostIds: (() => {
+        const current = existing.data() as Partial<AglynOrgMember> | undefined
+        if (existing.exists && isOrgWideMember(current)) return []
+        if (current?.hostAccess?.[hostId]) return []
+        return [hostId]
+      })(),
+      self: { uid, email },
+      read: (query) => tx.get(query),
+    })
     tx.set(
       memberRef,
       {

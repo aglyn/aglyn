@@ -35,6 +35,7 @@ import { collection, deleteDoc, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { EntitlementGatedCard } from './entitlement-gate.component'
 
 export interface MemberPostsCardProps {
   hostId: string
@@ -44,6 +45,14 @@ export interface MemberPostsCardProps {
  * Member updates (AGL-316): posts for entitled subscribers, published
  * through a manager-gated API that can also email the audience. The
  * member-feed block renders them on the site.
+ *
+ * Gated on `contentGating` since AGL-2080, and this is the one of the five
+ * that failed OPEN. `server/gate.ts:48` (`hostHasContentGating`) is what
+ * decides whether `membership-content.ts`, `member-feed.ts` and `stream.ts`
+ * withhold anything; without the entitlement it withholds nothing. So an
+ * unentitled operator could mark a post members-only, see it accepted, and
+ * have the renderer serve it to the public — believing content was protected
+ * while it was not. A refusal the operator can see is the fix.
  */
 export function MemberPostsCard(props: MemberPostsCardProps) {
   const { hostId } = props
@@ -104,6 +113,16 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
   }, [draft, user, hostId, enqueueSnackbar])
 
   return (
+    <EntitlementGatedCard
+      hostId={hostId}
+      feature="contentGating"
+      header={'Member updates'}
+      upsell={
+        'Memberships and gated content keep posts, pages and video behind ' +
+        'a subscription, and publish updates to the members entitled to ' +
+        'them.'
+      }
+    >
     <CardDisplay header={'Member updates'} contentGutterX contentGutterY>
       <Stack spacing={1}>
         {posts.length === 0 ? (
@@ -238,6 +257,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
         </DialogActions>
       </Dialog>
     </CardDisplay>
+    </EntitlementGatedCard>
   )
 }
 MemberPostsCard.displayName = 'MemberPostsCard'

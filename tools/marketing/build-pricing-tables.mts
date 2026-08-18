@@ -222,7 +222,18 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       { label: 'Online store', value: (p) => bool(F(p).commerce) },
       { label: 'Products per site', value: talk((p) => num(E(p).productsPerHost)) },
-      { label: 'POS registers', value: talk((p) => num(E(p).posRegisters)) },
+      // "per site" is load-bearing, not decoration (AGL-1775). Since Zach's
+      // 2026-08-17 decision `posRegisters` is the PER-SITE cap — the add-on is
+      // a pool whose seats are allocated to one site each, so an org running
+      // five locations needs five. Every other per-site limit in this table
+      // says so explicitly ("Products per site" is the row directly above),
+      // and a bare "POS registers" beside them reads as org-wide by contrast.
+      // Ground truth: `resolveHostRegisterCap(org, hostId)` = this cap plus
+      // that site's allocated seats.
+      {
+        label: 'POS registers per site',
+        value: talk((p) => num(E(p).posRegisters)),
+      },
       // A fee only means something if you can sell. Free carries
       // `transactionFeeDigitalPct: 0` but `commerce: false`, so printing "0%"
       // would read as "sell for free on the Free plan" — the opposite of
@@ -398,7 +409,9 @@ const SPEC: Record<string, (e: (typeof PLAN_ENTITLEMENTS)[Plan]) => string> = {
       ? 'unlimited products'
       : `${num(e.productsPerHost)} products per site`,
   bandwidth: (e) => `${gb(e.bandwidthGb)} bandwidth`,
-  registers: (e) => `${num(e.posRegisters)} POS registers`,
+  // Per site, for the same AGL-1775 reason as the compare-table row: this is
+  // the cap each site gets, not a total the org shares out.
+  registers: (e) => `${num(e.posRegisters)} POS registers per site`,
   whiteLabel: (e) =>
     e.features.whiteLabel
       ? 'full white-label incl. custom console domain'
@@ -495,7 +508,14 @@ const addons = {
     {
       label: 'Extra POS register',
       priceUsd: POS_REGISTER_ADDON_MONTHLY_USD,
-      scope: 'per register',
+      // 'per register' described the pre-AGL-1775 behaviour, where one
+      // purchase raised the cap on every site the org ran. It is now a pool
+      // (`seatAddons.posRegisters`) whose seats are assigned to individual
+      // sites via `org.registerAllocations`, reassignable, and returned to the
+      // pool when a site is deleted. The scope that matters to a buyer pricing
+      // a multi-location rollout is the SITE, which is why this is not
+      // 'organization' the way Event Calendar deliberately is.
+      scope: 'per site',
       maxQuantity: null,
       included: Object.fromEntries(
         PLANS.map((p) => [p, PLAN_ENTITLEMENTS[p].posRegisters]),

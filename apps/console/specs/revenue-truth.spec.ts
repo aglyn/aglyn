@@ -53,8 +53,167 @@ import { join, relative } from 'node:path'
 const REPO_ROOT = join(__dirname, '../../..')
 const SCAN_ROOTS = ['apps', 'libs']
 
+/**
+ * The source with COMMENTS and STRING LITERALS blanked out, offsets preserved.
+ *
+ * AGL-2086/AGL-1939 are one defect in two guards: a scanner written to read a
+ * rendered artifact was pointed at checked-in source, where it counts a
+ * MENTION as a USE. `retired-colours.mjs` fixed its half by separating
+ * assigned from merely named (`splitSourceComments` / `findSourceOccurrences`);
+ * this is the same treatment for the same reason.
+ *
+ * Without it, the word "revenue" in an email body or a design-rationale
+ * comment reads exactly like a revenue computation, and the only remedy on
+ * offer is to exempt the file forever — which is how a guard stops meaning
+ * anything. Prose is not an aggregate. Code is.
+ *
+ * Blanks rather than deletes so nothing shifts: line structure survives and
+ * every offset still points where it did. `${…}` substitutions stay CODE —
+ * `orgMonthlyRevenueUsd(org)` interpolated into a template is a real call and
+ * must still count — which is why templates carry a brace-depth stack instead
+ * of being blanked wholesale.
+ *
+ * Deliberately biased AGAINST blanking. A guard's only fatal failure is the
+ * false negative, so an escape outside a string skips its pair (a regex
+ * literal like `/['"]/` must not open a phantom string and blank the real
+ * code after it), and anything unrecognised is left as code.
+ */
+function codeRegionOf(source: string): string {
+  const out = source.split('')
+  const blank = (at: number) => {
+    if (source[at] !== '\n') out[at] = ' '
+  }
+  /** One frame per open template literal; `active` means inside `${…}`. */
+  const templates: { braces: number; active: boolean }[] = []
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    const top = templates[templates.length - 1]
+
+    // Literal text of a template — blanked, until a substitution opens.
+    if (top && !top.active) {
+      if (ch === '\\') {
+        blank(i)
+        blank(i + 1)
+        i += 2
+        continue
+      }
+      if (ch === '`') {
+        blank(i)
+        templates.pop()
+        i += 1
+        continue
+      }
+      if (source.startsWith('${', i)) {
+        blank(i)
+        blank(i + 1)
+        top.active = true
+        top.braces = 1
+        i += 2
+        continue
+      }
+      blank(i)
+      i += 1
+      continue
+    }
+
+    // Code: top level, or inside a substitution whose braces we are counting.
+    if (top && top.active) {
+      if (ch === '{') top.braces += 1
+      else if (ch === '}') {
+        top.braces -= 1
+        if (top.braces === 0) {
+          blank(i)
+          top.active = false
+          i += 1
+          continue
+        }
+      }
+    }
+    if (ch === '\\') {
+      i += 2
+      continue
+    }
+    if (source.startsWith('//', i)) {
+      while (i < source.length && source[i] !== '\n') {
+        blank(i)
+        i += 1
+      }
+      continue
+    }
+    if (source.startsWith('/*', i)) {
+      while (i < source.length && !source.startsWith('*/', i)) {
+        blank(i)
+        i += 1
+      }
+      blank(i)
+      blank(i + 1)
+      i += 2
+      continue
+    }
+    if (ch === '`') {
+      blank(i)
+      templates.push({ braces: 0, active: false })
+      i += 1
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      // Only a quote that CLOSES on the same line opens a string. Without
+      // this, the `'` in a regex literal like `/['\"]/` opens a string that
+      // never ends and blanks the rest of the line — silently erasing real
+      // code, which is the false-negative direction a guard cannot afford.
+      let end = i + 1
+      while (end < source.length && source[end] !== '\n') {
+        if (source[end] === '\\') {
+          end += 2
+          continue
+        }
+        if (source[end] === ch) break
+        end += 1
+      }
+      if (end >= source.length || source[end] !== ch) {
+        i += 1 // not a string: leave it as code
+        continue
+      }
+      while (i <= end) {
+        blank(i)
+        i += 1
+      }
+      continue
+    }
+    i += 1
+  }
+  return out.join('')
+}
+
 /** Words that mean "a revenue total", as opposed to one org's price. */
-const AGGREGATE = /\b(mrr|arr|revenue)\b/i
+const AGGREGATE_WORD = /\b(mrr|arr|revenue)\b/i
+
+/**
+ * The same idea INSIDE an identifier: `mrrUsd`, `orgMonthlyRevenueUsd`,
+ * `totalRevenueCents`.
+ *
+ * Added with the code-region fix, and not optional alongside it. Measuring
+ * this guard while fixing AGL-2086 turned up something worse than the two
+ * false positives: every `MRR`/`revenue` occurrence in
+ * `api/admin/overview/route.ts` — the one surface that genuinely aggregates
+ * money — is in a COMMENT. Real revenue code is camelCase, and `\brevenue\b`
+ * cannot match `orgMonthlyRevenueUsd`. So the word-only guard was drawing
+ * ALL of its signal from prose; restricting it to code without this would
+ * have left it matching almost nothing and still green.
+ *
+ * Case-SENSITIVE, because casing is the only thing marking a segment
+ * boundary. `ARR` is deliberately absent: it would match `ARRAY` and
+ * `ARR_LIMIT` and mean nothing. Verified against the whole tree — this adds
+ * zero new offenders today, so it is reach for what gets written next.
+ */
+const AGGREGATE_IDENT =
+  /\b(?:mrr|revenue)(?=[A-Z0-9_])|(?<=[a-z0-9])(?:MRR|Revenue)(?![a-z])/
+
+/** Either shape, read off whatever region the caller decided to trust. */
+function mentionsAggregate(text: string): boolean {
+  return AGGREGATE_WORD.test(text) || AGGREGATE_IDENT.test(text)
+}
 
 /** Reading the plan field in any of the shapes used in this repo. */
 const READS_PLAN = /\.plan\b|\['plan'\]|\bplan:\s/
@@ -69,31 +228,8 @@ const USES_HELPERS = /isBillingSubscription|orgMonthlyRevenueUsd/
  * revenue figure from `plan`.
  */
 const EXCEPTIONS: Record<string, string> = {
-  'libs/aglyn/src/lib/app-utils/plan-entitlements.ts':
-    'Home of isBillingSubscription/orgMonthlyRevenueUsd — it IS the rule.',
-  'libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts':
-    'GA4 event senders (purchase/refund/cancellation, AGL-1850/1851): they ' +
-    'forward per-event Stripe invoice amounts and the plan LABEL being left ' +
-    'as event params — no aggregate is computed and nothing derives money ' +
-    'from org.plan; the invoice is the money source per event.',
   'apps/console/app/(app)/admin/overview/page.tsx':
     'Renders metrics.mrrUsd straight from /api/admin/overview; its `plan` references are the broadcast-audience selector and a per-org label, not a computation.',
-  'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx':
-    'Enterprise custom-billing card (AGL-1110) provisions ONE org\'s custom price and shows its net margin from the entered amount; the "MRR" mention is a doc comment. It reads the truthful subscription.customMonthlyUsd, never sums PLAN_PRICING[plan] across orgs.',
-  'libs/aglyn/src/lib/app-utils/org-billing-doc.ts':
-    'Path constants, types and field pickers for the manager-gated billing doc (AGL-1028). It computes no figure at all — the `plan` mentions are prose explaining WHY plan/entitlements stayed on the org doc while the Stripe keys moved.',
-  'apps/console/utils/server/metered-backfill.ts':
-    'Decides WHETHER a subscription gets the metered usage item (AGL-1352) and adds it. It computes no figure — it reads `plan` only to check membership of PAID_PLANS, and the one "revenue" mention is prose about why an unmetered subscription is a problem.',
-  'apps/console/components/quota-warnings-banner.component.tsx':
-    'Renders quota warnings for ONE org and computes no money at all. The ' +
-    'single "revenue" mention is a design-rationale comment explaining why a ' +
-    'legacy membership row without a slug must not silence a genuine breach ' +
-    '("a quota warning nobody sees is revenue nobody collects") — prose ' +
-    'about a trade-off, not a figure. Its `total` mentions are SEAT and ' +
-    'DATASET counts gated on orgWideViewer (AGL-1068), not currency, and ' +
-    '`plan` is read only to decide which quota effects run at all.',
-  'apps/console/constants/assist-docs-index.generated.ts':
-    'GENERATED retrieval corpus for Aglyn Assist (AGL-1860): every string in it is customer DOCS PROSE lifted verbatim from apps/docs, so "recurring revenue shows up in the Orders tab" and the per-plan allowance tables are the docs talking to a reader, not code. It contains no logic at all — one exported readonly array of {path,title,heading,anchor,text} — so there is nothing here that could derive money from `plan`. Regenerate with tools/scripts/generate-assist-docs-index.mjs; the exemption is this ONE path, so any hand-written file that quotes docs prose still trips the guard.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -120,14 +256,32 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/**
+ * Whether a file looks like it derives a revenue aggregate from `plan`.
+ *
+ * Read off the CODE region only. `USES_HELPERS` is checked against the raw
+ * source on purpose: an import is code, but a file that names the helpers
+ * anywhere has already been reasoned about, and reading it loosely here can
+ * only ever exempt — never accuse.
+ */
+function tripsGuard(source: string): boolean {
+  // AGGREGATE off the CODE region — that is the mention-vs-use fix.
+  if (!mentionsAggregate(codeRegionOf(source))) return false
+  // READS_PLAN off the RAW source, deliberately. Two of its three shapes —
+  // `org['plan']` and `plan: ` — are property accessors that live INSIDE
+  // quotes, so blanking string literals would blind it. Unchanged from
+  // before, so nothing here is loosened: the pair is strictly tighter.
+  if (!READS_PLAN.test(source)) return false
+  return !USES_HELPERS.test(source)
+}
+
 describe('revenue is derived from billing state, never from org.plan (AGL-1070)', () => {
   const offenders = SCAN_ROOTS.flatMap((root) =>
     walk(join(REPO_ROOT, root)),
   ).filter((file) => {
-    const source = readFileSync(file, 'utf8')
-    if (!AGGREGATE.test(source) || !READS_PLAN.test(source)) return false
-    if (USES_HELPERS.test(source)) return false
-    return !(relative(REPO_ROOT, file) in EXCEPTIONS)
+    return tripsGuard(readFileSync(file, 'utf8'))
+      ? !(relative(REPO_ROOT, file) in EXCEPTIONS)
+      : false
   })
 
   it('has no file computing a revenue total outside the helpers', () => {
@@ -170,6 +324,81 @@ describe('revenue is derived from billing state, never from org.plan (AGL-1070)'
       'utf8',
     )
     expect(USES_HELPERS.test(route)).toBe(true)
-    expect(AGGREGATE.test(route)).toBe(true)
+    // Read off the CODE region, so this doubles as proof that `codeRegionOf`
+    // does not blank real code: the one file that genuinely aggregates money
+    // must still look like it does after the extraction.
+    expect(mentionsAggregate(codeRegionOf(route))).toBe(true)
+    expect(READS_PLAN.test(route)).toBe(true)
+  })
+
+  it('counts a use and ignores a mention', () => {
+    // The AGL-2086 defect itself, pinned. Without these the extraction could
+    // regress to counting prose — or to blanking everything, which would make
+    // the guard vacuous and still green.
+    const prose = `
+      // A quota warning nobody sees is revenue nobody collects.
+      /* MRR is not derived here. */
+      const message = 'so this is margin, not revenue'
+      const body = \`your plan: \${tier} — no revenue is computed\`
+      if (!orgData['plan']) return
+    `
+    expect(mentionsAggregate(prose)).toBe(true)
+    expect(mentionsAggregate(codeRegionOf(prose))).toBe(false)
+    // …and the file is therefore NOT an offender, with no exemption needed.
+    expect(tripsGuard(prose)).toBe(false)
+
+    const real = `
+      // revenue lives here
+      const mrrUsd = orgs.reduce((sum, o) => sum + PLAN_PRICING[o.plan], 0)
+    `
+    expect(mentionsAggregate(codeRegionOf(real))).toBe(true)
+    expect(tripsGuard(real)).toBe(true)
+
+    // The identifier reach, which is what stops the code-region fix from
+    // making this guard vacuous. None of these has a standalone "revenue".
+    expect(mentionsAggregate('const mrrUsd = 0')).toBe(true)
+    expect(mentionsAggregate('sum += orgMonthlyRevenueUsd(o)')).toBe(true)
+    expect(mentionsAggregate('const totalRevenueCents = 0')).toBe(true)
+    // …without dragging in every array in the repo.
+    expect(mentionsAggregate('const arrays = []')).toBe(false)
+    expect(mentionsAggregate('const ARRAY_LIMIT = 10')).toBe(false)
+    expect(mentionsAggregate('arrangement.plan')).toBe(false)
+
+    // A substitution is code, not text: a helper called inside a template
+    // must still be seen, or the guard could be evaded by interpolation.
+    expect(
+      codeRegionOf('const t = `total ${orgMonthlyRevenueUsd(org)}`'),
+    ).toContain('orgMonthlyRevenueUsd(org)')
+    // A regex literal holding a quote must not open a phantom string and
+    // blank the code after it — the false-negative direction.
+    expect(codeRegionOf("const q = /['\"]/; const mrr = sum(o.plan)")).toContain(
+      'mrr = sum(o.plan)',
+    )
+  })
+
+  it('has no stale EXCEPTIONS entry', () => {
+    // An exemption list with no staleness check only ever grows, and every
+    // entry silently widens what is permitted long after the reason expired
+    // (the sibling naming-sweep guard has had this for a while; this
+    // one did not, which is half of why AGL-2086 happened). An entry earns
+    // its place only while the file would ACTUALLY trip the guard.
+    const stale = Object.keys(EXCEPTIONS).filter((path) => {
+      let source
+      try {
+        source = readFileSync(join(REPO_ROOT, path), 'utf8')
+      } catch {
+        return true // the file is gone
+      }
+      return !tripsGuard(source)
+    })
+    if (stale.length > 0) {
+      throw new Error(
+        `These EXCEPTIONS entries no longer exempt anything — the file is ` +
+          `gone, or it stopped tripping the guard. Delete them; a stale ` +
+          `exemption is a hole nobody is watching:\n\n` +
+          `${stale.map((n) => `  • ${n}`).join('\n')}`,
+      )
+    }
+    expect(stale).toEqual([])
   })
 })

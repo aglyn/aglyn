@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { mediaStorageGate } from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   checkEntitlement,
   readImageDimensions,
@@ -185,22 +186,34 @@ async function handler(request: Request): Promise<Response> {
     {
       // Storage quota applies to every org; a plan-less org resolves as
       // `free` (250 MB cap), not unmetered.
-      const counterSnapshot = await scope.scopeRef
-        .collection('counters')
-        .doc('media')
-        .get()
-      const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
+      // ONE org-wide band across every media scope (AGL-2075). The counter
+      // used to be read per scope and checked against `storagePerHostMb`,
+      // which handed the org library a second full band of its own — a free
+      // org's real ceiling was 250 MB + 250 MB against a published 250 MB.
+      // The pool is what `meteredIncludedAllowance` and the usage alert
+      // already measure, so ingress now refuses at the band the invoice bills
+      // past.
+      const band = await resolveOrgMediaBand({
+        firestore: scope.scopeRef.firestore,
+        orgId: scope.orgId,
+        org: org as any,
+        currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+      })
       // Quota against the NEW total (swap the old bytes for the new).
-      const projected = usedBytes - previousBytes + buffer.length
+      const projected = band.usedBytes - previousBytes + buffer.length
       const usedMb = projected / (1024 * 1024)
-      const gate = mediaStorageGate({ org: org as any, usedMb })
+      const gate = mediaStorageGate({
+        org: org as any,
+        usedMb,
+        allowanceMb: band.allowanceMb,
+      })
       if (!gate.allowed) {
         return Response.json(
           {
             error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
             code: gate.code,
             projectedOverageUsd: gate.projectedOverageUsd,
-            ceilingUsd: gate.ceilingUsd,
+            monthlyCapUsd: gate.monthlyCapUsd,
           },
           { status: gate.status },
         )

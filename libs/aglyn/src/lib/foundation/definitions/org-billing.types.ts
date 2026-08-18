@@ -96,6 +96,18 @@ export interface OrgFeatureFlags {
    * alerts. Included on ALL plans — pure client-side DOM with no server
    * cost. The `actions` flag below gates the powerful automation steps
    * (server dispatch, runJs, analytics, overlays, raw HTML).
+   *
+   * `true` on all eight tiers, and NO code gates on it — which makes it look
+   * dead, and it has now been filed as dead once (AGL-2082). It is not.
+   * `tools/marketing/build-pricing-tables.mts` reads its value to emit the
+   * "Interactions" row on the public /pricing compare table, ticked on every
+   * plan, and the Free plan card bullets it. That row is the claim that a
+   * hover-to-open menu is not a paid feature — a real competitive statement,
+   * and the reason `true` everywhere is a DECISION rather than a default.
+   *
+   * So: do not delete it as dead weight. Deleting it silently removes a
+   * public pricing row while the Figma frames still carry it in all four
+   * responsive variants, which is a pricing call and not a cleanup.
    */
   interactions?: boolean
   /** Event → action automation builder (AGL-148). */
@@ -464,29 +476,54 @@ export interface OrgSeatAddons {
 export type OrgRegisterAllocations = Record<string, number>
 
 /**
- * An org's acknowledged consent to metered storage overage, and its bound
- * (AGL-1886).
+ * The monthly storage-overage spend cap an org CHOSE for itself (AGL-1886,
+ * corrected 2026-08-18).
  *
- * Zach's condition on billing org-library storage from today was, verbatim:
- * "also give overage protection and usage alerts, so customers don't get a
- * surprise bill." This is the protection half. Consent is explicit
- * (`acknowledgedAt` is stamped server-side when a manager accepts in Billing)
- * and BOUNDED (`monthlyCeilingUsd`) — an acknowledgement is never consent to
- * an open-ended amount, so uploads are refused again at the ceiling.
+ * Zach, 2026-08-18, verbatim: *"don't let it make us lose revenue or cost us
+ * money, it should be a control by the end user, to prevent overage or usage
+ * alerts rather, we just want to minimize churn"*.
  *
- * @see apps/console/utils/storage-overage.ts for the hard-vs-soft-cap
- * decision and why the bound is part of the consent rather than beside it.
+ * So this document is **absent by default and absent is the normal state**.
+ * Storage past a metered plan's included band bills without it; the customer
+ * is warned by `usage-alerts` on approach and at the band. Writing a cap here
+ * is a customer opting IN to being stopped, and it is the only thing that can
+ * refuse an upload on a plan that meters.
+ *
+ * NOT a consent record. It was one before 2026-08-18 — an acknowledgement
+ * that had to exist before a paying org could store a byte past its band —
+ * and that shape cost revenue and blocked customers without preventing any
+ * bill, because `report-usage` never read it.
+ *
+ * Still an ENTITLEMENT INPUT in the security sense, in the other direction: a
+ * member who could raise their own `capUsd` could raise their own spend
+ * ceiling, so the rules deny it to every client and only
+ * `/api/billing/storage-overage` (Admin SDK, `billing.manage`) writes it.
+ *
+ * @see apps/console/utils/storage-overage.ts for the model and what still
+ * hard-bands.
  */
 export interface OrgStorageOverage {
-  /** When a manager accepted metered storage. Absent = not acknowledged. */
-  acknowledgedAt?: ITimestamp | null
-  /** The uid that accepted, for the audit trail. */
-  acknowledgedBy?: string | null
   /**
-   * The monthly storage-overage spend the org agreed to. A missing or
-   * malformed value resolves to `STORAGE_OVERAGE_DEFAULT_CEILING_USD`, never
-   * to unbounded — the one direction this must not fail in.
+   * The monthly storage-overage spend the org will not go past. Present means
+   * capped; absent means uncapped, which is the default. A present but
+   * malformed value resolves to `STORAGE_CAP_FALLBACK_USD` rather than to "no
+   * cap" — a customer who asked for a ceiling must not be billed past one
+   * because the stored number was corrupt.
    */
+  capUsd?: number
+  /** When the cap was set, for the audit trail. */
+  capSetAt?: ITimestamp | null
+  /** The uid that set it. */
+  capSetBy?: string | null
+  /**
+   * LEGACY (pre-2026-08-18): the acknowledged-consent pair. Read only, and
+   * honoured as a cap of `monthlyCeilingUsd` so a ceiling somebody typed is
+   * not silently raised. Never written again.
+   */
+  acknowledgedAt?: ITimestamp | null
+  /** @deprecated legacy consent field; see `acknowledgedAt`. */
+  acknowledgedBy?: string | null
+  /** @deprecated legacy bound; read as a cap. See `capUsd`. */
   monthlyCeilingUsd?: number
 }
 

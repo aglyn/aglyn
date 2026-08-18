@@ -128,8 +128,24 @@ export function retrieveDocsSections(
     .slice(0, limit)
 }
 
-/** Public docs-site origin for deep links the assistant hands the user. */
-export const DOCS_SITE_ORIGIN = 'https://docs.aglyn.com'
+/**
+ * Public docs-site origin for deep links the assistant hands the user.
+ *
+ * Configurable (AGL-2016): a self-hoster who publishes the `apps/docs` site on
+ * their own domain otherwise had every Assist citation deep-link into
+ * `docs.aglyn.com` — our documentation, describing our deployment's flags and
+ * plans, cited as if it were theirs.
+ *
+ * Unlike the operator CONTACT values this keeps our value as the default, and
+ * the difference is deliberate: an unset citation origin degrades to a page
+ * that genuinely exists and is genuinely about this software, so it is wrong
+ * in the way a stale bookmark is wrong. An unset contact address would
+ * misroute a legal notice, which is why that one refuses to guess. Dot
+ * notation — this constant is re-exported to client code (AGL-2037).
+ */
+export const DOCS_SITE_ORIGIN = (
+  process.env.NEXT_PUBLIC_DOCS_ORIGIN || 'https://docs.aglyn.com'
+).replace(/\/+$/, '')
 
 /**
  * The grounding block injected into the system prompt: the retrieved

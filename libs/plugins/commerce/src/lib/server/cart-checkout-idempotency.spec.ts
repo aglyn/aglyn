@@ -257,7 +257,9 @@ beforeEach(() => {
     status: 'active',
     variants: [{ id: 'default', priceUsd: 40, inventory: null }],
   })
-  docs.set('hosts/host-1/settings/store', {})
+  // AGL-1999: an unconfigured store now REFUSES the sale, so a fixture
+  // that means "this store charges no tax" has to say so.
+  docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
   docs.set('hosts/host-1/coupons/SAVE10', { percentOff: 10, enabled: true })
   docs.set('hosts/host-1/giftCards/GIFTCARD1', { balanceCents: 500 })
   docs.set('profiles/owner-1', {

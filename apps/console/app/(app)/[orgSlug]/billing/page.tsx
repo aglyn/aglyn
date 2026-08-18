@@ -25,6 +25,7 @@ import {
   ENTERPRISE_PLAN_LABEL,
   isEnterpriseOrg,
   isLiveSubscriptionStatus,
+  mergeOrgBillingOverOrg,
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
@@ -77,6 +78,7 @@ import BillingPlanCardsComponent, {
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingRegisterAllocationsCardComponent from '../../../../components/billing/billing-register-allocations-card.component'
 import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
+import BillingUsageBudgetCardComponent from '../../../../components/billing/billing-usage-budget-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
@@ -110,8 +112,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     firestore,
     orgId ? ['orgs', orgId, ORG_BILLING_SUBCOLLECTION, ORG_BILLING_DOC_ID] : null,
   )
+  // NOT a plain spread (AGL-1991). `useConfirmedDoc` stamps the document id
+  // into its payload, so `orgBilling.$id` is the literal `'stripe'`; spreading
+  // it second made the merged `org.$id` `'stripe'` and every child deriving an
+  // org id from this object read `orgs/stripe/…` — denied, which is what left
+  // the metered estimate card stuck on "Calculating…" on every org.
   const org = useMemo(
-    () => ({ ...(orgDoc ?? {}), ...(orgBilling ?? {}) }),
+    () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
   const { permissions, can, loaded: permissionsLoaded } =
@@ -966,20 +973,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             {
               size: { xs: 12 },
               children: (
-                // Where metered storage is TURNED ON (AGL-1957, for AGL-1886).
-                // `mediaStorageGate` refuses an upload past the included band
-                // with "turn it on in Billing", and until this card existed
-                // there was nothing in Billing to turn on — so the soft cap
-                // could not be exercised by anyone and the refusal pointed at
-                // a dead end. Directly under the meters that show the usage
-                // this governs.
+                // The customer's OPTIONAL storage cap (AGL-1957, for AGL-1886;
+                // inverted 2026-08-18). Storage past the included band bills
+                // by default and `usage-alerts` warns before and at the band —
+                // this card is only for a customer who would rather uploads
+                // stopped than be billed. Directly under the meters that show
+                // the usage it governs.
                 <Box id="storage-overage">
                   <CardDisplay
-                    header={'Storage limit'}
+                    header={'Storage cap'}
                     subheader={
-                      'Choose whether uploads may go past your included ' +
-                      'storage, and the most you are willing to be billed ' +
-                      'for it in a month.'
+                      'Extra storage past your included allowance is billed ' +
+                      'on your monthly invoice. Set a cap if you would ' +
+                      'rather uploads stopped instead.'
                     }
                     help={docsHelp('billing', {
                       anchor: '#storage-overage',
@@ -992,6 +998,41 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterY
                   >
                     <BillingStorageOverageCardComponent
+                      orgId={orgId}
+                      canManage={can('billing.manage')}
+                    />
+                  </CardDisplay>
+                </Box>
+              ),
+            },
+            {
+              size: { xs: 12 },
+              children: (
+                // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
+                // "budgets for usage alerts, similar to how google cloud
+                // charges". Deliberately BELOW the storage cap and visibly
+                // separate from it: the cap refuses uploads, the budget
+                // refuses nothing and only warns. A card that blurred the two
+                // would sell a heads-up as a brake.
+                <Box id="usage-budget">
+                  <CardDisplay
+                    header={'Monthly usage budget'}
+                    subheader={
+                      'Get alerted as your metered usage passes each ' +
+                      'percentage of an amount you choose. A budget warns ' +
+                      'you — it never stops anything.'
+                    }
+                    help={docsHelp('billing', {
+                      anchor: '#usage-budget',
+                      excerpt:
+                        'Set a monthly usage budget and the percentages you ' +
+                        'want to hear about; alerts arrive in the console ' +
+                        'and by email.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <BillingUsageBudgetCardComponent
                       orgId={orgId}
                       canManage={can('billing.manage')}
                     />

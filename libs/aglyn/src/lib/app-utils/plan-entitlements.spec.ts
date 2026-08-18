@@ -944,6 +944,73 @@ describe('plan entitlements', () => {
     ).toBe(0)
   })
 
+  it('never sells at 0% on a commerce-overridden free org (AGL-2071)', () => {
+    // THE DEFECT. A per-org `features.commerce` override is the one way an
+    // org on the FREE entitlement set reaches a storefront — and free carries
+    // 0% for both product types. Those sales are DESTINATION charges, so
+    // Stripe's fee lands on Aglyn's balance and every one of them loses money.
+    // Before the floor both of these returned 0.
+    const overridden = {
+      plan: 'free',
+      entitlements: { features: { commerce: true } },
+    } as any
+    expect(resolveTransactionFeePct(overridden, 'physical')).toBe(2)
+    expect(resolveTransactionFeePct(overridden, 'digital')).toBe(5)
+    expect(resolveTransactionFeePct(overridden, 'service')).toBe(5)
+
+    // A LAPSED paid org resolves to free the same way, and the same floor
+    // applies when commerce was overridden on. Without the override every
+    // storefront door already refuses it, so the rate is never consulted —
+    // which is why the canceled-subscription case above still reads 0.
+    expect(
+      resolveTransactionFeePct(
+        {
+          plan: 'business',
+          subscription: { status: 'canceled' },
+          entitlements: { features: { commerce: true } },
+        } as any,
+        'digital',
+      ),
+    ).toBe(5)
+
+    // A staff fee override WINS, at 0 too: that is a negotiated comp with a
+    // reason attached, and the floor must not silently overrule it.
+    expect(
+      resolveTransactionFeePct(
+        {
+          plan: 'free',
+          entitlements: {
+            features: { commerce: true },
+            transactionFeeDigitalPct: 0,
+          },
+        } as any,
+        'digital',
+      ),
+    ).toBe(0)
+    expect(
+      resolveTransactionFeePct(
+        {
+          plan: 'free',
+          entitlements: {
+            features: { commerce: true },
+            transactionFeePhysicalPct: 1,
+          },
+        } as any,
+        'physical',
+      ),
+    ).toBe(1)
+
+    // The floor is scoped to FREE. A paid plan's deliberate 0% — every tier
+    // above starter zero-rates physical sales — is untouched, and so is an
+    // ordinary free org, which cannot sell at all.
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
+      .toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'free' } as any, 'physical'))
+      .toBe(0)
+    expect(resolveTransactionFeePct(null, 'digital')).toBe(0)
+  })
+
   it('resolves the marketplace take rate from entitlements (AGL-1543)', () => {
     // The published rates: 20% per sale, 30% on the Free plan.
     expect(resolveMarketplaceFeePct({ plan: 'free' } as any)).toBe(30)

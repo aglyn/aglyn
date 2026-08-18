@@ -194,6 +194,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/collection-kind'),
+  // The REAL error-slot list (AGL-2092). `/server` re-exports `foundation`, so
+  // the route reads it from the same barrel as everything above — and a mock
+  // that left it `undefined` would throw inside `errorSlotBoundTo` and report a
+  // 500 as if the CONVERSION had regressed.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/foundation/definitions/platform.types',
+  ),
   createResourceUid: () => `made-${++mockNextUid}`,
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({

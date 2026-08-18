@@ -26,11 +26,11 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
+import { analyticsEnvironmentForcesInternal } from '@aglyn/aglyn/app-utils/analytics-environment'
 import { NoSsr } from '@mui/material'
 import {
   type Analytics,
   logEvent,
-  setDefaultEventParameters,
   setUserId,
   setUserProperties,
 } from 'firebase/analytics'
@@ -41,7 +41,11 @@ import { useOrgPlans } from '../../hooks/use-org-plans'
 import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
 import useSessionCookie from '../../hooks/use-session-cookie'
-import { buildConsolePageViewParams } from '../../utils/page-view-params'
+import {
+  buildConsolePageTitle,
+  buildConsolePageViewParams,
+} from '../../utils/page-view-params'
+import { setAnalyticsDefaultParams } from '../../utils/analytics-default-params'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 import {
   getSessionHealth,
@@ -53,6 +57,7 @@ import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
   isInternalTrafficSession,
+  readInternalTrafficOverride,
 } from '../../utils/internal-traffic'
 
 /**
@@ -180,7 +185,7 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // total traffic, and GA4 data filters are NOT retroactive — an event that
   // ships unstamped is unstamped forever.
   //
-  // `setDefaultEventParameters` rather than a param threaded through
+  // Default event parameters rather than a param threaded through
   // `trackEvent`: the filter matches per EVENT, and the events that would leak
   // are exactly the ones no call site writes — `page_view` below, plus the
   // `session_start` / `first_visit` / `user_engagement` that the SDK sends on
@@ -205,7 +210,69 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // session. Failure is treated as NOT internal for the same asymmetry:
   // wrongly flagging a real user erases them from the metrics, while missing
   // one of ours leaves a session the IP rule is the secondary net for.
+  //
+  // ## The browser-pinned override, OR'd in (AGL-2065)
+  //
+  // The claims predicate covers staff and impersonation and deliberately
+  // covers nothing else — but several release drills REQUIRE a non-staff
+  // account (the marketplace publisher drill cannot be run by staff at all),
+  // and those sessions emit the activation and revenue events the September
+  // funnel is read from. `readInternalTrafficOverride` answers a different
+  // question — "is this BROWSER ours" — set once with `?aglyn_internal=1` and
+  // remembered in localStorage for that origin.
+  //
+  // OR'd into the parameter every write already computes, rather than written
+  // by a second caller, and that is the load-bearing detail twice over. The
+  // negative branch clears the parameter explicitly (the console does not
+  // remount across a re-auth, AGL-664), so an override set separately would be
+  // wiped the moment the token resolved to a customer — the exact session it
+  // exists for. And the underlying SDK call ASSIGNS rather than merges before
+  // gtag is wrapped (AGL-2087), so a second caller is a race as well as a
+  // logic error. See `stamp` below.
   useEffect(() => {
+    // `analyticsEnvironmentForcesInternal` (AGL-2067) is the escape hatch's
+    // other half: a non-production build only reaches this component at all
+    // when someone deliberately turned analytics back on for it, and such a
+    // build is ours by definition — so it stamps unconditionally rather than
+    // waiting to be opted in, and the hatch cannot become the leak it stands
+    // beside.
+    const override =
+      readInternalTrafficOverride() || analyticsEnvironmentForcesInternal()
+
+    // ONE call site for this parameter, and it is a shared invariant rather
+    // than a tidiness preference. `@firebase/analytics`:
+    //
+    //   function setDefaultEventParameters(customParams) {
+    //     if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
+    //     else _setDefaultEventParametersForInit(customParams)  // ASSIGNMENT
+    //   }
+    //
+    // Before gtag is wrapped it REPLACES the pending default set instead of
+    // merging into it, so two callers racing during boot means whichever
+    // loses silently drops the other's params. Dropping `traffic_type` puts
+    // our own browsing back into the launch metrics, irreversibly — a GA4
+    // data filter is not retroactive.
+    //
+    // Which is why this writes through `setAnalyticsDefaultParams` rather
+    // than the SDK directly (AGL-2087). One call site inside THIS effect is
+    // not enough once a second concern wants the same API — `page_title`
+    // does, from the `page_view` effect below — because the collision is
+    // between effects, not within one. The owner in
+    // `utils/analytics-default-params.ts` keeps the composed set and re-sends
+    // all of it, so neither concern can drop the other's keys, and a third
+    // cannot either.
+    const stamp = (internal: boolean) =>
+      setAnalyticsDefaultParams({
+        [INTERNAL_TRAFFIC_PARAM]: internal ? INTERNAL_TRAFFIC_VALUE : undefined,
+      })
+
+    // Applied on the best answer available RIGHT NOW, before the token read.
+    // This effect is declared above the `page_view` effect and React runs
+    // effects in declaration order, so an overridden browser stamps its own
+    // cold-load pageview. The claims half keeps AGL-1582's accepted first-hit
+    // race — a token read cannot be made synchronous.
+    stamp(override)
+
     const account = user?.data as
       | {
           getIdTokenResult?: (
@@ -213,22 +280,18 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
           ) => Promise<{ claims?: Record<string, unknown> } | undefined>
         }
       | undefined
-    if (!account?.getIdTokenResult) {
-      setDefaultEventParameters({ [INTERNAL_TRAFFIC_PARAM]: undefined })
-      return
-    }
+    if (!account?.getIdTokenResult) return
+
     let active = true
     void Promise.resolve(account.getIdTokenResult())
       .then((result) => {
         if (!active) return
-        setDefaultEventParameters({
-          [INTERNAL_TRAFFIC_PARAM]: isInternalTrafficSession(result?.claims)
-            ? INTERNAL_TRAFFIC_VALUE
-            : undefined,
-        })
+        stamp(override || isInternalTrafficSession(result?.claims))
       })
       .catch(() => {
-        if (active) setDefaultEventParameters({ traffic_type: undefined })
+        // Unreadable claims are treated as NOT internal, but the override is
+        // knowledge we already have and never loses it.
+        if (active) stamp(override)
       })
     return () => {
       active = false
@@ -241,6 +304,13 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   //
   // `page_location` is a full URL and no longer the bare pathname (AGL-1643);
   // `buildConsolePageViewParams` holds the why and is spec'd against it.
+  //
+  // `page_title` is passed EXPLICITLY (AGL-2060) rather than left for the SDK
+  // to read off `document.title` at hit time. The notifications menu writes a
+  // live unread counter into that title, so GA4 was splitting one console page
+  // into a row per unread count. The builder strips it with the same helper
+  // that writes it; read here, at hit time, because the badge and the route's
+  // own metadata both land on `document.title` and only it has both.
   //
   // Read off `window.location` rather than rebuilt from `pathname`, because
   // only the browser knows the host, and the App Router has already committed
@@ -262,12 +332,42 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // outside the `AnalyticsEventParams` union — no call site writes it, so
   // there are no keys for the compiler to settle, and adding it would put a
   // name in the taxonomy that the taxonomy does not govern.
+  //
+  // ## The same title also rides EVERY other hit (AGL-2087)
+  //
+  // An explicit param fixes `page_view` and nothing else. gtag builds
+  // `page_title` from `document.title` for every hit it assembles, so the
+  // badge still reached the two raw `screen_view` calls (`hosts/[host]/setup`,
+  // `manage/user` — their own `firebase_screen` params are authored strings
+  // and were never the problem) and the `session_start` / `first_visit` /
+  // `user_engagement` the SDK sends with no call site at all.
+  //
+  // `setAnalyticsDefaultParams` is how that is closed, and the indirection is
+  // the entire point: the raw `setDefaultEventParameters` REPLACES the pending
+  // default set during boot rather than merging into it, so a second caller
+  // added here would have silently dropped the `traffic_type` stamp set by the
+  // effect above — un-excluding our own traffic from metrics no data filter
+  // can repair afterwards. One owner composes both keys into one object; see
+  // `utils/analytics-default-params.ts`.
+  //
+  // Refreshed here rather than in an effect of its own because this one
+  // already runs on mount and on every route change, which is when the title
+  // changes for any reason other than the badge — and the badge is precisely
+  // what is being stripped out. `undefined` on an empty title, matching the
+  // builder's omission rule.
+  //
+  // Set BEFORE the event, though the ordering is not load-bearing: an
+  // explicit param beats a default, so `buildConsolePageViewParams` still
+  // decides this hit's own `page_title`.
   useEffect(() => {
     if (typeof window === 'undefined') return
+    setAnalyticsDefaultParams({
+      page_title: buildConsolePageTitle(document.title) || undefined,
+    })
     logEvent(
       analytics,
       'page_view',
-      buildConsolePageViewParams(window.location.href),
+      buildConsolePageViewParams(window.location.href, document.title),
     )
   }, [pathname, analytics])
 

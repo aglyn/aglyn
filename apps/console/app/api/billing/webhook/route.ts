@@ -50,6 +50,14 @@ import {
 // behind, and it must handle the MULTIPLE `v1` signatures a secret roll sends
 // (AGL-1552).
 import { verifyStripeSignature } from '../../../../utils/server/stripe-signature'
+// The ENVIRONMENT gate (AGL-2040). Signature verification proves an event came
+// from Stripe; it says nothing about WHICH Stripe. Both destinations point
+// here on purpose (AGL-547), so this route must ask separately.
+import {
+  deploymentLivemode,
+  eventLivemode,
+  livemodeDecision,
+} from '../../../../utils/server/stripe-livemode'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -196,14 +204,59 @@ async function handler(request: Request): Promise<Response> {
   const type = String(event?.type ?? '')
   const object = event?.data?.object ?? {}
 
+  // THE ENVIRONMENT GATE (AGL-2040), and its position is the point.
+  //
+  // Here — after JSON.parse, BEFORE the idempotency claim below — so a
+  // refused event leaves NO TRACE. Placed after the claim it would still
+  // stamp a document, and `stripeEvents` would go on accumulating test-mode
+  // rehearsals; placed after dispatch it would not be a gate at all.
+  //
+  // On 2026-08-18 five test-mode dispute/refund events reached this route and
+  // ran the money-reversal dispatch against production Firestore. They moved
+  // nothing only because `marketplacePurchases`, `platformRevenue` and the
+  // order collections are still empty pre-launch. Both of the joins that
+  // matter are payment-intent-keyed, so once those collections fill, a
+  // rehearsal carrying a copied payment-intent id would revoke a paid
+  // install, reverse a real order, write a false row into the AGL-1811 tax
+  // record and send a real merchant a chargeback alert.
+  //
+  // 200, not 4xx: an event's `livemode` never changes, so a retry would
+  // re-reach this same refusal for days and then leave the destination
+  // looking broken. `ignored` names the reason for the Stripe dashboard and
+  // for the AGL-1906 audit.
+  const decision = livemodeDecision({
+    deploymentLivemode: deploymentLivemode(process.env),
+    eventLivemode: eventLivemode(event),
+  })
+  if (decision.outcome === 'refuse') {
+    // The only trace a refusal leaves, and deliberately not a Firestore
+    // write: the collection must stay clean for the guard to mean anything.
+    console.warn('[billing/webhook] refusing an event from the other Stripe environment', {
+      eventId: String(event?.id ?? ''),
+      type,
+      eventLivemode: eventLivemode(event),
+      deploymentLivemode: deploymentLivemode(process.env),
+    })
+    return Response.json({ received: true, ignored: decision.reason }, { status: 200 })
+  }
+
   // Idempotency (AGL-498): claim the Stripe event id before running any side
   // effects so a redelivery (or a replayed request) can't re-apply the
   // non-idempotent handlers (inventory / gift-card / coupon decrements).
   // create() is atomic, so a concurrent duplicate loses the race; on failure
   // below we delete the marker so Stripe's retry still re-runs.
+  //
+  // The collection is environment-scoped (AGL-2040): a test-mode deployment
+  // claims into `stripeEventsTest`, so `stripeEvents` stays a pure record of
+  // LIVE traffic for anything that scans it rather than joining by id. That
+  // is bookkeeping — the gate above is the control.
   const eventId = String(event?.id ?? '')
   const eventRef = eventId
-    ? firebaseAdmin.app().firestore().collection('stripeEvents').doc(eventId)
+    ? firebaseAdmin
+        .app()
+        .firestore()
+        .collection(decision.claimCollection)
+        .doc(eventId)
     : null
   if (eventRef) {
     try {

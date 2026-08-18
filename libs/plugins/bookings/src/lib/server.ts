@@ -193,7 +193,12 @@ const slotsHandler: PluginApiHandler = async (req, res) => {
  * sends an env-gated Resend confirmation. Plan gate: the owning org
  * needs the `bookings` flag (dark-launch workspaces pass).
  */
-const bookHandler: PluginApiHandler = async (req, res) => {
+/**
+ * Exported for spec (AGL-2000). The tax decision this handler takes lives in
+ * the ABSENCE of a parameter, and an absence is only a decision if something
+ * asserts it — see `server-booking-tax.spec.ts`.
+ */
+export const bookHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -321,6 +326,38 @@ const bookHandler: PluginApiHandler = async (req, res) => {
 
     if (paid) {
       const origin = req.headers.origin ?? `https://${req.headers.host}`
+      // TAX ON A PAID BOOKING: none, and that is a DECISION (AGL-2000).
+      //
+      // AGL-1953 made every commerce path state its tax decision explicitly.
+      // Bookings sat outside that sweep and stated nothing at all — no
+      // `automatic_tax`, no `tax_rates`, no manual line, and no comment — so a
+      // paid service booking charged list price untaxed in both merchant tax
+      // modes, and nobody had ever considered whether it should. The distinction
+      // matters: reservations decided not to tax (`reserve.ts`); this had not
+      // decided anything.
+      //
+      // Two reasons for the decision, and either alone would be enough:
+      //
+      //  1. **A service is not goods.** The rate the merchant configures lives
+      //     in the COMMERCE plugin's Taxes card and is a goods sales rate for a
+      //     declared store origin (AGL-285). Whether a given service is taxable
+      //     at all is jurisdiction-specific and frequently the opposite answer
+      //     from goods, so applying that rate here would be confidently wrong
+      //     rather than merely absent. Stripe Tax has the same problem from the
+      //     other side: it needs a service tax code this handler does not send,
+      //     so `automatic_tax` would compute a goods rate on an appointment.
+      //  2. **Nothing says the merchant meant it to cover bookings.** The
+      //     commerce tax settings are a different plugin's document; reading
+      //     them here would silently extend a decision to a surface the
+      //     merchant was never asked about.
+      //
+      // So the merchant collects any service tax they owe outside the platform,
+      // and the sale is RECORDED either way: `booking-payment` is in
+      // `storefront-tax-record.ts`'s SESSION_TYPES since AGL-2000, so the row
+      // exists and reads `taxMode: 'none'` — which is what makes the absence
+      // reconcilable instead of invisible. Proper service-tax support is filed
+      // rather than guessed at here. The day this path does compute tax, it is
+      // recorded with no further wiring.
       const params = new URLSearchParams({
         mode: 'payment',
         'line_items[0][quantity]': '1',

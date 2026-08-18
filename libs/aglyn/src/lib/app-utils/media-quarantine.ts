@@ -79,6 +79,7 @@
  */
 
 import { isLockdownActive } from './lockdown'
+import { operatorContactLine } from './operator-identity'
 
 /**
  * Why a file was disabled. Deliberately NOT `LockdownReasonCode`: the
@@ -353,7 +354,18 @@ export interface MediaQuarantineNotice {
   contact?: string
 }
 
-export const MEDIA_QUARANTINE_SUPPORT_EMAIL = 'support@aglyn.com'
+/**
+ * The address on the owner-facing quarantine notice, from operator
+ * configuration (AGL-2016).
+ *
+ * Was a `'support@aglyn.com'` literal. The notice is shown to the org that
+ * owns the asset, so on a self-host install it told the operator's OWN
+ * customer to write to Aglyn about a file Aglyn never stored — and only the
+ * operator's staff can lift the quarantine they applied.
+ */
+export function mediaQuarantineSupportEmail(): string | null {
+  return operatorContactLine('support').address
+}
 
 /**
  * The OWNER-facing notice: "this file was disabled: {reason} — contact
@@ -374,7 +386,7 @@ export function mediaQuarantineNotice(
     typeof state.message === 'string' && state.message.trim()
       ? state.message.trim()
       : undefined
-  const contact = MEDIA_QUARANTINE_SUPPORT_EMAIL
+  const contact = mediaQuarantineSupportEmail() ?? undefined
   switch (state.reason) {
     case 'malware':
       return {
@@ -422,9 +434,12 @@ export function mediaQuarantineNotice(
         title: 'This file was disabled',
         body:
           custom ??
-          'This file was disabled by Aglyn staff. It has not been deleted ' +
-            'and still counts toward your storage. Contact support to find ' +
-            'out why.',
+          // "by Aglyn staff" named the wrong company on every self-host
+          // install (AGL-2016). "the operator of this service" is true on
+          // ours too — it is who disabled it, from the owner's point of view.
+          'This file was disabled by the operator of this service. It has ' +
+            'not been deleted and still counts toward your storage. Contact ' +
+            'support to find out why.',
         contact,
       }
   }

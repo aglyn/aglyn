@@ -77,31 +77,111 @@ const quotaLabel = (value: number, unit?: string) =>
 
 const mbLabel = (mb: number) => (mb >= 1024 ? `${mb / 1024} GB` : `${mb} MB`)
 
-/** Feature checklist rows, in display order (AGL-69 flags). */
-const FEATURE_ROWS: Array<{
-  key: keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
-  label: string
+type FeatureKey = keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
+
+/**
+ * Flags deliberately absent from the checklist, each with the reason. The
+ * guard in `billing-plan-feature-rows.spec.ts` derives the expected row set
+ * from `PLAN_ENTITLEMENTS.free.features` and allows exactly these — so a new
+ * flag fails the build until someone decides which side of this line it is
+ * on. A hand-written row list with no derivation is what decayed to 19 of 34
+ * (AGL-2079); the exclusion list is the part that keeps it honest.
+ */
+export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
+  // True on all eight tiers (AGL-2082), so a checklist row here would be
+  // ticked on every card and answer no purchase question.
+  //
+  // NOT dead, despite reading like it: `tools/marketing/build-pricing-tables.mts`
+  // renders it as an "Interactions ✓ everywhere" row on the PUBLIC pricing
+  // compare table, and the Free plan card bullets it. `true` on every tier
+  // IS the AGL-577 decision — basic interactions are free, `actions` is the
+  // paid tier — not the absence of one. It is excluded from this GRID
+  // because a comparison grid and a marketing table have different jobs, and
+  // it stays in the flag set because deleting it would silently drop that
+  // public row.
+  interactions:
+    'Included on every plan — presentational interactions are a besigner ' +
+    'primitive, not a tier. Sold as universal on the public pricing table.',
+  // False on all eight tiers: a paid add-on resolved through the org
+  // `entitlements` override, not something a plan carries. A row would read
+  // as "no plan includes this", which is true and useless — the add-on is
+  // sold on its own line.
+  eventCalendar:
+    'Sold as a paid add-on, not carried by any tier — priced separately.',
+}
+
+/**
+ * Feature checklist rows (AGL-69 flags), grouped so a full-coverage list
+ * stays readable (AGL-2079).
+ *
+ * Covers EVERY key of `PLAN_ENTITLEMENTS.free.features` except the
+ * documented {@link FEATURE_ROW_EXCLUSIONS}. It previously covered 19 of 34,
+ * omitting SSO, white-label, API access and the whole commerce ladder — the
+ * most consequential purchase decisions in the product were missing from the
+ * one surface whose job is answering "does my plan include this".
+ */
+const FEATURE_GROUPS: Array<{
+  title: string
+  rows: Array<{ key: FeatureKey; label: string }>
 }> = [
-  { key: 'reusableComponents', label: 'Reusable components' },
-  { key: 'versioning', label: 'Screen versioning' },
-  { key: 'scheduledPublishing', label: 'Scheduled publishing' },
-  { key: 'customDomain', label: 'Custom domain' },
-  { key: 'removeBranding', label: 'Remove Aglyn branding' },
-  { key: 'marketplaceSelling', label: 'Sell on the marketplace' },
-  { key: 'aiAssist', label: 'AI assist' },
-  { key: 'workflows', label: 'Workflows & automations' },
-  { key: 'dataStore', label: 'Datasets & dynamic data' },
-  { key: 'bookings', label: 'Appointment bookings' },
-  { key: 'videoMedia', label: 'Video & file uploads' },
-  { key: 'actions', label: 'Actions builder' },
-  { key: 'siteExport', label: 'Site backup & restore' },
-  { key: 'redirects', label: 'URL redirects' },
-  { key: 'webhooks', label: 'Webhooks' },
-  { key: 'multilingual', label: 'Multilingual sites' },
-  { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
-  { key: 'marketingOverlays', label: 'Announcement bar & popups' },
-  { key: 'mediaCdn', label: 'CDN delivery & responsive images' },
+  {
+    title: 'Build & publish',
+    rows: [
+      { key: 'reusableComponents', label: 'Reusable components' },
+      { key: 'versioning', label: 'Screen versioning' },
+      { key: 'scheduledPublishing', label: 'Scheduled publishing' },
+      { key: 'customDomain', label: 'Custom domain' },
+      { key: 'removeBranding', label: 'Remove Aglyn branding' },
+      { key: 'multilingual', label: 'Multilingual sites' },
+      { key: 'redirects', label: 'URL redirects' },
+      { key: 'siteExport', label: 'Site backup & restore' },
+      { key: 'videoMedia', label: 'Video & file uploads' },
+      { key: 'mediaCdn', label: 'CDN delivery & responsive images' },
+    ],
+  },
+  {
+    title: 'Grow & automate',
+    rows: [
+      { key: 'aiAssist', label: 'AI assist' },
+      { key: 'workflows', label: 'Workflows & automations' },
+      { key: 'actions', label: 'Actions builder' },
+      { key: 'dataStore', label: 'Datasets & dynamic data' },
+      { key: 'bookings', label: 'Appointment bookings' },
+      { key: 'marketingOverlays', label: 'Announcement bar & popups' },
+      { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
+      { key: 'abTesting', label: 'A/B testing' },
+      { key: 'marketplaceSelling', label: 'Sell on the marketplace' },
+    ],
+  },
+  {
+    title: 'Commerce',
+    rows: [
+      { key: 'commerce', label: 'Storefront: catalog, cart & checkout' },
+      { key: 'storefrontSubscriptions', label: 'Subscription products' },
+      { key: 'giftCards', label: 'Gift cards & store credit' },
+      { key: 'productReviews', label: 'Verified-buyer reviews' },
+      { key: 'abandonedCart', label: 'Abandoned checkout recovery' },
+      { key: 'dropshipRouting', label: 'Dropship supplier routing' },
+      { key: 'contentGating', label: 'Memberships & gated content' },
+      { key: 'commerceAnalytics', label: 'Commerce analytics' },
+      { key: 'pos', label: 'Point of sale' },
+    ],
+  },
+  {
+    title: 'Platform & enterprise',
+    rows: [
+      { key: 'apiAccess', label: 'REST API & API keys' },
+      { key: 'webhooks', label: 'Webhooks' },
+      { key: 'whiteLabel', label: 'Full white-label' },
+      { key: 'ssoEnabled', label: 'SAML / OIDC single sign-on' },
+    ],
+  },
 ]
+
+/** Flat row list, for the guard and for anything that wants the whole set. */
+export const FEATURE_ROWS: Array<{ key: FeatureKey; label: string }> =
+  FEATURE_GROUPS.flatMap((group) => group.rows)
+
 
 export interface BillingPlanCardsProps {
   /** The tenant's current plan; undefined when no plan is assigned yet. */
@@ -450,8 +530,21 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       : 'No storefront'}
                   </Typography>
                 </Stack>
-                <Stack spacing={0.5}>
-                  {FEATURE_ROWS.map(({ key, label }) => {
+                <Stack spacing={1.5}>
+                  {/* Grouped since AGL-2079: the checklist went from 19 rows
+                      to the full flag set, and 32 undifferentiated ticks is a
+                      wall nobody reads. The headings are the difference
+                      between a longer list and a legible one. */}
+                  {FEATURE_GROUPS.map((group) => (
+                  <Stack key={group.title} spacing={0.5}>
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ lineHeight: 1.6 }}
+                  >
+                    {group.title}
+                  </Typography>
+                  {group.rows.map(({ key, label }) => {
                     const enabled = entitlements.features[key]
                     return (
                       <Stack
@@ -478,6 +571,8 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       </Stack>
                     )
                   })}
+                  </Stack>
+                  ))}
                 </Stack>
               </CardContent>
             </Card>

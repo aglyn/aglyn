@@ -22,6 +22,39 @@ export function unreadBadge(count: number): string {
 }
 
 /**
+ * The exact inverse of `unreadBadge`, anchored at the start of a title.
+ *
+ * `\+?` is not decoration — `unreadBadge` caps at `(99+)` above, so a regex
+ * that only matched `\(\d+\)` would leave the badge on precisely the busiest
+ * users' titles. The two must stay the same shape, which is why they live
+ * three lines apart in one file rather than as a literal at each call site.
+ */
+const UNREAD_BADGE_PREFIX = /^\(\d+\+?\)\s+/
+
+/**
+ * Strip the unread-count tab badge from a title (AGL-2060).
+ *
+ * Two callers, and the reason they must share this:
+ *
+ * 1. `notifications-menu.component.tsx` — strips before re-applying, so the
+ *    badge never compounds into `(1) (1) Aglyn`, and strips again on cleanup.
+ * 2. `page-view-params.ts` — strips before the title is reported to GA4.
+ *
+ * The second is the one that bit us. GA4 reads `page_title` from
+ * `document.title` at the instant the hit fires, so the badge — a per-user,
+ * per-moment counter — became a reporting DIMENSION VALUE. One console page
+ * arrived as three rows (6.2K / 2.2K / 1.7K), split by how many unread
+ * notifications the user happened to have. Nothing is wrong with the badge;
+ * it was simply never meant to be data.
+ *
+ * The badge feature stays. Only its reflection in analytics goes away.
+ */
+export function stripUnreadBadge(title: string): string {
+  if (!title) return ''
+  return title.replace(UNREAD_BADGE_PREFIX, '')
+}
+
+/**
  * A short two-note chime, synthesized rather than loaded (AGL-650).
  *
  * Generating it with Web Audio avoids shipping a binary asset that can 404 or

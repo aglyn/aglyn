@@ -530,7 +530,7 @@
             }
           },
           {
-            "label": "POS registers",
+            "label": "POS registers per site",
             "duplicateOf": null,
             "values": {
               "free": "—",
@@ -843,7 +843,7 @@
           "full white-label incl. custom console domain",
           "5M API requests/mo",
           "unlimited records & variables",
-          "20 POS registers"
+          "20 POS registers per site"
         ],
         "cta": "CHOOSE"
       }
@@ -1043,7 +1043,7 @@
       {
         "label": "Extra POS register",
         "priceUsd": 89,
-        "scope": "per register",
+        "scope": "per site",
         "maxQuantity": null,
         "included": {
           "free": 0,

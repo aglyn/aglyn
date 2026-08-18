@@ -34,11 +34,21 @@
  * The folder is deliberately NOT a lib: everything here is HTML and Response
  * plumbing for two sibling routes in one app, and hoisting it into
  * `@aglyn/aglyn` would put presentation in a package whose consumers are
- * mostly not rendering pages. `/api/report-abuse` still carries its own copy
- * of this chrome — it shipped first and is being actively worked on
- * elsewhere; adopting this module is a follow-up rather than a change made
- * underneath another agent's open work.
+ * mostly not rendering pages.
+ *
+ * BOTH routes render through this module. `/api/report-abuse` shipped first
+ * with its own copy and adopted this one in AGL-2026; the only thing its copy
+ * lacked was `input[type=tel]`, which is exactly the silent divergence the
+ * merge exists to stop. `specs/legal-intake-chrome.spec.ts` asserts the two
+ * rendered forms carry a byte-identical stylesheet, so a local copy
+ * reintroduced in either route fails rather than drifting unnoticed.
  */
+
+import {
+  OPERATOR_CONTACT_UNSET,
+  operatorContactLine,
+  operatorIdentity,
+} from '@aglyn/aglyn/server'
 
 /** Escape a string for interpolation into HTML text or an attribute value. */
 export const escapeHtml = (value: string): string =>
@@ -149,15 +159,29 @@ export const PAGE_STYLE = `
  * `noindex` on both the meta and the header: these pages carry sworn
  * statements and legal correspondence, and a search engine that indexed a
  * receipt would publish a dispute neither party asked to have published.
+ *
+ * The title suffix is the OPERATOR of this deployment, not `Aglyn` (AGL-2016).
+ * Both §512 intakes share this shell, so the hardcoded suffix put our name in
+ * the browser tab, the bookmark and the print header of a self-hoster's
+ * counter-notice — the document a subscriber keeps as their record of what
+ * they swore to and who they sent it to. Unconfigured drops the suffix
+ * entirely rather than substituting a placeholder: a legal document with no
+ * publisher named is at least not a legal document naming the wrong one.
  */
+export function operatorTitleSuffix(): string {
+  const operator = operatorIdentity().name
+  return operator ? ` — ${escapeHtml(operator)}` : ''
+}
+
 export function documentHtml(title: string, body: string): string {
+  const suffix = operatorTitleSuffix()
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${escapeHtml(title)} — Aglyn</title>
+<title>${escapeHtml(title)}${suffix}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
@@ -167,6 +191,54 @@ ${body}
 </body>
 </html>`
 }
+
+/**
+ * The operator's contact address, as HTML — a `mailto:` when configured, and
+ * an honest sentence when not (AGL-2016).
+ *
+ * Both intakes offer "if you would rather email us" as the fallback channel,
+ * and both used to hardcode `support@aglyn.com` into it. On a self-host
+ * install that turned the fallback into a misroute: the reporter who did not
+ * trust the form emailed a company with no access to the content.
+ *
+ * Returns prose rather than an empty anchor when unconfigured, because an
+ * `<a href="mailto:">` with nothing behind it is a link a reporter will click,
+ * and a mail client that opens with a blank To: line reads as our bug rather
+ * than as a deployment that never published an address.
+ */
+export function contactHtml(kind: 'support' | 'legal' = 'support'): string {
+  const { address } = operatorContactLine(kind)
+  if (!address) return escapeHtml(OPERATOR_CONTACT_UNSET)
+  const safe = escapeHtml(address)
+  return `<a href="mailto:${safe}">${safe}</a>`
+}
+
+/** Plain-text counterpart of {@link contactHtml}, for JSON and prose bodies. */
+export const contactText = (kind: 'support' | 'legal' = 'support'): string | null =>
+  operatorContactLine(kind).address
+
+/**
+ * What a refusal offers instead of "email us" when no address is configured.
+ *
+ * Both intakes refuse in two places — rate-limited, and write-failed — and
+ * both refusals hand the reporter another route so the wall is not the last
+ * thing a real reporter sees. With no address to hand them, the next best
+ * thing is telling them the thing they wrote still exists and is worth
+ * keeping, which is the part they lose if they close the tab.
+ */
+export const NO_CHANNEL_ADVICE =
+  'This deployment has published no contact address, so keep a copy of what ' +
+  'you wrote and try again shortly.'
+
+/**
+ * The URL placeholder in both intakes' address field.
+ *
+ * Was `https://example.aglyn.app/page` — our apex, shown to someone reporting
+ * a page on somebody else's install. `example.com` is the RFC 2606 reserved
+ * name and belongs to nobody, which is exactly the property a placeholder
+ * needs.
+ */
+export const EXAMPLE_URL = 'https://example.com/page'
 
 /** An HTML response with the no-store/noindex headers both intakes need. */
 export const html = (body: string, status = 200): Response =>

@@ -272,7 +272,8 @@ beforeEach(() => {
     status: 'active',
     variants: [{ id: 'default', priceUsd: 900, inventory: null }],
   })
-  docs.set('hosts/host-1/settings/store', {})
+  // AGL-1999: "no tax" is now an explicit decision, not an absent doc.
+  docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_live_merchant',
     stripeChargesEnabled: true,

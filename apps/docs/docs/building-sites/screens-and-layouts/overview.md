@@ -24,6 +24,28 @@ flowchart TD
 reusable components.
 :::
 
+## What counts against your screen allowance
+
+Your plan's screen limit counts the screens that are **pages of your site** — the ones a
+visitor can reach at an address of their own. Some screens you design are not pages, and
+those don't count:
+
+| Screen | Counts? | Why |
+| --- | --- | --- |
+| A page you publish at a slug | **Yes** | It has a URL of its own. |
+| A collection's **list** template | **Yes** | `/{collection}` renders that exact screen. |
+| A collection's **entry** template | No | One screen composes every entry; it has no address of its own. |
+| An [error screen](../site-protection/error-screens.md) you've assigned | No | It renders on addresses that matched nothing. |
+| An [email](../../marketing-and-automation/email-campaigns/overview.md) you design | No | It's sent, never served at a URL. |
+| A screen you've deleted | No | Deleting frees the slot straight away. |
+
+The rule behind the table is one question: **does the screen occupy a URL of its own?**
+So an error screen that is *also* still published at its own address — say a 404 screen
+you published at `/404` while designing it — is a page, and it counts until you remove
+that address. The **Error pages** card tells you when that's the case and offers the
+one-click **Remove address**; the screen carries on rendering for its status code
+afterwards.
+
 ![Editing a screen in the Besigner](/img/besigner/besigner-editor.png)
 
 ![The screens list](/img/getting-started/screens-list.png)

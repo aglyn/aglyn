@@ -215,6 +215,49 @@ describe('getScreen refuses a template unless asked (AGL-1400)', () => {
     expect(result.screen).toBeUndefined()
   })
 
+  /**
+   * `kind: 'error'` (AGL-2092) is the one non-page kind this function SERVES,
+   * with no flag to ask for it, and the asymmetry is deliberate:
+   *
+   *  - the two refusals above exist because their fields are client-writable,
+   *    so refusing is what turns the bypass into a trade (the field costs you
+   *    the page). Nothing about that argument reaches `'error'`: the rules have
+   *    frozen `kind` since AGL-1383, only /api/hosts/screens stamps this value,
+   *    and it does so bounded by the four error slots;
+   *  - a routed error screen still COUNTS (the map outranks the document), so
+   *    there is no free page here to refuse;
+   *  - and refusing would break the customer's own designed 404, because the
+   *    error-render callers in `load-page-data` fetch it through this very
+   *    function — assigning a screen would silently un-render it.
+   *
+   * Soft-delete still wins, exactly as it does for a template above.
+   */
+  it('serves an error screen without being asked (AGL-2092)', async () => {
+    const result = await read({ displayName: 'Not found', kind: 'error' })
+
+    expect(result.screen).toEqual(
+      expect.objectContaining({ displayName: 'Not found' }),
+    )
+    // …and to a composer as well, since it is the same document either way.
+    const composed = await read(
+      { displayName: 'Not found', kind: 'error' },
+      { allowTemplate: true },
+    )
+    expect(composed.screen).toEqual(
+      expect.objectContaining({ displayName: 'Not found' }),
+    )
+  })
+
+  it('still refuses a soft-deleted error screen', async () => {
+    const result = await read({
+      displayName: 'Gone',
+      kind: 'error',
+      deletedAt: { _seconds: 1 },
+    })
+
+    expect(result.screen).toBeUndefined()
+  })
+
   // The two reads must never share a cache slot, or a template fetched for a
   // composition would be handed back to the request that must 404 on it.
   it('caches the two reads under different keys', async () => {

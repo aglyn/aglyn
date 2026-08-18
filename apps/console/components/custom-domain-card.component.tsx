@@ -203,7 +203,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   // route reads, so the card cannot drift from what the route accepts.
   const records = dnsInstructionsFor(domain)
   const [checking, setChecking] = useState(false)
-  const entitled = hasEntitlement('custom-domain', org)
+  const entitled = hasEntitlement('customDomain', org)
 
   const handleConnect = useCallback(async () => {
     const value = domain.trim().toLowerCase()

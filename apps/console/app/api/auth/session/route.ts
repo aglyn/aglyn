@@ -31,6 +31,7 @@ import {
   lockdownJsonResponse,
   resolveConsoleDomain,
   seedUserProfile,
+  ssoDomainRefusal,
 } from '@aglyn/tenant-data-admin'
 import { after } from 'next/server'
 import {
@@ -291,6 +292,39 @@ async function handler(request: Request): Promise<Response> {
           return unverified
         }
         tenantId = decoded.firebase?.tenant
+        // Workspace-domain SSO policy (AGL-1993). Placed HERE, at the mint,
+        // because the rule is about AUTHENTICATION and not about staff: an
+        // `@aglyn.com` account signing in with a password or a consumer
+        // Google account is outside Workspace MFA and offboarding whether or
+        // not it holds a staff claim, so gating it at the staff console would
+        // miss the point entirely.
+        //
+        // Inert until the operator configures SSO-required domains AND flips
+        // the switch — both default off, and a self-host install configures
+        // neither. `ssoDomainRefusal` returns null in every other case, so
+        // this call site is live while its consequence is not.
+        //
+        // Same shape as the refusals above (AGL-1142): a refusal is an
+        // eligibility statement, not a sign-out, so a stale tombstone
+        // standing in front of this verified caller is cleared.
+        const ssoDomain = ssoDomainRefusal({
+          email: decoded.email,
+          tenantId: tenantId ?? null,
+        })
+        if (ssoDomain) {
+          console.warn(
+            '[auth/session] refused by SSO domain policy',
+            JSON.stringify({
+              uid: decoded.uid,
+              domain: ssoDomain.decision.domain,
+              requiredTenantId: ssoDomain.decision.requiredTenantId,
+            }),
+          )
+          for (const value of clearTombstone ?? []) {
+            ssoDomain.response.headers.append('Set-Cookie', value)
+          }
+          return ssoDomain.response
+        }
         // Lockdown gate (AGL-1501): this route MINTS THE SESSION — the same
         // reasoning that put the sanctions gate here. A locked user (or a
         // platform-wide lockdown) is refused a cookie with the distinct 423

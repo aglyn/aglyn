@@ -42,6 +42,12 @@ export interface MediaScope {
   collection: 'hosts' | 'orgs'
   /** Host or org id. */
   scopeId: string
+  /**
+   * The OWNING org, for both scope kinds (AGL-2075). A host scope's quota has
+   * always ridden the org doc; the org's id was simply thrown away with it,
+   * which is why the storage band could only ever be asked per scope.
+   */
+  orgId: string
   /** Firestore doc ref of the scope (media/mediaFolders/counters parent). */
   scopeRef: FirebaseFirestore.DocumentReference
   /** Billing/entitlement doc — the owning org either way (AGL-238). */
@@ -188,6 +194,7 @@ export async function resolveMediaScope(
         base: `orgs/${orgId}`,
         collection: 'orgs',
         scopeId: orgId,
+        orgId,
         scopeRef: firestore.collection('orgs').doc(orgId),
         billing: org as Record<string, unknown>,
         cdnScope: `org:${orgId}`,
@@ -214,7 +221,8 @@ export async function resolveMediaScope(
   if (memberRole !== 'admin' && memberRole !== 'editor') {
     return { error: { status: 403, message: 'Not a site admin' } }
   }
-  const billing = (await getOrgForHost(hostId))?.org ?? {}
+  const resolvedOrg = await getOrgForHost(hostId)
+  const billing = resolvedOrg?.org ?? {}
   const locked = await lockdownScopeError(
     {
       staff: options?.staff,
@@ -231,6 +239,7 @@ export async function resolveMediaScope(
       base: `hosts/${hostId}`,
       collection: 'hosts',
       scopeId: hostId,
+      orgId: resolvedOrg?.orgId ?? '',
       scopeRef: hostRef,
       billing: billing as Record<string, unknown>,
       cdnScope: hostId,

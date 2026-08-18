@@ -46,6 +46,8 @@
  * that.
  */
 
+import { operatorContactLine } from './operator-identity'
+
 export type LockdownScope = 'platform' | 'org' | 'host' | 'user' | 'feature'
 
 /**
@@ -502,7 +504,25 @@ export interface LockdownNotice {
   contact?: string
 }
 
-export const LOCKDOWN_SUPPORT_EMAIL = 'support@aglyn.com'
+/**
+ * The address on the visitor-facing 503, from operator configuration
+ * (AGL-2016).
+ *
+ * Was a `'support@aglyn.com'` literal read by eleven call sites below. A
+ * self-hosted site that went into lockdown therefore told *its* visitors to
+ * write to **Aglyn** about an account Aglyn has no record of and cannot
+ * restore. Unlike the abuse form this is not a legal misroute, but it is the
+ * same class of wrong answer: the only party who can lift the lock is the
+ * operator who set it.
+ *
+ * Returns `null` when unconfigured, which the notice treats as "no contact
+ * line" — the same shape `maintenance` already uses. A lockdown notice with a
+ * dangling "contact " and nothing after it would be worse than one that
+ * simply does not offer a channel the deployment does not have.
+ */
+export function lockdownSupportEmail(): string | null {
+  return operatorContactLine('support').address
+}
 
 /**
  * Per-reason visitor copy — plain and non-alarming. A staff-typed `message`
@@ -549,7 +569,7 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
           'This account is on hold over an unresolved billing issue. ' +
             'Updating the payment method in workspace billing settings ' +
             'restores access.',
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'security':
       return {
@@ -558,14 +578,14 @@ export function lockdownNotice(state: LockdownState): LockdownNotice {
           custom ??
           'Access is temporarily disabled while we investigate a security ' +
             'concern.',
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'manual':
     default:
       return {
         title: 'Temporarily unavailable',
         body: custom ?? 'Access to this account is currently disabled.',
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
   }
 }
@@ -612,7 +632,7 @@ function readOnlyLockdownNotice(
             `sites keep serving and nothing has been deleted — updating the ` +
             `payment method in workspace billing settings restores ` +
             `editing.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'security':
     case 'manual':
@@ -624,7 +644,7 @@ function readOnlyLockdownNotice(
           `Saving changes is paused while we work on something. Your sites ` +
             `keep serving and nothing you have created is affected — ` +
             `changes will save again shortly.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
   }
 }
@@ -718,7 +738,7 @@ function featureLockdownNotice(
         body:
           custom ??
           `New signups are temporarily paused. Existing accounts can sign in and work as usual.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'uploads':
       return {
@@ -726,7 +746,7 @@ function featureLockdownNotice(
         body:
           custom ??
           `Media uploads are temporarily disabled while we address an issue. Your existing media and published sites are unaffected.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'checkout':
       return {
@@ -734,7 +754,7 @@ function featureLockdownNotice(
         body:
           custom ??
           `Checkout is temporarily unavailable — this is not a payment failure, and your account, subscription, and sites are unaffected. Please try again shortly.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'marketplace-installs':
       return {
@@ -742,7 +762,7 @@ function featureLockdownNotice(
         body:
           custom ??
           `Installing from the marketplace is temporarily disabled. Everything already installed keeps working.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
     case 'ai-assist':
     default:
@@ -751,7 +771,7 @@ function featureLockdownNotice(
         body:
           custom ??
           `AI assist is temporarily unavailable. Your content is unaffected — please try again shortly.${window}`,
-        contact: LOCKDOWN_SUPPORT_EMAIL,
+        contact: lockdownSupportEmail() ?? undefined,
       }
   }
 }

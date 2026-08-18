@@ -23,6 +23,7 @@ import {
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx/components/navigation-drawer.component'
+import { fetchAllPages } from '../utils/fetch-all-pages'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { SystemEmailTemplateDefinition } from '@aglyn/shared-util-email'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -101,6 +102,12 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
   const [users, setUsers] = useState<
     { uid: string; email: string | null; displayName: string | null }[]
   >([])
+  /**
+   * Sources whose page ceiling was hit (AGL-2083). Rendered, not swallowed:
+   * the whole defect this closes was a list that looked complete, so a
+   * partial list has to say it is partial.
+   */
+  const [truncated, setTruncated] = useState<string[]>([])
 
   // One fetch per source, all staff endpoints. Only while the drawer is open —
   // it mounts with the page and these are three list reads nobody asked for
@@ -113,20 +120,49 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
         user as { getIdToken?: () => Promise<string> }
       )?.getIdToken?.()
       const headers = idToken ? { Authorization: `Bearer ${idToken}` } : {}
-      const load = async (path: string, key: string) => {
-        const response = await fetch(path, { headers })
-        if (!response.ok) return []
-        return (await response.json())?.[key] ?? []
-      }
+      // Every one of these three routes paginates, and this drawer read
+      // exactly one page of each (AGL-2083). `/api/admin/orgs` serves 25 per
+      // page, so the organization picker listed the first 25 orgs on the
+      // platform; `/api/admin/hosts` serves 200; `/api/admin/users` pages
+      // through GCIP with a `nextPageToken`. None of them errored and none
+      // said they were short — an operator who could not find a host in this
+      // picker had every reason to conclude it did not exist.
       const [orgs, hosts, userList] = await Promise.all([
-        load('/api/admin/orgs', 'orgs'),
-        load('/api/admin/hosts', 'hosts'),
-        load('/api/admin/users', 'users'),
+        fetchAllPages<any>({ path: '/api/admin/orgs', key: 'orgs', headers, active: () => active }),
+        fetchAllPages<any>({ path: '/api/admin/hosts', key: 'hosts', headers, active: () => active }),
+        // GCIP names its cursor differently from the Firestore routes.
+        fetchAllPages<any>({
+          path: '/api/admin/users',
+          key: 'users',
+          cursorParam: 'nextPageToken',
+          cursorField: 'nextPageToken',
+          headers,
+          active: () => active,
+          // A SECOND kind of short list, narrower than the cursor: an SSO
+          // tenant pool that outgrew its per-tenant cap inside a page.
+          // Walking `nextPageToken` to the end does not catch it, so
+          // dropping this field would leave the picker looking complete
+          // again by a different route. `/admin/users` already reports it.
+          accumulate: ['tenantTruncated'],
+        }),
       ])
       if (!active) return
-      setOrgDocs(orgs)
-      setHostDocs(hosts)
-      setUsers(userList)
+      setOrgDocs(orgs.items)
+      setHostDocs(hosts.items)
+      setUsers(userList.items)
+      const shortTenants = userList.extras.tenantTruncated ?? []
+      setTruncated(
+        [
+          orgs.truncated ? 'organizations' : null,
+          hosts.truncated ? 'sites' : null,
+          userList.truncated ? 'users' : null,
+          shortTenants.length
+            ? `users in ${shortTenants.length} SSO tenant${
+                shortTenants.length === 1 ? '' : 's'
+              }`
+            : null,
+        ].filter(Boolean) as string[],
+      )
     })().catch(() => undefined)
     return () => {
       active = false
@@ -310,6 +346,17 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
 
             <Stack spacing={1}>
               <Typography variant="subtitle2">{'Populate from'}</Typography>
+              {/* An operator who cannot find a host in this picker concludes
+                  it does not exist (AGL-2083). Now that the walk is bounded
+                  rather than one-page, the one remaining way to be short is
+                  the ceiling — and it says so. */}
+              {truncated.length > 0 ? (
+                <Alert severity="warning">
+                  {`This list stopped early for ${truncated.join(' and ')}, ` +
+                    'so some entries are missing. Search by name in the ' +
+                    'admin list instead.'}
+                </Alert>
+              ) : null}
               <Autocomplete
                 options={[...sources].sort((a, b) =>
                   a.group.localeCompare(b.group),

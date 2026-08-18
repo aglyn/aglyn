@@ -90,7 +90,7 @@ export function normalizeAddress(
  * Best-effort E.164 (`+15125550123`).
  *
  * Measured on production 2026-07-30: the one populated profile stored a bare
- * ten-digit US number with no country code — `5122228232` in the examples
+ * ten-digit US number with no country code — `5550107788` in the examples
  * below, standing in for the value actually measured. That is unusable for SMS
  * or for a Stripe customer, and it is what "phone already exists but is stored
  * unnormalized" in AGL-1133 refers to.

@@ -41,13 +41,50 @@
  * straight out of the root and `SiteAnalytics` painted nothing at all. AGL-1556
  * shipped `PageBodyBoundary` to close that gap, and importing it here is the
  * point: these specs now exercise what the route actually renders.
+ *
+ * ## The real shape changed again (AGL-2074), and the invariant got sharper
+ *
+ * `apps/tenant/app` now HAS segment boundaries — `[host]/not-found.tsx`,
+ * `[host]/error.tsx`, `app/error.tsx`, `app/global-error.tsx` — because their
+ * absence meant every customer site on the platform served Next's unstyled
+ * `404 | This page could not be found`. This file used to forbid those
+ * filenames outright, and that ban has to be reconsidered rather than
+ * deleted, because the reasoning behind it was correct.
+ *
+ * The stated fear: an `error.tsx` sits ABOVE `page.tsx`, and `page.tsx` is
+ * what renders `SiteAnalytics` — so a segment boundary that catches a
+ * rejecting plugin gate would replace the measurement surface along with the
+ * page, and that is AGL-1541 rebuilt.
+ *
+ * MEASURED, in the real nesting, with a genuinely rejecting `ensure`
+ * (`analytics survive a segment error boundary` below): the gate's throw
+ * never reaches the segment boundary at all. `PageBodyBoundary` is the INNER
+ * boundary and catches it first, `SiteAnalytics` is its sibling and keeps
+ * rendering, the beacon fires, and the branded error screen does not appear.
+ * Removing `PageBodyBoundary` from that same arrangement flips it
+ * immediately — the throw reaches the segment boundary and the error screen
+ * takes the page. So `PageBodyBoundary` is not redundant with the new
+ * boundaries; it is precisely what makes them safe.
+ *
+ * That is the invariant, and it is narrower and more useful than "these
+ * filenames must not exist":
+ *
+ *   The plugin gate's failure must be caught INSIDE `page.tsx`, by a boundary
+ *   wrapping only `CatchAllClient`, with `SiteAnalytics` as its sibling —
+ *   before any segment boundary can see it.
+ *
+ * `loading.tsx` is a different animal and stays banned outright: it is not an
+ * error boundary at all, it makes Next wrap the segment in SUSPENSE, and that
+ * is AGL-1541 verbatim rather than by analogy.
  */
 import { act, render, waitFor } from '@testing-library/react'
-import { readdirSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import CatchAllClient from '../app/[host]/[[...slug]]/catch-all-client'
 import PageBodyBoundary from '../app/[host]/[[...slug]]/page-body-boundary'
 import SiteAnalytics from '../app/[host]/[[...slug]]/site-analytics'
+import HostError from '../app/[host]/error'
+import { HostBrandProvider } from '../app/[host]/host-brand.context'
 import { sitePluginLoader } from '../utils/site-plugin-loader'
 
 jest.mock('next/script', () => ({
@@ -106,16 +143,49 @@ afterEach(() => {
  * SIBLING of the page body, never a descendant of it, with the page body — and
  * only the page body — inside `PageBodyBoundary`.
  */
-function renderRoute() {
-  return render(
+function renderRouteTree() {
+  return (
     <>
       <SiteAnalytics host={GA_HOST as any} screenId={SCREEN_ID} />
       <PageBodyBoundary>
         <CatchAllClient data={{ host: GA_HOST as any }} nodes={{}} />
       </PageBodyBoundary>
-    </>,
+    </>
   )
 }
+
+function renderRoute() {
+  return render(renderRouteTree())
+}
+
+
+/**
+ * These cases describe a PRODUCTION deployment, and now have to say so
+ * (AGL-2067): outside one, `analyticsMayEmit()` is false and no tag is
+ * created at all. Declared per file rather than in a jest setup, because
+ * `NODE_ENV` changes far more than analytics and a global override would
+ * quietly move other behaviour under every spec in the repo.
+ */
+/**
+ * `process.env` is typed read-only for `NODE_ENV` in this app (Next ships that
+ * declaration), and these cases have to state which deployment they describe
+ * — see AGL-2067. One narrow cast, named, rather than one per assignment.
+ */
+const mutableEnv = process.env as Record<string, string | undefined>
+
+const savedEnv = {
+  nodeEnv: process.env.NODE_ENV,
+  deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+}
+beforeAll(() => {
+  mutableEnv.NODE_ENV = 'production'
+  process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'
+})
+afterAll(() => {
+  mutableEnv.NODE_ENV = savedEnv.nodeEnv
+  if (savedEnv.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+  else process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
+})
 
 describe('analytics survive a broken plugin gate (AGL-1550)', () => {
   it('a plugin gate that NEVER resolves: the beacon and the region call still fire', async () => {
@@ -243,6 +313,57 @@ describe('analytics survive a broken plugin gate (AGL-1550)', () => {
     expect(beacons.length).toBe(1)
   })
 
+  it('analytics survive a segment error boundary above the page (AGL-2074)', async () => {
+    // The measurement AGL-2074 owed this file. `[host]/error.tsx` now exists,
+    // and it sits ABOVE `page.tsx` — which renders `SiteAnalytics`. If a
+    // rejecting plugin gate unwound into it, the branded error screen would
+    // replace the measurement surface along with the page, and AGL-1541 would
+    // be back in a new costume: a 404-ing chunk after a deploy taking
+    // analytics down on every tenant site at once, invisibly.
+    //
+    // It does not, and the reason is ordering, not luck: `PageBodyBoundary`
+    // is the INNER boundary, so it catches the gate's throw before anything
+    // outside `page.tsx` sees it. Measured both ways — remove
+    // `PageBodyBoundary` from this arrangement and the error screen takes the
+    // page immediately (`error screen shown: true`), which is what makes it
+    // load-bearing rather than redundant.
+    const reactModule = jest.requireActual('react') as typeof import('react')
+    class SegmentBoundary extends reactModule.Component<
+      { children?: any },
+      { error: Error | null }
+    > {
+      override state = { error: null as Error | null }
+      static getDerivedStateFromError(error: Error) {
+        return { error }
+      }
+      override render() {
+        return this.state.error ? (
+          <HostError error={this.state.error} reset={() => undefined} />
+        ) : (
+          this.props.children
+        )
+      }
+    }
+
+    jest
+      .spyOn(sitePluginLoader, 'ensure')
+      .mockReturnValue(Promise.reject(new Error('chunk load failed')))
+
+    await act(async () => {
+      render(
+        <HostBrandProvider brandName="Stall Site">
+          <SegmentBoundary>{renderRouteTree()}</SegmentBoundary>
+        </HostBrandProvider>,
+      )
+    })
+
+    await waitFor(() => expect(beacons.length).toBe(1))
+    expect(beacons[0].body).toMatchObject({ hostId: HOST_ID, screenId: SCREEN_ID })
+    await waitFor(() => expect(regionCalls).toBeGreaterThanOrEqual(1))
+    // And the branded screen never activated — the inner boundary held.
+    expect(document.body.textContent).not.toContain('Something went wrong')
+  })
+
   it('the boundary reports what it catches — isolation must not buy silence (AGL-1556)', async () => {
     // The failure this issue is about was a SILENT one, so the fix must not
     // create another. React 19 sends errors an error boundary catches to
@@ -268,11 +389,17 @@ describe('analytics survive a broken plugin gate (AGL-1550)', () => {
 })
 
 /**
- * The absence of these files is load-bearing and completely invisible at the
- * call site, which is how it would get undone by someone reaching for the
- * ordinary Next.js tool for an ordinary Next.js problem.
+ * The SHAPE is load-bearing and completely invisible at the call site, which
+ * is how it would get undone by someone reaching for the ordinary Next.js
+ * tool for an ordinary Next.js problem (AGL-1541/AGL-1556/AGL-2074).
+ *
+ * This used to assert that `loading.tsx`, `error.tsx` and `global-error.tsx`
+ * did not exist anywhere under `app/`. Two of those three are now REQUIRED —
+ * see the header — so the guard asserts the thing the ban was standing in
+ * for, plus the presence of the boundaries, so that neither rule can be
+ * satisfied by quietly deleting the other.
  */
-describe('the tenant route has no segment boundary files (AGL-1541/AGL-1556)', () => {
+describe('the tenant route keeps the shape that protects measurement (AGL-1541/AGL-1556/AGL-2074)', () => {
   function walk(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
       entry.isDirectory()
@@ -281,27 +408,64 @@ describe('the tenant route has no segment boundary files (AGL-1541/AGL-1556)', (
     )
   }
 
-  it('no loading.tsx and no error.tsx anywhere under app/', () => {
-    const found = walk(join(__dirname, '..', 'app'))
-      .map((file) => file.split('/').pop() as string)
-      .filter((name) =>
-        ['loading.tsx', 'error.tsx', 'global-error.tsx'].includes(name),
-      )
+  const APP = join(__dirname, '..', 'app')
 
-    // `loading.tsx` is the fatal one: it makes Next wrap the segment in a
-    // Suspense boundary, which is AGL-1541 verbatim — the page body leaves the
-    // streamed shell for a late `<div hidden>` segment whose reveal and
-    // hydration retry both ride requestAnimationFrame.
-    //
-    // `error.tsx` at `[[...slug]]` is the subtler one: it wraps that segment's
-    // PAGE, and `page.tsx` is what renders `SiteAnalytics` — so the file that
-    // looks like it isolates the page body would take the measurement and
-    // consent surface down with it, which is the whole failure AGL-1550 and
-    // AGL-1556 exist to prevent. The isolation lives in `PageBodyBoundary`
-    // INSIDE `page.tsx` for exactly that reason. Getting above a segment
-    // `error.tsx` instead would mean hoisting `SiteAnalytics` into
-    // `[host]/layout.tsx`, which cannot see its child segment's slug and so
-    // cannot pass a screen id — losing AGL-151's per-screen attribution.
+  it('no loading.tsx anywhere under app/ — that one is still fatal', () => {
+    // Not an error boundary at all. It makes Next wrap the segment in a
+    // Suspense boundary, so the page body leaves the streamed shell for a
+    // late `<div hidden>` segment whose reveal AND hydration retry both ride
+    // requestAnimationFrame — which never fires in hidden, occluded or
+    // prerendered tabs. That is AGL-1541 verbatim, and no error boundary
+    // anywhere changes it. The long note on the "paints NOTHING" case above
+    // records why the obvious escapes (warm-render-only, server-conditional)
+    // are all closed.
+    const found = walk(APP)
+      .map((file) => file.split('/').pop() as string)
+      .filter((name) => name === 'loading.tsx')
     expect(found).toEqual([])
+  })
+
+  it('no error.tsx in the catch-all segment — the isolation belongs INSIDE page.tsx', () => {
+    // An `error.tsx` at `[[...slug]]` wraps that segment's PAGE, and the page
+    // is what renders `SiteAnalytics`. Someone adding one here would almost
+    // certainly be reaching for the isolation `PageBodyBoundary` already
+    // provides, and would get it one level too high — measurement inside the
+    // blast radius instead of beside it. The boundaries that legitimately
+    // exist live at `[host]/` and `app/`, above this segment, where
+    // `PageBodyBoundary` still catches the plugin gate first.
+    const segment = join(APP, '[host]', '[[...slug]]')
+    const found = walk(segment)
+      .map((file) => file.split('/').pop() as string)
+      .filter((name) => name === 'error.tsx')
+    expect(found).toEqual([])
+  })
+
+  it('page.tsx keeps SiteAnalytics OUTSIDE PageBodyBoundary', () => {
+    // The structural half of the invariant. The behavioural tests above
+    // prove the arrangement works; this proves it is still the arrangement,
+    // because re-nesting the sibling under the boundary is a two-line edit
+    // that no behavioural test in a file nobody re-reads would catch until
+    // traffic stopped.
+    const page = readFileSync(join(APP, '[host]', '[[...slug]]', 'page.tsx'), 'utf8')
+    const analyticsAt = page.indexOf('<SiteAnalytics')
+    const boundaryAt = page.indexOf('<PageBodyBoundary>')
+    expect(analyticsAt).toBeGreaterThan(-1)
+    expect(boundaryAt).toBeGreaterThan(-1)
+    expect(analyticsAt).toBeLessThan(boundaryAt)
+  })
+
+  it('the AGL-2074 boundaries are still there', () => {
+    // Stated as a requirement in the same breath as the bans, so a future
+    // reader cannot satisfy one rule by deleting the other and leave every
+    // customer site back on the framework's raw page.
+    for (const relative of [
+      '[host]/not-found.tsx',
+      '[host]/error.tsx',
+      'error.tsx',
+      'global-error.tsx',
+      'not-found.tsx',
+    ]) {
+      expect(readFileSync(join(APP, relative), 'utf8')).toContain('export default')
+    }
   })
 })

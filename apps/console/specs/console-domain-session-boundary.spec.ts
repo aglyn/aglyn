@@ -41,6 +41,9 @@ const mockResolveConsoleDomain = jest.fn()
 const mockOrgSlugGet = jest.fn(async () => ({ exists: true }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // AGL-1993. Matches the real function under this env: the SSO domain
+  // policy is unconfigured in tests, so it governs nothing and returns null.
+  ssoDomainRefusal: () => null,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({

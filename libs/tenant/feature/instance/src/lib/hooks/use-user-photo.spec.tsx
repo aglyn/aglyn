@@ -80,7 +80,7 @@ function resolve(): string | undefined {
 
 describe('useUserPhoto (AGL-1961)', () => {
   beforeEach(() => {
-    mockUser = { uid: 'IHumyGGhGxZKjVV26qCRx5Okf573', photoURL: null }
+    mockUser = { uid: 'QQ7fixtureUid0000000000000001', photoURL: null }
     mockDoc = undefined
     builtRef = undefined
   })
@@ -97,7 +97,7 @@ describe('useUserPhoto (AGL-1961)', () => {
     // the roster's `photoURL` spelling would satisfy every other case here
     // by returning undefined and falling through to the auth record.
     resolve()
-    expect(builtRef).toEqual({ path: 'users/IHumyGGhGxZKjVV26qCRx5Okf573' })
+    expect(builtRef).toEqual({ path: 'users/QQ7fixtureUid0000000000000001' })
   })
 
   it('prefers the profile document over a stale auth photoURL', () => {

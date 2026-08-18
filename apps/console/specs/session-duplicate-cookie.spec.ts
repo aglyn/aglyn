@@ -50,6 +50,9 @@ const mockCreateSessionCookie = jest.fn()
 const mockVerifySessionCookie = jest.fn()
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // AGL-1993. Matches the real function under this env: the SSO domain
+  // policy is unconfigured in tests, so it governs nothing and returns null.
+  ssoDomainRefusal: () => null,
   __esModule: true,
   firebaseAdmin: {
     app: () => ({

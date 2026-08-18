@@ -25,7 +25,7 @@ import {
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
   type OrgFeatureFlags,
-  SCREEN_KIND_TEMPLATE,
+  SCREEN_KIND_EMAIL,
   screenClaimsToBeAPage,
   WEBHOOK_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
@@ -381,16 +381,26 @@ async function handler(request: Request): Promise<Response> {
     // described, one field over. A template is made by demoting a page
     // (/api/hosts/screens), which is free precisely because the page was paid
     // for; promoting it back meets this same gate.
+    //
+    // Keyed off the PREDICATE and not off `=== SCREEN_KIND_TEMPLATE` (AGL-2092).
+    // The enumeration was correct for exactly as long as there were two
+    // billing-excluding values, and `kind: 'error'` made it wrong the day it
+    // landed: a create carrying it would have minted an unbilled screen here,
+    // outside the four-slot bound that is the whole reason the assignment route
+    // owns the stamp. Written as "not a page, and not the one exception", a
+    // future non-page kind is refused by default — which is the same shape the
+    // flat cap thirty lines below already uses, and for the same stated reason.
     const requestedKind = (data as Record<string, unknown>)['kind']
     if (
       resourceKey === 'screen' &&
       typeof requestedKind === 'string' &&
-      requestedKind === SCREEN_KIND_TEMPLATE
+      requestedKind !== SCREEN_KIND_EMAIL &&
+      !screenClaimsToBeAPage({ kind: requestedKind })
     ) {
       return Response.json({
         error:
-          'Create the screen, then convert it to a template — a screen ' +
-          'cannot be created as one',
+          `Create the screen, then convert it — a screen cannot be created ` +
+          `as '${requestedKind}'`,
       }, { status: 403 })
     }
 

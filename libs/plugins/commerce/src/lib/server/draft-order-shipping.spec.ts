@@ -219,9 +219,14 @@ async function runDraft(scenario: Scenario = {}) {
     variants: [{ id: 'v1', priceUsd: 30, weightGrams: 400, inventory: 100 }],
     ...(scenario.product ?? {}),
   })
-  if (scenario.settings) {
-    docs.set('hosts/host-1/settings/store', scenario.settings)
-  }
+  // AGL-1999: every scenario in this suite is about SHIPPING, so the store
+  // states a tax decision it would otherwise leave unmade — an undecided
+  // store refuses the sale before shipping is ever resolved. A scenario that
+  // supplies its own `tax` wins.
+  docs.set('hosts/host-1/settings/store', {
+    tax: { mode: 'none' },
+    ...(scenario.settings ?? {}),
+  })
   sessionBody = null
   const { res, result } = makeResponse()
   const req = {

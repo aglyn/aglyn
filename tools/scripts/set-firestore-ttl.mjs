@@ -37,12 +37,15 @@
 
 import { cert, initializeApp } from 'firebase-admin/app'
 
-/** Collections whose documents expire, and the timestamp field to expire on. */
-const TTL_POLICIES = [
-  // AGL-794 — one document per (hashed key, window). Without a policy these
-  // accumulate at roughly one per caller per minute, forever.
-  { collection: 'rateLimits', field: 'expiresAt' },
-]
+// The policy list lives in `lib/ttl-policies.mjs` — a side-effect-free module,
+// so `lib/ttl-policies.test.mjs` can import it and hold it to the table in
+// `docs/FIRESTORE_MANUAL_CONFIG.md` (AGL-2014). Inline here, it was
+// unimportable and drifted to one policy against the doc's eight.
+//
+// Enabling is idempotent — an already-ACTIVE policy is skipped below — so
+// running this against the cloud project is a no-op and against a fresh
+// self-host project is the fix.
+import { TTL_POLICIES } from './lib/ttl-policies.mjs'
 
 const dryRun = process.argv.includes('--dry-run')
 

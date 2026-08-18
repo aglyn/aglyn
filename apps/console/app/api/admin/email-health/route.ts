@@ -22,9 +22,22 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { operatorIdentity } from '@aglyn/aglyn/app-utils/operator-identity'
 
-/** The sender domain we expect in production (AGL-709/721). */
-const EXPECTED_FROM_DOMAIN = 'aglyn.com'
+/**
+ * The sender domain this deployment expects in production (AGL-709/721).
+ *
+ * Operator configuration (AGL-2016). Hardcoded to `aglyn.com`, this health
+ * check told every self-hoster their correctly-configured mail was wrong —
+ * an unfixable red on a staff diagnostics page, for the one deployment shape
+ * where the answer is "your domain, not ours". Derived from the operator's
+ * support address so it cannot drift from the address the product actually
+ * prints; falls back to the literal for a deployment that has not configured
+ * an operator yet, which keeps this check's behaviour rather than turning it
+ * into a second unconfigured surface.
+ */
+const EXPECTED_FROM_DOMAIN =
+  operatorIdentity().supportEmail?.split('@').pop() || 'aglyn.com'
 
 /**
  * Email provisioning health (AGL-709). Answers "can this deployment send

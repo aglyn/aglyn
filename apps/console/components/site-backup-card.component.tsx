@@ -52,7 +52,7 @@ export function SiteBackupCard(props: { hostId: string }) {
       })
       return false
     }
-    if (hasEntitlement('site-export', org)) return true
+    if (hasEntitlement('siteExport', org)) return true
     enqueueSnackbar(
       'Site backups require a Pro plan — see Billing to upgrade',
       { variant: 'warning', persist: false },

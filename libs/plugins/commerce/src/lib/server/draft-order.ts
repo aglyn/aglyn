@@ -200,10 +200,26 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     // Computed pure and BEFORE the claim so the stored totals can carry it;
     // the Stripe object it needs is minted below the point of no return.
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
-    const useStripeTax = taxSettings.mode === 'stripe' && !product.taxExempt
+    // AGL-1999: an unset tax mode is NOT a decision, and it must not sell.
+    // `mode` was `undefined` for every store whose owner never opened the
+    // Taxes card — the default state of every new storefront — and each
+    // branch below tested for a specific string, so no branch was taken, no
+    // tax was computed, and the shopper was charged an untaxed total. See
+    // `commerce-tax-decision.ts` for why refusing beats defaulting to either
+    // mode. `mode: 'none'` is the explicit opt-out and passes straight
+    // through.
+    const taxDecision = CommerceModel.storefrontTaxDecision({
+      settings: taxSettings,
+      taxExempt: product.taxExempt,
+    })
+    if (taxDecision.kind === 'undecided') {
+      return res
+        .status(409)
+        .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
+    }
+    const useStripeTax = taxDecision.kind === 'stripe-automatic'
     const manualRate =
-      taxSettings.mode === 'manual' &&
-      !product.taxExempt &&
+      taxDecision.kind === 'manual' &&
       !taxSettings.pricesIncludeTax
         ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
         : null

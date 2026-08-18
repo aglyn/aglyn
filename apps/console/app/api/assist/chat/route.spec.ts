@@ -87,6 +87,38 @@ function mockMakeFirestore() {
   })
   return {
     collection: (name: string) => makeCollection(name),
+    /**
+     * Atomic transactions (AGL-2057): reads see a consistent snapshot, writes
+     * land together at the end. `reserveAssistMessage` runs here, and it is
+     * the step that spends a message BEFORE the model is called.
+     */
+    runTransaction: async (
+      fn: (tx: unknown) => Promise<unknown>,
+    ): Promise<unknown> => {
+      const queued: Array<() => void> = []
+      const tx = {
+        get: async (ref: { path: string }) => ({
+          exists: mockDocs.has(ref.path),
+          data: () => mockDocs.get(ref.path),
+          get: (field: string) => (mockDocs.get(ref.path) ?? {})[field],
+        }),
+        set: (
+          ref: { path: string },
+          data: Record<string, unknown>,
+          options?: { merge?: boolean },
+        ) => {
+          queued.push(() => {
+            mockDocs.set(
+              ref.path,
+              applyData(mockDocs.get(ref.path), data, Boolean(options?.merge)),
+            )
+          })
+        },
+      }
+      const result = await fn(tx)
+      for (const write of queued) write()
+      return result
+    },
     batch: () => {
       const queued: Array<() => void> = []
       const batch = {
@@ -117,8 +149,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
   checkEntitlement: mockPlanEntitlements.checkEntitlement,
 }))
 
+// The reservation/metering module moved into the admin lib (AGL-2073) so the
+// besigner assist handler can share it. The barrel is still stubbed here — a
+// real import would pull the whole tenancy surface — so the REAL module is
+// spliced back in by path, and its `FieldValue` is stubbed to the sentinels the
+// fake Firestore below understands. Without the splice the route would call
+// undefined and the cap tests would go green on nothing.
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
+  },
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  ...jest.requireActual(
+    '../../../../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({

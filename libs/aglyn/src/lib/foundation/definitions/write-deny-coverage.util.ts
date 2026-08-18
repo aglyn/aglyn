@@ -432,6 +432,67 @@ export function seedFields(source: string, anchor: RegExp): string[] | null {
 }
 
 /**
+ * Field names a document of `collection` is seeded with, in either shape a
+ * seed write takes in this codebase (AGL-2100).
+ *
+ * The original parser understood only the CHAINED form —
+ * `collection('hosts').doc(id).set({ … })` — because that is what every seed
+ * route looked like when it was written. AGL-2063 rewrote the host create into
+ * a transactional claim, which necessarily splits the chain: the ref has to be
+ * built BEFORE `runTransaction` opens so the transaction body can both read
+ * and write it, leaving `const hostRef = …doc(hostId)` in one statement and
+ * `tx.set(hostRef, { … })` in another. The chained anchor then matched
+ * nothing, `seedFields` returned null, and the guard threw — asserting nothing
+ * about any of the four sources of the host field set until it was fixed.
+ *
+ * So resolve the REF BINDING rather than teaching the guard one more literal
+ * spelling. Any `set`/`create` whose first argument is a ref bound to this
+ * collection is a seed write, which covers `tx.`, `batch.` and a bare
+ * `ref.set()` alike, and does not care what wraps them.
+ *
+ * Anchoring on the WRITE and not on the binding matters: the binding is
+ * followed by the transaction callback's own `{`, so a binding-anchored parse
+ * would happily return the arrow body's contents as the field list — a
+ * silently wrong answer, which is worse than the throw.
+ *
+ * Returns null when neither shape is present, so the caller still throws.
+ */
+export function seedFieldsOfCollection(
+  source: string,
+  collection: string,
+): string[] | null {
+  const name = collection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const chained = seedFields(
+    source,
+    new RegExp(
+      `collection\\('${name}'\\)\\s*\\.doc\\([^)]*\\)\\s*\\.\\s*(?:set|create)\\s*\\(`,
+    ),
+  )
+  if (chained) return chained
+
+  const text = stripComments(source)
+  const bindings = [
+    ...text.matchAll(
+      new RegExp(
+        `(?:const|let|var)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*[^;\\n]*collection\\('${name}'\\)\\s*\\.doc\\(`,
+        'g',
+      ),
+    ),
+  ].map((entry) => entry[1])
+
+  for (const binding of bindings) {
+    const fields = seedFields(
+      source,
+      new RegExp(
+        `\\b(?:set|create)\\s*\\(\\s*${binding}\\s*,\\s*\\{`,
+      ),
+    )
+    if (fields) return fields
+  }
+  return null
+}
+
+/**
  * Whether the property access ending at `index` is being CALLED (AGL-1719).
  *
  * The guard reads `hosts/{hostId}` fields by scanning for `host.<name>` across

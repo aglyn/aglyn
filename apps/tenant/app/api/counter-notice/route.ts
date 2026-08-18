@@ -87,9 +87,13 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   clientIp,
+  contactHtml,
+  contactText,
   documentHtml,
   escapeHtml,
+  EXAMPLE_URL,
   html,
+  NO_CHANNEL_ADVICE,
   readPayload,
   wantsJson,
 } from '../_legal-intake/chrome'
@@ -141,7 +145,7 @@ speak to a lawyer before sending this.</div>
     https://</p>
     <input id="url" name="url" type="text" inputmode="url" required
            value="${escapeHtml(url)}"
-           placeholder="https://example.aglyn.app/page">
+           placeholder="${escapeHtml(EXAMPLE_URL)}">
   </div>
 
   <div class="field">
@@ -164,8 +168,8 @@ speak to a lawyer before sending this.</div>
       <input type="checkbox" name="consentJurisdiction" value="on">
       <span>I consent to the jurisdiction of the Federal District Court for
       the judicial district in which my address is located — or, if my address
-      is outside the United States, any judicial district in which Aglyn may
-      be found.</span>
+      is outside the United States, any judicial district in which
+      ${escapeHtml(Aglyn.operatorDisplayName())} may be found.</span>
     </label>
     <label class="choice">
       <input type="checkbox" name="acceptService" value="on">
@@ -219,7 +223,7 @@ speak to a lawyer before sending this.</div>
 <footer>
   <p>If you only want to ask a question about a removal, do not use this form —
   write to
-  <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a>
+  ${contactHtml('legal')}
   instead. A counter-notice is a sworn statement and cannot be withdrawn
   casually.</p>
 </footer>`,
@@ -243,7 +247,7 @@ function receiptHtml(reference: string): string {
   business days after we received this counter-notice.</p>
   <p>That clock started when you pressed the button, not when we get to it —
   so time we take to process it comes out of the wait, not out of yours.</p>
-  <p>Questions: <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a></p>
+  <p>Questions: ${contactHtml('legal')}</p>
 </footer>`,
   )
 }
@@ -314,17 +318,22 @@ export async function POST(request: Request): Promise<Response> {
     windowMs: COUNTER_NOTICE_RATE_WINDOW_MS,
   })
   if (!rate.allowed) {
+    // Hand them another route rather than a wall — but only a route this
+    // deployment actually has. An unconfigured operator gets the advice
+    // instead of a mailto with nothing behind it (AGL-2016).
+    const contact = contactText('legal')
     const message =
       `You have sent several counter-notices from this connection recently. ` +
-      `Please wait a few minutes, or email ${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} ` +
-      `so nothing is lost.`
+      (contact
+        ? `Please wait a few minutes, or email ${contact} so nothing is lost.`
+        : `Please wait a few minutes. ${NO_CHANNEL_ADVICE}`)
     const retryAfter = Math.max(
       1,
       Math.ceil((rate.resetMs - Date.now()) / 1000) || 60,
     )
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 429, headers: { 'retry-after': String(retryAfter) } },
         )
       : new Response(
@@ -439,13 +448,15 @@ export async function POST(request: Request): Promise<Response> {
     })
   } catch (error) {
     console.error('counter-notice write failed', error)
-    const message =
-      `We could not record your counter-notice just now. Please email ` +
-      `${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} so it is not lost — and keep a ` +
-      `copy of what you wrote.`
+    const contact = contactText('legal')
+    const message = contact
+      ? `We could not record your counter-notice just now. Please email ` +
+        `${contact} so it is not lost — and keep a copy of what you wrote.`
+      : `We could not record your counter-notice just now. ` +
+        NO_CHANNEL_ADVICE
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 503 },
         )
       : html(

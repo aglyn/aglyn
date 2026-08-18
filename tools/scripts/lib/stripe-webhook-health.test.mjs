@@ -29,6 +29,7 @@ import test from 'node:test'
 import {
   EVENT_RETENTION_DAYS,
   PLATFORM_WEBHOOK_URL,
+  RETRY_LAG_SECONDS,
   WEBHOOK_EVENTS,
   assessWebhookHealth,
   resolveWindow,
@@ -49,12 +50,22 @@ const endpoint = (overrides = {}) => ({
 
 const event = (id, type, created = AT) => ({ id, type, created })
 
-/** A fully healthy account: one delivery, delivered, handled. */
+/**
+ * A `stripeEvents` document, with the delivery lag that separates a
+ * first-attempt success from a retry. The default of 2s is what the live
+ * account's healthy deliveries actually measured (1.0–3.7s on 2026-08-18).
+ */
+const processedAfter = (id, lagSeconds = 2) => ({
+  id,
+  receivedAt: AT + lagSeconds,
+})
+
+/** A fully healthy account: one delivery, delivered first try, handled. */
 const healthy = (overrides = {}) => ({
   endpoints: [endpoint()],
   events: [event('evt_ok', 'invoice.paid')],
   failedEventIds: [],
-  processedEventIds: ['evt_ok'],
+  processedEvents: [processedAfter('evt_ok')],
   firestoreChecked: true,
   windowStart: WINDOW_START,
   windowEnd: WINDOW_END,
@@ -77,6 +88,7 @@ test('the happy path is green, and every check actually ran', () => {
     'endpoint.events',
     'delivery.evidence',
     'delivery.failures',
+    'delivery.retries',
     'processing.coverage',
   ]) {
     assert.equal(levelOf(result, check), 'pass', `${check} did not run green`)
@@ -93,7 +105,7 @@ test('AGL-1551 replayed: deliveries attempted, none handled → RED', () => {
     healthy({
       events: [event('evt_1U49Xt', 'customer.subscription.updated')],
       failedEventIds: [],
-      processedEventIds: [],
+      processedEvents: [],
     }),
   )
   assert.equal(result.ok, false)
@@ -103,9 +115,124 @@ test('AGL-1551 replayed: deliveries attempted, none handled → RED', () => {
   assert.equal(result.summary.processingGapRate, 1)
 })
 
+// ---------------------------------------------------------------------------
+// delivery.retries — the arm that reconciles this audit with the Dashboard.
+//
+// On 2026-08-18 this audit reported 0.00% for `we_1TuaNvDYHP4psn7hmNkYMbEU`
+// while the Stripe Dashboard reported 30% (Total 10 / Failed 3) for the same
+// destination over an overlapping window. Both were right. This audit's
+// denominator is EVENTS scored on their final delivery state; the Dashboard's
+// is delivery ATTEMPTS. `delivery_success=false` is terminal-only, so the
+// three failed attempts — all of them the AGL-1551 event, 400ing before the
+// signing secret was repaired — were invisible to every arm the audit had.
+//
+// These tests pin the real numbers, so the reconciliation cannot be forgotten
+// and re-derived as a regression the next time someone reads two dashboards.
+
+test('the 2026-08-14 shape: an event that only landed on a retry goes RED', () => {
+  // `evt_1U49XtDYHP4psn7hA9VHPnZz`, verbatim from the live account.
+  // Stripe created it 2026-08-14T01:04:29Z; AGL-1551 records three 400
+  // `Invalid signature` attempts; the `stripeEvents` stamp is
+  // 2026-08-14T05:42:14Z — 16,665s later, two minutes before AGL-1551 was
+  // closed. Stripe's own `delivery_success` calls this event a success,
+  // because in the end it was one, so `failedEventIds` is passed EMPTY on
+  // purpose: the red has to come from the lag alone.
+  const created = Math.floor(Date.parse('2026-08-14T01:04:29Z') / 1000)
+  const landed = Math.floor(Date.parse('2026-08-14T05:42:14Z') / 1000)
+  assert.equal(landed - created, 16_665, 'the real lag, restated')
+  const result = assessWebhookHealth(
+    healthy({
+      events: [
+        { id: 'evt_1U49Xt', type: 'customer.subscription.updated', created },
+      ],
+      failedEventIds: [],
+      processedEvents: [{ id: 'evt_1U49Xt', receivedAt: landed }],
+    }),
+  )
+  assert.equal(result.ok, false)
+  assert.equal(levelOf(result, 'delivery.retries'), 'fail')
+  // The two arms that reported this destination healthy still do. That is the
+  // point: neither was lying, and neither could see this.
+  assert.equal(levelOf(result, 'delivery.failures'), 'pass')
+  assert.equal(levelOf(result, 'processing.coverage'), 'pass')
+  assert.equal(result.summary.errorRate, 0)
+  assert.equal(result.summary.retriedEvents, 1)
+  assert.equal(result.summary.maxDeliveryLagSeconds, 16_665)
+  const finding = result.findings.find((f) => f.check === 'delivery.retries')
+  assert.deepEqual(finding.detail, [
+    {
+      id: 'evt_1U49Xt',
+      type: 'customer.subscription.updated',
+      lagSeconds: 16_665,
+      created: '2026-08-14T01:04:29.000Z',
+      receivedAt: '2026-08-14T05:42:14.000Z',
+    },
+  ])
+})
+
+test('the retry threshold has a real boundary, both sides of it', () => {
+  const under = assessWebhookHealth(
+    healthy({ processedEvents: [processedAfter('evt_ok', RETRY_LAG_SECONDS)] }),
+  )
+  assert.equal(levelOf(under, 'delivery.retries'), 'pass')
+  assert.equal(under.ok, true)
+
+  const over = assessWebhookHealth(
+    healthy({ processedEvents: [processedAfter('evt_ok', RETRY_LAG_SECONDS + 1)] }),
+  )
+  assert.equal(levelOf(over, 'delivery.retries'), 'fail')
+  assert.equal(over.ok, false)
+})
+
+test('ids without receivedAt stamps read unknown, never pass', () => {
+  // The pre-fix caller shape: `.exists` only, no stamp. It must not be able to
+  // report a clean bill of health on a question it did not ask — that is the
+  // AGL-1906 defect itself, one level down.
+  const result = assessWebhookHealth({
+    ...healthy(),
+    processedEvents: undefined,
+    processedEventIds: ['evt_ok'],
+  })
+  assert.equal(levelOf(result, 'delivery.retries'), 'unknown')
+  assert.equal(levelOf(result, 'processing.coverage'), 'pass')
+  assert.equal(result.ok, false)
+  assert.equal(result.summary.retriedEvents, null)
+})
+
+test('a document carrying no receivedAt reads unknown, not pass', () => {
+  const result = assessWebhookHealth(
+    healthy({ processedEvents: [{ id: 'evt_ok', receivedAt: null }] }),
+  )
+  assert.equal(levelOf(result, 'delivery.retries'), 'unknown')
+  assert.equal(result.ok, false)
+})
+
+test('a retried delivery is not double-reported as a processing gap', () => {
+  // It has a document, so `processing.coverage` is satisfied; the failure
+  // belongs to `delivery.retries` and only there.
+  const result = assessWebhookHealth(
+    healthy({ processedEvents: [processedAfter('evt_ok', 4000)] }),
+  )
+  assert.equal(levelOf(result, 'delivery.retries'), 'fail')
+  assert.equal(levelOf(result, 'processing.coverage'), 'pass')
+  assert.equal(result.summary.unprocessedEvents, 0)
+})
+
+test('the error rate carries its own denominator, spelled out', () => {
+  // AGL-1906 reported "0.00% error rate" and it was read as the Dashboard's.
+  // The basis travels with the number so the two cannot be conflated again.
+  const result = assessWebhookHealth(healthy())
+  assert.equal(result.summary.errorRate, 0)
+  assert.equal(result.summary.errorRateBasis.denominatorValue, 1)
+  assert.equal(result.summary.errorRateBasis.numeratorValue, 0)
+  assert.equal(result.summary.errorRateBasis.countsRetriedAttempts, false)
+  assert.match(result.summary.errorRateBasis.denominator, /subscribed type/)
+  assert.match(result.summary.errorRateBasis.notComparableTo, /ATTEMPTS/)
+})
+
 test('an empty window cannot pass — 0% over zero deliveries is not evidence', () => {
   const result = assessWebhookHealth(
-    healthy({ events: [], processedEventIds: [] }),
+    healthy({ events: [], processedEvents: [] }),
   )
   assert.equal(result.ok, false)
   assert.equal(levelOf(result, 'delivery.evidence'), 'fail')
@@ -117,7 +244,7 @@ test('an unsubscribed event type is not counted as a delivery', () => {
   // `product.updated` reaches no destination, so it can neither succeed nor
   // fail. Counting it would manufacture evidence out of dashboard edits.
   const result = assessWebhookHealth(
-    healthy({ events: [event('evt_prod', 'product.updated')], processedEventIds: [] }),
+    healthy({ events: [event('evt_prod', 'product.updated')], processedEvents: [] }),
   )
   assert.equal(result.summary.totalEvents, 1)
   assert.equal(result.summary.deliverableEvents, 0)
@@ -135,7 +262,7 @@ test('Stripe-reported delivery failures go RED', () => {
 
 test('a skipped Firestore arm reads unknown, never pass', () => {
   const result = assessWebhookHealth(
-    healthy({ firestoreChecked: false, processedEventIds: [] }),
+    healthy({ firestoreChecked: false, processedEvents: [] }),
   )
   assert.equal(result.ok, false)
   assert.equal(levelOf(result, 'processing.coverage'), 'unknown')
@@ -216,7 +343,7 @@ test('the per-type decomposition separates attempts, failures and processing gap
         event('b1', 'charge.refunded'),
       ],
       failedEventIds: ['a2'],
-      processedEventIds: ['a1'],
+      processedEvents: [processedAfter('a1')],
     }),
   )
   assert.deepEqual(result.summary.byType, {

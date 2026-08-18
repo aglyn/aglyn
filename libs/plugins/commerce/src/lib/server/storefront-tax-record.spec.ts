@@ -244,6 +244,30 @@ const MANUAL_TAX_SESSION = {
   },
 }
 
+/**
+ * A paid service booking (AGL-2000). Carries no tax by a stated decision in
+ * `bookings/server.ts`, and — the actual finding — was absent from
+ * SESSION_TYPES, so it produced no row at all.
+ */
+const BOOKING_SESSION = {
+  id: 'cs_booking_1',
+  payment_status: 'paid',
+  payment_intent: 'pi_booking_1',
+  amount_total: 7500,
+  currency: 'usd',
+  created: 1787032952,
+  customer_details: {
+    email: 'client@example.com',
+    address: { country: 'US', state: 'TX', city: 'Austin' },
+  },
+  total_details: { amount_tax: 0, amount_shipping: 0, amount_discount: 0 },
+  metadata: {
+    type: 'booking-payment',
+    hostId: 'host-1',
+    bookingId: 'booking-1',
+  },
+}
+
 async function deliver(object: any, type = 'checkout.session.completed') {
   await commerceBillingWebhookHandler({
     type,
@@ -300,6 +324,43 @@ describe('storefront tax recording (AGL-1904)', () => {
         percentage: 8.25,
       },
     ])
+  })
+
+  /**
+   * AGL-2000: a booking sale was not merely untaxed — it did not appear in
+   * the record that would let anyone notice it was untaxed, or reconcile it
+   * later. `booking-payment` was absent from SESSION_TYPES entirely.
+   */
+  it('records a paid booking, and reads it as an untaxed sale', async () => {
+    await deliver(BOOKING_SESSION)
+    const row = docs.get('storefrontTaxCollected/cs_booking_1')
+    expect(row).toBeDefined()
+    expect(row).toMatchObject({
+      kind: 'session',
+      hostId: 'host-1',
+      metadataType: 'booking-payment',
+      // The stated decision, visible in the ledger rather than inferred from
+      // a missing row.
+      taxMode: 'none',
+      taxLiability: null,
+      grossCents: 7500,
+      taxCents: 0,
+      netCents: 7500,
+    })
+    // Stripe computed nothing, so there is no base to go and fetch.
+    expect(expandCalls).toHaveLength(0)
+  })
+
+  // Positive control: the set must stay selective. Recording every session
+  // type would file platform subscription revenue and marketplace sales as
+  // storefront tax rows.
+  it('still records nothing for a session type that is not a storefront sale', async () => {
+    await deliver({
+      ...BOOKING_SESSION,
+      id: 'cs_not_ours_1',
+      metadata: { type: 'marketplace-purchase', hostId: 'host-1' },
+    })
+    expect(docs.get('storefrontTaxCollected/cs_not_ours_1')).toBeUndefined()
   })
 
   it('records a manual-mode sale as manual, with no liability and no base', async () => {

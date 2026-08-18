@@ -54,6 +54,7 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 import EditListingDialog from './marketplace/edit-listing-dialog.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import mediaSrc from '../utils/media-src'
+import { payoutReadiness } from '../utils/payout-readiness'
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -105,8 +106,21 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
       : profileStatus === 'error'
         ? 'error'
         : 'loaded'
-  const payoutsEnabled =
-    payoutsState === 'loaded' && Boolean(profile?.stripeChargesEnabled)
+  /**
+   * TWO questions, not one (AGL-1997). This card said "Payouts are enabled"
+   * off `stripeChargesEnabled` — whether Stripe will let the account take
+   * MONEY — and never read `stripePayoutsEnabled`, whether the money can
+   * LEAVE. The decision itself lives in `payoutReadiness` so each of its six
+   * outcomes can be asserted without mounting this tree.
+   */
+  const readiness = payoutReadiness({
+    state: payoutsState,
+    chargesEnabled: profile?.stripeChargesEnabled,
+    payoutsEnabled: profile?.stripePayoutsEnabled,
+  })
+  /** Stripe will let this account take money — three of the six outcomes. */
+  const chargesEnabled =
+    readiness === 'ready' || readiness === 'blocked' || readiness === 'unknown'
   // Both held at null while the org is unknown, like the profile above
   // (AGL-1440): AGL-1380 repaired the profile ref and left these two
   // `where`-clause siblings on the sentinel. The purchases query is the one
@@ -182,12 +196,21 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         // Publisher-payout half of the same activation metric (AGL-1561),
         // gated on the transition for the same reason as the commerce card:
         // the connect handler is re-entrant and reports `true` on every
-        // revisit. `payoutsEnabled` is the pre-request state.
-        if (!payoutsEnabled) trackEvent('stripe_connected', {})
-        return void enqueueSnackbar('Payouts are enabled', {
-          variant: 'success',
-          persist: false,
-        })
+        // revisit. `chargesEnabled` is the pre-request state — the metric is
+        // about CONNECTING (AGL-1997 split the two flags; payout readiness
+        // can arrive days later and is not a second activation).
+        if (!chargesEnabled) trackEvent('stripe_connected', {})
+        // The same split the card renders (AGL-1997): the route answers both
+        // flags, so the toast must not announce payouts off the charges one.
+        return void enqueueSnackbar(
+          payload.payoutsEnabled === false
+            ? 'Connected — payouts are not released yet'
+            : 'Payouts are enabled',
+          {
+            variant: payload.payoutsEnabled === false ? 'warning' : 'success',
+            persist: false,
+          },
+        )
       }
       if (payload.url) window.location.assign(payload.url)
     } catch (error) {
@@ -199,7 +222,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     } finally {
       setPayoutsBusy(false)
     }
-  }, [orgId, user, payoutsEnabled, enqueueSnackbar])
+  }, [orgId, user, chargesEnabled, enqueueSnackbar])
 
   const [handle, setHandle] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -914,25 +937,52 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             </Typography>
           ) : (
             <>
+              {/* The charges-yes/payouts-no state (AGL-1997), which used to
+                  render as unqualified success. Stripe will let this account
+                  take money and will not let it out yet, so the honest thing
+                  is to say both halves — a publisher who reads "enabled" and
+                  sells has no reason to go finish verification. */}
+              {readiness === 'blocked' ? (
+                <Alert severity="warning">
+                  {'Your Stripe account can take payments, but payouts are ' +
+                    'not enabled yet — sales would stay in Stripe rather ' +
+                    'than reaching your bank. Finish verification in Stripe ' +
+                    'to release them.'}
+                </Alert>
+              ) : null}
               <Typography variant="body2" color="text.secondary">
-                {payoutsEnabled
+                {readiness === 'ready'
                   ? 'Payouts are enabled — paid listings transfer to your ' +
                     'Stripe account automatically (platform fee 20%, 30% on ' +
                     'the Free plan).'
-                  : 'Connect a Stripe account to sell components. The ' +
-                    'platform fee is 20% per sale (30% on the Free plan).'}
+                  : readiness === 'unknown'
+                    ? // Connected, payout readiness unread. Says only what is
+                      // known, like the error branch above.
+                      'Your Stripe account is connected. We haven’t checked ' +
+                      'whether payouts are released yet — recheck to ' +
+                      'confirm. The platform fee is 20% per sale (30% on ' +
+                      'the Free plan).'
+                    : readiness === 'blocked'
+                      ? 'The platform fee is 20% per sale (30% on the Free ' +
+                        'plan).'
+                      : 'Connect a Stripe account to sell components. The ' +
+                        'platform fee is 20% per sale (30% on the Free plan).'}
               </Typography>
               <Button
-                variant={payoutsEnabled ? 'outlined' : 'contained'}
+                variant={chargesEnabled ? 'outlined' : 'contained'}
                 color="primary"
                 disabled={payoutsBusy}
                 onClick={handlePayouts}
               >
-                {payoutsEnabled
-                  ? 'Payouts enabled — recheck status'
-                  : payoutsBusy
-                    ? 'Opening Stripe…'
-                    : 'Set up payouts'}
+                {payoutsBusy
+                  ? 'Opening Stripe…'
+                  : readiness === 'ready'
+                    ? 'Payouts enabled — recheck status'
+                    : readiness === 'blocked'
+                      ? 'Finish payout setup in Stripe'
+                      : readiness === 'unknown'
+                        ? 'Recheck payout status'
+                        : 'Set up payouts'}
               </Button>
             </>
           )}

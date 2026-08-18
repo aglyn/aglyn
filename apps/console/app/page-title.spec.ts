@@ -95,6 +95,44 @@ function walk(dir: string, rel = ''): TitledFile[] {
   return found
 }
 
+/**
+ * Every routable directory, and every directory that supplies a title.
+ *
+ * Separate from `walk` above because it answers a different question and
+ * needs a LOOSER notion of "titles this route". `walk` looks for a literal
+ * `title:` so it can inspect the template; a route may instead title itself
+ * from an async `generateMetadata`, which is how
+ * `(app)/[orgSlug]/marketplace/[listingId]` does it — its title comes from
+ * `listingSocialCard`, whose fallback is pinned by `listing-social-card.spec`.
+ * Treating `generateMetadata` as titling therefore trusts a neighbouring
+ * spec rather than assuming; the alternative is a false failure on a route
+ * that is correct.
+ */
+function walkRoutes(
+  dir: string,
+  rel = '',
+  acc: { pages: string[]; titling: string[] } = { pages: [], titling: [] },
+): { pages: string[]; titling: string[] } {
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry)
+    if (statSync(abs).isDirectory()) {
+      walkRoutes(abs, rel ? `${rel}/${entry}` : entry, acc)
+      continue
+    }
+    if (!METADATA_FILES.has(entry)) continue
+    if (entry === 'page.tsx') acc.pages.push(rel)
+    const code = strip(
+      readFileSync(abs, 'utf8'),
+      rel ? `${rel}/${entry}` : entry,
+      0,
+    )
+    if (/\btitle\s*:/.test(code) || /\bgenerateMetadata\b/.test(code)) {
+      acc.titling.push(rel)
+    }
+  }
+  return acc
+}
+
 /** Whether `child` is nested strictly below `parent` in the route tree. */
 const isBelow = (parent: string, child: string) =>
   parent === '' ? child !== '' : child.startsWith(`${parent}/`)
@@ -129,6 +167,49 @@ describe('console tab titles keep the brand (AGL-1059)', () => {
     // layout may keep the plain string — it has nothing below to hand the
     // template to, which is why this only flags files with descendants.
     expect(offenders).toEqual([])
+  })
+
+  /*
+   * AGL-2060. The sibling invariant: not "is the brand still attached" but
+   * "is there a title at all".
+   *
+   * Until 2026-07-28 the console had ONE titled layout — the root — because
+   * pages titled themselves through `NextPageTitle`, which renders via
+   * `next/head` and is inert in the App Router. So every console route
+   * reported the root default, and GA4's "Views by Page title" collapsed the
+   * whole console onto `Secure Platform Console – Aglyn`: 6.2K views on a row
+   * that is not a page. AGL-1059 fixed it by adding 61 layouts in one commit,
+   * and nothing has held that line since.
+   *
+   * A route that loses its title does not error, does not warn, and does not
+   * fail the template guard above — that one only speaks about files which
+   * ALREADY set a title. It reappears silently in the analytics as views
+   * merged into a generic row, which is unrecoverable: GA4 dimension values
+   * are not retroactive.
+   */
+  it('gives every route a title of its own, so none reports the root default', () => {
+    const routes = walkRoutes(APP_DIR)
+    // The corpus must be real. A walk that matched nothing would pass this
+    // forever — the exact failure mode this repo keeps rediscovering.
+    expect(routes.pages.length).toBeGreaterThan(40)
+    expect(routes.titling.length).toBeGreaterThan(40)
+
+    const untitled = routes.pages
+      .filter(
+        (page) =>
+          // The ROOT layout is deliberately excluded as a title provider:
+          // inheriting from it IS the bug. Its default exists for the
+          // document shell, not as a page title any route should settle for.
+          !routes.titling.some(
+            (dir) => dir !== '' && (page === dir || page.startsWith(`${dir}/`)),
+          ),
+      )
+      .sort()
+
+    // Fix by adding a `layout.tsx` beside the page that exports
+    // `metadata: { title: segmentTitle('…') }` — a client-component page
+    // cannot export `metadata` itself, which is why titles live in layouts.
+    expect(untitled).toEqual([])
   })
 
   it('uses one brand template, defined once', () => {

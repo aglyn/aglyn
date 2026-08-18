@@ -25,6 +25,13 @@
  */
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  // The REAL `checkEntitlement` against the REAL plan table (AGL-2072): the
+  // route now asks for `reusableComponents` before it asks about payment, and
+  // a stubbed `() => true` here would let this file keep passing if that gate
+  // ever stopped meaning anything. The org below is `starter`, the lowest
+  // plan that includes the feature, so what these tests prove stays the
+  // PURCHASE gate and nothing else.
+  ...jest.requireActual('@aglyn/aglyn/server'),
   createResourceUid: () => 'component-new',
 }))
 
@@ -119,6 +126,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
   return {
     __state: state,
+    // The owning org, read whole exactly as `getOrgDoc` returns it (AGL-2072).
+    getOrgForHost: async () => ({
+      orgId: 'buyer-org',
+      org: { id: 'buyer-org', plan: 'starter' },
+    }),
     firebaseAdmin: {
       app: () => ({
         auth: () => ({ verifyIdToken: async () => ({ uid: 'buyer-1' }) }),

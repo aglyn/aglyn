@@ -44,6 +44,7 @@ import {
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { EntitlementGatedCard } from './entitlement-gate.component'
 
 export interface SuppliersCardProps {
   hostId: string
@@ -54,6 +55,11 @@ export interface SuppliersCardProps {
  * supplier notify it by email and/or HMAC-signed webhook, and the
  * supplier posts tracking back through a token link — no Aglyn account
  * needed. Assign suppliers per product in the product editor.
+ *
+ * Gated on `dropshipRouting` since AGL-2080. `server/billing-webhook.ts:2474`
+ * enforces it, so an unentitled org could create suppliers, assign them to
+ * products, and watch every paid order silently fail to route — a supplier
+ * that looks configured and never hears about an order.
  */
 export function SuppliersCard(props: SuppliersCardProps) {
   const { hostId } = props
@@ -162,6 +168,16 @@ export function SuppliersCard(props: SuppliersCardProps) {
   )
 
   return (
+    <EntitlementGatedCard
+      hostId={hostId}
+      feature="dropshipRouting"
+      header={'Dropship suppliers'}
+      upsell={
+        'Dropship routing forwards each paid order to the right supplier ' +
+        'by email or signed webhook, and takes tracking numbers back ' +
+        'without the supplier needing an Aglyn account.'
+      }
+    >
     <CardDisplay header={'Dropship suppliers'} contentGutterX contentGutterY>
       <Stack spacing={1}>
         {(supplierDocs ?? []).length === 0 ? (
@@ -284,6 +300,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
         </DialogActions>
       </Dialog>
     </CardDisplay>
+    </EntitlementGatedCard>
   )
 }
 SuppliersCard.displayName = 'SuppliersCard'

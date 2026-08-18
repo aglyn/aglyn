@@ -21,6 +21,7 @@ import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   FormControlLabel,
   MenuItem,
@@ -70,6 +71,17 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   )
   const [draft, setDraft] = useState<CommerceModel.TaxSettings | null>(null)
   const current: CommerceModel.TaxSettings = draft ?? store?.tax ?? { mode: 'manual' }
+  /**
+   * Whether anyone has ever answered the tax question for this store
+   * (AGL-1999). Read from the SAVED document, never from `current` — the
+   * `{ mode: 'manual' }` seed above is local state that has never reached
+   * Firestore, and it is exactly what made this invisible: the card looked
+   * configured while the server saw `mode: undefined`, took no branch, and
+   * sold untaxed. Every storefront path now refuses that state, so the card
+   * has to show it rather than paper over it.
+   */
+  const decided =
+    storeStatus !== 'loading' && typeof store?.tax?.mode === 'string'
   const update = (patch: Partial<CommerceModel.TaxSettings>) =>
     setDraft({ ...current, ...patch })
   const updateRate = (
@@ -122,11 +134,22 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   return (
     <CardDisplay header={'Taxes'} contentGutterX contentGutterY>
       <Stack spacing={1.5}>
+        {decided ? null : (
+          // The store is not selling. Saying so here is the whole point: the
+          // silent version of this state charged shoppers an untaxed total.
+          <Alert severity="warning">
+            {'Choose how this store handles sales tax and save. Until you ' +
+              'do, checkout is turned off — we won’t take an order we can’t ' +
+              'tax correctly.'}
+          </Alert>
+        )}
         <TextField
           label="Calculation"
           value={current.mode ?? 'manual'}
           onChange={(event) =>
-            update({ mode: event.target.value as 'manual' | 'stripe' })
+            update({
+              mode: event.target.value as 'manual' | 'stripe' | 'none',
+            })
           }
           size="small"
           select
@@ -134,8 +157,17 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
         >
           <MenuItem value="manual">{'Manual rates (below)'}</MenuItem>
           <MenuItem value="stripe">{'Stripe Tax (automatic)'}</MenuItem>
+          {/* An explicit decision, not an omission (AGL-1999) — the option a
+              merchant under a nexus threshold, or selling non-taxable goods,
+              needs in order to sell at all. */}
+          <MenuItem value="none">{'Don’t collect sales tax'}</MenuItem>
         </TextField>
-        {current.mode === 'stripe' ? (
+        {current.mode === 'none' ? (
+          <Typography variant="body2" color="text.secondary">
+            {'This store adds no sales tax to any order. Orders still go ' +
+              'through — the decision is recorded, not the tax.'}
+          </Typography>
+        ) : current.mode === 'stripe' ? (
           <Typography variant="body2" color="text.secondary">
             {'Stripe Tax calculates per buyer location at checkout. ' +
               'Activate Stripe Tax in your Stripe dashboard first.'}

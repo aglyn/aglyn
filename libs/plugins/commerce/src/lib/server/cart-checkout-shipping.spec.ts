@@ -222,7 +222,14 @@ function seedStore(
     variants: [{ id: 'v1', priceUsd: 30, weightGrams: 400, inventory: 10 }],
     ...(scenario.product ?? {}),
   })
-  if (storeSettings) docs.set('hosts/host-1/settings/store', storeSettings)
+  // AGL-1999: every scenario in this suite is about SHIPPING, so the store
+  // states a tax decision it would otherwise leave unmade — an undecided
+  // store refuses the sale before shipping is ever resolved. A scenario that
+  // supplies its own `tax` wins.
+  docs.set('hosts/host-1/settings/store', {
+    tax: { mode: 'none' },
+    ...(storeSettings ?? {}),
+  })
   if (scenario.couponCode) {
     docs.set(`hosts/host-1/coupons/${scenario.couponCode}`, {
       percentOff: 50,

@@ -37,7 +37,7 @@ single-owner accounts but not for the product's real shape:
 - Hosts do **not** share site members (end-users of the published site) or
   screens/layouts.
 - **A person belongs to many orgs** with different powers in each — e.g.
-  zachary.w.gover@gmail.com writes blogs on 3 of Business 1's sites and
+  owner@example.com writes blogs on 3 of Business 1's sites and
   oversees development on all 15 of Business 2's.
 - A one-person small business is just an org with one member and 1–2 hosts —
   same model, no special case.

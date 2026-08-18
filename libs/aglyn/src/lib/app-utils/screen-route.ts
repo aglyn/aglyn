@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ScreenUid } from '../foundation'
+import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
 
 /**
  * Route path of a host's root screen. The tenant matcher joins the catch-all
@@ -218,6 +218,54 @@ export const SCREEN_KIND_EMAIL = 'email'
  */
 export const SCREEN_KIND_TEMPLATE = 'template'
 
+/**
+ * `kind` of a designed ERROR screen (AGL-2092): the screen a host assigns to
+ * one of `errorScreens`' four status slots, rendered on paths that did not
+ * match — and so, like an entry template, at no address of its own.
+ *
+ * Zach's decision on 2026-08-18 was that these must not spend the plan's screen
+ * allowance, for the reason AGL-1173 excluded an entry template: the governing
+ * question is whether the screen occupies a URL of its own, and a 404 body does
+ * not. (A collection's LIST template does — `/{collectionSlug}` renders that
+ * exact screen — which is why AGL-1387 left it counting.)
+ *
+ * ## This value does NOT get `kind: 'template'`'s trust
+ *
+ * `billableScreenIds` short-circuits on `SCREEN_KIND_TEMPLATE` BEFORE it
+ * consults the routing map, because a template is routed on purpose. An error
+ * screen is not, so it deliberately falls through to the ordinary rule and
+ * **the routing map outranks this field**: a screen still published at an
+ * address of its own counts, whatever it says about itself. That is the whole
+ * migration story for the error screens that already exist — see
+ * {@link ERROR_SCREEN_MAX_PER_HOST}.
+ *
+ * Stamped only by /api/hosts/screens, as part of binding the screen to a slot,
+ * and frozen against the client by the same rule that has frozen `kind` since
+ * AGL-1383. Nothing about that is new for this value; what IS new is that the
+ * stamp is BOUNDED, because unlike a template there is no natural limit on how
+ * many screens somebody would like to declare as error pages.
+ */
+export const SCREEN_KIND_ERROR = 'error'
+
+/**
+ * How many screens one host may hold with `kind: 'error'` (AGL-2092).
+ *
+ * An exclusion the metered party can ask for is a free-screen generator unless
+ * something bounds it, and the four bindings in `HostErrorScreens` are the
+ * bound: at most one exempt screen per error slot. It is `.length` of the slot
+ * list rather than a literal `4` so the two can never disagree.
+ *
+ * Checked at the moment of the STAMP, against the post-state — the AGL-1390
+ * shape. The tempting alternative is to enforce "bound to a slot" as an
+ * invariant, promoting a screen back to a page whenever its slot is cleared;
+ * that is AGL-1390's refuse-the-clear bug wearing a different hat, because
+ * promotion raises the count and a host at its cap could then never unassign an
+ * error screen. So clearing a slot is always allowed and leaves the screen an
+ * error screen — unbilled, unrouted, and one deliberate click from being a page
+ * again — and what is bounded is how many of them can exist at once.
+ */
+export const ERROR_SCREEN_MAX_PER_HOST = HOST_ERROR_SCREEN_SLOTS.length
+
 /** The two self-describing fields {@link screenClaimsToBeAPage} reads. */
 export interface ScreenPageClaim {
   kind?: string
@@ -227,14 +275,23 @@ export interface ScreenPageClaim {
 /**
  * Whether a screen document claims to be a page of the site at all (AGL-1383).
  *
- * Three things say it is not: `deletedAt` (soft-deleted — delete stamps the
+ * Four things say it is not: `deletedAt` (soft-deleted — delete stamps the
  * field rather than removing the doc), `kind: 'email'` (an Emails-page
  * document, which has no URL and is rendered only by the campaign sender,
- * straight off the doc) and `kind: 'template'` (a collection entry template,
+ * straight off the doc), `kind: 'template'` (a collection entry template,
  * which composes `/{collection}/{entry}` and has no address of its own —
- * AGL-1400). All three are also the exclusions `countBillableScreens`
- * subtracts before enforcing `screensPerHost`, and since AGL-1400 they are the
- * WHOLE of that subtraction: the count reads no other collection.
+ * AGL-1400) and `kind: 'error'` (a screen assigned to one of the host's four
+ * error slots, rendered on paths that matched nothing — AGL-2092). All four
+ * are also the exclusions `countBillableScreens` subtracts before enforcing
+ * `screensPerHost`, and since AGL-1400 they are the WHOLE of that subtraction:
+ * the count reads no other collection.
+ *
+ * Adding the fourth needed no edit to `billableScreenIds` and no edit to
+ * `nonPageScreenIds`, which is the property AGL-1439 wrote them for: the
+ * routing-map override applies to a new non-page `kind` by default, and the
+ * flat infrastructure cap is the complement, so there is no second list to
+ * remember. Only `kind: 'template'` is named anywhere else, because only it
+ * opts OUT of the routing-map override.
  *
  * That is exactly why this is ONE function with TWO callers rather than two
  * matching filters. Both fields are ordinary client-writable fields on
@@ -249,6 +306,14 @@ export interface ScreenPageClaim {
  * A CLAIM, not the answer, for the two fields a client can still reach: the
  * routing map decides reachability, and `countBillableScreens` trusts
  * `deletedAt` / `kind: 'email'` only for screens the map does not route.
+ * `kind: 'error'` is in the client-can-still-reach group for counting purposes
+ * even though no client writes it either: an error screen that is ALSO
+ * published at an address is a page somebody is using as a page, so the map
+ * outranks the stamp and it counts. Serving is the other way round — see
+ * `getScreen`, which returns error screens rather than 404ing them, because
+ * refusing would break the customer's own designed error page without closing
+ * anything (they are already paying for it if it is routed).
+ *
  * `kind: 'template'` is the exception, and the reason it can be one is that no
  * client writes it — /api/hosts/screens stamps it, demotion lowers the count
  * and promotion is checked exactly like a create, so there is no toggle to
@@ -262,7 +327,8 @@ export function screenClaimsToBeAPage(
   return (
     screen.deletedAt == null &&
     screen.kind !== SCREEN_KIND_EMAIL &&
-    screen.kind !== SCREEN_KIND_TEMPLATE
+    screen.kind !== SCREEN_KIND_TEMPLATE &&
+    screen.kind !== SCREEN_KIND_ERROR
   )
 }
 

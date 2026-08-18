@@ -153,10 +153,26 @@ function assertUsable(vsDir, sourceFileCount) {
  * @throws when the copy cannot be produced or is not loadable. Callers must
  *   NOT catch this: the alternative to a local copy is the jsDelivr default.
  */
-function syncMonacoAssets({ publicDir }) {
-  let monacoPackageJson
+function resolveMonacoPackageDir() {
+  // Deliberately NOT `require.resolve('monaco-editor/package.json')` (AGL-2051).
+  //
+  // That subpath is only reachable when the package's `exports` map happens to
+  // publish it. monaco-editor 0.55.1 shipped a catch-all `"./*": "./*"`, so it
+  // did; 0.56.0 narrowed the map to `"./*": "./esm/vs/*.js"`, which rewrites
+  // the request to a file that has never existed:
+  //
+  //   Cannot find module '.../monaco-editor/esm/vs/package.json.js'
+  //
+  // Node reports that as MODULE_NOT_FOUND, indistinguishable from the package
+  // genuinely being absent, so the catch below turned a routine dependency
+  // bump into "`monaco-editor` is not installed. Run `npm ci`" and failed
+  // every console build. Resolve the package ENTRY instead — the one subpath
+  // an `exports` map must always publish — and walk up to the directory that
+  // owns it, so the manifest is read off the filesystem rather than requested
+  // through a map upstream is free to rewrite again.
+  let entry
   try {
-    monacoPackageJson = require.resolve('monaco-editor/package.json')
+    entry = require.resolve('monaco-editor')
   } catch {
     throw new Error(
       '[monaco] `monaco-editor` is not installed, so the Raw JSON editor ' +
@@ -165,8 +181,35 @@ function syncMonacoAssets({ publicDir }) {
     )
   }
 
-  const { version } = require(monacoPackageJson)
-  const sourceDir = path.join(path.dirname(monacoPackageJson), 'min', 'vs')
+  let dir = path.dirname(entry)
+  while (dir !== path.dirname(dir)) {
+    const manifest = path.join(dir, 'package.json')
+    if (fs.existsSync(manifest)) {
+      try {
+        if (
+          JSON.parse(fs.readFileSync(manifest, 'utf8')).name === 'monaco-editor'
+        ) {
+          return dir
+        }
+      } catch {
+        /* an unreadable manifest is not this package's root — keep walking */
+      }
+    }
+    dir = path.dirname(dir)
+  }
+
+  throw new Error(
+    `[monaco] resolved monaco-editor to ${entry} but found no monaco-editor ` +
+      'package.json above it, so the vendored copy cannot be versioned (AGL-1779).',
+  )
+}
+
+function syncMonacoAssets({ publicDir }) {
+  const packageDir = resolveMonacoPackageDir()
+  const { version } = JSON.parse(
+    fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+  )
+  const sourceDir = path.join(packageDir, 'min', 'vs')
   if (!fs.existsSync(sourceDir)) {
     throw new Error(
       `[monaco] monaco-editor@${version} has no min/vs at ${sourceDir}.`,

@@ -196,3 +196,74 @@ describe('resolveScreenLiveUrl (AGL-1271)', () => {
     expect(hostDisplayDomain(undefined)).toBeUndefined()
   })
 })
+
+/**
+ * Both deployment shapes, because a config guard that only exercises the
+ * default passes by ignoring the configuration (AGL-2022).
+ *
+ * `TENANT_PRODUCTION_ROOT` is read at module scope, so each shape needs a
+ * fresh module registry — asserting against the already-imported binding
+ * would only ever re-test the default.
+ */
+describe('tenant apex is configuration, not our infrastructure (AGL-2022)', () => {
+  const ORIGINAL = process.env.NEXT_PUBLIC_TENANT_DOMAIN
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
+    else process.env.NEXT_PUBLIC_TENANT_DOMAIN = ORIGINAL
+    jest.resetModules()
+  })
+
+  /** Re-import under the current env so the module-scope const is re-evaluated. */
+  function loadWith(value: string | undefined) {
+    if (value === undefined) delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
+    else process.env.NEXT_PUBLIC_TENANT_DOMAIN = value
+    jest.resetModules()
+    return require('./tenant-links') as typeof import('./tenant-links')
+  }
+
+  it('SELF-HOST shape: an operator apex replaces ours everywhere it is printed', () => {
+    const links = loadWith('sites.example.com')
+
+    // The displayed address of a site...
+    expect(links.hostDisplayDomain({ subdomain: 'acme' })).toBe(
+      'acme.sites.example.com',
+    )
+    // ...and the URL "View live" actually opens. `host.subdomain` is
+    // `aglyn-marketing`, so this is that site on the OPERATOR's apex.
+    expect(
+      links.buildScreenLiveUrl(host, 'scr-1' as any, 'console.example.com'),
+    ).toBe('https://aglyn-marketing.sites.example.com/product/besigner')
+
+    // The whole point: our origin must not survive an operator's config.
+    expect(links.hostDisplayDomain({ subdomain: 'acme' })).not.toContain(
+      'aglyn.app',
+    )
+    expect(
+      links.buildScreenLiveUrl(host, 'scr-1' as any, 'console.example.com'),
+    ).not.toContain('aglyn.app')
+  })
+
+  it('AGLYN-OPERATED shape: unset still resolves to our production apex', () => {
+    const links = loadWith(undefined)
+
+    expect(links.hostDisplayDomain({ subdomain: 'acme' })).toBe('acme.aglyn.app')
+    expect(
+      links.buildScreenLiveUrl(host, 'scr-1' as any, 'app.aglyn.com'),
+    ).toBe('https://aglyn-marketing.aglyn.app/product/besigner')
+  })
+
+  it('an empty value is not a configured value — it falls back, never to ".."', () => {
+    const links = loadWith('')
+
+    expect(links.hostDisplayDomain({ subdomain: 'acme' })).toBe('acme.aglyn.app')
+  })
+
+  it('a custom domain still wins over both', () => {
+    const links = loadWith('sites.example.com')
+
+    expect(links.hostDisplayDomain({ cname: 'shop.acme.test', subdomain: 'acme' })).toBe(
+      'shop.acme.test',
+    )
+  })
+})

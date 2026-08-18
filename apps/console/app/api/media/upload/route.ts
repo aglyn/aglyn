@@ -20,6 +20,7 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import { mediaStorageGate } from '../../../../utils/storage-overage'
+import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band'
 import {
   checkEntitlement,
   createResourceUid,
@@ -224,13 +225,6 @@ async function handler(request: Request): Promise<Response> {
       if (refusal) return refusal
     }
 
-    // Server-side quota: counter bytes + this file against the plan limit
-    // (no enforcement until the org has an explicit plan — AGL-38 gate).
-    const counterSnapshot = await scopeRef
-      .collection('counters')
-      .doc('media')
-      .get()
-    const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
     // Quota/entitlements ride the owning org's doc (AGL-238).
     const org = scope.billing
     // Everything that is not an image rides `videoMedia` — AGL-162's
@@ -246,15 +240,32 @@ async function handler(request: Request): Promise<Response> {
     {
       // Storage quota applies to every org; a plan-less org resolves as
       // `free` (250 MB cap), not unmetered.
-      const usedMb = (usedBytes + buffer.length) / (1024 * 1024)
-      const gate = mediaStorageGate({ org: org as any, usedMb })
+      // ONE org-wide band across every media scope (AGL-2075). The counter
+      // used to be read per scope and checked against `storagePerHostMb`,
+      // which handed the org library a second full band of its own — a free
+      // org's real ceiling was 250 MB + 250 MB against a published 250 MB.
+      // The pool is what `meteredIncludedAllowance` and the usage alert
+      // already measure, so ingress now refuses at the band the invoice bills
+      // past.
+      const band = await resolveOrgMediaBand({
+        firestore: scopeRef.firestore,
+        orgId: scope.orgId,
+        org: org as any,
+        currentHostId: scope.collection === 'hosts' ? scope.scopeId : null,
+      })
+      const usedMb = (band.usedBytes + buffer.length) / (1024 * 1024)
+      const gate = mediaStorageGate({
+        org: org as any,
+        usedMb,
+        allowanceMb: band.allowanceMb,
+      })
       if (!gate.allowed) {
         return Response.json(
           {
             error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
             code: gate.code,
             projectedOverageUsd: gate.projectedOverageUsd,
-            ceilingUsd: gate.ceilingUsd,
+            monthlyCapUsd: gate.monthlyCapUsd,
           },
           { status: gate.status },
         )

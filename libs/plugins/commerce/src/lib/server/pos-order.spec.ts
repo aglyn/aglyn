@@ -320,7 +320,9 @@ beforeEach(() => {
     status: 'active',
     variants: [{ id: 'default', priceUsd: 4, inventory: null }],
   })
-  docs.set('hosts/host-1/settings/store', { tax: {} })
+  // AGL-1999: `{ tax: {} }` is the UNDECIDED state and now refuses. A
+  // register that genuinely rings no tax states the decision.
+  docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
   docs.set('profiles/owner-1', {
     stripeAccountId: 'acct_live_merchant',
     stripeChargesEnabled: true,
@@ -1446,5 +1448,52 @@ describe('POS low-stock crossing alert (AGL-1826)', () => {
     await post(body, { 'idempotency-key': 'low-e' })
     expect(orderDocs()).toHaveLength(1)
     expect(lowStockAlerts()).toHaveLength(1)
+  })
+})
+
+/**
+ * The AGL-1999 refusal on the register.
+ *
+ * `pos-order.ts` tested only `mode === 'manual'`, so an undecided store rang
+ * every in-person sale untaxed — and a register is the path where an
+ * unremitted liability accrues fastest.
+ */
+describe('an undecided store cannot ring a sale (AGL-1999)', () => {
+  it('REFUSES when no settings document exists', async () => {
+    docs.delete('hosts/host-1/settings/store')
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(409)
+    expect(String(result.body?.error)).toContain('sales tax')
+    // Refused before anything was rung or charged.
+    expect(orderDocs()).toHaveLength(0)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('REFUSES a settings doc that states no tax mode', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: {} })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(409)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  // Positive controls: a decided store still rings, taxed or not.
+  it('RINGS a sale for a store that decided not to collect', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'none' } })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.taxCents ?? 0).toBe(0)
+  })
+
+  it('RINGS a taxed sale for a manual-mode store', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }],
+      },
+    })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
   })
 })

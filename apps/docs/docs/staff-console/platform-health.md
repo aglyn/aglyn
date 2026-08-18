@@ -104,6 +104,33 @@ Two things to read carefully:
 Unlike the health probes, this data is staff-only rather than public: the rows carry
 customer site hostnames and page paths.
 
+## Sharing-scope drift
+
+A scoped document with no sharing scope is **invisible to every scoped read** — both
+enforcement layers fail closed on it, so the data is not leaked, it is simply gone from
+every list that should show it. The weekly job finds this and notifies; it never repairs.
+Stamping the missing scopes is a deliberate act, and this card is where it is performed.
+
+The two buttons drive the same route the runbook documents, and the dry-run/write
+decision stays with that route.
+
+- **Scan for drift** is always a dry run. It pages through every scoped collection and
+  reports what it *would* stamp, per collection, plus any member documents whose
+  `scopeTokens` projection has gone stale. Nothing is written.
+- **Stamp the missing scopes** is enabled only after a scan that actually planned writes,
+  and it stamps exactly what that scan reported. Run a scan again afterwards to confirm
+  it now reports none.
+
+Three things the report says that are easy to skim past:
+
+- **"No drift" is only as wide as the pages it read.** The count is per scan, not a
+  standing guarantee.
+- **A truncated legacy scan makes the count a FLOOR, not the total.** The card says so
+  when it happens. Treat the number as "at least this many" and scan again.
+- **A bounded run stopped early.** One pass is capped at a fixed number of pages so a
+  loop cannot depend on the server ever saying stop. If the card reports it stopped
+  before the route said done, run the scan again to continue.
+
 ## Re-checking
 
 **Re-check now** re-runs every probe. The probes memoise their expensive work for five

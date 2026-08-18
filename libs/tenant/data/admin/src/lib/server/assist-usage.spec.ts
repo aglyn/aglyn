@@ -53,6 +53,18 @@ function applyData(
 
 let mockAutoId = 0
 
+/** Serialises the fake's transactions, one at a time, FIFO. */
+let mockTxChain: Promise<void> = Promise.resolve()
+function mockTxLock(): Promise<() => void> {
+  let release!: () => void
+  const next = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const waitFor = mockTxChain
+  mockTxChain = mockTxChain.then(() => next)
+  return waitFor.then(() => release)
+}
+
 function mockMakeFirestore() {
   const makeDoc = (path: string) => ({
     id: path.split('/').pop(),
@@ -76,6 +88,54 @@ function mockMakeFirestore() {
   })
   return {
     collection: (name: string) => makeCollection(name),
+    /**
+     * Serializable transactions, faithfully: the callback's reads see a
+     * consistent snapshot and its writes land atomically, and two overlapping
+     * transactions are ordered rather than interleaved (real Firestore gets
+     * there by contention + retry; the outcome is what the code under test
+     * depends on). A fake that let two callbacks interleave their read phases
+     * would fabricate the very race `reserveAssistMessage` exists to close —
+     * it would go GREEN on the broken code.
+     */
+    runTransaction: async <T,>(
+      fn: (tx: {
+        get: (ref: { path: string }) => Promise<unknown>
+        set: (
+          ref: { path: string },
+          data: Record<string, unknown>,
+          options?: { merge?: boolean },
+        ) => void
+      }) => Promise<T>,
+    ): Promise<T> => {
+      const release = await mockTxLock()
+      try {
+        const queued: Array<() => void> = []
+        const tx = {
+          get: async (ref: { path: string }) => ({
+            exists: mockDocs.has(ref.path),
+            data: () => mockDocs.get(ref.path),
+            get: (field: string) => (mockDocs.get(ref.path) ?? {})[field],
+          }),
+          set: (
+            ref: { path: string },
+            data: Record<string, unknown>,
+            options?: { merge?: boolean },
+          ) => {
+            queued.push(() => {
+              mockDocs.set(
+                ref.path,
+                applyData(mockDocs.get(ref.path), data, Boolean(options?.merge)),
+              )
+            })
+          },
+        }
+        const result = await fn(tx as never)
+        for (const write of queued) write()
+        return result
+      } finally {
+        release()
+      }
+    },
     batch: () => {
       const queued: Array<() => void> = []
       const batch = {
@@ -101,15 +161,15 @@ function mockMakeFirestore() {
   }
 }
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
+// The module under test reads `FieldValue` straight off the SDK (AGL-2073),
+// so the sentinel factory is stubbed there rather than on the admin barrel.
+// Mocking the barrel would no longer intercept anything, and the tests would
+// silently run against real Firestore transforms the fake cannot interpret.
+jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  firebaseAdmin: {
-    firestore: {
-      FieldValue: {
-        increment: (n: number) => ({ __inc: n }),
-        serverTimestamp: () => '__now__',
-      },
-    },
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
   },
 }))
 
@@ -125,6 +185,8 @@ const {
   estimateAssistCostUsd,
   recordAssistExchange,
   recordAssistFeedback,
+  releaseAssistMessage,
+  reserveAssistMessage,
 } = require('./assist-usage') as typeof import('./assist-usage')
 
 const NOW = new Date('2026-08-17T12:00:00Z')
@@ -265,6 +327,148 @@ describe('checkAssistQuota — the caps must be able to go RED', () => {
   })
 })
 
+describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () => {
+  const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('admits a free org under the cap AND counts the message immediately', async () => {
+    mockDocs.set(dailyPath, { '2026-08-17': 9 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({
+      allowed: true,
+      period: 'day',
+      dayKey: '2026-08-17',
+      monthKey: '2026-08',
+      used: 10,
+      limit: 10,
+      remaining: 0,
+    })
+    // The point of the whole change: the counter has ALREADY moved, before
+    // the caller has had the chance to spend a token.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ month: '2026-08', messages: 1 })
+  })
+
+  it('REFUSES a free org at the cap and moves no counter', async () => {
+    mockDocs.set(dailyPath, { '2026-08-17': 10 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation.allowed).toBe(false)
+    expect(reservation.remaining).toBe(0)
+    // Forced RED by flipping the fixture to 9: the assertion above starts
+    // failing immediately, which is what proves it is live rather than
+    // vacuously true.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
+    expect(mockDocs.get(monthPath)).toBeUndefined()
+  })
+
+  it('THE FAIL-OPEN: concurrent requests cannot all pass the same cap', async () => {
+    // The bug this closes. `checkAssistQuota` READ the counter and the count
+    // only moved at stream completion, so eight simultaneous requests each
+    // saw `used: 8` and eight answers were generated against a cap of ten.
+    // With the reservation the arithmetic is atomic: exactly the remaining
+    // two are admitted, whatever the concurrency.
+    mockDocs.set(dailyPath, { '2026-08-17': 8 })
+    const store = firestore()
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        reserveAssistMessage(store, ORG, false, NOW),
+      ),
+    )
+    expect(results.filter((r) => r.allowed)).toHaveLength(2)
+    expect(results.filter((r) => !r.allowed)).toHaveLength(6)
+    // And the counter lands exactly ON the cap — never past it.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
+  })
+
+  it('GUARD IS LIVE: the same eight all pass when there is room for eight', async () => {
+    // The inverse fixture. Without this the test above is satisfied by a
+    // function that refuses everything.
+    mockDocs.set(dailyPath, { '2026-08-17': 2 })
+    const store = firestore()
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        reserveAssistMessage(store, ORG, false, NOW),
+      ),
+    )
+    expect(results.filter((r) => r.allowed)).toHaveLength(8)
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
+  })
+
+  it('creates the counter document on an org\'s very first message', async () => {
+    // `update()` would throw NOT_FOUND here; a merging `set` conjures it.
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({ allowed: true, used: 1 })
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 1 })
+  })
+
+  it('meters an entitled org against the MONTH, and refuses at the guard', async () => {
+    mockDocs.set(monthPath, { messages: 1000 })
+    const denied = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(denied).toMatchObject({ allowed: false, period: 'month', used: 1000 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 1000 })
+
+    mockDocs.set(monthPath, { messages: 999 })
+    const allowed = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(allowed).toMatchObject({ allowed: true, used: 1000 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 1000 })
+    // An entitled reservation still moves the daily counter, so a plan change
+    // mid-day cannot hand the org a fresh free allowance.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 1 })
+  })
+
+  it('honours the env override, so the cap can be tightened without a deploy', async () => {
+    process.env.ASSIST_FREE_DAILY_LIMIT = '1'
+    const store = firestore()
+    expect((await reserveAssistMessage(store, ORG, false, NOW)).allowed).toBe(true)
+    expect((await reserveAssistMessage(store, ORG, false, NOW)).allowed).toBe(false)
+  })
+})
+
+describe('releaseAssistMessage — an outage must not cost a message', () => {
+  const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('gives both counters back', async () => {
+    const store = firestore()
+    const reservation = await reserveAssistMessage(store, ORG, false, NOW)
+    await releaseAssistMessage(store, ORG, reservation)
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 0 })
+  })
+
+  it('releases against the RESERVED day, never against "now"', async () => {
+    // The midnight case: reserved at 23:59:59, released after the rollover.
+    const store = firestore()
+    const lastSecond = new Date('2026-08-17T23:59:59Z')
+    const reservation = await reserveAssistMessage(store, ORG, false, lastSecond)
+    expect(reservation.dayKey).toBe('2026-08-17')
+    await releaseAssistMessage(store, ORG, reservation)
+    // The 18th must be untouched — a credit landing there is free capacity.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
+    expect(mockDocs.get(dailyPath)?.['2026-08-18']).toBeUndefined()
+  })
+
+  it('never drives a counter below zero, however often it is called', async () => {
+    const store = firestore()
+    const reservation = await reserveAssistMessage(store, ORG, false, NOW)
+    await releaseAssistMessage(store, ORG, reservation)
+    await releaseAssistMessage(store, ORG, reservation)
+    await releaseAssistMessage(store, ORG, reservation)
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 0 })
+  })
+
+  it('is a no-op for a reservation that was REFUSED', async () => {
+    mockDocs.set(dailyPath, { '2026-08-17': 10 })
+    const store = firestore()
+    const refused = await reserveAssistMessage(store, ORG, false, NOW)
+    expect(refused.allowed).toBe(false)
+    await releaseAssistMessage(store, ORG, refused)
+    // A refusal that credited a message would be an infinite allowance.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 10 })
+  })
+})
+
 describe('recordAssistExchange', () => {
   const record = {
     uid: 'user-1',
@@ -306,17 +510,21 @@ describe('recordAssistExchange', () => {
       stopReason: 'end_turn',
     })
 
+    // NO message counting here any more (AGL-2057) — the counters move in
+    // `reserveAssistMessage`, before the tokens are spent. Recording again
+    // would double-count every message and would put the cap back behind the
+    // stream completion that abandoned requests never reach.
     expect(
       mockDocs.get(`orgs/${ORG}/counters/assistMessagesDaily`),
-    ).toMatchObject({ '2026-08-17': 1 })
+    ).toBeUndefined()
 
     const month = mockDocs.get(`orgs/${ORG}/assistUsage/2026-08`)
     expect(month).toMatchObject({
       month: '2026-08',
-      messages: 1,
       inputTokens: 1200,
       outputTokens: 300,
     })
+    expect(month?.messages).toBeUndefined()
     expect(Number(month?.estCostUsd)).toBeGreaterThan(0)
   })
 
@@ -326,9 +534,8 @@ describe('recordAssistExchange', () => {
     await recordAssistExchange(store, ORG, record, NOW)
     expect(
       mockDocs.get(`orgs/${ORG}/counters/assistMessagesDaily`),
-    ).toMatchObject({ '2026-08-17': 2 })
+    ).toBeUndefined()
     expect(mockDocs.get(`orgs/${ORG}/assistUsage/2026-08`)).toMatchObject({
-      messages: 2,
       inputTokens: 2400,
     })
   })

@@ -25,6 +25,7 @@ import {
   notifyHostManagers,
   upsertHostContact,
   renderHostEmailWithTokens,
+  syncConnectAccountStatus,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
@@ -442,6 +443,138 @@ async function recordDisputeClosed(
     })
 }
 
+/**
+ * Stop a LAPSED storefront's recurring billing (AGL-2071).
+ *
+ * ## The money path this closes
+ *
+ * A storefront subscription is a DESTINATION CHARGE on Aglyn's platform
+ * account: `checkout.ts` sends `subscription_data[transfer_data][destination]`
+ * unconditionally and `subscription_data[application_fee_percent]` only when
+ * the plan's take rate is above zero. Stripe's processing fee (2.9% + 30¢) and
+ * any $15 dispute fee are debited from the PLATFORM's balance — stated at
+ * :356-359 of this file — so a cycle billed at a 0% take rate is strictly
+ * loss-making for Aglyn.
+ *
+ * Every shopper-facing door re-asks the plan per request and refuses a lapsed
+ * org: `checkout.ts:132`, `cart-checkout.ts:96`, `draft-order.ts:102`,
+ * `reserve.ts:70`, `pos-order.ts:94`. A RENEWAL has no door — Stripe bills the
+ * subscriber on its own schedule and this webhook is told afterwards. So the
+ * subscription created while the org could sell keeps billing forever after
+ * the org's own subscription dies, and `resolveEffectivePlan` has by then
+ * collapsed that org to `free`.
+ *
+ * ## Why this cancels rather than refuses
+ *
+ * The cycle in hand is money Stripe has ALREADY taken. Refusing to record it
+ * would be AGL-1732 in reverse — a payment collected and filed nowhere — and
+ * the subscriber's box still has to ship. So the ledger, the order and the
+ * fulfilment path are untouched; what changes is that no FURTHER cycle is
+ * billed.
+ *
+ * `cancel_at_period_end` rather than an outright cancel, for two reasons that
+ * both matter: the subscriber keeps the period they just paid for, and the
+ * flag is REVERSIBLE — the merchant has a full cycle to restore their Aglyn
+ * plan before anything is actually lost. An immediate cancel would take
+ * service away from a shopper who did nothing wrong.
+ *
+ * ## Once-only
+ *
+ * The marker is CLAIMED in a transaction before the Stripe call, so two
+ * deliveries racing cannot both notify the merchant. A Stripe refusal releases
+ * the claim, because a marker that outlives a failed call would leave the
+ * subscription billing forever with the books saying it had been stopped. The
+ * `Idempotency-Key` covers the window where the claim is written and the
+ * response never arrives.
+ */
+async function stopLapsedStorefrontSubscription(
+  hostId: string,
+  subscriptionId: string,
+  subscriptionRef: FirebaseFirestore.DocumentReference,
+): Promise<void> {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    console.error(
+      'Lapsed storefront subscription not stopped: STRIPE_SECRET_KEY is not set (AGL-2071)',
+      { hostId, subscriptionId },
+    )
+    return
+  }
+  const claimed = await firebaseAdmin
+    .app()
+    .firestore()
+    .runTransaction(async (transaction) => {
+      const fresh = await transaction.get(subscriptionRef)
+      if (fresh.get('lapsedStopRequestedAtMs') != null) return false
+      transaction.set(
+        subscriptionRef,
+        { lapsedStopRequestedAtMs: Date.now() },
+        { merge: true },
+      )
+      return true
+    })
+  if (!claimed) return
+
+  // `null`, not `FieldValue.delete()`: the guard above asks `!= null`, so
+  // both readings are identical to it, and a plain value keeps the release
+  // inside the same merge-set semantics every other write here uses.
+  const release = async () => {
+    await subscriptionRef
+      .set({ lapsedStopRequestedAtMs: null }, { merge: true })
+      .catch(() => undefined)
+  }
+
+  const response = await fetch(
+    `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(
+      subscriptionId,
+    )}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `lapsed-stop-${subscriptionId}`,
+      },
+      body: new URLSearchParams({
+        cancel_at_period_end: 'true',
+      }).toString(),
+    },
+  ).catch(() => null)
+  if (!response || !response.ok) {
+    await release()
+    if (!response || isTransientStripeStatus(response.status)) {
+      // Let Stripe redeliver: the ledger write above is idempotent on the
+      // invoice id, so a retry re-runs this and nothing else.
+      throw new Error(
+        `Stripe refused to stop lapsed subscription ${subscriptionId} ` +
+          `(${response ? response.status : 'network'})`,
+      )
+    }
+    console.error(
+      'Stripe refused to stop a lapsed storefront subscription (AGL-2071)',
+      { hostId, subscriptionId, status: response.status },
+    )
+    return
+  }
+  await subscriptionRef
+    .set(
+      {
+        lapsedStopReason: 'plan',
+        cancelAtPeriodEnd: true,
+      },
+      { merge: true },
+    )
+    .catch(() => undefined)
+  void notifyHostManagers(hostId, {
+    type: 'content.order',
+    title: 'A subscription stopped renewing — your plan no longer includes storefront subscriptions',
+    body:
+      'This subscriber keeps the period they have already paid for. ' +
+      'Restore your plan before it ends to keep billing them.',
+    link: `/${hostId}/products`,
+  })
+}
+
 /** Stripe failures a redelivery can actually fix. */
 function isTransientStripeStatus(status: number): boolean {
   return status === 429 || status >= 500
@@ -779,6 +912,22 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   object,
   requestHost,
 }) => {
+  // Connect readiness, kept fresh (AGL-1997). Every commerce money route —
+  // checkout, cart checkout, draft orders, reservations, POS — gates the sale
+  // on the CACHED `stripeChargesEnabled` written by the connect route. Nothing
+  // refreshed it but the merchant reopening that route, so a merchant Stripe
+  // later restricted kept selling on a stale `true` and the shopper met the
+  // failure at payment time.
+  //
+  // FIRST and with an early return: this event shares nothing with the order
+  // sections below, and returning here keeps it out of every `metadata.type`
+  // test. `syncConnectAccountStatus` mirrors current state, so a redelivery is
+  // harmless.
+  if (type === 'account.updated') {
+    await syncConnectAccountStatus('profiles', object)
+    return
+  }
+
   // White-label brand per host (White-Label Phase 3): every storefront email
   // this webhook sends — receipts, gift cards, reservation and sale notices,
   // supplier notices — reads as the store's brand. Resolved once per host from
@@ -1049,6 +1198,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           .collection('subscriptions')
           .doc(subscriptionId)
         const invoiceRef = subscriptionRef.collection('invoices').doc(invoiceId)
+        // The plan, RE-ASKED at the cycle (AGL-2071). `checkout.ts:132/149`
+        // asked it when the subscription was SOLD, and that answer is all this
+        // renewal would otherwise have — an answer that can be months stale
+        // and is the wrong one the moment the merchant's own subscription
+        // dies. The org doc is read whole (`getOrgDoc` projects nothing), so
+        // `plan`, `subscriptionStatus` and `entitlements` are all present for
+        // `resolveEffectivePlan` to collapse a dead subscription to `free`.
+        //
+        // BOTH flags, because `checkout.ts` required both to create this
+        // subscription: `commerce` (Starter+) opens the storefront and
+        // `storefrontSubscriptions` (Business+) is what makes a recurring
+        // product sellable at all. A Business org that drops to Pro still has
+        // a storefront and must still stop billing subscribers.
+        const renewalOrg = (
+          await getOrgForHost(invoiceHostId).catch(() => null)
+        )?.org
+        const renewalEntitled =
+          Aglyn.checkEntitlement(renewalOrg as any, 'commerce') &&
+          Aglyn.checkEntitlement(renewalOrg as any, 'storefrontSubscriptions')
         // The product identity comes from what the sale already recorded: an
         // invoice line knows a description and a price, never a productId, a
         // variant or a SKU. Subscriptions sold before AGL-1732 have no stored
@@ -1366,6 +1534,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
           return true
         })
+        // BEFORE the redelivery short-circuit, deliberately (AGL-2071): a
+        // cycle Aglyn has already recorded is exactly the cycle whose renewal
+        // still needs stopping, and gating the stop on `recorded` would mean a
+        // Stripe redelivery — or a stop that failed once — never tries again.
+        // Its own claim marker is what makes it once-only.
+        if (!renewalEntitled) {
+          await stopLapsedStorefrontSubscription(
+            invoiceHostId,
+            subscriptionId,
+            subscriptionRef,
+          )
+        }
         if (!recorded) return
         // Inventory per cycle (AGL-1750, the AGL-281 semantics): the box that
         // ships this cycle comes off the shelf this cycle. Mirrors the cart

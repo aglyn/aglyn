@@ -111,6 +111,22 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ...hint,
     ...access,
     editAccessMintRefusal: authz.editAccessMintRefusal,
+    // AGL-2005 moved this route off a project-level `getUser` and onto the
+    // cross-pool resolver, because an SSO user's uid lives in their org's GCIP
+    // tenant and the project lookup THROWS for them. A wholesale module mock is
+    // a closed world, so omitting this export made it `undefined` and every
+    // request read as "no account" — a 403 that looks like a permission
+    // decision rather than a lookup that never happened.
+    //
+    // Modelled on the real contract: `null` when no pool knows the uid, and
+    // `{ record, tenantId }` when one does. Backed by the same `mockUsers`
+    // fixture the deleted- and disabled-account cases drive, so those keep
+    // measuring what they claim to.
+    findUserByUidAcrossPools: async (uid: string) => {
+      const record = mockUsers[uid]
+      if (!record) return null
+      return { record: { uid, ...record }, tenantId: null }
+    },
     firebaseAdmin: {
       app: () => ({ firestore: () => mockFirestore(), auth: () => mockAuth() }),
     },

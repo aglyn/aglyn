@@ -1264,6 +1264,72 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                       spacing={1}
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
+                      {/* The action the queue was missing (AGL-2059).
+                          `list` is what turns `isListingBrowsable` true —
+                          the moment third-party code becomes installable by
+                          every workspace — and it had no button, while
+                          `verify`, which only adds a badge, has had one all
+                          along. The only way a listing reached `listed` was
+                          the incidental mirror inside `approve-version`, so
+                          the consequential act happened as a side effect of
+                          a control labelled about something else, and a
+                          delisted plugin had no path back at all.
+
+                          Same checklist gate as `Verify` — the route gates
+                          both (and the `list` half of that gate had never
+                          been reachable). `warning`, matching the `listed`
+                          chip: this state is the live one, and the colour
+                          is the page's existing shorthand for that. */}
+                      {!['listed', 'verified'].includes(detail.reviewStatus) ? (
+                        <Tooltip
+                          title={
+                            blocked
+                              ? `Complete the review checklist first — ` +
+                                `${detail.checklistOutstanding.length} required ` +
+                                `item(s) outstanding for this version's bytes`
+                              : 'Makes this plugin browsable in the ' +
+                                'marketplace and installable by every ' +
+                                'workspace. This is the step that puts the ' +
+                                'code in front of customers.'
+                          }
+                        >
+                          <span>
+                            <Button
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              disabled={busy || blocked}
+                              onClick={() =>
+                                void post(
+                                  { action: 'list' },
+                                  'Listed — installable by every workspace',
+                                )
+                              }
+                            >
+                              {'List in marketplace'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      ) : null}
+                      {/* Claiming a submission (AGL-2059). Ungated, as the
+                          route intends: `delist` reuses `in_review` but
+                          reads as a retreat, so with more than one reviewer
+                          there was no way to say "I have this one". */}
+                      {detail.reviewStatus === 'submitted' ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={busy}
+                          onClick={() =>
+                            void post(
+                              { action: 'start-review' },
+                              'Marked in review',
+                            )
+                          }
+                        >
+                          {'Start review'}
+                        </Button>
+                      ) : null}
                       {detail.reviewStatus !== 'verified' ? (
                         // Say WHY it is disabled, at the button (AGL-1121).
                         // The checklist alert lives elsewhere on the page, so

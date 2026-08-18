@@ -43,6 +43,49 @@ const headers = {
   'Content-Type': 'application/json',
 }
 
+/**
+ * Does the custom domain actually SERVE? (AGL-1913)
+ *
+ * The attach route stopped registering this redirect for a domain that is
+ * attached but not serving — an ownership challenge outstanding, or DNS that
+ * no longer points here — because redirecting the platform subdomain at a dead
+ * domain costs the site BOTH its addresses. This script walks every host
+ * carrying a `cname` and, before that gate existed, would have happily
+ * registered exactly the redirects the gate now withholds: one `--apply` run
+ * would undo the fix for precisely the hosts it protects.
+ *
+ * Same two reads the route's status probe makes, in the same order. Unknown is
+ * treated as SERVING, matching the route: a platform API that cannot answer
+ * must not strand a healthy domain, and this path is guarded by a dry run
+ * plus an explicit `--apply` either way.
+ */
+async function customDomainServes(domain) {
+  try {
+    const attached = await fetch(
+      `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}${query}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (attached.status === 404) return { serves: false, why: 'not attached' }
+    if (!attached.ok) return { serves: true, why: 'state unknown' }
+    const payload = await attached.json()
+    if (payload?.verified === false) {
+      return { serves: false, why: 'ownership check pending' }
+    }
+    const configured = await fetch(
+      `https://api.vercel.com/v6/domains/${encodeURIComponent(domain)}/config${query}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (!configured.ok) return { serves: true, why: 'state unknown' }
+    const dns = await configured.json()
+    return dns?.misconfigured === true
+      ? { serves: false, why: 'DNS does not point here' }
+      : { serves: true, why: 'serving' }
+  } catch (error) {
+    console.error(`  ! status ${domain}:`, error?.message ?? error)
+    return { serves: true, why: 'state unknown' }
+  }
+}
+
 /** The redirect the edge should carry for one host, or null when correct. */
 async function currentRedirect(name) {
   const response = await fetch(
@@ -92,6 +135,8 @@ let candidates = 0
 let alreadyCorrect = 0
 let changed = 0
 let failed = 0
+/** Hosts whose custom domain does not serve, so the redirect was withheld. */
+let withheld = 0
 
 const hosts = await firestore.collection('hosts').get()
 for (const host of hosts.docs) {
@@ -106,6 +151,12 @@ for (const host of hosts.docs) {
     // Dry run still reports the CURRENT edge state when a token is present,
     // so the run says what would change, not just what exists in Firestore.
     if (token && projectId) {
+      const health = await customDomainServes(cname)
+      if (!health.serves) {
+        withheld += 1
+        console.log(`  would SKIP    ${name} → ${cname} (${health.why})`)
+        continue
+      }
       const state = await currentRedirect(name)
       const correct = state.exists && state.redirect === cname
       if (correct) {
@@ -123,6 +174,12 @@ for (const host of hosts.docs) {
     continue
   }
 
+  const health = await customDomainServes(cname)
+  if (!health.serves) {
+    withheld += 1
+    console.log(`  skipped   ${name} → ${cname} (${health.why})`)
+    continue
+  }
   const state = await currentRedirect(name)
   if (state.exists && state.redirect === cname) {
     alreadyCorrect += 1
@@ -146,6 +203,7 @@ for (const host of hosts.docs) {
 console.log(
   `\n${apply ? 'APPLIED' : 'DRY RUN'} — scanned ${scanned} host(s), ` +
     `${candidates} carry a custom domain, ${alreadyCorrect} already correct, ` +
-    `${changed} upserted, ${failed} failed.`,
+    `${changed} upserted, ${withheld} withheld (domain not serving), ` +
+    `${failed} failed.`,
 )
 if (!apply) console.log('Re-run with --apply (VERCEL_TOKEN required) to write.')

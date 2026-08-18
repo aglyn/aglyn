@@ -137,7 +137,7 @@ const SSO_ROSTER_ROW = {
  * genuinely missing — this is not a lookup failure.
  */
 const SSO_AUTH_RECORD = {
-  uid: 'IHumyGGhGxZKjVV26qCRx5Okf573',
+  uid: 'QQ7fixtureUid0000000000000001',
   email: 'zach@aglyn.com',
   displayName: null,
   photoURL: undefined,

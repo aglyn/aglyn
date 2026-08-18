@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { PLAN_ENTITLEMENTS, resolveMarketplaceFeePct } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
@@ -34,6 +35,7 @@ import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import PublishArtifactDialog, {
   type PublishArtifactTarget,
@@ -112,6 +114,12 @@ export function OrgPublishPanel({
 }) {
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
+  // The platform's cut, from the SAME helper the checkout deducts with
+  // (AGL-2078) rather than a restated constant — a second copy of a rate
+  // that moves money is a copy free to disagree with the one that bills.
+  const { org, ready: orgReady } = useCurrentOrg()
+  const feePct = resolveMarketplaceFeePct(org as never)
+  const paidFeePct = PLAN_ENTITLEMENTS.starter.marketplaceFeePct
   const { data: profile } = useFirestoreDoc<any>(
     () => doc(firestore, 'publisherProfiles', orgId || '-none-'),
     [firestore, orgId],
@@ -306,6 +314,33 @@ export function OrgPublishPanel({
             'an entire site from your organization so other organizations ' +
             'can install it. Your live site is unaffected.'}
         </Typography>
+        {/* What Aglyn keeps (AGL-2078). Until now this number appeared in
+            exactly one place in the console — the STAFF override table —
+            while `resolveMarketplaceFeePct` deducted it from every sale. A
+            publisher chose a price and learned the cut from the payout.
+
+            Rendered only once the org doc has arrived:
+            `resolveMarketplaceFeePct(undefined)` returns the free-plan rate,
+            so a number shown during load accuses a paying publisher of the
+            higher cut — and the same helper prices a DEAD subscription as
+            free-plan while `org.plan` still reads Pro, which is precisely
+            the case a publisher has no other way to notice. */}
+        {orgReady ? (
+          <Alert severity={feePct > paidFeePct ? 'warning' : 'info'}>
+            {feePct > paidFeePct
+              ? `Aglyn keeps ${feePct}% of each sale on your current plan. ` +
+                `On a paid plan it is ${paidFeePct}%.`
+              : `Aglyn keeps ${feePct}% of each sale. Payment processing ` +
+                'fees are charged separately by Stripe.'}
+            {feePct > paidFeePct && orgSlug ? (
+              <Box sx={{ mt: 1 }}>
+                <AppLink href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}>
+                  {'See plans'}
+                </AppLink>
+              </Box>
+            ) : null}
+          </Alert>
+        ) : null}
         {hosts.length > 1 && kind !== 'datasetSchema' ? (
           <TextField
             select

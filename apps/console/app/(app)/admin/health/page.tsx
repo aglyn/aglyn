@@ -68,6 +68,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import ScopeDriftCard from '../../../../components/scope-drift-card.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -512,6 +513,12 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                 )}
               </Stack>
             </CardDisplay>
+
+            {/* The repair half of the scope-drift pair (AGL-2062). The
+                detector has run weekly since AGL-1478 and the only way to
+                act on what it found was a curl carrying a hand-harvested
+                staff token. */}
+            <ScopeDriftCard />
           </Stack>
         </StaffOnly>
       </Container>

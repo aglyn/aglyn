@@ -1769,11 +1769,41 @@ export function resolveTransactionFeePct(
   productType: 'physical' | 'digital' | 'service',
 ): number {
   const entitlements = resolveOrgEntitlements(org)
-  const pct =
+  const key =
     productType === 'physical'
-      ? entitlements.transactionFeePhysicalPct
-      : entitlements.transactionFeeDigitalPct
-  return Number.isFinite(pct) && pct > 0 ? pct : 0
+      ? 'transactionFeePhysicalPct'
+      : 'transactionFeeDigitalPct'
+  const pct = entitlements[key]
+  if (Number.isFinite(pct) && pct > 0) return pct
+  // The free plan's 0% prices a plan that CANNOT SELL: `features.commerce` is
+  // false there, so on an ordinary free org this rate is never consulted. It
+  // IS consulted for the one org shape that can reach a storefront on the free
+  // entitlement set — a per-org `features.commerce` override — and 0% on a
+  // DESTINATION charge is not "no take rate", it is a loss: Stripe's
+  // processing fee (2.9% + 30¢) and any $15 dispute fee are debited from the
+  // PLATFORM's balance, so every sale costs Aglyn money (AGL-2071).
+  //
+  // `marketplaceFeePct: 30` on the free row is the same decision already made
+  // for marketplace selling, and its comment says so in as many words: the
+  // rate exists to price "an org GRANTED selling via a per-org feature
+  // override". This is the missing equivalent for storefront sales, expressed
+  // here rather than in the table because the plan CARDS render the table —
+  // `billing-plan-cards.component.tsx:444` — and a Free card advertising a
+  // transaction fee for selling it does not permit would be a pricing lie.
+  //
+  // A staff fee override wins even at 0: `resolveOrgEntitlements` merges any
+  // numeric override indistinguishably from the default, so the raw doc is
+  // what separates "nobody set a rate" from a deliberately comped one. That
+  // decision has a name and a reason attached (`org-override-reason.ts`), and
+  // this floor must not silently overrule it.
+  if (
+    resolvePlan(org) === 'free' &&
+    entitlements.features.commerce &&
+    typeof org?.entitlements?.[key] !== 'number'
+  ) {
+    return PLAN_ENTITLEMENTS.starter[key]
+  }
+  return 0
 }
 
 /**
@@ -1795,6 +1825,46 @@ export function resolveMarketplaceFeePct(
   return Number.isFinite(pct) && pct >= 0 && pct <= 100
     ? pct
     : PLAN_ENTITLEMENTS.free.marketplaceFeePct
+}
+
+/**
+ * The cheapest plan whose BASE features include `feature`, in ladder order —
+ * the answer to "which plan do I need for this?", which is the one thing an
+ * upsell has to say and the one thing no gate can hard-code without drifting
+ * from the table it is quoting.
+ *
+ * Returns `undefined` when NO plan carries it on the base tier. That is not
+ * an error: `eventCalendar` is an add-on purchased through
+ * `resolveOrgEntitlements`' override path and is false on all eight tiers, so
+ * "upgrade to X" is the wrong sentence for it. Callers must handle undefined
+ * rather than defaulting to a tier name.
+ *
+ * Derived from PLAN_ENTITLEMENTS on every call rather than from a
+ * hand-written map: a table of "feature → plan" is exactly the artifact that
+ * decays silently when a tier's flags are re-cut, and it would decay into
+ * pricing copy shown to a customer.
+ *
+ * Ladder order is `SELF_SERVE_PLANS` then `enterprise` — the same order the
+ * plan grid renders — so an enterprise-only feature (`ssoEnabled`) reports
+ * Enterprise rather than nothing.
+ */
+export function planGrantingFeature(
+  feature: keyof OrgFeatureFlags,
+): OrgPlan | undefined {
+  return [...SELF_SERVE_PLANS, 'enterprise' as OrgPlan].find((plan) =>
+    Boolean(PLAN_ENTITLEMENTS[plan].features[feature]),
+  )
+}
+
+/**
+ * The plan name an upsell should name, ready to interpolate — "Business",
+ * or undefined when {@link planGrantingFeature} has no answer.
+ */
+export function planLabelGrantingFeature(
+  feature: keyof OrgFeatureFlags,
+): string | undefined {
+  const plan = planGrantingFeature(feature)
+  return plan ? PLAN_LABELS[plan] : undefined
 }
 
 /** True when the org's plan (or overrides) enables the boolean feature. */
@@ -1885,6 +1955,63 @@ export function resolveBrandingProfile(
       cleanBrandString(profile.customConsoleDomain) ??
       AGLYN_BRANDING_PROFILE.customConsoleDomain,
   }
+}
+
+/**
+ * The value of the `<meta name="generator">` tag and of the `x-powered-by`
+ * header on published sites (AGL-2088) — the canonical CMS signal WordPress,
+ * Squarespace, Drupal and Ghost all ship, and the thing tech-stack detectors
+ * key on.
+ *
+ * Deliberately VERSIONLESS. The accidental headers this replaced carried
+ * `1.0.0-alpha.0` and a Node version, which dated every deployment and named
+ * our runtime to no consumer. A detector needs the product name and nothing
+ * else.
+ */
+export const PLATFORM_GENERATOR_NAME = 'Aglyn'
+
+/**
+ * May this org's published pages say they were built with Aglyn? (AGL-2088)
+ *
+ * The gate for the `<meta name="generator">` tag and the `x-powered-by`
+ * header. It reads the SAME entitlement `resolveBrandingProfile` reads —
+ * `whiteLabel` — rather than inventing a parallel one, so an agency's
+ * concealment promise has exactly one definition.
+ *
+ * WHY `whiteLabel` AND NOT `showBranding`. The "Made with Aglyn" badge is
+ * gated on `removeBranding`, which every plan above free grants, so reusing
+ * that gate would confine the signal to free-tier sites — the corpus this
+ * exists to build would be almost empty on day one. The two promises are also
+ * different in kind: `removeBranding` buys a page with no Aglyn credit on it,
+ * an aesthetic commitment about what a VISITOR sees; `whiteLabel` buys
+ * concealment of who built the site, which is the promise a machine-readable
+ * fingerprint actually breaks. A paying customer on a mid plan has bought a
+ * clean page, not anonymity.
+ *
+ * ⚠️ AN UNRESOLVED ORG SUPPRESSES, and this is the whole reason the function
+ * exists instead of a bare `!checkEntitlement(org, 'whiteLabel')` at each call
+ * site. `resolveOrgEntitlements(null)` resolves to the FREE plan — a loading
+ * default answering a question it was never asked — so a null org reads as
+ * "no white-label" and would EMIT. That null is not hypothetical: the tenant's
+ * `getOrgBilling` fails open with `org: null` on a Firestore error, so a
+ * transient read failure on an Agency site would have stamped the generator
+ * tag onto it. The asymmetry decides the direction: suppressing wrongly costs
+ * us one detection sample, emitting wrongly breaks a paid promise on a
+ * customer's own domain. So the org must be PRESENT and lack the entitlement;
+ * absent is not the same as free here.
+ */
+export function showsPlatformAttribution(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  // `{}` is treated as unresolved alongside `null`, and that is not
+  // pedantry: no org doc that was actually READ is empty — the converter
+  // yields `$id` at minimum — so an empty object only ever arrives from a
+  // placeholder or a loading default, the same shape `useBranding` hands back
+  // before its read lands. It resolves to the free plan like every other
+  // absent org, which is the right default for a quota and the wrong one for
+  // a disclosure.
+  if (!org || Object.keys(org).length === 0) return false
+  return !checkEntitlement(org, 'whiteLabel')
 }
 
 /**

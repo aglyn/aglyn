@@ -256,6 +256,38 @@ const ALLOWED = new Map<string, string>([
     'apps/console/constants/legal/v4/privacy.txt',
     'Frozen published Privacy Policy (v4, AGL-1564) — immutable evidence.',
   ],
+  // Zach's 2026-08-18 mandate, carried VERBATIM (3695fc02d). The word appears
+  // as "the open source community" — the ordinary English meaning, in quoted
+  // source material, not product naming. This block is under a standing
+  // instruction never to paraphrase, summarise or edit it: it has already lost
+  // a directive once by being summarised, which is why it is quoted rather
+  // than described. Rewording it to satisfy this guard would defeat the commit
+  // that carries it and silently alter words attributed to the founder.
+  //
+  // Scoped to the ONE file. Do not widen this to `.claude/` — the coverage
+  // test below asserts that this remains the only exemption outside the
+  // product tree, so widening it fails rather than quietly permitting more.
+  // The generated release record. `8e72befb8` (1.0.0-beta.1) rendered the
+  // AGL-2066 commit subject — "the no-community sweep exempts a verbatim
+  // quote, narrowly" — into the changelog, and the guard went red on main
+  // with nobody having filed it. The word is there as the NAME OF THIS GUARD
+  // inside a shipped commit subject, which is the opposite of product naming.
+  //
+  // Exempted at the file rather than fixed in place, for two reasons: a
+  // changelog is an append-only record of what was released and editing it
+  // falsifies that, and it is REGENERATED from commit subjects — so any
+  // future commit that mentions this guard by name reintroduces the line.
+  // Losing product-naming coverage here costs nothing: a changelog is not a
+  // product surface, and the surfaces this rename protects are still asserted
+  // scanned by the narrowness test below.
+  [
+    'CHANGELOG.md',
+    'Generated release record (AGL-2102): the word appears inside a quoted commit subject naming this very guard, and the file is regenerated from commit subjects so it cannot be fixed in place.',
+  ],
+  [
+    '.claude/commands/release.md',
+    "Verbatim capture of Zach's mandate; \"open source community\" is quoted speech, not product naming (AGL-2066).",
+  ],
 ])
 
 /** Anything whose bytes are not text we can meaningfully read. */
@@ -297,6 +329,43 @@ describe('the marketplace no longer calls itself community (AGL-975)', () => {
     for (const [rel] of ALLOWED) {
       const source = readFileSync(join(REPO_ROOT, rel), 'utf8')
       expect(`${rel}: ${/community/i.test(source)}`).toBe(`${rel}: true`)
+    }
+  })
+
+  it('keeps the exemptions narrow, and still polices the product surfaces', () => {
+    // An exemption is the ONE mechanism that can silently shrink this guard,
+    // and AGL-2066 added the first entry outside the product tree — a verbatim
+    // quote of Zach's mandate in `.claude/commands/release.md`. The staleness
+    // test above only asks whether an exemption is still USED; it cannot see
+    // an exemption that has grown to cover more than it should. This one asks
+    // the other question: is the guard still pointed at what it exists for?
+
+    // Exactly one exemption outside the product tree, named to the file.
+    // Widening this to `.claude/` — the tempting shortcut — fails here.
+    expect([...ALLOWED.keys()].filter((rel) => rel.startsWith('.claude/'))).toEqual([
+      '.claude/commands/release.md',
+    ])
+
+    // Every exemption names a real FILE. A directory or prefix entry would
+    // exempt everything beneath it, which `ALLOWED.has(rel)` would never
+    // reveal because it matches on exact path.
+    for (const rel of ALLOWED.keys()) {
+      expect(`${rel}: ${rel.endsWith('/')}`).toBe(`${rel}: false`)
+      expect(`${rel}: ${statSync(join(REPO_ROOT, rel)).isFile()}`).toBe(`${rel}: true`)
+    }
+
+    // The surfaces the rename exists to protect are still scanned. If an
+    // exemption ever swallowed one of these, the sweep above would pass by
+    // covering nothing — the failure mode that makes a green meaningless.
+    const scanned = trackedFiles().filter((rel) => !ALLOWED.has(rel))
+    for (const surface of [
+      'apps/console/app/',
+      'libs/plugins/marketplace/src/',
+      'apps/tenant/app/',
+      'libs/aglyn/src/lib/app-utils/',
+    ]) {
+      const covered = scanned.filter((rel) => rel.startsWith(surface)).length
+      expect(`${surface} scanned: ${covered > 0}`).toBe(`${surface} scanned: true`)
     }
   })
 

@@ -21,7 +21,7 @@
  */
 
 /**
- * AGL-941: a Stripe customer row said only `zachary.w.gover@gmail.com`.
+ * AGL-941: a Stripe customer row said only `owner@example.com`.
  *
  * The subscription has carried `metadata.orgId` since AGL-445; the CUSTOMER —
  * the row the dashboard lists — carried nothing. With one person owning

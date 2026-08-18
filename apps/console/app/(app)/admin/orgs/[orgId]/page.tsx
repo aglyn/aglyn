@@ -79,6 +79,7 @@ import StaffOrgSummaryCard, {
   staffPersonLabel,
   type StaffPerson,
 } from '../../../../../components/staff-org-summary-card.component'
+import { fetchAllPages } from '../../../../../utils/fetch-all-pages'
 import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 
@@ -215,19 +216,27 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // against what this card renders before switching, since a projection that
   // drops a field the UI reads fails silently as a blank.
   const [hostDocs, setHostDocs] = useState<any[] | null>(null)
+  /** True when the page ceiling stopped the walk (AGL-2083). */
+  const [hostsTruncated, setHostsTruncated] = useState(false)
   useEffect(() => {
     if (!isStaff || !orgId) return undefined
     let active = true
     void (async () => {
       const idToken = await (user as any)?.getIdToken?.()
       if (!idToken) return
-      const response = await fetch(
-        `/api/admin/hosts?orgId=${encodeURIComponent(orgId)}`,
-        { headers: { Authorization: `Bearer ${idToken}` } },
-      )
-      if (!response.ok) return
-      const payload = await response.json()
-      if (active) setHostDocs(payload?.hosts ?? [])
+      // The route serves 200 per page and returns `nextCursor`; this read
+      // took the first page and stopped (AGL-2083). `hostLimit` is
+      // UNLIMITED on the top tier, so an org past 200 sites showed a
+      // truncated Sites card with no indication it was short.
+      const result = await fetchAllPages<any>({
+        path: `/api/admin/hosts?orgId=${encodeURIComponent(orgId)}`,
+        key: 'hosts',
+        headers: { Authorization: `Bearer ${idToken}` },
+        active: () => active,
+      })
+      if (!active) return
+      setHostDocs(result.items)
+      setHostsTruncated(result.truncated)
     })().catch(() => undefined)
     return () => {
       active = false
@@ -1159,6 +1168,18 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       contentGutterY
                     >
                       <Stack spacing={1}>
+                        {/* Say so when the walk was cut short (AGL-2083).
+                            This count also feeds `usageByKey.hostLimit`
+                            below, so a silently short list did not just
+                            hide sites — it under-reported the org's host
+                            usage against its plan. */}
+                        {hostsTruncated ? (
+                          <Alert severity="warning">
+                            {'This list stopped before the route ran out of ' +
+                              'sites, so both it and the host count above ' +
+                              'are incomplete.'}
+                          </Alert>
+                        ) : null}
                         {(hostDocs ?? []).length === 0 ? (
                           <Typography
                             variant="body2"

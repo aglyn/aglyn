@@ -55,6 +55,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -106,6 +107,7 @@ import {
   isAllowedUploadType,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
+  requiresFileUploadEntitlement,
   UPLOAD_ACCEPT_ATTRIBUTE,
   UPLOAD_TYPES_MESSAGE,
 } from '../../utils/media-upload-limits'
@@ -391,6 +393,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const { org, ready: orgReady } = useCurrentOrg()
+  /**
+   * Media entitlement state (AGL-2081). Both were enforced server-side with
+   * ZERO console affordance:
+   *
+   * * `videoMedia` gates every non-image upload (`requiresFileUploadEntitlement`
+   *   — video, PDF, Office documents, ZIP). A free-tier drop just failed,
+   *   server-side, with nothing on screen naming the cause.
+   * * `mediaCdn` silently decides whether an asset gets a `cdnPath`, which
+   *   decides whether `mediaSrc` emits a stable CDN URL or a raw storage URL
+   *   that BREAKS when the file is moved between folders. A free-tier org's
+   *   asset URLs broke on a folder move with no way to learn why — the
+   *   subtlest of the four, because nothing about it looks like a plan
+   *   limit.
+   *
+   * Both read after `orgReady` at every use: `checkEntitlement(undefined)`
+   * answers NO, and the library is one of the first things opened on a cold
+   * console.
+   */
+  const fileUploads = orgReady && Aglyn.checkEntitlement(org as never, 'videoMedia')
+  const cdnDelivery = orgReady && Aglyn.checkEntitlement(org as never, 'mediaCdn')
+  const fileUploadPlanLabel =
+    Aglyn.planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
+  const cdnPlanLabel = Aglyn.planLabelGrantingFeature('mediaCdn') ?? 'a higher plan'
   /**
    * The scope stored on a folder created here (AGL-1466).
    *
@@ -2460,6 +2485,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         return 0
       }
+      // `videoMedia` (AGL-2081). Both upload routes enforce this —
+      // `media/upload/route.ts:240` and `upload-url/route.ts:166` — and the
+      // library had no gate at all, so a free-tier video or PDF drop was
+      // refused as a bare server error with nothing on screen naming the
+      // cause. A paid-feature refusal delivered as an upload failure.
+      //
+      // After the `orgReady` guard above on purpose: `checkEntitlement`
+      // answers NO for an undefined org, and this is one of the first things
+      // opened on a cold console.
+      if (
+        requiresFileUploadEntitlement(contentType) &&
+        !Aglyn.checkEntitlement(org as never, 'videoMedia')
+      ) {
+        enqueueSnackbar(
+          `"${file.name}" needs ${fileUploadPlanLabel} — images upload on ` +
+            'every plan. See Billing to upgrade.',
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
         enqueueSnackbar(
@@ -2685,6 +2730,72 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [assetOrigin, enqueueSnackbar],
   )
 
+  /**
+   * Mint and copy the short-lived link for a PRIVATE asset (AGL-2055).
+   *
+   * `POST /api/media/sign` has existed since AGL-1051 and nothing called it.
+   * That left the private flag half a feature: `handleCopyUrl` above hides
+   * itself for a private asset — correctly, there is no permanent URL — and
+   * so the console offered no way to fetch the bytes at all. Both the docs
+   * (`/content-and-data/media/overview#private-files`) and the "Make
+   * private" confirmation promise a temporary link, so the promise was the
+   * only place the capability appeared.
+   *
+   * Org library only, matching `onSetPrivate`: the route signs an `org:`
+   * scope and refuses anything else, so offering this on a site library
+   * would hand over a control that always 404s.
+   *
+   * The URL is NOT read back into state. It expires in about fifteen
+   * minutes, so holding it would mean rendering a control that silently
+   * decays; minting per click is the only shape that cannot be stale.
+   */
+  const handleCopySignedLink = useCallback(
+    (media: Aglyn.AglynHostMedia) => async () => {
+      const mediaId = media.$id as string
+      if (!orgId || !mediaId) return
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/sign', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ orgId, mediaId }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload?.url) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'Could not create a link for this file',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        // Absolute, like `handleCopyUrl`: the value is going to the
+        // clipboard and will be pasted somewhere with no origin of its own.
+        await navigator.clipboard.writeText(`${assetOrigin}${payload.url}`)
+        // The expiry is the whole point of the feature, so it is said out
+        // loud rather than left in the docs. Derived from the response
+        // instead of restating the TTL constant, which would be a second
+        // copy of it free to drift.
+        const minutes = Math.max(
+          1,
+          Math.round((Number(payload.expiresAtMs) - Date.now()) / 60000),
+        )
+        enqueueSnackbar(
+          `Temporary link copied — it stops working in about ${minutes} ` +
+            `minute${minutes === 1 ? '' : 's'}`,
+          { variant: 'success', persist: false },
+        )
+      } catch {
+        enqueueSnackbar('Could not create a link for this file', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [orgId, user, assetOrigin, enqueueSnackbar],
+  )
+
   const handleDelete = useCallback(
     (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
       const fileName = media.fileName ?? media.$id
@@ -2842,6 +2953,47 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         <Typography variant="body2" color="text.secondary">
           {`${items.length}${totalCount > items.length ? ` of ${totalCount}` : ''} file${totalCount === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
         </Typography>
+        {/* Media entitlement state (AGL-2081). Neither of these had ANY
+            console affordance — no toggle, no state, no locked branch — while
+            both changed what the library actually does. Stated as fact, not
+            sold: there is nothing here to switch on, and the honest answer to
+            "why did my video fail" / "why did my image URL break" is a line
+            that says so.
+
+            Rendered only once `orgReady`, so a cold console never tells a
+            paying workspace it is on the free tier. */}
+        {orgReady && !fileUploads ? (
+          <Tooltip
+            title={
+              `Images upload on every plan. Video, PDF, Word, Excel, ` +
+              `PowerPoint and ZIP need ${fileUploadPlanLabel}.`
+            }
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label={`Images only · ${fileUploadPlanLabel} for files`}
+            />
+          </Tooltip>
+        ) : null}
+        {orgReady && !cdnDelivery ? (
+          <Tooltip
+            title={
+              'Assets are served straight from storage, so an asset URL ' +
+              'changes if you move the file to another folder. ' +
+              `${cdnPlanLabel} serves them from the CDN at a stable address ` +
+              'with responsive image variants.'
+            }
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label={`No CDN · URLs change on move`}
+            />
+          </Tooltip>
+        ) : null}
         <Box
           component="input"
           ref={inputRef}
@@ -3143,6 +3295,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     )
                   }
                   onCopyUrl={handleCopyUrl(media)}
+                  // Same gate as `onSetPrivate` below — the route signs an
+                  // `org:` scope only, and the card hides the item unless
+                  // the asset is actually private (AGL-2055).
+                  onCopySignedLink={
+                    orgId && viewerOrgWide && !onSelect
+                      ? handleCopySignedLink(media)
+                      : undefined
+                  }
                   onReplace={
                     String(media.contentType ?? '').startsWith('image/')
                       ? () => requestCardReplace(media)

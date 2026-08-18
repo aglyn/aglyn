@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+/**
+ * `FieldValue` comes straight from the SDK rather than through the admin
+ * barrel (AGL-2073). This module now serves BOTH assist entrypoints — the
+ * console chat route and the besigner `/api/ai/assist` handler, which lives in
+ * a lib and cannot import from an app — so it had to move here. Importing
+ * `./firebase-admin` would drag the default-app initialization (cert
+ * credential, RTDB, AppCheck) into every unit test that touches a counter;
+ * `FieldValue`'s statics need no app at all.
+ */
+import { FieldValue } from 'firebase-admin/firestore'
 
 /**
  * Aglyn Assist metering + the data loop (AGL-1860, phase 1).
@@ -227,10 +236,146 @@ export interface AssistQuotaVerdict {
 }
 
 /**
- * Pre-flight quota check — runs BEFORE the model request so a capped org
- * never spends tokens. Free orgs meter per UTC day; entitled orgs carry the
- * monthly runaway guard. Reads are strongly consistent (no cache): a cap
- * must not be laundered by a stale counter.
+ * A reservation taken against the cap, carrying BOTH counter keys so it can
+ * be handed back against the periods it actually moved rather than against
+ * "now". A request that reserves at 23:59:59 and fails at 00:00:01 would
+ * otherwise credit the NEXT day — capacity nobody paid for, arriving by the
+ * one route a cap must never have.
+ */
+export interface AssistReservation extends AssistQuotaVerdict {
+  /** UTC day the daily counter was incremented for (`YYYY-MM-DD`). */
+  dayKey: string
+  /** Month the `assistUsage` doc was incremented for (`YYYY-MM`). */
+  monthKey: string
+}
+
+/**
+ * Reserve one assist message BEFORE the model is called (AGL-2057).
+ *
+ * This replaces `checkAssistQuota` on the request path, and the difference is
+ * the whole point. `checkAssistQuota` READ the counter and let the request
+ * through; the counter only moved in `recordAssistExchange`, at stream
+ * COMPLETION. Two ways out of the cap followed, both of which spend real
+ * provider tokens for an org that has no invoice to put them on:
+ *
+ * 1. **Concurrency.** N in-flight requests each read `used < limit` before any
+ *    of them recorded. The per-uid rate limiter (20/min) was the only bound.
+ * 2. **Abandoned streams.** Recording ran in the stream's completion handler,
+ *    so a client that opened a request and dropped it never counted at all.
+ *    Looped, that is UNBOUNDED spend on a free workspace — the cap simply
+ *    never advanced. This is the fail-open that costs money silently.
+ *
+ * So the count moves to the front, inside a transaction: read and increment
+ * are one atomic step, and a refused request never reaches the provider. The
+ * lesson is AGL's own — fix WHEN the quota is evaluated, not how the counting
+ * is done.
+ *
+ * Both counters move here (the daily one AND monthly `messages`) so message
+ * counting has exactly one home. `recordAssistExchange` therefore records the
+ * exchange, its tokens and its cost, and counts NO messages; calling it after
+ * a reservation must not double-count.
+ *
+ * A plan-less org resolves as free upstream, so an unknown org gets the
+ * SMALLER cap. That direction is deliberate.
+ */
+export async function reserveAssistMessage(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  entitled: boolean,
+  now = new Date(),
+): Promise<AssistReservation> {
+  const increment = FieldValue.increment
+  const serverTimestamp = FieldValue.serverTimestamp
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const day = assistUsageDay(now)
+  const month = assistUsageMonth(now)
+  const dailyRef = orgRef.collection('counters').doc('assistMessagesDaily')
+  const monthlyRef = orgRef.collection('assistUsage').doc(month)
+  const limit = entitled ? assistEntitledMonthlyLimit() : assistFreeDailyLimit()
+  const period: 'day' | 'month' = entitled ? 'month' : 'day'
+  const gateRef = entitled ? monthlyRef : dailyRef
+  const gateField = entitled ? 'messages' : day
+
+  return firestore.runTransaction(async (tx) => {
+    // The one read, before any write — Firestore requires that ordering, and
+    // it is also what makes check-and-increment a single atomic step.
+    const snapshot = await tx.get(gateRef)
+    const used = Number(snapshot.get(gateField) ?? 0)
+    if (!(used < limit)) {
+      return {
+        allowed: false,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: 0,
+      }
+    }
+    // `set(…, { merge: true })` and never `update()`: the counter document
+    // does not exist before an org's first message, and `update()` throws
+    // NOT_FOUND on a missing doc where a merging set conjures it.
+    tx.set(dailyRef, { [day]: increment(1) }, { merge: true })
+    tx.set(
+      monthlyRef,
+      { month, messages: increment(1), updatedAt: serverTimestamp() },
+      { merge: true },
+    )
+    return {
+      allowed: true,
+      period,
+      dayKey: day,
+      monthKey: month,
+      used: used + 1,
+      limit,
+      remaining: Math.max(0, limit - (used + 1)),
+    }
+  })
+}
+
+/**
+ * Hand a reservation back when the provider was never reached (AGL-2057): an
+ * upstream 502 spent no tokens, so it must not spend one of a free
+ * workspace's ten messages a day either.
+ *
+ * Released against the keys the RESERVATION recorded — see
+ * `AssistReservation`. Each counter is read first so neither can be driven
+ * below zero, even if the same reservation were released twice: a negative
+ * counter is extra capacity, and the release path must not become the
+ * laundering route the reservation was added to close.
+ */
+export async function releaseAssistMessage(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  reservation: Pick<AssistReservation, 'allowed' | 'dayKey' | 'monthKey'>,
+): Promise<void> {
+  if (!reservation.allowed) return
+  const increment = FieldValue.increment
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const dailyRef = orgRef.collection('counters').doc('assistMessagesDaily')
+  const monthlyRef = orgRef.collection('assistUsage').doc(reservation.monthKey)
+  await firestore.runTransaction(async (tx) => {
+    const dailySnapshot = await tx.get(dailyRef)
+    const monthlySnapshot = await tx.get(monthlyRef)
+    if (Number(dailySnapshot.get(reservation.dayKey) ?? 0) > 0) {
+      tx.set(dailyRef, { [reservation.dayKey]: increment(-1) }, { merge: true })
+    }
+    if (Number(monthlySnapshot.get('messages') ?? 0) > 0) {
+      tx.set(monthlyRef, { messages: increment(-1) }, { merge: true })
+    }
+  })
+}
+
+/**
+ * READ-ONLY view of where an org stands against its cap.
+ *
+ * ⚠️ NOT the enforcement path any more (AGL-2057) — `reserveAssistMessage` is.
+ * A read that is followed by a separate write is exactly the shape that let
+ * concurrent requests and abandoned streams past the cap; this function is
+ * kept for reporting and for tests that want the standing without consuming a
+ * message. **Anything that decides whether to call the model must reserve.**
+ *
+ * Free orgs meter per UTC day; entitled orgs carry the monthly runaway guard.
  */
 export async function checkAssistQuota(
   firestore: FirebaseFirestore.Firestore,
@@ -274,10 +419,18 @@ export async function checkAssistQuota(
   }
 }
 
-export interface AssistExchangeRecord {
-  uid: string
-  question: string
-  answer: string
+/**
+ * The DERIVED half of one assist turn: what it cost, what it cited, how it
+ * stopped. No prose and no uid, by construction — see the module header.
+ *
+ * Split out of `AssistExchangeRecord` (AGL-2073) because the besigner copy
+ * assistant at `/api/ai/assist` needs the meters WITHOUT the verbatim half.
+ * What a customer types into that surface is their own site copy and blog
+ * bodies, and retaining it for 180 days is a data flow the published privacy
+ * disclosure does not describe. The margin question — what did this org's
+ * assist usage cost us — is answered entirely by this record.
+ */
+export interface AssistSignalRecord {
   /** Console route the user asked from, e.g. `/org/acme/hosts`. */
   route: string
   hostId: string | null
@@ -297,42 +450,30 @@ export interface AssistExchangeRecord {
   stopReason: string | null
 }
 
-/**
- * The data loop + meters, one batch: writes the two halves of the exchange,
- * bumps the daily counter, and folds tokens/cost into the monthly usage doc.
- * Returns the shared id (the feedback route addresses it later). Callers
- * `await` this — an exchange that fails to record should surface in logs,
- * but the batch is one round trip so it does not add meaningful latency.
- *
- * The two halves share one id ON PURPOSE. It is what lets the feedback route
- * keep its single-id signature, and it is what makes an exchange and its
- * signal joinable for as long as both exist — without storing a second
- * pointer that could rot.
- */
-export async function recordAssistExchange(
-  firestore: FirebaseFirestore.Firestore,
-  orgId: string,
-  record: AssistExchangeRecord,
-  now = new Date(),
-): Promise<string> {
-  const increment = firebaseAdmin.firestore.FieldValue.increment
-  const serverTimestamp = firebaseAdmin.firestore.FieldValue.serverTimestamp
-  const orgRef = firestore.collection('orgs').doc(orgId)
-  const exchangeRef = orgRef.collection('assistExchanges').doc()
-  const signalRef = orgRef.collection('assistSignals').doc(exchangeRef.id)
-  const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
+/** A signal PLUS the verbatim half — the question, the answer, the asker. */
+export interface AssistExchangeRecord extends AssistSignalRecord {
+  uid: string
+  question: string
+  answer: string
+}
 
-  const batch = firestore.batch()
-  // The personal half. Everything a person typed, everything we said back,
-  // and who asked — and nothing else. Expires.
-  batch.set(exchangeRef, {
-    uid: record.uid,
-    question: record.question,
-    answer: record.answer,
-    hostId: record.hostId,
-    createdAt: serverTimestamp(),
-    expiresAt: assistExchangeExpiry(now),
-  })
+/**
+ * The signal document and the monthly cost rollup — the two writes every
+ * assist turn owes regardless of whether its prose is kept. Shared by
+ * `recordAssistExchange` and `recordAssistCost` so the meter has exactly one
+ * writer and the two entrypoints can never drift into reporting different
+ * money for the same tokens.
+ */
+function writeSignalAndRollup(
+  batch: FirebaseFirestore.WriteBatch,
+  orgRef: FirebaseFirestore.DocumentReference,
+  signalRef: FirebaseFirestore.DocumentReference,
+  record: AssistSignalRecord,
+  now: Date,
+): void {
+  const increment = FieldValue.increment
+  const serverTimestamp = FieldValue.serverTimestamp
+  const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
   // The analytic half. No prose and NO uid — deliberately, because a signal
   // row that names the asker is just the exchange with the words removed,
   // and would re-create as an access-request obligation exactly what the
@@ -353,16 +494,16 @@ export async function recordAssistExchange(
     feedback: null,
     createdAt: serverTimestamp(),
   })
-  batch.set(
-    orgRef.collection('counters').doc('assistMessagesDaily'),
-    { [assistUsageDay(now)]: increment(1) },
-    { merge: true },
-  )
+  // NO message counting here (AGL-2057). Both message counters are moved by
+  // `reserveAssistMessage`, BEFORE the provider is called — which is what
+  // makes the cap a cap. Counting again here would double every message, and
+  // more importantly would restore the belief that this is where the cap
+  // advances: it is not, and an exchange that never reaches this function
+  // (an abandoned stream) has already been counted.
   batch.set(
     orgRef.collection('assistUsage').doc(assistUsageMonth(now)),
     {
       month: assistUsageMonth(now),
-      messages: increment(1),
       inputTokens: increment(record.usage.inputTokens),
       outputTokens: increment(record.usage.outputTokens),
       cacheReadTokens: increment(record.usage.cacheReadTokens),
@@ -372,6 +513,75 @@ export async function recordAssistExchange(
     },
     { merge: true },
   )
+}
+
+/**
+ * Meter one assist turn that keeps NO verbatim record (AGL-2073) — the
+ * besigner copy assistant at `/api/ai/assist`.
+ *
+ * Writes the signal and folds tokens/cost into the monthly rollup, and writes
+ * nothing to `assistExchanges`. Same reason the console route splits the two:
+ * the loop's corpus was never the words. Here there is no loop to feed and no
+ * thumbs to collect, so the words are simply not taken.
+ *
+ * Like `recordAssistExchange` it counts NO message — the reservation did that
+ * before the tokens were spent. Callers should not let a metering failure fail
+ * the request: the tokens are already spent either way, and refusing the
+ * answer the customer paid for would make an accounting problem a product one.
+ */
+export async function recordAssistCost(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  record: AssistSignalRecord,
+  now = new Date(),
+): Promise<string> {
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const signalRef = orgRef.collection('assistSignals').doc()
+  const batch = firestore.batch()
+  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
+  await batch.commit()
+  return signalRef.id
+}
+
+/**
+ * The data loop + meters, one batch: writes the two halves of the exchange
+ * and folds tokens/cost into the monthly usage doc. It does NOT count the
+ * message — `reserveAssistMessage` already did, before the tokens were spent.
+ * Returns the shared id (the feedback route addresses it later). Callers
+ * `await` this — an exchange that fails to record should surface in logs,
+ * but the batch is one round trip so it does not add meaningful latency.
+ *
+ * The two halves share one id ON PURPOSE. It is what lets the feedback route
+ * keep its single-id signature, and it is what makes an exchange and its
+ * signal joinable for as long as both exist — without storing a second
+ * pointer that could rot.
+ */
+export async function recordAssistExchange(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  record: AssistExchangeRecord,
+  now = new Date(),
+): Promise<string> {
+  const serverTimestamp = FieldValue.serverTimestamp
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  const exchangeRef = orgRef.collection('assistExchanges').doc()
+  const signalRef = orgRef.collection('assistSignals').doc(exchangeRef.id)
+
+  const batch = firestore.batch()
+  // The personal half. Everything a person typed, everything we said back,
+  // and who asked — and nothing else. Expires.
+  batch.set(exchangeRef, {
+    uid: record.uid,
+    question: record.question,
+    answer: record.answer,
+    hostId: record.hostId,
+    createdAt: serverTimestamp(),
+    expiresAt: assistExchangeExpiry(now),
+  })
+  // The analytic half plus the meters — the same writer `recordAssistCost`
+  // uses, so the two assist entrypoints can never report different money for
+  // the same tokens.
+  writeSignalAndRollup(batch, orgRef, signalRef, record, now)
   await batch.commit()
   return exchangeRef.id
 }

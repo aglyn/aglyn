@@ -20,7 +20,7 @@
  *
  * The Checkout session already puts `orgId` on the **subscription**, but the
  * **Customer** carried nothing but an email — so the Stripe dashboard shows a
- * row reading `zachary.w.gover@gmail.com` and nothing else. One person owning
+ * row reading `owner@example.com` and nothing else. One person owning
  * several orgs makes that list ambiguous, and revenue cannot be grouped by
  * workspace at all.
  *

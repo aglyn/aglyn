@@ -25,7 +25,7 @@ describe('normalizePhone', () => {
   it('normalizes a bare ten-digit number, the shape production had stored', () => {
     // The real profile doc held one of these on 2026-07-30 — ten digits, no
     // country code, unusable for SMS or for a Stripe customer.
-    expect(normalizePhone('5122228232')).toBe('+15122228232')
+    expect(normalizePhone('5550107788')).toBe('+15550107788')
   })
 
   it('strips the punctuation humans type', () => {
@@ -56,7 +56,7 @@ describe('normalizePhone', () => {
   it('refuses to guess a country outside NANP', () => {
     // Inferring +49 for a bare German national number invents a different
     // subscriber; better to store nothing and ask.
-    expect(normalizePhone('5122228232', 'DE')).toBeNull()
+    expect(normalizePhone('5550107788', 'DE')).toBeNull()
     // ...but an explicit country code is still honoured under any default.
     expect(normalizePhone('+49 30 12345678', 'DE')).toBe('+493012345678')
   })

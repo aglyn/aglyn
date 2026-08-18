@@ -94,113 +94,69 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+// AGL-2016 + AGL-2026: both halves of the chrome the two §512 intakes share
+// — the operator-facing strings, and the page shell itself. AGL-1983 left
+// adopting the shared shell as a follow-up; this is it, so the local copies
+// below are gone and `documentHtml` owns the doctype, noindex and stylesheet.
+import {
+  clientIp,
+  contactHtml,
+  contactText,
+  documentHtml,
+  escapeHtml,
+  EXAMPLE_URL,
+  html,
+  NO_CHANNEL_ADVICE,
+  operatorTitleSuffix,
+  readPayload,
+  wantsJson,
+} from '../_legal-intake/chrome'
 import { getHost } from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The lede — who this form reaches, and what they can do about the report.
+ *
+ * Was: *"Tell us about a site hosted by **Aglyn** that is phishing … or
+ * otherwise breaking **our** Acceptable Use Policy."* Two claims, both false
+ * on every deployment but ours, on a page that ships with the software and is
+ * served unauthenticated: that Aglyn hosts the reported site, and that Aglyn's
+ * AUP governs it. A copyright holder reading that sends their §512 notice to
+ * us, about material we cannot see and have no right to remove, while their
+ * clock runs.
+ *
+ * Configured, it names the operator and reads as it always did. Unconfigured,
+ * it says so plainly and tells the reporter to find the operator another way
+ * (AGL-2016). That is deliberately unhelpful-sounding: a form that silently
+ * routes a legal notice to the wrong entity is worse than one that admits it
+ * does not know where the notice should go, because the first consumes the
+ * reporter's time before failing and the second does not.
+ *
+ * Note the AUP sentence drops entirely when unconfigured rather than being
+ * genericised. "Breaking the operator's acceptable use policy" asserts such a
+ * policy exists; on a bare install it may not.
+ */
+function operatorLede(): string {
+  const operator = Aglyn.operatorIdentity()
+  if (!operator.configured) {
+    return `<p class="lede">${Aglyn.OPERATOR_UNCONFIGURED_NOTICE}</p>`
+  }
+  const name = escapeHtml(operator.name)
+  return `<p class="lede">Tell us about a site hosted by ${name} that is
+phishing, hosting malware, infringing copyright, or otherwise breaking the
+acceptable use policy for this service. You do not need an account, and you do
+not have to tell us who you are.</p>`
+}
 
 /** Reports accepted per IP per window before throttling. */
 export const REPORT_RATE_MAX = 5
 /** Rate-limit window. */
 export const REPORT_RATE_WINDOW_MS = 10 * 60_000
 
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-
-const clientIp = (request: Request): string =>
-  String(request.headers.get('x-forwarded-for') ?? 'unknown')
-    .split(',')[0]
-    .trim() || 'unknown'
-
-/** Does the caller want JSON back, or is this a browser form post? */
-const wantsJson = (request: Request): boolean => {
-  const accept = request.headers.get('accept') ?? ''
-  const type = request.headers.get('content-type') ?? ''
-  return accept.includes('application/json') || type.includes('application/json')
-}
-
-/**
- * Read a body that may be JSON or a urlencoded form.
- *
- * Both spellings have to work: the no-JS form posts urlencoded, and a
- * programmatic reporter (a vendor's automated pipeline, which is a realistic
- * source for phishing feeds) posts JSON.
- */
-async function readPayload(request: Request): Promise<Record<string, unknown>> {
-  const type = request.headers.get('content-type') ?? ''
-  try {
-    if (type.includes('application/json')) {
-      const parsed = await request.json()
-      return parsed && typeof parsed === 'object'
-        ? (parsed as Record<string, unknown>)
-        : {}
-    }
-    const form = await request.formData()
-    const payload: Record<string, unknown> = {}
-    for (const [key, value] of form.entries()) {
-      payload[key] = typeof value === 'string' ? value : ''
-    }
-    return payload
-  } catch {
-    return {}
-  }
-}
-
 // ---------------------------------------------------------------------------
 // The form
 // ---------------------------------------------------------------------------
-
-const PAGE_STYLE = `
-  :root { color-scheme: light dark; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: #f6f7f9; color: #16181d; line-height: 1.55; }
-  main { max-width: 640px; margin: 0 auto; padding: 32px 20px 64px; }
-  h1 { font-size: 1.5rem; margin: 0 0 8px; }
-  .lede { color: #495057; margin: 0 0 24px; }
-  form { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px;
-         padding: 20px; }
-  fieldset { border: 0; margin: 0 0 20px; padding: 0; }
-  legend { font-weight: 600; padding: 0; margin-bottom: 8px; }
-  label { display: block; font-weight: 600; margin: 0 0 4px; }
-  .hint { font-weight: 400; color: #5c636a; font-size: .875rem; margin: 0 0 6px; }
-  input[type=text], input[type=email], input[type=url], textarea, select {
-    width: 100%; box-sizing: border-box; padding: 9px 10px; font: inherit;
-    border: 1px solid #ccd0d5; border-radius: 6px; background: #fff;
-    color: inherit; }
-  textarea { min-height: 120px; resize: vertical; }
-  .choice { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px;
-            font-weight: 400; }
-  .choice input { margin-top: 5px; }
-  .field { margin: 0 0 18px; }
-  button { background: #1b1f24; color: #fff; border: 0; border-radius: 6px;
-           padding: 11px 20px; font: inherit; font-weight: 600;
-           cursor: pointer; }
-  .note { background: #fff8e6; border: 1px solid #f0dcaa; border-radius: 8px;
-          padding: 12px 14px; margin: 0 0 20px; font-size: .9375rem; }
-  .error { background: #fdecec; border: 1px solid #f2b8b8; border-radius: 8px;
-           padding: 12px 14px; margin: 0 0 20px; }
-  .ok { background: #eaf7ee; border: 1px solid #b7e0c4; border-radius: 8px;
-        padding: 16px 18px; }
-  footer { color: #5c636a; font-size: .875rem; margin-top: 24px; }
-  a { color: #0b5ed7; }
-  .hp { position: absolute; left: -9999px; width: 1px; height: 1px;
-        overflow: hidden; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #16181d; color: #e6e8ea; }
-    form { background: #1e2127; border-color: #2f343c; }
-    input[type=text], input[type=email], input[type=url], textarea, select {
-      background: #16181d; border-color: #3a4048; color: inherit; }
-    button { background: #e6e8ea; color: #16181d; }
-    .lede, .hint, footer { color: #a5abb3; }
-    .note { background: #2a2415; border-color: #4d431f; }
-    .error { background: #2d1a1a; border-color: #5a2b2b; }
-    .ok { background: #16281c; border-color: #2c5237; }
-    a { color: #7db1ff; }
-  }
-`
 
 const categoryFields = (): string =>
   Aglyn.ABUSE_REPORT_CATEGORIES.map(
@@ -217,22 +173,10 @@ function formHtml(options: {
   error?: string
 }): string {
   const { reportedUrl, error } = options
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Report abuse — Aglyn</title>
-<style>${PAGE_STYLE}</style>
-</head>
-<body>
-<main>
-<h1>Report abuse</h1>
-<p class="lede">Tell us about a site hosted by Aglyn that is phishing, hosting
-malware, infringing copyright, or otherwise breaking our Acceptable Use
-Policy. You do not need an account, and you do not have to tell us who you
-are.</p>
+  return documentHtml(
+    'Report abuse',
+    `<h1>Report abuse</h1>
+${operatorLede()}
 ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
 <div class="note"><strong>If someone is in immediate danger, contact your local
 emergency services first.</strong> We act quickly, but we are not an emergency
@@ -243,7 +187,7 @@ service.</div>
     <p class="hint">The full address, starting with https://</p>
     <input id="url" name="url" type="text" inputmode="url" required
            value="${escapeHtml(reportedUrl)}"
-           placeholder="https://example.aglyn.app/page">
+           placeholder="${escapeHtml(EXAMPLE_URL)}">
   </div>
 
   <fieldset>
@@ -310,26 +254,15 @@ service.</div>
 </form>
 <footer>
   <p>We read every report. If you would rather email us, write to
-  <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a>.</p>
-</footer>
-</main>
-</body>
-</html>`
+  ${contactHtml('support')}.</p>
+</footer>`,
+  )
 }
 
 function receiptHtml(reference: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Report received — Aglyn</title>
-<style>${PAGE_STYLE}</style>
-</head>
-<body>
-<main>
-<h1>Report received</h1>
+  return documentHtml(
+    'Report received',
+    `<h1>Report received</h1>
 <div class="ok">
   <p>Thank you — your report is in front of our team.</p>
   <p>Your reference is <strong>${escapeHtml(reference)}</strong>. Quote it if
@@ -340,22 +273,10 @@ function receiptHtml(reference: string): string {
   share your details with the site's owner unless the law requires it — a
   copyright notice is the exception, because the site owner has a right to
   respond to one.</p>
-  <p>Follow-up: <a href="mailto:${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}">${Aglyn.ABUSE_REPORT_CONTACT_EMAIL}</a></p>
-</footer>
-</main>
-</body>
-</html>`
+  <p>Follow-up: ${contactHtml('support')}</p>
+</footer>`,
+  )
 }
-
-const html = (body: string, status = 200): Response =>
-  new Response(body, {
-    status,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-robots-tag': 'noindex',
-    },
-  })
 
 /**
  * Render the form.
@@ -432,17 +353,19 @@ export async function POST(request: Request): Promise<Response> {
   if (!rate.allowed) {
     // Hand them another route rather than a wall — the refusal must not be
     // the last thing a real reporter sees.
+    const contact = contactText('support')
     const message =
       `You have sent several reports from this connection recently. ` +
-      `Please wait a few minutes, or email ${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} ` +
-      `so nothing is lost.`
+      (contact
+        ? `Please wait a few minutes, or email ${contact} so nothing is lost.`
+        : `Please wait a few minutes. ${NO_CHANNEL_ADVICE}`)
     const retryAfter = Math.max(
       1,
       Math.ceil((rate.resetMs - Date.now()) / 1000) || 60,
     )
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 429, headers: { 'retry-after': String(retryAfter) } },
         )
       : new Response(formHtml({ reportedUrl: '', error: message }), {
@@ -547,12 +470,14 @@ export async function POST(request: Request): Promise<Response> {
     })
   } catch (error) {
     console.error('abuse report write failed', error)
-    const message =
-      `We could not record your report just now. Please email ` +
-      `${Aglyn.ABUSE_REPORT_CONTACT_EMAIL} so it is not lost.`
+    const contact = contactText('support')
+    const message = contact
+      ? `We could not record your report just now. Please email ` +
+        `${contact} so it is not lost.`
+      : `We could not record your report just now. ${NO_CHANNEL_ADVICE}`
     return asJson
       ? Response.json(
-          { error: message, contact: Aglyn.ABUSE_REPORT_CONTACT_EMAIL },
+          { error: message, contact },
           { status: 503 },
         )
       : html(formHtml({ reportedUrl: report.url, error: message }), 503)

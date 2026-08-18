@@ -54,12 +54,24 @@ interface SeededHost {
 
 let mockOrgs: SeededOrg[]
 let mockHosts: SeededHost[]
-/** Every `notifyOrgAdmins` call, as `{orgId, title}`. */
-let mockNotifications: Array<{ orgId: string; title: string }>
+/**
+ * Every `notifyOrgAdmins` call.
+ *
+ * `body` is captured since 2026-08-18: once storage past the band BILLS
+ * rather than being refused, this notification is the whole of the "no
+ * surprise bill" protection, and what it says is the protection — a body that
+ * tells a metered org to "upgrade to raise the limit" describes a wall that
+ * is not there and omits the charge that is.
+ */
+let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 
 const mockNotifyOrgAdmins = jest.fn(
-  async (orgId: string, payload: { title: string }) => {
-    mockNotifications.push({ orgId, title: payload.title })
+  async (orgId: string, payload: { title: string; body: string }) => {
+    mockNotifications.push({
+      orgId,
+      title: payload.title,
+      body: payload.body,
+    })
   },
 )
 
@@ -216,11 +228,14 @@ async function run() {
   return mockNotifications
 }
 
-const mediaAlerts = (notifications: Array<{ title: string }>) =>
+/** One captured notification: title AND body (see `mockNotifications`). */
+type CapturedAlert = { title: string; body: string }
+
+const mediaAlerts = (notifications: CapturedAlert[]) =>
   notifications.filter((entry) => entry.title.includes('media storage'))
 
 /** The AGL-1886 check, keyed and labelled apart from the org-wide one. */
-const libraryAlerts = (notifications: Array<{ title: string }>) =>
+const libraryAlerts = (notifications: CapturedAlert[]) =>
   notifications.filter((entry) =>
     entry.title.includes('organization library storage'),
   )
@@ -318,7 +333,41 @@ describe('the org library is warnable on its own (AGL-1886)', () => {
     expect(10240 / PRO_BAND_MB).toBeLessThan(0.8)
     // The library check fires, at the cap.
     expect(libraryAlerts(notifications)).toHaveLength(1)
-    expect(libraryAlerts(notifications)[0].title).toContain('reached')
+    // Pro METERS storage, so past the band the product keeps working and
+    // starts charging (2026-08-18). The alert has to say that — "you've
+    // reached your limit" would describe a wall that no longer exists, and
+    // would omit the only thing the customer needs to know.
+    expect(libraryAlerts(notifications)[0].title).toContain('now billed')
+    expect(libraryAlerts(notifications)[0].body).toContain(
+      'billed on your monthly invoice',
+    )
+    // And it names both ways out, because the cap is the customer's control.
+    expect(libraryAlerts(notifications)[0].body).toContain('monthly cap')
+    expect(libraryAlerts(notifications)[0].body).toContain('upgrade')
+  })
+
+  it('CONTROL: a plan that hard-bands is still told to upgrade, not billed at', () => {
+    // The other side of the same branch, and the reason it is a branch. Free
+    // never bills for storage — its band is a wall — so telling a free org
+    // that extra storage "is billed on your monthly invoice" would be a
+    // surprise bill invented by a notification. Forced red by dropping the
+    // `check.billsOverage` ternary: free got the metered wording.
+    //
+    // Free's `hostLimit` is 1, so both storage checks cross together here.
+    // That collapse is what makes free useless for testing WHICH band is
+    // read — but it is irrelevant to WHAT THE ALERT SAYS, which is all this
+    // case asks.
+    return (async () => {
+      mockOrgs = [{ id: 'org-1', plan: 'free', orgLibraryBytes: 250 * MB }]
+      mockHosts = [{ id: 'site-a', orgId: 'org-1', mediaBytes: 0 }]
+      const notifications = await run()
+      const library = libraryAlerts(notifications)
+      expect(library).toHaveLength(1)
+      expect(library[0].title).toContain('reached')
+      expect(library[0].title).not.toContain('billed')
+      expect(library[0].body).toContain('upgrade in Billing to raise the limit')
+      expect(library[0].body).not.toContain('invoice')
+    })()
   })
 
   it('warns on the approach, before the money and before the refusal', async () => {

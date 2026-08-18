@@ -25,23 +25,30 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RELEASE_FLAGS } from '@aglyn/aglyn'
 
-// `assist-usage` reaches the admin barrel only for FieldValue, and the barrel
-// pulls the whole tenancy surface (and `next/cache`) with it. Stubbed to the
-// two sentinels the batch writes, so the path assertions below stay about
-// PATHS.
-jest.mock('@aglyn/tenant-data-admin', () => ({
+// `assist-usage` moved into the admin lib (AGL-2073) so the besigner's
+// `/api/ai/assist` handler — which lives in a lib and cannot import from an
+// app — can reserve and meter through the same code. Importing the barrel for
+// real would pull the whole tenancy surface (and `next/cache`) with it, so the
+// barrel stays stubbed and the REAL module is spliced back in by path. The
+// module itself only reaches `firebase-admin/firestore` for FieldValue, which
+// is stubbed to the two sentinels the batch writes — the assertions below stay
+// about PATHS.
+jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  firebaseAdmin: {
-    firestore: {
-      FieldValue: {
-        increment: (n: number) => ({ __inc: n }),
-        serverTimestamp: () => '__now__',
-      },
-    },
+  FieldValue: {
+    increment: (n: number) => ({ __inc: n }),
+    serverTimestamp: () => '__now__',
   },
 }))
 
-import { recordAssistExchange } from '../app/api/_lib/assist-usage'
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+  ),
+}))
+
+import { recordAssistExchange, reserveAssistMessage } from '@aglyn/tenant-data-admin'
 
 /**
  * AGL-1909: Anthropic must be a published subprocessor BEFORE it processes
@@ -130,8 +137,20 @@ const MENTIONS_ONLY = new Map<string, string>([
     'Sets a fake key to exercise the 501 gate.',
   ],
   [
+    'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
+    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+  ],
+  [
     'apps/console/.env.development.local.example',
     'Local development template.',
+  ],
+  [
+    '.env.selfhost.example',
+    'The self-host env template (AGL-2014). Names the key so an operator knows Assist needs their OWN Anthropic key; without it both Assist surfaces answer 501. A template, not a flow.',
+  ],
+  [
+    'docs/SELF_HOSTING.md',
+    'The self-host runbook (AGL-2014). Documents the same key as an optional operator-supplied credential. Documentation, not a flow.',
   ],
   [
     'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
@@ -297,6 +316,19 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
     })
     const firestore = {
       collection: (name: string) => makeCollection(name),
+      // The counters/rollup writes moved into the RESERVATION (AGL-2057), so
+      // the erasure surface is only complete if this test drives both halves.
+      runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          get: async () => ({
+            exists: false,
+            data: () => undefined,
+            get: () => undefined,
+          }),
+          set: (ref: { path: string }) => {
+            written.push(ref.path)
+          },
+        }),
       batch: () => ({
         set: (ref: { path: string }) => {
           written.push(ref.path)
@@ -305,6 +337,7 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
       }),
     } as unknown as FirebaseFirestore.Firestore
 
+    await reserveAssistMessage(firestore, 'org-1', false)
     await recordAssistExchange(firestore, 'org-1', {
       uid: 'user-1',
       question: 'How do I publish?',
@@ -329,11 +362,14 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
     // it created a new collection, which is precisely the moment a cascade
     // silently stops covering everything. The length is asserted so a fifth
     // collection added later cannot slip past this list unnoticed.
-    expect(written).toHaveLength(4)
-    for (const path of written) {
+    // Deduped: the monthly rollup is touched by BOTH halves now — the
+    // reservation counts the message, the batch folds in the tokens.
+    const distinct = [...new Set(written)]
+    expect(distinct).toHaveLength(4)
+    for (const path of distinct) {
       expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
     }
-    expect(written.map((path) => path.split('/')[2]).sort()).toEqual([
+    expect(distinct.map((path) => path.split('/')[2]).sort()).toEqual([
       'assistExchanges',
       'assistSignals',
       'assistUsage',

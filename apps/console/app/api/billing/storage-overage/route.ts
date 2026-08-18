@@ -29,9 +29,9 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
-  resolveStorageOverage,
+  resolveStorageCap,
   storageOveragePricePerGbUsd,
-  STORAGE_OVERAGE_DEFAULT_CEILING_USD,
+  STORAGE_CAP_FALLBACK_USD,
 } from '../../../../utils/storage-overage'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as
@@ -39,31 +39,32 @@ import {
 // alive precisely so members can reach Billing; and this is the control that
 // stops an org accruing charges, so a 423 would trap it accruing them.
 
-/** The most a self-serve org may set as its monthly storage-overage bound. */
-export const STORAGE_OVERAGE_MAX_CEILING_USD = 5_000
+/** The most a self-serve org may set as its monthly storage-overage cap. */
+export const STORAGE_CAP_MAX_USD = 5_000
 
 /**
- * Acknowledge metered storage overage, and set the monthly bound (AGL-1886).
+ * Set or clear the org's own monthly storage-overage cap (AGL-1886, corrected
+ * 2026-08-18).
  *
- * Zach's condition on billing org-library storage from today, verbatim: "also
- * give overage protection and usage alerts, so customers don't get a surprise
- * bill." This route is the consent half of the protection.
+ * Zach, 2026-08-18, verbatim: *"it should be a control by the end user, to
+ * prevent overage or usage alerts rather, we just want to minimize churn"*.
+ * This route is that control, and nothing else — it is **not** a consent
+ * surface and there is nothing here a customer must do before storage works.
  *
- *   `get`         → the current acknowledgement, ceiling, and whether the
- *                   plan meters storage at all
- *   `acknowledge` → stamp consent and store the ceiling
- *   `revoke`      → withdraw consent; the hard cap returns immediately
+ *   `get`      → the cap in force (if any), whether the plan meters, and the
+ *                per-GB rate the invoice uses
+ *   `setCap`   → store the ceiling the customer typed
+ *   `clearCap` → remove it; the org goes back to billing without a ceiling
  *
- * `billing.manage`-gated: agreeing to a charge is the permission that buys
- * things. Admin-SDK-only by construction — `storageOverage` is an ENTITLEMENT
- * INPUT (it is what lets an upload past `storagePerHostMb`) and the rules deny
- * it to every client, so a member cannot grant their own org unbounded
- * storage and raise their own spend limit in one write.
+ * `billing.manage`-gated, because the cap bounds spend in both directions:
+ * raising it raises what the org can be invoiced. Admin-SDK-only by
+ * construction — `storageOverage` is an ENTITLEMENT INPUT and the rules deny
+ * it to every client, so a member cannot raise their own spend ceiling.
  *
- * REVOKE IS ALWAYS AVAILABLE, including to a plan that no longer meters and
- * to an org already over its allowance: withdrawing consent must never be
- * gated on the same conditions as giving it, or an org that changed its mind
- * would be stuck accruing.
+ * CLEARING IS ALWAYS AVAILABLE, including to a plan that no longer meters and
+ * to an org already over its allowance. So is setting: an org that wants to
+ * be stopped must be able to say so at any moment, and an org that wants the
+ * brakes off must not have to argue with a precondition.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -78,7 +79,7 @@ async function handler(request: Request): Promise<Response> {
   if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   const orgId = String(body?.orgId ?? '')
   const action = String(body?.action ?? '')
-  if (!orgId || !['get', 'acknowledge', 'revoke'].includes(action)) {
+  if (!orgId || !['get', 'setCap', 'clearCap'].includes(action)) {
     return Response.json({ error: 'Bad request' }, { status: 400 })
   }
 
@@ -104,67 +105,70 @@ async function handler(request: Request): Promise<Response> {
     const org = (orgSnapshot.data() ?? {}) as any
     const entitlements = resolveOrgEntitlements(org)
     const metered = planMetersInfraOverage(org)
-    const current = resolveStorageOverage(org)
+    const current = resolveStorageCap(org)
 
     if (action === 'get') {
       return Response.json(
         {
           ...current,
           metered,
-          defaultCeilingUsd: STORAGE_OVERAGE_DEFAULT_CEILING_USD,
-          maxCeilingUsd: STORAGE_OVERAGE_MAX_CEILING_USD,
+          defaultCapUsd: STORAGE_CAP_FALLBACK_USD,
+          maxCapUsd: STORAGE_CAP_MAX_USD,
           includedStoragePerSiteMb: entitlements.storagePerHostMb,
-          // The card quotes a price before asking for consent, and it must be
-          // the rate the rollup bills (AGL-1957) — so it is served from the
-          // same constants rather than duplicated into the client bundle.
+          // The card quotes the price storage bills at, and it must be the
+          // rate the rollup bills (AGL-1957) — so it is served from the same
+          // constants rather than duplicated into the client bundle. This
+          // survived the 2026-08-18 correction unchanged and must keep doing
+          // so: the quoted price IS the invoiced price.
           pricePerGbUsd: storageOveragePricePerGbUsd(),
         },
         { status: 200 },
       )
     }
 
-    if (action === 'revoke') {
+    if (action === 'clearCap') {
+      // Deletes the whole document, legacy consent fields included, so an org
+      // that clears its cap is byte-identical to one that never set one.
       await orgRef.set(
         { storageOverage: FieldValue.delete() },
         { merge: true },
       )
       return Response.json(
-        { ok: true, acknowledged: false, monthlyCeilingUsd: 0 },
+        { ok: true, capSet: false, monthlyCapUsd: null },
         { status: 200 },
       )
     }
 
-    // Free hard-bands and enterprise is UNLIMITED — neither has a metered
-    // storage line for consent to attach to, and pretending otherwise would
-    // store an acknowledgement that the upload gate then ignores. A stored
-    // consent nothing reads is worse than none: it reads as protection.
+    // A plan that never bills for storage has no overage for a cap to bound.
+    // Storing one would be a control that does nothing — and a control that
+    // does nothing reads as protection, which is worse than none.
+    //
+    // Note this is NOT a gate on storing: a free org's uploads are refused at
+    // its band whatever this route does. It is a gate on offering a knob.
     if (!metered) {
       return Response.json(
         {
           error:
-            'Your plan does not meter storage — its storage allowance is a ' +
-            'fixed cap. Upgrade in Billing to store more.',
-          code: 'upgrade_required',
+            'Your plan never bills for storage — its allowance is a fixed ' +
+            'cap and uploads stop there, so there is no overage to limit. ' +
+            'Upgrade in Billing to store more.',
+          code: 'not_metered',
         },
         { status: 409 },
       )
     }
 
-    const requested = Number(body?.monthlyCeilingUsd)
-    const ceiling = Number.isFinite(requested)
-      ? requested
-      : STORAGE_OVERAGE_DEFAULT_CEILING_USD
-    // A ceiling is the BOUND on the consent, so it must be a real number in a
-    // real range. Zero or negative would be consent that refuses every byte —
-    // indistinguishable from not acknowledging, but stored as if it were —
-    // and an unbounded one is the surprise bill this exists to prevent.
-    if (ceiling <= 0 || ceiling > STORAGE_OVERAGE_MAX_CEILING_USD) {
+    const requested = Number(body?.capUsd)
+    const cap = Number.isFinite(requested) ? requested : STORAGE_CAP_FALLBACK_USD
+    // The cap must be a real number in a real range. Zero or negative would
+    // refuse every overage byte while reading as a limit; above the maximum
+    // is a self-serve org writing itself an enterprise-sized commitment.
+    if (cap <= 0 || cap > STORAGE_CAP_MAX_USD) {
       return Response.json(
         {
           error:
-            `Set a monthly storage limit between $1 and ` +
-            `$${STORAGE_OVERAGE_MAX_CEILING_USD}.`,
-          code: 'invalid_ceiling',
+            `Set a monthly storage cap between $1 and $${STORAGE_CAP_MAX_USD}.`,
+          code: 'invalid_cap',
         },
         { status: 400 },
       )
@@ -173,9 +177,16 @@ async function handler(request: Request): Promise<Response> {
     await orgRef.set(
       {
         storageOverage: {
-          acknowledgedAt: FieldValue.serverTimestamp(),
-          acknowledgedBy: decoded.uid,
-          monthlyCeilingUsd: ceiling,
+          capUsd: cap,
+          capSetAt: FieldValue.serverTimestamp(),
+          capSetBy: decoded.uid,
+          // The legacy consent pair is cleared on any write, so an org that
+          // sets a cap today is not also carrying a stale acknowledgement
+          // that `resolveStorageCap` would read as a second, different
+          // ceiling.
+          acknowledgedAt: FieldValue.delete(),
+          acknowledgedBy: FieldValue.delete(),
+          monthlyCeilingUsd: FieldValue.delete(),
         },
       },
       { merge: true },
@@ -187,19 +198,19 @@ async function handler(request: Request): Promise<Response> {
       .add({
         actorUid: decoded.uid,
         actorEmail: decoded.email ?? null,
-        action: 'billing.storageOverage.acknowledge',
+        action: 'billing.storageOverage.setCap',
         target: `orgs/${orgId}`,
         before: {
-          acknowledged: current.acknowledged,
-          monthlyCeilingUsd: current.monthlyCeilingUsd,
+          capSet: current.capSet,
+          monthlyCapUsd: current.monthlyCapUsd,
         },
-        after: { acknowledged: true, monthlyCeilingUsd: ceiling },
+        after: { capSet: true, monthlyCapUsd: cap },
         at: FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)
 
     return Response.json(
-      { ok: true, acknowledged: true, monthlyCeilingUsd: ceiling },
+      { ok: true, capSet: true, monthlyCapUsd: cap },
       { status: 200 },
     )
   } catch (error) {
