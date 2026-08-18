@@ -75,6 +75,16 @@ afterEach(() => {
   delete (window as unknown as { gtag?: unknown }).gtag
 })
 
+
+// The classifier returns a union (content click | outbound link); these
+// pricing-CTA cases are all content clicks — narrow once, type-safely, so
+// tsc agrees with what jest already exercises (AGL-1841's lesson: jest
+// never typechecks, so a union access error hides until a full tsc).
+const contentId = (
+  params: { content_id: string } | { link_domain: string } | undefined,
+): string | undefined =>
+  params && 'content_id' in params ? params.content_id : undefined
+
 describe('what counts as a CTA (AGL-1562)', () => {
   it('counts a link built to look like a button, with the label a report can read', () => {
     const link = paint(
@@ -178,11 +188,11 @@ describe('tier qualification — the plan in the CTA href (AGL-1858)', () => {
     const starter = paint(
       '<a id="target" class="MuiButton-root" href="/signup?plan=starter">CHOOSE</a>',
     )
-    const first = classify(starter)?.params.content_id
+    const first = contentId(classify(starter)?.params)
     const scale = paint(
       '<a id="target" class="MuiButton-root" href="/signup?plan=scale">CHOOSE</a>',
     )
-    const second = classify(scale)?.params.content_id
+    const second = contentId(classify(scale)?.params)
     expect(first).toBe('CHOOSE:plan=starter')
     expect(second).toBe('CHOOSE:plan=scale')
     expect(first).not.toBe(second)
@@ -205,7 +215,7 @@ describe('tier qualification — the plan in the CTA href (AGL-1858)', () => {
       '<a id="target" class="MuiButton-root" ' +
         'href="/signup?email=someone%40example.com&code=SECRET">Start free</a>',
     )
-    const id = classify(link)?.params.content_id
+    const id = contentId(classify(link)?.params)
     expect(id).toBe('Start free')
     expect(id).not.toContain('example.com')
     expect(id).not.toContain('SECRET')
