@@ -287,10 +287,21 @@ Work this list, not the tree.
 **Under each workspace they belong to**
 - `orgs/{orgId}` and every subcollection: members, invites, roles, usage,
   apiUsage, analytics, datasets/records, contacts, contactSegments, lists,
-  media, mediaFolders, installs, activity, `retention` (churn survey free text)
+  media, mediaFolders, installs, activity, `retention` (churn survey — the
+  reason and plan; the free text moved to `churnSurveyDetails`, below)
 - **`orgs/{orgId}/assistExchanges`** — their Assist questions and the answers,
   **verbatim**, keyed by `uid`. Easy to forget; often the most personal thing
-  we hold (AGL-1972)
+  we hold. Bounded to **180 days** since AGL-1972, so an access request made
+  later than that legitimately finds nothing — say that, rather than reporting
+  an empty result as "no Assist use"
+- `orgs/{orgId}/assistSignals` — the same exchanges with the prose and the
+  `uid` removed (docs paths, tokens, cost, rating). **Not responsive to a
+  personal request**: it names no person, which is the point of the split. Do
+  not offer it as "your Assist data" — doing so would re-personalise a record
+  deliberately built not to be
+- `orgs/{orgId}/churnSurveyDetails` — the churn survey's free text, ≤500
+  characters, keyed by the survey id. **365 days** (AGL-1978). Responsive: it
+  is whatever the person typed on their way out
 - `hosts/{hostId}` trees for that org — screens, layouts, orders, webhooks,
   form submissions
 - Storage `orgs/{orgId}/`, `hosts/{hostId}/`

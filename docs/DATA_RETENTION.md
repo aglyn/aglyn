@@ -69,6 +69,28 @@ Verified against `gcloud firestore fields ttls list --project=aglyn-main
 row still reads "TTL not yet enabled in gcloud as of 2026-08-17" — it is
 enabled. Corrected in that file with this change.
 
+### Declared and written, but the gcloud policy is OWED
+
+These three have `expiresAt` stamped by every writer and a `fieldOverrides`
+entry in `cloud/firebase-firestore.indexes.json`, so nothing is at risk from an
+index deploy. **The `gcloud firestore fields ttls update` command has not been
+run**, so the timestamps are currently inert. They are listed separately rather
+than in the table above because the difference between "a period is written
+down" and "a period is enforced" is exactly the AGL-1496 defect, and a schedule
+that blurs the two is worse than one that admits the gap. Commands in
+`docs/FIRESTORE_MANUAL_CONFIG.md`; move these rows up when they read `ACTIVE`.
+
+| Collection group | Field | Period | Contents | Evidence |
+| --- | --- | --- | --- | --- |
+| `assistExchanges` | `expiresAt` | **180 days** | The **verbatim** half of an Assist exchange: the question, the answer, the asking `uid`, the host. | `assist-usage.ts` `ASSIST_EXCHANGE_RETENTION_DAYS` (AGL-1972) |
+| `churnSurveyDetails` | `expiresAt` | **365 days** | The churn survey's ≤500 characters of free text, split off the survey document. | `_lib/retention.ts` `CHURN_SURVEY_DETAIL_RETENTION_DAYS` (AGL-1978) |
+| `apiIdempotency` | `expiresAt` | **30 days** | Replay keys **and the original response body** — for the REST API, a copy of the created record's `values`. | `api-idempotency.ts` `API_IDEMPOTENCY_RETENTION_DAYS` (AGL-1978) |
+
+`apps/console/specs/retention-ttl-config.spec.ts` asserts all eight policies as
+a three-part configuration — declared in the index file, documented with a
+gcloud command, and actually stamped by **every** writer. It cannot see the
+live project; that read-back is the `ttls list` command below.
+
 ### Enforced by a scheduled job
 
 | Data | Period | Mechanism | Evidence |
@@ -85,20 +107,54 @@ usage and apiUsage rollups, installs, activity, `pluginSettings`, and the
 churn-funnel `retention` subcollection. No per-collection period; they live as
 long as the workspace does and die with `recursiveDelete(orgRef)`.
 
+Two exceptions now sit under the org and DO have a period, both created by
+splitting a document rather than by shortening one: `assistExchanges` (below)
+and `churnSurveyDetails`, which holds the churn survey's free text so that it
+can expire at 365 days while the survey's closed-set `reason` — the breakdown
+the retention funnel exists to produce — stays for the life of the workspace.
+A TTL deletes documents, so a period on the survey itself would have taken the
+reason with it; that is the general shape of both splits.
+
 The same is true of everything under `users/{uid}/…` — profile, org
 memberships, host memberships, notifications, passkeys, `legalAcceptances` —
 which `eraseUser` removes with `recursiveDelete(userRef)`
 (`erase.ts:938`, AGL-1140).
 
-**Aglyn Assist writes three subcollections and all three are under the org**,
-so the cascade reaches them with no extra sweep:
-`orgs/{orgId}/assistExchanges/{id}`, `orgs/{orgId}/assistUsage/{month}`,
+**Aglyn Assist writes four subcollections and all four are under the org**, so
+the cascade reaches them with no extra sweep:
+`orgs/{orgId}/assistExchanges/{id}`, `orgs/{orgId}/assistSignals/{id}`,
+`orgs/{orgId}/assistUsage/{month}`,
 `orgs/{orgId}/counters/assistMessagesDaily`. Pinned by
 `apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts` §"assist
 records stay reachable by eraseOrg", which asserts both halves — that every
 written path starts `orgs/{orgId}/`, *and* that `erase.ts` still contains
 `recursiveDelete(orgRef)`, because the first assertion is decorative without
-the second. **Reachable is not the same as bounded** — see the defects below.
+the second. The spec asserts the COUNT as well as the names, so the next
+collection added cannot slip past it the way `assistSignals` would have.
+
+**Only three of the four are retained for the life of the workspace.**
+AGL-1972 split the exchange in two rather than choosing one period for two
+kinds of data:
+
+- `assistExchanges` holds the question, the answer, the asking `uid` and the
+  host — and expires at **180 days** (see the owed-policy table above).
+- `assistSignals` holds the same id and **no prose and no uid**: the console
+  route, model, tier, token counts, estimated cost, the cited `docsPaths`, the
+  `stopReason` and the thumbs rating. No expiry. This is what the docs-gap
+  mining loop and the cost meters actually read, and it is why 180 days on the
+  prose costs the loop nothing.
+- `assistUsage/{month}` and `counters/assistMessagesDaily` carry no expiry
+  deliberately. They are integers, the monthly rollup is the cost history the
+  pricing decision reads, and the daily counter is ONE document per org keyed
+  by field — a TTL deletes documents, so it could only reap the whole quota
+  state, cap included.
+
+⚠️ **This is the row that no longer matches the published page.** Privacy
+Policy v5 §5 says Assist conversations "are retained for as long as your
+Organization exists". After the 180-day expiry that sentence is wrong — in the
+customer's favour, but wrong. Filed as **AGL-1992**; nothing is actually
+deleted for 180 days after the policy is enabled, so the page has a full
+window to be corrected before any divergence exists in fact.
 
 ### Top-level collections the cascade cannot see
 
@@ -110,7 +166,7 @@ has a sweep in `eraseOrg` or is a defect.
 | `apiKeys` | yes (AGL-1444) | SHA-256 of the token, label, creating uid, scopes |
 | `ssoDomains` | yes (AGL-1448) | domain, GCIP tenant/provider ids, IdP name |
 | `consoleDomains` | yes (AGL-1448) | custom console domain claims |
-| `apiIdempotency` | yes (AGL-1448) | replay keys — no TTL, see defect 9 |
+| `apiIdempotency` | yes (AGL-1448) | replay keys **and the original response body** — for the REST API a copy of the created record's `values`. 30-day TTL declared (AGL-1978); the sweep is what covers an erasure, the TTL is what bounds a live org |
 | `stripeCustomers` | yes (AGL-1448) | billing-identity → workspace correlation |
 | `orgSlugs` | yes (AGL-1448) | current slug **and every rename tombstone** |
 | `hostIndex` | yes, via `eraseHost` | subdomain/cname routing |
@@ -259,15 +315,16 @@ Each of these is a defect, not a note. Filed rather than narrated.
 | 1 | ~~**`profiles/{uid}` survives `eraseUser`.**~~ **CLOSED 2026-08-18.** `eraseUser` now `recursiveDelete`s `profiles/{uid}` before the auth record and reports `deleted.profile` in the audit row. | **AGL-1970** |
 | 2 | ~~**`publisherProfiles/{orgId}` and `publisherHandles/{handle}` survive `eraseOrg`.**~~ **CLOSED 2026-08-18.** Handles — live reservation and rename tombstones alike — are swept by `orgId` field; the profile is deleted, or reduced to a content-free `{ erased: true }` tombstone when a listing outlives it. Both pinned by `erase-publisher-identity.emulator.spec.ts`, whose negative control proves a bystander publisher's profile, handle and payout id are untouched. | **AGL-1970** |
 | 3 | ~~**`supportTickets` survives both erasures.**~~ **CLOSED 2026-08-18.** `eraseOrg` recursive-deletes each thread with its `messages`; `eraseUser` redacts `authorId`/`authorEmail` across every workspace, current or former, and keeps the org's thread. Pinned by `erase-support-tickets.emulator.spec.ts`, whose negative controls hold a bystander org's thread and a co-author's email in a redacted thread. **One deployment step outstanding**: the `messages.authorId` `COLLECTION_GROUP` index must be deployed, or the user-side redaction reports `null`. | **AGL-1971** |
-| 4 | **Assist Q&A has no retention period at all.** `orgs/{orgId}/assistExchanges/{id}` stores the user's `question` and the model's `answer` **verbatim** plus the asking `uid`, with no `expiresAt`, no TTL and no prune. It is reachable by the cascade, so an erasure clears it — but until the org is erased it is kept forever, and Assist is gated on a privacy-policy disclosure for exactly this data (`release_assist`, AGL-1909). A disclosure that states a period we do not enforce is worse than the gap. | **AGL-1972** |
+| 4 | ~~**Assist Q&A has no retention period at all.**~~ **CLOSED 2026-08-18.** The exchange is split: `assistExchanges` (question, answer, `uid`) carries `expiresAt` at **180 days**; `assistSignals` (no prose, no uid) carries the docs paths, tokens, cost and rating with no expiry, so the data loop keeps its corpus. Declared in the index file and documented; the gcloud policy is owed. The published page now says something different — that is **AGL-1992**, not this row. | **AGL-1972** |
 | 5 | **`privacy@aglyn.com` may not exist.** It is the intake address in Privacy Policy §7, §9, §11 and §13 and the data-importer contact in DPA Annex A. The Drive open-items list records that only `noreply@` and `info@` were live at drafting; `security@`, `legal@`, `abuse@` and `dmca@` are in the same unconfirmed state and each is load-bearing in a published document. | **AGL-1973** |
 | 6 | ~~**No personal-data export exists.**~~ **CLOSED 2026-08-18.** `/manage/user` → **Download my data** and `/[orgSlug]/settings` → Delete → **Download workspace data** serve machine-readable JSON; `tools/scripts/subject-access.mjs` is the staff path for someone who cannot sign in, and it CALLS the same functions rather than reimplementing them. Secrets are reported as present and never reproduced; an API key's id is withheld because it is the token's SHA-256. **The coverage is held in step with erasure by `personal-data-export-coverage.spec.ts`**, which discovers every collection `erase.ts` names out of its source and fails until each has an explicit disclosure decision — so a new sweep here turns the export red instead of silently under-disclosing. | **AGL-1974** |
 | 7 | ~~**No deletion-instruction replay after a restore.**~~ **CLOSED 2026-08-18.** `tools/scripts/replay-erasures.mjs` is step 4 of `DISASTER_RECOVERY.md` Procedures C and D. Residual: the 90-day hot `adminAudit` window does not cover the oldest GCS export — the script reports that as `incomplete` and exits non-zero rather than printing an empty list. Gap 5 of `DISASTER_RECOVERY.md`. | **AGL-1975** |
 | 7b | **DPA §7.2's subprocessor change-notification mechanism does not exist** — no notice period, no subscribe control, no objection path. Split out because it is a **legal-page publication**, not a repo change: `/legal/subprocessors` needs a dated changelog, a stated notice period and an objection address, published in the same batch as the new subprocessor rows. | **AGL-1990** |
 | 8 | **Staff user erasure has no button.** `eraseUser` is reachable only by hand-crafting `POST /api/admin/users/manage {action:'erase'}` with a super-staff token — and `erase-org-cli.mjs:117` points operators at a "staff console → Users → Erase" button that does not exist. | **AGL-1977** |
-| 9 | `apiIdempotency` has no TTL and is reaped only by an erasure, so replay keys accumulate against a live org indefinitely. Low severity (a replay key names an org and a record id and authorises nothing) but it is retention without a period. | **AGL-1978** |
-| 10 | `orgs/{orgId}/retention` — the churn survey — stores up to 500 characters of free text with no period. Org-scoped, so the cascade takes it; noted because a free-text field is where a person types something we did not ask for. | **AGL-1978** |
-| 11 | `/PRIVACY_POLICY.md` at the repo root is a 2021-dated stub that names `privacy@aglyn.com` and nothing else. It is not the published policy, is not referenced by anything, and is exactly the sort of file a reader trusts. | **AGL-1978** |
+| 9 | ~~`apiIdempotency` has no TTL.~~ **CLOSED 2026-08-18** at **30 days**, and the severity was understated when it was filed: a settled claim stores the **original response body**, which for the REST API is the created record's `values`. It was a permanent second copy of every record created through the API — one that survived the record's own deletion, as `apps/docs/api/conventions.md` advertised in terms. That page moved from "keys never expire" to the 30-day window in the same change. | **AGL-1978** |
+| 10 | ~~The churn survey's free text has no period.~~ **CLOSED 2026-08-18.** Split into `orgs/{orgId}/churnSurveyDetails/{surveyId}` at **365 days**, so the free text expires while the closed-set `reason`, `surface` and `plan` stay for the life of the workspace — the retention funnel's breakdown (AGL-1859/AGL-1863) is what Zach asked for and must not be reaped along with the prose. | **AGL-1978** |
+| 11 | ~~`/PRIVACY_POLICY.md` at the repo root is a 2021-dated stub.~~ **CLOSED 2026-08-18.** Replaced by a pointer to the published pages and an explanation of the publication-first ordering, rather than deleted — a deleted file at an obvious path gets helpfully re-created. Nothing referenced it; confirmed before replacing. | **AGL-1978** |
+| 12 | **Privacy Policy v5 §5 says Assist conversations are retained for the life of the Organization**, which stopped being true when defect 4 was closed with a 180-day expiry. Wrong in the customer's favour, and nothing is actually deleted for 180 days, so the page has a window to be corrected. Publication-first: the page moves, then the snapshot. | **AGL-1992** |
 
 ## Reviewing this document
 
