@@ -1065,17 +1065,40 @@ describe('the stock a chargeback left off the shelf (AGL-1797)', () => {
  * The platform's side of the money (AGL-1794).
  *
  * On a destination charge a lost dispute debits AGLYN's balance while the
- * merchant keeps the transfer. The decision: the merchant eats their share —
- * a transfer reversal for the portion that was actually transferred, never
- * the application fee's — and the platform eats Stripe's dispute fee as the
- * cost of owning the payment relationship.
+ * merchant keeps the transfer. The decision: the merchant eats their share,
+ * and the platform eats Stripe's dispute fee as the cost of owning the
+ * payment relationship.
  *
- * The transfer is 5580 of the 6200 charge (a 620 application fee), so no
- * correct assertion can coincide with the dispute amount, the order total or
- * any other figure in this file (AGL-1711).
+ * ## The fixture used to model Stripe wrongly (AGL-1951)
+ *
+ * It set the transfer to 5580 of the 6200 charge — "the application fee's 620
+ * was never the merchant's, so it is not pulled back from them" — and every
+ * assertion here agreed with it. **Stripe does not do that.** Measured in test
+ * mode on this exact session shape (a destination charge, `application_fee_
+ * amount: 500` on a $100.00 charge):
+ *
+ *   - `charge.amount` 10000, `charge.application_fee_amount` 500
+ *   - **`transfer.amount` 10000** — the FULL charge, not charge-minus-fee
+ *   - the connected account's own balance transaction: `amount` 10000,
+ *     `fee` 500, `net` 9500 — the application fee is debited at the
+ *     DESTINATION, it does not reduce the transfer
+ *
+ * So `transferCents === chargeAmountCents` in production, the proportional
+ * share is the whole principal, and the application fee's portion IS pulled
+ * back from the merchant. The old fixture made the opposite claim pass green:
+ * a double that does not model real semantics fabricates a false green about
+ * the one number that moves money.
+ *
+ * The figures below now match what Stripe actually produces. The commercial
+ * question this exposes — whether the merchant should hand back the gross or
+ * only the 9500 they netted — is recorded on AGL-1951 for Zach; this file
+ * pins what SHIPS, which is the gross.
  */
 describe('the seller share of a lost dispute (AGL-1794)', () => {
-  const TRANSFER_CENTS = 5580
+  // Faithful to Stripe: the transfer is the whole charge. The application fee
+  // is a separate debit on the connected account and never reduces it.
+  const TRANSFER_CENTS = 6200
+  const APPLICATION_FEE_CENTS = 620
   const CHARGE_URL = 'https://api.stripe.com/v1/charges/ch_1'
   const TRANSFER_URL = 'https://api.stripe.com/v1/transfers/tr_1'
   const REVERSAL_URL = 'https://api.stripe.com/v1/transfers/tr_1/reversals'
@@ -1089,7 +1112,15 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
   ): void {
     stubStripe({
       [CHARGE_URL]: {
-        body: { id: 'ch_1', amount: ORDER_TOTAL_CENTS, transfer: 'tr_1' },
+        body: {
+          id: 'ch_1',
+          amount: ORDER_TOTAL_CENTS,
+          // Carried because Stripe carries it — and deliberately NOT
+          // subtracted from the transfer below, which is the measured
+          // behaviour this fixture used to get backwards (AGL-1951).
+          application_fee_amount: APPLICATION_FEE_CENTS,
+          transfer: 'tr_1',
+        },
       },
       [TRANSFER_URL]: {
         body: {
@@ -1122,9 +1153,14 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     const post = reversalPosts()[0]
     expect(post.url).toBe(REVERSAL_URL)
     const body = new URLSearchParams(String(post.init.body))
-    // The TRANSFERRED portion, not the disputed 6200: the application fee's
-    // 620 was never the merchant's, so it is not pulled back from them.
+    // The TRANSFERRED portion — which Stripe makes the whole charge, so the
+    // application fee's 620 comes back out of the merchant too (AGL-1951).
     expect(body.get('amount')).toBe(String(TRANSFER_CENTS))
+    // Stated as its own assertion so the fee's fate cannot regress silently
+    // back to the pre-AGL-1951 belief that it was excluded.
+    expect(Number(body.get('amount'))).toBeGreaterThan(
+      ORDER_TOTAL_CENTS - APPLICATION_FEE_CENTS,
+    )
     // The metadata is the crash-window backstop's join key.
     expect(body.get('metadata[disputeId]')).toBe('dp_1')
     expect(body.get('metadata[orderId]')).toBe('order-1')
@@ -1142,37 +1178,44 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     happyStripe()
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(disputeEvents().at(-1).detail).toBe(
-      '$55.80 seller share reversed for lost dispute',
+      '$62.00 seller share reversed for lost dispute',
     )
   })
 
   /**
    * The proportion follows the order's OWN reversal, which `refund.ts`'s cap
    * already bounded: a $17.00 refund left 4500 to charge back, and the
-   * merchant's share of that is 4500 × 5580 ÷ 6200 = 4050.
+   * merchant's share of that is 4500 × 6200 ÷ 6200 = 4500.
+   *
+   * The ratio is 1 because Stripe transfers the whole charge (AGL-1951), so
+   * this case no longer discriminates the share from the principal on its
+   * own — `never reverses more than the transfer has left`, below, is what
+   * still proves the formula is a formula and not `principalCents` passed
+   * through.
    */
   it('reverses proportionally when a partial refund left less behind', async () => {
     docs.set('hosts/host-1/orders/order-1', {
       ...order(),
       refundedCents: 1700,
     })
-    happyStripe({ reversal: { body: { id: 'trr_1', amount: 4050 } } })
+    happyStripe({ reversal: { body: { id: 'trr_1', amount: 4500 } } })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     const body = new URLSearchParams(String(reversalPosts()[0].init.body))
-    expect(body.get('amount')).toBe('4050')
-    expect(order().dispute.reversedTransferCents).toBe(4050)
+    expect(body.get('amount')).toBe('4500')
+    expect(order().dispute.reversedTransferCents).toBe(4500)
   })
 
   /** NEVER MORE: the transfer's remainder caps the share. */
   it('never reverses more than the transfer has left', async () => {
     happyStripe({
       transfer: { amount_reversed: 5000 },
-      reversal: { body: { id: 'trr_1', amount: 580 } },
+      reversal: { body: { id: 'trr_1', amount: 1200 } },
     })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     const body = new URLSearchParams(String(reversalPosts()[0].init.body))
-    expect(body.get('amount')).toBe('580')
-    expect(order().dispute.reversedTransferCents).toBe(580)
+    // 6200 − 5000 already reversed. The full share would have been 6200.
+    expect(body.get('amount')).toBe('1200')
+    expect(order().dispute.reversedTransferCents).toBe(1200)
   })
 
   /**
@@ -1225,12 +1268,12 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
           data: [{ id: 'trr_8', amount: 100, metadata: { disputeId: 'dp_0' } }],
         },
       },
-      reversal: { body: { id: 'trr_1', amount: 5480 } },
+      reversal: { body: { id: 'trr_1', amount: 6100 } },
     })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     const body = new URLSearchParams(String(reversalPosts()[0].init.body))
-    // Capped by the 5480 the transfer has left, not the full 5580 share.
-    expect(body.get('amount')).toBe('5480')
+    // Capped by the 6100 the transfer has left, not the full 6200 share.
+    expect(body.get('amount')).toBe('6100')
     expect(order().dispute.transferReversalId).toBe('trr_1')
   })
 
@@ -1383,9 +1426,18 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     )
     expect(payout).toHaveLength(1)
     expect(payout[0].hostId).toBe('host-1')
-    // $55.80 — the transferred share, NOT the $62.00 the shopper disputed.
-    expect(payout[0].title).toContain('$55.80')
-    expect(payout[0].title).not.toContain('$62.00')
+    // $62.00 — the transferred share, which Stripe makes the whole charge.
+    // This used to also assert the figure was NOT the $62.00 the shopper
+    // disputed; the two coincide once the transfer is modelled faithfully
+    // (AGL-1951), so what is pinned instead is that this is a SECOND,
+    // separate notice from the dispute-outcome one — the property that
+    // assertion was really protecting.
+    expect(payout[0].title).toContain('$62.00')
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Chargeback lost'),
+      ),
+    ).toHaveLength(1)
     expect(payout[0].body).toContain('order-1')
     // The negative-balance consequence, in the merchant's own words.
     expect(payout[0].body).toContain('future payouts')
