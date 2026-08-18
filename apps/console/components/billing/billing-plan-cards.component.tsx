@@ -165,7 +165,7 @@ function LowerTierDisclosure(props: {
               }`}
         </Button>
         {/* The tip appears only once the lower plans are actually on screen
-            (AGL-1929). Collapsed, this is a disclosure control and there is
+            (AGL-1943). Collapsed, this is a disclosure control and there is
             nothing yet to explain; expanded, the customer is looking at a
             downgrade, and the one thing no card can say in its own corner is
             WHEN picking it takes effect — end of the paid period, $0 today,

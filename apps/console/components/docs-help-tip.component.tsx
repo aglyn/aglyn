@@ -40,7 +40,7 @@ export interface DocsHelpTipProps<
   /** Registry key of the docs page this affordance explains. */
   topic: K
   /**
-   * Heading on that page to land on, rather than its top (AGL-1929).
+   * Heading on that page to land on, rather than its top (AGL-1943).
    *
    * Type-checked against the page's real headings, exactly as `docsHelp()`'s
    * `anchor` is — so a docs restructure that renames the heading is a compile

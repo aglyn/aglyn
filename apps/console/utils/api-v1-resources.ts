@@ -545,7 +545,7 @@ async function handleSites(
 
 /**
  * Commerce resources need the `commerce` entitlement as well as the scope
- * (AGL-1906). `apiAccess` alone is the wrong gate here: it says the org may
+ * (AGL-1928). `apiAccess` alone is the wrong gate here: it says the org may
  * call the API at all, not that it may still use the store. AGL-1873 closed
  * exactly this class on the write side — two money doors that asked the
  * plugin switch (`org.enabledPlugins`) instead of the plan, so a lapsed org

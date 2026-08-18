@@ -22,7 +22,7 @@
  */
 
 /**
- * The orders / products / media resources on the public REST API (AGL-1906).
+ * The orders / products / media resources on the public REST API (AGL-1928).
  *
  * Four of these assertions exist because the naive implementation of each is
  * wrong in a way that still returns 200, which is the class of defect a

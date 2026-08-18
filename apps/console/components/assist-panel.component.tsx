@@ -397,7 +397,7 @@ export function AssistPanelComponent() {
             {/* Assist answers from the docs but never says so, and the three
                 questions it provokes — what it can and can't do, why it
                 stopped answering, what happens to what I typed — are exactly
-                the four headings on its docs page (AGL-1929). Nothing in this
+                the four headings on its docs page (AGL-1943). Nothing in this
                 panel's chrome can carry those, and a chat box is the one
                 surface where a user is most likely to keep asking rather
                 than go and read. */}

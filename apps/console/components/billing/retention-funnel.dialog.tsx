@@ -419,7 +419,7 @@ export function RetentionFunnelDialog({
       {step === 'confirm' && (
         <>
           {/* The one help tip in this dialog, and it belongs on THIS step
-              (AGL-1929). The earlier steps each explain themselves in a
+              (AGL-1943). The earlier steps each explain themselves in a
               sentence; this is where an irreversible decision is made, and
               it is the step whose consequences a sentence cannot carry —
               what survives, what stops, what "end of the paid period"
