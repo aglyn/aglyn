@@ -41,8 +41,9 @@ async function stripeGet(
 }
 
 /**
- * The seller's share of a LOST marketplace dispute, pulled back from the
- * connected account (AGL-1554, by the AGL-1794 policy).
+ * The seller's share of a LOST marketplace dispute — or of a REFUND
+ * (AGL-1995) — pulled back from the connected account (AGL-1554, by the
+ * AGL-1794 policy).
  *
  * Marketplace sales are destination charges on the platform account, so the
  * disputed funds and the dispute fee are debited from the PLATFORM's balance
@@ -53,7 +54,7 @@ async function stripeGet(
  * `transfers/{id}/reversals` call for the portion that was actually
  * transferred; the platform still eats Stripe's dispute fee, deliberately.
  *
- * PROPORTIONAL, NEVER MORE: `disputedCents × transfer.amount ÷
+ * PROPORTIONAL, NEVER MORE: `causeAmountCents × transfer.amount ÷
  * charge.amount`, FLOORED, then capped at what the transfer has left
  * (`amount − amount_reversed`) — a transfer partially reversed by a
  * dashboard refund cannot be pulled below its own remainder from here. The
@@ -66,7 +67,8 @@ async function stripeGet(
  * `reversedTransferCents` present (0 included) means this step settled, and
  * a redelivery returns before any Stripe call; a delivery killed between the
  * POST landing and the record writing is healed by ADOPTING the reversal the
- * transfer already carries (`metadata.disputeId`); and the POST's
+ * transfer already carries (`metadata.disputeId` / `metadata.refundId`);
+ * and the POST's
  * `Idempotency-Key` hands a racing delivery Stripe's stored response rather
  * than a second reversal.
  *
@@ -77,19 +79,67 @@ async function stripeGet(
  * retry. A missing STRIPE_SECRET_KEY neither settles nor throws: the
  * revocation half already landed, and the redelivery retries the reversal
  * once a key is present.
+ *
+ * WHY THE SAME FUNCTION SERVES BOTH DOORS (AGL-1995).
+ *
+ * The refund door reached Sep 1 never calling this at all: `charge.refunded`
+ * revoked the entitlement and sent the GA hit while the publisher kept their
+ * 80% and Aglyn absorbed the whole gross. A second, parallel reversal
+ * function is exactly the shape AGL-1994 was filed about — the marketplace
+ * and commerce Connect twins drifting because a fix landed on one — so the
+ * cause is a parameter here rather than a copy.
+ *
+ * WHAT DOES *NOT* CARRY OVER FROM COMMERCE. `refund.ts` pairs
+ * `reverse_transfer` with `refund_application_fee: 'true'`, and the AGL-1794
+ * note warns that flag is a one-parameter policy switch. **It has no meaning
+ * on this path.** Marketplace checkout deliberately pays the seller with a
+ * FIXED `payment_intent_data[transfer_data][amount]` and NOT
+ * `application_fee_amount` (checkout.ts:177-181 — the fee form would transfer
+ * `amount_total − fee`, and `amount_total` includes the tax the platform
+ * owes). There is therefore no application-fee object on a marketplace charge
+ * to refund, and `transfer.amount` is the seller's share, NOT `charge.amount`
+ * as it is on the commerce side. The proportional maths below already models
+ * that correctly, which is why the refund door can reuse it unchanged.
+ *
+ * The resulting allocation on a full refund is the same one commerce reaches
+ * by the opposite parameter: the buyer is made whole, the seller returns
+ * their share, and Aglyn gives back its own commission and the tax it
+ * collected. A LOST DISPUTE still differs on purpose — the platform keeps its
+ * cut there, per AGL-1794 — and that difference survives because the two call
+ * sites pass different causes, not because they run different code.
+ *
+ * ONE PULL-BACK PER PURCHASE. Both doors share the `reversedTransferCents`
+ * settle marker, so a refund following a lost dispute (or the reverse) finds
+ * the share already recovered and returns before any Stripe call. The seller
+ * cannot be debited twice for one sale.
  */
+interface SellerShareReversalCause {
+  /** Which door — decides the metadata key and the idempotency key. */
+  kind: 'dispute' | 'refund'
+  /** Stripe id of the dispute or the refunded charge. */
+  id: string
+  /** Cents going back to the buyer. */
+  amountCents: number
+  /** The charge whose transfer is being pulled back. */
+  chargeId: string
+}
+
 async function reverseMarketplaceSellerShare(
   purchaseRef: FirebaseFirestore.DocumentReference,
-  dispute: any,
+  cause: SellerShareReversalCause,
 ): Promise<void> {
-  const disputeId = String(dispute?.id ?? '')
-  if (!disputeId) return
+  const causeId = String(cause?.id ?? '')
+  if (!causeId) return
+  // Kept as `disputeId` on the wire for `kind: 'dispute'` so reversals
+  // stamped before AGL-1995 are still found and ADOPTED by the crash-window
+  // backstop below. A refund uses its own key for the same reason.
+  const metadataKey = cause.kind === 'dispute' ? 'disputeId' : 'refundId'
   const snapshot = await purchaseRef.get()
   if (!snapshot.exists) return
   // The settle marker — see the doc comment. 0 counts.
   if (snapshot.get('reversedTransferCents') != null) return
-  const disputedCents = Math.round(Number(dispute?.amount ?? 0))
-  if (!(disputedCents > 0)) return
+  const causeAmountCents = Math.round(Number(cause?.amountCents ?? 0))
+  if (!(causeAmountCents > 0)) return
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
     console.error(
@@ -114,10 +164,11 @@ async function reverseMarketplaceSellerShare(
     )
   }
 
-  const chargeId = String(dispute?.charge ?? '')
+  const chargeId = String(cause?.chargeId ?? '')
   if (!chargeId) {
-    console.error('Marketplace dispute carries no charge; share not reversed', {
-      disputeId,
+    console.error('Marketplace reversal cause carries no charge; share not reversed', {
+      kind: cause.kind,
+      causeId,
     })
     await settle(0, null)
     return
@@ -129,7 +180,7 @@ async function reverseMarketplaceSellerShare(
   if (!charge.ok) {
     if (isTransientStripeStatus(charge.status)) {
       throw new Error(
-        `Stripe charge read failed (${charge.status}) for marketplace dispute ${disputeId}`,
+        `Stripe charge read failed (${charge.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
     console.error(
@@ -144,7 +195,7 @@ async function reverseMarketplaceSellerShare(
   if (!transferId || !(chargeAmountCents > 0)) {
     console.error(
       'No transfer on the disputed marketplace charge; share not reversed',
-      { disputeId, chargeId },
+      { kind: cause.kind, causeId, chargeId },
     )
     await settle(0, null)
     return
@@ -156,7 +207,7 @@ async function reverseMarketplaceSellerShare(
   if (!transfer.ok) {
     if (isTransientStripeStatus(transfer.status)) {
       throw new Error(
-        `Stripe transfer read failed (${transfer.status}) for marketplace dispute ${disputeId}`,
+        `Stripe transfer read failed (${transfer.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
     console.error(
@@ -169,7 +220,7 @@ async function reverseMarketplaceSellerShare(
   // The crash window's backstop: the POST landed on a previous delivery and
   // the record did not. Adopt what exists rather than creating a second one.
   const existing = ((transfer.body?.reversals?.data ?? []) as any[]).find(
-    (item) => String(item?.metadata?.disputeId ?? '') === disputeId,
+    (item) => String(item?.metadata?.[metadataKey] ?? '') === causeId,
   )
   if (existing) {
     await settle(
@@ -184,20 +235,20 @@ async function reverseMarketplaceSellerShare(
   )
   const remainingCents = Math.max(0, transferCents - alreadyReversedCents)
   const shareCents = Math.min(
-    Math.floor((disputedCents * transferCents) / chargeAmountCents),
+    Math.floor((causeAmountCents * transferCents) / chargeAmountCents),
     remainingCents,
   )
   if (!(shareCents > 0)) {
     console.error(
       'Transfer has nothing left to reverse; marketplace share not reversed',
-      { disputeId, transferId, transferCents, alreadyReversedCents },
+      { kind: cause.kind, causeId, transferId, transferCents, alreadyReversedCents },
     )
     await settle(0, null)
     return
   }
   const params = new URLSearchParams({
     amount: String(shareCents),
-    'metadata[disputeId]': disputeId,
+    [`metadata[${metadataKey}]`]: causeId,
     'metadata[purchaseId]': purchaseRef.id,
   })
   const response = await fetch(
@@ -207,7 +258,7 @@ async function reverseMarketplaceSellerShare(
       headers: {
         Authorization: `Bearer ${stripeKey}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Idempotency-Key': `dispute-reversal-${disputeId}`,
+        'Idempotency-Key': `${cause.kind}-reversal-${causeId}`,
       },
       body: params.toString(),
     },
@@ -216,7 +267,7 @@ async function reverseMarketplaceSellerShare(
   if (!response.ok) {
     if (isTransientStripeStatus(response.status)) {
       throw new Error(
-        `Stripe transfer reversal failed (${response.status}) for marketplace dispute ${disputeId}`,
+        `Stripe transfer reversal failed (${response.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
     console.error(
@@ -421,6 +472,31 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             }).catch(() => undefined)
           }
         }
+        // The publisher's share comes back (AGL-1995).
+        //
+        // Until this, a refund made the buyer whole, left the publisher their
+        // 80%, and Aglyn absorbed the entire gross — the exact inverse of the
+        // commerce door, and of the lost-dispute branch a few lines below
+        // which has always reversed. There is no marketplace refund UI, so
+        // every refund is issued from the Stripe Dashboard and this webhook is
+        // the only code that sees one.
+        //
+        // FULL refunds only, matching the revocation and GA gates above: the
+        // branch is already inside `object?.refunded === true`. A partial
+        // refund is a concession the ledger's split cannot decompose, so it
+        // stays one — the seller keeps their share, exactly as the
+        // entitlement survives.
+        //
+        // AFTER the revocation stamp, for the reason the dispute branch
+        // states: this half throws on transient Stripe failures so the
+        // redelivery retries it, and everything above is idempotent under
+        // that redelivery.
+        await reverseMarketplaceSellerShare(purchase.ref, {
+          kind: 'refund',
+          id: String(object?.id ?? ''),
+          amountCents: Math.round(Number(object?.amount_refunded ?? 0)),
+          chargeId: String(object?.id ?? ''),
+        })
       }
     }
   }
@@ -497,7 +573,12 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
           // because a Stripe read failed: this half throws on transient
           // failures (the redelivery is the retry, and everything above is
           // idempotent under it) and settles definitively otherwise.
-          await reverseMarketplaceSellerShare(purchase.ref, object)
+          await reverseMarketplaceSellerShare(purchase.ref, {
+            kind: 'dispute',
+            id: disputeId,
+            amountCents: Math.round(Number(object?.amount ?? 0)),
+            chargeId: String(object?.charge ?? ''),
+          })
         } else {
           // `won` or `warning_closed`: the money stayed, the entitlement
           // stays, and the outcome lands on the record for whoever flagged
