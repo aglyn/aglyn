@@ -53,6 +53,7 @@ import {
   INTERNAL_TRAFFIC_PARAM,
   INTERNAL_TRAFFIC_VALUE,
   isInternalTrafficSession,
+  readInternalTrafficOverride,
 } from '../../utils/internal-traffic'
 
 /**
@@ -205,7 +206,37 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // session. Failure is treated as NOT internal for the same asymmetry:
   // wrongly flagging a real user erases them from the metrics, while missing
   // one of ours leaves a session the IP rule is the secondary net for.
+  //
+  // ## The browser-pinned override, OR'd in (AGL-2065)
+  //
+  // The claims predicate covers staff and impersonation and deliberately
+  // covers nothing else — but several release drills REQUIRE a non-staff
+  // account (the marketplace publisher drill cannot be run by staff at all),
+  // and those sessions emit the activation and revenue events the September
+  // funnel is read from. `readInternalTrafficOverride` answers a different
+  // question — "is this BROWSER ours" — set once with `?aglyn_internal=1` and
+  // remembered in localStorage for that origin.
+  //
+  // OR'd into the SAME `setDefaultEventParameters` call rather than set
+  // separately, and that is the load-bearing detail: the negative branch here
+  // clears the parameter explicitly (the console does not remount across a
+  // re-auth, AGL-664), so an override written by a second call would be wiped
+  // the moment the token resolved to a customer — which is exactly the session
+  // the override exists for.
+  //
+  // Applied SYNCHRONOUSLY before the token read as well as after it. This
+  // effect is declared above the `page_view` effect below and React runs
+  // effects in declaration order, so an overridden browser stamps its own
+  // cold-load pageview — closing, for this path only, the first-hit race
+  // AGL-1582 accepted for the claims path (a token read cannot be made
+  // synchronous, so that one stands).
   useEffect(() => {
+    const override = readInternalTrafficOverride()
+    if (override) {
+      setDefaultEventParameters({
+        [INTERNAL_TRAFFIC_PARAM]: INTERNAL_TRAFFIC_VALUE,
+      })
+    }
     const account = user?.data as
       | {
           getIdTokenResult?: (
@@ -214,7 +245,9 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
         }
       | undefined
     if (!account?.getIdTokenResult) {
-      setDefaultEventParameters({ [INTERNAL_TRAFFIC_PARAM]: undefined })
+      setDefaultEventParameters({
+        [INTERNAL_TRAFFIC_PARAM]: override ? INTERNAL_TRAFFIC_VALUE : undefined,
+      })
       return
     }
     let active = true
@@ -222,13 +255,19 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
       .then((result) => {
         if (!active) return
         setDefaultEventParameters({
-          [INTERNAL_TRAFFIC_PARAM]: isInternalTrafficSession(result?.claims)
-            ? INTERNAL_TRAFFIC_VALUE
-            : undefined,
+          [INTERNAL_TRAFFIC_PARAM]:
+            override || isInternalTrafficSession(result?.claims)
+              ? INTERNAL_TRAFFIC_VALUE
+              : undefined,
         })
       })
       .catch(() => {
-        if (active) setDefaultEventParameters({ traffic_type: undefined })
+        if (active)
+          setDefaultEventParameters({
+            [INTERNAL_TRAFFIC_PARAM]: override
+              ? INTERNAL_TRAFFIC_VALUE
+              : undefined,
+          })
       })
     return () => {
       active = false

@@ -16,13 +16,27 @@
  */
 
 /**
- * The GA4 event parameter GA's built-in internal-traffic data filter matches
- * on, and the value its default rule uses. Named here rather than inlined
- * because the string has to agree with a setting in the GA UI that nothing in
- * this repo can typecheck against — see `docs/ANALYTICS.md`.
+ * The GA4 parameter/value pair, and the browser-pinned opt-in that rides
+ * alongside the claims predicate below.
+ *
+ * These MOVED to `@aglyn/aglyn/app-utils/internal-traffic` (AGL-2064) when the
+ * tenant runtime and the docs site started stamping the same parameter — the
+ * strings have to agree with a setting in the GA UI that nothing here can
+ * typecheck against, so having three surfaces spell them independently is how
+ * one of them quietly becomes a different dimension. Re-exported rather than
+ * repointed at every call site so this module stays the console's one door to
+ * the subject.
+ *
+ * `isInternalTrafficSession` stays here: it reads Firebase ID-token claims,
+ * which is console-only knowledge.
  */
-export const INTERNAL_TRAFFIC_PARAM = 'traffic_type'
-export const INTERNAL_TRAFFIC_VALUE = 'internal'
+export {
+  INTERNAL_TRAFFIC_PARAM,
+  INTERNAL_TRAFFIC_VALUE,
+  INTERNAL_TRAFFIC_STORAGE_KEY,
+  INTERNAL_TRAFFIC_QUERY_PARAM,
+  readInternalTrafficOverride,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
 
 /**
  * Whether a signed-in console session is OURS rather than a customer's
