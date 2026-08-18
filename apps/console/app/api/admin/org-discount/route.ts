@@ -19,11 +19,11 @@ import {
   isLiveSubscriptionStatus,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
-import {
-  checkDiscountMargin,
-  orgCogsInputFrom,
-  orgMonthlyCogsUsd,
-} from '@aglyn/aglyn/server'
+import { checkDiscountMargin } from '@aglyn/aglyn/server'
+// Shared with the retention funnel since AGL-2118 — two copies of "what does
+// this org cost us" is how two surfaces came to price the same org
+// differently once already (AGL-1134).
+import { latestMeasuredCogsUsd } from '../../_lib/org-cogs'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -47,58 +47,6 @@ import {
  * directly (no SDK).
  */
 
-/**
- * The org's most recent measured monthly cost, priced by the shared cost
- * model (AGL-1134) from the usage rollup at `orgs/{id}/usage/{month}`.
- *
- * It used to read the rollup's `costUsd` field directly. That field prices
- * only storage, page views and form submissions — the same document also
- * records `dataStorageMb`, `apiRequests` and `contactsCount`, and the metering
- * estimate charges nothing for any of them. `orgMonthlyCogsUsd` prices all
- * six, and is the same function the staff overview now uses, so the guardrail
- * and the MRR view cannot answer "what does this org cost" differently.
- *
- * Returns null when there is no rollup, which is the honest answer —
- * `checkDiscountMargin` then falls back to the flat per-site estimate rather
- * than treating "not measured" as "costs nothing". Best-effort: a missing
- * index or a read failure must not block a staff action, and the flat floor
- * still applies.
- *
- * NOTE: on production data this is currently inert. The largest real org's
- * measured cost was $0.0000054 against a $4.00 two-site floor, so the floor
- * wins for every org today and will until there is real traffic.
- */
-async function latestMeasuredCogsUsd(orgId: string): Promise<number | null> {
-  try {
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .collection('usage')
-      .orderBy('month', 'desc')
-      .limit(1)
-      .get()
-    const rollup = snapshot.docs[0]
-    if (!rollup) return null
-    const { measuredUsd } = orgMonthlyCogsUsd(
-      // One shared list of priced fields (AGL-1134) rather than a copy per
-      // call site. This route, the staff overview's anomaly detector and
-      // `/api/admin/org-usage` each hand-listed them, and the last of the
-      // three was missing half — so the browser preview and this route
-      // priced the same org differently.
-      orgCogsInputFrom(rollup.data()),
-      // Site count comes from `checkDiscountMargin`, which applies the flat
-      // floor itself — passing 0 here keeps this the MEASURED half only, so
-      // the floor is not applied twice.
-      0,
-    )
-    return Number.isFinite(measuredUsd) ? measuredUsd : null
-  } catch (error) {
-    console.error('[admin/org-discount] usage rollup read failed', error)
-    return null
-  }
-}
 async function stripe(
   secretKey: string,
   path: string,

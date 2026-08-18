@@ -16,9 +16,11 @@
  */
 
 import {
+  checkDiscountMargin,
   isLiveSubscriptionStatus,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
+import { latestMeasuredCogsUsd } from '../../_lib/org-cogs'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -199,6 +201,85 @@ async function handler(request: Request): Promise<Response> {
     )
     if (!subscription) {
       return Response.json({ error: 'No active subscription' }, { status: 409 })
+    }
+
+    // THE MARGIN GUARDRAIL, which this path did not have (AGL-2118).
+    //
+    // Every OTHER way a discount reaches a live subscription runs
+    // `checkDiscountMargin` against the org that will bear it —
+    // `api/admin/org-discount` blocks on a `block` rating unless staff pass
+    // `confirmBelowFloor`. This route mints a real Stripe coupon and applies
+    // it to a real subscription with nobody in the loop at all, and it was the
+    // ONLY such path: `assertBoundedWinbackCoupon` checks the SHAPE of two
+    // module constants and cannot fail on today's values, so it proved nothing
+    // about whether the resulting subscription still covers what the org costs
+    // to serve.
+    //
+    // Rated against the org's MEASURED cost, exactly as the staff route does,
+    // because the flat per-site estimate is the wrong input for the org shape
+    // that reaches a cancel dialog: heavy usage is a common reason to leave.
+    //
+    // NO OVERRIDE PARAMETER. `confirmBelowFloor` exists on the staff route
+    // because a human with a name is choosing to go underwater for a reason
+    // they record. There is no equivalent here — a customer clicking "keep my
+    // discount" is not an approval — so a `block` verdict simply refuses the
+    // offer and the funnel falls back to the downsell, which is the cheaper
+    // plan and therefore the honest thing to sell someone whose usage will not
+    // support a discounted one.
+    //
+    // SHAPE FIRST, then economics (AGL-2118). `assertBoundedWinbackCoupon`
+    // used to run only inside the mint block, after the one-shot reservation
+    // was taken and with a delete-on-throw to give it back. Hoisted here it
+    // refuses before anything is written at all, and it keeps its place ahead
+    // of the margin verdict so an unbounded-constants edit still surfaces as
+    // the loud 502 its own guard asserts rather than as a quiet 409 about
+    // margin. It stays in the mint block too — it is pure, and the mint site
+    // is where the promise is written down.
+    assertBoundedWinbackCoupon({
+      percentOff: WINBACK_PERCENT_OFF,
+      duration: 'repeating',
+      durationInMonths: WINBACK_DURATION_MONTHS,
+    })
+
+    // The subscription STATUS and INTERVAL come from the Stripe object fetched
+    // above, not from the org doc's mirror, and that is what keeps the check
+    // from being inert. `checkDiscountMargin` prices through
+    // `orgListPriceMonthlyUsd`, which returns **0** for an org whose
+    // `subscription.status` is missing or dead — and 0 gross rates every
+    // discount `ok`. The webhook mirror can lag or have been missed entirely
+    // (AGL-1763 records orphaned subscriptions for exactly that reason), so a
+    // guardrail reading the mirror alone would pass hardest on the orgs whose
+    // records are worst. Stripe just told us this subscription is live; use
+    // that. The interval decides which of the two base prices is list.
+    const stripeInterval = ((subscription?.items?.data ?? []) as any[]).find(
+      (item) => item?.price?.recurring?.interval,
+    )?.price?.recurring?.interval
+    const orgForMargin = {
+      ...(orgSnapshot.data() ?? {}),
+      subscription: {
+        ...((orgSnapshot.get('subscription') as Record<string, unknown>) ?? {}),
+        status: String(subscription?.status ?? ''),
+        ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
+      },
+    }
+    const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
+    const marginRating = checkDiscountMargin(
+      orgForMargin as never,
+      { percentOff: WINBACK_PERCENT_OFF },
+      { measuredCogsUsd },
+    )
+    if (marginRating.rating === 'block') {
+      return Response.json(
+        {
+          error:
+            'This workspace costs more to run than a discounted subscription ' +
+            'would cover, so the winback offer is not available. Switching to ' +
+            'a smaller plan is the better fit.',
+          code: 'margin_floor',
+          rating: marginRating,
+        },
+        { status: 409 },
+      )
     }
 
     const funnelId = typeof body?.funnelId === 'string' ? body.funnelId : null
