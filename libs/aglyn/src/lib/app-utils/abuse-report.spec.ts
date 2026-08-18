@@ -31,10 +31,28 @@ import {
   ABUSE_REPORT_CONTACT_EMAIL,
   ABUSE_REPORT_MAX_DETAILS,
   abuseReportCategory,
+  type AbuseReportValidation,
+  type AbuseReportValidationFailure,
   isAbuseReportStatus,
   normalizeReportedUrl,
   validateAbuseReport,
 } from './abuse-report'
+
+/**
+ * Read the failure arm without leaning on the discriminant.
+ *
+ * `strictNullChecks` is OFF repo-wide, and with it off TypeScript does not
+ * narrow a union by a boolean discriminant — after `if (result.ok) return`,
+ * `result` is still the whole `AbuseReportValidation`, so `result.code` is a
+ * compile error even though the branch has already proved which arm it is.
+ * /api/report-abuse hit exactly this wall and casts for the same reason; this
+ * does it in one place instead of at every assertion.
+ *
+ * The runtime `expect(result.ok).toBe(false)` above each call is what actually
+ * proves the arm — this only satisfies the compiler.
+ */
+const failed = (result: AbuseReportValidation): AbuseReportValidationFailure =>
+  result as AbuseReportValidationFailure
 
 const phishing = {
   category: 'phishing',
@@ -74,7 +92,7 @@ describe('validateAbuseReport', () => {
       const result = validateAbuseReport({ ...phishing, url })
       expect(result.ok).toBe(false)
       if (result.ok) return
-      expect(result.code).toBe('url')
+      expect(failed(result).code).toBe('url')
     }
   })
 
@@ -82,7 +100,7 @@ describe('validateAbuseReport', () => {
     const result = validateAbuseReport({ ...phishing, category: 'made-up' })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.code).toBe('category')
+    expect(failed(result).code).toBe('category')
   })
 
   it('asks for a sentence, not a novel', () => {
@@ -118,7 +136,7 @@ describe('validateAbuseReport', () => {
     })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.code).toBe('reporterEmail')
+    expect(failed(result).code).toBe('reporterEmail')
   })
 })
 
@@ -156,7 +174,7 @@ describe('the DMCA path carries its statutory shape', () => {
     const result = validateAbuseReport({ ...notice, [field]: '' })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.code).toBe(code)
+    expect(failed(result).code).toBe(code)
   })
 
   it('reads a no-JavaScript checkbox the same as a JSON boolean', () => {
