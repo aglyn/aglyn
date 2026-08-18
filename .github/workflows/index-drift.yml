@@ -93,7 +93,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # fetch-depth 0 is REQUIRED (AGL-1920). The index comparison itself needs
+      # no history, but `test:rules-drift` below — run here as the AGL-1816
+      # cross-guard — builds its fixture from the last commit touching the
+      # firestore rules and that commit's PARENT. A shallow clone has neither,
+      # and it lies rather than erroring: the graft commit has no parents, so
+      # every file reads as newly added in it and `git log -1 -- <path>`
+      # returns HEAD itself, whose `^` does not resolve. That failed the
+      # self-test and SKIPPED the live index diff below on every run since
+      # 2026-08-14 — the guard AGL-1801 exists for, silently not running.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Refuse to no-op without credentials
         env:
