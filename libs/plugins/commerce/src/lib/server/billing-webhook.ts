@@ -507,54 +507,69 @@ async function stripeGet(
  * This runs OUTSIDE the settle transaction and re-reads the order itself,
  * because it must also run on a redelivery whose settle was idle — the
  * transient-failure path above depends on exactly that.
+ *
+ * RETURNS the cents this delivery pulled back and is therefore responsible
+ * for announcing — 0 for every no-op, every definitive failure, and every
+ * redelivery that found the step already settled. The caller's merchant
+ * notification is keyed on it, so a non-zero answer must mean "the write
+ * happened HERE, and nobody has told the merchant yet".
  */
 async function reverseSellerShare(
   orderRef: FirebaseFirestore.DocumentReference,
   dispute: StripeDispute,
-): Promise<void> {
+): Promise<number> {
   const disputeId = String(dispute?.id ?? '')
-  if (!disputeId) return
+  if (!disputeId) return 0
   const snapshot = await orderRef.get()
-  if (!snapshot.exists) return
+  if (!snapshot.exists) return 0
   const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
   const stored = order.dispute
   // A different dispute has replaced the record, or the outcome on the books
   // is not a loss: nothing here to recover.
-  if (stored?.id !== disputeId || stored.outcome !== 'lost') return
+  if (stored?.id !== disputeId || stored.outcome !== 'lost') return 0
   // The settle marker — see the doc comment. 0 counts.
-  if (stored.reversedTransferCents != null) return
+  if (stored.reversedTransferCents != null) return 0
   const principalCents = Number(stored.reversedCents ?? 0)
   // The order had nothing left to reverse — it was already fully refunded,
   // and `refund.ts` sent `reverse_transfer=true` when it was, so the seller's
   // share already went back by the refund door. No marker and no Stripe call:
   // the short-circuit is as idempotent as the write and cheaper.
-  if (!(principalCents > 0)) return
+  if (!(principalCents > 0)) return 0
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) {
     console.error(
       'Transfer reversal skipped: STRIPE_SECRET_KEY is not set (AGL-1794)',
     )
-    return
+    return 0
   }
 
-  /** Settles the step exactly once, whatever it found. */
+  /**
+   * Settles the step exactly once, whatever it found, and reports whether
+   * THIS delivery was the one that wrote.
+   *
+   * The boolean is what makes the merchant notification once-only. The
+   * pre-read above turns away every ordinary redelivery, but two deliveries
+   * racing can both pass it and only one can win the transaction — so the
+   * caller must learn its outcome from the write, not from having reached
+   * this far. A notification is not idempotent by any doc key of its own.
+   */
   const settle = async (
     reversedTransferCents: number,
     transferReversalId: string | null,
     note: string,
-  ): Promise<void> => {
-    await firebaseAdmin
+  ): Promise<boolean> => {
+    return firebaseAdmin
       .app()
       .firestore()
       .runTransaction(async (transaction) => {
         const fresh = await transaction.get(orderRef)
-        if (!fresh.exists) return
+        if (!fresh.exists) return false
         const current = CommerceModel.liftLegacyOrder(
           (fresh.data() ?? {}) as never,
         )
         const record = current.dispute
         if (record?.id !== disputeId || record.reversedTransferCents != null) {
-          return
+          return false
         }
         transaction.update(orderRef, {
           // Written whole, the field's own rule — see `OrderDispute`.
@@ -565,6 +580,7 @@ async function reverseSellerShare(
           },
           timeline: CommerceModel.appendOrderEvent(current, 'dispute', note),
         })
+        return true
       })
   }
 
@@ -578,7 +594,7 @@ async function reverseSellerShare(
       null,
       'Seller share not reversed — no charge on the dispute',
     )
-    return
+    return 0
   }
   const charge = await stripeGet(
     `https://api.stripe.com/v1/charges/${chargeId}`,
@@ -599,7 +615,7 @@ async function reverseSellerShare(
       null,
       'Seller share not reversed — charge not found at Stripe',
     )
-    return
+    return 0
   }
   const transferId = String(charge.body?.transfer ?? '')
   const chargeAmountCents = Math.round(Number(charge.body?.amount ?? 0))
@@ -618,7 +634,7 @@ async function reverseSellerShare(
       null,
       'Seller share not reversed — no transfer on the charge',
     )
-    return
+    return 0
   }
   const transfer = await stripeGet(
     `https://api.stripe.com/v1/transfers/${transferId}`,
@@ -639,7 +655,7 @@ async function reverseSellerShare(
       null,
       'Seller share not reversed — transfer not found at Stripe',
     )
-    return
+    return 0
   }
   // The crash window's backstop: the POST landed on a previous delivery and
   // the record did not. Adopt what exists rather than creating a second one.
@@ -648,12 +664,15 @@ async function reverseSellerShare(
   )
   if (existing) {
     const adoptedCents = Math.round(Number(existing.amount ?? 0))
-    await settle(
+    // Announced on adoption too: the delivery that created this reversal died
+    // before recording it, so it died before notifying. The money left the
+    // connected account either way and the merchant has not been told yet.
+    const wrote = await settle(
       adoptedCents,
       String(existing.id ?? ''),
       `$${(adoptedCents / 100).toFixed(2)} seller share reversed for lost dispute`,
     )
-    return
+    return wrote ? adoptedCents : 0
   }
   const transferCents = Math.round(Number(transfer.body?.amount ?? 0))
   const alreadyReversedCents = Math.round(
@@ -676,7 +695,7 @@ async function reverseSellerShare(
       null,
       'Seller share already reversed on the transfer — nothing left to pull back',
     )
-    return
+    return 0
   }
   const params = new URLSearchParams({
     amount: String(shareCents),
@@ -708,16 +727,17 @@ async function reverseSellerShare(
       null,
       'Seller share not reversed — Stripe refused the reversal',
     )
-    return
+    return 0
   }
   const reversedTransferCents = Math.round(
     Number(reversal?.amount ?? shareCents),
   )
-  await settle(
+  const wrote = await settle(
     reversedTransferCents,
     String(reversal?.id ?? ''),
     `$${(reversedTransferCents / 100).toFixed(2)} seller share reversed for lost dispute`,
   )
+  return wrote ? reversedTransferCents : 0
 }
 
 /**
@@ -2744,7 +2764,35 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the order's own `reversedTransferCents` marker, so it runs at most
         // once per dispute however many times Stripe delivers.
         if (String(dispute?.status ?? '') === 'lost') {
-          await reverseSellerShare(snapshot.ref, dispute)
+          const pulledBackCents = await reverseSellerShare(
+            snapshot.ref,
+            dispute,
+          )
+          // The merchant-experience half of the AGL-1794 decision, and not an
+          // optional extra: the reversal takes money out of the connected
+          // account, and when the balance does not cover it Stripe carries a
+          // NEGATIVE balance and recovers it from future payouts. A merchant
+          // who learns that from a short payout weeks later has been told by
+          // the wrong party.
+          //
+          // The outcome notice above is a different message with a different
+          // number: it reports what the SHOPPER's bank took back, which on a
+          // destination charge left the platform's balance, not theirs. This
+          // one reports the seller share that left THEIRS. Only sent when the
+          // transfer reversal actually settled on this delivery — a redelivery
+          // and every definitive no-op return 0, so the merchant is told once
+          // and never told about money that did not move.
+          if (pulledBackCents > 0 && hostId) {
+            await notifyHostManagers(hostId, {
+              type: 'content.order',
+              title: `Payout adjusted — $${(pulledBackCents / 100).toFixed(2)} recovered for a lost chargeback`,
+              body:
+                `Order ${snapshot.id}: the amount transferred to you for this sale has been ` +
+                `reversed. If your balance does not cover it, Stripe recovers the remainder ` +
+                `from your future payouts.`,
+              link: `/${hostId}/orders`,
+            })
+          }
         }
       }
     }

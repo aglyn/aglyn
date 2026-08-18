@@ -1309,8 +1309,21 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
     expect(reversalPosts()).toHaveLength(1)
     expect(order().dispute.reversedTransferCents).toBe(TRANSFER_CENTS)
-    // The settle was idle on the redelivery: one notice, one contact write.
-    expect(managerNotices).toHaveLength(1)
+    // The settle was idle on the redelivery: ONE outcome notice, one contact
+    // write. The payout notice rides the reversal rather than the settle, so
+    // it arrives on the delivery that actually moved the money — the second
+    // one here — and it too arrives exactly once. Counting notices as a lump
+    // could not tell "announced twice" from "two different announcements".
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Chargeback lost'),
+      ),
+    ).toHaveLength(1)
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(1)
     expect(contact().refundedCents).toBe(DISPUTE_CENTS)
     expect(contact().refundedOrdersCount).toBe(1)
   })
@@ -1347,5 +1360,114 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     expect(consoleError).toHaveBeenCalledWith(
       expect.stringContaining('STRIPE_SECRET_KEY'),
     )
+  })
+
+  // -------------------------------------------------------------------------
+  // The merchant is TOLD their payout was clawed back (AGL-1794 item 2)
+  // -------------------------------------------------------------------------
+  //
+  // "It can drive a connected account negative. Stripe recovers from future
+  // payouts — that is a real merchant-experience event and needs a
+  // notification, not silence." The order timeline carried the sentence, but a
+  // timeline is a thing the merchant has to go and open; the outcome notice
+  // that DOES get pushed reports the shopper's disputed total, which on a
+  // destination charge left the platform's balance rather than theirs. These
+  // pin the second notice: the seller share, once, and only when money moved.
+
+  /** The notice exists, carries the seller share, and says who recovers it. */
+  it('tells the merchant their payout was reduced, with the seller-share figure', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    const payout = managerNotices.filter((notice) =>
+      String(notice.title).includes('Payout adjusted'),
+    )
+    expect(payout).toHaveLength(1)
+    expect(payout[0].hostId).toBe('host-1')
+    // $55.80 — the transferred share, NOT the $62.00 the shopper disputed.
+    expect(payout[0].title).toContain('$55.80')
+    expect(payout[0].title).not.toContain('$62.00')
+    expect(payout[0].body).toContain('order-1')
+    // The negative-balance consequence, in the merchant's own words.
+    expect(payout[0].body).toContain('future payouts')
+    expect(payout[0].link).toBe('/host-1/orders')
+  })
+
+  /** Both notices, distinct: the outcome AND the payout, never conflated. */
+  it('sends it beside the outcome notice, not instead of it', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(managerNotices).toHaveLength(2)
+    expect(managerNotices[0].title).toContain('Chargeback lost')
+    expect(managerNotices[1].title).toContain('Payout adjusted')
+  })
+
+  /** Once — the settle marker turns the redelivery away before the notice. */
+  it('does not re-announce the claw-back on a redelivery', async () => {
+    happyStripe()
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  /**
+   * The adoption path announces too. The delivery that created the reversal
+   * died before recording it, so it died before notifying — the money left the
+   * connected account and nobody has said so yet.
+   */
+  it('announces a reversal it adopted from the crash window', async () => {
+    happyStripe({
+      transfer: {
+        amount_reversed: TRANSFER_CENTS,
+        reversals: {
+          data: [
+            { id: 'trr_9', amount: TRANSFER_CENTS, metadata: { disputeId: 'dp_1' } },
+          ],
+        },
+      },
+    })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(reversalPosts()).toHaveLength(0)
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  /** Silence when no money moved — a merchant is never told about a $0 pull. */
+  it('says nothing when the transfer had nothing left to reverse', async () => {
+    happyStripe({ transfer: { amount_reversed: TRANSFER_CENTS } })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(order().dispute.reversedTransferCents).toBe(0)
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  /** Nor when Stripe refused outright — recorded, but nothing was taken. */
+  it('says nothing when Stripe refused the reversal', async () => {
+    happyStripe({ reversal: { status: 400, body: { error: { code: 'nope' } } } })
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  /** And a WON dispute takes nothing, so it announces nothing. */
+  it('says nothing on a won dispute', async () => {
+    await deliver('charge.dispute.closed', disputeEvent({ status: 'won' }))
+    expect(
+      managerNotices.filter((notice) =>
+        String(notice.title).includes('Payout adjusted'),
+      ),
+    ).toHaveLength(0)
   })
 })
