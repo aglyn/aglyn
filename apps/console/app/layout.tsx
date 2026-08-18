@@ -121,6 +121,7 @@ export const viewport: Viewport = {
 // whole App Router tree out of static generation (AGL-401).
 import ServiceWorkerRegistrar from '../components/service-worker-registrar.component'
 import ErrorBeacon from '../components/error-beacon.component'
+import WebVitalsReporter from '../components/web-vitals-reporter.component'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,6 +150,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 → /api/errors → Cloud Error Reporting. Module-scope install,
                 null render — see the component. */}
             <ErrorBeacon />
+            {/* Real-user Core Web Vitals → GA4 (AGL-1642). Same shape as the
+                beacon above: module-scope install, null render, outside every
+                page boundary so a wedged page still measures. */}
+            <WebVitalsReporter />
           </Providers>
         </AppRouterCacheProvider>
       </body>
