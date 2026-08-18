@@ -138,14 +138,37 @@ async function resolveARecords(domain: string): Promise<string[]> {
  * its own copy under a different env var (AGL-1275) — that env edit is exactly
  * the move which used to leave the two disagreeing.
  */
-async function apexPointsAtTenantEdge(domain: string): Promise<boolean> {
+/**
+ * The `stray` half exists because the intersection above is deliberately an
+ * `some`, and a name can answer with our addresses AND somebody else's at the
+ * same time (AGL-1913).
+ *
+ * That is the shape a stale A record makes: a previous host's address left in
+ * the zone answers alongside a correct ALIAS, the resolver hands out whichever
+ * it likes, and the site loads for one visitor and not the next. Every check we
+ * had reported that domain as verified, because it is — some of the time — and
+ * "it works when I try it" is exactly why nobody finds it.
+ *
+ * Reported, not refused. Refusing would mean treating "an address we do not
+ * recognise" as proof of misconfiguration, and the recognised set is an env var
+ * plus a live lookup of one hostname: the day the platform widens its pool
+ * ahead of our config, refusing would fail every correctly-pointed apex at
+ * once. A warning costs a confused customer nothing and cannot take the flow
+ * down.
+ */
+async function apexPointsAtTenantEdge(
+  domain: string,
+): Promise<{ matched: boolean; stray: string[] }> {
   const [domainAddresses, targetAddresses] = await Promise.all([
     resolveARecords(domain),
     resolveARecords(CNAME_TARGET),
   ])
-  if (!domainAddresses.length) return false
+  if (!domainAddresses.length) return { matched: false, stray: [] }
   const acceptable = new Set([...targetAddresses, ...HOST_APEX_ADDRESSES])
-  return domainAddresses.some((address) => acceptable.has(address))
+  return {
+    matched: domainAddresses.some((address) => acceptable.has(address)),
+    stray: domainAddresses.filter((address) => !acceptable.has(address)),
+  }
 }
 
 /**
@@ -204,15 +227,20 @@ async function handler(request: Request): Promise<Response> {
   // A domain that DOES carry a CNAME but points somewhere else must keep
   // failing — otherwise "pointed at the wrong place" and "pointed at an apex"
   // would verify identically.
-  const apexVerified = !records.length && (await apexPointsAtTenantEdge(domain))
+  const apex = records.length
+    ? { matched: false, stray: [] }
+    : await apexPointsAtTenantEdge(domain)
   return Response.json({
     domain,
     records,
     expected: CNAME_TARGET,
-    verified: cnameVerified || apexVerified,
+    verified: cnameVerified || apex.matched,
     // Which rule passed, so the wizard can explain itself rather than just
     // showing a tick.
-    ...(apexVerified && { matchedBy: 'apex-address' as const }),
+    ...(apex.matched && { matchedBy: 'apex-address' as const }),
+    // Addresses answering for the name that are not ours. A verified domain
+    // with a non-empty list here is the one that loads intermittently.
+    ...(apex.stray.length && { strayAddresses: apex.stray }),
   }, { status: 200 })
 }
 

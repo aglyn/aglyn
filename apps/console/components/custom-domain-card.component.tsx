@@ -251,6 +251,20 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           persist: false,
         })
       }
+      // Verified AND wrong at the same time (AGL-1913): the name answers with
+      // our addresses and somebody else's, which is what a stale A record left
+      // by a previous host does next to a correct ALIAS. The connect proceeds
+      // — it IS pointed here — but silence would leave the customer with a
+      // site that loads for one visitor and not the next, and no surface
+      // anywhere that mentions why.
+      if (verify.strayAddresses?.length) {
+        enqueueSnackbar(
+          `Also answering: ${verify.strayAddresses.join(', ')} — not ours. ` +
+            'Remove those records at your registrar or the site will load ' +
+            'intermittently.',
+          { variant: 'warning', persist: false },
+        )
+      }
       // `/api/domains/attach` claims the domain and persists `host.cname` in a
       // single transaction (AGL-743) — the client must NOT write `cname` itself,
       // or a losing 409 leaves this host still holding another org's domain.
