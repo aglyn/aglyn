@@ -221,11 +221,22 @@ const CHECKOUT_LOCK: LockdownState = {
 let checkoutAnswers: Array<{ status: number; payload: unknown }>
 let checkoutCalls: Array<Record<string, unknown>>
 
-function answerCheckout(...answers: Array<{ status: number; payload: unknown }>) {
+function answerCheckout(
+  ...answers: Array<{ status: number; payload: unknown }>
+) {
   checkoutAnswers = answers
 }
 
+// AGL-2016: the contact line on these notices is operator CONFIGURATION, not
+// the `LOCKDOWN_SUPPORT_EMAIL` constant it used to read. Seven sibling specs
+// got this preamble in that pass and this one did not, so `notice.contact`
+// came back undefined here and the two contact assertions below stopped
+// describing anything. This is the AGLYN-OPERATED shape; the self-host and
+// unconfigured shapes are proved at the source, in
+// libs/aglyn/src/lib/app-utils/lockdown.spec.ts.
 beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
   mockEnqueueSnackbar.mockClear()
   checkoutAnswers = []
   checkoutCalls = []
@@ -247,6 +258,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
   jest.restoreAllMocks()
 })
 
@@ -352,6 +365,11 @@ describe('AGL-1557 · a 423 from /api/billing/checkout renders the notice in the
       'Back once the payment provider incident clears.',
     )
     expect(alert.textContent).toContain(notice.title)
+    // Stated before it is queried: `getByRole('link', {name: undefined})`
+    // matches EVERY link on the page, so an unconfigured contact would fail
+    // here as "found multiple elements" rather than as the missing address it
+    // actually is.
+    expect(notice.contact).toBeTruthy()
     expect(
       screen.getByRole('link', { name: notice.contact as string }),
     ).toBeTruthy()
