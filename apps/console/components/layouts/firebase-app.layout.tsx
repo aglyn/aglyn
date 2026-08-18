@@ -281,6 +281,13 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // `page_location` is a full URL and no longer the bare pathname (AGL-1643);
   // `buildConsolePageViewParams` holds the why and is spec'd against it.
   //
+  // `page_title` is passed EXPLICITLY (AGL-2060) rather than left for the SDK
+  // to read off `document.title` at hit time. The notifications menu writes a
+  // live unread counter into that title, so GA4 was splitting one console page
+  // into a row per unread count. The builder strips it with the same helper
+  // that writes it; read here, at hit time, because the badge and the route's
+  // own metadata both land on `document.title` and only it has both.
+  //
   // Read off `window.location` rather than rebuilt from `pathname`, because
   // only the browser knows the host, and the App Router has already committed
   // the new URL to `history` by the time this effect runs. `pathname` stays as
@@ -306,7 +313,7 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
     logEvent(
       analytics,
       'page_view',
-      buildConsolePageViewParams(window.location.href),
+      buildConsolePageViewParams(window.location.href, document.title),
     )
   }, [pathname, analytics])
 

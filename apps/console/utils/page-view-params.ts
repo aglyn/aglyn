@@ -16,6 +16,7 @@
  */
 
 import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
+import { stripUnreadBadge } from './notification-alerts'
 
 /**
  * Build the console's SPA `page_view` params (AGL-1643).
@@ -39,11 +40,44 @@ import { sanitizeEventParams } from '@aglyn/aglyn/app-utils/analytics-events'
  * the query is gone before the hit is built and the upgrade from pathname to
  * full URL cannot leak more than the pathname already did.
  *
+ * ## Why `page_title` is sent EXPLICITLY (AGL-2060)
+ *
+ * GA4 reads `page_title` from `document.title` at the instant the hit is
+ * built, and the console writes a live unread-notification counter into that
+ * title (`notifications-menu.component.tsx`, a real feature — "Unread count
+ * in tab title", on by default). So a per-user, per-moment counter became a
+ * reporting DIMENSION VALUE: one console page arrived in GA4 as three rows —
+ * 6.2K, 2.2K `(4) …`, 1.7K `(5) …` — split by how many notifications the
+ * viewer happened to have unread. Views for a page were divided across an
+ * unbounded set of rows that correlates with engagement, so the most active
+ * users fragmented the most and no page ever showed a true total.
+ *
+ * Passing the title as a param takes the value out of the SDK's hands, and
+ * `stripUnreadBadge` — the exact inverse of the `unreadBadge` that writes it —
+ * removes the counter. The badge itself is untouched; only its reflection in
+ * analytics goes away.
+ *
+ * ## Why an empty title omits the key rather than sending `''`
+ *
+ * Next 16 STREAMS metadata for any route whose `generateMetadata` awaits I/O:
+ * the shell ships with no `<title>` at all and the real one is inserted near
+ * the end of the stream. Measured on `/{org}/marketplace/{listingId}`, whose
+ * card does a Firestore read — `</head>` at byte 40934 with no title in it,
+ * `Marketplace listing · Aglyn` at byte 80279 of 83383. Hydration, and so
+ * this hit, can beat that. An explicit `''` would report those views as an
+ * empty title; omitting the key lets GA4 fall back to its own reading, which
+ * is no worse than the behaviour before this function existed.
+ *
  * Extracted from the layout so the guarantee is testable without mounting the
  * console's whole provider tree.
  */
 export function buildConsolePageViewParams(
   href: string,
+  title?: string,
 ): Record<string, unknown> {
-  return sanitizeEventParams({ page_location: href })
+  const pageTitle = stripUnreadBadge(title ?? '').trim()
+  return sanitizeEventParams({
+    page_location: href,
+    ...(pageTitle ? { page_title: pageTitle } : {}),
+  })
 }
