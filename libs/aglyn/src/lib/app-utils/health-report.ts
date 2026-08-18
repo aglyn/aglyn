@@ -759,3 +759,97 @@ export function billingWebhookHealth(
   }
   return { ...base, ok: true }
 }
+
+/**
+ * Is every interval we can SELL also an interval we can BILL? (AGL-1931)
+ *
+ * The metered item is what turns reported usage into money. It is attached
+ * from an env-configured price id that is keyed by billing interval —
+ * `STRIPE_PRICE_METERED` for monthly, `STRIPE_PRICE_METERED_YEARLY` for
+ * annual — because Stripe forbids one subscription mixing
+ * `recurring.interval`.
+ *
+ * When one of those ids is missing, `meteredPriceId(interval)` returns null
+ * and every subscription-mutating path does the only safe thing: it attaches
+ * nothing and carries on. Failing a checkout over it would be worse. But the
+ * result is a subscription that accrues usage against a meter and carries no
+ * item to bill it, and NOTHING about that is visible — the plan is right, the
+ * entitlements are right, the invoice looks right, and the only trace is
+ * revenue that never arrives.
+ *
+ * That is the defect shape this check exists to end. The absence of a price
+ * was indistinguishable from "correctly no overage", so it hid behind a
+ * `console.warn` on a server log nobody reads. Here it is a 503 on the same
+ * probe the uptime check and alert email already watch.
+ *
+ * ## Why ASYMMETRY is the loudest code
+ *
+ * One interval configured and the other not means one cohort of customers is
+ * billed for overage and the other silently is not — off the same meter, on
+ * the same plans, with no screen anywhere showing the difference. It cannot
+ * be a deliberate state: there is no product reason to meter monthly
+ * subscribers and exempt annual ones.
+ *
+ * ## Why BOTH missing is still red, but only with Stripe configured
+ *
+ * Both unset with no `STRIPE_SECRET_KEY` is simply an unprovisioned
+ * deployment — local dev, a fresh preview — where no money is at stake and
+ * going red would train everyone to ignore this check. That is the exact
+ * reasoning the checkout and subscription routes already apply to their
+ * warning, and it is preserved here.
+ *
+ * But both unset while Stripe IS configured is a deployment that can take
+ * money and cannot bill a single unit of overage on ANY interval. That is
+ * the same revenue loss, merely total instead of partial, and the earlier
+ * code treated it as calm because it only ever compared the two ids to each
+ * other. Comparing them to Stripe's presence instead is what closes it.
+ */
+export interface MeteredPricingFacts {
+  /** Whether this deployment holds a Stripe secret key at all. */
+  stripeConfigured: boolean
+  /** `STRIPE_PRICE_METERED` — the monthly metered price — is set. */
+  monthly: boolean
+  /** `STRIPE_PRICE_METERED_YEARLY` — the annual metered price — is set. */
+  yearly: boolean
+}
+
+export interface MeteredPricingCheck extends HealthCheck {
+  stripeConfigured: boolean
+  monthly: boolean
+  yearly: boolean
+  /**
+   * The interval that would accrue unbilled usage, named so the body says
+   * which cohort is affected without anyone re-deriving it from two booleans.
+   */
+  unbilledInterval: 'month' | 'year' | 'both' | null
+}
+
+export function meteredPricingHealth(
+  facts: MeteredPricingFacts,
+  ms: number,
+): MeteredPricingCheck {
+  const base = {
+    ms,
+    stripeConfigured: facts.stripeConfigured,
+    monthly: facts.monthly,
+    yearly: facts.yearly,
+  }
+
+  // Unprovisioned: no Stripe, no money, no alarm.
+  if (!facts.stripeConfigured) {
+    return { ...base, ok: true, code: 'stripe-unconfigured', unbilledInterval: null }
+  }
+  if (facts.monthly && facts.yearly) {
+    return { ...base, ok: true, unbilledInterval: null }
+  }
+  if (!facts.monthly && !facts.yearly) {
+    return { ...base, ok: false, code: 'metered-price-missing', unbilledInterval: 'both' }
+  }
+  // Exactly one. The AGL-1931 shape.
+  return {
+    ...base,
+    ok: false,
+    code: 'metered-price-asymmetric',
+    unbilledInterval: facts.yearly ? 'month' : 'year',
+  }
+}

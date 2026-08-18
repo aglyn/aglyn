@@ -30,6 +30,7 @@ import {
   MAX_ORG_CREATIONS_PER_WINDOW,
   ORG_CREATION_WINDOW_MINUTES,
   memoizeWithTtl,
+  meteredPricingHealth,
   RATE_LIMIT_DEGRADED_WINDOW_MINUTES,
   rateLimitsHealth,
   signupsHealth,
@@ -690,5 +691,84 @@ describe('billingWebhookHealth (AGL-1924)', () => {
   it('describes its own window, so the body needs no external key', () => {
     expect(billingWebhookHealth(HEALTHY, 90).windowMinutes).toBe(60)
     expect(billingWebhookHealth(HEALTHY, 90, 15).windowMinutes).toBe(15)
+  })
+})
+
+describe('meteredPricingHealth (AGL-1931)', () => {
+  const LIVE = { stripeConfigured: true, monthly: true, yearly: true }
+
+  it('is ok when both intervals have a metered price', () => {
+    const check = meteredPricingHealth(LIVE, 1)
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.unbilledInterval).toBeNull()
+    expect(healthHttpStatus(healthStatus({ meteredPricing: check }))).toBe(200)
+  })
+
+  it('goes red when the YEARLY price is missing — the AGL-1931 shape', () => {
+    // Annual subscribers accrue usage against the meter and carry no item to
+    // bill it. Monthly subscribers are billed correctly, which is precisely
+    // what makes it invisible.
+    const check = meteredPricingHealth({ ...LIVE, yearly: false }, 1)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('metered-price-asymmetric')
+    expect(check.unbilledInterval).toBe('year')
+    expect(healthHttpStatus(healthStatus({ meteredPricing: check }))).toBe(503)
+  })
+
+  it('goes red when the MONTHLY price is missing — the mirror shape', () => {
+    // Same fault, other cohort. Naming only the yearly one would leave the
+    // symmetric regression uncaught.
+    const check = meteredPricingHealth({ ...LIVE, monthly: false }, 1)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('metered-price-asymmetric')
+    expect(check.unbilledInterval).toBe('month')
+  })
+
+  it('goes red when BOTH are missing on a Stripe-configured deployment', () => {
+    // Total, not partial: this deployment can take money and cannot bill a
+    // single unit of overage. The old two-ids-compared-to-each-other rule
+    // called this calm.
+    const check = meteredPricingHealth(
+      { stripeConfigured: true, monthly: false, yearly: false },
+      1,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('metered-price-missing')
+    expect(check.unbilledInterval).toBe('both')
+  })
+
+  it('stays ok when Stripe itself is unconfigured — no money at stake', () => {
+    // Local dev and fresh previews. Going red here would train everyone to
+    // ignore this check, which is the same reasoning the checkout route
+    // applies to its warning.
+    const check = meteredPricingHealth(
+      { stripeConfigured: false, monthly: false, yearly: false },
+      1,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('stripe-unconfigured')
+    expect(check.unbilledInterval).toBeNull()
+  })
+
+  it('does NOT excuse a half-configured deployment as unprovisioned', () => {
+    // The tempting shortcut is "no Stripe key, ignore everything". A
+    // deployment holding one metered price but no key is a misconfiguration
+    // worth seeing, but it is NOT revenue loss — so it reports ok, and the
+    // check must not claim otherwise in either direction.
+    const check = meteredPricingHealth(
+      { stripeConfigured: false, monthly: true, yearly: false },
+      1,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBe('stripe-unconfigured')
+  })
+
+  it('carries the facts into the body so the verdict is auditable', () => {
+    const check = meteredPricingHealth({ ...LIVE, yearly: false }, 7)
+    expect(check.monthly).toBe(true)
+    expect(check.yearly).toBe(false)
+    expect(check.stripeConfigured).toBe(true)
+    expect(check.ms).toBe(7)
   })
 })
