@@ -169,7 +169,7 @@ async function handler(request: Request): Promise<Response> {
       }
       {
         // Storage quota applies to every org; a plan-less org resolves as
-        // `free` (250 MB cap), not unmetered. Soft cap past the allowance for
+        // `free` (250 MB cap), not unmetered. Metered plans bill past the
         // metered plans (AGL-1886) — see `utils/storage-overage.ts`.
         const counterSnapshot = await counterRef.get()
         const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
@@ -181,7 +181,7 @@ async function handler(request: Request): Promise<Response> {
               error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
               code: gate.code,
               projectedOverageUsd: gate.projectedOverageUsd,
-              ceilingUsd: gate.ceilingUsd,
+              monthlyCapUsd: gate.monthlyCapUsd,
             },
             { status: gate.status },
           )
@@ -340,7 +340,7 @@ async function handler(request: Request): Promise<Response> {
             error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
             code: gate.code,
             projectedOverageUsd: gate.projectedOverageUsd,
-            ceilingUsd: gate.ceilingUsd,
+            monthlyCapUsd: gate.monthlyCapUsd,
           },
           { status: gate.status },
         )

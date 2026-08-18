@@ -286,23 +286,44 @@ describe('the DAM accepts documents and meters their bytes (AGL-1465)', () => {
 
   describe('the counter the quota check reads is the counter the upload moved', () => {
     it('refuses a document that would cross the plan’s storage cap', async () => {
-      // Pro, so the entitlement gate above is satisfied and the STORAGE cap
-      // is the thing under test. Seat the counter at the plan's allowance and
-      // the next document must be refused — only possible if the quota check
-      // reads the same `counters/media.bytes` the upload increments.
-      state.org = { plan: 'pro' }
-      state.usedBytes = resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024
+      // The property this case was written for is that the counter the quota
+      // check READS is the counter the upload MOVES — so the check has to be
+      // driven to a refusal to observe it. Since 2026-08-18 a metered plan is
+      // no longer refused past its band (it bills), so the refusal is now
+      // produced the way a metered org can still be refused: by ITS OWN cap.
+      //
+      // Free would also refuse, but on free the entitlement gate above rejects
+      // documents before storage is ever consulted — the check under test
+      // would never run.
+      state.org = {
+        plan: 'pro',
+        // The customer asked to be stopped at one cent of storage overage.
+        storageOverage: { capUsd: 0.01, capSetAt: new Date(), capSetBy: 'uid' },
+      }
+      // 10 GB past the band, which is $0.338 of overage — a hundred times the
+      // cap, so the verdict cannot turn on how large the test document is.
+      state.usedBytes =
+        resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024 +
+        10 * 1024 * 1024 * 1024
       const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
       expect(response.status).toBe(403)
       const body = await response.json()
-      // The refusal is now ACTIONABLE (AGL-1886): pro meters storage, so
-      // past the allowance the answer is "opt in and keep uploading" rather
-      // than a dead end. What must not change is the property this case was
-      // written for — the counter the check reads is the counter the upload
-      // moves, so the bytes never land.
-      expect(body.code).toBe('overage_optin_required')
-      expect(body.error).toContain('past your included')
+      expect(body.code).toBe('storage_cap_reached')
+      expect(body.error).toContain('cap you set')
       expect(mockCounterSet).not.toHaveBeenCalled()
+    })
+
+    it('POSITIVE CONTROL: the same org WITHOUT a cap is served, and billed', async () => {
+      // The inversion, asserted on a real ingress route rather than only on
+      // the helper: past the included band a metered org keeps uploading. If
+      // the opt-in gate is ever restored, this is the case that goes red on
+      // the route itself.
+      state.org = { plan: 'pro' }
+      state.usedBytes = resolveOrgEntitlements(state.org).storagePerHostMb * 1024 * 1024
+      const response = await upload(DOCUMENT_TYPES[0][0], 'contract.docx')
+      expect(response.status).toBe(200)
+      // The bytes landed, so the rollup will find and bill them.
+      expect(mockCounterSet).toHaveBeenCalled()
     })
 
     it('gates documents behind the same paid entitlement as video, PDF and ZIP', async () => {

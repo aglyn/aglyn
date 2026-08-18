@@ -97,31 +97,38 @@ Nothing here guarantees that a price or feature set will remain the same.
 
 ## Storage overage
 
-Each site includes a fixed amount of storage. What happens when you reach it depends on
-one setting, and **you are the one who decides it** — from
-**Billing → Storage limit**.
+Each site includes a fixed amount of storage. On a paid plan, going past it is **not** a
+wall:
 
-- **Leave it off (the default).** Uploads past your included storage are refused. You are
-  never billed for storage overage, because the files are never accepted. Nothing you
-  have already uploaded is affected.
-- **Turn it on.** Uploads keep working past the included allowance and the extra storage
-  is metered on your next invoice — and you set a **monthly limit** at the same time.
-  Once a month's storage overage would pass that limit, uploads are refused again. The
-  limit is part of the agreement: turning metered storage on is never consent to an
-  unbounded amount.
+- **Uploads keep working.** You are never stopped from adding files because you reached
+  your included storage.
+- **The extra storage is billed** on your monthly invoice, at about $0.034 per GB per
+  month — our cost plus 30%, the same rate shown in **Billing → Storage cap**.
+- **We tell you before it happens.** You get an alert as you approach your included
+  storage and another when you cross it, so the invoice is never the first you hear of
+  it. See [usage meters](#usage-meters).
 
-You can change the limit or turn metered storage off at any time, including while you are
-over your included allowance. Turning it off deletes nothing — the files stay, and only
-*new* uploads past the allowance are refused.
+### If you would rather uploads stopped
 
-Metered storage is only available on plans that meter infrastructure. Free plans have a
-fixed storage cap with no metering, and Enterprise storage is unlimited, so neither has
-anything to turn on.
+Set a **monthly storage cap** in **Billing → Storage cap**. This is optional and off
+unless you choose it. Once a month's storage overage would pass the amount you set,
+new uploads are refused and you are never billed above that number.
+
+You can change or remove the cap at any time, including while you are over your included
+allowance. Nothing is ever deleted — a cap only affects *new* uploads, and removing one
+takes effect immediately.
+
+:::info Free plans are never billed for storage
+On the Free plan there is no storage overage at all. Your included storage is a fixed
+cap: uploads stop there, nothing is metered, and no amount of usage produces a charge —
+so there is nothing to cap and nothing to configure. Enterprise storage is unlimited, so
+it has no overage either.
+:::
 
 :::tip No surprise bills
-Between the opt-in and the monthly limit, storage cannot appear on an invoice you did not
-agree to in advance. The [usage alerts](#usage-meters) at 80% and 100% of your allowance
-arrive before either one matters.
+Two things prevent one, and they work in different ways. The **alerts** at 80% and 100%
+of your allowance mean nobody first learns about overage from an invoice. The optional
+**cap** means anyone who wants a hard ceiling can have one, at a number they choose.
 :::
 
 ## Seats

@@ -336,18 +336,59 @@ subscription product, Stripe records them and charges no one.
      of the band. An alert that cannot fire reads as coverage.
    - Thresholds are config (`USAGE_ALERT_APPROACH_PCT`, default 80; cap at
      100) and fail TO the default on anything malformed.
-   - **Overage protection is a SOFT cap with an acknowledged opt-in**, bounded
-     by a monthly ceiling (`org.storageOverage`, written only by
-     `/api/billing/storage-overage`). Past the included allowance an upload is
-     refused with the price named until a manager opts in, and refused again
-     at the ceiling they set. An org that never opts in cannot be billed a
-     cent of storage overage, because the bytes were never accepted — see
-     `apps/console/utils/storage-overage.ts` for the full hard-vs-soft
-     reasoning. Free still hard-bands (no subscription to bill on).
+   - **Overage protection is ALERTS plus an OPTIONAL customer cap** — see the
+     correction below. Past the included allowance a metered org's upload is
+     **accepted and billed**; the alerts above are what prevent the surprise.
+     A customer who wants a ceiling sets one (`org.storageOverage.capUsd`,
+     written only by `/api/billing/storage-overage`), and only then are
+     uploads refused, citing their own number. Free still hard-bands.
    - The Billing card shows the library's usage **against its own allowance**,
      before any invoice.
    - The rollup records `orgLibraryBilledFrom` verbatim beside
      `orgLibraryBilled`, so a month's audit document says why it billed.
+
+   ### Zach's correction, 2026-08-18 — the opt-in became a cap
+
+   The shape above shipped as a **soft cap with an acknowledged opt-in**: past
+   the band, a metered org was REFUSED until a manager accepted metered
+   storage in Billing. Zach reversed it the next day, verbatim:
+
+   > *"don't let it make us lose revenue or cost us money, it should be a
+   > control by the end user, to prevent overage or usage alerts rather, we
+   > just want to minimize churn"*
+
+   The opt-in gate cost revenue and blocked customers without preventing any
+   bill. `/api/billing/storage-overage` had **no caller at all** until
+   AGL-1957 (hours earlier), so no org could give the consent, so no metered
+   org could store past its band — while `report-usage` had always billed
+   stored bytes and never consulted the acknowledgement. The ingress refusal
+   was the only thing between a metered org and an invoice line, and the two
+   surfaces disagreed by construction.
+
+   | | before | after |
+   | -- | -- | -- |
+   | metered org past band | **refused** until it opts in | **billed**, no consent step |
+   | customer wants a ceiling | mandatory, part of the opt-in | **optional cap**, off by default |
+   | what prevents bill shock | the block | the **alerts** |
+   | free / hobby | hard band | **hard band (unchanged)** |
+
+   And on the bottom of the range, same day, verbatim:
+
+   > *"We also need to make sure the free/hobby tier does hard cap so it
+   > always actually stays free"*
+
+   Free's guarantee is **structural, not a gate**: `PLAN_PRICING.free` carries
+   `meteredInfraPassThrough: false` and a `null` rate on
+   `extraDataGbMonthlyUsd`, `extraApiRequestsUsdPer1k` and
+   `extraContactsUsdPer1k`, so `estimateMonthlyUsageCost` returns
+   `billableCostUsd: 0` and every `check*Quota` returns
+   `overageMonthlyUsd: 0` **by arithmetic**. A free org exceeding every band
+   assembles `billedCents === 0`, and `report-usage` only pushes a Stripe
+   meter event `if (stripeKey && billedCents > 0)` — so there is no meter
+   event, not merely a zero one. `apps/console/specs/free-tier-never-billed.spec.ts`
+   decomposes this per dimension. ⚠️ **Bandwidth is the dimension with no
+   runtime gate at all** — nothing refuses a page view — so it rests on the
+   structural zero alone.
 
    **THE REMAINING STEP IS ZACH'S**, because setting it starts real invoices:
 
@@ -357,4 +398,24 @@ subscription product, Stripe records them and charges no one.
 
    (`2026-08` = the month this shipped. Use the month of the deploy, never an
    earlier one — an earlier month is the one input that would reach backwards.)
+
+   ⚠️ **What setting it does NOW is larger than what it did before
+   2026-08-18.** Under the opt-in design, flipping this would have billed only
+   the orgs that had explicitly acknowledged metered storage — and none had,
+   because the surface had no caller, so the first invoice would have been
+   $0.00 for everybody. Under the corrected model there is no acknowledgement
+   to filter on: **every metered org's org-library bytes past its band become
+   billable from that month**, whether or not anyone opted into anything.
+
+   The measured blast radius is still small, and the 2026-08-13 production
+   reading above is why: four orgs hold 24.8 MB of org-scope media between
+   them, 99.9% of it in one *enterprise* org that does not meter infra
+   overage, and the two `starter` orgs holding any are five orders of
+   magnitude below their 2 GB band. So the change in what the flag MEANS is
+   large while the change in what it CHARGES today is still zero. That is a
+   fact about this month's data, not a property of the mechanism — re-read the
+   measurement before setting it, rather than trusting this paragraph.
+
+   It remains **unset**, and unset still fails closed: measured, recorded,
+   charged to nobody.
 

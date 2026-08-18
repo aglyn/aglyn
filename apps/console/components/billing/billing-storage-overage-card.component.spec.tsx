@@ -16,14 +16,20 @@
  */
 
 /**
- * AGL-1957: `/api/billing/storage-overage` — the only writer of the storage
- * opt-in — had zero callers, so the AGL-1886 soft cap could not be turned on
- * by anybody. The media gate refused uploads with "turn it on in Billing" and
- * Billing had nothing to turn on.
+ * The storage-cap card (AGL-1957, inverted 2026-08-18).
  *
- * These cover the states that decide whether the consent is real: that the
- * price is named BEFORE the button, that the ceiling travels with the
- * acknowledgement, and that turning it off is never harder than turning it on.
+ * AGL-1957 found `/api/billing/storage-overage` had zero callers, so the
+ * AGL-1886 opt-in could not be given by anybody and every metered org was
+ * held at a hard cap it was told to escape via a screen that did not exist.
+ *
+ * The card that fixed that was a CONSENT switch. Zach's 2026-08-18 correction
+ * turned it into an optional CAP: storage past the band bills by default, the
+ * alerts prevent the surprise, and this card exists only for a customer who
+ * would rather uploads stopped than be billed.
+ *
+ * So these cases guard two things at once — that the default state advertises
+ * BILLING rather than a wall (the inversion, visible in the UI), and that the
+ * cap the customer types is the cap that travels to the route.
  *
  * Every expectation here was forced red once against the code it guards.
  */
@@ -63,21 +69,24 @@ const jsonResponse = (body: unknown, status = 200) =>
     json: async () => body,
   }) as unknown as Response
 
-/** A metered plan that has not opted in — the state every metered org starts in. */
-const NOT_ACKNOWLEDGED = {
-  acknowledged: false,
-  monthlyCeilingUsd: 0,
+/**
+ * A metered plan with NO cap — the state every metered org starts in, and
+ * now the state most of them will stay in.
+ */
+const UNCAPPED = {
+  capSet: false,
+  monthlyCapUsd: null,
   metered: true,
-  defaultCeilingUsd: 25,
-  maxCeilingUsd: 5000,
+  defaultCapUsd: 25,
+  maxCapUsd: 5000,
   includedStoragePerSiteMb: 10240,
   pricePerGbUsd: 0.0338,
 }
 
-const ACKNOWLEDGED = {
-  ...NOT_ACKNOWLEDGED,
-  acknowledged: true,
-  monthlyCeilingUsd: 40,
+const CAPPED = {
+  ...UNCAPPED,
+  capSet: true,
+  monthlyCapUsd: 40,
 }
 
 beforeEach(() => {
@@ -87,7 +96,7 @@ beforeEach(() => {
 })
 
 describe('BillingStorageOverageCard (AGL-1957)', () => {
-  it('claims nothing about the opt-in while the request is in flight', async () => {
+  it('claims nothing about the cap while the request is in flight', async () => {
     global.fetch = jest.fn(
       () => new Promise<Response>(() => undefined),
     ) as unknown as typeof fetch
@@ -95,13 +104,12 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
     expect(await screen.findByText('Loading your storage settings…')).toBeTruthy()
-    // "Metered storage off" is a claim about this org's billing CONSENT.
-    // Rendering it before the answer arrives would offer an org that already
-    // opted in a button to opt in again.
-    expect(screen.queryByText('Metered storage off')).toBeNull()
+    // "No cap" is a claim about this org's billing settings. Rendering it
+    // before the answer arrives would tell a capped org it was uncapped.
+    expect(screen.queryByText('No cap — extra storage bills')).toBeNull()
   })
 
-  it('reports a failed load as a failure, not as "off"', async () => {
+  it('reports a failed load as a failure, not as "no cap"', async () => {
     global.fetch = jest.fn(async () =>
       jsonResponse({ error: 'nope' }, 500),
     ) as unknown as typeof fetch
@@ -109,66 +117,70 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
     await screen.findByText(/couldn.t load your storage settings/)
-    expect(screen.queryByText('Metered storage off')).toBeNull()
+    expect(screen.queryByText('No cap — extra storage bills')).toBeNull()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 
-  it('names the price and the included allowance BEFORE the opt-in button', async () => {
-    // Consent to a charge that was not priced is not consent. The rate comes
-    // from the route (same constants the rollup bills from), so the number
-    // here is the number invoiced.
+  it('THE INVERSION, on screen: an uncapped org is told uploads KEEP WORKING', async () => {
+    // The UI half of the correction. Before it, this state read "uploads are
+    // refused unless you turn on metered storage" — a wall, and a demand.
+    // Forced red by restoring that sentence: the assertions below flip.
     global.fetch = jest.fn(async () =>
-      jsonResponse(NOT_ACKNOWLEDGED),
+      jsonResponse(UNCAPPED),
     ) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    expect(await screen.findByText(/10240 MB/)).toBeTruthy()
+    expect(await screen.findByText(/keep working/)).toBeTruthy()
+    expect(screen.getByText(/10240 MB/)).toBeTruthy()
+    // The price is named — from the route, which serves the same constants the
+    // rollup bills from (AGL-1957), so this number is the invoiced number.
     expect(screen.getByText(/\$0\.034 per GB/)).toBeTruthy()
-    expect(
-      screen.getByRole('button', { name: 'Turn on metered storage' }),
-    ).toBeTruthy()
+    // And the alerts are promised, because they are the actual protection.
+    expect(screen.getByText(/alert you/)).toBeTruthy()
+    // The cap is offered as optional, never as a precondition.
+    expect(screen.getByText(/This is optional/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Set a monthly cap' })).toBeTruthy()
+    // Nothing anywhere says uploads are refused in this state.
+    expect(screen.queryByText(/uploads are refused/)).toBeNull()
   })
 
-  it('sends the ceiling WITH the acknowledgement', async () => {
-    // THE CENTRAL CASE. An acknowledgement with no bound is consent to any
-    // amount — the surprise bill this whole feature exists to prevent. Forced
-    // red by dropping `monthlyCeilingUsd` from the request: the route then
-    // applies its $25 default and the number the customer typed and agreed to
-    // is silently discarded.
+  it('sends the cap the customer TYPED', async () => {
+    // THE CENTRAL CASE. Forced red by dropping `capUsd` from the request: the
+    // route applies its $25 fallback and the number the customer chose is
+    // silently discarded — an org that asked to stop at $2 stops at $25.
     const calls: any[] = []
     global.fetch = jest.fn(async (_url: any, init: any) => {
       const body = JSON.parse(init.body)
       calls.push(body)
-      if (body.action === 'get') return jsonResponse(NOT_ACKNOWLEDGED)
-      return jsonResponse({ ok: true, acknowledged: true, monthlyCeilingUsd: 60 })
+      if (body.action === 'get') return jsonResponse(UNCAPPED)
+      return jsonResponse({ ok: true, capSet: true, monthlyCapUsd: 60 })
     }) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    const field = await screen.findByLabelText(/Monthly limit/)
+    const field = await screen.findByLabelText(/Monthly cap/)
     fireEvent.change(field, { target: { value: '60' } })
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Turn on metered storage' }),
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Set a monthly cap' }))
 
     await waitFor(() =>
-      expect(
-        calls.find((call) => call.action === 'acknowledge'),
-      ).toMatchObject({ orgId: 'org-1', monthlyCeilingUsd: 60 }),
+      expect(calls.find((call) => call.action === 'setCap')).toMatchObject({
+        orgId: 'org-1',
+        capUsd: 60,
+      }),
     )
   })
 
   it('shows the route’s own refusal rather than inventing one', async () => {
-    // The legal ceiling range lives in the route. A client-side copy would be
-    // a second source of truth for what a valid consent is.
+    // The legal cap range lives in the route. A client-side copy would be a
+    // second source of truth for what a valid cap is.
     global.fetch = jest.fn(async (_url: any, init: any) => {
       const body = JSON.parse(init.body)
-      if (body.action === 'get') return jsonResponse(NOT_ACKNOWLEDGED)
+      if (body.action === 'get') return jsonResponse(UNCAPPED)
       return jsonResponse(
         {
-          error: 'Set a monthly storage limit between $1 and $5000.',
-          code: 'invalid_ceiling',
+          error: 'Set a monthly storage cap between $1 and $5000.',
+          code: 'invalid_cap',
         },
         400,
       )
@@ -176,11 +188,9 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    const field = await screen.findByLabelText(/Monthly limit/)
+    const field = await screen.findByLabelText(/Monthly cap/)
     fireEvent.change(field, { target: { value: '999999' } })
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Turn on metered storage' }),
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Set a monthly cap' }))
 
     await waitFor(() =>
       expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
@@ -190,89 +200,98 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     )
   })
 
-  it('shows an opted-in org its ceiling, and seeds the field from it', async () => {
+  it('shows a capped org its cap, and seeds the field from it', async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse(ACKNOWLEDGED),
+      jsonResponse(CAPPED),
     ) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    expect(await screen.findByText('Metered storage on')).toBeTruthy()
-    expect(screen.getByText('$40.00/mo limit')).toBeTruthy()
-    // Seeded from the acknowledged ceiling, not the default — a field that
-    // reset to $25 would make "Save limit" a quiet downgrade of the bound.
-    expect((screen.getByLabelText(/Monthly limit/) as HTMLInputElement).value).toBe('40')
+    expect(await screen.findByText('Monthly cap set')).toBeTruthy()
+    expect(screen.getByText('$40.00/mo cap')).toBeTruthy()
+    // Seeded from the cap in force, not the default — a field that reset to
+    // $25 would make "Save cap" a quiet tightening of the customer's ceiling.
+    expect((screen.getByLabelText(/Monthly cap/) as HTMLInputElement).value).toBe(
+      '40',
+    )
+    // A capped org is told it is still billed BELOW the cap. The cap bounds
+    // the invoice; it does not zero it, and implying otherwise would be the
+    // surprise bill arriving from the other direction.
+    expect(screen.getByText(/are billed at about/)).toBeTruthy()
   })
 
-  it('CONFIRMS before turning it off, and writes nothing if declined', async () => {
-    // Turning it off means new uploads start being refused. The person should
-    // hear that before it happens, not from a failing upload.
+  it('CONFIRMS before removing the cap, and writes nothing if declined', async () => {
+    // Removing the cap is the direction that can RAISE a bill — uploads that
+    // were being refused start landing and billing. The person should hear
+    // that before it happens, not from an invoice. Setting a cap is the safe
+    // direction and is deliberately NOT confirmed (see the case above, which
+    // clicks straight through).
     mockConfirm.mockReturnValue(Promise.reject(new Error('declined')))
     const calls: any[] = []
     global.fetch = jest.fn(async (_url: any, init: any) => {
       calls.push(JSON.parse(init.body))
-      return jsonResponse(ACKNOWLEDGED)
+      return jsonResponse(CAPPED)
     }) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Turn off metered storage' }),
-    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove cap' }))
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled())
     const confirmArgs = mockConfirm.mock.calls[0] as unknown as [
       { description?: unknown },
     ]
-    expect(String(confirmArgs[0].description)).toContain('Nothing is deleted')
+    // The consequence, in the words that matter: billing, with no ceiling.
+    expect(String(confirmArgs[0].description)).toContain('no ceiling')
+    expect(String(confirmArgs[0].description)).toContain('alerted')
     await waitFor(() =>
-      expect(calls.filter((call) => call.action === 'revoke')).toHaveLength(0),
+      expect(calls.filter((call) => call.action === 'clearCap')).toHaveLength(0),
     )
   })
 
-  it('lets an org OFF a plan that no longer meters still turn it off', async () => {
-    // Withdrawing consent is never gated on the conditions that allowed
-    // giving it. An org that downgraded after opting in would otherwise be
-    // stuck showing an acknowledgement it could not remove. Forced red by
-    // rendering the whole acknowledged branch behind `metered`.
+  it('lets an org OFF a plan that no longer meters still remove its cap', async () => {
+    // Removing a cap is never gated on the conditions that allowed setting it.
+    // An org that downgraded while capped would otherwise be stuck showing a
+    // control it could not clear. Forced red by rendering the whole capped
+    // branch behind `metered`.
     global.fetch = jest.fn(async () =>
-      jsonResponse({ ...ACKNOWLEDGED, metered: false }),
+      jsonResponse({ ...CAPPED, metered: false }),
     ) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
     expect(
-      await screen.findByRole('button', { name: 'Turn off metered storage' }),
+      await screen.findByRole('button', { name: 'Remove cap' }),
     ).toBeTruthy()
-    // And it does not offer to raise a limit on a plan with nothing to meter.
-    expect(screen.queryByRole('button', { name: 'Save limit' })).toBeNull()
+    // And it does not offer to edit a cap on a plan with nothing to bill.
+    expect(screen.queryByRole('button', { name: 'Save cap' })).toBeNull()
   })
 
-  it('offers nothing to turn on when the plan has a fixed cap', async () => {
-    // A free org has no metered line for consent to attach to. Offering the
-    // button would earn a 409 from the route and teach the customer that
-    // Billing controls do not work.
+  it('offers no cap when the plan never bills for storage', async () => {
+    // A free org has no overage for a cap to bound. Offering the control would
+    // earn a 409 from the route and teach the customer that Billing controls
+    // do not work — and it says plainly that free is never charged, which is
+    // the property Zach asked to be true and visible.
     global.fetch = jest.fn(async () =>
       jsonResponse({
-        ...NOT_ACKNOWLEDGED,
+        ...UNCAPPED,
         metered: false,
-        includedStoragePerSiteMb: 512,
+        includedStoragePerSiteMb: 250,
       }),
     ) as unknown as typeof fetch
 
     render(<BillingStorageOverageCardComponent orgId="org-1" canManage />)
 
-    expect(await screen.findByText(/nothing to meter and nothing to turn on/)).toBeTruthy()
-    expect(
-      screen.queryByRole('button', { name: 'Turn on metered storage' }),
-    ).toBeNull()
+    expect(await screen.findByText(/never charged/)).toBeTruthy()
+    expect(screen.getByText(/no overage to cap/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Set a monthly cap' })).toBeNull()
   })
 
   it('is read-only without billing.manage', async () => {
-    // The same permission the route requires, and the same one that agrees to
-    // the charge.
+    // The same permission the route requires — raising a cap raises what the
+    // org can be invoiced, so it buys things in both directions.
     global.fetch = jest.fn(async () =>
-      jsonResponse(NOT_ACKNOWLEDGED),
+      jsonResponse(UNCAPPED),
     ) as unknown as typeof fetch
 
     render(
@@ -280,7 +299,7 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     )
 
     const button = await screen.findByRole('button', {
-      name: 'Turn on metered storage',
+      name: 'Set a monthly cap',
     })
     expect((button as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/need the Manage billing permission/)).toBeTruthy()

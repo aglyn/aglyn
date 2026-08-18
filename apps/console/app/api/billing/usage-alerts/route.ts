@@ -17,7 +17,11 @@
 
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
-import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
+import {
+  planMetersInfraOverage,
+  resolveOrgEntitlements,
+  UNLIMITED,
+} from '@aglyn/aglyn/server'
 import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
 import {
   usageAlertApproachPct,
@@ -237,7 +241,25 @@ async function handler(request: Request): Promise<Response> {
           ).maxBillable,
       )
 
-      const checks: Array<{ key: string; label: string; used: number; limit: number }> = [
+      // Does THIS org's plan bill storage past the band, rather than refusing
+      // it? Read once, and only used to choose the alert's wording — the
+      // thresholds themselves are identical either way.
+      const metersInfra = planMetersInfraOverage(orgData as never)
+
+      const checks: Array<{
+        key: string
+        label: string
+        used: number
+        limit: number
+        /**
+         * TRUE when crossing this band produces an INVOICE LINE rather than a
+         * refusal (2026-08-18). The alert has to say which, because the two
+         * call for opposite actions: "upgrade to raise the limit" is right
+         * when the product is about to stop working and actively misleading
+         * when the product will keep working and bill.
+         */
+        billsOverage?: boolean
+      }> = [
         {
           // AGL-484: a downgrade can leave an org over its site/storage
           // caps; these persist and keep serving, so surface them here.
@@ -263,6 +285,7 @@ async function handler(request: Request): Promise<Response> {
           used: mediaMb,
           // Org-wide media allowance: per-host cap × the site allowance.
           limit: entitlements.hostLimit * entitlements.storagePerHostMb,
+          billsOverage: metersInfra,
         },
         {
           // THE ORG LIBRARY ON ITS OWN (AGL-1886), and this is the blind spot,
@@ -288,6 +311,7 @@ async function handler(request: Request): Promise<Response> {
           label: 'organization library storage',
           used: orgLibraryBytes / (1024 * 1024),
           limit: entitlements.storagePerHostMb,
+          billsOverage: metersInfra,
         },
         {
           // The only email figure a quota can refuse (AGL-1438). Reading the
@@ -373,15 +397,33 @@ async function handler(request: Request): Promise<Response> {
           continue
         }
         guardUpdates[check.key] = { month, threshold }
+        // THE ALERT IS THE PROTECTION (2026-08-18). Zach's condition on
+        // billing storage was "so customers don't get a surprise bill" — and
+        // once overage bills by default rather than being refused, this
+        // notification is the entire thing standing between a customer and a
+        // number they did not expect. So it must describe what actually
+        // happens at the band:
+        //
+        //   billsOverage -> the product keeps working and starts charging;
+        //                   the action is "cap it or upgrade", never "upgrade
+        //                   to raise the limit", which implies you are stuck.
+        //   otherwise    -> the product stops at the band; upgrading is the
+        //                   only way through, and always was.
         await notifyOrgAdmins(org.id, {
           type: 'billing.usage',
           title:
             threshold >= 100
-              ? `You've reached your ${check.label} limit`
+              ? check.billsOverage
+                ? `You're past your included ${check.label} — extra usage is now billed`
+                : `You've reached your ${check.label} limit`
               : `You're above ${approachPct}% of your ${check.label} quota`,
-          body:
-            `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-            'in Billing to raise the limit.',
+          body: check.billsOverage
+            ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
+              `${check.limit}, extra ${check.label} is billed on your ` +
+              'monthly invoice — upgrade in Billing for a bigger allowance, ' +
+              'or set a monthly cap there if you would rather it stopped.'
+            : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
+              'in Billing to raise the limit.',
           orgId: org.id,
           // Billing is org-scoped now (AGL-621/644); links are frozen at write
           // time, so emit canonical and let the reader repair the legacy ones.

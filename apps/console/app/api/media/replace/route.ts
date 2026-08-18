@@ -200,7 +200,7 @@ async function handler(request: Request): Promise<Response> {
             error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
             code: gate.code,
             projectedOverageUsd: gate.projectedOverageUsd,
-            ceilingUsd: gate.ceilingUsd,
+            monthlyCapUsd: gate.monthlyCapUsd,
           },
           { status: gate.status },
         )

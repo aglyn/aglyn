@@ -972,20 +972,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             {
               size: { xs: 12 },
               children: (
-                // Where metered storage is TURNED ON (AGL-1957, for AGL-1886).
-                // `mediaStorageGate` refuses an upload past the included band
-                // with "turn it on in Billing", and until this card existed
-                // there was nothing in Billing to turn on — so the soft cap
-                // could not be exercised by anyone and the refusal pointed at
-                // a dead end. Directly under the meters that show the usage
-                // this governs.
+                // The customer's OPTIONAL storage cap (AGL-1957, for AGL-1886;
+                // inverted 2026-08-18). Storage past the included band bills
+                // by default and `usage-alerts` warns before and at the band —
+                // this card is only for a customer who would rather uploads
+                // stopped than be billed. Directly under the meters that show
+                // the usage it governs.
                 <Box id="storage-overage">
                   <CardDisplay
-                    header={'Storage limit'}
+                    header={'Storage cap'}
                     subheader={
-                      'Choose whether uploads may go past your included ' +
-                      'storage, and the most you are willing to be billed ' +
-                      'for it in a month.'
+                      'Extra storage past your included allowance is billed ' +
+                      'on your monthly invoice. Set a cap if you would ' +
+                      'rather uploads stopped instead.'
                     }
                     help={docsHelp('billing', {
                       anchor: '#storage-overage',
