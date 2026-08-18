@@ -139,6 +139,36 @@ shipping, inventory → get paid; a publisher can sell a plugin and get their sp
 of it in GA4 and the console with staff traffic excluded, nobody undercharged, nothing fail-open,
 and every guard able to go red.
 
+## Workstream G — docs, guides, API surface, and in-product help (Zach, verbatim)
+
+> Don't forget we always need to keep the docs in sync and create new pages and reorganize as
+> necessary, take screenshots of the browser and make as visualized as possible, you also don't
+> always need screenshot the entire page but can screenshot sections of the site of components,
+> maybe even add outlines and text if need to better visualize and make the image more descriptive
+> or helpful. Add more API's to our customer facing API and document it extremely well. Also add
+> helpful how-to guides and walk through guides and make it easy for anybody but also very
+> descriptive for those who are also technical and need reference guides where necessary etc, also
+> make sure we are updating the tooltip documentation tips across Aglyn.
+
+Distilled into work:
+- **Docs stay in sync with every shipped feature** (the standing rule, now with teeth: new features
+  update `DOCS_HELP_TOPICS`, `generate-docs-help.mjs` runs, `docs-links.spec.ts` guards).
+- **Visual docs**: browser screenshots via the emulator/dev environment (Zach's browser for
+  production-only surfaces) — SECTION/component-level crops, not just full pages; annotate with
+  outlines/callout text where it makes the image teach better. Store under the docs assets
+  convention; the brand-assets lore applies (`@2x` labels lie — trust real dimensions).
+- **Customer-facing REST API growth**: extend `/v1` with the resources customers will actually
+  automate (audit what the console can do that `/v1` can't); every endpoint documented to the
+  standard of the existing datasets pages — request/response shapes, idempotency headers, error
+  contracts, `conventions.md` kept authoritative. The AGL-1710 lineage is the bar.
+- **Guides ladder**: how-to walkthroughs a beginner can follow click-by-click AND technical
+  reference pages for developers — both, cross-linked, per major feature (sites, commerce,
+  marketplace, forms, data, API).
+- **Tooltip pass across Aglyn**: the in-console tooltip/help-tip layer audited and updated to match
+  current behavior — tooltips are documentation and drift like documentation; tie them to
+  `DOCS_HELP_TOPICS` anchors where a "learn more" belongs. Aglyn Assist (Workstream F) mines its
+  Q&A data for which tooltips and guides are missing.
+
 ## Browser, auth, and env access (Zach, verbatim)
 
 > Don't forget you can use my browser to test and use my authentication session, but first try using
