@@ -17,13 +17,15 @@
 'use client'
 
 import { formatOrderNumber, isLowStock, liftLegacyProduct } from '../../model'
+import { checkEntitlement } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
+import { Alert, Button, Chip, Divider, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
+  useOrgPlan,
 } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
@@ -33,12 +35,22 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
  * Commerce at a glance (AGL-353): 30-day revenue, orders, AOV, low-stock
  * count and the five latest orders. Renders nothing for hosts without a
  * catalog so non-commerce dashboards stay clean.
+ *
+ * The figures are the `commerceAnalytics` entitlement — `/pricing` sells
+ * "Commerce analytics" as Pro-and-up, and `/product/commerce` calls it "a
+ * built-in commerce analytics dashboard". Until AGL-1938 the flag was
+ * inert: its ONLY occurrence outside `plan-entitlements.ts` was its own
+ * type declaration, and this card carried no check, so every commerce org
+ * — Starter included — got the Pro surface for free. The store link and
+ * card shell stay ungated; only the measured numbers are the paid part.
  */
 export function CommerceGlanceCard(props: { hostId: string }) {
   const { hostId } = props
   // Console routes are /[orgSlug]/hosts/[subdomain]/… (AGL-673); this
   // component only has a host doc id.
   const consoleRoute = useConsoleHostRoute(hostId)
+  const { org, ready: orgReady } = useOrgPlan(hostId)
+  const entitled = checkEntitlement(org as never, 'commerceAnalytics')
   const firestore = useFirestore()
   const { data: orderDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(200)),
@@ -94,24 +106,74 @@ export function CommerceGlanceCard(props: { hostId: string }) {
 
   const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
+  const openStoreAction = (
+    <Button
+      component={AppLink as any}
+      {...({ componentVariant: 'naked', nativeButton: false } as any)}
+      href={consoleRoute.base ? `${consoleRoute.base}/products` : undefined}
+      size="small"
+      color="primary"
+    >
+      {'Open store'}
+    </Button>
+  )
+
+  if (!orgReady) {
+    // `checkEntitlement(undefined)` resolves the FREE tier rather than
+    // "unknown" (see `useOrgPlan`), and this card's "no" is an upsell —
+    // never accuse a paying org of being unentitled while the plan doc is
+    // still in flight.
+    return (
+      <CardDisplay
+        header={'Commerce'}
+        contentGutterX
+        contentGutterY
+        HeaderProps={{ action: openStoreAction }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      </CardDisplay>
+    )
+  }
+
+  if (!entitled) {
+    return (
+      <CardDisplay
+        header={'Commerce'}
+        contentGutterX
+        contentGutterY
+        HeaderProps={{ action: openStoreAction }}
+      >
+        <Alert
+          severity="info"
+          action={
+            consoleRoute.orgSlug ? (
+              <AppLink
+                componentVariant="button"
+                color="inherit"
+                size="small"
+                href={`/${consoleRoute.orgSlug}/billing`}
+              >
+                {'Upgrade'}
+              </AppLink>
+            ) : undefined
+          }
+        >
+          {'Commerce analytics — revenue, orders and average order value — ' +
+            'is a Pro feature. Every order is still being recorded, so the ' +
+            'numbers are waiting the moment you upgrade.'}
+        </Alert>
+      </CardDisplay>
+    )
+  }
+
   return (
     <CardDisplay
       header={'Commerce'}
       contentGutterX
       contentGutterY
-      HeaderProps={{
-        action: (
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={consoleRoute.base ? `${consoleRoute.base}/products` : undefined}
-            size="small"
-            color="primary"
-          >
-            {'Open store'}
-          </Button>
-        ),
-      }}
+      HeaderProps={{ action: openStoreAction }}
     >
       <Stack spacing={1.5}>
         <Stack direction="row" spacing={3}>
