@@ -29,7 +29,7 @@ import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, forwardRef, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
@@ -37,6 +37,20 @@ import { CART_UPDATED_EVENT } from './cart'
 import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
 import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
+import { StorefrontPaymentElementFallback } from './storefront-payment-element'
+
+/**
+ * The Payment Element (AGL-1944), behind a lazy boundary rather than a plain
+ * import. Stripe.js and its React wrapper are a large dependency, the flag is
+ * OFF, and a static import would put the whole SDK into the bundle of every
+ * product page on every published site to serve a code path no shopper reaches.
+ * Split, it is fetched by the shoppers who actually get the in-page form.
+ */
+const StorefrontPaymentElement = lazy(() =>
+  import('./storefront-payment-element').then((module) => ({
+    default: module.StorefrontPaymentElement,
+  })),
+)
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-detail'
@@ -146,6 +160,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [billing, setBilling] = useState<CommerceModel.CheckoutBillingChoice>(
       'once',
     )
+    /**
+     * The in-page checkout session (AGL-1944), null on every store until the
+     * flag AND a publishable key say otherwise. A `clientSecret` is Stripe's
+     * instruction to the browser; holding it says nothing about money having
+     * moved, and nothing in this component ever claims it has.
+     */
+    const [nativeCheckout, setNativeCheckout] = useState<{
+      clientSecret: string
+      publishableKey: string
+    } | null>(null)
 
     const slug = slugProp || slugFromLocation()
 
@@ -280,6 +304,19 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
           }),
         })
         const payload = await response.json().catch(() => ({}))
+        // In-page payment (AGL-1944). A native session returns a client secret
+        // and NO url — the two are mutually exclusive by construction, so the
+        // redirect branch below is unreachable in native mode and vice versa.
+        // Checked FIRST so a server that somehow sent both cannot silently
+        // navigate the shopper away from the form we just decided to show.
+        if (response.ok && payload?.clientSecret && payload?.publishableKey) {
+          setNativeCheckout({
+            clientSecret: String(payload.clientSecret),
+            publishableKey: String(payload.publishableKey),
+          })
+          setStatus('idle')
+          return
+        }
         if (response.ok && payload?.url) {
           window.location.assign(payload.url)
           return
@@ -556,10 +593,30 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               {variant?.soldOut
                 ? 'Sold out'
                 : status === 'sending'
-                  ? 'Redirecting…'
+                  ? // "Redirecting" is a lie once the form opens in place, and
+                    // it is the shopper's only clue about what is about to
+                    // happen to their page (AGL-1944).
+                    nativeCheckout
+                    ? 'Opening…'
+                    : 'Redirecting…'
                   : buyLabel || (subscribing ? 'Subscribe' : 'Buy now')}
             </Button>
           </Box>
+          {nativeCheckout ? (
+            <Suspense fallback={<StorefrontPaymentElementFallback />}>
+              <StorefrontPaymentElement
+                clientSecret={nativeCheckout.clientSecret}
+                publishableKey={nativeCheckout.publishableKey}
+                payLabel={buyLabel || (subscribing ? 'Subscribe' : 'Pay now')}
+                // Cancelling drops the form and leaves the session open —
+                // deliberately. The shopper may come back to the same
+                // attempt key, and an abandoned session is what the AGL-323
+                // recovery emails are built on. Nothing is expired from the
+                // browser: that is a write against the merchant's account.
+                onCancel={() => setNativeCheckout(null)}
+              />
+            </Suspense>
+          ) : null}
           {shipCountries ? (
             <TextField
               select
