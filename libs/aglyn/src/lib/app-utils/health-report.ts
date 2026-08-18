@@ -163,9 +163,38 @@ export function backupsHealth(
   // backup legitimately is one, and paging on it weekly would teach everyone
   // to ignore the alert. It earns no freshness credit either — a backup that
   // never finishes fails the age rule instead.
-  const failed = backups.some(
-    (backup) => backup.state !== 'READY' && backup.state !== 'CREATING',
-  )
+  //
+  // `NOT_AVAILABLE` BEHIND the newest READY backup is tolerated for a sharper
+  // reason (AGL-1843): it is not a failure at all, it is how a managed backup
+  // ends. Every backup this project has ever taken flips `READY` →
+  // `NOT_AVAILABLE` at roughly one week old while its `expireTime` sits ~90
+  // days out, so an aged-out backup lingers in the listing for another three
+  // months. Against a weekly schedule that means the steady state is ~13
+  // aged-out backups beside exactly one READY one — and the original rule
+  // ("any non-READY backup fails") could therefore NEVER be satisfied again.
+  // It went red on 2026-08-13 and stayed red, structurally, for as long as
+  // the schedule kept working. A check that cannot go green is worth no more
+  // than one that cannot go red: both times the alert says nothing, and this
+  // one was actively teaching the one person who receives it that a backup
+  // page is noise — eight days before launch.
+  //
+  // What genuinely reproduces AGL-1490 is a NEWEST run that produced nothing
+  // usable, so that is what is measured: a non-READY backup is a failure only
+  // when it is newer than the newest READY one (or when it cannot be dated,
+  // which is not a claim of freshness this check will make on its behalf).
+  // On 2026-08-13 the unusable 08-02 backup WAS the newest, so the condition
+  // this rule was born to catch still trips it. The age rule below remains
+  // the backstop: if the flip ever starts happening faster than the schedule
+  // replaces it, `newestReadyAgeDays` crosses the budget and this goes red on
+  // freshness instead — which is the honest reason to be worried.
+  const failed = backups.some((backup) => {
+    if (backup.state === 'READY' || backup.state === 'CREATING') return false
+    if (newestReadyMs === null) return true
+    const snapshotMs = backup.snapshotTime
+      ? Date.parse(backup.snapshotTime)
+      : Number.NaN
+    return !Number.isFinite(snapshotMs) || snapshotMs > newestReadyMs
+  })
 
   const code = failed
     ? 'backup-failed'

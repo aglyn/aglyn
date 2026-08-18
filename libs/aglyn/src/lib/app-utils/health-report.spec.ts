@@ -147,14 +147,14 @@ describe('backupsHealth', () => {
     expect(check.states).toEqual({ READY: 1 })
   })
 
-  it('fails on any NOT_AVAILABLE backup — the AGL-1490 gap', () => {
+  it('fails when the NEWEST backup is unusable — the AGL-1490 gap', () => {
     // The 2026-08-02 backup failed silently and sat unnoticed for 11 days.
-    // A fresh READY sibling does NOT excuse it: half the restore points being
-    // gone is exactly the condition that must page someone.
+    // What made it an incident is that it was the NEWEST thing there was:
+    // nothing usable had been produced since. That must still page someone.
     const check = backupsHealth(
       [
         { state: 'NOT_AVAILABLE', snapshotTime: days(11) },
-        { state: 'READY', snapshotTime: days(4) },
+        { state: 'READY', snapshotTime: days(14) },
       ],
       7,
       NOW,
@@ -162,6 +162,52 @@ describe('backupsHealth', () => {
     expect(check.ok).toBe(false)
     expect(check.code).toBe('backup-failed')
     expect(check.states).toEqual({ NOT_AVAILABLE: 1, READY: 1 })
+  })
+
+  it('tolerates aged-out NOT_AVAILABLE backups behind a fresh READY (AGL-1843)', () => {
+    // THE regression test. Managed backups flip READY → NOT_AVAILABLE at ~7
+    // days and then linger for the ~90 days until `expireTime`, so a weekly
+    // schedule that is working perfectly always shows a pile of them beside
+    // one READY backup. The old rule failed on any of them, which made this
+    // check structurally incapable of going green — it alerted continuously
+    // from 2026-08-13 onward while the backups were in fact fine. Production
+    // shape on 2026-08-18, verbatim from `gcloud firestore backups list`.
+    const check = backupsHealth(
+      [
+        { state: 'NOT_AVAILABLE', snapshotTime: days(16) },
+        { state: 'NOT_AVAILABLE', snapshotTime: days(9) },
+        { state: 'READY', snapshotTime: days(2) },
+      ],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(true)
+    expect(check.code).toBeUndefined()
+    expect(check.states).toEqual({ NOT_AVAILABLE: 2, READY: 1 })
+    expect(check.newestReadyAgeDays).toBe(2)
+  })
+
+  it('refuses to date an undateable non-READY backup in its own favour', () => {
+    // No `snapshotTime` means it cannot be shown to be older than the newest
+    // READY one, and "assume it aged out" is the assumption that hides a
+    // genuinely broken run.
+    const check = backupsHealth(
+      [{ state: 'NOT_AVAILABLE' }, { state: 'READY', snapshotTime: days(2) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
+  })
+
+  it('still fails when nothing is READY, whatever the aged ones say', () => {
+    const check = backupsHealth(
+      [{ state: 'NOT_AVAILABLE', snapshotTime: days(16) }],
+      7,
+      NOW,
+    )
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('backup-failed')
   })
 
   it('fails when the newest READY backup exceeds the age budget', () => {
