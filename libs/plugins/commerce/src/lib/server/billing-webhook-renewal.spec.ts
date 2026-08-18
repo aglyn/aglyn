@@ -162,9 +162,18 @@ jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async () => undefined,
 }))
 
-const fetchMock = jest.fn(async (url: any) => {
-  throw new Error(`Unexpected fetch to ${String(url)}`)
-})
+/**
+ * Typed at the declaration on purpose. An implementation that only throws
+ * infers `Promise<never>` and a one-element parameter tuple, which then makes
+ * every `mockImplementation` returning a response unassignable and every
+ * `mock.calls[n] as [string, any]` a non-overlapping cast (AGL-2098). The
+ * shape here is `fetch`'s: a url and an optional init.
+ */
+const fetchMock = jest.fn(
+  async (url: any, _init?: any): Promise<any> => {
+    throw new Error(`Unexpected fetch to ${String(url)}`)
+  },
+)
 
 // ---------------------------------------------------------------------------
 // Fixtures
