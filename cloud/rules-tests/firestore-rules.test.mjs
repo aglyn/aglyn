@@ -56,47 +56,30 @@ const RULES_SOURCE = readFileSync(
 )
 
 /**
- * The org-admin deny list, parsed out of the rules rather than retyped
- * (AGL-1355). Retyping it would make this suite a copy of the thing it is
- * testing: both would drift together and agree the whole way down.
+ * Strip comments with ONE left-to-right scan, so whichever delimiter appears
+ * first wins (AGL-2004, and its second instance AGL-2002).
  *
- * Comments go first — the org block's own prose names all four keys AGL-1354
- * closed, so parsing with it in place would read the explanation as the rule.
- * Path variables become angle brackets so block depth can be counted by
- * braces alone.
- */
-/**
- * Strip comments from the rules source with a single left-to-right scan, so
- * whichever delimiter appears FIRST wins.
+ * The two-regex form this replaces — block comments removed first, then line
+ * comments — is the bug `fcb8dbd45` fixed in
+ * `libs/aglyn/src/lib/foundation/definitions/write-deny-coverage.util.ts`.
+ * That fix did not reach here, and this file had the identical defect: the
+ * rules carry a LINE comment that quotes a wildcard path,
  *
- * This is the same bug, in the same rules file, as AGL-2004 — which the
- * promotion gate found in the `write-deny-coverage` guards at the same time
- * this suite hit it. Both parsers stripped block comments with one regex and
- * line comments with a second, in that order, and the rules file quotes a
- * wildcard path inside a LINE comment:
+ *   // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable
  *
- *     // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable
+ * whose `/*` opened a phantom block comment that ran 551 lines to the next
+ * closing delimiter, deleting real rule text on the way. The host catch-all's
+ * three exclusion lists were inside the swallowed region, so
+ * `hostServerOnlySubcollections()` threw at module load and took every one
+ * of this file's 124 assertions with it — a suite that had never run in any
+ * workflow, so nothing reported the red.
  *
- * To a regex that cannot tell prose from code, the `/` before `*` there opens
- * a block comment. The non-greedy match then runs to the next terminator far
- * below — 571 lines in AGL-2004's measurement — deleting real rule text and
- * its braces on the way. Both parsers below count braces to find a block, so
- * what they were parsing was not the file.
- *
- * It stayed invisible because the damage is brace ARITHMETIC: while the stray
- * opener happened to pair with a harmless terminator, extraction still landed
- * on the right block and everything passed. Adding one block comment above it
- * flips the pairing — which is what this issue's own `dmcaStrikes` rule
- * comment did, taking both guards from quietly-lucky to loudly-wrong in one
- * commit.
- *
- * Deliberately the SAME shape as `stripComments` in
- * `libs/aglyn/src/lib/foundation/definitions/write-deny-coverage.util.ts`
- * (AGL-2004), rather than the cheaper "strip line comments first" that also
- * fixes the observed break. Ordering the two regexes the other way trades one
- * blind spot for its mirror image: a `*​/` sitting after a `//` on one line
- * would have its block's terminator deleted instead. A single scan has
- * neither, and one bug should not leave two different fixes in one repo.
+ * Scanning once fixes it in both directions: `/*` inside a line comment is
+ * just text, and `//` inside a block comment cannot eat the terminator.
+ * Kept as a local copy rather than an import because `cloud/` is not an nx
+ * project and this is plain ESM run by `node --test`; it cannot reach the
+ * TypeScript source of the canonical helper. `RULES_PARSE_SELF_TEST` below
+ * pins the two implementations to the same behaviour.
  */
 const stripComments = (source) => {
   let out = ''
@@ -111,8 +94,7 @@ const stripComments = (source) => {
     if (pair === '//') {
       const end = source.indexOf('\n', index + 2)
       if (end < 0) break
-      // Keep the newline: the `;`-splitting below relies on statements
-      // staying separated, and line numbers survive for anyone debugging.
+      // Keep the newline: line numbers and statement separation survive.
       out += '\n'
       index = end + 1
       continue
@@ -123,28 +105,46 @@ const stripComments = (source) => {
   return out
 }
 
-/**
- * The parse is only trustworthy if what it parsed is balanced. A stray
- * delimiter that ate half the file leaves braces uneven, so this is the cheap
- * check that the two extractions below are reading the real document.
- */
-{
-  const stripped = stripComments(RULES_SOURCE)
-  const opens = (stripped.match(/\{/g) ?? []).length
-  const closes = (stripped.match(/\}/g) ?? []).length
-  assert.equal(
-    opens,
-    closes,
-    `the rules source does not have balanced braces after comment stripping ` +
-      `(${opens} open, ${closes} close). Something is eating real rules — the ` +
-      `block-depth parsers below are reading a corrupted document and every ` +
-      `guard built on them is meaningless until this is fixed.`,
+/** Comments out, path variables to angle brackets so braces alone give depth. */
+const normalizeRules = (source) =>
+  stripComments(source).replace(
+    /\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g,
+    '<$1>',
   )
+
+/**
+ * Run once, cache, and — the point — run LAZILY, inside a test (AGL-2002).
+ *
+ * These parsers used to run at module scope. When AGL-2004's phantom comment
+ * made one of them throw, the throw happened during import: node:test reported
+ * one anonymous failing "test at …test.mjs:1:1" and not one of the real
+ * assertions below ever ran. A suite that covers ~124 cases went to zero and
+ * said so only as a stack trace.
+ *
+ * Deferring the parse to first use puts any future parse failure inside a
+ * NAMED test, next to the parser guards below that explain what a parse
+ * failure means — while the rest of the file still runs and still reports.
+ */
+const memoize = (compute) => {
+  let cached
+  return () => {
+    if (!cached) cached = { value: compute() }
+    return cached.value
+  }
 }
 
-const ORG_ADMIN_DENIED = (() => {
-  const rules = stripComments(RULES_SOURCE)
-    .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
+/**
+ * The org-admin deny list, parsed out of the rules rather than retyped
+ * (AGL-1355). Retyping it would make this suite a copy of the thing it is
+ * testing: both would drift together and agree the whole way down.
+ *
+ * Comments go first — the org block's own prose names all four keys AGL-1354
+ * closed, so parsing with it in place would read the explanation as the rule.
+ * Path variables become angle brackets so block depth can be counted by
+ * braces alone.
+ */
+const orgAdminDenied = memoize(() => {
+  const rules = normalizeRules(RULES_SOURCE)
   const header = 'match /orgs/<orgId> {'
   const at = rules.indexOf(header)
   assert.ok(at >= 0, 'no `match /orgs/{orgId}` block in the rules')
@@ -174,7 +174,7 @@ const ORG_ADMIN_DENIED = (() => {
   const list = branches[0].match(/hasAny\(\s*\[([^\]]*)\]/)
   assert.ok(list, 'the canManageOrg() branch has no hasAny([…]) key diff')
   return [...list[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1])
-})()
+})
 
 /**
  * The host subcollections that are denied to the client OUTRIGHT — parsed
@@ -194,9 +194,8 @@ const ORG_ADMIN_DENIED = (() => {
  *    That is why a dedicated `allow write: if false` block would not have
  *    closed AGL-1367, and why this set is computed by subtracting them.
  */
-const HOST_SERVER_ONLY_SUBCOLLECTIONS = (() => {
-  const rules = stripComments(RULES_SOURCE)
-    .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
+const hostServerOnlySubcollections = memoize(() => {
+  const rules = normalizeRules(RULES_SOURCE)
 
   const hostHeader = 'match /hosts/<hostId> {'
   const hostAt = rules.indexOf(hostHeader)
@@ -276,7 +275,116 @@ const HOST_SERVER_ONLY_SUBCOLLECTIONS = (() => {
     (name) =>
       update.includes(name) && remove.includes(name) && !dedicated.has(name),
   )
-})()
+})
+
+/**
+ * The parser's own guard (AGL-2002).
+ *
+ * Everything above reads the rules file, and the two failures that matter are
+ * both about the READ, not the rules:
+ *
+ *  - The strip eats too much. That is AGL-2004: a line comment quoting `/*`
+ *    swallowed 551 lines here and the host catch-all's exclusion lists went
+ *    with it. It happened to throw, but truncation does not have to — a
+ *    shorter bite leaves the lists parseable and merely SMALLER, and every
+ *    `for (const name of …)` below then loops over a set with the interesting
+ *    names missing. Green, testing less.
+ *  - The strip eats too little, and prose gets read as rules.
+ *
+ * These run without the emulator, before any of it, so a parse regression
+ * reads as a parse regression rather than as a rules failure.
+ */
+describe('the rules parser reads the whole file (AGL-2002)', () => {
+  it('strips a line comment that quotes a wildcard path, without eating the file', () => {
+    // The literal line that caused AGL-2004, still in the rules today.
+    //
+    // The trailing block comment is load-bearing, not scenery: the phantom
+    // comment a block-first strip opens at `datasets/*` runs to the NEXT
+    // closing delimiter, so without one downstream the buggy strip finds no
+    // match, removes nothing, and this test passes under the very defect it
+    // exists to catch. Checked by injecting that defect — with the block
+    // comment present it fails, without it it does not.
+    const source = [
+      'match /a/<id> {',
+      '  // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable',
+      "  allow read: if keep in ['sentinel'];",
+      '  /* an ordinary block comment, further down the file */',
+      '}',
+    ].join('\n')
+    const stripped = stripComments(source)
+    assert.ok(
+      stripped.includes('sentinel'),
+      'a line comment quoting `/*` opened a phantom block comment and ate ' +
+        'the rule under it — this is AGL-2004 returning.',
+    )
+    assert.ok(
+      !stripped.includes('client-writable'),
+      'the line comment survived the strip',
+    )
+  })
+
+  it('does not let a `//` inside a block comment eat the block terminator', () => {
+    const source = ['/* prose with // inside */', "allow read: if x in ['kept'];"].join(
+      '\n',
+    )
+    const stripped = stripComments(source)
+    assert.ok(stripped.includes('kept'), 'the block comment swallowed the rule')
+    assert.ok(!stripped.includes('prose'), 'the block comment survived the strip')
+  })
+
+  it('reads the real rules file whole, not a truncated prefix', () => {
+    // A cheap, order-of-magnitude floor. The AGL-2004 strip returned 1045
+    // lines where the correct one returns 1596, so anything near the true
+    // size proves the phantom-comment bite is not happening. Deliberately
+    // NOT derived from the file's own length after stripping — that would be
+    // the tautology this issue is about.
+    const lines = stripComments(RULES_SOURCE).split('\n').length
+    assert.ok(
+      lines > 1400,
+      `the comment strip returned ${lines} lines of rules; the file has ` +
+        `${RULES_SOURCE.split('\n').length}. Something is eating the source, ` +
+        `and every list parsed off it above is reading a truncated file.`,
+    )
+  })
+
+  it('strips to a brace-balanced document (AGL-1983)', () => {
+    // Came in on `c14fc5c38` as a module-scope block. Kept, but moved INSIDE a
+    // test: at module scope a throw here dies at import and takes all ~124
+    // assertions with it, which is the exact failure AGL-2002 exists to stop.
+    //
+    // The parse is only trustworthy if what it parsed is balanced. A stray
+    // delimiter that ate half the file leaves braces uneven, so this is the
+    // cheap check that the two extractions above read the real document.
+    const stripped = stripComments(RULES_SOURCE)
+    const opens = (stripped.match(/\{/g) ?? []).length
+    const closes = (stripped.match(/\}/g) ?? []).length
+    assert.equal(
+      opens,
+      closes,
+      `the rules source does not have balanced braces after comment stripping ` +
+        `(${opens} open, ${closes} close). Something is eating real rules — the ` +
+        `block-depth parsers above are reading a corrupted document and every ` +
+        `guard built on them is meaningless until this is fixed.`,
+    )
+  })
+
+  it('parses non-empty lists off the rules (the vacuous-pass floor)', () => {
+    // Without this, a strip that truncated JUST enough to leave the lists
+    // syntactically valid but empty would make every loop below iterate
+    // nothing and the suite would pass having asserted on no collection at
+    // all. The per-name floors further down catch a specific name going
+    // missing; this catches the whole set going missing.
+    assert.ok(
+      hostServerOnlySubcollections().length > 0,
+      'no server-only host subcollections parsed — every `for (const name ' +
+        'of hostServerOnlySubcollections())` below is a no-op',
+    )
+    assert.ok(
+      orgAdminDenied().length > 0,
+      'no org-admin denied keys parsed — the org key-diff loops are no-ops',
+    )
+  })
+})
 
 /** @type {import('@firebase/rules-unit-testing').RulesTestEnvironment} */
 let env
@@ -669,11 +777,11 @@ describe('org docs', () => {
    */
   it('every key on the parsed deny list is actually denied (AGL-1355)', async () => {
     assert.ok(
-      ORG_ADMIN_DENIED.length >= 15,
-      `Parsed only ${ORG_ADMIN_DENIED.length} keys off the org-update rule; ` +
+      orgAdminDenied().length >= 15,
+      `Parsed only ${orgAdminDenied().length} keys off the org-update rule; ` +
         `the parser has rotted and this test is proving nothing.`,
     )
-    for (const key of ORG_ADMIN_DENIED) {
+    for (const key of orgAdminDenied()) {
       await assertFails(
         updateDoc(doc(authed(OWNER), 'orgs', ORG), { [key]: 'agl-1355-probe' }),
       )
@@ -1062,7 +1170,7 @@ describe('hosts', () => {
   it('the host catch-all still denies every server-owned subcollection (AGL-1367)', () => {
     for (const name of ['counters', 'analytics', 'members', 'datasets']) {
       assert.ok(
-        HOST_SERVER_ONLY_SUBCOLLECTIONS.includes(name),
+        hostServerOnlySubcollections().includes(name),
         `\`${name}\` is no longer denied outright under hosts/{hostId}. It ` +
           `must appear in ALL THREE \`subcollection in […]\` exclusion lists ` +
           `of the host catch-all AND have no dedicated match block re-granting ` +
@@ -1077,14 +1185,14 @@ describe('hosts', () => {
   it('every parsed server-only host subcollection is create/update/delete denied (AGL-1367)', async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
-      for (const name of HOST_SERVER_ONLY_SUBCOLLECTIONS) {
+      for (const name of hostServerOnlySubcollections()) {
         await setDoc(doc(db, 'hosts', HOST, name, 'agl1367-seed'), { total: 7 })
       }
     })
     // Both roles: this is a PATH question, not a role one. A site admin has
     // the same billing incentive as an editor and no more right to the meter.
     for (const uid of [EDITOR, OWNER]) {
-      for (const name of HOST_SERVER_ONLY_SUBCOLLECTIONS) {
+      for (const name of hostServerOnlySubcollections()) {
         const at = `hosts/{hostId}/${name} as ${uid}`
         await mustDeny(
           `create ${at}`,
@@ -3831,7 +3939,7 @@ describe('the org suspended* additions are on both deny branches (AGL-1507)', ()
   it('the three new keys are on the parsed manager deny list', () => {
     for (const key of NEW_ORG_KEYS) {
       assert.ok(
-        ORG_ADMIN_DENIED.includes(key),
+        orgAdminDenied().includes(key),
         `\`${key}\` fell off the canManageOrg() deny list — an org admin ` +
           `with the client SDK could now ${key === 'suspendedUntilMs'
             ? 'shorten their own suspension'
