@@ -138,3 +138,49 @@ A stranger can: sign up → build a site → publish on their domain → sell a 
 shipping, inventory → get paid; a publisher can sell a plugin and get their split; Zach can see all
 of it in GA4 and the console with staff traffic excluded, nobody undercharged, nothing fail-open,
 and every guard able to go red.
+
+## Browser, auth, and env access (Zach, verbatim)
+
+> Don't forget you can use my browser to test and use my authentication session, but first try using
+> the local dev environment or emulator environment, you can use my browser to manage anything such
+> as stripe, google cloud, firebase, aglyn, vercel etc, also when looking for env always double
+> check shared/global envs.
+
+Operational notes on that grant: the browser is ONE resource — serialize browser tasks, never fan
+them out to concurrent agents; never enter credentials/API keys into fields (read them from where
+they already are); `vercel env ls` CANNOT see team-level shared envs (use the REST API or the
+dashboard — a "missing" var may be shared-but-unlinked, which is invisible at runtime until linked
+per-project: the exact AGL-1636/AGL-1846 failure, twice).
+
+## The mandate, in Zach's own words (2026-08-17 — verbatim, so nothing gets lost again)
+
+> once the background agents are done and the promotion gate is done. Write me a new command to
+> start in a new session, making note that we need to make sure we are completing everything in the
+> backlog and getting things ready to release on Sept 1, spawning each one in a new background
+> agent, completing as many as possible at once, updating linear as we go, file and fix all at the
+> same time and update statuses as we go. We gotta get these things ready to go and be released to
+> the public and start accepting payments, selling marketplace items, and the storefronts of the
+> hosts ready to receive payments and fulfill orders and shipments etc, all of the commerce features
+> and addons and plugins, and our subscription tiers, our usage metering, data analysis and security
+> measure and billing overages etc, and everything else you suggest. We need to make sure we are not
+> losing money when we release and will enable features that will not produce churn but rather
+> commitment and making it more easy to upgrade and not as easy to downgrade similar to how claude
+> subscriptions work etc, I already asked for this before not sure how it was lost, we need to hide
+> the lower tiers or something or make them less visible and make the upgrade paths more visible,
+> then produce a funnel to try and prevent canceling account first by asking for them to complete
+> survey why they are churning or deleting account or canceling account etc and then offer them a
+> smaller subscription tier or a short term discount etc. All of Stripe and staff needs to be
+> polished and ready to go. Let's make sure our console and besigner actually match the features we
+> promote in our product mockups/screenshots, don't change the screenshots just make our feature
+> match more similar to what we are advertising. Add a new console ai generative chat bot helper
+> tool persisted on every page to assist with direction or how to do things, direct them to
+> documentation or help them use aglyn or to automate current view etc create a new element or
+> change the screen design or build page content or build an entire site for them or update
+> attribute value in besigner etc, the expanse of this tool can be entirely up to you, remember we
+> need to make it easy for all 3 of our ICPs, Multi-Site orgs, agencies, and beginner mom and pop or
+> fresh business looking to get started etc. We need to make sure it is easy for someone who doesn't
+> know code and even easier for someone who does know code. We may need to make this a paid feature
+> to keep from costing us too much money and keep our profit margins high, provide all limitations
+> to possibly make a free version available. We will also want to use the data and questions and
+> answers to help better build our docs so we will need to store that info and allow us to learn
+> from it to improve docs and the ai tool.
