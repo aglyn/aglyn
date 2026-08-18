@@ -84,12 +84,8 @@ commits while preserving the working tree.
 3. **AGL-1620** E2ETEST100 drill coupon expires **2026-08-21**.
 4. Ruling signature (`Platform Docs/Legal/TX_PRIVATE_LETTER_RULING_REQUEST_…md`); §151.0242 publisher
    certification text before the first real plugin sale.
-5. The TX Webfile number is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. The
-   number itself is NOT recorded here: this repo is public, and the Comptroller authenticates
-   eSystems taxpayer-access with it. It lives in the console deployment's server-only env as
-   `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` (AGL-2021) — read it from Vercel project env or the
-   Comptroller correspondence, never from source. Residual: confirm on the next correspondence
-   whether the *officer* mailing address got the RA swap (AGL-1812).
+5. Webfile **RT974186** is assigned (2026-08-17) — the mailed-notice dependency is CLEARED. Residual:
+   confirm on the next correspondence whether the *officer* mailing address got the RA swap (AGL-1812).
 6. AGL-1506/1573 need a drill API key only he can mint; AGL-1133 needs the 07-31 roster ratified.
 7. **AGL-1777** — `main`/`production` have NO branch protection. NX CI stays `disabled_manually`
    (AGL-1776); no workflow builds PRs.
@@ -113,3 +109,49 @@ Isolated worktree at `/private/tmp/aglyn-gate/wt` — OUTSIDE the shared scratch
 `--prefix cloud/functions`, private npm cache, `NX_DAEMON=false`, exit codes to files, and END with a
 deliberate cross-project import proving `@nx/enforce-module-boundaries` fires. The gate must run
 tests AND lint, not just build.
+
+---
+
+## ⚑ Session close 2026-08-18 — read this before spawning anything
+
+### Zach decisions captured this session (act on these, they are not open questions)
+
+- **The business phone is `512-222-8232`** — the Google Voice line, NOT his personal cell
+  `(737) 600-6900`, which must never reach a public record. Readable directly from Google Voice under
+  Google account slot **`/u/4/`**; do not ask him for it again. This unblocks AGL-2035 (`/legal/dmca`
+  publishes no phone → §512(c)(2) non-compliant) and the designated-agent filing.
+- **The DMCA filing is at <https://dmca.copyright.gov>** — account, $6, 3-year term. Every value to
+  type is assembled on AGL-1983. Zach's part is account creation, the attestation checkbox and
+  payment; an agent can drive the three form pages from there.
+- **Approved: delete the five test-mode `stripeEvents` rows** from production. Verify each id against
+  the TEST key before deleting (that is the check that can fail); the guard half of AGL-2040 is a
+  separate agent's — do not touch the webhook code.
+- **Shared env before project env, always.** `vercel env ls` cannot see team-shared vars; a shared var
+  must be LINKED, never duplicated at project scope. Zach caught exactly that shadowing on the GA4
+  vars earlier today.
+
+### ⚠️ Do not lose: `.claude/commands/release.md` now carries the RESTATED mandate
+
+Commit `3695fc02d`. Zach restated the full directive on 2026-08-18 and it **grew** — seven new
+directives, most notably the **free/hobby tier hard cap**, **usage alerts + budgets modelled on Google
+Cloud**, **self-host polish with branding/identity moved to env vars**, **enterprise/agency white-label
+audit**, and **"a capability is not a feature until the console exposes it."** The 2026-08-17 version was
+summarised once and lost a directive; the block is verbatim now and each phrase was grep-verified.
+Never paraphrase it.
+
+### Push discipline that mattered
+
+`git push` was rejected (main moves constantly) and `git rebase` refused because other agents hold
+dirty files. **Do not stash and do not autostash** — the working answer was a detached worktree at an
+absolute `/private/tmp` path, cherry-pick, push, then `git reset --soft origin/main` to realign local
+main without touching the index or anyone's worktree. Confirm the blast radius with
+`git show --stat` afterwards, every time.
+
+### Still in flight at session close — reconcile before assuming any of it landed
+
+Six background agents were mid-run: the promotion gate on a ~10-commit batch (contains the **live
+Billing fix**, AGL-1991 — billing was broken on every org in production), marketing authoring (blog
+link + TikTok), the permissive catch-all (AGL-2038), the livemode guard (AGL-2040), self-host
+DMCA/operator identity, and the shared-env + `stripeEvents` cleanup agent. **Re-derive their state from
+git and Linear — do not trust this list as an outcome.** Roughly 13 held commits sit across 7 worktrees
+awaiting the current promotion.
