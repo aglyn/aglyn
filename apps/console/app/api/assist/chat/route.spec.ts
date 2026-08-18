@@ -190,7 +190,7 @@ const QUESTION_BODY = (orgId: string) => ({
 })
 
 /** Arm the Anthropic fake with a canned SSE stream. */
-function armUpstream(): void {
+function armUpstream(stopReason = 'end_turn', withText = true): void {
   const encoder = new TextEncoder()
   const events = [
     {
@@ -203,9 +203,17 @@ function armUpstream(): void {
         },
       },
     },
-    { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Open the screen, ' } },
-    { type: 'content_block_delta', delta: { type: 'text_delta', text: 'then press Publish.' } },
-    { type: 'message_delta', usage: { output_tokens: 42 } },
+    ...(withText
+      ? [
+          { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Open the screen, ' } },
+          { type: 'content_block_delta', delta: { type: 'text_delta', text: 'then press Publish.' } },
+        ]
+      : []),
+    {
+      type: 'message_delta',
+      delta: { stop_reason: stopReason },
+      usage: { output_tokens: 42 },
+    },
     { type: 'message_stop' },
   ]
   mockFetch.mockResolvedValue({
@@ -422,6 +430,75 @@ describe('the green path', () => {
     expect(request.stream).toBe(true)
     expect(request.system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(request.model).toBe('claude-sonnet-5')
+  })
+
+  it('sends thinking DISABLED and low effort — the defaults are not free', async () => {
+    // On Sonnet 5 an omitted `thinking` runs ADAPTIVE at `high` effort, and
+    // max_tokens caps thinking + answer together: leaving these off buys
+    // output-priced silence and a truncated answer. Asserted because the
+    // failure is invisible — the request still succeeds.
+    seedOrgs()
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    await response.text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    expect(request.thinking).toEqual({ type: 'disabled' })
+    expect(request.output_config).toEqual({ effort: 'low' })
+    expect(request.max_tokens).toBe(1024)
+  })
+
+  it('never opens the conversation on an assistant turn', async () => {
+    // The client sends a trailing window of its thread; a window boundary
+    // lands mid-exchange half the time, and the API 400s a history that
+    // starts assistant-side. That would break the panel at exactly the
+    // point a user has had a real conversation with it.
+    seedOrgs()
+    armUpstream()
+    const response = await POST(
+      post({
+        ...QUESTION_BODY(FREE_ORG),
+        history: [
+          { role: 'assistant', text: 'the tail of an earlier answer' },
+          { role: 'user', text: 'and then?' },
+          { role: 'assistant', text: 'and then this' },
+        ],
+      }),
+    )
+    await response.text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    expect(request.messages[0].role).toBe('user')
+    expect(request.messages[0].content).toBe('and then?')
+    expect(request.messages[request.messages.length - 1].content).toBe(
+      'How do I publish my first screen?',
+    )
+  })
+
+  it('a refusal reaches the user as words, not as silence', async () => {
+    // stop_reason: 'refusal' is an HTTP 200 with an empty answer. Without
+    // this the spinner stops and nothing appears — reads as a dead feature.
+    seedOrgs()
+    armUpstream('refusal', false)
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const events = await readEvents(response)
+    const failure = events.find((event) => event.type === 'error')
+    expect(String(failure?.error)).toMatch(/could not answer/i)
+    const done = events.find((event) => event.type === 'done')
+    const exchange = mockDocs.get(
+      `orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`,
+    )
+    // Still recorded: the tokens were spent, and the refusal RATE is the
+    // signal that the prompt or the corpus needs work.
+    expect(exchange).toMatchObject({ stopReason: 'refusal', answer: '' })
+  })
+
+  it('a truncated answer says so instead of just stopping', async () => {
+    seedOrgs()
+    armUpstream('max_tokens')
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    const events = await readEvents(response)
+    expect(
+      String(events.find((event) => event.type === 'error')?.error),
+    ).toMatch(/cut short/i)
   })
 
   it('502 when the upstream refuses', async () => {

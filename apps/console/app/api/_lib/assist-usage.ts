@@ -76,15 +76,50 @@ export function assistEntitledMonthlyLimit(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1000
 }
 
+export interface AssistTokenRates {
+  inputPerToken: number
+  outputPerToken: number
+  cacheReadPerToken: number
+  cacheWritePerToken: number
+}
+
+/** List price per MTok → per-token rates, cache read at 0.1x, write 1.25x. */
+function rates(inputPerMTok: number, outputPerMTok: number): AssistTokenRates {
+  return {
+    inputPerToken: inputPerMTok / 1_000_000,
+    outputPerToken: outputPerMTok / 1_000_000,
+    cacheReadPerToken: (inputPerMTok * 0.1) / 1_000_000,
+    cacheWritePerToken: (inputPerMTok * 1.25) / 1_000_000,
+  }
+}
+
 /**
- * List-rate unit costs (USD per token) for the assist model tier — Sonnet
- * class. These are telemetry estimates for margin tuning, not billing.
+ * List-rate unit costs (USD per token) BY MODEL. Telemetry estimates for
+ * margin tuning, not billing.
+ *
+ * Keyed by model rather than fixed at Sonnet's rates because `ASSIST_MODEL`
+ * is an env override: a one-line incident swap to an Opus-class model would
+ * otherwise keep reporting Sonnet money, and per-org cost would read as
+ * roughly right — the failure mode this whole meter exists to prevent. An
+ * unknown id falls back to the most EXPENSIVE known tier on purpose: a
+ * cost estimate that errs low is worse than one that errs high.
  */
-export const ASSIST_TOKEN_RATES_USD = {
-  inputPerToken: 3 / 1_000_000,
-  outputPerToken: 15 / 1_000_000,
-  cacheReadPerToken: 0.3 / 1_000_000,
-  cacheWritePerToken: 3.75 / 1_000_000,
+export const ASSIST_MODEL_RATES_USD: Record<string, AssistTokenRates> = {
+  'claude-sonnet-5': rates(3, 15),
+  'claude-sonnet-4-6': rates(3, 15),
+  'claude-haiku-4-5': rates(1, 5),
+  'claude-opus-5': rates(5, 25),
+  'claude-opus-4-8': rates(5, 25),
+}
+
+/** Rates for the assist tier's default model — Sonnet class. */
+export const ASSIST_TOKEN_RATES_USD = ASSIST_MODEL_RATES_USD['claude-sonnet-5']
+
+/** The dearest known tier, used when a model id is not in the table. */
+const FALLBACK_RATES: AssistTokenRates = rates(10, 50)
+
+export function assistRatesForModel(model: string): AssistTokenRates {
+  return ASSIST_MODEL_RATES_USD[model] ?? FALLBACK_RATES
 }
 
 export interface AssistTokenUsage {
@@ -94,14 +129,21 @@ export interface AssistTokenUsage {
   cacheWriteTokens: number
 }
 
-/** Estimated cost in USD for one exchange, at list rates, rounded to 6dp. */
-export function estimateAssistCostUsd(usage: AssistTokenUsage): number {
-  const rates = ASSIST_TOKEN_RATES_USD
+/**
+ * Estimated cost in USD for one exchange, at the SERVING model's list
+ * rates, rounded to 6dp. `model` is optional only so the older call shape
+ * keeps working; the route always passes it.
+ */
+export function estimateAssistCostUsd(
+  usage: AssistTokenUsage,
+  model = 'claude-sonnet-5',
+): number {
+  const rate = assistRatesForModel(model)
   const raw =
-    usage.inputTokens * rates.inputPerToken +
-    usage.outputTokens * rates.outputPerToken +
-    usage.cacheReadTokens * rates.cacheReadPerToken +
-    usage.cacheWriteTokens * rates.cacheWritePerToken
+    usage.inputTokens * rate.inputPerToken +
+    usage.outputTokens * rate.outputPerToken +
+    usage.cacheReadTokens * rate.cacheReadPerToken +
+    usage.cacheWriteTokens * rate.cacheWritePerToken
   return Math.round(raw * 1_000_000) / 1_000_000
 }
 
@@ -175,6 +217,14 @@ export interface AssistExchangeRecord {
   usage: AssistTokenUsage
   /** Docs paths cited in grounding, for the docs-gap mining view. */
   docsPaths: string[]
+  /**
+   * The model's own `stop_reason` (`end_turn` | `refusal` | `max_tokens` |
+   * …), or null when the stream ended without one. Stored because a
+   * refusal and a truncation both look like a short answer in the data —
+   * and a rising refusal rate is a prompt problem, while a rising
+   * max_tokens rate is a ceiling problem. They need different fixes.
+   */
+  stopReason: string | null
 }
 
 /**
@@ -194,7 +244,7 @@ export async function recordAssistExchange(
   const serverTimestamp = firebaseAdmin.firestore.FieldValue.serverTimestamp
   const orgRef = firestore.collection('orgs').doc(orgId)
   const exchangeRef = orgRef.collection('assistExchanges').doc()
-  const estCostUsd = estimateAssistCostUsd(record.usage)
+  const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
 
   const batch = firestore.batch()
   batch.set(exchangeRef, {
@@ -211,6 +261,7 @@ export async function recordAssistExchange(
     cacheWriteTokens: record.usage.cacheWriteTokens,
     estCostUsd,
     docsPaths: record.docsPaths,
+    stopReason: record.stopReason,
     feedback: null,
     createdAt: serverTimestamp(),
   })

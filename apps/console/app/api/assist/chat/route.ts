@@ -57,15 +57,35 @@ import {
  *
  * Streaming: the route re-emits Anthropic's SSE stream as simplified
  * `data: {type:'delta',text}` events, then one `{type:'done', exchangeId,
- * usage, quota, docs}` after the exchange + meters are recorded. Prompt
- * caching: the static system block carries `cache_control` so the per-turn
- * variation (context + retrieval) never re-bills the stable prefix.
+ * usage, quota, docs}` after the exchange + meters are recorded.
+ *
+ * Thinking is DISABLED explicitly. On Sonnet 5 an omitted `thinking` runs
+ * ADAPTIVE — the default flipped from Sonnet 4.6 — and `max_tokens` caps
+ * thinking plus answer together, so leaving it off the request would spend
+ * output-priced thinking tokens on "how do I publish a screen", stall the
+ * stream behind a silent think (display defaults to `omitted`, i.e. empty
+ * thinking blocks), and truncate the answer inside the same 1024-token
+ * ceiling. `effort: low` is the documented posture for a scoped chat
+ * workload; both are asserted in the spec so a silent default change fails.
+ *
+ * Prompt caching: the static system block carries the breakpoint so the
+ * per-turn variation (context + retrieval) sits after it. Note the prefix
+ * is currently BELOW Sonnet 5's 1024-token cacheable minimum, so it does
+ * not actually cache yet — the breakpoint is correct placement that starts
+ * paying the moment the prefix or the model changes, not a live saving.
+ * `usage.cacheReadTokens` on the exchange doc is where to confirm that.
  */
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 
-/** Sonnet-class default for cost; overridable without a deploy. */
+/**
+ * Sonnet-class default: the margin constraint on this feature is hard, and
+ * a docs-grounded how-to is exactly the shape Sonnet serves well. Env
+ * override exists for incident response (see ASSIST_TOKEN_RATES_USD — the
+ * cost telemetry follows the model id, so an override cannot silently make
+ * the per-org cost numbers lie).
+ */
 export function assistModel(): string {
   return process.env.ASSIST_MODEL || 'claude-sonnet-5'
 }
@@ -74,6 +94,8 @@ const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_TURNS = 24
 const MAX_HISTORY_CHARS = 8000
 const MAX_OUTPUT_TOKENS = 1024
+/** Scoped, latency-sensitive chat: the low rung, deliberately. */
+const ASSIST_EFFORT = 'low'
 /** Stored-answer cap — the data loop needs the gist, not an unbounded doc. */
 const MAX_STORED_ANSWER_CHARS = 20000
 
@@ -123,6 +145,12 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
       history.push({ role, text })
     }
   }
+  // The conversation MUST open on a user turn or the API 400s the whole
+  // request. The client sends a trailing window of its thread, and a window
+  // boundary lands mid-exchange as often as not — so a long-running panel
+  // thread would start failing at exactly the twelfth message, which is the
+  // sort of bug that only shows up for the users who like the feature most.
+  while (history.length && history[0].role === 'assistant') history.shift()
   const rawContext = body.context as Record<string, unknown> | null | undefined
   const context = rawContext
     ? {
@@ -291,6 +319,11 @@ async function handler(request: Request): Promise<Response> {
         model: assistModel(),
         max_tokens: MAX_OUTPUT_TOKENS,
         stream: true,
+        // See the header comment: omitting these is NOT the same as
+        // sending them — the model-side defaults are adaptive thinking at
+        // `high` effort, which this workload neither needs nor can afford.
+        thinking: { type: 'disabled' },
+        output_config: { effort: ASSIST_EFFORT },
         system: [
           {
             type: 'text',
@@ -328,6 +361,7 @@ async function handler(request: Request): Promise<Response> {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
         }
         let answer = ''
+        let stopReason: string | null = null
         const usage: AssistTokenUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -365,12 +399,34 @@ async function handler(request: Request): Promise<Response> {
               } else if (event.type === 'message_delta') {
                 const deltaUsage = (event.usage as Record<string, number>) ?? {}
                 usage.outputTokens = deltaUsage.output_tokens ?? usage.outputTokens
+                stopReason =
+                  ((event.delta as { stop_reason?: string })?.stop_reason ??
+                    stopReason) ||
+                  null
               } else if (event.type === 'error') {
                 const error = event.error as { message?: string } | undefined
                 emit({ type: 'error', error: error?.message ?? 'Assistant stream failed' })
               }
             }
           }
+          // A refusal is an HTTP 200 with an empty or partial answer, not an
+          // error — so without this the user watches the spinner stop and
+          // gets nothing back. Truncation is the same shape: the tokens are
+          // spent either way, and silence reads as a broken feature.
+          if (stopReason === 'refusal') {
+            emit({
+              type: 'error',
+              error: answer
+                ? 'The assistant stopped part-way through that answer. Try rephrasing the question.'
+                : 'The assistant could not answer that one. Try rephrasing, or ask about a different part of Aglyn.',
+            })
+          } else if (stopReason === 'max_tokens') {
+            emit({
+              type: 'error',
+              error: 'That answer was cut short — ask for the next part, or narrow the question.',
+            })
+          }
+
           // The data loop + meters — recorded even for a partial answer:
           // tokens were spent either way and the miner wants the question.
           let exchangeId: string | null = null
@@ -385,6 +441,7 @@ async function handler(request: Request): Promise<Response> {
               tier,
               usage,
               docsPaths,
+              stopReason,
             })
           } catch (error) {
             console.error('assist exchange record failed', error)

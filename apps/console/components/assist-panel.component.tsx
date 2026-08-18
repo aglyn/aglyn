@@ -206,10 +206,14 @@ export function AssistPanelComponent() {
         return next
       })
     }
+    // A notice must not be swallowed by a partial answer: a refusal or a
+    // max_tokens cut arrives AFTER text has streamed, and substituting only
+    // when the bubble is empty would leave the user staring at half an
+    // answer with nothing saying why it stopped.
     const failAnswer = (notice: string) => {
       patchAnswer((message) => ({
         ...message,
-        text: message.text || notice,
+        text: message.text ? `${message.text}\n\n${notice}` : notice,
       }))
     }
     try {

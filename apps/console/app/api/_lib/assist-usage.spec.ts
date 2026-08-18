@@ -118,6 +118,7 @@ const {
   assistFreeDailyLimit,
   assistUsageDay,
   assistUsageMonth,
+  assistRatesForModel,
   checkAssistQuota,
   estimateAssistCostUsd,
   recordAssistExchange,
@@ -177,6 +178,34 @@ describe('estimateAssistCostUsd', () => {
       cacheWriteTokens: 0,
     })
     expect(cost).toBe(0.3)
+  })
+
+  it('follows the SERVING model, so an ASSIST_MODEL swap cannot understate cost', () => {
+    // The whole point of the meter is that per-org cost is trustworthy. A
+    // model override that kept reporting Sonnet money would read as
+    // "roughly right" while being wrong by the exact factor that matters.
+    const million = {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    }
+    expect(estimateAssistCostUsd(million, 'claude-sonnet-5')).toBe(18)
+    expect(estimateAssistCostUsd(million, 'claude-opus-5')).toBe(30)
+    expect(estimateAssistCostUsd(million, 'claude-haiku-4-5')).toBe(6)
+  })
+
+  it('an unknown model id errs HIGH rather than low', () => {
+    // A pinned snapshot id, a model released after this table was written,
+    // a typo in the env var: none of them may quietly make an org look
+    // cheap. The fallback is the dearest tier on purpose.
+    const rate = assistRatesForModel('claude-something-not-in-the-table')
+    expect(rate.inputPerToken).toBeGreaterThan(
+      assistRatesForModel('claude-opus-5').inputPerToken,
+    )
+    expect(rate.outputPerToken).toBeGreaterThan(
+      assistRatesForModel('claude-opus-5').outputPerToken,
+    )
   })
 })
 
@@ -250,6 +279,7 @@ describe('recordAssistExchange', () => {
       cacheWriteTokens: 100,
     },
     docsPaths: ['/getting-started/publish-your-first-screen#steps'],
+    stopReason: 'end_turn',
   }
 
   it('writes the exchange, the daily counter, and the monthly meter', async () => {
@@ -264,6 +294,9 @@ describe('recordAssistExchange', () => {
       tier: 'free',
       feedback: null,
       docsPaths: record.docsPaths,
+      // A refusal and a truncation both look like a short answer without
+      // this — and they need opposite fixes.
+      stopReason: 'end_turn',
     })
 
     expect(
