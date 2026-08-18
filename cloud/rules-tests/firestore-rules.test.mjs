@@ -65,9 +65,54 @@ const RULES_SOURCE = readFileSync(
  * Path variables become angle brackets so block depth can be counted by
  * braces alone.
  */
+/**
+ * Strip comments from the rules source, LINE COMMENTS FIRST.
+ *
+ * The order is the whole point, and it is a real bug that was found by this
+ * suite going red for a reason nobody would have guessed (AGL-1983).
+ *
+ * The rules file talks about paths in its prose, and some of those paths carry
+ * a glob — `hosts/{hostId}/datasets/*` appears inside a `//` comment. Strip
+ * block comments first and that `/*` opens one: the non-greedy match then runs
+ * to the next `*​/` anywhere below, swallowing tens of thousands of characters
+ * of REAL RULES on its way, braces included. The parsers under this comment
+ * count braces to find a block, so what they were parsing was not the file.
+ *
+ * It survived unnoticed because the damage depends on PARITY. As long as the
+ * stray `/*` happened to pair with a nearby harmless `*​/`, the extraction
+ * still landed on the right block and every assertion passed. Adding one more
+ * block comment anywhere above it flips the pairing — which is exactly what
+ * adding the `dmcaStrikes` rule's doc comment did, and the guard went from
+ * quietly-lucky to loudly-wrong in one commit.
+ *
+ * Stripping `//` to end-of-line first removes the glob before anything looks
+ * for `/*`. Block delimiters that live on their own lines — which is how every
+ * real block comment in the file is written — are untouched by it.
+ */
+const stripComments = (source) =>
+  source.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+
+/**
+ * The parse is only trustworthy if what it parsed is balanced. A stray
+ * delimiter that ate half the file leaves braces uneven, so this is the cheap
+ * check that the two extractions below are reading the real document.
+ */
+{
+  const stripped = stripComments(RULES_SOURCE)
+  const opens = (stripped.match(/\{/g) ?? []).length
+  const closes = (stripped.match(/\}/g) ?? []).length
+  assert.equal(
+    opens,
+    closes,
+    `the rules source does not have balanced braces after comment stripping ` +
+      `(${opens} open, ${closes} close). Something is eating real rules — the ` +
+      `block-depth parsers below are reading a corrupted document and every ` +
+      `guard built on them is meaningless until this is fixed.`,
+  )
+}
+
 const ORG_ADMIN_DENIED = (() => {
-  const rules = RULES_SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/[^\n]*/g, '')
+  const rules = stripComments(RULES_SOURCE)
     .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
   const header = 'match /orgs/<orgId> {'
   const at = rules.indexOf(header)
@@ -119,8 +164,7 @@ const ORG_ADMIN_DENIED = (() => {
  *    closed AGL-1367, and why this set is computed by subtracting them.
  */
 const HOST_SERVER_ONLY_SUBCOLLECTIONS = (() => {
-  const rules = RULES_SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/[^\n]*/g, '')
+  const rules = stripComments(RULES_SOURCE)
     .replace(/\{([A-Za-z_][A-Za-z0-9_]*(?:=\*\*)?)\}/g, '<$1>')
 
   const hostHeader = 'match /hosts/<hostId> {'
@@ -2940,6 +2984,144 @@ describe('the abuse-report queue is staff-read, nobody-write (AGL-1964)', () => 
       await mustDeny(
         `${label} deleting a report`,
         deleteDoc(doc(db, 'abuseReports', 'report-1')),
+      )
+    }
+  })
+})
+
+/**
+ * The other two §512 collections (AGL-1983), held to the same posture as the
+ * queue above and for sharper reasons.
+ *
+ * A counter-notice's evidentiary value is that the text is exactly what was
+ * sworn, at the time it says — and `receivedAtMs` is the instant the
+ * 10-to-14 business day put-back clock counts from, so a client that could
+ * write it could move its own restoration date in either direction. The
+ * strike ledger is the account-termination condition of the whole safe
+ * harbour, so a client that could write it could delete its own strikes.
+ *
+ * `dmcaStrikes` was already deny-all by the ABSENCE of a rule — there is no
+ * catch-all under `orgs/{orgId}` — and the block exists so that stays true
+ * the day somebody adds a convenience wildcard. This test is what would go
+ * red if they did.
+ */
+describe('the §512 counter-notice and strike ledger are staff-read, nobody-write (AGL-1983)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'dmcaCounterNotices', 'cn-1'), {
+        reference: 'CN-ABC1234567', status: 'received',
+        url: 'https://acme.aglyn.app/gallery', hostId: HOST, orgId: ORG,
+        subscriberName: 'Dana Okonkwo',
+        subscriberAddress: '128 Rue Example, Austin, TX',
+        subscriberPhone: '+1 512 555 0134',
+        receivedAtMs: Date.now() - 2 * 86_400_000,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'dmcaStrikes', 'report-1'), {
+        reportId: 'report-1', url: 'https://acme.aglyn.app/gallery',
+        withdrawnAt: null,
+      })
+    })
+  })
+
+  it('staff read a counter-notice; nobody else does, including its own filer’s org', async () => {
+    await mustAllow(
+      'staff reading a counter-notice',
+      getDoc(doc(authed(STAFF, { staff: true }), 'dmcaCounterNotices', 'cn-1')),
+    )
+    // The intake is unauthenticated, so there is no uid on the row to match a
+    // reader against — admitting one would be admitting an unverified claim
+    // to be that person. The row also carries a home address and a phone
+    // number §512(g)(3)(D) forced the filer to supply.
+    for (const uid of [OWNER, EDITOR, VIEWER, OUTSIDER]) {
+      await mustDeny(
+        `${uid} reading a counter-notice filed about their own site`,
+        getDoc(doc(authed(uid), 'dmcaCounterNotices', 'cn-1')),
+      )
+    }
+    await mustDeny(
+      'an anonymous visitor reading a counter-notice',
+      getDoc(
+        doc(env.unauthenticatedContext().firestore(), 'dmcaCounterNotices', 'cn-1'),
+      ),
+    )
+  })
+
+  it('nobody writes a counter-notice from a client — staff included', async () => {
+    for (const [label, db] of [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['a site owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} forging a counter-notice at a chosen id`,
+        setDoc(doc(db, 'dmcaCounterNotices', 'forged-1'), {
+          status: 'received', url: 'https://acme.aglyn.app/gallery',
+          receivedAtMs: 1,
+        }),
+      )
+      // The sharpest one: `receivedAtMs` IS the statutory clock. Moving it
+      // back would bring a restoration forward; moving it on would push a
+      // customer's put-back out.
+      await mustDeny(
+        `${label} moving a counter-notice's receipt instant`,
+        updateDoc(doc(db, 'dmcaCounterNotices', 'cn-1'), { receivedAtMs: 1 }),
+      )
+      await mustDeny(
+        `${label} rewriting what was sworn`,
+        updateDoc(doc(db, 'dmcaCounterNotices', 'cn-1'), {
+          material: 'Something else entirely',
+        }),
+      )
+      await mustDeny(
+        `${label} deleting a counter-notice`,
+        deleteDoc(doc(db, 'dmcaCounterNotices', 'cn-1')),
+      )
+    }
+  })
+
+  it('staff read the strike ledger; the counted org does not', async () => {
+    await mustAllow(
+      'staff reading the strike ledger',
+      getDoc(doc(authed(STAFF, { staff: true }), 'orgs', ORG, 'dmcaStrikes', 'report-1')),
+    )
+    // Not secrecy for its own sake — §512(i) requires subscribers to be
+    // INFORMED of the policy, and the published policy plus a per-strike
+    // notice does that. What the raw ledger adds is the complainants'
+    // identities and an exact live count an org could time its behaviour
+    // against.
+    for (const uid of [OWNER, EDITOR, VIEWER, OUTSIDER]) {
+      await mustDeny(
+        `${uid} reading their own workspace's strike ledger`,
+        getDoc(doc(authed(uid), 'orgs', ORG, 'dmcaStrikes', 'report-1')),
+      )
+    }
+  })
+
+  it('nobody deletes their own strikes', async () => {
+    // The account-termination condition of the entire safe harbour. A client
+    // able to write here could clear the ledger that decides it.
+    for (const [label, db] of [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} deleting a strike`,
+        deleteDoc(doc(db, 'orgs', ORG, 'dmcaStrikes', 'report-1')),
+      )
+      await mustDeny(
+        `${label} marking a strike withdrawn from the client`,
+        updateDoc(doc(db, 'orgs', ORG, 'dmcaStrikes', 'report-1'), {
+          withdrawnAt: new Date(),
+        }),
+      )
+      await mustDeny(
+        `${label} writing a strike ledger row directly`,
+        setDoc(doc(db, 'orgs', ORG, 'dmcaStrikes', 'invented'), {
+          reportId: 'invented',
+        }),
       )
     }
   })
