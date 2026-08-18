@@ -178,6 +178,122 @@ export function countManagerSeats(
 }
 
 /**
+ * One roster row or pending invite, as the collaborator counter needs to see
+ * it (AGL-2068). Deliberately structural rather than `Partial<AglynOrgMember>`
+ * — an INVITE is not a member document, it is keyed by email and has no uid,
+ * and the whole point of this counter is that the two populations must be
+ * counted together or the cap is enforced against a fraction of itself.
+ */
+export interface CollaboratorSeatEntry {
+  /** Member documents are keyed by uid; invites have none. */
+  uid?: string | null
+  email?: string | null
+  role?: unknown
+  allHosts?: boolean
+  hostAccess?: Record<string, unknown> | null
+}
+
+/**
+ * The identity key one entry occupies, or `''` when it identifies nobody.
+ *
+ * EMAIL FIRST, uid second, and that order is the join (AGL-2068). A person
+ * admitted to a site is one seat whether they arrive as an accepted member or
+ * as a still-pending invite, and those two rows live in different collections
+ * keyed different ways — `orgs/{id}/members/{uid}` and
+ * `orgs/{id}/invites/{inviteId}` — with the address as the only field both
+ * carry. Counting by uid would count the invite and the membership it becomes
+ * as two seats; counting only invites would miss every member.
+ *
+ * Legacy roster rows written before `email` was mirrored fall back to the uid,
+ * which cannot collide with an address (the `uid:` prefix is not a legal
+ * local-part/domain pair) and so is safe to mix into the same set.
+ */
+function collaboratorSeatKey(entry: CollaboratorSeatEntry): string {
+  const email =
+    typeof entry.email === 'string' ? entry.email.trim().toLowerCase() : ''
+  if (email) return email
+  const uid = typeof entry.uid === 'string' ? entry.uid.trim() : ''
+  return uid ? `uid:${uid}` : ''
+}
+
+/**
+ * Every principal consuming a COLLABORATOR seat on one host (AGL-2068).
+ *
+ * ## Why this exists at all
+ *
+ * `membersPerHost` was enforced on one of the four doors that admit a site
+ * collaborator, and that one door counted `hosts/{hostId}/members` — a
+ * DISPLAY roster only `/api/hosts/members` writes. The other three
+ * (`/api/orgs/invites` create, `/api/orgs/invites` accept, and the
+ * `hostAccess` branch of `/api/orgs/members`) land in `orgs/{id}/members` and
+ * the `hosts/{id}.memberRoles` projection, and were invisible to it. So the
+ * cap was both skipped on three paths and under-counted on the fourth, and a
+ * free org — `membersPerHost: 1` — could take on unlimited collaborators,
+ * each with full site access, on a plan that is never invoiced.
+ *
+ * Zach, 2026-08-18, verbatim: **"We need to make sure the free/hobby tier
+ * does hard cap so it always actually stays free."**
+ *
+ * ## What counts
+ *
+ * A SCOPED grant on `hostId`, and nothing else. An org-wide member
+ * (owner/admin, or `allHosts`) reaches every host but consumes a MANAGER
+ * seat — `countManagerSeats` is that side, and charging them here would bill
+ * one person twice and trip a cap they are not on. This is the same split
+ * AGL-1113 drew; it is now drawn from one place instead of three.
+ *
+ * Pending invites count, for the reason the manager gate counts them: an
+ * invite reserves the seat it will become, and a cap that only bites on
+ * acceptance can be walked past by mailing out N invites first.
+ */
+export function collaboratorSeatKeys(
+  entries: ReadonlyArray<CollaboratorSeatEntry | null | undefined>,
+  hostId: string,
+): Set<string> {
+  const keys = new Set<string>()
+  if (!hostId) return keys
+  for (const entry of entries) {
+    if (!entry) continue
+    // Managers are the other counter's population, whatever host map they
+    // happen to carry — a promoted collaborator keeps their old `hostAccess`.
+    if (isOrgWideMember(entry as Partial<AglynOrgMember>)) continue
+    if (!entry.hostAccess?.[hostId]) continue
+    const key = collaboratorSeatKey(entry)
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+/**
+ * How many collaborator seats on `hostId` are spoken for by someone OTHER
+ * than `exclude` (AGL-2068).
+ *
+ * `exclude` is the principal the caller is about to admit, and dropping them
+ * is what makes this composable with `checkSeatQuota(…, used)`, whose
+ * contract is "usage BEFORE the resource being created". Without it the
+ * accept path refuses its own invite: at the moment acceptance is decided the
+ * invitee holds a pending invite AND is about to hold a membership, so they
+ * would be counted once or twice against a cap they are the subject of.
+ *
+ * Both identities are dropped, not whichever one is present. A person can be
+ * on the roster under a uid with no mirrored email and hold an invite under
+ * that address, and the seat is still one seat.
+ */
+export function countCollaboratorSeats(
+  entries: ReadonlyArray<CollaboratorSeatEntry | null | undefined>,
+  hostId: string,
+  exclude?: { uid?: string | null; email?: string | null },
+): number {
+  const keys = collaboratorSeatKeys(entries, hostId)
+  const email =
+    typeof exclude?.email === 'string' ? exclude.email.trim().toLowerCase() : ''
+  if (email) keys.delete(email)
+  const uid = typeof exclude?.uid === 'string' ? exclude.uid.trim() : ''
+  if (uid) keys.delete(`uid:${uid}`)
+  return keys.size
+}
+
+/**
  * What KIND of user a console row represents (AGL-1114) — the distinction
  * that decides which seat they consume, and the one the Team table could not
  * express because a manager and a collaborator differ only by fields the

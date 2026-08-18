@@ -28,6 +28,7 @@ import {
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  collaboratorSeatRefusalResponse,
   emailUnverifiedResponse,
   findUserByEmailAcrossPools,
   findUserByUidAcrossPools,
@@ -392,6 +393,13 @@ async function handler(request: Request): Promise<Response> {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    // The `hostAccess` branch of this route admits a site COLLABORATOR and
+    // metered nothing (AGL-2068): it gates on `isOrgWideMember`, which is
+    // false for exactly that shape, so the manager quota above was skipped and
+    // `upsertOrgMember` ran unconditionally. The cap now lives inside that
+    // call's transaction and arrives here as an error to translate.
+    const seatRefusal = collaboratorSeatRefusalResponse(error)
+    if (seatRefusal) return seatRefusal
     console.error(error)
     return Response.json({ error: 'Membership operation failed' }, { status: 500 })
   }
