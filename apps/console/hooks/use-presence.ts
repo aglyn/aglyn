@@ -325,7 +325,7 @@ export function usePresence(options: {
           body: JSON.stringify({ hostId }),
         })
         if (!response.ok) return
-        const { token, orgId, canEdit } = await response.json()
+        const { token, orgId, canEdit, tenantId } = await response.json()
         if (!active || !token) return
 
         // The shared constant, not a literal: the primary app is
@@ -356,6 +356,13 @@ export function usePresence(options: {
             // Already connected on a previous mount.
           }
         }
+        // An SSO user's custom token is minted in their org's GCIP tenant
+        // (AGL-1962), and a tenant token can only be exchanged by an auth
+        // instance already placed in that tenant. Set it BEFORE the exchange.
+        // Assigned unconditionally — null puts the instance back on the
+        // project pool, so a presence app reused across a sign-out into a
+        // non-SSO account cannot carry a stale tenant over.
+        auth.tenantId = tenantId ?? null
         await signInWithCustomToken(auth, token)
         // The database handle is built HERE, once, and carried on the
         // session: co-editing must talk to the same authenticated app

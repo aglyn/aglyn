@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  authForPool,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgDoc,
@@ -128,15 +129,26 @@ async function handler(request: Request): Promise<Response> {
       orgRole === 'admin' ||
       orgRole === 'editor'
 
-    const token = await firebaseAdmin
-      .app()
-      .auth()
-      .createCustomToken(decoded.uid, {
-        presenceOrg: orgId,
-        ...(canEdit ? { coeditHost: hostId } : {}),
-      })
+    // Mint in the caller's OWN pool (AGL-1962). A uid is unique only WITHIN
+    // a pool, and `signInWithCustomToken` CREATES the account when the uid is
+    // absent from the pool the token was minted in. Minting an SSO user's
+    // GCIP-tenant uid against the project pool therefore did not fail — it
+    // silently manufactured a second, empty project-level account carrying
+    // their tenant uid (no email, no providers), which then shadowed the real
+    // SSO record in every `findUserByUidAcrossPools` caller, because that
+    // helper checks the project pool first. Measured on production:
+    // `IHumyGGhGxZKjVV26qCRx5Okf573` exists in both pools, the project copy
+    // created 2026-08-04 22:10 during the AGL-675 presence verification.
+    // `/api/admin/impersonate` already scoped its mint this way.
+    const tenantId = decoded.firebase?.tenant ?? null
+    const token = await authForPool(tenantId).createCustomToken(decoded.uid, {
+      presenceOrg: orgId,
+      ...(canEdit ? { coeditHost: hostId } : {}),
+    })
 
-    return Response.json({ token, orgId, canEdit }, { status: 200 })
+    // The client must put its presence auth instance in the same tenant
+    // before exchanging this, or the token is rejected as cross-pool.
+    return Response.json({ token, orgId, canEdit, tenantId }, { status: 200 })
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Could not start presence' }, { status: 500 })

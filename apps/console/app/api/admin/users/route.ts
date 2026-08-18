@@ -58,7 +58,11 @@ async function handler(request: Request): Promise<Response> {
     // way to reach the account at all. `tenantId` rides each row so the UI can
     // say which pool a user is in; it is also what a mutation needs, since
     // custom claims are per-pool.
-    const serialize = ({ record, tenantId }: PooledUserRecord) => ({
+    const serialize = ({
+      record,
+      tenantId,
+      uidAlsoInPools,
+    }: PooledUserRecord) => ({
       uid: record.uid,
       email: record.email ?? null,
       displayName: record.displayName ?? null,
@@ -70,6 +74,14 @@ async function handler(request: Request): Promise<Response> {
       providers: record.providerData.map((provider) => provider.providerId),
       /** GCIP tenant id, or null for a project-pool (non-SSO) account. */
       tenantId,
+      /**
+       * Other pools holding this same uid (AGL-1962) — present only when
+       * something minted a custom token across pools and Firebase created an
+       * empty shadow account rather than refusing. Sent through so the row
+       * can say so: both records are real, neither is deduplicated, and the
+       * shadow is the one that wins every uid lookup.
+       */
+      uidAlsoInPools: uidAlsoInPools ?? null,
     })
     // Exact-email lookup (AGL-270): listUsers can't search, this can.
     const email = typeof query.email === 'string' ? query.email : ''
