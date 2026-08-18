@@ -91,7 +91,7 @@ jobs:
       # fetch-depth 0: the checker resolves `origin/production` and lists the
       # rules commits in `origin/production..HEAD`. A shallow clone cannot do
       # either, and the checker exits 2 rather than guessing.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -117,7 +117,7 @@ jobs:
             exit 2
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'

@@ -102,11 +102,11 @@ jobs:
       # check:standalone-installs only needs `git ls-files`; this is for the
       # drift self-test. rules-drift.yml has always fetched full history for
       # the same reason.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'

@@ -102,7 +102,7 @@ jobs:
       # returns HEAD itself, whose `^` does not resolve. That failed the
       # self-test and SKIPPED the live index diff below on every run since
       # 2026-08-14 — the guard AGL-1801 exists for, silently not running.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -124,7 +124,7 @@ jobs:
             exit 2
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
