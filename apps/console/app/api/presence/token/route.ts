@@ -137,7 +137,7 @@ async function handler(request: Request): Promise<Response> {
     // their tenant uid (no email, no providers), which then shadowed the real
     // SSO record in every `findUserByUidAcrossPools` caller, because that
     // helper checks the project pool first. Measured on production:
-    // `IHumyGGhGxZKjVV26qCRx5Okf573` exists in both pools, the project copy
+    // `QQ7fixtureUid0000000000000001` exists in both pools, the project copy
     // created 2026-08-04 22:10 during the AGL-675 presence verification.
     // `/api/admin/impersonate` already scoped its mint this way.
     const tenantId = decoded.firebase?.tenant ?? null

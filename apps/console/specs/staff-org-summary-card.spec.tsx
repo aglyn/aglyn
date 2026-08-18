@@ -41,7 +41,7 @@ const org = {
   name: 'Northwind',
   slug: 'northwind',
   plan: 'agency',
-  ownerUid: '7AVEMtDa6OR1EuEspeLTx2xj7gg1',
+  ownerUid: 'QQ7fixtureUid0000000000000002',
   stripeCustomerId: 'cus_123',
   subscription: { status: 'active' },
   createdAt: { seconds: 1_700_000_000 },

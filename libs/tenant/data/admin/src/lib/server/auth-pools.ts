@@ -54,7 +54,7 @@ export interface PooledUserRecord {
    * means something minted a custom token for one pool's uid against another
    * pool — `signInWithCustomToken` CREATES the account when the uid is absent,
    * so the mistake manufactures an empty shadow account rather than failing.
-   * Measured on production: `IHumyGGhGxZKjVV26qCRx5Okf573` existed in both the
+   * Measured on production: `QQ7fixtureUid0000000000000001` existed in both the
    * project pool and `aglyn-org-y5v14`, the project copy created by
    * `/api/presence/token` minting an SSO user's tenant uid at project level.
    *

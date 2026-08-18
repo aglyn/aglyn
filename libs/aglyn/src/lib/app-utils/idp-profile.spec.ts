@@ -27,36 +27,45 @@ const saml = (attributes: Record<string, unknown>) => ({
 })
 
 /**
- * The real thing. Decoded from the live ID token of a zach@aglyn.com SSO
- * session on 2026-08-01, after the Workspace attribute mapping was added —
- * verbatim except that nothing was added to it.
+ * The measured SHAPE of a production SSO ID token payload, with every value
+ * replaced by a synthetic one (AGL-2029).
  *
- * Note what is NOT here: no top-level `name`, no `picture`. The claim the old
- * code read did not merely hold the wrong value, it was absent, which is why
- * a correct IdP mapping still produced a blank roster row.
+ * It was originally transcribed verbatim from a live member@example.com SSO
+ * session on 2026-08-01, which put a real personal phone number and a real
+ * production uid into a PUBLIC repository for no test-carrying reason —
+ * nothing here asserts anything about the VALUES, only that each claim is read
+ * from the right place. So the values are now fictional (555-01xx is the
+ * reserved not-a-real-number range) and the fixture proves exactly what it did
+ * before.
+ *
+ * What is preserved, because it IS the point of the fixture, is the structure:
+ * the claims live under `firebase.sign_in_attributes`, and note what is NOT
+ * here — no top-level `name`, no `picture`. The claim the old code read did not
+ * merely hold the wrong value, it was absent, which is why a correct IdP
+ * mapping still produced a blank roster row.
  */
 const MEASURED_TOKEN = {
-  uid: 'IHumyGGhGxZKjVV26qCRx5Okf573',
-  email: 'zach@aglyn.com',
+  uid: 'QQ7fixtureUid0000000000000001',
+  email: 'member@example.com',
   firebase: {
     tenant: 'aglyn-org-y5v14',
     sign_in_provider: 'saml.aglyn-workspace',
     sign_in_attributes: {
-      firstName: 'Zach',
-      lastName: 'Gover',
-      phoneNumber: '+1 (512) 222-8232',
-      email: 'zach@aglyn.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      phoneNumber: '+1 (555) 010-7788',
+      email: 'member@example.com',
     },
   },
 }
 
 describe('the measured production SSO token', () => {
   it('yields the name that the console rendered blank', () => {
-    expect(resolveIdpDisplayName(MEASURED_TOKEN)).toBe('Zach Gover')
+    expect(resolveIdpDisplayName(MEASURED_TOKEN)).toBe('Ada Lovelace')
   })
 
   it('yields the phone, in the format the directory holds it', () => {
-    expect(resolveIdpPhone(MEASURED_TOKEN)).toBe('+1 (512) 222-8232')
+    expect(resolveIdpPhone(MEASURED_TOKEN)).toBe('+1 (555) 010-7788')
   })
 
   it('yields no photo, because this IdP maps no photo attribute', () => {
@@ -76,17 +85,17 @@ describe('resolveIdpDisplayName', () => {
     // reading `decoded.name` produced nothing, because SAML attributes never
     // land as a top-level claim — they land under sign_in_attributes.
     expect(
-      resolveIdpDisplayName(saml({ firstName: 'Zach', lastName: 'Gover' })),
-    ).toBe('Zach Gover')
+      resolveIdpDisplayName(saml({ firstName: 'Ada', lastName: 'Lovelace' })),
+    ).toBe('Ada Lovelace')
   })
 
   it('still prefers a top-level name, which is what OIDC sends', () => {
     expect(
       resolveIdpDisplayName({
-        name: 'Zach Gover',
+        name: 'Ada Lovelace',
         ...saml({ firstName: 'Wrong' }),
       }),
-    ).toBe('Zach Gover')
+    ).toBe('Ada Lovelace')
   })
 
   it('accepts the attribute spellings other IdPs use', () => {
@@ -140,16 +149,16 @@ describe('resolveIdpDisplayName', () => {
 
   it('ignores whitespace-only and non-string values', () => {
     expect(resolveIdpDisplayName({ name: '   ' })).toBe('')
-    expect(resolveIdpDisplayName(saml({ firstName: '  ', lastName: 'Gover' }))).toBe(
-      'Gover',
+    expect(resolveIdpDisplayName(saml({ firstName: '  ', lastName: 'Lovelace' }))).toBe(
+      'Lovelace',
     )
     expect(resolveIdpDisplayName(saml({ firstName: 42, lastName: null }))).toBe('')
   })
 
   it('trims, so a padded attribute does not become a double space', () => {
     expect(
-      resolveIdpDisplayName(saml({ firstName: ' Zach ', lastName: ' Gover ' })),
-    ).toBe('Zach Gover')
+      resolveIdpDisplayName(saml({ firstName: ' Ada ', lastName: ' Lovelace ' })),
+    ).toBe('Ada Lovelace')
   })
 
   it('survives a token with no firebase claim at all', () => {

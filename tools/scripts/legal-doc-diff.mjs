@@ -66,7 +66,7 @@
 //      (unshared Doc, Drive API disabled, missing creds, network, dead page)
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -88,8 +88,27 @@ import {
 
 const LEGAL_ORIGIN = 'https://aglyn.com'
 const SA_EMAIL_HINT = 'firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com'
+/**
+ * Where the local copies of the legal documents live.
+ *
+ * `LEGAL_DOCS_DIR` first (AGL-2029). This was an absolute path into one
+ * developer's home directory — which only ever worked on that machine, and, in
+ * a PUBLIC repository, published the layout of a private Drive mount along with
+ * the account it is mounted under. The fallback is now relative to `homedir()`,
+ * so it still resolves for anyone with the same Drive mount without naming a
+ * user; set the env var for any other layout.
+ */
 const DEFAULT_LEGAL_DIR =
-  '/Users/zgover/Library/CloudStorage/GoogleDrive-zach@aglyn.com/Shared drives/Platform Docs/Legal'
+  process.env['LEGAL_DOCS_DIR'] ||
+  join(
+    homedir(),
+    'Library',
+    'CloudStorage',
+    'GoogleDrive-zach@aglyn.com',
+    'Shared drives',
+    'Platform Docs',
+    'Legal',
+  )
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 function parseArgs(argv) {

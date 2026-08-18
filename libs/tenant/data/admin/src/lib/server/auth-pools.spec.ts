@@ -278,7 +278,7 @@ describe('listUsersAcrossPools (AGL-1122)', () => {
    * undefined.
    */
   it('flags one uid living in two pools instead of merging the rows', async () => {
-    const uid = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+    const uid = 'QQ7fixtureUid0000000000000001'
     // The project copy is the empty shadow: no address at all, which is why
     // the staff page fell back to printing its uid.
     projectUsers.set(uid, userRecord(uid, undefined as any))

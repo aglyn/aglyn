@@ -22,7 +22,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 
-const UID = 'IHumyGGhGxZKjVV26qCRx5Okf573'
+const UID = 'QQ7fixtureUid0000000000000001'
 const ORG = 'jWmGooWE3L'
 
 /** Shaped from the real decoded token measured on production 2026-08-01. */

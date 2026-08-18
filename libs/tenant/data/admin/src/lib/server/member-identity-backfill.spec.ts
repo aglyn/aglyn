@@ -54,7 +54,7 @@ describe('backfillMemberIdentity', () => {
     const db = fakeDb({ role: 'owner', email: 'zach@aglyn.com' })
     const written = await backfillMemberIdentity(
       'jWmGooWE3L',
-      'IHumyGGhGxZKjVV26qCRx5Okf573',
+      'QQ7fixtureUid0000000000000001',
       { displayName: 'Zach Gover', photoURL: null },
       db,
     )
