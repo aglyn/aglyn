@@ -74,6 +74,28 @@ async function readScreenDoc(
   if (allowTemplate && screen?.kind === Aglyn.SCREEN_KIND_TEMPLATE) {
     return screen.deletedAt == null ? screen : null
   }
+  // `kind: 'error'` (AGL-2092) is served, and served UNCONDITIONALLY — no
+  // opt-in flag like `allowTemplate` above, on purpose.
+  //
+  // The two exclusions this function refuses are refused because refusing is
+  // what makes them honest: they are client-writable, so `kind: 'email'` had to
+  // cost the page or it would have been a discount (AGL-1383). Neither half of
+  // that argument holds here. A client cannot write `kind` at all — the rules
+  // have frozen it since AGL-1383 and only /api/hosts/screens stamps this
+  // value, bounded at `ERROR_SCREEN_MAX_PER_HOST` — and, decisively, an error
+  // screen that is still in the host's routing map still COUNTS, because the
+  // map outranks the document for this value. So there is no page being had for
+  // free to refuse, and refusing would only mean that assigning a 404 screen
+  // silently broke it: the very error-render callers below fetch it through
+  // this function, and a host that ALSO still publishes it at `/404` (which is
+  // exactly how every error screen on the platform exists today) would find
+  // that address 404ing the moment somebody used the Error pages card.
+  //
+  // What keeps the exclusion honest instead is the routing map: the screen
+  // stops counting when, and only when, it stops having an address of its own.
+  if (screen?.kind === Aglyn.SCREEN_KIND_ERROR) {
+    return screen.deletedAt == null ? screen : null
+  }
   return Aglyn.screenClaimsToBeAPage(screen as Aglyn.ScreenPageClaim)
     ? screen
     : null

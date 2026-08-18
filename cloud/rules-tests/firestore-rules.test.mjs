@@ -1701,6 +1701,66 @@ describe('hosts', () => {
       )
     })
 
+    /**
+     * AGL-2092 added a THIRD billing-excluding `kind` — `'error'`, a screen
+     * assigned to one of the host's four error slots — and it is exempt on the
+     * same terms: the value is stamped only by /api/hosts/screens, as part of
+     * binding a slot, bounded at four by the slot count.
+     *
+     * The freeze above is written on the FIELD, not on its values, so this
+     * value arrived covered. That is the reason to assert it rather than assume
+     * it: "the rule already covers the new case" is a claim about a rule
+     * nobody re-read, and this repo has ~12 documented green checks that only
+     * ever proved what they read.
+     */
+    it('an editor cannot declare a screen an error screen either', async () => {
+      await seedScreens()
+      // The bypass this would be: one write, no route call, the screen stops
+      // counting against `screensPerHost` and — because `getScreen` serves
+      // error screens — carries on rendering at its own address for free.
+      await mustDeny(
+        'screens/page-1 { kind: "error" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'page-1'), {
+          kind: 'error',
+        }),
+      )
+      // The return leg: promoting a cheaply-stamped error screen back to a page
+      // without passing the cap gate /api/hosts/screens applies.
+      await env.withSecurityRulesDisabled(async (context) => {
+        await setDoc(
+          doc(context.firestore(), 'hosts', HOST, 'screens', 'error-1'),
+          { displayName: 'Not found', kind: 'error', versionId: 'v1' },
+        )
+      })
+      await mustDeny(
+        'screens/error-1 { kind: "page" }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'error-1'), {
+          kind: 'page',
+        }),
+      )
+      await mustDeny(
+        'screens/error-1 { kind: deleteField() }',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'error-1'), {
+          kind: deleteField(),
+        }),
+      )
+      // The positive control the deny must not have taken with it: an error
+      // screen is an ordinary besigner document otherwise, and the console
+      // renames, re-parents and soft-deletes it from the client SDK.
+      await mustAllow(
+        'screens/error-1 rename',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'error-1'), {
+          displayName: 'Not found (v2)', updatedAt: new Date(),
+        }),
+      )
+      await mustAllow(
+        'screens/error-1 soft delete',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'error-1'), {
+          deletedAt: new Date(),
+        }),
+      )
+    })
+
     it('an editor cannot un-delete a screen', async () => {
       await seedScreens()
       await mustDeny(

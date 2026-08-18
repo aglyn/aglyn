@@ -34,6 +34,11 @@ export * from './definitions/shared'
 // here so the write boundary can enforce that declaration at runtime
 // (AGL-1429), not only so the rules coverage guard can read it.
 export {
+  // The four error slots as a VALUE (AGL-2092). Exported because their COUNT
+  // is now the bound on `kind: 'error'` exemptions (`ERROR_SCREEN_MAX_PER_HOST`)
+  // as well as the console card's picker list — one list, so the pickers and
+  // the bound cannot drift apart.
+  HOST_ERROR_SCREEN_SLOTS,
   HOST_UNPERSISTED_FIELDS,
   HostEntityType,
   HostRedirectParams,
@@ -78,6 +83,8 @@ export type {
   AglynUser,
   ComponentDefUid,
   HostAnnouncementBar,
+  HostErrorScreens,
+  HostErrorScreenSlot,
   HostPopup,
   HostMediaUid,
   HostPath,
