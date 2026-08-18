@@ -67,6 +67,9 @@ on:
       # The scripts themselves are defined here.
       - package.json
       - package-lock.json
+      # test:ttl-policies compares the TTL script against this doc's table, so
+      # a doc-only edit must trigger the guard that would catch the mismatch.
+      - docs/FIRESTORE_MANUAL_CONFIG.md
       # check:standalone-installs asserts against nx-ci.yml's text — an edit
       # deleting an install step must trigger the check that would catch it.
       - .github/workflows/nx-ci.yml
@@ -145,6 +148,13 @@ jobs:
       - run: npm run test:disk-space
 
       - run: npm run test:deploy-guard
+
+      # AGL-2014 — holds tools/scripts/set-firestore-ttl.mjs to the TTL table in
+      # docs/FIRESTORE_MANUAL_CONFIG.md. The script is the only reproducible way
+      # a self-host install gets TTL policies, and it had drifted to one of the
+      # documented eight. Triggered by the `docs/FIRESTORE_MANUAL_CONFIG.md`
+      # path added above, so editing the doc alone still runs it.
+      - run: npm run test:ttl-policies
 
       - run: npm run test:erase-cli
 

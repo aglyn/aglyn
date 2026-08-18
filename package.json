@@ -76,6 +76,7 @@
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",
+    "test:ttl-policies": "node --test tools/scripts/lib/ttl-policies.test.mjs",
     "test:standalone-installs": "node --test tools/scripts/lib/standalone-installs.test.mjs",
     "test:legal-drift": "node --test tools/scripts/lib/legal-doc-diff.test.mjs",
     "test:stripe-webhook-health": "node --test tools/scripts/lib/stripe-webhook-health.test.mjs",
