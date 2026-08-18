@@ -62,6 +62,7 @@ import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import {
   playNotificationChime,
   showDesktopNotification,
+  stripUnreadBadge,
   unreadBadge,
 } from '../utils/notification-alerts'
 import {
@@ -235,11 +236,17 @@ export function NotificationsMenu() {
   //
   // `apply` is idempotent and strips any existing badge first, so reacting to
   // our own write neither loops nor compounds `(1) (1) …`.
+  //
+  // The strip goes through `stripUnreadBadge` rather than an inline regex
+  // because analytics needs the identical inverse (AGL-2060): the badge was
+  // reaching GA4 inside `page_title` and splitting one console page across a
+  // row per unread count. A second copy of the pattern that drifted from this
+  // one would silently start leaking again.
   useEffect(() => {
     if (typeof document === 'undefined') return
     const badge = alertPrefs.tabBadge ? unreadBadge(unreadCount) : ''
     const apply = () => {
-      const base = document.title.replace(/^\(\d+\+?\)\s+/, '')
+      const base = stripUnreadBadge(document.title)
       const next = badge ? `${badge} ${base}` : base
       if (document.title !== next) document.title = next
     }
@@ -252,7 +259,7 @@ export function NotificationsMenu() {
     })
     return () => {
       observer.disconnect()
-      document.title = document.title.replace(/^\(\d+\+?\)\s+/, '')
+      document.title = stripUnreadBadge(document.title)
     }
   }, [unreadCount, alertPrefs.tabBadge])
 
