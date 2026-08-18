@@ -62,6 +62,11 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
   if (beaconed.has(key)) return
   beaconed.add(key)
   try {
+    // Campaign attribution (AGL-1844): the three utm labels, straight off
+    // the query string. Marketer-chosen labels on the URL the visitor is
+    // already on — no cookie, no identifier; the collector clamps and caps
+    // their cardinality server-side.
+    const params = new URLSearchParams(window.location.search)
     navigator.sendBeacon(
       '/api/analytics/collect',
       JSON.stringify({
@@ -72,6 +77,9 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
         // External referrer host only; same-site moves are dropped
         // server-side (AGL-138).
         referrer: document.referrer || undefined,
+        utmSource: params.get('utm_source') || undefined,
+        utmMedium: params.get('utm_medium') || undefined,
+        utmCampaign: params.get('utm_campaign') || undefined,
       }),
     )
   } catch {

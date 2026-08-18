@@ -43,6 +43,80 @@ function rateLimited(ip: string): boolean {
   return hits.length > RATE_MAX
 }
 
+// ---------------------------------------------------------------------------
+// UTM capture (AGL-1844)
+// ---------------------------------------------------------------------------
+
+/**
+ * The three campaign-attribution params the beacon reports. Deliberately not
+ * `utm_term`/`utm_content`: keyword- and variant-level labels multiply
+ * cardinality for detail the console has no surface for, and terms are the
+ * one UTM field that routinely carries user-typed search strings.
+ */
+const UTM_PARAMS = ['source', 'medium', 'campaign'] as const
+
+/**
+ * Values are opaque components: clamped, Firestore-hostile characters
+ * stripped (same rule as `pathKey`/referrer hosts), never parsed or echoed.
+ */
+const utmKey = (value: unknown): string =>
+  String(value ?? '').slice(0, 80).replace(/[.$#[\]/]/g, '_')
+
+/**
+ * Distinct-value cap, per (host x day x param) — the CSP collector's
+ * distinct-origin cap (AGL-1799) restated for a map whose key space the
+ * VISITOR'S URL chooses: without it, a crawler cycling `?utm_source=<junk>`
+ * grows the day doc without bound. Known values keep counting; new values
+ * beyond the cap are dropped (the pageview itself is never dropped). Per
+ * instance like every limiter on this route — fleet-wide worst case is
+ * (instances x cap), bounded and small.
+ */
+const UTM_MAX_DISTINCT_PER_DAY = 50
+const utmMinted = new Map<string, Set<string>>()
+const MAX_TRACKED_UTM_GROUPS = 512
+
+function utmAdmitted(
+  hostId: string,
+  day: string,
+  param: string,
+  value: string,
+): boolean {
+  if (utmMinted.size > MAX_TRACKED_UTM_GROUPS) utmMinted.clear()
+  const groupKey = `${hostId}|${day}|${param}`
+  let minted = utmMinted.get(groupKey)
+  if (!minted) {
+    minted = new Set()
+    utmMinted.set(groupKey, minted)
+  }
+  if (minted.has(value)) return true
+  if (minted.size >= UTM_MAX_DISTINCT_PER_DAY) return false
+  minted.add(value)
+  return true
+}
+
+/**
+ * The `utm` merge fragment for the day doc, or null when the beacon carried
+ * no attribution. Host-level only, deliberately — mirroring it onto every
+ * screen day doc would multiply the capped cardinality by the screen count
+ * for a breakdown no surface asks for.
+ */
+function utmFragment(
+  body: Record<string, any>,
+  hostId: string,
+  day: string,
+): Record<string, Record<string, FieldValue>> | null {
+  const fragment: Record<string, Record<string, FieldValue>> = {}
+  for (const param of UTM_PARAMS) {
+    const key = utmKey(
+      body[`utm${param[0].toUpperCase()}${param.slice(1)}`],
+    )
+    if (!key) continue
+    if (!utmAdmitted(hostId, day, param, key)) continue
+    fragment[param] = { [key]: FieldValue.increment(1) }
+  }
+  return Object.keys(fragment).length ? fragment : null
+}
+
 /**
  * Privacy-friendly pageview collector (AGL-82): no cookies, no user ids —
  * one increment per view into a per-day counter doc the console dashboard
@@ -138,6 +212,10 @@ export async function POST(request: Request): Promise<Response> {
         : 'desktop'
 
     const day = new Date().toISOString().slice(0, 10)
+    // Campaign attribution (AGL-1844): utm_source/medium/campaign, reported
+    // by the beacon from the landing URL's query string. Query params, not
+    // cookies — nothing here identifies a visitor.
+    const utm = utmFragment(body, hostId, day)
     await firebaseAdmin
       .app()
       .firestore()
@@ -153,6 +231,7 @@ export async function POST(request: Request): Promise<Response> {
           ...(referrerHost && {
             referrers: { [referrerHost]: FieldValue.increment(1) },
           }),
+          ...(utm && { utm }),
         },
         { merge: true },
       )
