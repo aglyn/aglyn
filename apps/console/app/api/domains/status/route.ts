@@ -19,7 +19,9 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  getOrgForHost,
   isImpersonationSession,
+  lockdownRefusal,
   projectDomainStatus,
 } from '@aglyn/tenant-data-admin'
 
@@ -84,6 +86,35 @@ async function handler(request: Request): Promise<Response> {
   if (!memberRole && decoded['staff'] !== true) {
     return Response.json({ error: 'Not a member of this site' }, { status: 403 })
   }
+
+  // Lockdown verdict (AGL-1506, AGL-2006). Wired rather than exempt, and the
+  // line was already drawn in this directory: `domains/verify` is exempt
+  // because it is an "advisory DNS lookup with no org/host doc in reach
+  // (domain string only)", while `attach` and `detach` — which hold the host
+  // doc — carry the gate. This route holds the host doc too: it reads
+  // `memberRoles`, `cname` and `cnameAttachmentPending` off it. So it sits on
+  // the wired side of the distinction its own siblings established, and
+  // claiming the `verify` exemption here would mean restating a reason that is
+  // not true of this handler.
+  //
+  // The read-only argument for exempting it is real but does not survive
+  // contact with what a lockdown is for (AGL-1501): the panic button stops a
+  // locked org operating its sites, not merely mutating them.
+  //
+  // Nothing is lost for support, which is the case an exemption would have
+  // been protecting. `lockdownRefusal` bypasses for staff — the un-panic
+  // invariant — so the docstring's promise above, that staff can see a
+  // customer's stuck domain without impersonating them, still holds during a
+  // lockdown. It is only the locked org's own members who get the 423, and
+  // they can still read the same DNS facts publicly.
+  const locked = await lockdownRefusal({
+    request,
+    staff: decoded['staff'] === true,
+    uid: decoded.uid,
+    org: (await getOrgForHost(hostId))?.org ?? {},
+    host: hostSnapshot.data(),
+  })
+  if (locked) return locked
 
   const domain = String(hostSnapshot.get('cname') ?? '')
     .trim()

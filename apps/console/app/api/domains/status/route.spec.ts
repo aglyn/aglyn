@@ -38,6 +38,8 @@ let docs = new Map<string, Record<string, unknown>>()
 
 const mockVerifyIdToken = jest.fn()
 const mockProjectDomainStatus = jest.fn()
+const mockLockdownRefusal = jest.fn()
+const mockGetOrgForHost = jest.fn()
 
 function mockMakeFirestore() {
   return {
@@ -69,6 +71,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
+  getOrgForHost: (...args: unknown[]) => mockGetOrgForHost(...args),
+  lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -112,6 +116,11 @@ beforeEach(() => {
     verification: [],
     conflicts: [],
   })
+  mockLockdownRefusal.mockReset()
+  // No lockdown in force is the default; the tests below opt into one.
+  mockLockdownRefusal.mockResolvedValue(null)
+  mockGetOrgForHost.mockReset()
+  mockGetOrgForHost.mockResolvedValue({ orgId: 'org-1', org: { $id: 'org-1' } })
   process.env.VERCEL_TENANT_PROJECT_ID = 'prj_tenant'
 })
 
@@ -227,5 +236,64 @@ describe('it answers for the site in the URL, to someone who belongs to it', () 
     const response = await GET(get('mine'))
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({ error: 'Verify your email' })
+  })
+})
+
+/**
+ * The 423 verdict (AGL-1506, AGL-2006).
+ *
+ * This route was landed unwired, and the coverage guard caught it. Wiring it
+ * without a test that can fail would only move the omission somewhere quieter,
+ * so these assert the two halves that actually matter: the refusal reaches a
+ * locked org's own member, and it does NOT reach staff.
+ */
+describe('a lockdown reaches this route (AGL-2006)', () => {
+  it('refuses a locked org member with the 423, before asking Vercel anything', async () => {
+    seedHost('mine', { cname: 'example.com' })
+    mockLockdownRefusal.mockResolvedValue(
+      Response.json({ error: 'Locked down' }, { status: 423 }),
+    )
+
+    const response = await GET(get('mine'))
+
+    expect(response.status).toBe(423)
+    // The refusal has to come BEFORE the outbound status call: a locked org
+    // should not be able to drive our Vercel API quota, and the check is
+    // worthless if the work it guards has already happened.
+    expect(mockProjectDomainStatus).not.toHaveBeenCalled()
+  })
+
+  it('passes the verdict the docs it already has, rather than re-reading them', async () => {
+    seedHost('mine', { cname: 'example.com' })
+
+    await GET(get('mine'))
+
+    expect(mockLockdownRefusal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uid: 'user-1',
+        staff: false,
+        org: { $id: 'org-1' },
+        host: expect.objectContaining({ orgId: 'org-1' }),
+      }),
+    )
+  })
+
+  it('still answers staff during a lockdown — the un-panic invariant', async () => {
+    // The route's own docstring promises support can see a customer's stuck
+    // domain without impersonating them. `lockdownRefusal` bypasses for staff,
+    // so that promise survives the wiring; this pins it.
+    seedHost('theirs', { cname: 'example.com', memberRoles: {} })
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+
+    const response = await GET(get('theirs'))
+
+    expect(response.status).toBe(200)
+    expect(mockLockdownRefusal).toHaveBeenCalledWith(
+      expect.objectContaining({ staff: true }),
+    )
   })
 })
