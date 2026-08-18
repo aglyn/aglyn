@@ -25,19 +25,37 @@ screens** for each status.
 1. **Create a screen** for the status, in **Screens**, and design it in the
    [Besigner](../besigner/overview.md) like any other screen — add your header/layout, a
    helpful message, and a link home.
-2. **Publish** it.
-3. **Assign it.** Go to **Setup** and scroll to the **Error pages** card. Each status has
+2. **Assign it.** Go to **Setup** and scroll to the **Error pages** card. Each status has
    its own picker — **404 · Not found**, **401 · Members only**, **403 · Forbidden**,
    **503 · Maintenance** — listing every screen on the site. Choose your screen in the
    matching picker.
 
-Step 3 is the one that's easy to miss: designing and publishing a screen does **not** make
-it an error page on its own. Until it's picked in the **Error pages** card, the status
-still renders Aglyn's **Built-in default**, which is what every picker is set to until you
-change it.
+Step 2 is the one that's easy to miss: designing a screen does **not** make it an error
+page on its own. Until it's picked in the **Error pages** card, the status still renders
+Aglyn's **Built-in default**, which is what every picker is set to until you change it.
 
 Assigned error screens are automatically kept out of search results, so a 404 page can't
 itself turn up in a search.
+
+## Error screens are free
+
+An assigned error screen **doesn't count against your plan's screen allowance**. Nothing
+about it is a page of your site: it renders on addresses that matched nothing, so it has
+no URL of its own — the same reason a collection's entry template doesn't count. See
+[what counts against your screen allowance](../screens-and-layouts/overview.md#what-counts-against-your-screen-allowance).
+
+There's one thing to know, and it's the reason you don't need to publish the screen at
+all:
+
+:::tip Don't give it an address
+An error screen that is *also* published at its own address — a 404 screen you published
+at `/404` so you could preview it, say — **is** a page, so it counts like any other page
+until you remove that address.
+
+If you've already published one, the **Error pages** card says so and offers **Remove
+address**. Removing it frees the allowance slot and the screen carries on rendering for
+its status code, which is the only place it was ever meant to appear.
+:::
 
 ## Tips
 
