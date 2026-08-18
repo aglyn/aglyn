@@ -77,7 +77,15 @@ a scope. `newResourceScopeFields` (and `newMediaFolderDoc` for folders) take a
 **required** argument with no default, so a creator that has not decided
 cannot compile.
 
-**Then stamp the documents.** Same route, driven by a staff ID token:
+**Then stamp the documents.** Use the **Sharing-scope drift** card on
+`/admin/health` (AGL-2062). *Scan for drift* runs the dry run and follows the
+cursor to the end; *Stamp the missing scopes* performs the write, and is
+enabled only by a scan that actually planned some. The card reports
+`legacyScanTruncated`, so you can tell a total from a floor.
+
+Until AGL-2062 the only way to run the repair was the curl below, which needs
+a staff ID token harvested out of a browser session. It still works, and it is
+still the right shape for a one-off from a terminal:
 
 ```bash
 # Dry run first — always. The totals are meant to be read before bytes move.
