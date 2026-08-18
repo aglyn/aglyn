@@ -41,6 +41,19 @@ import { claimDailyVisit } from './visit-claim'
 const beaconed = new Set<string>()
 
 /**
+ * The platform's own GA4 property (AGL-1857). `aglyn.com` is a tenant site
+ * pointed at this id, and it is the ONE host whose pageviews should carry
+ * `content_group: 'marketing'` — the first-class GA4 axis that separates
+ * marketing from `console` and `docs` in standard reports without reaching
+ * for the Hostname dimension. A customer's site configures their own
+ * measurement id, and their property gets no opinion of ours stamped on it,
+ * which is why the discriminator is the id itself: same-property IS the
+ * definition of "this is our surface". The id is public in every page the
+ * platform serves, so holding it in source discloses nothing.
+ */
+const PLATFORM_GA_MEASUREMENT_ID = 'G-YW5PG16YTM'
+
+/**
  * Send the pageview beacon (AGL-82), NOT from an effect (AGL-1550).
  *
  * An effect only runs if React commits, and a page that renders but never
@@ -269,7 +282,12 @@ export default function SiteAnalytics({
               'function gtag(){dataLayer.push(arguments);}' +
               (consentRequired ? GA_CONSENT_DEFAULT_SNIPPET : '') +
               "gtag('js', new Date());" +
-              `gtag('config', '${gaMeasurementId}');`}
+              // `content_group: 'marketing'` on OUR property only (AGL-1857):
+              // the one-click marketing/docs/console split in GA4 standard
+              // reports. A customer's id passes through untouched.
+              (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
+                ? `gtag('config', '${gaMeasurementId}', {'content_group':'marketing'});`
+                : `gtag('config', '${gaMeasurementId}');`)}
           </Script>
           <Script
             id="ga-src"
