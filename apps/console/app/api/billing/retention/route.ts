@@ -68,6 +68,26 @@ async function stripeRequest(
 }
 
 /**
+ * Whether a Stripe subscription already carries a discount (AGL-2117).
+ *
+ * Both shapes are checked because both are real: `discounts` is the current
+ * list-valued field, and `discount` is the singular legacy one that older API
+ * versions still return. Reading only the modern name would answer "no
+ * discount" for exactly the long-lived subscriptions most likely to hold a
+ * promo — the ones this guard exists to protect.
+ *
+ * A `discounts` array that exists but is empty is not a discount; a live
+ * subscription reports `discounts: []` routinely.
+ */
+function hasExistingDiscount(subscription: any): boolean {
+  const list = subscription?.discounts
+  if (Array.isArray(list) && list.some((entry: unknown) => Boolean(entry))) {
+    return true
+  }
+  return Boolean(subscription?.discount)
+}
+
+/**
  * Cancellation/deletion funnel storage + winback minting (AGL-1863, under
  * AGL-1859 — Zach's twice-given retention directive). billing.manage-gated,
  * POST only:
@@ -199,6 +219,30 @@ async function handler(request: Request): Promise<Response> {
     )
     if (!subscription) {
       return Response.json({ error: 'No active subscription' }, { status: 409 })
+    }
+    // A subscription that already carries a discount is refused rather than
+    // overwritten (AGL-2117). The apply below sets `discounts[0][coupon]`, and
+    // Stripe's `discounts` parameter SETS the list — it does not append. On a
+    // customer who checked out with a promotion code (checkout sends
+    // `allow_promotion_codes`) that write silently deletes the promo they
+    // were promised: they take 50% for two months, lose whatever months
+    // remained, and land on full list price at month three — a price rise
+    // nobody agreed to, delivered by the flow whose whole job is retention.
+    //
+    // Refused, not stacked. Stacking the winback on top of an existing large
+    // discount walks toward the free account `assertBoundedWinbackCoupon`
+    // exists to make impossible, and a retained org still has to cover its
+    // costs. Checked BEFORE the reservation below so the org keeps its one
+    // shot without needing the reservation released.
+    if (hasExistingDiscount(subscription)) {
+      return Response.json(
+        {
+          error:
+            'This subscription already has a discount applied — the winback ' +
+            'offer would replace it. Contact support to change the discount.',
+        },
+        { status: 409 },
+      )
     }
 
     const funnelId = typeof body?.funnelId === 'string' ? body.funnelId : null

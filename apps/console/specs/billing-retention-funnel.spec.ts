@@ -177,6 +177,12 @@ const STRIPE_ENV = {
 let capturedCouponBody: URLSearchParams | null = null
 let capturedSubUpdateBody: URLSearchParams | null = null
 
+/**
+ * Extra fields merged onto the live subscription the Stripe double returns —
+ * how a test seeds an already-discounted subscription (AGL-2117).
+ */
+let subscriptionFields: Record<string, unknown> = {}
+
 function loadRoute(path: string) {
   jest.resetModules()
   process.env = { ...CLEAN_ENV, ...STRIPE_ENV } as NodeJS.ProcessEnv
@@ -220,6 +226,7 @@ beforeEach(() => {
   mockAutoId = 0
   capturedCouponBody = null
   capturedSubUpdateBody = null
+  subscriptionFields = {}
   mockVerifyIdToken.mockResolvedValue({ uid: 'u-1', email_verified: true })
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
@@ -232,6 +239,7 @@ beforeEach(() => {
             status: 'active',
             current_period_end: 1767225600,
             items: { data: [] },
+            ...subscriptionFields,
           },
         ],
       }
@@ -470,6 +478,67 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
     const failed = await call(post, { action: 'winback' })
     expect(failed.status).toBe(502)
     expect(mockStoredDocs.has('orgs/org-1/retention/winback')).toBe(false)
+  })
+})
+
+/**
+ * The apply writes `discounts[0][coupon]`, and Stripe's `discounts` parameter
+ * SETS the list rather than appending to it. Checkout sends
+ * `allow_promotion_codes`, so a customer arriving at the funnel with a promo
+ * already on their subscription is an ordinary case, not an exotic one — and
+ * overwriting it takes months they were promised and lands them on full list
+ * price two cycles later.
+ */
+describe('/api/billing/retention — an existing discount is never overwritten (AGL-2117)', () => {
+  const ROUTE = '../app/api/billing/retention/route'
+
+  it('refuses the winback when the subscription already carries a discount', async () => {
+    subscriptionFields = {
+      discounts: [{ id: 'di_promo_1', coupon: { id: 'LAUNCH30' } }],
+    }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toMatch(/already has a discount/i)
+    // Nothing was minted and nothing was written to the subscription — the
+    // customer's promo is still theirs.
+    expect(capturedCouponBody).toBeNull()
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+
+  it('reads the LEGACY singular `discount` too — an old subscription is the likeliest to hold a promo', async () => {
+    subscriptionFields = { discount: { id: 'di_legacy_1' } }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(409)
+    expect(capturedCouponBody).toBeNull()
+  })
+
+  it('the refusal costs the org NOTHING — its one winback is still unspent', async () => {
+    subscriptionFields = { discounts: [{ id: 'di_promo_1' }] }
+    const post = loadRoute(ROUTE)
+    expect((await call(post, { action: 'winback' })).status).toBe(409)
+    // Refused before the reservation, so there is no `winback` doc to release
+    // and no race for a later request to lose.
+    expect(mockStoredDocs.has('orgs/org-1/retention/winback')).toBe(false)
+
+    // Once the discount is gone the same org can still take its offer.
+    subscriptionFields = {}
+    const second = loadRoute(ROUTE)
+    expect((await call(second, { action: 'winback' })).status).toBe(200)
+    expect(capturedSubUpdateBody?.get('discounts[0][coupon]')).toBe(
+      'coupon_winback_1',
+    )
+  })
+
+  it('an EMPTY discounts array is not a discount — a live subscription reports one routinely', async () => {
+    subscriptionFields = { discounts: [] }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(200)
+    expect(capturedSubUpdateBody?.get('discounts[0][coupon]')).toBe(
+      'coupon_winback_1',
+    )
   })
 })
 
