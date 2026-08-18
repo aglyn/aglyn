@@ -170,6 +170,16 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
  * rows through the SAME function that deletes them. A separate counting pass
  * would be a second enumeration of the sweep list, which is precisely the
  * divergence AGL-1481 exists to remove.
+ *
+ * **`platformRevenue` must NEVER be added to this sweep (AGL-1811).** It is
+ * org-keyed by field — exactly the shape this mechanism eats — and that is
+ * the trap: those rows are per-transaction TAX FILING RECORDS (gross, tax,
+ * jurisdiction) with a statutory retention obligation, and the quarterly
+ * Texas return is their sum. GDPR Art. 17(3)(b) exempts them: erasure does
+ * not extend to records retained for compliance with a legal obligation. An
+ * erased org's rows deliberately outlive it — the
+ * `erase-org-tax-retention.emulator.spec` pins survival, so an over-eager
+ * future sweep fails a test instead of un-filing a tax period.
  */
 async function deleteDocsByOrgId(
   collection: string,

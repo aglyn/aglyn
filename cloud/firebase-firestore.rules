@@ -650,6 +650,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Per-transaction tax/revenue records (AGL-1811), written by the billing
+    // webhook on `invoice.paid` and read only by the staff tax-return route
+    // through the Admin SDK. Deny ALL client access: a row carries a
+    // customer's billing address beside their invoice amounts.
+    //
+    // Unmatched paths deny anyway; this match exists to carry the record:
+    // these are TAX FILING RECORDS with a statutory retention obligation, so
+    // they are deliberately EXCLUDED from the GDPR org-erasure sweep
+    // (`eraseOrg` — see the note there, and the erase-org-tax-retention
+    // emulator spec that pins it). Do not add `platformRevenue` to any
+    // org-keyed deletion pass.
+    match /platformRevenue/{invoiceId} {
+      allow read, write: if false;
+    }
+
     // Hosts and everything under them (content-hardening review,
     // 2026-07-07: tenant sites read through the Admin SDK, so no public
     // read). Access resolves through the org membership projection
