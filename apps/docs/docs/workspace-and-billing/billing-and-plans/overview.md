@@ -164,6 +164,34 @@ organization**:
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the
 same Stripe integration.
 
+### Sales tax {#sales-tax}
+
+**Plan prices are quoted before tax.** Where Aglyn has a tax collection obligation,
+sales tax is added on top at checkout and on every renewal, and appears as its own
+line on the invoice.
+
+- **Tax is calculated from the billing address on your workspace**, not from your
+  card's country and not from your personal address. It is computed automatically at
+  the moment each invoice is created, so moving your workspace changes the tax on
+  your *next* invoice rather than re-rating past ones.
+- **A workspace with no billing address cannot have tax calculated at all**, which is
+  why the address can be replaced but not emptied — see the address bullets below.
+- **Adding a business tax ID** (VAT, ABN, EIN and the like) at checkout or in the
+  Billing Portal puts it on the invoice. That's what makes an invoice usable for
+  reclaiming tax or handing to an accountant, and in some jurisdictions it changes
+  who accounts for the tax.
+- **Every invoice states the tax separately** from the amount charged, so the figure
+  you reclaim is never one you have to back out of a total yourself. Invoice PDFs and
+  receipts are on the Billing page's **Billing history** table.
+- **Marketplace plugin purchases** are taxed the same way, and **Aglyn collects and
+  remits that tax as the marketplace provider** — the plugin's publisher does not
+  charge you tax separately, and you should not receive two tax charges for one
+  plugin purchase. If you ever do, that's a bug worth reporting.
+
+Sales tax on **your own** storefront's sales to **your** customers is a separate
+thing, configured by you — see
+[Shipping &amp; taxes](../../commerce-and-bookings/commerce/overview.md#shipping--taxes).
+
 ### Platform fees
 
 Storefront sales carry a **declining platform fee** on top of Stripe's processing fee —
@@ -185,10 +213,16 @@ member subscriptions alike. Selling requires a paid plan with commerce.
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
   headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).
-- **Plan switches** on an active subscription show a **prorated preview** of today's
-  charge before you confirm, and apply in place (no second checkout).
+- **Plan switches** on an active subscription apply in place (no second checkout), and
+  show you what's due before you confirm. **Upgrades** apply immediately and preview a
+  **prorated** charge for the rest of the period. **Downgrades** take effect at the
+  **end of the current period** and preview **$0 due today** plus the effective date —
+  see [when each change takes effect](./downgrading-and-canceling.md#when-changes-take-effect).
 - **Cancel any time** — the subscription runs to the end of the paid period; a warning
-  chip shows the end date and you can resume before it hits.
+  chip shows the end date and you can resume before it hits. Cancel opens a short
+  dialog that may offer you a smaller plan or a time-boxed discount first;
+  [what the Cancel button actually opens](./downgrading-and-canceling.md#the-cancel-dialog)
+  walks through every step of it.
 - **Invoices & receipts** — the billing page's **Billing history** table lists every
   invoice with its date, status, and amount. Each row links to the **Stripe-hosted
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
