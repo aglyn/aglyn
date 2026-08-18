@@ -44,7 +44,8 @@ import {
  * The gate ladder, in order (every step can go red and each has a spec that
  * forces it): 405 → 501 no ANTHROPIC_API_KEY → 401 no token → 403
  * email-unverified → 400 bad body → 403 not a member → 404 release flag off
- * (a released-off feature does not exist; staff bypass) → 423 lockdown
+ * (a released-off feature does not exist; staff bypass) → 403 unscoped/wrong
+ * org (AGL-1934 — the request must NAME the org it meters) → 423 lockdown
  * (platform/org/user + the `ai-assist` feature kill switch) → 429 rate
  * limit → 429 quota (free: N messages/UTC-day; entitled: monthly runaway
  * guard) → the model call.
@@ -162,6 +163,69 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
   return { orgId, question, history, context }
 }
 
+/**
+ * Top-level console path segments that are a SECTION, not an org slug.
+ * Mirrors `resolveNavSection` in `hooks/use-secondary-nav.ts`: every other
+ * first segment is `/[orgSlug]/…`.
+ */
+const ORGLESS_PATH_SEGMENTS = new Set(['admin', 'manage'])
+
+export type AssistScopeRefusal = 'no-org' | 'wrong-org'
+
+/**
+ * Whether this request may be METERED against `body.orgId` (AGL-1934).
+ *
+ * Membership is checked above this and answers a different question: *may
+ * this caller reach that org at all*. It cannot catch the reported bug,
+ * because in that bug the caller **is** a member — `useCurrentOrg()` falls
+ * back to a remembered selection and then to the user's FIRST org, so the
+ * workspace picker posted questions attributed and billed to a workspace
+ * nobody opened. A membership check waves that through: every one of the
+ * four cards on the picker passes it.
+ *
+ * So the server asks the second question too: **did the request NAME the org
+ * it wants billed?** The only evidence available is the page the question was
+ * asked from, which the client already sends as `context` — the route path
+ * and, when the page was opened on a workspace subdomain, that subdomain's
+ * slug. This mirrors `urlNamesOrg()` (AGL-1130) on the server side, so the
+ * client gate and the billing boundary agree by construction rather than by
+ * the client being trusted to have one.
+ *
+ * Two refusals, and they are deliberately asymmetric:
+ *
+ *   - `no-org` — the page named no workspace at all (`/`, `/manage/*` off a
+ *     subdomain, `/admin/*` anywhere). There is no correct attribution for a
+ *     question asked from a page with no workspace in scope, so the answer is
+ *     a refusal, not a guess. This is the reported bug, and refusing it here
+ *     is what makes a future client-side regression a VISIBLE failure instead
+ *     of quiet mis-billing.
+ *   - `wrong-org` — the page named a workspace and it is not this one. A
+ *     POSITIVE contradiction only, exactly as AGL-1916 settled it: `slug` is
+ *     absent on plenty of org docs, and an org that cannot state its own slug
+ *     must not have every message refused. Only a slug that actively
+ *     disagrees suppresses.
+ *
+ * `/admin/*` is the platform's own view and names no workspace on ANY
+ * hostname — a staff subdomain session does not rescue it, same as
+ * `urlNamesOrg`'s `section.kind === 'admin'` short-circuit.
+ */
+export function assistScopeRefusal(
+  context: AssistRequestBody['context'],
+  orgSlug: string,
+): AssistScopeRefusal | null {
+  const first = String(context?.route ?? '')
+    .split('/')
+    .filter(Boolean)[0]
+  const staffConsole = first === 'admin'
+  const pathSlug = !first || ORGLESS_PATH_SEGMENTS.has(first) ? '' : first
+  const subdomainSlug = staffConsole ? '' : String(context?.orgSlug ?? '').trim()
+  if (!pathSlug && !subdomainSlug) return 'no-org'
+  if (!orgSlug) return null
+  if (pathSlug && pathSlug !== orgSlug) return 'wrong-org'
+  if (subdomainSlug && subdomainSlug !== orgSlug) return 'wrong-org'
+  return null
+}
+
 /** Level-2 context block (entitled orgs only). */
 function contextBlock(
   context: NonNullable<AssistRequestBody['context']>,
@@ -234,6 +298,26 @@ async function handler(request: Request): Promise<Response> {
     // UI). A released-off feature does not exist → 404. Staff previews.
     if (!staff && !(await isServerReleaseFlagOnForOrg('release_assist', body.orgId))) {
       return Response.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    // The request must NAME the org it is about to be metered against
+    // (AGL-1934). Below the flag check on purpose: a released-off deployment
+    // must keep answering 404 for everything, including a malformed scope.
+    const scopeRefusal = assistScopeRefusal(
+      body.context,
+      String((org as Record<string, unknown>).slug ?? ''),
+    )
+    if (scopeRefusal) {
+      return Response.json(
+        {
+          error:
+            scopeRefusal === 'no-org'
+              ? 'Open a workspace before asking the assistant'
+              : 'That question named a different workspace',
+          reason: 'scope',
+        },
+        { status: 403 },
+      )
     }
 
     // Lockdown: scope verdict (platform/org/user), then the ai-assist

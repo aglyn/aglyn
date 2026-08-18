@@ -356,6 +356,145 @@ describe('the gate ladder — every guard forced red once', () => {
   })
 })
 
+/**
+ * AGL-1934: the org that gets METERED must be one the caller both belongs to
+ * AND named.
+ *
+ * Membership answers only the first half, and it cannot catch the reported
+ * bug — there the caller IS a member of the org being billed. The client's
+ * org scope falls back to a remembered selection and then to the user's first
+ * org, so questions asked from the workspace picker arrived naming a
+ * workspace nobody had opened, and every one of the user's own orgs passes a
+ * membership check. The second half is asserted here.
+ *
+ * Every case seeds a real, member, unlocked, under-quota org and changes only
+ * the `context` — the page the question was asked from. The assertion is
+ * always that no tokens were spent AND no meter moved, not merely that the
+ * caller saw a 4xx: a refusal that still bumped `assistMessagesDaily` would
+ * leave the billing defect exactly where it was.
+ */
+describe('metering is refused for an org the request did not name (AGL-1934)', () => {
+  /** Everything the caller sent, minus the page they sent it from. */
+  const askFrom = (context: unknown) => ({
+    ...QUESTION_BODY(FREE_ORG),
+    context,
+  })
+
+  /** No counter, usage rollup or exchange doc was written for the org. */
+  const meteredPaths = () =>
+    [...mockDocs.keys()].filter(
+      (path) => path.startsWith(`orgs/${FREE_ORG}/`),
+    )
+
+  it('403s a question asked from the workspace picker', async () => {
+    seedOrgs()
+    const response = await POST(post(askFrom({ route: '/', hostId: '', orgSlug: '' })))
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ reason: 'scope' })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(meteredPaths()).toEqual([])
+  })
+
+  it('403s a request that sends no page context at all', async () => {
+    // The panel always sends one. A caller that does not cannot be attributed
+    // — and "cannot be attributed" must not resolve to "bill whoever the body
+    // says", which is precisely how the picker bug worked.
+    seedOrgs()
+    const response = await POST(post(askFrom(null)))
+    expect(response.status).toBe(403)
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(meteredPaths()).toEqual([])
+  })
+
+  it('403s from /manage/* on the apex, where no workspace is in scope', async () => {
+    seedOrgs()
+    const response = await POST(
+      post(askFrom({ route: '/manage/user', hostId: '', orgSlug: '' })),
+    )
+    expect(response.status).toBe(403)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('403s from /admin/* even on a workspace subdomain', async () => {
+    // The staff console is org-less on ANY hostname — it is the platform's
+    // own view, not a workspace's (`urlNamesOrg`'s admin short-circuit). A
+    // subdomain does not rescue it.
+    seedOrgs()
+    const response = await POST(
+      post(askFrom({ route: '/admin/orgs', hostId: '', orgSlug: 'acme' })),
+    )
+    expect(response.status).toBe(403)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('403s when the page named a DIFFERENT workspace than the body', async () => {
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Freebies', plan: 'free', slug: 'acme' })
+    const response = await POST(
+      post(askFrom({ route: '/other-org/screens', hostId: '', orgSlug: '' })),
+    )
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ reason: 'scope' })
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(meteredPaths()).toEqual([])
+  })
+
+  it('403s when the SUBDOMAIN names a different workspace', async () => {
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Freebies', plan: 'free', slug: 'acme' })
+    const response = await POST(
+      post(askFrom({ route: '/manage/user', hostId: '', orgSlug: 'other-org' })),
+    )
+    expect(response.status).toBe(403)
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('serves an org whose doc carries no slug — contradiction only', async () => {
+    // The deliberate NON-suppression, settled the same way in AGL-1916.
+    // `slug` is absent on plenty of org docs, and an org that cannot state
+    // its own slug must not have every message refused. Only a slug that
+    // actively DISAGREES suppresses. If this ever flips to 403, the gate has
+    // become an outage.
+    seedOrgs()
+    armUpstream()
+    const response = await POST(
+      post(askFrom({ route: '/whatever-slug/screens', hostId: '', orgSlug: '' })),
+    )
+    expect(response.status).toBe(200)
+    await response.text()
+  })
+
+  it('serves /manage/* on the workspace SUBDOMAIN, which does name it', async () => {
+    // `business1.aglyn.com/manage/user` legitimately names a workspace even
+    // though the path does not. Refusing it would be the false negative.
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Freebies', plan: 'free', slug: 'acme' })
+    armUpstream()
+    const response = await POST(
+      post(askFrom({ route: '/manage/user', hostId: '', orgSlug: 'acme' })),
+    )
+    expect(response.status).toBe(200)
+    await response.text()
+  })
+
+  it('still meters the org route the panel actually runs on', async () => {
+    // The paired positive, asserted on the METER rather than the status: the
+    // fix must not be "stop billing anyone".
+    seedOrgs()
+    mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Freebies', plan: 'free', slug: 'acme' })
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`),
+    ).toMatchObject({ [TODAY]: 1 })
+    expect(mockDocs.get(`orgs/${FREE_ORG}/assistUsage/${MONTH}`)).toMatchObject({
+      messages: 1,
+    })
+  })
+})
+
 describe('the green path', () => {
   it('streams deltas, records the exchange + meters (free tier)', async () => {
     seedOrgs()

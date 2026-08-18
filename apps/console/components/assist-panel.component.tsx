@@ -58,8 +58,9 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
-import useOrgScope from '../hooks/use-org-scope'
+import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
 import useReleaseFlags, { useReleaseFlag } from '../hooks/use-release-flags'
+import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 
 /**
  * Aglyn Assist (AGL-1860, phase 1 — answer + guide): the floating chat
@@ -68,6 +69,27 @@ import useReleaseFlags, { useReleaseFlag } from '../hooks/use-release-flags'
  * adds page-context awareness. The panel never answers the entitlement
  * question from a loading default — capability messaging waits for
  * `useCurrentOrg().ready` (the checkQuota(undefined)=Free lesson).
+ *
+ * ## It also never runs against an org the URL did not name (AGL-1934)
+ *
+ * `useCurrentOrg()` deliberately keeps a fallback — org-less pages still need
+ * an org to ACT on — so on the workspace picker it answers with a real org
+ * and a truthy plan: a remembered selection, or simply the user's first. This
+ * panel used to gate on nothing but `orgId` being present, which that
+ * fallback always satisfies. The result was the whole component running for a
+ * workspace nobody opened: the entitlement decided by its plan, the upgrade
+ * nudge pitched on its behalf, the session thread filed under its id, and —
+ * the reason this ranked High rather than cosmetic — every question POSTed
+ * with its `orgId`, so the message was METERED to it. Billing data attributed
+ * to the wrong customer.
+ *
+ * The gate is AGL-1130's `useUrlNamesOrg()`, the same predicate AGL-1916
+ * applied to `QuotaWarningsBanner` on the same page, plus the positive
+ * contradiction check that goes with it. It is expressed once, as
+ * `scopedOrgId`, so that no send path can reach `orgId` around it — and the
+ * server refuses an unscoped request independently (`assistScopeRefusal` in
+ * `app/api/assist/chat/route.ts`), because a metering boundary the client
+ * alone decides is not a boundary.
  */
 
 interface AssistDocLink {
@@ -159,7 +181,27 @@ export function AssistPanelComponent() {
   const verdict = useReleaseFlag('release_assist')
   const { isStaff } = useReleaseFlags()
   const { org, orgId, ready: orgReady } = useCurrentOrg()
-  const { orgSlug } = useOrgScope()
+  const { orgSlug, pathOrgSlug, currentOrg } = useOrgScope()
+  // Whether the URL itself scopes this page to a workspace (AGL-1130), and
+  // whether the org that answered contradicts the one it names — a shared
+  // link to a workspace you are not in wears a URL that appears to justify
+  // the fallback. POSITIVE contradiction only (AGL-1916): `slug` is optional
+  // on the membership row, and a legacy row without one must not silence the
+  // assistant on a route that is perfectly legitimate.
+  const namesOrg = useUrlNamesOrg()
+  const wrongOrg = Boolean(
+    pathOrgSlug && currentOrg?.slug && currentOrg.slug !== pathOrgSlug,
+  )
+  /**
+   * The org this panel may speak for, act as, and be METERED against — or
+   * `undefined` where the page named none. Every use of the org below goes
+   * through this rather than `orgId`, so a send path cannot be added later
+   * that quietly reaches around the gate; the thread key, the two POST
+   * bodies and the render gate all read the same value.
+   */
+  const scopedOrgId = namesOrg && !wrongOrg ? orgId : undefined
+  /** Path slug for building `/[orgSlug]/…` links (AGL-621). */
+  const billingSlug = useOrgSlug()
   const hostId = useContext(HostIdContext)
   const pathname = usePathname()
   const { data: user } = useUser()
@@ -173,22 +215,25 @@ export function AssistPanelComponent() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Thread is per-org, session-persisted; switching orgs swaps threads.
+  // Keyed on the SCOPED org (AGL-1934): gating only the render would still
+  // load — and, on the next keystroke, save — a thread under the fallback
+  // org's key on every mount of a page that named no workspace.
   useEffect(() => {
-    setMessages(loadThread(orgId))
+    setMessages(loadThread(scopedOrgId))
     setQuota(null)
-  }, [orgId])
+  }, [scopedOrgId])
 
   useEffect(() => {
-    saveThread(orgId, messages)
+    saveThread(scopedOrgId, messages)
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [orgId, messages])
+  }, [scopedOrgId, messages])
 
   const entitled = orgReady && checkEntitlement(org as never, 'aiAssist')
 
   const send = useCallback(async () => {
     const question = input.trim()
-    if (!question || busy || !orgId) return
+    if (!question || busy || !scopedOrgId) return
     setBusy(true)
     setInput('')
     const history = messages
@@ -228,7 +273,7 @@ export function AssistPanelComponent() {
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
-          orgId,
+          orgId: scopedOrgId,
           question,
           history,
           // Page context rides along; the server drops it for free orgs
@@ -301,7 +346,7 @@ export function AssistPanelComponent() {
     hostId,
     input,
     messages,
-    orgId,
+    scopedOrgId,
     orgSlug,
     pathname,
     user,
@@ -310,7 +355,7 @@ export function AssistPanelComponent() {
   const sendFeedback = useCallback(
     async (index: number, feedback: 'up' | 'down') => {
       const message = messages[index]
-      if (!message?.exchangeId || !orgId) return
+      if (!message?.exchangeId || !scopedOrgId) return
       setMessages((prior) =>
         prior.map((entry, i) => (i === index ? { ...entry, feedback } : entry)),
       )
@@ -326,7 +371,7 @@ export function AssistPanelComponent() {
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           body: JSON.stringify({
-            orgId,
+            orgId: scopedOrgId,
             exchangeId: message.exchangeId,
             feedback,
           }),
@@ -338,12 +383,16 @@ export function AssistPanelComponent() {
         })
       }
     },
-    [enqueueSnackbar, messages, orgId, user],
+    [enqueueSnackbar, messages, scopedOrgId, user],
   )
 
   // A released-off feature does not exist (staff preview excepted) — and
-  // without an org there is nothing to meter or record against.
-  if (!verdict.visible || !orgId) return null
+  // without an org IN SCOPE there is nothing to meter or record against
+  // (AGL-1934). `scopedOrgId`, never `orgId`: the fallback org is always
+  // present, which is exactly why gating on it announced and billed the
+  // assistant on the workspace picker. Every hook above has already run, so
+  // this early return costs no hook-order hazard.
+  if (!verdict.visible || !scopedOrgId) return null
 
   return (
     <>
@@ -505,12 +554,19 @@ export function AssistPanelComponent() {
             {quota && quota.period === 'day' && (
               <Typography variant="caption" color="text.secondary">
                 {quota.remaining} of {quota.limit} free messages left today
-                {orgSlug ? (
+                {/* `useOrgSlug()`, not `useOrgScope().orgSlug` — the latter
+                    is the SUBDOMAIN slug, which is null on `app.aglyn.com`,
+                    so this upgrade link silently vanished on every apex org
+                    route: the one place a capped free workspace is told it
+                    is capped, with no way to act on it. Safe to fall back to
+                    the resolved org's slug here because the render gate
+                    above has already established the URL names it. */}
+                {billingSlug ? (
                   <>
                     {' — '}
                     <AppLink
                       componentVariant="naked"
-                      href={`/${orgSlug}/billing`}
+                      href={`/${billingSlug}/billing`}
                     >
                       upgrade for more
                     </AppLink>
