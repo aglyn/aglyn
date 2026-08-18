@@ -535,3 +535,71 @@ export function memoizeWithTtl<T>(
     return value
   }
 }
+
+/**
+ * The error beacon's own liveness, reduced to a health verdict (AGL-1923).
+ *
+ * ## The failure this exists for
+ *
+ * The `Client error beacon` alert policy is a log-match: it fires when an
+ * entry APPEARS in `client-errors`. A policy of that shape can only report
+ * presence, so if the thing writing the entries stops writing, the policy
+ * goes quiet — and quiet is the reading it also gives when everything is
+ * healthy. **A dead beacon is indistinguishable from zero errors**, and
+ * `reportClientErrors` has three fail-soft paths that each end in a
+ * `console.warn` to a log that retains an hour and drains nowhere
+ * (AGL-1799). Error Reporting would show zero errors; the policy would stay
+ * silent; both readings look exactly like a clean launch.
+ *
+ * ## Why this shape and not a metric-absence policy
+ *
+ * AGL-1923 proposed a log-based metric plus `conditionAbsent`. This is the
+ * same guarantee with two properties that one lacks. It is PROVABLE — the
+ * verdict is graded synchronously against the write's own status, so the
+ * degraded branch can be induced and observed rather than waited out over an
+ * absence window. And it needs nothing new to run it: the uptime probe is
+ * what winds the dead-man's switch, so there is no cron that can itself stop
+ * without anyone noticing (which would only move the problem one layer out).
+ *
+ * ## It must be able to go GREEN
+ *
+ * The condition is an EVENT, not a state. A failed write degrades; the next
+ * successful write clears it, within one probe TTL — no marker, no latch, no
+ * retention window to age out of. That is the AGL-1843 rule applied before
+ * the fact: the clearing event is named, and it is "the next heartbeat that
+ * reaches Cloud Logging".
+ *
+ * Pure on purpose, like its siblings: the route writes, this decides, the
+ * spec exercises every branch without a network.
+ */
+export interface BeaconCheck extends HealthCheck {
+  /**
+   * The log id the heartbeat targets, so the body names what to query during
+   * an incident rather than making someone go and find it.
+   */
+  logId: string
+  /** Which deployment's credential was exercised — console and tenant differ. */
+  service: string
+}
+
+export function beaconHealth(
+  write: { ok: boolean; code?: string } | null,
+  logId: string,
+  service: string,
+  ms: number,
+): BeaconCheck {
+  // A null result is degraded by contract, the same rule `signupsHealth` and
+  // `rateLimitsHealth` follow: an alarm that cannot see the thing it watches
+  // must not report calm. Here it is stronger than a convention — "we could
+  // not determine whether the beacon works" IS the AGL-1923 condition.
+  if (write === null) {
+    return { ok: false, ms, code: 'heartbeat-unavailable', logId, service }
+  }
+  return {
+    ok: write.ok,
+    ms,
+    ...(write.ok ? {} : { code: write.code ?? 'heartbeat-failed' }),
+    logId,
+    service,
+  }
+}

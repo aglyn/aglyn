@@ -20,6 +20,7 @@ import {
   MAX_BACKUP_AGE_DAYS,
   MAX_EXPORT_AGE_DAYS,
   backupsHealth,
+  beaconHealth,
   exportsHealth,
   healthBody,
   healthHeaders,
@@ -521,5 +522,66 @@ describe('memoizeWithTtl', () => {
     expect(await probe()).toBe(1)
     clock = 0
     expect(await probe()).toBe(2)
+  })
+})
+
+describe('beaconHealth (AGL-1923)', () => {
+  const LOG = 'client-error-beacon-heartbeat'
+
+  it('is ok when the heartbeat write reached Cloud Logging', () => {
+    const check = beaconHealth({ ok: true }, LOG, 'console-web', 40)
+    expect(check.ok).toBe(true)
+    // No code on success — a body that always carries one teaches whoever
+    // reads it during an incident that the field means nothing.
+    expect(check.code).toBeUndefined()
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(200)
+  })
+
+  it('names the log and the deployment, so the body says what to go and query', () => {
+    const check = beaconHealth({ ok: true }, LOG, 'tenant-web', 40)
+    expect(check.logId).toBe(LOG)
+    expect(check.service).toBe('tenant-web')
+  })
+
+  it('is degraded, with the transport code, when the write was rejected', () => {
+    const check = beaconHealth({ ok: false, code: 'http-403' }, LOG, 'console-web', 40)
+    expect(check.ok).toBe(false)
+    // 403 is the revoked-IAM shape this whole check exists for — the code has
+    // to survive into the body or the alert says "beacon down" and nothing else.
+    expect(check.code).toBe('http-403')
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(503)
+  })
+
+  it('is degraded when the credential could not be minted', () => {
+    const check = beaconHealth({ ok: false, code: 'no-credential' }, LOG, 'console-web', 3)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('no-credential')
+  })
+
+  it('falls back to a stable code when a failure carries none', () => {
+    expect(beaconHealth({ ok: false }, LOG, 'console-web', 3).code).toBe(
+      'heartbeat-failed',
+    )
+  })
+
+  it('treats an unavailable heartbeat as degraded, never as calm', () => {
+    // "We could not determine whether the beacon works" IS the AGL-1923
+    // condition. A check that reports ok here would be the exact failure it
+    // was built to catch, one layer up.
+    const check = beaconHealth(null, LOG, 'console-web', 4000)
+    expect(check.ok).toBe(false)
+    expect(check.code).toBe('heartbeat-unavailable')
+    expect(healthHttpStatus(healthStatus({ beacon: check }))).toBe(503)
+  })
+
+  it('CLEARS: a degraded verdict does not latch — the next good write is ok', () => {
+    // The AGL-1843 rule, enforced rather than asserted in prose. `backup-state`
+    // sat red for four and a half days because its condition could not be
+    // cleared by any event; this one has no state to carry, so the same inputs
+    // in the other order give the other answer.
+    const red = beaconHealth({ ok: false, code: 'http-429' }, LOG, 'console-web', 40)
+    const green = beaconHealth({ ok: true }, LOG, 'console-web', 40)
+    expect(red.ok).toBe(false)
+    expect(green.ok).toBe(true)
   })
 })
