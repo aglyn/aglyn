@@ -55,6 +55,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -106,6 +107,7 @@ import {
   isAllowedUploadType,
   normalizeUploadContentType,
   SIGNED_UPLOAD_THRESHOLD_BYTES,
+  requiresFileUploadEntitlement,
   UPLOAD_ACCEPT_ATTRIBUTE,
   UPLOAD_TYPES_MESSAGE,
 } from '../../utils/media-upload-limits'
@@ -391,6 +393,29 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
 
   const { org, ready: orgReady } = useCurrentOrg()
+  /**
+   * Media entitlement state (AGL-2081). Both were enforced server-side with
+   * ZERO console affordance:
+   *
+   * * `videoMedia` gates every non-image upload (`requiresFileUploadEntitlement`
+   *   — video, PDF, Office documents, ZIP). A free-tier drop just failed,
+   *   server-side, with nothing on screen naming the cause.
+   * * `mediaCdn` silently decides whether an asset gets a `cdnPath`, which
+   *   decides whether `mediaSrc` emits a stable CDN URL or a raw storage URL
+   *   that BREAKS when the file is moved between folders. A free-tier org's
+   *   asset URLs broke on a folder move with no way to learn why — the
+   *   subtlest of the four, because nothing about it looks like a plan
+   *   limit.
+   *
+   * Both read after `orgReady` at every use: `checkEntitlement(undefined)`
+   * answers NO, and the library is one of the first things opened on a cold
+   * console.
+   */
+  const fileUploads = orgReady && Aglyn.checkEntitlement(org as never, 'videoMedia')
+  const cdnDelivery = orgReady && Aglyn.checkEntitlement(org as never, 'mediaCdn')
+  const fileUploadPlanLabel =
+    Aglyn.planLabelGrantingFeature('videoMedia') ?? 'a higher plan'
+  const cdnPlanLabel = Aglyn.planLabelGrantingFeature('mediaCdn') ?? 'a higher plan'
   /**
    * The scope stored on a folder created here (AGL-1466).
    *
@@ -2460,6 +2485,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         return 0
       }
+      // `videoMedia` (AGL-2081). Both upload routes enforce this —
+      // `media/upload/route.ts:240` and `upload-url/route.ts:166` — and the
+      // library had no gate at all, so a free-tier video or PDF drop was
+      // refused as a bare server error with nothing on screen naming the
+      // cause. A paid-feature refusal delivered as an upload failure.
+      //
+      // After the `orgReady` guard above on purpose: `checkEntitlement`
+      // answers NO for an undefined org, and this is one of the first things
+      // opened on a cold console.
+      if (
+        requiresFileUploadEntitlement(contentType) &&
+        !Aglyn.checkEntitlement(org as never, 'videoMedia')
+      ) {
+        enqueueSnackbar(
+          `"${file.name}" needs ${fileUploadPlanLabel} — images upload on ` +
+            'every plan. See Billing to upgrade.',
+          { variant: 'warning', persist: false, allowDuplicate: true },
+        )
+        return 0
+      }
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
         enqueueSnackbar(
@@ -2908,6 +2953,47 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         <Typography variant="body2" color="text.secondary">
           {`${items.length}${totalCount > items.length ? ` of ${totalCount}` : ''} file${totalCount === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
         </Typography>
+        {/* Media entitlement state (AGL-2081). Neither of these had ANY
+            console affordance — no toggle, no state, no locked branch — while
+            both changed what the library actually does. Stated as fact, not
+            sold: there is nothing here to switch on, and the honest answer to
+            "why did my video fail" / "why did my image URL break" is a line
+            that says so.
+
+            Rendered only once `orgReady`, so a cold console never tells a
+            paying workspace it is on the free tier. */}
+        {orgReady && !fileUploads ? (
+          <Tooltip
+            title={
+              `Images upload on every plan. Video, PDF, Word, Excel, ` +
+              `PowerPoint and ZIP need ${fileUploadPlanLabel}.`
+            }
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label={`Images only · ${fileUploadPlanLabel} for files`}
+            />
+          </Tooltip>
+        ) : null}
+        {orgReady && !cdnDelivery ? (
+          <Tooltip
+            title={
+              'Assets are served straight from storage, so an asset URL ' +
+              'changes if you move the file to another folder. ' +
+              `${cdnPlanLabel} serves them from the CDN at a stable address ` +
+              'with responsive image variants.'
+            }
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color="default"
+              label={`No CDN · URLs change on move`}
+            />
+          </Tooltip>
+        ) : null}
         <Box
           component="input"
           ref={inputRef}

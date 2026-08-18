@@ -36,7 +36,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { InputAdornment, Tab } from '@mui/material'
+import { InputAdornment, Stack, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -51,6 +51,7 @@ import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.co
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import AuthScreensCard from '../../../../../../components/auth-screens-card.component'
 import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
+import SiteBrandingBadgeCard from '../../../../../../components/site-branding-badge-card.component'
 import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
 import SearchIndexingCard from '../../../../../../components/search-indexing-card.component'
@@ -897,7 +898,17 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                       ) : null}
                     </TabPanel>
                     <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
-                      <CustomDomainCard hostId={hostId} />
+                      <Stack spacing={2}>
+                        <CustomDomainCard hostId={hostId} />
+                        {/* The badge is a fact about the PUBLISHED site, so
+                            it belongs beside the domain it is published on
+                            (AGL-2081). There is nothing to toggle — the
+                            entitlement is the switch — but "do my sites show
+                            the Aglyn badge" is a question an owner should be
+                            able to answer somewhere, and until now it was
+                            answerable nowhere in the console. */}
+                        <SiteBrandingBadgeCard />
+                      </Stack>
                     </TabPanel>
                     <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
                       <SiteEmailsCard />

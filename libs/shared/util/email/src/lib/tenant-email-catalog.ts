@@ -50,6 +50,22 @@ export interface TenantEmailEntry {
   mergeTokens?: readonly SystemEmailMergeToken[]
   /** `besigner`: starting content the editor seeds and the default renders. */
   defaultBody?: readonly SystemEmailDefaultBlock[]
+  /**
+   * Entitlement flag the SEND is gated on, when one is (AGL-2081).
+   *
+   * `enabledPlugins` decides whether a template appears at all; this is the
+   * narrower question of whether the send behind an appearing template can
+   * actually happen. `abandoned-cart` is the case that named it: the template
+   * has always been listed and designable on every plan, while
+   * `process-abandoned.ts` refuses to send it without `abandonedCart` — so
+   * the Emails page showed a template that could never send, and read
+   * exactly like one that could.
+   *
+   * A plain string rather than `keyof OrgFeatureFlags` to keep this lib off
+   * the billing lib's dependency edge; the console resolves it through
+   * `checkEntitlement`, and a spec asserts every value here is a real flag.
+   */
+  requiresFeature?: string
 }
 
 /**
@@ -350,6 +366,9 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     key: 'abandoned-cart',
     name: 'Abandoned cart',
     description: 'Reminds a shopper of items left in their cart.',
+    // The cron refuses to send this without the entitlement
+    // (`process-abandoned.ts:92`), so the console has to say so (AGL-2081).
+    requiresFeature: 'abandonedCart',
     pluginId: 'commerce',
     plugin: 'Commerce',
     control: 'besigner',
