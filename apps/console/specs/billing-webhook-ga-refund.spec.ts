@@ -298,6 +298,41 @@ describe('charge.refunded reaches sendGa4Refund with the right numbers (AGL-1850
     expect(mockGa4Refunds).toHaveLength(0)
   })
 
+  it('a TAXED row scales the delta to NET — a full refund sums to what the purchase reported (AGL-1872)', async () => {
+    const post = loadWebhook()
+    // The measured live TX row (AGL-1811): $106.60 gross, $6.60 tax, so the
+    // purchase reported $100.00. Refunds must reverse THAT number, not the
+    // gross — a gross reversal would net GA below zero on a full refund.
+    docs.set('platformRevenue/in_ga_taxed', {
+      grossCents: 10660,
+      taxCents: 660,
+      orgId: 'org-real',
+    })
+    const taxedCharge = {
+      ...OWN_CHARGE,
+      id: 'ch_taxed',
+      invoice: 'in_ga_taxed',
+    }
+    // Half the gross back: 5330 × (10660 − 660) / 10660 = 5000 — half of
+    // what the purchase reported. A gross pass-through would send 53.30.
+    await post(signed(refundEvent({ ...taxedCharge, amount_refunded: 5330 })))
+    // The rest: the two deltas must sum to the purchase's $100.00 exactly.
+    await post(
+      signed(
+        refundEvent({ ...taxedCharge, refunded: true, amount_refunded: 10660 }),
+      ),
+    )
+    expect(mockGa4Refunds.map((call) => call.value)).toEqual([50, 50])
+    expect(
+      mockGa4Refunds.reduce((sum, call) => sum + call.value, 0),
+    ).toBeCloseTo(100)
+    // The row still tracks the GROSS cumulative — the tax record stays in
+    // Stripe's own unit; only the GA reversal is netted.
+    expect(docs.get('platformRevenue/in_ga_taxed')).toMatchObject({
+      refundedCents: 10660,
+    })
+  })
+
   it('a pre-AGL-1811 invoice (no revenue row) reports only a FULL refund, once, at the total', async () => {
     const post = loadWebhook()
     docs.delete('platformRevenue/in_ga_annual')
