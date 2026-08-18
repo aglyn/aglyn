@@ -41,7 +41,7 @@
  * a hole as the fix for it.
  *
  * A single left-to-right scan, NOT two regex passes, and that distinction is
- * load-bearing (AGL-1986). The previous version removed block comments first
+ * load-bearing (AGL-2004). The previous version removed block comments first
  * and line comments second, so a line comment that merely QUOTED a path opened
  * a block comment that was never meant to exist:
  *
