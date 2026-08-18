@@ -328,3 +328,45 @@ describe('retention stamps (AGL-1844)', () => {
   })
 })
 
+describe('spoofed-host gate (AGL-1844, AGL-510)', () => {
+  it('writes nothing and fires no host event for a hostId that does not exist', async () => {
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: 'no-such-host', path: '/' }),
+    )
+    expect(response.status).toBe(204)
+    expect(mockStore[`hosts/no-such-host/analytics/${DAY}`]).toBeUndefined()
+    expect(mockEmitted).toEqual([])
+  })
+
+  it('drops overlay counters for a spoofed hostId too', async () => {
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: 'no-such-host', overlay: 'popupImpression' }),
+    )
+    expect(mockStore[`hosts/no-such-host/analytics/${DAY}`]).toBeUndefined()
+  })
+
+  it('rejects hostIds that are not plain document ids', async () => {
+    const route = loadRoute()
+    for (const hostId of ['a/b', '__reserved__', 'bad id']) {
+      await route.POST(beacon({ hostId, path: '/' }))
+    }
+    // No day doc, no host-existence read either — malformed ids fail the
+    // charset wall before anything touches Firestore.
+    expect(
+      Object.keys(mockStore).filter((path) => path.includes('analytics')),
+    ).toHaveLength(0)
+    expect(mockHostReads).toBe(0)
+  })
+
+  it('answers existence from the per-instance cache, not a read per beacon', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    await route.POST(beacon({ hostId: HOST_ID, path: '/two' }))
+    await route.POST(beacon({ hostId: HOST_ID, path: '/three' }))
+    expect(mockHostReads).toBe(1)
+    expect(dayDoc().total).toBe(3)
+  })
+})
+
