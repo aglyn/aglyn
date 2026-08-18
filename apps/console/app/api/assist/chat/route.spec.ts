@@ -87,6 +87,38 @@ function mockMakeFirestore() {
   })
   return {
     collection: (name: string) => makeCollection(name),
+    /**
+     * Atomic transactions (AGL-2057): reads see a consistent snapshot, writes
+     * land together at the end. `reserveAssistMessage` runs here, and it is
+     * the step that spends a message BEFORE the model is called.
+     */
+    runTransaction: async (
+      fn: (tx: unknown) => Promise<unknown>,
+    ): Promise<unknown> => {
+      const queued: Array<() => void> = []
+      const tx = {
+        get: async (ref: { path: string }) => ({
+          exists: mockDocs.has(ref.path),
+          data: () => mockDocs.get(ref.path),
+          get: (field: string) => (mockDocs.get(ref.path) ?? {})[field],
+        }),
+        set: (
+          ref: { path: string },
+          data: Record<string, unknown>,
+          options?: { merge?: boolean },
+        ) => {
+          queued.push(() => {
+            mockDocs.set(
+              ref.path,
+              applyData(mockDocs.get(ref.path), data, Boolean(options?.merge)),
+            )
+          })
+        },
+      }
+      const result = await fn(tx)
+      for (const write of queued) write()
+      return result
+    },
     batch: () => {
       const queued: Array<() => void> = []
       const batch = {

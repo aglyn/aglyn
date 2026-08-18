@@ -41,7 +41,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
-import { recordAssistExchange } from '../app/api/_lib/assist-usage'
+import {
+  recordAssistExchange,
+  reserveAssistMessage,
+} from '../app/api/_lib/assist-usage'
 
 /**
  * AGL-1909: Anthropic must be a published subprocessor BEFORE it processes
@@ -297,6 +300,19 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
     })
     const firestore = {
       collection: (name: string) => makeCollection(name),
+      // The counters/rollup writes moved into the RESERVATION (AGL-2057), so
+      // the erasure surface is only complete if this test drives both halves.
+      runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          get: async () => ({
+            exists: false,
+            data: () => undefined,
+            get: () => undefined,
+          }),
+          set: (ref: { path: string }) => {
+            written.push(ref.path)
+          },
+        }),
       batch: () => ({
         set: (ref: { path: string }) => {
           written.push(ref.path)
@@ -305,6 +321,7 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
       }),
     } as unknown as FirebaseFirestore.Firestore
 
+    await reserveAssistMessage(firestore, 'org-1', false)
     await recordAssistExchange(firestore, 'org-1', {
       uid: 'user-1',
       question: 'How do I publish?',
@@ -329,11 +346,14 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
     // it created a new collection, which is precisely the moment a cascade
     // silently stops covering everything. The length is asserted so a fifth
     // collection added later cannot slip past this list unnoticed.
-    expect(written).toHaveLength(4)
-    for (const path of written) {
+    // Deduped: the monthly rollup is touched by BOTH halves now — the
+    // reservation counts the message, the batch folds in the tokens.
+    const distinct = [...new Set(written)]
+    expect(distinct).toHaveLength(4)
+    for (const path of distinct) {
       expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
     }
-    expect(written.map((path) => path.split('/')[2]).sort()).toEqual([
+    expect(distinct.map((path) => path.split('/')[2]).sort()).toEqual([
       'assistExchanges',
       'assistSignals',
       'assistUsage',

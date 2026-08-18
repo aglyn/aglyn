@@ -33,8 +33,9 @@ import {
   DOCS_SITE_ORIGIN,
 } from '../../_lib/assist-retrieval'
 import {
-  checkAssistQuota,
   recordAssistExchange,
+  releaseAssistMessage,
+  reserveAssistMessage,
   type AssistTokenUsage,
 } from '../../_lib/assist-usage'
 import {
@@ -434,7 +435,12 @@ async function handler(request: Request): Promise<Response> {
     // which is a real answer (limited mode), not a denial.
     const entitled = checkEntitlement(org, 'aiAssist')
     const firestore = app.firestore()
-    const quota = await checkAssistQuota(firestore, body.orgId, entitled)
+    // RESERVED, not merely checked (AGL-2057). The counter moves here, in a
+    // transaction, BEFORE a single token is spent — because the old order
+    // (check now, count at stream completion) let concurrent requests and
+    // abandoned streams past the cap, and an abandoned-stream loop is
+    // unbounded provider spend on a workspace that pays nothing.
+    const quota = await reserveAssistMessage(firestore, body.orgId, entitled)
     if (!quota.allowed) {
       return Response.json(
         {
@@ -518,6 +524,12 @@ async function handler(request: Request): Promise<Response> {
     if (!upstream.ok || !upstream.body) {
       const errorPayload = await upstream.json().catch(() => null)
       console.error('assist upstream error', upstream.status, errorPayload)
+      // The provider was never reached, so no tokens were spent — give the
+      // reservation back rather than charging an outage to the ten messages a
+      // free workspace gets in a day.
+      await releaseAssistMessage(firestore, body.orgId, quota).catch((error) =>
+        console.error('assist reservation release failed', error),
+      )
       return Response.json(
         {
           error:
