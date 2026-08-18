@@ -24,6 +24,7 @@ import {
 } from 'firebase/app'
 import {
   type Analytics,
+  getAnalytics as getAnalyticsInstance,
   initializeAnalytics as initializeAnalyticsInstance,
 } from 'firebase/analytics'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
@@ -173,6 +174,28 @@ const firestoreInitialized = new Set<string>()
 let connectedDatabase = false
 let connectedAuth = false
 
+/**
+ * The console tag's gtag config — ONE object, at module scope, deliberately
+ * (AGL-1979).
+ *
+ * `initializeAnalytics(app, options)` throws `already-initialized` unless the
+ * options `deepEqual` the ones the instance was first created with, and the
+ * provider re-enters this block on every mount, every StrictMode double
+ * invoke and every Fast Refresh. A fresh object literal per call survives
+ * that only by *value*; a shared constant survives it by *identity*, which is
+ * the first branch of the SDK's own comparison and cannot drift when someone
+ * edits one call site and not another.
+ *
+ * ⚠️ The SDK MUTATES this object: `_initializeAnalytics` reads `options.config`
+ * and writes `origin`, `update` and the installation id onto it in place.
+ * That is precisely why sharing it is safe rather than dangerous — the object
+ * the provider holds and the object the SDK stored are the same one, so they
+ * cannot disagree.
+ */
+const CONSOLE_ANALYTICS_OPTIONS = {
+  config: { send_page_view: false, content_group: 'console' },
+}
+
 export interface FirebaseServicesProviderProps {
   firebaseConfig: FirebaseOptions
   appName: string
@@ -313,10 +336,34 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // `page_referrer` itself, and which is what carries marketing traffic
     // source into the session — is still the external referrer at that moment.
     //
-    // Safe to re-enter: `initializeAnalytics` returns the existing instance
-    // when the options deep-equal the first call's, and throws only on a
-    // CONFLICTING re-init. This is the sole call site, so the options are
-    // always these.
+    // Re-entry is safe *only* while the options match. `initializeAnalytics`
+    // returns the existing instance when they deep-equal the first call's and
+    // throws `already-initialized` otherwise — and the options can be made to
+    // differ by things no call site here controls (AGL-1979):
+    //
+    //   * anything that touches the analytics provider WITHOUT options first
+    //     initializes it with `{}`. `getAnalytics()` is the obvious one, but
+    //     `@firebase/remote-config` reaches the same code path on its own —
+    //     `addExperimentToAnalytics` calls `analyticsProvider.getImmediate({
+    //     optional: true })`, and `optional` only suppresses the throw, it
+    //     does not stop the initialization.
+    //   * in dev, a module instance carrying a PREVIOUS version of these
+    //     options (this config changed under AGL-1857) surviving a Fast
+    //     Refresh alongside the new one.
+    //
+    // Once that happens the conflict is permanent for the document: every
+    // later call throws, so without the fallback below `analytics` stayed
+    // undefined forever and the next consumer — `logEvent(analytics, …)` —
+    // read `.app` off it and threw a TypeError two frames away, which is how
+    // this surfaced (top Cloud Error Reporting group, and reproduced live on
+    // app.aglyn.com).
+    //
+    // `getAnalytics(app)` is the remedy the SDK's own error message names. It
+    // cannot cost us the config on a healthy document: it only runs after
+    // `initializeAnalytics` threw, and on a first init that throw can only be
+    // `no-app-id` / `no-api-key` / `already-exists`, none of which
+    // `getAnalytics` can rescue either — it re-throws and we fall through to
+    // an undefined instance, which every consumer must now tolerate.
     // `content_group: 'console'` (AGL-1857) rides the same config: it is the
     // first-class GA4 axis that separates console traffic from `marketing`
     // (stamped by the tenant runtime on aglyn.com's own tag) and `docs`
@@ -326,11 +373,20 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // `site-analytics.tsx` and never passes through here.
     let analytics: Analytics
     try {
-      analytics = initializeAnalyticsInstance(app, {
-        config: { send_page_view: false, content_group: 'console' },
-      })
+      analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
     } catch (error) {
       console.error(error)
+      try {
+        // Already initialized by someone else, with someone else's options:
+        // take THAT instance rather than leaving consumers with nothing. The
+        // tag it is attached to was configured without `send_page_view: false`
+        // and without `content_group`, so this session reports a duplicate
+        // startup page_view and an unstamped surface — degraded, and loudly
+        // so, instead of silently dead.
+        analytics = getAnalyticsInstance(app)
+      } catch (fallbackError) {
+        console.error(fallbackError)
+      }
     }
     // Remote Config (AGL-228): release-flag delivery. Browser-only like
     // analytics; consumers set defaultConfig before their first getValue so

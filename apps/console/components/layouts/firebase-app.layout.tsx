@@ -28,6 +28,7 @@ import {
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
 import { NoSsr } from '@mui/material'
 import {
+  type Analytics,
   logEvent,
   setDefaultEventParameters,
   setUserId,
@@ -101,9 +102,42 @@ setStaleSessionCheck(() => getSessionHealth().staleSession)
 watchSessionHeal()
 
 function AnalyticsGlobalEvents({ children }) {
-  // Cross-subdomain session cookie sync (AGL-236).
+  // Cross-subdomain session cookie sync (AGL-236). NOT analytics, and it must
+  // run whether or not Firebase Analytics came up — so it stays out here.
   useSessionCookie()
   const analytics = useAnalytics()
+
+  // ONE gate for every Firebase Analytics binding in this app (AGL-1979).
+  //
+  // `useAnalytics()` is typed as always returning an `Analytics`, and
+  // strictNullChecks is off repo-wide, so nothing has ever forced a call site
+  // to consider that it can be undefined — which it is whenever
+  // `initializeAnalytics` failed in the services provider. `logEvent(undefined,
+  // …)` reads `.app` off it and throws a TypeError out of an effect, which was
+  // the top group in Cloud Error Reporting and is still firing on
+  // app.aglyn.com.
+  //
+  // Guarding each call site is what was tried first (526608b9) and it is why
+  // this is the second fix: the transport registration got a guard and the
+  // four `logEvent`/`setUserId`/`setUserProperties` sites beneath it did not.
+  // A gate on the MOUNT cannot be half-applied — every binding lives in the
+  // child, so a new one is guarded by construction rather than by remembering.
+  //
+  // Not a hook-order hazard: the provider builds its services exactly once per
+  // document, so this condition is a constant for the lifetime of the tree.
+  return (
+    <>
+      {analytics ? <AnalyticsBindings analytics={analytics} /> : null}
+      {children}
+    </>
+  )
+}
+
+/**
+ * Every Firebase Analytics binding the console has. Mounted only when there is
+ * a real `Analytics` instance to bind to — see the gate above.
+ */
+function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   const pathname = usePathname()
   const user = useUser()
 
@@ -119,25 +153,18 @@ function AnalyticsGlobalEvents({ children }) {
   // consent (AGL-1498), making the gate structural there.
   useEffect(() => {
     // Registering a transport that cannot deliver is WORSE than registering
-    // none (AGL-1516 beacon, top error group). `initializeAnalytics` throws
-    // whenever Analytics is unsupported — no measurement id, cookies or
-    // IndexedDB blocked, an ad blocker eating the gtag script — and the
-    // provider catches that and leaves `analytics` undefined. Because
-    // `useAnalytics()` is typed as always returning an `Analytics` and
-    // strictNullChecks is off repo-wide, nothing here ever complained.
+    // none (AGL-1516 beacon, top error group), which is the sharpest reason
+    // the mount gate above exists. `deliver()` swallows a throwing transport
+    // ("analytics never breaks the page") — but it swallows it AFTER having
+    // taken the transport branch and returned, so the `window.gtag` fallback
+    // underneath is never reached. That is not a degraded surface, it is a
+    // silent TOTAL loss of console analytics for exactly the visitors whose
+    // browsers are hostile to Firebase, reported as zero events rather than
+    // as an error. Sept 1 activation and funnel numbers are read off this
+    // taxonomy.
     //
-    // `logEvent(undefined, ...)` then reads `.app` off undefined and throws.
-    // `deliver()` swallows it ("analytics never breaks the page") — but it
-    // swallows it AFTER having taken the transport branch and returned, so
-    // the `window.gtag` fallback underneath is never reached. The result is
-    // not a degraded surface, it is a silent TOTAL loss of console analytics
-    // for exactly the visitors whose browsers are hostile to Firebase, with
-    // no error surfaced anywhere. Sept 1 activation and funnel numbers are
-    // read off this taxonomy, so they would have quietly under-reported.
-    //
-    // Leaving the transport unregistered is the honest state: `deliver()`
-    // falls through to `window.gtag`, which is what every other surface uses.
-    if (!analytics) return
+    // Unregistered is the honest state: `deliver()` falls through to
+    // `window.gtag`, which is what every other surface uses.
     configureAnalyticsTransport((name, params) => {
       // `logEvent`'s overloads type each reserved name individually, so the
       // shared taxonomy's union has to be widened past them here. The typing
@@ -293,8 +320,9 @@ function AnalyticsGlobalEvents({ children }) {
     }
   }, [analytics, user])
 
-  return children
+  return null
 }
+AnalyticsBindings.displayName = 'AnalyticsBindings'
 
 export interface FirebaseAppLayoutProps {
   children?: JSX.Children
