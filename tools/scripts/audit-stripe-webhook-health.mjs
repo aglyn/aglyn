@@ -249,6 +249,7 @@ async function main() {
     failedEventIds: failures.map((event) => event.id),
     processedEventIds,
     firestoreChecked,
+    expectLivemode: keyMode === 'live',
     windowStart,
     windowEnd: until,
   })
