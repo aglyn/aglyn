@@ -39,7 +39,7 @@
  */
 
 import {
-  MEDIA_QUARANTINE_SUPPORT_EMAIL,
+  mediaQuarantineSupportEmail,
   MEDIA_QUARANTINE_UPLOAD_STATUS,
 } from '@aglyn/aglyn/server'
 import {
@@ -101,6 +101,16 @@ beforeEach(() => {
   mockState.reads = 0
   mockState.readThrows = false
   invalidateMediaQuarantineCache()
+})
+
+// AGL-2016: the quarantine contact is operator configuration, not a constant.
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_OPERATOR_NAME = 'Aglyn LLC'
+  process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL = 'support@aglyn.com'
+})
+afterEach(() => {
+  delete process.env.NEXT_PUBLIC_OPERATOR_NAME
+  delete process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL
 })
 
 describe('AGL-1613 · quarantined bytes are refused at ingestion', () => {
@@ -200,7 +210,7 @@ describe('AGL-1613 · the refusal explains itself to the owner', () => {
   })
 
   it('offers the way back — the lever is reversible and must look it', async () => {
-    expect((await body())['contact']).toBe(MEDIA_QUARANTINE_SUPPORT_EMAIL)
+    expect((await body())['contact']).toBe(mediaQuarantineSupportEmail())
   })
 
   it('NEVER leaks the staff note', async () => {
