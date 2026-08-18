@@ -379,7 +379,7 @@ describe('revenue is derived from billing state, never from org.plan (AGL-1070)'
   it('has no stale EXCEPTIONS entry', () => {
     // An exemption list with no staleness check only ever grows, and every
     // entry silently widens what is permitted long after the reason expired
-    // (the sibling no-community-naming guard has had this for a while; this
+    // (the sibling naming-sweep guard has had this for a while; this
     // one did not, which is half of why AGL-2086 happened). An entry earns
     // its place only while the file would ACTUALLY trip the guard.
     const stale = Object.keys(EXCEPTIONS).filter((path) => {

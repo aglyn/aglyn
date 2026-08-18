@@ -267,6 +267,23 @@ const ALLOWED = new Map<string, string>([
   // Scoped to the ONE file. Do not widen this to `.claude/` — the coverage
   // test below asserts that this remains the only exemption outside the
   // product tree, so widening it fails rather than quietly permitting more.
+  // The generated release record. `8e72befb8` (1.0.0-beta.1) rendered the
+  // AGL-2066 commit subject — "the no-community sweep exempts a verbatim
+  // quote, narrowly" — into the changelog, and the guard went red on main
+  // with nobody having filed it. The word is there as the NAME OF THIS GUARD
+  // inside a shipped commit subject, which is the opposite of product naming.
+  //
+  // Exempted at the file rather than fixed in place, for two reasons: a
+  // changelog is an append-only record of what was released and editing it
+  // falsifies that, and it is REGENERATED from commit subjects — so any
+  // future commit that mentions this guard by name reintroduces the line.
+  // Losing product-naming coverage here costs nothing: a changelog is not a
+  // product surface, and the surfaces this rename protects are still asserted
+  // scanned by the narrowness test below.
+  [
+    'CHANGELOG.md',
+    'Generated release record (AGL-2102): the word appears inside a quoted commit subject naming this very guard, and the file is regenerated from commit subjects so it cannot be fixed in place.',
+  ],
   [
     '.claude/commands/release.md',
     "Verbatim capture of Zach's mandate; \"open source community\" is quoted speech, not product naming (AGL-2066).",
