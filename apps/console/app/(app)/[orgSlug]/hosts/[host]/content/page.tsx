@@ -500,7 +500,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [bodyTab, applyMarkdown],
   )
   // AI assist (AGL-130): write or improve the markdown-lite body.
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { org, orgId, ready: orgReady } = useCurrentOrg()
   const [aiInstruction, setAiInstruction] = useState<string | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const handleAiConfirm = useCallback(async () => {
@@ -517,6 +517,11 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
+          // The request NAMES the org it is metered against (AGL-2073) — the
+          // route no longer resolves it from the signed-in user, because a
+          // multi-org user's spend was landing on whichever org came back.
+          orgId,
+          hostId,
           mode: 'blog',
           title: editor.title,
           excerpt: editor.excerpt,

@@ -52,6 +52,13 @@ export interface AiAssistProviderProps {
    * assist is not on its plan for as long as the read was in flight.
    */
   orgReady?: boolean
+  /**
+   * The org every assist call is metered against (AGL-2073). The route no
+   * longer resolves it from the signed-in user — a user with one paid org was
+   * getting assist on all of their free ones, and their spend was landing on
+   * whichever org the server happened to resolve.
+   */
+  orgId?: string
   children?: JSX.Children
 }
 
@@ -65,6 +72,7 @@ export interface AiAssistProviderProps {
 export function AiAssistProvider(props: AiAssistProviderProps) {
   const org = props.org
   const orgReady = props.orgReady
+  const orgId = props.orgId
   const { children } = props
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
@@ -144,7 +152,11 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({ text, instruction: instruction.trim() }),
+        body: JSON.stringify({
+          orgId,
+          text,
+          instruction: instruction.trim(),
+        }),
       })
       const payload = await response.json()
       // An ai-assist feature lockdown (AGL-1510/1532) reads as a pause, not
@@ -191,7 +203,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [node, instruction, busy, user, effectiveTarget, enqueueSnackbar])
+  }, [node, instruction, busy, user, effectiveTarget, orgId, enqueueSnackbar])
 
   const handleGenerateSection = useCallback(() => {
     // AGL-1380: same gate as `handleRewrite`.
@@ -223,6 +235,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
+          orgId,
           mode: 'section',
           instruction: sectionPrompt.trim(),
         }),
@@ -286,7 +299,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [sectionPrompt, busy, user, enqueueSnackbar])
+  }, [sectionPrompt, busy, user, orgId, enqueueSnackbar])
 
   const contextValue = useMemo(
     () => ({

@@ -169,7 +169,7 @@ export default function ConsolePluginsGate({
   // undefined `org` checks as the free tier either way.
   return listConsoleProviders(enabledPluginIds).reduce<ReactNode>(
     (inner, Provider, index) => (
-      <Provider key={index} org={org} orgReady={orgReady}>
+      <Provider key={index} org={org} orgReady={orgReady} orgId={orgId}>
         {inner}
       </Provider>
     ),
