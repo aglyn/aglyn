@@ -40,8 +40,8 @@ import { FirebaseServicesProvider, useAnalytics } from './firebase-services'
  * `_getProvider` is a real, stable runtime export of `@firebase/app` — it is
  * how `firebase/analytics` itself reaches the provider — but the package's
  * published types deliberately withhold it: `package.json` points `types` at
- * `dist/app-public.d.ts`, which carries the line
- * `/* Excluded from this release type: _getProvider *​/`. The full declaration
+ * `dist/app-public.d.ts`, which carries a comment reading
+ * "Excluded from this release type: _getProvider". The full declaration
  * exists in `dist/app.d.ts`, which nothing resolves to.
  *
  * So a plain `import { _getProvider } from '@firebase/app'` runs correctly and
