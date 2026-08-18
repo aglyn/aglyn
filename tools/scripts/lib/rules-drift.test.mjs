@@ -631,6 +631,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:erase-cli',
       'test:standalone-installs',
       'check:standalone-installs',
+      'test:release-version', // AGL-2089
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -651,6 +652,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:erase-cli',
       'test:standalone-installs',
       'check:standalone-installs',
+      'test:release-version', // AGL-2089
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',

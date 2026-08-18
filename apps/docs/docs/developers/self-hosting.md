@@ -25,7 +25,7 @@ cd aglyn
 cp .env.selfhost.example .env.selfhost   # fill in your Firebase project + secrets
 
 # Deploy the repo's security rules to YOUR Firebase project (required once,
-# and again whenever release notes say rules changed):
+# and again whenever CHANGELOG.md records a rules change):
 npm install
 cp .env.selfhost .env
 node tools/scripts/deploy-firestore-rules.mjs
@@ -127,4 +127,4 @@ disables its feature rather than breaking the stack:
 | DMCA designated agent | Not inherited from Aglyn. Register your own with the U.S. Copyright Office; the product asserts a registration only when you set `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true`. |
 | Legal documents | Signup still clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots in the repository. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your own legal origin but does not yet retarget the acceptance flow. |
 | Documentation citations | AI-assist citations deep-link to `docs.aglyn.com` unless `NEXT_PUBLIC_DOCS_ORIGIN` names your own build. |
-| Updates | `git pull && docker compose up --build`, re-running the rules deploy when release notes say rules changed. |
+| Updates | `git pull && docker compose up --build`, re-running the rules deploy when `CHANGELOG.md` records a rules change. Releases are `v<semver>` git tags; `git describe --tags --match 'v*'` tells you which one you are on. |

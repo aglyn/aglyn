@@ -31,6 +31,14 @@ time** — and keep statuses current.
   installs, private npm cache, boundary-rule fault injection); PR main→production on **Zach's word**;
   real merge commit; verify DEPLOYED (Vercel prints to stderr); run stacked deploys (rules / indexes
   / TTL / Remote Config) from the promoted SHA and verify each.
+- Versioning (AGL-2089, full flow in `docs/RELEASING.md`): one repo-wide semver, bumped as a
+  DELIBERATE step of the promotion, never per-commit. On main when Zach calls the batch:
+  `npm run release:prepare` (report only) then `-- --write`, commit `chore(release): v<x>` with
+  `--only package.json CHANGELOG.md`. AFTER the merge is deployed and verified:
+  `npm run release:tag -- --write --push` tags the PRODUCTION MERGE COMMIT, so a tag means "this
+  tree was built and served". Bump is `feat`→minor, `fix|perf|revert`→patch, `!`/`BREAKING
+  CHANGE:`→major; during a prerelease only the series number moves. Currently `1.0.0-alpha.0`
+  with NO release tag yet — the first cut is Zach's call.
 - Two nx processes in one checkout destroy each other's `dist`. localhost Stripe key is LIVE.
   Never swap a shared file to prove a red. Test doubles model real semantics. Decompose every count.
 

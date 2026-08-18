@@ -19,6 +19,9 @@ name: Tools guards
 #                             destroyed (AGL-1778)
 #  - test:standalone-installs the enumerated-standalone-packages policy
 #                             (AGL-1781)
+#  - test:release-version     the semver/bump/changelog rules a release
+#                             depends on (AGL-2089) — a wrong bump does not
+#                             throw, it just mints a wrong number forever
 #  - check:standalone-installs  asserts every nested package with its own
 #                             lockfile has an install step in nx-ci.yml. That
 #                             file is currently disabled; the check still
@@ -148,6 +151,13 @@ jobs:
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
+
+      # AGL-2089. The versioning rules that decide what number a release
+      # carries. Pure string logic, no git — so it runs anywhere, and its
+      # dangerous failure mode is a plausible-looking wrong bump rather than a
+      # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
+      # rest, so deleting this step turns both drift workflows red.
+      - run: npm run test:release-version
 
       # AGL-2021. Two steps, and the order matters: the self-test proves the
       # comparator can still FAIL (it reconstructs the forbidden Webfile number
