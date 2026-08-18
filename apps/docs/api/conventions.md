@@ -44,6 +44,31 @@ Cursors are opaque — don't construct or parse them. A cursor we can't decode i
 error either: you'll get an empty or arbitrary page rather than a `400`, so check
 `has_more` rather than assuming a non-empty page means you're paging correctly.
 
+### A page can be shorter than `limit` {#short-pages}
+
+**`data.length < limit` never means you've reached the end.** Only
+`has_more === false` means that.
+
+Some endpoints filter rows out after reading a page — deleted
+[products](resources/products.md) and [media](resources/media.md) are dropped that
+way, and so is `?channel=online` on [orders](resources/orders.md), which has to match
+older rows that carry no channel field at all. A page of 100 can therefore come back
+with 60 rows and `has_more: true`.
+
+The loop that gets this right is the one that stops on the cursor, not on the count:
+
+```js
+let cursor = null
+do {
+  const page = await fetchPage(cursor)
+  handle(page.data)          // may be short, may even be empty
+  cursor = page.next_cursor  // the ONLY termination signal
+} while (cursor)
+```
+
+A loop written as `while (page.data.length === limit)` will silently stop early on
+these endpoints, and it will look like it worked.
+
 ### Ordering
 
 **Every list is ordered by record id, ascending — not by creation or update time.**
@@ -72,7 +97,7 @@ errors add a `code` with the specific detail.
 | --- | --- | --- |
 | `400` | `bad_request` | Failed validation (`code: "validation_failed"`). |
 | `401` | `unauthorized` | Missing, malformed, revoked, or expired key. |
-| `403` | `plan_required` | The organization's plan doesn't include API access. |
+| `403` | `plan_required` | The organization's plan doesn't include API access — or, on a commerce resource, doesn't include commerce (`code: "commerce"`). |
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
@@ -100,6 +125,23 @@ bisect a payload:
 ```
 
 `fields` is present only on validation failures — treat it as optional.
+
+### Two different `plan_required` failures {#plan-required}
+
+`plan_required` answers two distinct questions, and `code` is what tells them apart:
+
+| `code` | Means | What fixes it |
+| --- | --- | --- |
+| *absent* | The organization's plan doesn't include **API access** at all. Every endpoint answers this. | Move to a plan with the API. |
+| `"commerce"` | The API works, but the plan no longer includes **commerce**, so [orders](resources/orders.md) and [products](resources/products.md) are closed. Every other resource keeps working. | Restore a plan with commerce. |
+
+Branch on `code`, not on the message. An integration that retries a plan failure
+forever is the failure mode here — neither is transient, so back off and alert
+a human instead.
+
+We answer `plan_required` rather than `404` for the commerce case on purpose. Hiding a
+store that plainly exists behind a "no such thing" sends an integrator hunting a wrong
+site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 

@@ -64,9 +64,21 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `contacts:read` | List and read contacts. |
 | `sites:read` | List sites and read their details. |
 | `forms:read` | Read a site's form submissions. |
+| `orders:read` | Read a site's store orders. |
+| `products:read` | Read a site's products, variants, prices and stock. |
+| `media:read` | List files in the organization library and in a site's media. |
 
-Contacts are read-only over the API — they're created by the capture points on your
-sites (forms, member sign-ups, orders, bookings), so there is no `contacts:write`.
+Several resources are **read-only** over the API, and the missing write scope is
+deliberate in each case rather than an oversight:
+
+- **Contacts** are created by the capture points on your sites (forms, member
+  sign-ups, orders, bookings), so there is no `contacts:write`.
+- **Orders** and **products** move money and stock. A write scope for them belongs to
+  the change that ships the endpoint, not ahead of it — a scope you can grant that
+  grants nothing is a broken permission.
+- **Media** uploads go through the console library, which scans for malware, generates
+  image variants, and accounts for your storage quota. A bare API upload would skip
+  all three.
 
 ```json
 {

@@ -2,15 +2,18 @@
 sidebar_position: 1
 slug: /
 title: Aglyn REST API
-description: A REST API for your organization's datasets, records, contacts, sites, and form submissions — authenticated with API keys.
+description: A REST API for your organization's datasets, contacts, sites, form submissions, store orders, products and media — authenticated with API keys.
 ---
 
 # Aglyn REST API
 
 The Aglyn REST API gives you programmatic access to your organization's data —
-[datasets and records](resources/datasets.md), [contacts](resources/contacts.md), and
-[sites with their form submissions](resources/sites.md). Use it to sync content from
-another system, back up records, or build an integration.
+[datasets and records](resources/datasets.md), [contacts](resources/contacts.md),
+[sites with their form submissions](resources/sites.md), your store's
+[orders](resources/orders.md) and [products](resources/products.md), and your
+[media library](resources/media.md). Use it to sync content from another system, push
+orders into accounting, feed a catalog to a marketplace, back up records, or build an
+integration.
 
 :::info Plan availability
 The REST API is included on the **Business** and **Advanced** plans. Create keys from
@@ -102,12 +105,16 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
-  "resources": ["datasets", "contacts", "sites"]
+  "resources": ["datasets", "contacts", "sites", "media"]
 }
 ```
 
-Form submissions aren't a top-level resource — they live under
-[`/v1/sites/{siteId}/form-submissions`](resources/sites.md#list-form-submissions).
+This lists only **top-level** resources. Form submissions, [orders](resources/orders.md)
+and [products](resources/products.md) all live under a site
+(`/v1/sites/{siteId}/…`) and are deliberately absent, so a client that walks this list
+never builds a path that 404s. `media` is here because
+[`/v1/media`](resources/media.md) — the *organization* library — really is a top-level
+path; each site's own files are additionally at `/v1/sites/{siteId}/media`.
 
 ### `GET /v1/me`
 
@@ -129,6 +136,12 @@ for failing fast at startup with a clear message.
 | [Datasets & records](resources/datasets.md) | List datasets and create, read, update, and delete their records. |
 | [Contacts](resources/contacts.md) | Read your organization's contacts. |
 | [Sites & form submissions](resources/sites.md) | List sites and read their form submissions. |
+| [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes. |
+| [Products](resources/products.md) | Read a site's catalog — variants, prices, stock levels. |
+| [Media](resources/media.md) | List files in the organization library and in each site's media. |
+
+Orders and products need a plan that includes **commerce**, in addition to their
+scope — see each page's plan note.
 
 For event-driven integrations, see [Webhooks](integrations/webhooks.md) — push instead
 of poll.
