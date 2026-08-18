@@ -29,12 +29,16 @@
  * override is a separate `if (override) setDefaultEventParameters(...)` next to
  * the existing effect. It works until the token resolves — and then the claims
  * branch, which CLEARS the parameter explicitly on its negative path (the
- * console does not remount across a re-auth, AGL-664), wipes it. The wipe
- * happens precisely in the case the override exists for: a non-staff test
- * account. So every `setDefaultEventParameters` in the effect is required to
- * account for the override, which is asserted structurally rather than
- * behaviourally because it is a property of ALL of them, including ones not
- * written yet.
+ * console does not remount across a re-auth, AGL-664), wipes it, precisely in
+ * the case the override exists for: a non-staff test account.
+ *
+ * That is also a RACE, not only a logic error, and the reason this is now a
+ * shared invariant (AGL-2087): `setDefaultEventParameters` ASSIGNS rather than
+ * merges before gtag is wrapped, so two callers during boot means whichever
+ * loses silently drops the other's params. AGL-2087 folds `page_title` into
+ * the same object for that reason. So what is pinned is that the whole file
+ * has exactly ONE call site and every write goes through the helper in front
+ * of it — a property a new param inherits without anyone remembering to.
  *
  * **2. Effect order.** The override can be read synchronously, so unlike the
  * token it can land before the console's manual `page_view`. That only holds
@@ -103,29 +107,32 @@ describe('the internal-traffic override (AGL-2065)', () => {
     )
   })
 
-  it('leaves NO clear of the parameter that ignores the override', () => {
-    // Failure mode 1, stated as the property that actually matters: a call
-    // that can set the parameter to `undefined` must consult `override`
-    // first. Otherwise it deletes the stamp the moment a non-staff token
-    // resolves — which is the exact session the override exists for.
-    const calls = argumentsOf(trafficEffect(), 'setDefaultEventParameters')
-    // Three today (no-account, resolved, rejected); asserted over however
-    // many there turn out to be, so a fourth inherits the rule.
-    expect(calls.length).toBeGreaterThanOrEqual(3)
-    const clears = calls.filter((call) => /undefined/.test(call))
-    expect(clears.length).toBeGreaterThanOrEqual(3)
-    for (const call of clears) {
-      expect([call, /override/.test(call)]).toEqual([call, true])
-    }
+  it('writes the default parameters from exactly ONE call site', () => {
+    // Failure mode 1, and a shared invariant rather than tidiness (AGL-2087).
+    // `setDefaultEventParameters` ASSIGNS rather than merges before gtag is
+    // wrapped, so two callers racing during boot means whichever loses
+    // silently drops the other's params — and dropping `traffic_type` puts our
+    // own browsing back into the launch metrics, irreversibly. It is also the
+    // logic bug: a clear that did not consult the override would wipe it the
+    // moment a non-staff token resolved, which is the exact session the
+    // override exists for.
+    const wholeFile = argumentsOf(source, 'setDefaultEventParameters')
+    expect(wholeFile).toHaveLength(1)
+    // And that one call is the composed helper, not a literal.
+    expect(trafficEffect()).toMatch(
+      /const\s+stamp\s*=\s*\(internal:\s*boolean\)\s*=>\s*\n?\s*setDefaultEventParameters/,
+    )
   })
 
-  it('stamps from the override alone, before any token exists', () => {
-    // The other half: at least one call must be reachable with no account at
-    // all, which is what covers a signed-out console tab and the window
-    // before sign-in completes.
-    expect(trafficEffect()).toMatch(
-      /if\s*\(override\)\s*\{?\s*setDefaultEventParameters/,
-    )
+  it('routes every write through that helper, override included', () => {
+    const body = trafficEffect()
+    const writes = body.match(/\bstamp\(/g) ?? []
+    // Sync pre-token, resolved, rejected. Asserted as a floor so a fourth
+    // path inherits the rule rather than escaping it.
+    expect(writes.length).toBeGreaterThanOrEqual(3)
+    for (const call of argumentsOf(body, 'stamp')) {
+      expect([call, /override/.test(call)]).toEqual([call, true])
+    }
   })
 
   it('composes with the claims predicate by OR, not instead of it', () => {
@@ -135,15 +142,15 @@ describe('the internal-traffic override (AGL-2065)', () => {
     )
   })
 
-  it('sets the parameter from the override BEFORE awaiting the token', () => {
+  it('stamps from the override alone, before the token is read', () => {
     const body = trafficEffect()
-    const firstSet = body.indexOf('setDefaultEventParameters')
+    const firstWrite = body.indexOf('stamp(override)')
     const tokenRead = body.indexOf('getIdTokenResult')
-    expect(firstSet).toBeGreaterThan(-1)
+    expect(firstWrite).toBeGreaterThan(-1)
     expect(tokenRead).toBeGreaterThan(-1)
     // A token read cannot be made synchronous, so the claims path keeps
     // AGL-1582's accepted first-hit race. The override path need not.
-    expect(firstSet).toBeLessThan(tokenRead)
+    expect(firstWrite).toBeLessThan(tokenRead)
   })
 
   it('is declared above the page_view effect, which is what makes that work', () => {

@@ -20,7 +20,14 @@
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
-import { INTERNAL_TRAFFIC_GTAG_SNIPPET } from '@aglyn/aglyn/app-utils/internal-traffic'
+import {
+  INTERNAL_TRAFFIC_FORCED_SNIPPET,
+  INTERNAL_TRAFFIC_GTAG_SNIPPET,
+} from '@aglyn/aglyn/app-utils/internal-traffic'
+import {
+  analyticsEnvironmentForcesInternal,
+  analyticsMayEmit,
+} from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
   GA_CONSENT_DEFAULT_SNIPPET,
   hostConsentRequired,
@@ -302,8 +309,20 @@ export default function SiteAnalytics({
           and their property gets no opinion of ours stamped on it: wrongly
           flagging a real visitor erases them from every report and a GA4 data
           filter is not retroactive, so the id equality is the guard that keeps
-          the expensive direction unreachable. */}
-      {gaMeasurementId && analyticsAllowed ? (
+          the expensive direction unreachable.
+
+          `analyticsMayEmit()` on the render condition (AGL-2067) is the OTHER
+          half, and it is the half that needs nobody's click: a stamp only
+          separates our traffic once the GA4 data filter exists, while a tag
+          that was never mounted sends nothing today. `next dev` and Vercel
+          preview builds resolve `aglyn.com`'s host document and its platform
+          measurement id exactly as production does, so without this they
+          reported as real visits. When the escape hatch deliberately re-enables
+          a non-production build, the stamp becomes UNCONDITIONAL rather than
+          opt-in — a build that emits because someone asked it to is ours by
+          definition, and the hatch must not reopen the hole it stands beside.
+      */}
+      {gaMeasurementId && analyticsAllowed && analyticsMayEmit() ? (
         <>
           <Script id="ga-init" strategy="afterInteractive">
             {'window.dataLayer=window.dataLayer||[];' +
@@ -314,7 +333,9 @@ export default function SiteAnalytics({
               // evaluated in the browser and why its position in the snippet
               // is the whole of its correctness.
               (gaMeasurementId === PLATFORM_GA_MEASUREMENT_ID
-                ? INTERNAL_TRAFFIC_GTAG_SNIPPET
+                ? analyticsEnvironmentForcesInternal()
+                  ? INTERNAL_TRAFFIC_FORCED_SNIPPET
+                  : INTERNAL_TRAFFIC_GTAG_SNIPPET
                 : '') +
               "gtag('js', new Date());" +
               // `content_group: 'marketing'` on OUR property only (AGL-1857):

@@ -90,6 +90,21 @@ module.exports = withAglyn({
   // experimental: { appDir: isProduction },
   env: {
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
+    // Which deployment this build IS, in the CLIENT bundle (AGL-2067).
+    //
+    // `analyticsMayEmit` has to refuse a Vercel PREVIEW build, and a preview
+    // build has `NODE_ENV === 'production'` — it is a production build of a
+    // non-production deployment — so `NODE_ENV` alone cannot see it. `VERCEL_ENV`
+    // can, but it is server-only: Next inlines `NEXT_PUBLIC_*` into browser code
+    // and nothing else, so read from a client component it is simply undefined.
+    //
+    // Mapped explicitly here rather than relying on Vercel's "automatically
+    // expose System Environment Variables" project setting. That setting is a
+    // dashboard checkbox no spec in this repo can see, and a gate that is
+    // silently not there is the failure mode this whole issue is about.
+    // Undefined off Vercel, which `analyticsMayEmit` reads as "unknown
+    // deployment" and lets emit — the self-host default.
+    NEXT_PUBLIC_DEPLOY_ENV: process.env.VERCEL_ENV,
   },
   /**
    * The routes that call into `sharp` (AGL-1471, extended by AGL-1476).

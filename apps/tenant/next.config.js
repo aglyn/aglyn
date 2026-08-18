@@ -32,5 +32,9 @@ module.exports = withAglyn({
     AGLYN_TENANT_HOST_URL: process.env.AGLYN_TENANT_HOST_URL,
     AGLYN_TENANT_HOST_CNAME: process.env.AGLYN_TENANT_HOST_CNAME,
     AGLYN_TENANT_PUBLIC_KEY: process.env.AGLYN_TENANT_PUBLIC_KEY,
+    // Which deployment this build IS, in the CLIENT bundle (AGL-2067). See
+    // `apps/console/next.config.js` for why `VERCEL_ENV` has to be mapped
+    // explicitly rather than read directly or assumed to be auto-exposed.
+    NEXT_PUBLIC_DEPLOY_ENV: process.env.VERCEL_ENV,
   },
 })

@@ -192,4 +192,16 @@ export const INTERNAL_TRAFFIC_GTAG_SNIPPET =
   `gtag('set',{'${INTERNAL_TRAFFIC_PARAM}':'${INTERNAL_TRAFFIC_VALUE}'});` +
   '}catch(e){}'
 
+/**
+ * The stamp with no opt-in check at all, for a build that has already decided
+ * every one of its hits is ours (AGL-2067).
+ *
+ * Used only where `analyticsEnvironmentForcesInternal()` holds: a
+ * non-production build running with the analytics escape hatch on. Nobody
+ * reaches that state by accident, so consulting the browser as well would only
+ * create a way for it to be wrong.
+ */
+export const INTERNAL_TRAFFIC_FORCED_SNIPPET =
+  `gtag('set',{'${INTERNAL_TRAFFIC_PARAM}':'${INTERNAL_TRAFFIC_VALUE}'});`
+
 export default readInternalTrafficOverride

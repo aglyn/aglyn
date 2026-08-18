@@ -67,6 +67,35 @@ async function renderPage(host: Record<string, any>) {
 const initScriptText = () =>
   screen.queryByTestId('ga-init')?.textContent ?? ''
 
+
+/**
+ * These cases describe a PRODUCTION deployment, and now have to say so
+ * (AGL-2067): outside one, `analyticsMayEmit()` is false and no tag is
+ * created at all. Declared per file rather than in a jest setup, because
+ * `NODE_ENV` changes far more than analytics and a global override would
+ * quietly move other behaviour under every spec in the repo.
+ */
+/**
+ * `process.env` is typed read-only for `NODE_ENV` in this app (Next ships that
+ * declaration), and these cases have to state which deployment they describe
+ * — see AGL-2067. One narrow cast, named, rather than one per assignment.
+ */
+const mutableEnv = process.env as Record<string, string | undefined>
+
+const savedEnv = {
+  nodeEnv: process.env.NODE_ENV,
+  deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+}
+beforeAll(() => {
+  mutableEnv.NODE_ENV = 'production'
+  process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'
+})
+afterAll(() => {
+  mutableEnv.NODE_ENV = savedEnv.nodeEnv
+  if (savedEnv.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+  else process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
+})
+
 describe("content_group: 'marketing' on the platform property only (AGL-1857)", () => {
   afterEach(() => {
     window.localStorage.clear()

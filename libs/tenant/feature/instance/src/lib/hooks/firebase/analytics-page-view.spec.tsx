@@ -39,6 +39,7 @@
  */
 
 import { render } from '@testing-library/react'
+import { ANALYTICS_ALLOW_NONPROD_ENV } from '@aglyn/aglyn/app-utils/analytics-environment'
 import { FirebaseServicesProvider } from './firebase-services'
 
 /**
@@ -117,6 +118,28 @@ function mountProvider(): void {
   )
 }
 
+
+/**
+ * These cases describe a PRODUCTION deployment, and now have to say so
+ * (AGL-2067): outside one, `analyticsMayEmit()` is false and no tag is
+ * created at all. Declared per file rather than in a jest setup, because
+ * `NODE_ENV` changes far more than analytics and a global override would
+ * quietly move other behaviour under every spec in the repo.
+ */
+const savedEnv = {
+  nodeEnv: process.env.NODE_ENV,
+  deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+}
+beforeAll(() => {
+  process.env.NODE_ENV = 'production'
+  process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'
+})
+afterAll(() => {
+  process.env.NODE_ENV = savedEnv.nodeEnv
+  if (savedEnv.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+  else process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
+})
+
 describe('console analytics boot (AGL-1643)', () => {
   beforeEach(() => {
     initializeAnalytics.mockClear()
@@ -161,5 +184,89 @@ describe('console analytics boot (AGL-1643)', () => {
 
     expect(initializeAnalytics).toHaveBeenCalled()
     expect(getAnalytics).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * And the same boot, refused (AGL-2067).
+ *
+ * This provider used to call `initializeAnalytics` unconditionally, while
+ * `apps/console/.env.development.local` points at the PRODUCTION measurement
+ * id — so every `next dev` session and every Vercel preview build produced
+ * real `session_start` / `first_visit` / `page_view` hits in the live
+ * property. The archived Marketing property's whole year-to-date history is
+ * mostly preview `/signin` views, which is what that looks like from the
+ * reporting side.
+ *
+ * NOT initialized rather than initialized-and-suppressed: a resident tag
+ * reports on its own (AGL-1608 is the same lesson from the consent side), and
+ * `useAnalytics()` returning undefined is already a supported state
+ * everywhere (AGL-1979) — which is what makes this a two-line gate rather
+ * than an audit.
+ *
+ * Planted reds, verified: drop the `analyticsMayEmit()` condition → the dev
+ * and preview cases; make the escape hatch unconditional → nothing, which is
+ * why the production case above is asserted in the same file.
+ */
+describe('analytics is not booted outside production (AGL-2067)', () => {
+  const saved = {
+    nodeEnv: process.env.NODE_ENV,
+    deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+    hatch: process.env[ANALYTICS_ALLOW_NONPROD_ENV],
+  }
+
+  function inEnv(env: {
+    nodeEnv: string
+    deployEnv?: string
+    hatch?: string
+  }): void {
+    process.env.NODE_ENV = env.nodeEnv
+    if (env.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+    else process.env.NEXT_PUBLIC_DEPLOY_ENV = env.deployEnv
+    if (env.hatch === undefined) delete process.env[ANALYTICS_ALLOW_NONPROD_ENV]
+    else process.env[ANALYTICS_ALLOW_NONPROD_ENV] = env.hatch
+  }
+
+  beforeEach(() => {
+    initializeAnalytics.mockClear()
+    getAnalytics.mockClear()
+  })
+
+  afterEach(() => {
+    process.env.NODE_ENV = saved.nodeEnv
+    if (saved.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+    else process.env.NEXT_PUBLIC_DEPLOY_ENV = saved.deployEnv
+    if (saved.hatch === undefined) delete process.env[ANALYTICS_ALLOW_NONPROD_ENV]
+    else process.env[ANALYTICS_ALLOW_NONPROD_ENV] = saved.hatch
+  })
+
+  it('boots nothing under next dev', () => {
+    inEnv({ nodeEnv: 'development' })
+    mountProvider()
+    expect(initializeAnalytics).not.toHaveBeenCalled()
+    // And not through the fallback door either — that would boot a tag with
+    // NO config, i.e. one that also sends the startup page_view.
+    expect(getAnalytics).not.toHaveBeenCalled()
+  })
+
+  it('boots nothing on a Vercel preview, whose NODE_ENV is production', () => {
+    inEnv({ nodeEnv: 'production', deployEnv: 'preview' })
+    mountProvider()
+    expect(initializeAnalytics).not.toHaveBeenCalled()
+    expect(getAnalytics).not.toHaveBeenCalled()
+  })
+
+  it('boots on an unknown production deployment — the self-host default', () => {
+    // Their Firebase project and their GA property; our leak must not be
+    // fixed by silencing a customer's analytics.
+    inEnv({ nodeEnv: 'production' })
+    mountProvider()
+    expect(initializeAnalytics).toHaveBeenCalled()
+  })
+
+  it('boots when the escape hatch is deliberately set', () => {
+    inEnv({ nodeEnv: 'development', hatch: '1' })
+    mountProvider()
+    expect(initializeAnalytics).toHaveBeenCalled()
   })
 })

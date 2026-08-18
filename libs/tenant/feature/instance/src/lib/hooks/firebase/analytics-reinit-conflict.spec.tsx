@@ -179,6 +179,28 @@ describe('the SDK contract the provider re-enters (characterization)', () => {
   })
 })
 
+
+/**
+ * These cases describe a PRODUCTION deployment, and now have to say so
+ * (AGL-2067): outside one, `analyticsMayEmit()` is false and no tag is
+ * created at all. Declared per file rather than in a jest setup, because
+ * `NODE_ENV` changes far more than analytics and a global override would
+ * quietly move other behaviour under every spec in the repo.
+ */
+const savedEnv = {
+  nodeEnv: process.env.NODE_ENV,
+  deployEnv: process.env.NEXT_PUBLIC_DEPLOY_ENV,
+}
+beforeAll(() => {
+  process.env.NODE_ENV = 'production'
+  process.env.NEXT_PUBLIC_DEPLOY_ENV = 'production'
+})
+afterAll(() => {
+  process.env.NODE_ENV = savedEnv.nodeEnv
+  if (savedEnv.deployEnv === undefined) delete process.env.NEXT_PUBLIC_DEPLOY_ENV
+  else process.env.NEXT_PUBLIC_DEPLOY_ENV = savedEnv.deployEnv
+})
+
 describe('the provider survives a poisoned app (AGL-1979)', () => {
   it('yields the already-initialized instance instead of undefined', () => {
     // The regression. Before the fix the provider caught the

@@ -28,6 +28,7 @@ import {
   initializeAnalytics as initializeAnalyticsInstance,
 } from 'firebase/analytics'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { analyticsMayEmit } from '@aglyn/aglyn/app-utils/analytics-environment'
 import {
   type Auth,
   connectAuthEmulator,
@@ -371,21 +372,43 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     // reaching for the Hostname dimension. The console is this provider's
     // only consumer, verified by grep — the tenant runtime builds its tag in
     // `site-analytics.tsx` and never passes through here.
+    //
+    // AND NOT AT ALL outside a real production deployment (AGL-2067). This
+    // provider used to boot Analytics unconditionally, while
+    // `apps/console/.env.development.local` points at the PRODUCTION
+    // measurement id — so every `next dev` session and every Vercel preview
+    // build produced genuine `session_start` / `first_visit` / `page_view`
+    // hits in the live property. Not a theory: the archived Marketing
+    // property's entire year-to-date history is 30 views / 6 users, ~24 of
+    // them `/signin` on preview urls (docs/ANALYTICS.md).
+    //
+    // Not initialized rather than initialized-and-suppressed, because a
+    // resident tag reports on its own — AGL-1608 is the same lesson from the
+    // consent side. `useAnalytics()` returning undefined is already a
+    // supported state everywhere (AGL-1979), which is what makes this a
+    // two-line gate instead of an audit.
+    //
+    // `analyticsMayEmit` leans LOUD on an unknown deployment: a self-hosted
+    // build points at the operator's own Firebase project and their own GA
+    // property, and silencing a customer's analytics to protect ours is the
+    // worse failure. See the module for the escape hatch.
     let analytics: Analytics
-    try {
-      analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
-    } catch (error) {
-      console.error(error)
+    if (analyticsMayEmit()) {
       try {
-        // Already initialized by someone else, with someone else's options:
-        // take THAT instance rather than leaving consumers with nothing. The
-        // tag it is attached to was configured without `send_page_view: false`
-        // and without `content_group`, so this session reports a duplicate
-        // startup page_view and an unstamped surface — degraded, and loudly
-        // so, instead of silently dead.
-        analytics = getAnalyticsInstance(app)
-      } catch (fallbackError) {
-        console.error(fallbackError)
+        analytics = initializeAnalyticsInstance(app, CONSOLE_ANALYTICS_OPTIONS)
+      } catch (error) {
+        console.error(error)
+        try {
+          // Already initialized by someone else, with someone else's options:
+          // take THAT instance rather than leaving consumers with nothing. The
+          // tag it is attached to was configured without `send_page_view:
+          // false` and without `content_group`, so this session reports a
+          // duplicate startup page_view and an unstamped surface — degraded,
+          // and loudly so, instead of silently dead.
+          analytics = getAnalyticsInstance(app)
+        } catch (fallbackError) {
+          console.error(fallbackError)
+        }
       }
     }
     // Remote Config (AGL-228): release-flag delivery. Browser-only like

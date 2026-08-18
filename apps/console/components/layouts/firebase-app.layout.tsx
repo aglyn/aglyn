@@ -26,6 +26,7 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { configureAnalyticsTransport } from '@aglyn/aglyn/app-utils/analytics-events'
+import { analyticsEnvironmentForcesInternal } from '@aglyn/aglyn/app-utils/analytics-environment'
 import { NoSsr } from '@mui/material'
 import {
   type Analytics,
@@ -217,26 +218,51 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
   // question — "is this BROWSER ours" — set once with `?aglyn_internal=1` and
   // remembered in localStorage for that origin.
   //
-  // OR'd into the SAME `setDefaultEventParameters` call rather than set
-  // separately, and that is the load-bearing detail: the negative branch here
-  // clears the parameter explicitly (the console does not remount across a
-  // re-auth, AGL-664), so an override written by a second call would be wiped
-  // the moment the token resolved to a customer — which is exactly the session
-  // the override exists for.
-  //
-  // Applied SYNCHRONOUSLY before the token read as well as after it. This
-  // effect is declared above the `page_view` effect below and React runs
-  // effects in declaration order, so an overridden browser stamps its own
-  // cold-load pageview — closing, for this path only, the first-hit race
-  // AGL-1582 accepted for the claims path (a token read cannot be made
-  // synchronous, so that one stands).
+  // OR'd into the parameter every write already computes, rather than written
+  // by a second caller, and that is the load-bearing detail twice over. The
+  // negative branch clears the parameter explicitly (the console does not
+  // remount across a re-auth, AGL-664), so an override set separately would be
+  // wiped the moment the token resolved to a customer — the exact session it
+  // exists for. And `setDefaultEventParameters` ASSIGNS rather than merges
+  // before gtag is wrapped (AGL-2087), so a second caller is a race as well as
+  // a logic error. See `stamp` below.
   useEffect(() => {
-    const override = readInternalTrafficOverride()
-    if (override) {
+    // `analyticsEnvironmentForcesInternal` (AGL-2067) is the escape hatch's
+    // other half: a non-production build only reaches this component at all
+    // when someone deliberately turned analytics back on for it, and such a
+    // build is ours by definition — so it stamps unconditionally rather than
+    // waiting to be opted in, and the hatch cannot become the leak it stands
+    // beside.
+    const override =
+      readInternalTrafficOverride() || analyticsEnvironmentForcesInternal()
+
+    // ONE call site, and it is a shared invariant now rather than a tidiness
+    // preference (AGL-2087). `@firebase/analytics`:
+    //
+    //   function setDefaultEventParameters(customParams) {
+    //     if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
+    //     else _setDefaultEventParametersForInit(customParams)  // ASSIGNMENT
+    //   }
+    //
+    // Before gtag is wrapped it REPLACES the pending default set instead of
+    // merging into it, so two callers racing during boot means whichever
+    // loses silently drops the other's params. Dropping `traffic_type` puts
+    // our own browsing back into the launch metrics, irreversibly — a GA4
+    // data filter is not retroactive. AGL-2087 folds `page_title` in here for
+    // the same reason; keeping every write behind this one function is what
+    // makes that a one-line change rather than a fourth race.
+    const stamp = (internal: boolean) =>
       setDefaultEventParameters({
-        [INTERNAL_TRAFFIC_PARAM]: INTERNAL_TRAFFIC_VALUE,
+        [INTERNAL_TRAFFIC_PARAM]: internal ? INTERNAL_TRAFFIC_VALUE : undefined,
       })
-    }
+
+    // Applied on the best answer available RIGHT NOW, before the token read.
+    // This effect is declared above the `page_view` effect and React runs
+    // effects in declaration order, so an overridden browser stamps its own
+    // cold-load pageview. The claims half keeps AGL-1582's accepted first-hit
+    // race — a token read cannot be made synchronous.
+    stamp(override)
+
     const account = user?.data as
       | {
           getIdTokenResult?: (
@@ -244,30 +270,18 @@ function AnalyticsBindings({ analytics }: { analytics: Analytics }) {
           ) => Promise<{ claims?: Record<string, unknown> } | undefined>
         }
       | undefined
-    if (!account?.getIdTokenResult) {
-      setDefaultEventParameters({
-        [INTERNAL_TRAFFIC_PARAM]: override ? INTERNAL_TRAFFIC_VALUE : undefined,
-      })
-      return
-    }
+    if (!account?.getIdTokenResult) return
+
     let active = true
     void Promise.resolve(account.getIdTokenResult())
       .then((result) => {
         if (!active) return
-        setDefaultEventParameters({
-          [INTERNAL_TRAFFIC_PARAM]:
-            override || isInternalTrafficSession(result?.claims)
-              ? INTERNAL_TRAFFIC_VALUE
-              : undefined,
-        })
+        stamp(override || isInternalTrafficSession(result?.claims))
       })
       .catch(() => {
-        if (active)
-          setDefaultEventParameters({
-            [INTERNAL_TRAFFIC_PARAM]: override
-              ? INTERNAL_TRAFFIC_VALUE
-              : undefined,
-          })
+        // Unreadable claims are treated as NOT internal, but the override is
+        // knowledge we already have and never loses it.
+        if (active) stamp(override)
       })
     return () => {
       active = false
