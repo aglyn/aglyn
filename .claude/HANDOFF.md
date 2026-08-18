@@ -71,6 +71,40 @@ yourself — it is a claim, not a fact.
 - **`git reset --soft` ROTS the shared checkout** — it was 24 commits stale (119 files, 8792 deletions)
   at session start. Reconcile after any reset; a `--only` commit from a rotted tree reverts shipped work.
 
+## ⚑ TEN ORPHANED COMMITS RESCUED — pick these up AFTER promotion
+
+Found during the final sweep: **10 commits from the PREVIOUS session's worktrees were never on
+`main`** and had been stranded for a full session. The old handoff said "roughly 13 held commits sit
+across 7 worktrees"; nobody reconciled them, and `/private/tmp` worktrees are one cleanup away from
+gone. **Every one is now pushed to a rescue branch on `origin` — they cannot be lost.**
+
+| rescue branch | ahead | what it is |
+|---|---|---|
+| `rescue/AGL-2038` | +1 | **`fix(rules)`: screenAnalytics was editor-writable, and the catch-all grants by default** — a SECURITY fix; rules changes go Done only when DEPLOYED |
+| `rescue/AGL-2000` | +4 | **`fix(bookings,commerce)`: a paid booking states its tax decision, and is recorded** — money path |
+| `rescue/AGL-1993` | +1 | `feat(auth)`: a company domain can require SSO, without making staff require it |
+| `rescue/AGL-2014` | +3 | `docs(selfhost)`: the runbook never deployed indexes or TTL, **and hid five live keys** |
+| `rescue/AGL-2025` | +1 | `feat(tools)`: a source-side hardcoded-colour ratchet the census could never be |
+| `rescue/AGL-2026` | +1 | `refactor(tenant)`: one page chrome for both §512 intakes, guarded against drift |
+| `rescue/AGL-2039` | +1 | `fix(tools)`: the webhook audit could not see a delivery that failed then retried |
+| `rescue/AGL-1913` | +2 | `test(console)`: pin WHICH lock the domain-status route refuses |
+| `rescue/AGL-1957` | +1 | `fix(console)`: the storage consent card refuses to ask for consent it cannot price |
+| `rescue/AGL-2005` | +2 | `test(console)`: pin every staff action to the pool the person signs in to |
+
+**Deliberately NOT merged into the frozen batch** — they are ungated and would have needed re-gating,
+which is what the freeze exists to avoid. After promotion: cherry-pick each onto `main`, confirm the
+work is not already superseded (check by subject AND content — several were superseded once already),
+gate, and promote in the next batch. Delete the rescue branch once its work is an ancestor of
+`origin/production`.
+
+⚠️ **Do not clean `/private/tmp` worktrees until these are merged.** Four also carry uncommitted
+files (`agl-allred`, `agl-verify-backend` ×7, `agl-verify-ga4`, `agl-verify-rev`) that were NOT
+rescued — inspect before removing anything.
+
+**Dependabot confirmed 18 → 4** on the default branch (GitHub's own push message: "4 vulnerabilities,
+2 moderate, 2 low"), which is exactly what the monaco 0.55.1→0.56.0 bump predicted. The remaining 4 are
+the deliberately-unpatched DOMPurify advisories with call-site evidence on AGL-2051.
+
 ## After promotion, in order
 
 1. Verify **DEPLOYED**, not merged (Vercel CLI prints to STDERR; `gh api` cannot poll it).
