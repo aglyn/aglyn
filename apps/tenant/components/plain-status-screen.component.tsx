@@ -31,9 +31,22 @@ import type { ReactNode } from 'react'
  * unstyled. So this is plain elements and inline styles: the one thing every
  * one of those boundaries can definitely paint.
  *
- * Dark mode comes from `color-scheme` plus `currentColor`-relative values
- * rather than a media query per rule, so the page follows the visitor's OS
- * preference without a stylesheet or a hydration-sensitive class.
+ * ## Dark mode needs a real stylesheet here
+ *
+ * The first cut set `color-scheme: light dark` on the wrapper and leaned on
+ * inherited colors. Measured in a dark-scheme browser: **black text on the
+ * browser's black canvas**, completely unreadable. `color-scheme` changes the
+ * UA's default colors for the ROOT element, and a `<div>` deep in the page
+ * cannot claim the canvas — meanwhile `color` stayed at its initial black. A
+ * status page that is invisible in dark mode is a worse failure than the
+ * framework page it replaces, and it is invisible to markup review.
+ *
+ * So the colors are declared, in an inline `<style>` with a
+ * `prefers-color-scheme` block, scoped to one class. A stylesheet rather than
+ * inline style attributes because a media query cannot live in `style=`, and
+ * an inline `<style>` rather than emotion because `global-error` runs with no
+ * emotion cache at all. No class toggling and no script, so nothing here can
+ * mismatch between server and client.
  *
  * ## Why it names no platform
  *
@@ -47,6 +60,22 @@ import type { ReactNode } from 'react'
  * The copy is deliberately generic about the operator too ("this site"),
  * because on `global-error` we genuinely do not know whose site it is.
  */
+const ROOT_CLASS = 'aglyn-status-screen'
+
+/**
+ * Light values on the bare class, dark values behind the media query — so a
+ * browser that never evaluates the query still gets a fully specified page,
+ * and one that does gets legible text on a dark ground.
+ */
+const STYLES = `
+.${ROOT_CLASS} { background: #ffffff; color: #101114; }
+.${ROOT_CLASS} a, .${ROOT_CLASS} button { border-color: rgba(16, 17, 20, 0.32); }
+@media (prefers-color-scheme: dark) {
+  .${ROOT_CLASS} { background: #101114; color: #f2f3f5; }
+  .${ROOT_CLASS} a, .${ROOT_CLASS} button { border-color: rgba(242, 243, 245, 0.36); }
+}
+`
+
 export function PlainStatusScreen({
   code,
   title,
@@ -60,6 +89,7 @@ export function PlainStatusScreen({
 }) {
   return (
     <div
+      className={ROOT_CLASS}
       style={{
         colorScheme: 'light dark',
         minHeight: '100dvh',
@@ -74,6 +104,7 @@ export function PlainStatusScreen({
           'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: STYLES }} />
       <p
         style={{
           margin: 0,
@@ -118,7 +149,8 @@ export function PlainStatusScreen({
             display: 'inline-block',
             padding: '0.6rem 1.1rem',
             borderRadius: '0.5rem',
-            border: '1px solid currentColor',
+            borderStyle: 'solid',
+            borderWidth: '1px',
             textDecoration: 'none',
             color: 'inherit',
             fontWeight: 500,

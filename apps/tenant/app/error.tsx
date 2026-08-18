@@ -62,7 +62,8 @@ export default function RootError({
           style={{
             padding: '0.6rem 1.1rem',
             borderRadius: '0.5rem',
-            border: '1px solid currentColor',
+            borderStyle: 'solid',
+            borderWidth: '1px',
             background: 'transparent',
             color: 'inherit',
             font: 'inherit',
