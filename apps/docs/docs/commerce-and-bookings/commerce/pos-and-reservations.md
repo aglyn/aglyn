@@ -72,6 +72,15 @@ For stays (cabins, rooms, rentals):
    (with a folio summary if the guest charged store purchases to the
    room), walk-ins, no-shows, and cancellations.
 
+:::info Deposits need a plan with commerce
+Taking a **reservation deposit** is a sale, and it is checked against your plan
+at the moment a guest tries to pay — not just when you added the widget. On a
+plan without commerce the widget still renders but checkout answers
+"Reservations are not enabled". Enabling the plugin is your switch; including
+commerce is your plan's. See
+[downgrading](/workspace-and-billing/billing-and-plans/downgrading-and-canceling#what-changes-on-a-downgrade).
+:::
+
 ## Related
 
 - [Commerce overview](overview.md)
