@@ -541,8 +541,14 @@ async function handler(request: Request): Promise<Response> {
         email,
         // AGL-1131 — read from wherever the provider put them. An SSO user
         // accepting an invite joined the roster nameless and faceless.
-        displayName: resolveIdpDisplayName(decoded) || null,
-        photoURL: resolveIdpPhotoUrl(decoded) || null,
+        //
+        // `undefined`, not `null`, when the assertion carries nothing
+        // (AGL-1961): `upsertOrgMember` treats `null` as "clear it". This
+        // branch is not gated on the member being new — an existing member
+        // re-accepting an invite would otherwise have the name and photo
+        // already on their row wiped by a provider that simply sends neither.
+        displayName: resolveIdpDisplayName(decoded) || undefined,
+        photoURL: resolveIdpPhotoUrl(decoded) || undefined,
         invitedBy: invite['invitedBy'] ?? null,
       })
       await invitesRef.doc(inviteId).set(
