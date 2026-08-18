@@ -51,4 +51,18 @@ describe('console web-vitals wiring (AGL-1642)', () => {
     expect(component).not.toMatch(/useEffect/)
   })
 
+  it('the tenant runtime installs the same reporter with the site surface', () => {
+    // Cross-app source assertion, matching how the tenant independence spec
+    // reads console files: the two surfaces must stay on the same module so
+    // the event shape cannot fork.
+    const siteAnalytics = read(
+      '../../tenant/app/[host]/[[...slug]]/site-analytics.tsx',
+    )
+    expect(siteAnalytics).toMatch(
+      /from '@aglyn\/aglyn\/app-utils\/web-vitals-rum'/,
+    )
+    expect(siteAnalytics).toMatch(
+      /installWebVitalsReporting\(\{ surface: 'site' \}\)/,
+    )
+  })
 })
