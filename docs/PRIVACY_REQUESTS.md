@@ -117,6 +117,8 @@ reversible-where-it-matters, and need no staff involvement:
 | **Erasure — account** | `/manage/user` → "Close account" → **Close account permanently** | Password or re-auth popup, plus typing `DELETE`. Refuses while they solely own an org, **naming which** |
 | **Erasure — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Delete organization** | Owner only; type the org name; the retention funnel; then a **7-day reversible hold** with a **Cancel deletion** button |
 | **Erasure — one site** | `/[orgSlug]/hosts/[host]/admin` → **Delete site** | Site admin. Immediate, no hold |
+| **Access / portability — person** | `/manage/user` → **Close account** tab → **Download my data** | Machine-readable JSON, served to their own session. Excludes colleagues' data; never reproduces a secret |
+| **Access / portability — workspace** | `/[orgSlug]/settings` → **Delete** tab → **Download workspace data** | Owner or admin. No plan gate — a statutory right is not a feature |
 | **Rectification** | `/manage/user` and org settings | Self-service |
 | **Call/text opt-out** | reply STOP, or ask us — §5 | |
 
@@ -129,11 +131,51 @@ wrong account.
 
 ### Access ("what do you hold about me")
 
-There is **no export capability** — see AGL-1974. This is assembled by hand
-today. Work the list in §"Where to look" below, in order, and paste the result
-into the reply. Do not paste raw documents: strip internal ids that mean
-nothing to the subject, and never include another person's data that happens to
-sit in the same record (a members roster, a support thread with two authors).
+**Offer self-serve first — it is a stronger answer, not merely an easier one.**
+`/manage/user` → Close account → **Download my data** produces a
+machine-readable JSON copy, served to the account's own signed-in session, so
+it cannot act on the wrong account. Owners get the whole workspace from
+**Settings → Delete → Download workspace data**. Reply with the link and the
+exact button name.
+
+When they cannot sign in, run the same assembly yourself (AGL-1974):
+
+```bash
+set -a && source .env && set +a
+node tools/scripts/subject-access.mjs --email <address>          # to stdout
+node tools/scripts/subject-access.mjs --uid <uid> --out dsar.json
+node tools/scripts/subject-access.mjs --org <orgId> --out org.json
+```
+
+The script **calls `exportUserData`/`exportOrgData`** — the same functions the
+two routes call — so the manual path and the self-serve one cannot drift. This
+is the `erase-tenant.mjs` lesson applied before it bit: a second enumeration of
+the same collections under-discloses silently, and the symptom is a file that
+looks complete.
+
+`--email` resolves across the project pool **and** every SSO tenant pool
+(AGL-1122). No account for that address is a complete answer — reply with it,
+and do not ask for identity documents to prove a negative.
+
+What the export already handles, so you do not have to:
+
+* **Another person's data.** A person's export carries only the support
+  messages they wrote themselves, never a colleague's replies, and never the
+  org roster. An org export is a separate call with a separate authorization.
+* **Secrets.** API keys, webhook secrets, password hashes, SSO tokens and
+  payment links are reported as *present* and never reproduced. An API key's
+  document id is withheld too — it is the SHA-256 of the token.
+* **Staff-only records.** `adminAudit` is excluded, with the reason stated in
+  the file's own `coverage` block.
+
+⚠️ **The file is the most personal payload the platform produces.** Send it to
+the verified subject through a channel you would send a password reset through,
+and delete your local copy. Do not attach it to a ticket.
+
+Still do this by hand: strip internal ids that mean nothing to the subject if
+they ask for something readable rather than machine-readable, and read §"Where
+to look" below to check the export against the estate — it is the list the
+export's own coverage guard is held to.
 
 ### Erasure, when self-serve cannot reach them
 
@@ -193,9 +235,12 @@ if asked; the honest answer is better than an implied capability.
 
 ### Portability
 
-Same gap as access (AGL-1974). The site-export feature is **not** this: it is a
-design backup, Pro+, and its own header comment says it *"never includes …
-bookings/leads/submissions (PII)"*. Do not offer it as a portability answer.
+Same answer as access — the export above is machine-readable JSON, which is
+the Art. 20 wording (AGL-1974).
+
+The **site-export** feature is still not this and must not be offered as one:
+it is a design backup, Pro+, and its own header comment says it *"never
+includes … bookings/leads/submissions (PII)"*.
 
 ### Phone: "stop calling me" vs "delete my number"
 
@@ -295,8 +340,11 @@ The requester is a visitor to a customer's site.
 
 ## 7. Logging the request
 
-There is no DSAR register. Until AGL-1974 gives us one, write an `adminAudit`
-row for every action taken and keep the mail thread. What the record must
+There is no DSAR register. Every export now writes its own `adminAudit` row —
+`account.exported.self` or `org.exported`, carrying which sources were read and
+how many documents, never their content (AGL-1443) — so the access half is
+recorded automatically. Write a row for every OTHER action taken and keep the
+mail thread. What the record must
 contain: **when it arrived**, what was asked, how identity was verified, what
 was done, and when the reply went out. That set is what an audit or a
 supervisory-authority query will ask for, and reconstructing it later from
@@ -309,13 +357,12 @@ comfortably outlives the response window.
 
 | | Filed |
 | --- | --- |
-| We cannot export a person's data. Access and portability are answered by hand. | AGL-1974 |
 | We do not know that `privacy@aglyn.com` receives mail. | AGL-1973 |
 | ~~Erasure does not reach `profiles`, `publisherProfiles` or `publisherHandles`.~~ **Closed 2026-08-18 (AGL-1970)** — all three are swept, and a surviving marketplace listing leaves only a content-free tombstone. | AGL-1970 |
 | ~~Erasure does not reach `supportTickets`.~~ **Closed 2026-08-18 (AGL-1971).** One caveat to say accurately if asked: erasing a **person** redacts their name and email from support threads but does not delete the threads — those belong to the workspace, and only the workspace can ask for them. | AGL-1971 |
 | Assist Q&A has no retention period. | AGL-1972 |
 | Restriction and objection have no product representation. | — |
-| There is no DSAR register. | AGL-1974 |
+| There is no DSAR register, though every export and every erasure writes an `adminAudit` row. | — |
 
 Last reviewed **2026-08-18** against Privacy Policy **v4** and the live DPA.
 Terms v5 and a privacy update were publishing the same day — re-read §7 and §5

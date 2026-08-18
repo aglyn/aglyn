@@ -81,6 +81,7 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import CloseAccountCard from '../../../../components/close-account-card.component'
+import DataExportCard from '../../../../components/data-export-card.component'
 import PasskeysCard from '../../../../components/passkeys-card.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -807,7 +808,17 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     {
       id: 'close',
       label: 'Close account',
-      content: <CloseAccountCard user={user} hasPassword={hasPassword} />,
+      // The export sits directly ABOVE the irreversible control (AGL-1974).
+      // The Close account card has always told people to export first and
+      // there was nothing to export with; putting the answer in the same
+      // panel as the instruction is the difference between an instruction and
+      // an errand.
+      content: (
+        <Stack spacing={3}>
+          <DataExportCard user={user} />
+          <CloseAccountCard user={user} hasPassword={hasPassword} />
+        </Stack>
+      ),
     },
   ]
 
