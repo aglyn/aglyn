@@ -35,13 +35,27 @@ import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  notifyOrgAdmins,
+  notifyStaff,
+} from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   billingAutoLockEnabled,
   shouldAutoLockOrgForBilling,
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
+import {
+  assistCogsAlertThresholdUsd,
+  assistMarginBreach,
+  assistMarginMultiple,
+  budgetAlertDue,
+  BUDGET_GUARD_KEY,
+  orgMonthlySpend,
+  resolveUsageBudget,
+} from '../../../../utils/usage-budget'
+import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
 // the billing auto-lock sweep; gating the locker on the lock is circular.
@@ -371,6 +385,15 @@ async function handler(request: Request): Promise<Response> {
         // the rollup as an internal signal; the dead alert does not.
       ]
 
+      // Frozen once per org, and used by BOTH channels. Billing is org-scoped
+      // now (AGL-621/644); links are frozen at write time, so emit canonical
+      // and let the reader repair the legacy ones.
+      const billingLink = (org.get('slug') as string | undefined)
+        ? buildRoute(Route.MANAGE_BILLING, {
+            orgSlug: org.get('slug') as string,
+          })
+        : '/org/billing'
+
       const guards =
         (orgData['usageAlerts'] as Record<
           string,
@@ -409,32 +432,195 @@ async function handler(request: Request): Promise<Response> {
         //                   to raise the limit", which implies you are stuck.
         //   otherwise    -> the product stops at the band; upgrading is the
         //                   only way through, and always was.
+        // ONE set of words for BOTH channels (AGL-2052). Hoisted rather than
+        // written twice: an email that says something the console does not is
+        // how a customer ends up arguing with support about which one meant
+        // it.
+        const alertTitle =
+          threshold >= 100
+            ? check.billsOverage
+              ? `You're past your included ${check.label} — extra usage is now billed`
+              : `You've reached your ${check.label} limit`
+            : `You're above ${approachPct}% of your ${check.label} quota`
+        const alertBody = check.billsOverage
+          ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
+            `${check.limit}, extra ${check.label} is billed on your ` +
+            'monthly invoice — upgrade in Billing for a bigger allowance, ' +
+            'or set a monthly cap there if you would rather it stopped.'
+          : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
+            'in Billing to raise the limit.'
         await notifyOrgAdmins(org.id, {
           type: 'billing.usage',
-          title:
-            threshold >= 100
-              ? check.billsOverage
-                ? `You're past your included ${check.label} — extra usage is now billed`
-                : `You've reached your ${check.label} limit`
-              : `You're above ${approachPct}% of your ${check.label} quota`,
-          body: check.billsOverage
-            ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
-              `${check.limit}, extra ${check.label} is billed on your ` +
-              'monthly invoice — upgrade in Billing for a bigger allowance, ' +
-              'or set a monthly cap there if you would rather it stopped.'
-            : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-              'in Billing to raise the limit.',
+          title: alertTitle,
+          body: alertBody,
           orgId: org.id,
           // Billing is org-scoped now (AGL-621/644); links are frozen at write
           // time, so emit canonical and let the reader repair the legacy ones.
-          link: (org.get('slug') as string | undefined)
-            ? buildRoute(Route.MANAGE_BILLING, {
-                orgSlug: org.get('slug') as string,
-              })
-            : '/org/billing',
+          link: billingLink,
         })
-        alerted.push({ orgId: org.id, quota: check.key, threshold })
+        // AND BY EMAIL (AGL-2052). This route's header claimed for months
+        // that it "emails org admins"; it never did — `notifyOrgAdmins`
+        // writes `users/{uid}/notifications` and nothing turns that into
+        // mail. So the one pre-invoice warning on the platform reached only
+        // people already signed in and looking at the bell, which is the
+        // audience a push warning is not for. Sequenced AFTER the console
+        // write and independently: mail is best-effort, and a Resend outage
+        // must degrade to what this route did before, not to nothing.
+        const emailed = await emailOrgAdmins({
+          firestore,
+          orgId: org.id,
+          subject: alertTitle,
+          text:
+            `${alertBody}\n\nSee your usage and billing: ` +
+            `${consoleOrigin()}${billingLink}`,
+          context: 'usage-alert',
+        })
+        alerted.push({
+          orgId: org.id,
+          quota: check.key,
+          threshold,
+          emailed: emailed.sent,
+        })
       }
+
+      /*==========================================
+       * USAGE BUDGETS (AGL-1528) — the GCP billing-budget half.
+       *
+       * Zach, 2026-08-18, verbatim: "our usage metering, usage alerts,
+       * budgets for usage alerts, similar to how google cloud charges".
+       *
+       * Everything above answers "am I near a band". A budget answers "what
+       * will I owe", which is a different question and the one a metered
+       * customer actually has: an org at 60% of four bands may owe nothing,
+       * and an org at 101% of one band may owe $40. No sum of percentages
+       * produces dollars.
+       *
+       * NOTHING IS RE-DERIVED HERE. `report-usage` writes `billedCents` onto
+       * `orgs/{id}/usage/{month}` daily — the invoice's own arithmetic — and
+       * `rollup` two screens up is already that document, read for
+       * `dataStorageMb`. A second aggregation is the exact mistake AGL-1371
+       * exists about, and a budget alert quoting a figure the invoice will
+       * not show is worse than no alert because it is believed.
+       *
+       * A budget REFUSES NOTHING. The customer's hard cap lives in
+       * `utils/storage-overage.ts` and is a separate, opt-in control; the
+       * failure mode AGL-1529 rejected on arrival was a spend ceiling that
+       * takes a site down to save $2.
+       *=========================================*/
+      const assistUsageDoc = await org.ref
+        .collection('assistUsage')
+        .doc(month)
+        .get()
+      const spend = orgMonthlySpend({
+        month,
+        rollupBilledCents: rollup?.get('billedCents'),
+        // COMPARED, not trusted. `rollup` is the LATEST usage document by
+        // `computedAt`, which on the first days of a month is still LAST
+        // month's — evaluating August's budget against July's spend would
+        // fire every budget on the platform on the 1st.
+        rollupMonth: rollup?.get('month'),
+        assistEstCostUsd: assistUsageDoc.get('estCostUsd'),
+        assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
+      })
+      const budget = resolveUsageBudget(orgData)
+      const budgetThreshold = budgetAlertDue({
+        spendUsd: spend.totalUsd,
+        budget,
+        guard: guards[BUDGET_GUARD_KEY],
+        month,
+      })
+      if (budgetThreshold) {
+        guardUpdates[BUDGET_GUARD_KEY] = { month, threshold: budgetThreshold }
+        const amount = budget.amountUsd ?? 0
+        const title =
+          budgetThreshold >= 100
+            ? `You've reached your $${amount.toFixed(0)} monthly usage budget`
+            : `You're at ${budgetThreshold}% of your $${amount.toFixed(
+                0,
+              )} monthly usage budget`
+        // The split, because a figure with no breakdown invites the support
+        // ticket asking what the figure was. Assist is named only when it
+        // counts toward the total — quoting a cost the customer is not being
+        // charged would be a surprise bill invented by a notification.
+        const split = spend.assistBilled
+          ? ` ($${spend.meteredUsd.toFixed(2)} metered usage, ` +
+            `$${spend.assistUsd.toFixed(2)} Assist)`
+          : ''
+        const body =
+          `About $${spend.totalUsd.toFixed(2)} of usage so far this month` +
+          `${split}, against the $${amount.toFixed(0)} budget you set. ` +
+          'A budget is a heads-up, not a limit — nothing stops and nothing ' +
+          'is refused. Change or remove it any time in Billing.'
+        await notifyOrgAdmins(org.id, {
+          type: 'billing.usage',
+          title,
+          body,
+          orgId: org.id,
+          link: billingLink,
+        })
+        await emailOrgAdmins({
+          firestore,
+          orgId: org.id,
+          subject: title,
+          text: `${body}\n\nSee your usage and billing: ${consoleOrigin()}${billingLink}`,
+          context: 'usage-budget',
+        })
+        alerted.push({
+          orgId: org.id,
+          quota: BUDGET_GUARD_KEY,
+          threshold: budgetThreshold,
+        })
+      }
+
+      /*==========================================
+       * THE MARGIN GUARD — staff-facing, and the live half of "covers Assist
+       * token spend alike".
+       *
+       * `assistEntitledMonthlyLimit` caps an entitled org at 1,000 MESSAGES a
+       * month. A thousand long, cache-cold, Opus-class exchanges is a
+       * three-figure Anthropic bill against a subscription that did not move,
+       * and no dollar figure anywhere gates it. This is that dollar figure.
+       *
+       * STAFF, not the customer: the org is not being charged for Assist and
+       * has done nothing wrong, so mailing them about our cost would be
+       * alarming and meaningless. Its own guard key, so a staff alert and a
+       * customer budget can never suppress one another.
+       *=========================================*/
+      const assistCogsThreshold = assistCogsAlertThresholdUsd(
+        process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD,
+      )
+      if (
+        assistMarginBreach({
+          assistUsd: spend.assistUsd,
+          thresholdUsd: assistCogsThreshold,
+          guard: guards['assistCogs'],
+          month,
+        })
+      ) {
+        const multiple = assistMarginMultiple(
+          spend.assistUsd,
+          assistCogsThreshold,
+        )
+        guardUpdates['assistCogs'] = { month, threshold: multiple }
+        await notifyStaff({
+          type: 'billing.usage',
+          title: `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`,
+          body:
+            `${org.get('slug') ?? org.id} has run about ` +
+            `$${spend.assistUsd.toFixed(2)} of Aglyn Assist tokens in ` +
+            `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
+            'threshold. Assist is a plan entitlement with no per-token ' +
+            'price, so this is margin, not revenue.',
+          orgId: org.id,
+          link: '/admin/orgs',
+        })
+        alerted.push({
+          orgId: org.id,
+          quota: 'assistCogs',
+          threshold: multiple,
+        })
+      }
+
       if (Object.keys(guardUpdates).length) {
         await org.ref.set(
           { usageAlerts: { ...guards, ...guardUpdates } },
