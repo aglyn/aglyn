@@ -1557,6 +1557,41 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public abuse reports (AGL-1964) — the intake the lockdown levers above
+    // never had. Written by POST /api/report-abuse, which is unauthenticated
+    // by design: the people who find a phishing site on `*.aglyn.app` are a
+    // bank's fraud team, a browser vendor or Safe Browsing, and none of them
+    // has an account here.
+    //
+    // Staff-only READS, for both of the reasons `marketplaceReports` is
+    // staff-only and one more. A row can name its reporter, and letting the
+    // reported party see who reported them invites retaliation — sharper here
+    // than on a marketplace listing, because a DMCA notice carries a real
+    // legal name by statute. And the collection as a whole is a map of which
+    // sites are under suspicion, which would tell an abuser whether they had
+    // been noticed yet.
+    //
+    // Writes closed to EVERYONE including staff clients, the /lockdowns and
+    // /contactSuppressions posture rather than `marketplaceReports`'s. Two
+    // reasons, and the first is the load-bearing one:
+    //
+    //  - **The reporter is not authenticated, so the document id is the only
+    //    thing standing between the queue and a forgery.** The route derives
+    //    it from a one-way hash of (url, category, reporter IP) precisely so
+    //    one source reporting one page repeatedly merges into one row instead
+    //    of looking like a groundswell. A client that could choose its own id
+    //    could manufacture that groundswell against a competitor's site — and
+    //    the queue's whole value is that a human believes it.
+    //  - A staff status change (`open` → `actioned`) is not one document
+    //    write: it is the moment a lockdown or a quarantine gets justified, so
+    //    it goes through an Admin-SDK route that writes the `adminAudit` row
+    //    in the same act. A bare client write would be a decision with no
+    //    record of who made it.
+    match /abuseReports/{reportId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
     // Marketplace purchase records (AGL-46): written only by the Stripe
     // webhook (Admin SDK). Buyers read their own purchases (install
     // gating); sellers read sales of their listings (revenue ledger).

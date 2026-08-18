@@ -2788,6 +2788,75 @@ describe('legal acceptance records are owner-read, never client-written (AGL-150
  * pages — /api/admin/lockdown (Admin SDK) is the only writer, and a bare
  * client write would be a lockdown that looks set and enforces nothing.
  */
+/**
+ * AGL-1964: the public abuse-report queue.
+ *
+ * The reporter is UNAUTHENTICATED — that is the point of the feature, and it
+ * is what makes these rules load-bearing in a way `marketplaceReports`' are
+ * not. There is no verified uid to derive a document id from, so the id is a
+ * one-way hash the route computes; if a client could write here at all it
+ * could choose its own id, and manufacture a groundswell of reports against a
+ * competitor's site. The queue's entire value is that a human believes it.
+ */
+describe('the abuse-report queue is staff-read, nobody-write (AGL-1964)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'abuseReports', 'report-1'), {
+        reference: 'AR-ABC1234567', status: 'open', category: 'phishing',
+        url: 'https://evil.aglyn.app/signin', hostId: HOST,
+        reporterEmail: 'fraud@bank.example',
+        details: 'Copies a bank sign-in page.',
+      })
+    })
+  })
+
+  it('staff read the queue; nobody else does', async () => {
+    await mustAllow(
+      'staff reading an abuse report',
+      getDoc(doc(authed(STAFF, { staff: true }), 'abuseReports', 'report-1')),
+    )
+    // Not even the org that owns the reported site. A row names its reporter
+    // — by real legal name on a DMCA notice, by statute — and showing the
+    // reported party who reported them invites retaliation.
+    for (const uid of [OWNER, EDITOR, VIEWER, OUTSIDER]) {
+      await mustDeny(
+        `${uid} reading an abuse report about their own site`,
+        getDoc(doc(authed(uid), 'abuseReports', 'report-1')),
+      )
+    }
+    await mustDeny(
+      'an anonymous visitor reading the queue',
+      getDoc(doc(env.unauthenticatedContext().firestore(), 'abuseReports', 'report-1')),
+    )
+  })
+
+  it('nobody writes — staff clients included', async () => {
+    // Forging a report is the attack the id hash exists to prevent, so the
+    // create arm matters most.
+    for (const [label, db] of [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['a site owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]) {
+      await mustDeny(
+        `${label} forging an abuse report at a chosen id`,
+        setDoc(doc(db, 'abuseReports', 'forged-1'), {
+          status: 'open', category: 'phishing',
+          url: 'https://competitor.aglyn.app/',
+        }),
+      )
+      await mustDeny(
+        `${label} changing a report's status from the client`,
+        updateDoc(doc(db, 'abuseReports', 'report-1'), { status: 'dismissed' }),
+      )
+      await mustDeny(
+        `${label} deleting a report`,
+        deleteDoc(doc(db, 'abuseReports', 'report-1')),
+      )
+    }
+  })
+})
+
 describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () => {
   const LOCKED_UID = OUTSIDER
   beforeEach(async () => {
