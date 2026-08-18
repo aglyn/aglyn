@@ -28,6 +28,7 @@ import {
   HostThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
+import { HostBrandProvider } from './host-brand.context'
 
 /**
  * Client theme boundary for tenant sites (App Router). Replaces the Pages
@@ -39,6 +40,14 @@ import type { ReactNode } from 'react'
  * The navigation loader (AGL-594) mounts INSIDE the host theme so its
  * blurred `background.paper` scrim and `secondary` progress colors match
  * the site, branded with the host's logo (site name as fallback).
+ *
+ * `HostBrandProvider` publishes that same logo/name pair to the rest of the
+ * tree (AGL-2074). The navigation loader consumed them as props and nothing
+ * else could see them, which left the `not-found`/`error` boundaries — which
+ * get no `params` and so cannot resolve the host themselves — with no way to
+ * wear the site's own mark. Mounted OUTSIDE the loading layout rather than
+ * inside it, so a boundary rendering in place of the page still reads the
+ * brand even when the loader is not on screen.
  */
 export function HostThemeProviders({
   hostTheme,
@@ -59,12 +68,14 @@ export function HostThemeProviders({
       // customizes one value keeps the brand for the rest (AGL-1180).
       baseOptions={[consoleOptions, consoleOptionsDark]}
     >
-      <LoadingLayoutAppComponent
-        brandLogoUrl={brandLogoUrl}
-        brandName={brandName}
-      >
-        {children}
-      </LoadingLayoutAppComponent>
+      <HostBrandProvider brandLogoUrl={brandLogoUrl} brandName={brandName}>
+        <LoadingLayoutAppComponent
+          brandLogoUrl={brandLogoUrl}
+          brandName={brandName}
+        >
+          {children}
+        </LoadingLayoutAppComponent>
+      </HostBrandProvider>
     </HostThemeProvider>
   )
 }
