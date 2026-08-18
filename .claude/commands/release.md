@@ -185,51 +185,110 @@ they already are); `vercel env ls` CANNOT see team-level shared envs (use the RE
 dashboard — a "missing" var may be shared-but-unlinked, which is invisible at runtime until linked
 per-project: the exact AGL-1636/AGL-1846 failure, twice).
 
-## The mandate — Zach's consolidated directive, verbatim (2026-08-17)
+## Workstream I — self-host, white-label, and "the capability is not the feature" ⚑ ADDED 2026-08-18
 
-This is the canonical text, confirmed by Zach as the complete concatenated directive. Every
-workstream above is its distillation; when in doubt, THIS text wins.
+Three of Zach's rules that cut across every other workstream. Treat each as a review lens applied to
+everything the other workstreams touch, not as a separate queue.
 
-> once the background agents are done and the promotion gate is done. Write me a new command to
-> start in a new session, making note that we need to make sure we are completing everything in the
-> backlog and getting things ready to release on Sept 1, spawning each one in a new background
-> agent, completing as many as possible at once, updating linear as we go, file and fix all at the
-> same time and update statuses as we go. We gotta get these things ready to go and be released to
-> the public and start accepting payments, selling marketplace items, and the storefronts of the
-> hosts ready to receive payments and fulfill orders and shipments etc, all of the commerce features
-> and addons and plugins, and our subscription tiers, our usage metering, data analysis and security
-> measure and billing overages etc, and everything else you suggest. We need to make sure we are not
-> losing money when we release and will enable features that will not produce churn but rather
-> commitment and making it more easy to upgrade and not as easy to downgrade similar to how claude
-> subscriptions work etc, I already asked for this before not sure how it was lost, we need to hide
-> the lower tiers or something or make them less visible and make the upgrade paths more visible,
-> then produce a funnel to try and prevent canceling account first by asking for them to complete
-> survey why they are churning or deleting account or canceling account etc and then offer them a
-> smaller subscription tier or a short term discount etc. All of Stripe and staff needs to be
+1. **⚑ A capability is not a feature until the console exposes it.** Zach, verbatim: *"Always make
+   sure features are available in the console and not just that the capability exists, nothing should
+   be like that anyways, if there are any features that are the capability exists but they are not
+   implemented in the UI of the console or where appropriate then we need to add them now."* He raised
+   this after finding computable tax returns existed only as backend capability. **Sweep for the whole
+   class** — every entitlement, add-on, quota, and admin capability with no UI surface — file each,
+   and build the surface in the same pass. Do not close one by documenting it.
+2. **Self-hosting is a headline open-source selling point.** *"anybody can self host Aglyn with docker
+   and bring your own firebase, make sure this is polished."* Two deployment shapes, and every feature
+   must work in both: Aglyn-operated SaaS, and an operator's own Docker + own Firebase + own keys.
+   Anything reaching an Aglyn-operated service must be configurable and optional, degrading cleanly
+   when absent — never a hard dependency, never silently pointed at our infrastructure. **And the
+   self-hoster must never edit source**: *"the self hosted owner should not have to edit the source to
+   update aglyn branded items urls or personal identification items, should move these to env vars."*
+   That includes brand names, URLs, support/abuse addresses, legal-entity identifiers and the DMCA
+   agent block. ⚠️ The `@aglyn.com`-must-use-SSO rule is an Aglyn-operated policy and must never apply
+   to a self-host install.
+3. **Enterprise and agency selling features must actually be proper** — *"including but not limited to
+   white labeling."* Audit what we sell to those two ICPs against what the product does: white-label
+   branding end to end (console chrome, emails, auth screens, published sites, custom domains), agency
+   multi-org management, seat/permission models, SSO, audit trails, DPA/subprocessor material.
+
+## Additions to Workstreams B and C ⚑ ADDED 2026-08-18
+
+- **⚑ The free/hobby tier must HARD CAP so it always actually stays free.** Not a soft warning, not an
+  overage — a hard stop. This is the fail-open class and it is the one that costs real money silently.
+  Verify the cap by forcing the branch, not by reading the constant.
+- **Usage alerts and budgets for usage alerts, modelled on how Google Cloud charges.** Per-org
+  configurable budget thresholds, alerts fired at percentage milestones, visible in the console and
+  delivered by email — for metered usage, overages, and Assist token spend alike. This is both a
+  churn-prevention feature (no surprise bills) and a margin guard.
+
+## Working with Zach ⚑ ADDED 2026-08-18
+
+- **"If you need something from me, then ask me a question and give me options."** Do not block silently
+  and do not present an open-ended question — surface the decision with concrete choices and a
+  recommendation.
+- **Google accounts: `zach@aglyn.com` is NOT the primary account in the browser.** Append `/u/4/` to the
+  address bar or use the account switcher to reach it — for Admin, Drive, Voice, Analytics, anything.
+  An empty Shared-drive list means you are in the wrong slot. The business phone line is readable from
+  Google Voice under `/u/4/` rather than asking Zach for it.
+
+## The mandate — Zach's consolidated directive, verbatim (restated 2026-08-18)
+
+⚑ This is the canonical text, restated and expanded by Zach on 2026-08-18 (it supersedes the 2026-08-17
+version while containing all of it). Every workstream above is its distillation; when in doubt, THIS
+text wins. **Never paraphrase this block, never summarise it away, never let it be lost again** — the
+retention directive in Workstream C was already dropped once.
+
+> make sure we are completing everything in the backlog and getting things ready to release on Sept 1,
+> spawning each one in a new background agent, completing as many as possible at once, updating linear
+> as we go, file and fix new items and suggestions all at the same time and update statuses as we go.
+> We need to make sure the free/hobby tier does hard cap so it always actually stays free.. We gotta
+> get these things ready to go and be released to the public and start accepting payments, selling
+> marketplace items, and the storefronts of the hosts ready to receive payments and fulfill orders and
+> shipments etc, all of the commerce features and addons and plugins, and our subscription tiers, our
+> usage metering, usage alerts, budgets for usage alerts, similar to how google cloud charges, data
+> analysis and security measure and billing overages etc, and everything else you suggest. We need to
+> make sure we are not losing money when we release and will enable features that will not produce
+> churn but rather commitment and making it more easy to upgrade and not as easy to downgrade similar
+> to how claude subscriptions work etc, I already asked for this before not sure how it was lost, we
+> need to hide the lower tiers or something or make them less visible and make the upgrade paths more
+> visible, then produce a funnel to try and prevent canceling account first by asking for them to
+> complete survey why they are churning or deleting account or canceling account etc and then offer
+> them a smaller subscription tier or a short term discount etc. All of Stripe and staff needs to be
 > polished and ready to go. Let's make sure our console and besigner actually match the features we
-> promote in our product mockups/screenshots, don't change the screenshots just make our feature
-> match more similar to what we are advertising. Don't forget you can use my browser to test and use
-> my authentication session, but first try using the local dev environment or emulator environment,
-> you can use my browser to manage anything such as stripe, google cloud, firebase, aglyn, vercel
-> etc, also when looking for env always double check shared/global envs. Don't forget we always need
-> to keep the docs in sync and create new pages and reorganize as necessary, take screenshots of the
+> promote in our product mockups/screenshots, don't change the screenshots just make our feature match
+> more similar to what we are advertising. Don't forget you can use my browser to test and use my
+> authentication session, but first try using the local dev environment or emulator environment, you
+> can use my browser to manage anything such as stripe, google cloud, firebase, aglyn, vercel etc,
+> also when looking for env always double check shared/global envs. Don't forget we always need to
+> keep the docs in sync and create new pages and reorganize as necessary, take screenshots of the
 > browser and make as visualized as possible, you also don't always need screenshot the entire page
 > but can screenshot sections of the site of components, maybe even add outlines and text if need to
 > better visualize and make the image more descriptive or helpful. Add more API's to our customer
 > facing API and document it extremely well. Also add helpful how-to guides and walk through guides
 > and make it easy for anybody but also very descriptive for those who are also technical and need
-> reference guides where necessary etc, also make sure we are updating the tooltip documentation
-> tips across Aglyn. Fix all of the dependabot alerts and prs etc.
+> reference guides where necessary etc, also make sure we are updating the tooltip documentation tips
+> across Aglyn. If you need something from me, then ask me a question and give me options.
 >
-> Also build numerous reports for us in GA, and it can use my browser to do it. Also Add a new
-> console ai generative chat bot helper tool persisted on every page to assist with direction or how
-> to do things, direct them to documentation or help them use aglyn or to automate current view etc
-> create a new element or change the screen design or build page content or build an entire site for
-> them or update attribute value in besigner etc, the expanse of this tool can be entirely up to
-> you, remember we need to make it easy for all 3 of our ICPs, Multi-Site orgs, agencies, and
-> beginner mom and pop or fresh business looking to get started etc. We need to make sure it is easy
-> for someone who doesn't know code and even easier for someone who does know code. We may need to
-> make this a paid feature to keep from costing us too much money and keep our profit margins high,
-> provide all limitations to possibly make a free version available. We will also want to use the
-> data and questions and answers to help better build our docs so we will need to store that info
-> and allow us to learn from it to improve docs and the ai tool.
+> Fix all of the dependabot alerts and prs etc. Also build numerous reports for us in GA, and it can
+> use my browser to do it. Also Add a new console ai generative chat bot helper tool persisted on
+> every page to assist with direction or how to do things, direct them to documentation or help them
+> use aglyn or to automate current view etc create a new element or change the screen design or build
+> page content or build an entire site for them or update attribute value in besigner etc, the expanse
+> of this tool can be entirely up to you, remember we need to make it easy for all 3 of our ICPs,
+> Multi-Site orgs, agencies, and beginner mom and pop or fresh business looking to get started etc. We
+> need to make sure it is easy for someone who doesn't know code and even easier for someone who does
+> know code. We may need to make this a paid feature to keep from costing us too much money and keep
+> our profit margins high, provide all limitations to possibly make a free version available. We will
+> also want to use the data and questions and answers to help better build our docs so we will need to
+> store that info and allow us to learn from it to improve docs and the ai tool. Remember anybody can
+> self host Aglyn with docker and bring your own firebase, make sure this is polished, it is a big
+> selling point for the open source community. This can be self hosted so the self hosted owner should
+> not have to edit the source to update aglyn branded items urls or personal identification items,
+> should move these to env vars. Always double check enterprise and agency selling features are proper,
+> including but not limited to white labeling etc. Always make sure features are available in the
+> console and not just that the capability exists, nothing should be like that anyways, if there are
+> any features that are the capability exists but they are not implemented in the UI of the console or
+> where appropriate then we need to add them now. If you need to access google accounts like admin or
+> drive or whatever, zach@aglyn.com is not the primary google account in the browser, you will need to
+> append the u/4 to the address bar or use the account switcher to use zach@aglyn.com if you need it.
