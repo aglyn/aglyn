@@ -23,6 +23,10 @@ GET  https://app.aglyn.com/api/health/backups  Firestore backup state (AGL-1490)
 GET  https://app.aglyn.com/api/health/signups  org-creation volume (AGL-1536)
 GET  https://app.aglyn.com/api/health/rate-limits
                                                rate-limiter fallbacks (AGL-1693)
+GET  https://app.aglyn.com/api/health/billing  Stripe webhook delivery (AGL-1924)
+GET  https://app.aglyn.com/api/health/error-beacon
+                                               console beacon liveness (AGL-1923)
+GET  https://aglyn.com/api/health/error-beacon tenant beacon liveness (AGL-1923)
 HEAD <any>                                     liveness only, touches nothing
 ```
 
@@ -139,22 +143,21 @@ Console: https://console.cloud.google.com/monitoring/uptime?project=aglyn-main
 | `customer-site` | `demo.aglyn.app/` | 2xx and body contains `Aglyn Demo` | 5 min |
 | `backup-state` | `app.aglyn.com/api/health/backups` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | `signup-volume` | `app.aglyn.com/api/health/signups` | HTTP 2xx and `$.status == "ok"` | 5 min |
-| `rate-limiter` ⚠️ | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `rate-limiter` | `app.aglyn.com/api/health/rate-limits` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `billing-webhook` | `app.aglyn.com/api/health/billing` | HTTP 2xx and `$.status == "ok"` | 5 min |
+| `beacon-heartbeat console` | `app.aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
+| `beacon-heartbeat tenant` | `aglyn.com/api/health/error-beacon` | HTTP 2xx and `$.status == "ok"` | 15 min |
 | Cloud Functions | `execution_count{status != ok}` | > 2 failures in 5 min | metric |
 | Cloud Scheduler | job attempt logged at `severity >= ERROR` | any | log match |
 
 Notes that keep these honest:
 
-- ⚠️ **`rate-limiter` is the only row above that is not yet created in GCP.**
-  The endpoint ships and is spec-covered; the uptime check and its alert policy
-  are a console/API action against production and are owed (AGL-1693). Until
-  that is done the endpoint answers correctly and nobody is listening, which
-  is the same gap AGL-1693 was filed for — one layer up. Create it exactly like
-  `signup-volume`: uptime check on the path, 5-minute period, JSONPath matcher
-  `$.status == "ok"`, notification channel `7043898327231541746`. Prove the
-  path end to end with the forced-failure lever (`RATE_LIMIT_ALARM_MAX_CALLS=-1`
-  in the console's Vercel env → every probe reports degraded → expect the
-  email → unset), which is why that knob exists.
+- `rate-limiter`'s check and policy were created 2026-08-17 (`rate-limits
+  health check failing (AGL-1717)`), closing the gap this note used to
+  describe. The forced-failure lever still exists and is still the way to
+  re-prove the path end to end: `RATE_LIMIT_ALARM_MAX_CALLS=-1` in the
+  console's Vercel env → every probe reports degraded → expect the email →
+  unset.
 - `console-imaging` exists because `imaging.ok` is **deliberately body-only** —
   variant encoding being down is degraded, not an outage, so it must not 503
   the main check. A status-code monitor is blind to it; this check reads the
@@ -225,6 +228,52 @@ Notes that keep these honest:
   alert path, not by taste: 5 min probe memo + 5 min check period + ~10 min
   sustained-failure before the email means anything under ~20 minutes can go
   red and green again before anyone is told.
+- `billing-webhook` is the AGL-1924 standing alarm over the one subsystem
+  where silent failure costs money directly. **Stripe supplies the
+  denominator, and it has to.** `stripeEvents` alone cannot answer this: the
+  webhook returns 400 *before* claiming the idempotency document, so a
+  rejected delivery writes nothing and an empty collection reads identically
+  whether nothing happened or everything was refused. That is exactly how the
+  2026-08-14 checklist tick came out green while AGL-1551 had the live
+  endpoint 400ing 100% of deliveries behind an "Active" badge. The endpoint
+  503s when Stripe holds no endpoint at
+  `https://app.aglyn.com/api/billing/webhook` (`endpoint-missing` — nothing is
+  even being attempted), when Stripe has disabled it (`endpoint-disabled`),
+  when Stripe attempted and **failed** deliveries in the trailing hour
+  (`deliveries-failing` — the AGL-1551 / AGL-1560 shape), or when the census
+  could not be taken at all (`stripe-unavailable`; unknown is never a pass).
+  **It cannot page for lack of business:** the verdict never keys on the
+  absence of events, so a quiet night scores zero failed deliveries and reads
+  healthy for the right reason. Events emitted and events processed are
+  carried in the body for whoever reads the incident and are deliberately not
+  verdict inputs — no defensible floor exists for them until the beta produces
+  a baseline. **Clearing event:** a trailing-hour window with an enabled
+  endpoint and no failed deliveries; everything is a sliding window over live
+  Stripe state, so nothing latches. `npm run audit:stripe-webhook` (AGL-1906)
+  is the deeper point-in-time join to run once this fires, and it owns the
+  subscribed-event-list assertion this check deliberately does not duplicate.
+- `beacon-heartbeat` (console and tenant) is the AGL-1923 dead-man's switch,
+  and it is the only condition in the project that watches for **silence**.
+  Every other log-match policy here can report only the *presence* of an
+  entry: the `Client error beacon` policy fires when a browser error appears,
+  so if the beacon stops writing, that policy goes quiet — and quiet is the
+  reading it also gives on a healthy day. **A dead beacon is
+  indistinguishable from zero errors**, and all three failure paths in
+  `reportClientErrors` end in a `console.warn` to a log that retains an hour
+  and drains nowhere. The endpoint writes one INFO entry to the separate
+  `client-error-beacon-heartbeat` log through the beacon's own credential and
+  transport, and 503s when that write does not land: `no-credential`
+  (the deployment's `FIREBASE_*` admin credential is missing or unparsable),
+  `http-401`/`http-403` (the service account lost `logging.logEntries.create`),
+  `http-429` (Logging quota), `transport-TimeoutError` (Logging unreachable
+  within 4s). **Two deployments, two checks, deliberately** — `/api/errors`
+  exists in both the console and the tenant runtime with different admin
+  credentials, so a console heartbeat proves nothing about the tenant one.
+  **Clearing event:** the next heartbeat write that reaches Cloud Logging;
+  nothing latches, so recovery shows within one probe TTL (5 min) plus one
+  check period (15 min). The heartbeat log id is *not* `client-errors` on
+  purpose — writing there at `severity >= ERROR` would trip the existing
+  policy on every probe, building the alert fatigue this exists to prevent.
 - `customer-site` asserts on the demo site's own content. If someone renames
   the demo site's title away from "Aglyn Demo", this check goes red — update
   the content matcher, don't delete the check.
@@ -234,17 +283,47 @@ Notes that keep these honest:
 
 ### What is deliberately NOT watched (the honest list)
 
-- **Vercel function errors and logs.** Hobby has no log drains — a 500 spike
-  invisible to the health checks (one broken route, one bad deploy path) is
-  observable only by a user report. **Upgrade path:** Vercel Pro unlocks log
-  drains → pipe to GCP Logging → the same alerting stack picks it up.
-- **APM / client-side error tracking.** No Sentry or similar. A browser-side
-  crash in the builder is invisible end to end. Post-launch decision, tracked
-  in AGL-1148's follow-ups; Sentry's free tier (5k events/mo) likely suffices
-  at beta scale.
-- **Email delivery** (Resend outages), **Stripe webhooks**, and **DNS**: no
-  synthetic coverage. Each has failed loudly rather than silently so far;
-  revisit if that stops being true.
+- **The server-side error RATE (AGL-1921).** This is the largest remaining
+  hole and it deserves its own line rather than a clause. Every check above is
+  a *liveness* signal on one URL: they answer "is `/api/health` up", and not
+  one of them can answer "are 30% of checkout requests 500ing". **A route can
+  500 for every paying customer while every check above stays green.** It
+  cannot be built today, and the reason is specific: server errors live in the
+  Vercel runtime log, which retains ~60 minutes and drains nowhere —
+  `GET /v2/integrations/log-drains` returns `[]` on both `aglyn-console` and
+  `aglyn-tenant` (AGL-1799). Nothing from the running app reaches GCP Logging,
+  so there is nothing in `aglyn-main` for a log-based metric or a log-match
+  policy to key on. **Do not paper over this with a reachability probe.** The
+  health endpoints on this page are correctness signals for the subsystems
+  they name — beacon transport, Stripe delivery, backups, rate limiters — and
+  each is honest about what it reads; none of them is an error rate, and
+  dressing one up as one would be worse than the gap. The unblocking decision
+  is a Vercel log drain into GCP Logging: it closes this, closes AGL-1799, and
+  makes every "check the runtime log" instruction in the tree executable. The
+  policy is then a log-based counter on
+  `httpRequest.status >= 500`, threshold to be tuned against a real beta
+  baseline. AGL-1921 carries the fallback design (a first-party *server*-error
+  beacon, the same trick AGL-1538 plays for the browser) for the case where
+  the drain is not bought.
+- **Vercel function errors and logs.** The same root cause as the row above,
+  from the operator's side: a `console.error` written during an incident is
+  gone before anyone reads it. **Upgrade path:** Vercel Pro unlocks log drains
+  → pipe to GCP Logging → the same alerting stack picks it up.
+- **APM / client-side error tracking.** No Sentry or similar. The AGL-1538
+  first-party beacon plus Error Reporting covers uncaught browser errors, and
+  AGL-1923's heartbeat now covers the beacon itself going dark — but there is
+  still no session replay, no breadcrumbs, and no performance tracing, so a
+  browser-side *misbehaviour* that never throws is invisible. Post-launch
+  decision, tracked in AGL-1148's follow-ups.
+- **Stripe's own delivery attempts, from Stripe's side.** `billing-webhook`
+  reads them through the API on every probe, but Stripe also has built-in
+  endpoint-failure notification (Developers → Webhooks → the endpoint →
+  alerting on consecutive failures). It is free, needs no code, and catches
+  the case our infrastructure cannot see — an outage in which our probe is
+  down too. **It is an account-settings change and has not been made.**
+- **Email delivery** (Resend outages) and **DNS**: no synthetic coverage. Each
+  has failed loudly rather than silently so far; revisit if that stops being
+  true.
 
 ### Cost and plumbing
 
@@ -253,6 +332,34 @@ executions/month against a 1M free allowance, alert policies and the email
 channel are free, and the backup probe is one metadata-only REST call per
 15 minutes. **Expected marginal cost: $0.** (Budget guard: the existing
 `aglyn-main monthly spend` $20 alert.)
+
+Measured 2026-08-18, because two readings of this were in circulation and
+they are not the same quantity:
+
+- **Metric points are not executions, and they are not billable here.** The
+  `check_passed` timeseries carries ~430 points/hour for a 5-minute check and
+  ~144/hour for a 15-minute one (6 checker locations × 6 samples per period),
+  which totals ~2.1M points/month across the eleven checks. That number is
+  real and it is *not* a cost: uptime-check metrics are Google system metrics,
+  free to ingest. Confirmed directly rather than assumed —
+  `monitoring.googleapis.com/billing/samples_ingested` and
+  `billing/bytes_ingested` both return **no data at all** for `aglyn-main` over
+  a 30-day window, i.e. this project ingests nothing chargeable.
+- **Executions are the billable dimension** — 1M free per project per month.
+  At one request per location per period that is ~52k/month for a 5-minute
+  check and ~17k/month for a 15-minute one; the eleven checks come to roughly
+  430k/month, about 43% of the allowance. The three checks added for AGL-1923
+  and AGL-1924 account for ~86k of that.
+- Consequently the proposed `marketing-home` / `customer-site` 300s → 600s
+  relaxation **saves nothing billable** and should not be made for cost
+  reasons. It would halve the sample density on the two checks that most need
+  it (the customer-visible ones) to buy headroom in an allowance that is
+  already half empty.
+- Not verified here: the invoice itself. The billing account has no BigQuery
+  billing export configured and neither the Cloud Billing API nor Monitoring
+  exposes invoice lines, so the check above is against the project's own
+  chargeable-ingestion telemetry, not the PDF. Worth one look at
+  Billing → Cost table filtered to Cloud Monitoring to close the loop.
 
 The backup probe needed one IAM grant:
 `roles/datastore.backupsViewer` (backups get/list, nothing else) to
