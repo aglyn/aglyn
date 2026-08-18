@@ -66,31 +66,62 @@ const RULES_SOURCE = readFileSync(
  * braces alone.
  */
 /**
- * Strip comments from the rules source, LINE COMMENTS FIRST.
+ * Strip comments from the rules source with a single left-to-right scan, so
+ * whichever delimiter appears FIRST wins.
  *
- * The order is the whole point, and it is a real bug that was found by this
- * suite going red for a reason nobody would have guessed (AGL-1983).
+ * This is the same bug, in the same rules file, as AGL-2004 — which the
+ * promotion gate found in the `write-deny-coverage` guards at the same time
+ * this suite hit it. Both parsers stripped block comments with one regex and
+ * line comments with a second, in that order, and the rules file quotes a
+ * wildcard path inside a LINE comment:
  *
- * The rules file talks about paths in its prose, and some of those paths carry
- * a glob — `hosts/{hostId}/datasets/*` appears inside a `//` comment. Strip
- * block comments first and that `/*` opens one: the non-greedy match then runs
- * to the next `*​/` anywhere below, swallowing tens of thousands of characters
- * of REAL RULES on its way, braces included. The parsers under this comment
- * count braces to find a block, so what they were parsing was not the file.
+ *     // the name, so `hosts/{hostId}/datasets/*` stayed a client-writable
  *
- * It survived unnoticed because the damage depends on PARITY. As long as the
- * stray `/*` happened to pair with a nearby harmless `*​/`, the extraction
- * still landed on the right block and every assertion passed. Adding one more
- * block comment anywhere above it flips the pairing — which is exactly what
- * adding the `dmcaStrikes` rule's doc comment did, and the guard went from
- * quietly-lucky to loudly-wrong in one commit.
+ * To a regex that cannot tell prose from code, the `/` before `*` there opens
+ * a block comment. The non-greedy match then runs to the next terminator far
+ * below — 571 lines in AGL-2004's measurement — deleting real rule text and
+ * its braces on the way. Both parsers below count braces to find a block, so
+ * what they were parsing was not the file.
  *
- * Stripping `//` to end-of-line first removes the glob before anything looks
- * for `/*`. Block delimiters that live on their own lines — which is how every
- * real block comment in the file is written — are untouched by it.
+ * It stayed invisible because the damage is brace ARITHMETIC: while the stray
+ * opener happened to pair with a harmless terminator, extraction still landed
+ * on the right block and everything passed. Adding one block comment above it
+ * flips the pairing — which is what this issue's own `dmcaStrikes` rule
+ * comment did, taking both guards from quietly-lucky to loudly-wrong in one
+ * commit.
+ *
+ * Deliberately the SAME shape as `stripComments` in
+ * `libs/aglyn/src/lib/foundation/definitions/write-deny-coverage.util.ts`
+ * (AGL-2004), rather than the cheaper "strip line comments first" that also
+ * fixes the observed break. Ordering the two regexes the other way trades one
+ * blind spot for its mirror image: a `*​/` sitting after a `//` on one line
+ * would have its block's terminator deleted instead. A single scan has
+ * neither, and one bug should not leave two different fixes in one repo.
  */
-const stripComments = (source) =>
-  source.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+const stripComments = (source) => {
+  let out = ''
+  let index = 0
+  while (index < source.length) {
+    const pair = source.slice(index, index + 2)
+    if (pair === '/*') {
+      const end = source.indexOf('*/', index + 2)
+      index = end < 0 ? source.length : end + 2
+      continue
+    }
+    if (pair === '//') {
+      const end = source.indexOf('\n', index + 2)
+      if (end < 0) break
+      // Keep the newline: the `;`-splitting below relies on statements
+      // staying separated, and line numbers survive for anyone debugging.
+      out += '\n'
+      index = end + 1
+      continue
+    }
+    out += source[index]
+    index += 1
+  }
+  return out
+}
 
 /**
  * The parse is only trustworthy if what it parsed is balanced. A stray
