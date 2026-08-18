@@ -17,7 +17,11 @@
 
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import { type HostRedirect, matchRedirect, normalizeRedirectSource } from '../model/redirects'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import {
+  analyticsDayExpiresAt,
+  firebaseAdmin,
+  getOrgForHost,
+} from '@aglyn/tenant-data-admin'
 import {
   tenantDataTag,
   withRenderCache,
@@ -135,7 +139,12 @@ export async function resolveRedirect(
       .collection('analytics')
       .doc(day)
       .set(
-        { redirects: { [idKey(matchId)]: FieldValue.increment(1) } },
+        {
+          redirects: { [idKey(matchId)]: FieldValue.increment(1) },
+          // Retention (AGL-1844): every writer of a day doc stamps the
+          // day-anchored expiry the TTL policy sweeps on.
+          expiresAt: analyticsDayExpiresAt(day),
+        },
         { merge: true },
       )
       .catch(() => undefined)

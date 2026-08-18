@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+export * from './lib/server/analytics-retention'
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
 export * from './lib/server/auth-pools'

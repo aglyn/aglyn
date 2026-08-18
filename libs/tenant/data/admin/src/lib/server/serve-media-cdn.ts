@@ -24,6 +24,7 @@ import {
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { analyticsDayExpiresAt } from './analytics-retention'
 import { firebaseAdmin } from './firebase-admin'
 import { getPlatformLockdown } from './lockdown'
 import { getMediaQuarantine } from './media-quarantine'
@@ -1005,6 +1006,9 @@ export async function serveMediaCdn(
       .doc(day)
       .set(
         {
+          // Retention (AGL-1844): every writer of a day doc stamps the
+          // day-anchored expiry the TTL policy sweeps on.
+          expiresAt: analyticsDayExpiresAt(day),
           media: {
             [mediaId]: {
               serves: firebaseAdmin.firestore.FieldValue.increment(1),

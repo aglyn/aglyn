@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { analyticsDayExpiresAt, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -159,7 +159,12 @@ export async function POST(request: Request): Promise<Response> {
           .collection('analytics')
           .doc(day)
           .set(
-            { overlays: { [overlay]: FieldValue.increment(1) } },
+            {
+              overlays: { [overlay]: FieldValue.increment(1) },
+              // Retention (AGL-1844): a day doc created by overlay events
+              // alone must still carry its expiry stamp.
+              expiresAt: analyticsDayExpiresAt(day),
+            },
             { merge: true },
           )
         // Per-overlay attribution (AGL-271): marketing-hub overlay docs
@@ -242,6 +247,9 @@ export async function POST(request: Request): Promise<Response> {
           ...(body.newVisit === true && {
             visitors: FieldValue.increment(1),
           }),
+          // Retention (AGL-1844): every writer of a day doc stamps the same
+          // day-anchored expiry; the TTL policy on `expiresAt` sweeps it.
+          expiresAt: analyticsDayExpiresAt(day),
         },
         { merge: true },
       )
@@ -266,6 +274,7 @@ export async function POST(request: Request): Promise<Response> {
             ...(referrerHost && {
               referrers: { [referrerHost]: FieldValue.increment(1) },
             }),
+            expiresAt: analyticsDayExpiresAt(day),
           },
           { merge: true },
         )

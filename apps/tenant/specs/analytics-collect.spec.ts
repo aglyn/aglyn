@@ -126,14 +126,18 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // The barrel drags the whole admin surface in; the route needs little. The
-  // rate limiter is required FOR REAL (a pure module) so the route runs its
-  // actual limiter arithmetic, not a fake of it.
+  // rate limiter and the retention helper are required FOR REAL (both pure
+  // modules) so the route runs their actual arithmetic, not a fake of it.
   const apiHttp = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/api-http',
+  )
+  const retention = jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/analytics-retention',
   )
   return {
     __esModule: true,
     ...apiHttp,
+    ...retention,
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
@@ -295,6 +299,32 @@ describe('visitor approximation (AGL-1844)', () => {
     await route.POST(beacon({ hostId: HOST_ID, path: '/', newVisit: 'yes' }))
     expect(dayDoc().total).toBe(1)
     expect(dayDoc().visitors).toBeUndefined()
+  })
+})
+
+describe('retention stamps (AGL-1844)', () => {
+  const expected = Date.parse(`${DAY}T00:00:00Z`) + 400 * 24 * 60 * 60 * 1000
+
+  it('stamps host and screen day docs with a day-anchored expiresAt 400 days out', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/', screenId: 'scr-1' }))
+    for (const path of [
+      `hosts/${HOST_ID}/analytics/${DAY}`,
+      `hosts/${HOST_ID}/screenAnalytics/scr-1:${DAY}`,
+    ]) {
+      const expiresAt = mockStore[path].expiresAt
+      expect(expiresAt).toBeInstanceOf(Date)
+      expect((expiresAt as Date).getTime()).toBe(expected)
+    }
+  })
+
+  it('stamps a day doc created by overlay events alone', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, overlay: 'barImpression' }))
+    const dayData = dayDoc()
+    expect(dayData.overlays.barImpression).toBe(1)
+    expect(dayData.expiresAt).toBeInstanceOf(Date)
+    expect((dayData.expiresAt as Date).getTime()).toBe(expected)
   })
 })
 

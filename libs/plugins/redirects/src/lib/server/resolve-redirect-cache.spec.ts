@@ -56,6 +56,11 @@ const docStub = (id: string, data: Record<string, unknown>) => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The retention stamp (AGL-1844) is real arithmetic from a pure module —
+  // faking it here would let the writer drift from what production stamps.
+  ...jest.requireActual(
+    '../../../../../tenant/data/admin/src/lib/server/analytics-retention',
+  ),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
