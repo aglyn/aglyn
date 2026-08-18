@@ -357,6 +357,38 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
     expect(capturedCouponBody).toBeNull()
   })
 
+  it('GUARD IS WIRED — unbounded constants refuse at the route, before Stripe', async () => {
+    // The mint site promises the assert "stays in the live path so a future
+    // edit that unbounds the constants fails every request loudly instead of
+    // minting quietly". Nothing proved that: replacing the call with a no-op
+    // — `((_c: any) => undefined)({...})` — left this suite entirely GREEN,
+    // because the real constants are bounded and the assert therefore never
+    // fires in a passing run. The check existed and could not fail.
+    //
+    // So fire it. Real guard, unbounded constants: the exact future edit the
+    // comment describes. Restoring the no-op now turns this test red.
+    const actual = jest.requireActual('../app/api/_lib/retention')
+    jest.doMock('../app/api/_lib/retention', () => ({
+      ...actual,
+      WINBACK_PERCENT_OFF: 100,
+      WINBACK_DURATION_MONTHS: 999,
+    }))
+    try {
+      const post = loadRoute(ROUTE)
+      capturedCouponBody = null
+      const response = await call(post, { action: 'winback' })
+
+      // Refused, loudly — and Stripe was never reached, so no 100%-off
+      // coupon exists anywhere to be redeemed later.
+      expect(response.status).toBe(502)
+      expect(capturedCouponBody).toBeNull()
+      // And the reservation was released, so the org keeps its one shot.
+      expect(mockStoredDocs.has('orgs/org-1/retention/winback')).toBe(false)
+    } finally {
+      jest.dontMock('../app/api/_lib/retention')
+    }
+  })
+
   it('releases the reservation when the mint fails — the org keeps its one shot', async () => {
     const post = loadRoute(ROUTE)
     ;(global.fetch as jest.Mock).mockImplementation(async (url: unknown) => {
