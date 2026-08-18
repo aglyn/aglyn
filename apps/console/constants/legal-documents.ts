@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v5'
+export const LEGAL_DOCUMENT_VERSION = 'v6'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -251,20 +251,98 @@ export interface LegalDocumentManifestEntry {
  * snapshots captured. The capture method was re-proven byte-for-byte against
  * the v4 terms + privacy pins AND the `2026-08-14.1` publisher-agreement pin
  * before this set was taken.
+ *
+ * v6 (2026-08-18, AGL-1987 + AGL-1992): a CORRECTION OF PUBLISHED TEXT, taken
+ * the same day v5 published. Both documents were wrong on the live page, in
+ * opposite directions, and both errors were about a number.
+ *
+ *   - AGL-1987, Terms §10.6 and §10.2: the lost-dispute clawback is GROSS, and
+ *     v5 published the opposite. ⚠️ THE v5 NOTE ABOVE IS ITSELF WRONG and is
+ *     left standing as the record of what shipped: it says a lost dispute is
+ *     recovered from the merchant's "SHARE (the implemented proportional
+ *     maths, not the gross charge)" and that Aglyn "does not recharge the
+ *     platform transaction fee on a reversed sale". Neither is what the code
+ *     does. Stripe transfers the FULL charge to the connected account and
+ *     debits `application_fee_amount` at the DESTINATION, so `transfer.amount`
+ *     equals `charge.amount`, the proportional share is the WHOLE principal,
+ *     and the merchant hands back the gross while Aglyn keeps its commission.
+ *     The asymmetry is deliberate: `refund.ts` sends
+ *     `refund_application_fee: 'true'`, the dispute door sends no such flag.
+ *
+ *     THREE sentences were defective, not the one AGL-1987 quotes, and the
+ *     third is the one a careless correction leaves behind:
+ *       1. "the portion of the disputed amount that was transferred or payable
+ *          to you" — reads as the merchant's net share.
+ *       2. "does not recharge you the platform transaction fee (Section 4.3)
+ *          on a reversed sale" — flatly false; the clause AGL-1987 was filed
+ *          for.
+ *       3. "We will not recover from you more than the amount you received for
+ *          the sale" — A CAP THE CODE BREAKS AS READ. The merchant's economic
+ *          receipt is $95 and the reversal takes $100. Deleting only (2) would
+ *          have left a cap contradicting the corrected opening.
+ *     §10.2's "recover YOUR SHARE of a refunded, disputed, or otherwise
+ *     reversed sale" was corrected in the same pass for the same reason — not
+ *     false, but it re-created the ambiguity one subsection earlier. §10.2's
+ *     refund-door sentence ("we give back our platform transaction fee on the
+ *     refunded amount") is UNTOUCHED and correct.
+ *
+ *     ⚠️ The clause says "platform transaction fee (Section 4.3)", NOT
+ *     "commission", though AGL-1987 named "commission" as must-survive. The
+ *     Terms define the fee at §4.3 and have never used "commission"; an
+ *     undefined synonym for a defined money term is how a dispute over which
+ *     one governs starts. Zach's call, recorded on the issue.
+ *
+ *     ⚠️ NOT ESTABLISHED, and it is a real limitation: no Stripe dispute has
+ *     been exercised end to end. `transfer.amount === charge.amount` is
+ *     measured in TEST MODE only. The behaviour is pinned by two guards proven
+ *     red on purpose (`33b391969`, which is comment-and-guard only — it
+ *     changed no behaviour, so gross is what has always shipped), and
+ *     `docs.aglyn.com` already states the split publicly. If a real dispute
+ *     behaves differently this clause changes and costs another bump.
+ *
+ *   - AGL-1992, Privacy §5 and §2: AGL-1972 gave Assist conversations a
+ *     180-day TTL (`ASSIST_EXCHANGE_RETENTION_DAYS`, verified on `origin/main`
+ *     at capture time, not read from a plan), which made v5's "retained for as
+ *     long as your Organization exists" false the day after it published. §5
+ *     now describes the SPLIT, because that is what makes the short period
+ *     honest rather than a loss: `assistExchanges` (question, answer, uid —
+ *     180 days) versus `assistSignals` (docs paths, model, cost, rating — no
+ *     prose, NO uid — life of the Organization). §2's "Retention and deletion
+ *     follow the same rules as the rest of your Organization's data" became
+ *     the opposite of true and is neutralised to "are described in Section 5"
+ *     rather than restating the number twice — two copies of a number is how
+ *     the register drifted before.
+ *
+ *     The error ran in the customer's favour (we delete SOONER than promised)
+ *     and nothing diverges in fact for 180 days — the gcloud TTL policy is
+ *     declared and OWED, not enabled (`docs/FIRESTORE_MANUAL_CONFIG.md`), so
+ *     no exchange has been deleted. That window is why this was correctable
+ *     rather than urgent, and it is not an argument for leaving it.
+ *
+ * One bump for both documents, as v4 and v5 were, because every bump re-pins
+ * clickwrap and forces re-acceptance — and this is the SECOND re-consent in
+ * one day. AGL-1990's DPA and Subprocessors edits published in the same sitting
+ * and are deliberately NOT here: neither page is acceptance-pinned, so they
+ * cost no bump and have no hash.
+ *
+ * Publication-first as always. The capture method was re-proven byte-for-byte
+ * against the v5 terms + privacy pins AND the `2026-08-18.1`
+ * publisher-agreement pin before this set was taken. The publisher agreement is
+ * UNCHANGED by this pass and must not be bumped for consistency.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '8f631d705d7a180f3c23b4d3f0535fd6286d60f363cfb113f19e8336a75e8d13',
-    bytes: 35953,
+      '391b3460c01461651ab0ac4921f1d879a95a2b4223c1e1f01889ece2359980d4',
+    bytes: 35966,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '2f4c53a64b0c0023d3fc37e22ea2901c2b90dde1625d02b7e818475d2182356a',
-    bytes: 14377,
+      'e6796516e30e636024f2c544b286b4fa6b7cfe74a36595ba3a00cb8b8b75f3f5',
+    bytes: 14699,
   },
 ]
