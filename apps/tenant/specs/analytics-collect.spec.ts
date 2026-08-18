@@ -281,3 +281,20 @@ describe('UTM capture (AGL-1844)', () => {
   })
 })
 
+describe('visitor approximation (AGL-1844)', () => {
+  it('increments visitors only when the client claims the first visit of its day', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/', newVisit: true }))
+    await route.POST(beacon({ hostId: HOST_ID, path: '/pricing' }))
+    expect(dayDoc().total).toBe(2)
+    expect(dayDoc().visitors).toBe(1)
+  })
+
+  it('treats a non-boolean newVisit claim as absent', async () => {
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/', newVisit: 'yes' }))
+    expect(dayDoc().total).toBe(1)
+    expect(dayDoc().visitors).toBeUndefined()
+  })
+})
+

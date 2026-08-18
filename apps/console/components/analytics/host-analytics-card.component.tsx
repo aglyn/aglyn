@@ -39,6 +39,8 @@ import { docsHelp } from '../../constants/docs-links'
 interface DayStat {
   day: string
   total: number
+  /** Approximate uniques (AGL-1844): one per browser tab per UTC day. */
+  visitors: number
   paths: Record<string, number>
   referrers: Record<string, number>
   devices: Record<string, number>
@@ -76,7 +78,14 @@ export function HostAnalyticsCard(props: {
       dayIds: ids,
       liveDay: newestFirst[0],
       now: Date.now(),
-      fallback: { day: '', total: 0, paths: {}, referrers: {}, devices: {} },
+      fallback: {
+        day: '',
+        total: 0,
+        visitors: 0,
+        paths: {},
+        referrers: {},
+        devices: {},
+      },
       read: async (id) => {
         const snapshot = await getDoc(
           doc(firestore, 'hosts', hostId, 'analytics', id),
@@ -84,6 +93,7 @@ export function HostAnalyticsCard(props: {
         return {
           day: id,
           total: Number(snapshot.get('total') ?? 0),
+          visitors: Number(snapshot.get('visitors') ?? 0),
           paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
           referrers: (snapshot.get('referrers') ?? {}) as Record<string, number>,
           devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
@@ -100,6 +110,10 @@ export function HostAnalyticsCard(props: {
   }, [firestore, hostId, range])
 
   const total = (days ?? []).reduce((sum, day) => sum + day.total, 0)
+  // Approximate uniques (AGL-1844): summing per-day counts is honest here
+  // because the flag that feeds them cannot span a day — but it means a
+  // multi-day visitor counts once per day, which the label says out loud.
+  const visitors = (days ?? []).reduce((sum, day) => sum + day.visitors, 0)
   const max = Math.max(1, ...(days ?? []).map((day) => day.total))
   const topPaths = Object.entries(
     (days ?? []).reduce<Record<string, number>>((acc, day) => {
@@ -203,6 +217,27 @@ export function HostAnalyticsCard(props: {
                 {'Pageviews'}
               </Typography>
             </Stack>
+            {visitors > 0 ? (
+              // Cookieless approximation (AGL-1844): one count per browser
+              // tab per day, so it under- and over-counts in known ways.
+              // The tooltip is the honesty contract — do not shorten it.
+              <Tooltip
+                title={
+                  'Approximate: counts each browser tab once per day, ' +
+                  'without cookies or visitor IDs. A visitor using two ' +
+                  'tabs, or returning on another day, counts again.'
+                }
+              >
+                <Stack>
+                  <Typography variant="h4">
+                    {visitors.toLocaleString()}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {'Visitors (approx.)'}
+                  </Typography>
+                </Stack>
+              </Tooltip>
+            ) : null}
             <Stack>
               <Typography variant="h4">
                 {avgPerDay.toLocaleString()}

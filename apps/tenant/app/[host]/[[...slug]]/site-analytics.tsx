@@ -19,6 +19,7 @@
 
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
 import { installLinkClickTracking } from '@aglyn/aglyn/app-utils/analytics-link-clicks'
+import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
   GA_CONSENT_DEFAULT_SNIPPET,
   hostConsentRequired,
@@ -29,6 +30,7 @@ import {
 import Script from 'next/script'
 import type { ReactElement } from 'react'
 import { primeVisitorConsent, useVisitorConsent } from './use-visitor-consent'
+import { claimDailyVisit } from './visit-claim'
 
 /**
  * Pageviews already counted this page load, keyed by host and path. Module
@@ -80,6 +82,14 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
         utmSource: params.get('utm_source') || undefined,
         utmMedium: params.get('utm_medium') || undefined,
         utmCampaign: params.get('utm_campaign') || undefined,
+        // Visitor approximation (AGL-1844): true on the first pageview
+        // this tab sends today. A day string in sessionStorage is the
+        // entire mechanism — see `visit-claim.ts` for the honesty
+        // contract. Claimed only when a beacon is actually sent (the
+        // `beaconed` guard above), so the claim and the pageview travel
+        // together.
+        newVisit: claimDailyVisit(new Date().toISOString().slice(0, 10)) ||
+          undefined,
       }),
     )
   } catch {
@@ -192,6 +202,15 @@ export default function SiteAnalytics({
   // classified click is dropped. `surface` labels this as a tenant published
   // site; the docs app (AGL-1579) installs the same listener with its own.
   installLinkClickTracking({ surface: 'site' })
+  // Real-user Core Web Vitals (AGL-1642), same shape as the click listener:
+  // installed during render, once per page load, delivery through
+  // `window.gtag` so the consent gate above stays structural — a visitor
+  // whose tag never loads produces nothing. The module holds early metrics
+  // briefly because BOTH tag mounts load late by design (`afterInteractive`
+  // here); see `web-vitals-rum.ts` for why that hold is not the forbidden
+  // pre-consent queue. The library itself arrives as a lazy chunk, so the
+  // surface being measured pays nothing on its critical path.
+  installWebVitalsReporting({ surface: 'site' })
 
   const consent = useVisitorConsent(hostId, host, consentRequired)
   const analyticsAllowed = consentRequired

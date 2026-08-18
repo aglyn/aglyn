@@ -232,6 +232,16 @@ export async function POST(request: Request): Promise<Response> {
             referrers: { [referrerHost]: FieldValue.increment(1) },
           }),
           ...(utm && { utm }),
+          // Visitor approximation (AGL-1844): the client claims "first
+          // pageview this tab has sent today" via a day-scoped
+          // sessionStorage flag (see `visit-claim.ts` for exactly what
+          // `visitors` does and does not mean — one count per tab per UTC
+          // day, no identifier anywhere). Strict boolean: this is a client
+          // claim on an unauthenticated endpoint, bounded by the same
+          // rate limit as the pageview itself.
+          ...(body.newVisit === true && {
+            visitors: FieldValue.increment(1),
+          }),
         },
         { merge: true },
       )
