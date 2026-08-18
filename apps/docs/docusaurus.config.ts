@@ -50,6 +50,26 @@ const config: Config = {
   // Whether the FIRST pageview of a session carries it depends on where
   // Docusaurus renders config headTags relative to the preset's snippet;
   // best-effort there, and Hostname still separates the domains fully.
+  //
+  // `traffic_type: 'internal'` (AGL-2064) rides the same queue, for the same
+  // reason and with the same best-effort caveat. Dev builds were already safe
+  // — the gtag plugin returns null unless `NODE_ENV === 'production'` and this
+  // project has non-production git deployments disabled — but PRODUCTION
+  // `docs.aglyn.com` was not: we read our own docs constantly while building,
+  // logged out, and every one of those visits counted as a real reader in the
+  // property the September activation funnel is read from.
+  //
+  // Opt a browser in with `?aglyn_internal=1` on any docs URL. `localStorage`
+  // is origin-scoped, so this is a separate opt-in from `aglyn.com` and
+  // `app.aglyn.com` — see docs/ANALYTICS.md §8.
+  //
+  // ⚠️ The snippet is a VERBATIM COPY of `INTERNAL_TRAFFIC_GTAG_SNIPPET` in
+  // `libs/aglyn/src/lib/app-utils/internal-traffic.ts`, because this app
+  // cannot import from `libs/` (AGL-1595) — the same constraint that puts the
+  // measurement id in source below. `apps/console/specs/docs-internal-traffic-
+  // snippet.spec.ts` fails if the two ever drift, so the copy is checked
+  // rather than trusted: a stale copy here would read as a working stamp and
+  // stamp nothing, which no report would show.
   headTags: [
     {
       tagName: 'script',
@@ -60,7 +80,8 @@ const config: Config = {
       innerHTML:
         'window.dataLayer=window.dataLayer||[];' +
         'function gtag(){dataLayer.push(arguments);}' +
-        "gtag('set',{'content_group':'docs'});",
+        "gtag('set',{'content_group':'docs'});" +
+        "try{var aq=new URLSearchParams(location.search).get('aglyn_internal');if(aq!==null){if(['0','false','off','no'].indexOf(aq.toLowerCase())>=0)localStorage.removeItem('aglyn_traffic_type');else localStorage.setItem('aglyn_traffic_type','internal');}if(localStorage.getItem('aglyn_traffic_type')==='internal')gtag('set',{'traffic_type':'internal'});}catch(e){}",
     },
   ],
 
