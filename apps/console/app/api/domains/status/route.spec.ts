@@ -297,3 +297,70 @@ describe('a lockdown reaches this route (AGL-2006)', () => {
     )
   })
 })
+
+/**
+ * WHICH LOCK, not just "a lock" (AGL-1913 follow-up to AGL-2006).
+ *
+ * The wiring passes `request`, so the verdict derives its intent from the
+ * METHOD — and a `read-only` lock refuses writes only (`lockdownBlocks`). That
+ * makes this route answer during a maintenance freeze and refuse a full lock,
+ * which is the right split and was, until these tests, entirely incidental:
+ * the three cases above use a flat stub, so dropping `request` would 423 every
+ * GET under a read-only lock and all of them would still pass.
+ *
+ * The double here is faithful instead of flat — staff bypass, then
+ * `verdictIntent`'s fallback chain (explicit intent, else the method, else
+ * `write` as the fail-safe), then `lockdownBlocks` — because a stub that
+ * refuses whenever a lock exists cannot tell the two modes apart, and telling
+ * them apart is the whole claim.
+ */
+describe('the lockdown answer is per MODE', () => {
+  /** `lockdownRefusal`, modelled on the real verdict rather than switched. */
+  function faithfulVerdict(mode: 'full' | 'read-only') {
+    return async (options: Record<string, unknown>) => {
+      if (options['staff'] === true) return null
+      const request = options['request'] as { method?: string } | undefined
+      const method = String(request?.method ?? '').toUpperCase()
+      const intent =
+        (options['intent'] as string | undefined) ??
+        (request
+          ? method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
+            ? 'read'
+            : 'write'
+          : 'write')
+      return mode === 'full' || intent === 'write'
+        ? Response.json({ error: 'locked', mode }, { status: 423 })
+        : null
+    }
+  }
+
+  it('refuses a FULL lock', async () => {
+    seedHost('mine', { cname: 'example.com' })
+    mockLockdownRefusal.mockImplementation(faithfulVerdict('full'))
+    expect((await GET(get('mine'))).status).toBe(423)
+    expect(mockProjectDomainStatus).not.toHaveBeenCalled()
+  })
+
+  it('still answers under a READ-ONLY lock — nothing on this path mutates', async () => {
+    // A migration or maintenance freeze keeps a site readable. Telling a
+    // customer mid-freeze that their domain DIAGNOSIS is locked would be a
+    // support ticket about the wrong thing.
+    seedHost('mine', { cname: 'example.com' })
+    mockLockdownRefusal.mockImplementation(faithfulVerdict('read-only'))
+    expect((await GET(get('mine'))).status).toBe(200)
+    expect(mockProjectDomainStatus).toHaveBeenCalled()
+  })
+
+  it('derives that read from the REQUEST rather than restating it', async () => {
+    // The assertion the case above rests on. Without `request` the verdict
+    // defaults to `write` — the documented fail-safe — and the read-only case
+    // silently becomes a 423 that no test would notice.
+    seedHost('mine', { cname: 'example.com' })
+    await GET(get('mine'))
+    expect(mockLockdownRefusal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({ method: 'GET' }),
+      }),
+    )
+  })
+})

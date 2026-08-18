@@ -107,6 +107,15 @@ async function handler(request: Request): Promise<Response> {
   // customer's stuck domain without impersonating them, still holds during a
   // lockdown. It is only the locked org's own members who get the 423, and
   // they can still read the same DNS facts publicly.
+  // Passing `request` rather than an explicit intent is load-bearing, not
+  // stylistic (AGL-1913): the verdict derives `read` from the GET, and
+  // `lockdownBlocks` refuses a read only under a FULL lock. So a full lock —
+  // suspension, abuse, panic — refuses here like it does at `attach`, while a
+  // READ-ONLY lock, which exists to keep things readable during a migration,
+  // lets this answer. Nothing below mutates, so there is nothing for a freeze
+  // to protect by refusing. Drop `request` and the intent falls back to
+  // `write`, which would quietly turn every maintenance window into a domain
+  // page that says "locked" — `route.spec.ts` pins both modes.
   const locked = await lockdownRefusal({
     request,
     staff: decoded['staff'] === true,
