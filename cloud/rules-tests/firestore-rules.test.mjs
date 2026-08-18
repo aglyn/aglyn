@@ -1168,7 +1168,26 @@ describe('hosts', () => {
    * could only fail for a key somebody had already remembered.
    */
   it('the host catch-all still denies every server-owned subcollection (AGL-1367)', () => {
-    for (const name of ['counters', 'analytics', 'members', 'datasets']) {
+    // `registers` and `mediaTombstones` joined this floor in AGL-2002, and
+    // `registers` is the reason. The floor named four collections while the
+    // parse yields six, so the two it omitted could be dropped from an
+    // exclusion list and this suite would not notice: the parsed intersection
+    // simply gets shorter and every loop below covers one collection less,
+    // green the whole way. Proven by making the exact edit the rules file's
+    // own comment says has already happened TWICE from stale worktrees —
+    // deleting `registers` from the `allow update` list — and watching all
+    // nine AGL-1367 tests pass. They now fail.
+    //
+    // `registers` is the POS add-on pool the org is billed for;
+    // `mediaTombstones` is what makes a DAM delete restorable.
+    for (const name of [
+      'counters',
+      'analytics',
+      'members',
+      'datasets',
+      'registers',
+      'mediaTombstones',
+    ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
         `\`${name}\` is no longer denied outright under hosts/{hostId}. It ` +
