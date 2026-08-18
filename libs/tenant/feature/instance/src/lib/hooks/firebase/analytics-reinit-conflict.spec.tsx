@@ -32,9 +32,30 @@
 
 import { render } from '@testing-library/react'
 import { initializeApp } from 'firebase/app'
-import { _getProvider } from '@firebase/app'
+import * as firebaseAppInternal from '@firebase/app'
 import { type Analytics, initializeAnalytics, logEvent } from 'firebase/analytics'
 import { FirebaseServicesProvider, useAnalytics } from './firebase-services'
+
+/**
+ * `_getProvider` is a real, stable runtime export of `@firebase/app` — it is
+ * how `firebase/analytics` itself reaches the provider — but the package's
+ * published types deliberately withhold it: `package.json` points `types` at
+ * `dist/app-public.d.ts`, which carries the line
+ * `/* Excluded from this release type: _getProvider *​/`. The full declaration
+ * exists in `dist/app.d.ts`, which nothing resolves to.
+ *
+ * So a plain `import { _getProvider } from '@firebase/app'` runs correctly and
+ * fails `tsc` with TS2305. This spec needs the real provider precisely because
+ * the bug it pins lives in the SDK's re-initialization contract — mocking it
+ * would rebuild the blind spot AGL-1979 came from — so the shim declares the
+ * one internal signature used here rather than dropping the SDK for a fake.
+ */
+const { _getProvider } = firebaseAppInternal as unknown as {
+  _getProvider: (
+    app: unknown,
+    name: 'analytics',
+  ) => { getImmediate: () => Analytics }
+}
 
 jest.mock('firebase/app-check', () => ({
   __esModule: true,
