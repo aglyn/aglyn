@@ -72,6 +72,26 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
       'Check the failing dependency code below, then the Vercel and Firebase status pages.',
   },
   {
+    id: 'billing',
+    label: 'Billing webhook',
+    path: '/api/health/billing',
+    auth: 'public',
+    meaning:
+      'Stripe still has an enabled destination for us and its deliveries are landing. Degraded means Stripe is trying to tell us about money and cannot — subscriptions, refunds and entitlements stop moving while checkout keeps taking payments.',
+    remedy:
+      'Read the code: endpoint-missing or endpoint-disabled is a Stripe dashboard fix, deliveries-failing is ours (signature, a rolled secret, a wedged handler). Run `npm run audit:stripe-webhook` for the full join. A quiet window with no events is healthy, not blind — this never keys on the absence of deliveries.',
+  },
+  {
+    id: 'errorBeacon',
+    label: 'Error beacon',
+    path: '/api/health/error-beacon',
+    auth: 'public',
+    meaning:
+      'The client-error beacon can still reach Cloud Logging. Degraded means browser errors are being collected by nothing — and a dead beacon reads as ZERO errors everywhere else, which is indistinguishable from a clean day.',
+    remedy:
+      'no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe at aglyn.com.',
+  },
+  {
     id: 'backups',
     label: 'Backups & exports',
     path: '/api/health/backups',
