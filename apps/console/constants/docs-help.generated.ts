@@ -458,6 +458,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Responsive styling & custom CSS',
     excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   },
+  salesTaxReturn: {
+    path: '/staff-console/sales-tax-return',
+    title: 'Sales tax return (Texas)',
+    excerpt: 'The quarterly Texas return — pick a period, read the Form 01-114 figures, check the rows that need attention, and export the working papers.',
+  },
   sandboxSecurity: {
     path: '/developers/plugins/reference/sandbox-security',
     title: 'Sandbox security model',
@@ -663,6 +668,7 @@ export const DOCS_HELP_ANCHORS = {
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
+  salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#the-figures', '#refunds', '#all-jurisdictions', '#exporting-the-working-papers', '#related'],
   sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#saving-a-single-page-instead', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],

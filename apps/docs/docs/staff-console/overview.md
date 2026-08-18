@@ -116,6 +116,9 @@ set password](/img/staff-console/admin-user-password.png)
   staff of GDPR erasure requests past their 7-day hold.
 - **Organization suspension** — a staff toggle that serves 503s on the org's sites and shows the
   owner a banner.
+- **[Sales tax return](sales-tax-return.md)** — the quarterly Texas return: pick a
+  period, read the Form 01-114 figures for Texas, see every row the sweep could not
+  fully read, and export the working papers for the Webfile session.
 - **Audit log viewer** — a record of staff actions.
 
 Access is gated on a **staff claim**, enforced per handler and by scoped Firestore

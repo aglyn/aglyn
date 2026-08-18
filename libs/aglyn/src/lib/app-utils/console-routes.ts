@@ -36,6 +36,10 @@ export enum Route {
   // file. Its own page rather than a panel on Lockdown because the input is
   // an asset, not a scope — the two forms share no field but the reason.
   ADMIN_MEDIA_QUARANTINE = '/admin/media-quarantine',
+  // The Texas sales tax return (AGL-1900). The figures AGL-1811 computes had
+  // only a curl to reach them; filing happens on a fixed quarterly calendar
+  // from 2026-09-01, so the return needs a URL a person can bookmark.
+  ADMIN_TAX_RETURN = '/admin/tax-return',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
   ADMIN_USER_DETAIL = '/admin/users/[uid]',
@@ -208,6 +212,7 @@ export interface RoutePayload {
   [Route.ADMIN_COUPONS]: undefined
   [Route.ADMIN_LOCKDOWN]: undefined
   [Route.ADMIN_MEDIA_QUARANTINE]: undefined
+  [Route.ADMIN_TAX_RETURN]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_USER_DETAIL]: { uid: string }
