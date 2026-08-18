@@ -58,6 +58,17 @@ export interface MediaAssetCardProps {
   onToggleSelect?: (checked: boolean, options?: { range?: boolean }) => void
   /** Overflow-menu actions (non-picker). */
   onCopyUrl?: () => void
+  /**
+   * Mint and copy the short-lived link for a PRIVATE asset (AGL-2055).
+   *
+   * The counterpart to `onCopyUrl`, which is deliberately hidden for a
+   * private file because that file has no permanent URL. Without this the
+   * menu offered a private asset no way to be fetched at all — the docs
+   * and the "Make private" confirmation both promise a temporary link, and
+   * `POST /api/media/sign` has minted one since AGL-1051 with nothing in
+   * the console calling it.
+   */
+  onCopySignedLink?: () => void
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
@@ -99,6 +110,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     selected,
     onToggleSelect,
     onCopyUrl,
+    onCopySignedLink,
     onReplace,
     onDetails,
     onDelete,
@@ -353,6 +365,14 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
             would hand over a link that 404s (AGL-1051). */}
         {onCopyUrl && !media.private ? (
           <MenuItem onClick={runAction(onCopyUrl)}>{'Copy URL'}</MenuItem>
+        ) : null}
+        {/* The private half of the same affordance (AGL-2055). Only for a
+            private asset: a public one already has the permanent URL above,
+            and signing it is refused by the route anyway. */}
+        {onCopySignedLink && media.private ? (
+          <MenuItem onClick={runAction(onCopySignedLink)}>
+            {'Copy temporary link'}
+          </MenuItem>
         ) : null}
         {onSetPrivate ? (
           <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>

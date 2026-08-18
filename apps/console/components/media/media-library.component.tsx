@@ -2685,6 +2685,72 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [assetOrigin, enqueueSnackbar],
   )
 
+  /**
+   * Mint and copy the short-lived link for a PRIVATE asset (AGL-2055).
+   *
+   * `POST /api/media/sign` has existed since AGL-1051 and nothing called it.
+   * That left the private flag half a feature: `handleCopyUrl` above hides
+   * itself for a private asset — correctly, there is no permanent URL — and
+   * so the console offered no way to fetch the bytes at all. Both the docs
+   * (`/content-and-data/media/overview#private-files`) and the "Make
+   * private" confirmation promise a temporary link, so the promise was the
+   * only place the capability appeared.
+   *
+   * Org library only, matching `onSetPrivate`: the route signs an `org:`
+   * scope and refuses anything else, so offering this on a site library
+   * would hand over a control that always 404s.
+   *
+   * The URL is NOT read back into state. It expires in about fifteen
+   * minutes, so holding it would mean rendering a control that silently
+   * decays; minting per click is the only shape that cannot be stale.
+   */
+  const handleCopySignedLink = useCallback(
+    (media: Aglyn.AglynHostMedia) => async () => {
+      const mediaId = media.$id as string
+      if (!orgId || !mediaId) return
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/sign', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ orgId, mediaId }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload?.url) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'Could not create a link for this file',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
+        // Absolute, like `handleCopyUrl`: the value is going to the
+        // clipboard and will be pasted somewhere with no origin of its own.
+        await navigator.clipboard.writeText(`${assetOrigin}${payload.url}`)
+        // The expiry is the whole point of the feature, so it is said out
+        // loud rather than left in the docs. Derived from the response
+        // instead of restating the TTL constant, which would be a second
+        // copy of it free to drift.
+        const minutes = Math.max(
+          1,
+          Math.round((Number(payload.expiresAtMs) - Date.now()) / 60000),
+        )
+        enqueueSnackbar(
+          `Temporary link copied — it stops working in about ${minutes} ` +
+            `minute${minutes === 1 ? '' : 's'}`,
+          { variant: 'success', persist: false },
+        )
+      } catch {
+        enqueueSnackbar('Could not create a link for this file', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [orgId, user, assetOrigin, enqueueSnackbar],
+  )
+
   const handleDelete = useCallback(
     (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
       const fileName = media.fileName ?? media.$id
@@ -3143,6 +3209,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     )
                   }
                   onCopyUrl={handleCopyUrl(media)}
+                  // Same gate as `onSetPrivate` below — the route signs an
+                  // `org:` scope only, and the card hides the item unless
+                  // the asset is actually private (AGL-2055).
+                  onCopySignedLink={
+                    orgId && viewerOrgWide && !onSelect
+                      ? handleCopySignedLink(media)
+                      : undefined
+                  }
                   onReplace={
                     String(media.contentType ?? '').startsWith('image/')
                       ? () => requestCardReplace(media)
