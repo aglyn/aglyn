@@ -710,6 +710,28 @@ async function handler(request: Request): Promise<Response> {
           // anyone having to know what an environment variable held at the
           // moment the cron ran.
           orgLibraryBilled,
+          // THE SEMANTICS, on the document rather than in a commit message
+          // (AGL-1473 asked for this; AGL-1886 is when it started to matter).
+          //
+          // `BILL_ORG_LIBRARY_STORAGE_FROM` is a START MONTH, not a boolean,
+          // and NOT RETROACTIVE: no org is ever billed for bytes that were
+          // stored before the month named here. That is a property of the
+          // mechanism, not of anyone's care — `report-usage` takes `month` in
+          // its body and the daily cron re-sweeps any org-month lacking
+          // `reportedAt`, so a boolean flipped mid-September would bill a
+          // re-run of January at January's accumulated bytes, against a month
+          // already invoiced. A start month cannot reach backwards whenever
+          // it is set.
+          //
+          // Recorded VERBATIM, unparsed, so this document answers "why was
+          // this month billed (or not)" without anyone having to know what an
+          // environment variable held when the cron ran — and so a malformed
+          // value is legible as malformed rather than as absent.
+          // `orgLibraryBilled` above is the same env var after
+          // `billsOrgLibraryStorage`, which FAILS CLOSED on anything that is
+          // not `YYYY-MM`.
+          orgLibraryBilledFrom:
+            process.env.BILL_ORG_LIBRARY_STORAGE_FROM ?? null,
           siteSizeMb,
           // A LOWER BOUND when true — the sweep hit `SITE_SIZE_DOC_CEILING`
           // (AGL-1371). Nothing prices from site size today; anything that

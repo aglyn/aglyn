@@ -397,6 +397,57 @@ describe('the billing consequence is a switch, not a side effect', () => {
     expect(writes['org-1'].orgLibraryStorageGb).toBeCloseTo(1, 6)
   })
 
+  it('DECOMPOSES: the billed figure is host bytes PLUS library bytes, named', async () => {
+    // AGL-1402's hazard, stated for this rollup (AGL-1886): a sum that omits
+    // one of its inputs is still a precise-looking number. So the assertion is
+    // not "storageGb is 3" — it is that the total equals the two named parts
+    // and that neither part is zero, which a dropped input cannot satisfy.
+    //
+    // Forced red by reverting `estimate` to `estimateMonthlyUsageCost(usage,
+    // orgData)`: `storageGb` fell to 2, `orgLibraryStorageGb` stayed 1, and
+    // the identity below broke while every single-number assertion in this
+    // file still passed.
+    process.env.BILL_ORG_LIBRARY_STORAGE_FROM = MONTH
+    seed({
+      hosts: [
+        { id: 'site-a', orgId: 'org-1', mediaBytes: 1.5 * GB },
+        { id: 'site-b', orgId: 'org-1', mediaBytes: 0.5 * GB },
+      ],
+      orgLibraryBytes: { 'org-1': 1 * GB },
+    })
+    const written = (await rollUp())['org-1']
+    const hostGb = 1.5 + 0.5
+    const libraryGb = Number(written.orgLibraryStorageGb)
+    expect(libraryGb).toBeCloseTo(1, 6)
+    expect(hostGb).toBeGreaterThan(0)
+    // The identity: total = hosts + library, with both parts non-zero.
+    expect(Number(written.storageGb)).toBeCloseTo(hostGb + libraryGb, 6)
+    expect(written.orgLibraryBilled).toBe(true)
+  })
+
+  it('records the start month VERBATIM, so the doc says why it billed', async () => {
+    // AGL-1473 asked for the semantics to be stated on the audit document.
+    // `orgLibraryBilled` alone cannot distinguish "the flag was unset" from
+    // "the flag named a later month" from "somebody typed `yes`".
+    process.env.BILL_ORG_LIBRARY_STORAGE_FROM = MONTH
+    seed({ hosts: [{ id: 'site-a', orgId: 'org-1', mediaBytes: 1 * GB }] })
+    expect((await rollUp())['org-1'].orgLibraryBilledFrom).toBe(MONTH)
+
+    delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
+    seed({ hosts: [{ id: 'site-a', orgId: 'org-1', mediaBytes: 1 * GB }] })
+    const unset = (await rollUp())['org-1']
+    expect(unset.orgLibraryBilledFrom).toBeNull()
+    expect(unset.orgLibraryBilled).toBe(false)
+
+    // A malformed value is legible AS malformed, and still bills nothing —
+    // the fail-closed half, recorded rather than swallowed.
+    process.env.BILL_ORG_LIBRARY_STORAGE_FROM = 'yes'
+    seed({ hosts: [{ id: 'site-a', orgId: 'org-1', mediaBytes: 1 * GB }] })
+    const typo = (await rollUp())['org-1']
+    expect(typo.orgLibraryBilledFrom).toBe('yes')
+    expect(typo.orgLibraryBilled).toBe(false)
+  })
+
   it('leaves the COGS figure truthful whichever way the switch is set', async () => {
     // `costUsd` and `storageGb` are what the cost model reads. Org bytes cost
     // us real money whether or not we pass the cost on, so under-reporting
