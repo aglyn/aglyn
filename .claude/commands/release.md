@@ -40,6 +40,26 @@ time** — and keep statuses current.
   CHANGE:`→major; during a prerelease only the series number moves. Currently `1.0.0-alpha.0`
   with NO release tag yet — the first cut is Zach's call.
 - Two nx processes in one checkout destroy each other's `dist`. localhost Stripe key is LIVE.
+- **⚑ A worktree does NOT isolate the nx cache.** It writes into the SHARED checkout's `.nx/cache`;
+  another process clearing it mid-run **crashes** the run. On 2026-08-18 `nx run-many -t test --all`
+  died with `ENOENT …/.nx/cache/terminalOutputs/…`, aborted at **18 of 40 projects**, and
+  `console:test` never executed — a false RED over the whole remaining suite. **Set
+  `NX_CACHE_DIRECTORY` inside the gate worktree.** Distinguish a CRASH from a red: fewer projects
+  reported than the graph contains is an abort, not a failure.
+- **⚑ FREEZE `main` before the final gate.** It moved **13 commits during one gate run** and was 26
+  past the gated tip when it reported. A ~25-minute gate cannot converge on a branch this many agents
+  push to. Let agents drain, stop spawning, gate once on a still tree, promote.
+- **Check machine load before calling anything a flake.** Load hit **318 on 10 cores** (28 jest
+  processes across four checkouts), which produced 313s suites, a 5000ms timeout on a real-`sharp`
+  test and SIGTERM'd workers that all looked exactly like flakes.
+- **⚑ `vercel env ls` CANNOT see team-shared vars — use `vercel env pull` or the REST API.** Measured:
+  `ls` → 117 vars, `pull` → 141. That 24-var gap IS the shared scope. A gate declared a production
+  blocker on `ls` alone and was wrong; the vars existed and were linked. Never conclude "missing" from `ls`.
+- **The file-and-fix leak is the ESCAPE HATCH, not the instruction.** Briefs that said "file and fix
+  concurrently" still produced 12 filed-not-fixed, because they also said "if too large, file it".
+  Never write "where reachable" / "if feasible" / "if too large" into an audit brief. State it
+  adversarially: *fix every finding; for each one you do not, name the specific blocker.* If a
+  returning report's "filed, not fixed" section is longer than its "fixed" section, send it back.
   Never swap a shared file to prove a red. Test doubles model real semantics. Decompose every count.
 
 ## Workstream A — backlog burn-down
@@ -240,43 +260,48 @@ everything the other workstreams touch, not as a separate queue.
   An empty Shared-drive list means you are in the wrong slot. The business phone line is readable from
   Google Voice under `/u/4/` rather than asking Zach for it.
 
-## The mandate — Zach's consolidated directive, verbatim (restated 2026-08-18)
+## The mandate — Zach's consolidated directive, verbatim (restated 2026-08-18)## The mandate — Zach's consolidated directive, verbatim (restated 2026-08-18, evening)
 
-⚑ This is the canonical text, restated and expanded by Zach on 2026-08-18 (it supersedes the 2026-08-17
-version while containing all of it). Every workstream above is its distillation; when in doubt, THIS
+⚑ This is the canonical text, restated by Zach on the evening of 2026-08-18 (it supersedes both earlier
+versions while containing all of them). Every workstream above is its distillation; when in doubt, THIS
 text wins. **Never paraphrase this block, never summarise it away, never let it be lost again** — the
 retention directive in Workstream C was already dropped once.
 
-> make sure we are completing everything in the backlog and getting things ready to release on Sept 1,
-> spawning each one in a new background agent, completing as many as possible at once, updating linear
-> as we go, file and fix new items and suggestions all at the same time and update statuses as we go.
-> We need to make sure the free/hobby tier does hard cap so it always actually stays free.. We gotta
-> get these things ready to go and be released to the public and start accepting payments, selling
-> marketplace items, and the storefronts of the hosts ready to receive payments and fulfill orders and
-> shipments etc, all of the commerce features and addons and plugins, and our subscription tiers, our
-> usage metering, usage alerts, budgets for usage alerts, similar to how google cloud charges, data
-> analysis and security measure and billing overages etc, and everything else you suggest. We need to
-> make sure we are not losing money when we release and will enable features that will not produce
-> churn but rather commitment and making it more easy to upgrade and not as easy to downgrade similar
-> to how claude subscriptions work etc, I already asked for this before not sure how it was lost, we
-> need to hide the lower tiers or something or make them less visible and make the upgrade paths more
-> visible, then produce a funnel to try and prevent canceling account first by asking for them to
-> complete survey why they are churning or deleting account or canceling account etc and then offer
-> them a smaller subscription tier or a short term discount etc. All of Stripe and staff needs to be
-> polished and ready to go. Let's make sure our console and besigner actually match the features we
-> promote in our product mockups/screenshots, don't change the screenshots just make our feature match
-> more similar to what we are advertising. Don't forget you can use my browser to test and use my
-> authentication session, but first try using the local dev environment or emulator environment, you
-> can use my browser to manage anything such as stripe, google cloud, firebase, aglyn, vercel etc,
-> also when looking for env always double check shared/global envs. Don't forget we always need to
-> keep the docs in sync and create new pages and reorganize as necessary, take screenshots of the
-> browser and make as visualized as possible, you also don't always need screenshot the entire page
-> but can screenshot sections of the site of components, maybe even add outlines and text if need to
-> better visualize and make the image more descriptive or helpful. Add more API's to our customer
-> facing API and document it extremely well. Also add helpful how-to guides and walk through guides
-> and make it easy for anybody but also very descriptive for those who are also technical and need
-> reference guides where necessary etc, also make sure we are updating the tooltip documentation tips
-> across Aglyn. If you need something from me, then ask me a question and give me options.
+Two additions in this restatement, both load-bearing: the backlog now explicitly includes **Todo and In
+Progress**, not just Backlog; and the closing sentence makes **file-and-fix simultaneity** a standing
+rule for every new or suggested task, not just for discovered defects.
+
+> Make sure we are completing everything in the backlog and todo and in progress and getting things
+> ready to release on Sept 1, spawning each one in a new background agent, completing as many as
+> possible at once, updating linear as we go, file and fix new items and suggestions all at the same
+> time and update statuses as we go. We need to make sure the free/hobby tier does hard cap so it
+> always actually stays free.. We gotta get these things ready to go and be released to the public and
+> start accepting payments, selling marketplace items, and the storefronts of the hosts ready to
+> receive payments and fulfill orders and shipments etc, all of the commerce features and addons and
+> plugins, and our subscription tiers, our usage metering, usage alerts, budgets for usage alerts,
+> similar to how google cloud charges, data analysis and security measure and billing overages etc,
+> and everything else you suggest. We need to make sure we are not losing money when we release and
+> will enable features that will not produce churn but rather commitment and making it more easy to
+> upgrade and not as easy to downgrade similar to how claude subscriptions work etc, I already asked
+> for this before not sure how it was lost, we need to hide the lower tiers or something or make them
+> less visible and make the upgrade paths more visible, then produce a funnel to try and prevent
+> canceling account first by asking for them to complete survey why they are churning or deleting
+> account or canceling account etc and then offer them a smaller subscription tier or a short term
+> discount etc. All of Stripe and staff needs to be polished and ready to go. Let's make sure our
+> console and besigner actually match the features we promote in our product mockups/screenshots,
+> don't change the screenshots just make our feature match more similar to what we are advertising.
+> Don't forget you can use my browser to test and use my authentication session, but first try using
+> the local dev environment or emulator environment, you can use my browser to manage anything such as
+> stripe, google cloud, firebase, aglyn, vercel etc, also when looking for env always double check
+> shared/global envs. Don't forget we always need to keep the docs in sync and create new pages and
+> reorganize as necessary, take screenshots of the browser and make as visualized as possible, you
+> also don't always need screenshot the entire page but can screenshot sections of the site of
+> components, maybe even add outlines and text if need to better visualize and make the image more
+> descriptive or helpful. Add more API's to our customer facing API and document it extremely well.
+> Also add helpful how-to guides and walk through guides and make it easy for anybody but also very
+> descriptive for those who are also technical and need reference guides where necessary etc, also
+> make sure we are updating the tooltip documentation tips across Aglyn. If you need something from
+> me, then ask me a question and give me options.
 >
 > Fix all of the dependabot alerts and prs etc. Also build numerous reports for us in GA, and it can
 > use my browser to do it. Also Add a new console ai generative chat bot helper tool persisted on
@@ -300,3 +325,4 @@ retention directive in Workstream C was already dropped once.
 > where appropriate then we need to add them now. If you need to access google accounts like admin or
 > drive or whatever, zach@aglyn.com is not the primary google account in the browser, you will need to
 > append the u/4 to the address bar or use the account switcher to use zach@aglyn.com if you need it.
+> Remember for any new or suggsted tasks, always file and fix at the same time.
