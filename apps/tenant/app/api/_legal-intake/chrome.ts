@@ -34,10 +34,14 @@
  * The folder is deliberately NOT a lib: everything here is HTML and Response
  * plumbing for two sibling routes in one app, and hoisting it into
  * `@aglyn/aglyn` would put presentation in a package whose consumers are
- * mostly not rendering pages. `/api/report-abuse` still carries its own copy
- * of this chrome — it shipped first and is being actively worked on
- * elsewhere; adopting this module is a follow-up rather than a change made
- * underneath another agent's open work.
+ * mostly not rendering pages.
+ *
+ * BOTH routes render through this module. `/api/report-abuse` shipped first
+ * with its own copy and adopted this one in AGL-2026; the only thing its copy
+ * lacked was `input[type=tel]`, which is exactly the silent divergence the
+ * merge exists to stop. `specs/legal-intake-chrome.spec.ts` asserts the two
+ * rendered forms carry a byte-identical stylesheet, so a local copy
+ * reintroduced in either route fails rather than drifting unnoticed.
  */
 
 import {

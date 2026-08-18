@@ -94,17 +94,22 @@ import {
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-// AGL-2016: the operator-facing half of the chrome the two §512 intakes
-// share. This route still carries its own HTML shell (AGL-1983 left adopting
-// the shared one as a follow-up), but the strings that name a party must have
-// exactly one definition or they drift — which is how `support@aglyn.com`
-// came to be declared in four places.
+// AGL-2016 + AGL-2026: both halves of the chrome the two §512 intakes share
+// — the operator-facing strings, and the page shell itself. AGL-1983 left
+// adopting the shared shell as a follow-up; this is it, so the local copies
+// below are gone and `documentHtml` owns the doctype, noindex and stylesheet.
 import {
+  clientIp,
   contactHtml,
   contactText,
+  documentHtml,
+  escapeHtml,
   EXAMPLE_URL,
+  html,
   NO_CHANNEL_ADVICE,
   operatorTitleSuffix,
+  readPayload,
+  wantsJson,
 } from '../_legal-intake/chrome'
 import { getHost } from '../../../utils/get-host'
 
@@ -149,104 +154,9 @@ export const REPORT_RATE_MAX = 5
 /** Rate-limit window. */
 export const REPORT_RATE_WINDOW_MS = 10 * 60_000
 
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-
-const clientIp = (request: Request): string =>
-  String(request.headers.get('x-forwarded-for') ?? 'unknown')
-    .split(',')[0]
-    .trim() || 'unknown'
-
-/** Does the caller want JSON back, or is this a browser form post? */
-const wantsJson = (request: Request): boolean => {
-  const accept = request.headers.get('accept') ?? ''
-  const type = request.headers.get('content-type') ?? ''
-  return accept.includes('application/json') || type.includes('application/json')
-}
-
-/**
- * Read a body that may be JSON or a urlencoded form.
- *
- * Both spellings have to work: the no-JS form posts urlencoded, and a
- * programmatic reporter (a vendor's automated pipeline, which is a realistic
- * source for phishing feeds) posts JSON.
- */
-async function readPayload(request: Request): Promise<Record<string, unknown>> {
-  const type = request.headers.get('content-type') ?? ''
-  try {
-    if (type.includes('application/json')) {
-      const parsed = await request.json()
-      return parsed && typeof parsed === 'object'
-        ? (parsed as Record<string, unknown>)
-        : {}
-    }
-    const form = await request.formData()
-    const payload: Record<string, unknown> = {}
-    for (const [key, value] of form.entries()) {
-      payload[key] = typeof value === 'string' ? value : ''
-    }
-    return payload
-  } catch {
-    return {}
-  }
-}
-
 // ---------------------------------------------------------------------------
 // The form
 // ---------------------------------------------------------------------------
-
-const PAGE_STYLE = `
-  :root { color-scheme: light dark; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: #f6f7f9; color: #16181d; line-height: 1.55; }
-  main { max-width: 640px; margin: 0 auto; padding: 32px 20px 64px; }
-  h1 { font-size: 1.5rem; margin: 0 0 8px; }
-  .lede { color: #495057; margin: 0 0 24px; }
-  form { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px;
-         padding: 20px; }
-  fieldset { border: 0; margin: 0 0 20px; padding: 0; }
-  legend { font-weight: 600; padding: 0; margin-bottom: 8px; }
-  label { display: block; font-weight: 600; margin: 0 0 4px; }
-  .hint { font-weight: 400; color: #5c636a; font-size: .875rem; margin: 0 0 6px; }
-  input[type=text], input[type=email], input[type=url], textarea, select {
-    width: 100%; box-sizing: border-box; padding: 9px 10px; font: inherit;
-    border: 1px solid #ccd0d5; border-radius: 6px; background: #fff;
-    color: inherit; }
-  textarea { min-height: 120px; resize: vertical; }
-  .choice { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px;
-            font-weight: 400; }
-  .choice input { margin-top: 5px; }
-  .field { margin: 0 0 18px; }
-  button { background: #1b1f24; color: #fff; border: 0; border-radius: 6px;
-           padding: 11px 20px; font: inherit; font-weight: 600;
-           cursor: pointer; }
-  .note { background: #fff8e6; border: 1px solid #f0dcaa; border-radius: 8px;
-          padding: 12px 14px; margin: 0 0 20px; font-size: .9375rem; }
-  .error { background: #fdecec; border: 1px solid #f2b8b8; border-radius: 8px;
-           padding: 12px 14px; margin: 0 0 20px; }
-  .ok { background: #eaf7ee; border: 1px solid #b7e0c4; border-radius: 8px;
-        padding: 16px 18px; }
-  footer { color: #5c636a; font-size: .875rem; margin-top: 24px; }
-  a { color: #0b5ed7; }
-  .hp { position: absolute; left: -9999px; width: 1px; height: 1px;
-        overflow: hidden; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #16181d; color: #e6e8ea; }
-    form { background: #1e2127; border-color: #2f343c; }
-    input[type=text], input[type=email], input[type=url], textarea, select {
-      background: #16181d; border-color: #3a4048; color: inherit; }
-    button { background: #e6e8ea; color: #16181d; }
-    .lede, .hint, footer { color: #a5abb3; }
-    .note { background: #2a2415; border-color: #4d431f; }
-    .error { background: #2d1a1a; border-color: #5a2b2b; }
-    .ok { background: #16281c; border-color: #2c5237; }
-    a { color: #7db1ff; }
-  }
-`
 
 const categoryFields = (): string =>
   Aglyn.ABUSE_REPORT_CATEGORIES.map(
@@ -263,18 +173,9 @@ function formHtml(options: {
   error?: string
 }): string {
   const { reportedUrl, error } = options
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Report abuse${operatorTitleSuffix()}</title>
-<style>${PAGE_STYLE}</style>
-</head>
-<body>
-<main>
-<h1>Report abuse</h1>
+  return documentHtml(
+    'Report abuse',
+    `<h1>Report abuse</h1>
 ${operatorLede()}
 ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
 <div class="note"><strong>If someone is in immediate danger, contact your local
@@ -354,25 +255,14 @@ service.</div>
 <footer>
   <p>We read every report. If you would rather email us, write to
   ${contactHtml('support')}.</p>
-</footer>
-</main>
-</body>
-</html>`
+</footer>`,
+  )
 }
 
 function receiptHtml(reference: string): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Report received${operatorTitleSuffix()}</title>
-<style>${PAGE_STYLE}</style>
-</head>
-<body>
-<main>
-<h1>Report received</h1>
+  return documentHtml(
+    'Report received',
+    `<h1>Report received</h1>
 <div class="ok">
   <p>Thank you — your report is in front of our team.</p>
   <p>Your reference is <strong>${escapeHtml(reference)}</strong>. Quote it if
@@ -384,21 +274,9 @@ function receiptHtml(reference: string): string {
   copyright notice is the exception, because the site owner has a right to
   respond to one.</p>
   <p>Follow-up: ${contactHtml('support')}</p>
-</footer>
-</main>
-</body>
-</html>`
+</footer>`,
+  )
 }
-
-const html = (body: string, status = 200): Response =>
-  new Response(body, {
-    status,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-robots-tag': 'noindex',
-    },
-  })
 
 /**
  * Render the form.
