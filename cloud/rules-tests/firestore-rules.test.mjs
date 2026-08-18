@@ -1187,6 +1187,11 @@ describe('hosts', () => {
       'datasets',
       'registers',
       'mediaTombstones',
+      // AGL-2038. `screenAnalytics` is the same beacon as `analytics` one
+      // document finer, and was in NONE of the three lists — not because
+      // anyone decided it, but because the catch-all grants by default and
+      // nobody typed the name when AGL-151 created the collection.
+      'screenAnalytics',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -1290,6 +1295,115 @@ describe('hosts', () => {
       'deleting an analytics day',
       deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'analytics', '2026-08-01')),
     )
+  })
+
+  /**
+   * AGL-2038, spelled out the same way. The loop above already covers
+   * `screenAnalytics` because it derives its set from the rules — which is the
+   * point of deriving it — but the named writes are what a future reader needs
+   * in order to see what was actually reachable.
+   *
+   * Not the same severity as the counters above, and the comment should not
+   * pretend otherwise: nothing invoices off `screenAnalytics`.
+   * /api/billing/report-usage computes `pageViews` from `analytics` alone, so
+   * falsifying these rows lowers no bill. What it corrupts is the per-screen
+   * history behind the Pro+ panel — a record the customer consumes rather than
+   * authors, whose only writer is /api/analytics/collect through the Admin SDK.
+   *
+   * The reason it was reachable at all is the finding: the catch-all grants
+   * every host subcollection to editors unless a name appears in three lists,
+   * so a collection added later is open until somebody remembers it. The
+   * commit-time half of that is `host-subcollection-write-deny-coverage`.
+   */
+  it('an editor cannot falsify the per-screen traffic history (AGL-2038)', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'screenAnalytics', 'screen-1:2026-08-01'),
+        { screenId: 'screen-1', day: '2026-08-01', total: 4_120 },
+      )
+    })
+    await mustDeny(
+      'inflating screenAnalytics/{screenId}:{day}.total',
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screenAnalytics', 'screen-1:2026-08-01'),
+        { total: 9_999_999 },
+      ),
+    )
+    await mustDeny(
+      'forging a screenAnalytics day for a screen that never ran',
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screenAnalytics', 'screen-9:2026-08-02'),
+        { screenId: 'screen-9', day: '2026-08-02', total: 1 },
+      ),
+    )
+    await mustDeny(
+      'deleting a screenAnalytics day',
+      deleteDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screenAnalytics', 'screen-1:2026-08-01'),
+      ),
+    )
+    // The read is the product and survives: the Pro+ panel and the screens
+    // table both read this collection with the client SDK, and the entitlement
+    // — not the rules — is what gates the display.
+    await assertSucceeds(
+      getDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'screenAnalytics', 'screen-1:2026-08-01'),
+      ),
+    )
+  })
+
+  /**
+   * The negative control for the fix itself (AGL-2038), and the reason the
+   * rules were NOT flipped to deny-by-default.
+   *
+   * Inverting the host catch-all — deny everything, allow-list what editors
+   * may write — was considered and rejected because ~51 subcollections hang
+   * off `hosts/{hostId}` and roughly twenty of them are plugin content
+   * authored client-side. A name missing from that allow-list would not fail a
+   * build; it would fail a customer's save, in a plugin surface no test drives.
+   *
+   * So this is the assertion that would have caught such a flip. Every name
+   * below is absent from all three exclusion lists, i.e. governed by the
+   * catch-all and nothing else, and is written client-side by a real console
+   * or plugin surface. Ordinary authoring has to keep working — screens,
+   * layouts, collections and datasets are covered by the `hosts` suite above;
+   * this is the long tail that a narrowing change would silently take out.
+   */
+  it('ordinary authoring still works for every catch-all collection (AGL-2038)', async () => {
+    const AUTHORING = [
+      'actions', 'overlays', 'experiments', 'campaigns', 'emailTemplates',
+      'coupons', 'discounts', 'memberPosts', 'reviews', 'siteMembers',
+      'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
+      'settings', 'media', 'mediaFolders', 'leads', 'inventoryAdjustments',
+      'licenseKeys', 'reservations', 'resources', 'productCategories',
+    ]
+    for (const name of AUTHORING) {
+      // Absent from every exclusion list, so the catch-all is the only thing
+      // granting these. If a future narrowing takes one out, this names it.
+      assert.ok(
+        !HOST_SERVER_ONLY_SUBCOLLECTIONS.includes(name),
+        `\`${name}\` is now denied outright under hosts/{hostId}, but it is ` +
+          `authored CLIENT-SIDE by a console or plugin surface. Denying it ` +
+          `breaks that surface for every customer with no build failure to ` +
+          `warn anyone — which is exactly why AGL-2038 closed the ` +
+          `permissive-by-default hole at COMMIT time (the ` +
+          `host-subcollection-write-deny-coverage spec) rather than by ` +
+          `flipping these rules to deny-by-default.`,
+      )
+      await assertSucceeds(
+        setDoc(doc(authed(EDITOR), 'hosts', HOST, name, 'agl2038-new'), {
+          name: 'authored',
+        }),
+      )
+      await assertSucceeds(
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, name, 'agl2038-new'), {
+          name: 'edited',
+        }),
+      )
+      await assertSucceeds(
+        deleteDoc(doc(authed(EDITOR), 'hosts', HOST, name, 'agl2038-new')),
+      )
+    }
   })
 
   /**
