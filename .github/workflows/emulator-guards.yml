@@ -90,6 +90,17 @@ jobs:
       # around the failure.
       - run: npm ci
 
+      # firebase-tools is deliberately NOT a package.json dependency — no
+      # workflow before this one ran an emulator, and every developer who does
+      # has it installed globally, which is why `npx firebase` inside
+      # test-rules.sh worked on every machine and failed on the first CI run
+      # with "could not determine executable to run". Installed globally here
+      # rather than added to the root manifest so the other jobs, and every
+      # `npm ci` a developer runs, do not pay for a CLI they never invoke.
+      # Pinned: an emulator that changes behaviour under us would read as a
+      # rules regression.
+      - run: npm i -g firebase-tools@15.24.0
+
       - run: npm run test:rules
 
   emulator-specs:
@@ -110,6 +121,9 @@ jobs:
           java-version: '21'
 
       - run: npm ci
+
+      # Same reason as the rules job above.
+      - run: npm i -g firebase-tools@15.24.0
 
       # The runner asserts its own coverage after the suites: non-zero tests,
       # zero SKIPPED, and every `*.emulator.spec.ts` that `git ls-files` knows

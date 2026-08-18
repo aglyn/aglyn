@@ -56,7 +56,12 @@ FIRESTORE_PORT=8082
 AUTH_PORT=9099
 DATABASE_PORT=9000
 
-EMULATOR_LOG="$(mktemp -t emulator-guards)"
+# Full template, not `mktemp -t <prefix>`. BSD mktemp treats a bare `-t`
+# argument as a prefix and appends its own suffix; GNU mktemp requires the
+# template to end in at least three X's and exits "too few X's in template"
+# otherwise. This script is written on macOS and runs on ubuntu-latest, so the
+# BSD-only spelling passed locally and failed on the very first CI run.
+EMULATOR_LOG="$(mktemp "${TMPDIR:-/tmp}/emulator-guards.XXXXXX")"
 EMULATOR_PID=""
 
 # Kill the process GROUP, not the pid. `npx firebase emulators:start` is four
@@ -123,7 +128,7 @@ PROJECTS=(
   libs/tenant/runtime
 )
 
-REPORT_DIR="$(mktemp -d -t emulator-guard-reports)"
+REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"
 status=0
 for project in "${PROJECTS[@]}"; do
   echo "==> $project"
