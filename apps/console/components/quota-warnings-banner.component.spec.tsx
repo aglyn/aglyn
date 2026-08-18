@@ -101,8 +101,25 @@ jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ ...currentOrg, ready: true }),
 }))
+
+/**
+ * The route's own answer to "which workspace is this page about" (AGL-1916),
+ * and the org the scope actually resolved to — the two the banner must now
+ * agree before it claims anything. Defaults are an org route whose slug the
+ * resolved org matches, so every pre-existing case above is unaffected.
+ */
+const routeScope = {
+  namesOrg: true,
+  pathOrgSlug: 'acme' as string | null,
+  currentOrg: { $id: 'org-1', slug: 'acme' } as { $id: string; slug?: string },
+}
+
 jest.mock('../hooks/use-org-scope', () => ({
   useOrgSlug: () => 'acme',
+  useOrgScope: () => routeScope,
+}))
+jest.mock('../hooks/use-secondary-nav', () => ({
+  useUrlNamesOrg: () => routeScope.namesOrg,
 }))
 jest.mock('../components/host-id-provider', () => ({
   useHostId: () => 'host-1',
@@ -122,6 +139,9 @@ beforeEach(() => {
   scope.orgWide = true
   scope.loaded = false
   currentOrg.org = { plan: 'business' }
+  routeScope.namesOrg = true
+  routeScope.pathOrgSlug = 'acme'
+  routeScope.currentOrg = { $id: 'org-1', slug: 'acme' }
   sessionStorage.clear()
   // The seat count is a server call now. Stubbed rather than left undefined
   // so a scope-gating regression shows up as an unexpected ENTRY here, not as
@@ -255,5 +275,115 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     render(<QuotaWarningsBanner />)
     await screen.findByText(/Update your payment method/)
     expect(billingLinks()[0].textContent).toBe('Fix payment')
+  })
+})
+
+/**
+ * AGL-1916: the banner must be silent where the URL names no workspace.
+ *
+ * Every case here sets up a FULLY RESOLVED, breaching org — the same fixture
+ * the suites above use to render a banner — and changes only the route. That
+ * is the whole point: `plan` is truthy, the seat and screen quotas are over
+ * their limits, and the banner must still say nothing, because the org that
+ * answered is one the picker never asked about. A case that also blanked the
+ * org would pass with the gate deleted.
+ *
+ * The paired positive lives in `renders on an org route ...` below, and it is
+ * the load-bearing half: silencing a real breach trades a false positive for a
+ * false negative, and a quota warning nobody sees is money nobody collects.
+ */
+describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
+  /** The picker: `/` on the apex, no path slug, no subdomain. */
+  const onThePicker = () => {
+    routeScope.namesOrg = false
+    routeScope.pathOrgSlug = null
+    // The fallback the scope hands out anyway — a remembered selection or the
+    // user's first org. Present on purpose: this is the reported bug's exact
+    // state, an org fully resolved on a page that named none.
+    routeScope.currentOrg = { $id: 'org-1', slug: 'acme' }
+    scope.loaded = true
+    scope.orgWide = true
+  }
+
+  it('renders no quota banner on the workspace picker', async () => {
+    onThePicker()
+    const { container } = render(<QuotaWarningsBanner />)
+    // Give the effects the same window the positive cases need to render.
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(container.innerHTML).toBe('')
+    expect(screen.queryByText(/reached your/)).toBeNull()
+  })
+
+  it('asks for no seat count or quota totals on the picker', async () => {
+    // The banner's cost, not just its wording. Gating only the render would
+    // leave `/api/orgs/members?counts=1` firing for the fallback org on every
+    // mount of a page that has no org — and, for a viewer whose scope the
+    // rules disagree with, a 403 per mount.
+    onThePicker()
+    render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(countedPaths).toEqual([])
+  })
+
+  it('renders no SUSPENSION banner on the picker', async () => {
+    // Suspension outranks plan and dismissal by design (AGL-202). It does not
+    // outrank knowing which workspace it is about.
+    onThePicker()
+    currentOrg.org = { plan: 'business', suspendedAt: 1 }
+    const { container } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(screen.queryByText(/This account is suspended/)).toBeNull()
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('renders no DUNNING banner on the picker', async () => {
+    onThePicker()
+    currentOrg.org = { plan: 'business', billingStatus: 'past_due' }
+    const { container } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(screen.queryByText(/last payment failed/)).toBeNull()
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('stays silent when the resolved org contradicts the URL slug', async () => {
+    // The URL names a workspace, so `useUrlNamesOrg()` alone would let this
+    // through — but the scope fell through to a DIFFERENT org (a shared link
+    // to a workspace this user is not in). Same ambient answer, now wearing a
+    // URL that appears to justify it.
+    routeScope.namesOrg = true
+    routeScope.pathOrgSlug = 'other-org'
+    routeScope.currentOrg = { $id: 'org-1', slug: 'acme' }
+    scope.loaded = true
+    scope.orgWide = true
+    const { container } = render(<QuotaWarningsBanner />)
+    await waitFor(() => expect(seatFetches).toEqual([]))
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('still warns when the membership row carries no slug at all', async () => {
+    // The deliberate NON-suppression. `slug` is optional on the membership
+    // doc, and a legacy row without one must not silence a real breach —
+    // only a slug that actively DISAGREES suppresses. If this ever flips to
+    // "silent", the gate has become a revenue bug.
+    routeScope.namesOrg = true
+    routeScope.pathOrgSlug = 'acme'
+    routeScope.currentOrg = { $id: 'org-1' }
+    scope.loaded = true
+    scope.orgWide = true
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your screens limit/)
+  })
+
+  it('renders on an org route with a breached quota (the paired positive)', async () => {
+    // Unchanged defaults: URL names the workspace, resolved org agrees. The
+    // gate must not have silenced the case the banner exists for.
+    scope.loaded = true
+    scope.orgWide = true
+    render(<QuotaWarningsBanner />)
+    await screen.findByText(/reached your screens limit/)
+    expect(countedPaths).toContain('hosts/host-1/screens')
+    await waitFor(() =>
+      expect(seatFetches.join('\n')).toContain('/api/orgs/members?orgId=org-1'),
+    )
   })
 })

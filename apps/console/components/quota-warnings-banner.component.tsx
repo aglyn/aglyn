@@ -29,7 +29,8 @@ import { useEffect, useState } from 'react'
 import { useFirestore, useScopeTokens, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostId } from '../components/host-id-provider'
-import { useOrgSlug } from '../hooks/use-org-scope'
+import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import { useUrlNamesOrg } from '../hooks/use-secondary-nav'
 import useCurrentOrg from '../hooks/use-current-org'
 
 const DISMISS_KEY = 'aglyn-quota-banner-dismissed'
@@ -95,8 +96,43 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // pending outcome for a component whose entire job is to make claims about
   // the plan, and `ready` would not change a single branch — but it WOULD
   // put a second condition beside `plan` for a reader to reconcile.
+  //
+  // That argument holds for the case it addresses and MISSED the other one
+  // (AGL-1916). `plan` being undefined is not the only way this banner can be
+  // wrong: `useCurrentOrg` resolves through `useOrgScope().currentOrg`, which
+  // falls back to a remembered selection and then to the user's FIRST org, so
+  // on the workspace picker `plan` is perfectly truthy — it just belongs to an
+  // org the URL never named. Zach photographed the result: "You've reached
+  // your team seats limit — upgrade to keep adding" above the four unopened
+  // workspace cards, naming none of them, with UPGRADE pointing at the
+  // fallback org's billing page. A guard against NO answer is not a guard
+  // against the WRONG answer.
   // eslint-disable-next-line aglyn/no-unguarded-loading-hook
   const { org, orgId } = useCurrentOrg()
+  // Whether the URL itself scopes this page to a workspace (AGL-1130's
+  // predicate, and the same one the top bar, user menu, org switcher and
+  // `useBranding` already gate their org CLAIMS on). This banner is a claim in
+  // exactly that sense — a statement about one org's plan and usage, with a
+  // CTA to buy for it — so it belongs on that list and was simply left off it.
+  const namesOrg = useUrlNamesOrg()
+  const { pathOrgSlug, currentOrg } = useOrgScope()
+  // …and a second, sharper check for the case the URL DOES name an org: that
+  // the org which answered is the org the URL asked about. `currentOrg` only
+  // matches `pathOrgSlug` when the user is a member of that workspace; visit
+  // `/some-other-org/...` (a shared link, a stale bookmark, a membership list
+  // that has not loaded the row yet) and the scope quietly falls through to
+  // the first org instead — same ambient answer, now wearing a URL that
+  // appears to justify it.
+  //
+  // Deliberately a POSITIVE contradiction, not `currentOrg?.slug ===
+  // pathOrgSlug`. `slug` is optional on the membership doc, and a legacy row
+  // without one must not silence a genuine breach — a quota warning nobody
+  // sees is revenue nobody collects, which is a worse trade than the false
+  // positive being fixed here. Only a slug that actively disagrees suppresses.
+  const wrongOrg = Boolean(
+    pathOrgSlug && currentOrg?.slug && currentOrg.slug !== pathOrgSlug,
+  )
+  const orgInScope = namesOrg && !wrongOrg
   // Org-wide totals are not askable by a site collaborator (AGL-1068). An
   // unfiltered `count()` over an org collection is denied on the QUERY
   // SHAPE for a scoped member — Firestore does not evaluate it per
@@ -132,7 +168,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
 
   // Host-level quotas: screens, media storage, datasets.
   useEffect(() => {
-    if (!plan || !hostId) return
+    if (!orgInScope || !plan || !hostId) return
     let active = true
     const entitlements = resolveOrgEntitlements(org)
     void Promise.all([
@@ -189,7 +225,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, hostId, orgId, plan, orgWideViewer])
+  }, [firestore, hostId, orgId, plan, orgWideViewer, orgInScope])
 
   // Org-level team seats (AGL-238): the seat count is a client aggregate
   // query, cached per session.
@@ -201,7 +237,12 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // scoped collaborator since, silently (AGL-1068). Nobody outside the org
   // roster gets a seat total; the row is omitted instead.
   useEffect(() => {
-    if (!plan || !orgId || !orgWideViewer) return
+    // `orgInScope` first (AGL-1916). This is the effect that produced the
+    // reported banner, and gating only the RENDER would leave it sending
+    // `/api/orgs/members?orgId=…&counts=1` for the fallback org on every
+    // mount of the picker — a request the page had no reason to make, about a
+    // workspace nobody opened.
+    if (!orgInScope || !plan || !orgId || !orgWideViewer) return
     let active = true
     const apply = (seats: number) => {
       if (!active) return
@@ -261,7 +302,20 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, orgId, plan, orgWideViewer, user])
+  }, [firestore, orgId, plan, orgWideViewer, user, orgInScope])
+
+  // ONE gate for every branch below (AGL-1916), placed above all three rather
+  // than repeated inside them. Suspension and dunning are org claims of the
+  // same kind as the quota rows — "this account is suspended", "your last
+  // payment failed" — and read their fields off the same ambient object, so
+  // the moment the fallback org carries `suspendedAt` or a past_due status the
+  // picker announces it about a workspace the viewer did not open. Suspension
+  // deliberately outranks plan and dismissal; it does not outrank knowing
+  // WHICH org it is about.
+  //
+  // Every hook above has already run, so this early return costs no hook-order
+  // hazard — and it is below them for exactly that reason.
+  if (!orgInScope) return null
 
   // Suspension (AGL-202) outranks everything — not dismissible, shown
   // regardless of plan so pre-billing workspaces see it too.
