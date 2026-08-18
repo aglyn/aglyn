@@ -43,10 +43,16 @@ export interface RegistersCardProps {
 
 /**
  * POS registers (AGL-472): named registers under `hosts/{hostId}/registers`,
- * capped by the plan's `posRegisters` quota (Pro 1, Business 2, Advanced 5;
- * the $89/mo add-on raises it via a per-org entitlement override). Creation
- * rides the quota-enforcing resources API so the cap is authoritative;
- * every POS sale stamps its register so takings are attributable.
+ * capped by the plan's `posRegisters` quota (Pro 1, Business 2, Advanced 5)
+ * PLUS the register seats the org has allocated to this site out of the
+ * purchased $89/mo pool (AGL-1775). Creation rides the quota-enforcing
+ * resources API so the cap is authoritative; every POS sale stamps its
+ * register so takings are attributable.
+ *
+ * The add-on used to raise the org-level entitlement, which every site
+ * inherited — one purchase, `hostLimit` registers. It is a pool now, and the
+ * message below tells an owner which of the two things to do about an
+ * exhausted one: assign a seat they already own, or buy another.
  */
 export function RegistersCard(props: RegistersCardProps) {
   const { hostId } = props
@@ -107,7 +113,13 @@ export function RegistersCard(props: RegistersCardProps) {
     }
   }, [firestore, hostId, registerCountEpoch])
   const registerCount = serverRegisterCount ?? registers.length
-  const quota = Aglyn.checkQuota(org, 'posRegisters', registerCount)
+  // Per SITE (AGL-1775), not the org-level value: the plan's cap plus this
+  // host's allocated seats. The allocation rides the SAME org doc `useOrgPlan`
+  // already returns, so there is no second read to be loading or to fail —
+  // and an unallocated (or not-yet-arrived) org resolves to the plan cap,
+  // never to the pool.
+  const quota = Aglyn.checkHostRegisterQuota(org, hostId, registerCount)
+  const registerPool = Aglyn.resolveRegisterSeatPool(org)
   // Registers beyond the plan cap (e.g. after a downgrade) can't transact —
   // pos-order.ts blocks them by creation rank (AGL-482); mirror that here.
   //
@@ -126,12 +138,23 @@ export function RegistersCard(props: RegistersCardProps) {
     // where a click and the org doc race (AGL-1064).
     if (!planReady) return
     if (!quota.allowed) {
+      // Three different answers, because the fix differs (AGL-1775). An
+      // exhausted POOL is a purchase; an UNASSIGNED seat the org already owns
+      // is a click, and telling that owner to buy another would sell them a
+      // register they are already paying for.
       return void enqueueSnackbar(
         quota.limit === 0
           ? 'POS registers require the Pro plan or above — see Billing'
-          : `Your plan includes ${quota.limit} register${
-              quota.limit === 1 ? '' : 's'
-            } — add more from Billing → Add-ons ($89/mo each)`,
+          : registerPool.available > 0
+            ? `This site can run ${quota.limit} register${
+                quota.limit === 1 ? '' : 's'
+              } — you have ${registerPool.available} unassigned register seat${
+                registerPool.available === 1 ? '' : 's'
+              }; assign one to this site in Billing → Add-ons`
+            : `This site can run ${quota.limit} register${
+                quota.limit === 1 ? '' : 's'
+              } and every purchased seat is assigned — add another from ` +
+              'Billing → Add-ons ($89/mo each)',
         { variant: 'info', persist: false },
       )
     }

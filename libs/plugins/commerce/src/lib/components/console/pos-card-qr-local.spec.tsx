@@ -99,8 +99,12 @@ jest.mock('@aglyn/shared-ui-next/contexts/next-page-title-provider', () => ({
 }))
 
 jest.mock('@aglyn/aglyn', () => ({
-  // The register cap has its own coverage (AGL-482/1064); here it just has to
-  // admit the one register so the sale can proceed.
+  // The register cap has its own coverage (AGL-482/1064/1775); here it just
+  // has to admit the one register so the sale can proceed. Per SITE since
+  // AGL-1775 — the page reads `checkHostRegisterQuota(org, hostId, …)`, and a
+  // double that still only answered `checkQuota` would leave this suite
+  // failing on an undefined function rather than on anything it tests.
+  checkHostRegisterQuota: () => ({ limit: 5 }),
   checkQuota: () => ({ limit: 5 }),
 }))
 

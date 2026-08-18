@@ -24,6 +24,9 @@ import {
   checkDiscountMargin,
   checkEntitlement,
   checkFormSubmissionQuota,
+  checkHostRegisterQuota,
+  resolveHostRegisterCap,
+  resolveRegisterSeatPool,
   checkFormSubmissionAbuseCeiling,
   FORM_ABUSE_CEILING_FLOOR,
   FORM_ABUSE_CEILING_MULTIPLE,
@@ -470,9 +473,14 @@ describe('plan entitlements', () => {
       PLAN_ENTITLEMENTS.starter.hostLimit + 2,
     )
     expect(checkQuota(withHosts, 'hostLimit', 2).allowed).toBe(true)
-    // POS registers stack on the plan's included registers.
+    // POS registers deliberately DO NOT stack here since AGL-1775 — they are
+    // an org POOL allocated per site, and the org-level value every site
+    // inherits must stay the plan's cap. This is the assertion that fails if
+    // somebody restores the `+ extraRegisters` fold.
     const withRegisters = { plan: 'pro', seatAddons: { posRegisters: 3 } } as any
-    expect(resolveOrgEntitlements(withRegisters).posRegisters).toBe(1 + 3)
+    expect(resolveOrgEntitlements(withRegisters).posRegisters).toBe(
+      PLAN_ENTITLEMENTS.pro.posRegisters,
+    )
     // Event Calendar: quantity ≥ 1 switches the org-wide feature on.
     const withEvents = { plan: 'starter', seatAddons: { eventCalendar: 1 } } as any
     expect(checkEntitlement(withEvents, 'eventCalendar')).toBe(true)
@@ -500,17 +508,27 @@ describe('plan entitlements', () => {
     //
     // Agency is the largest STOCK band (20 registers, 25 sites), so every
     // number below is above every band a clamp could reasonably use.
+    //
+    // AGL-1775 moved WHERE the purchase applies (an org pool allocated to one
+    // site) without changing HOW MUCH is honoured, so the ceiling is asserted
+    // through `resolveHostRegisterCap` with the whole pool assigned to one
+    // site — the shape a single-site merchant who bought 50 registers has.
     const maxedRegisters = {
       plan: 'agency',
       seatAddons: { posRegisters: POS_REGISTERS_ADDON_MAX },
+      registerAllocations: { 'host-1': POS_REGISTERS_ADDON_MAX },
     } as any
-    expect(resolveOrgEntitlements(maxedRegisters).posRegisters).toBe(
+    expect(resolveHostRegisterCap(maxedRegisters, 'host-1')).toBe(
       PLAN_ENTITLEMENTS.agency.posRegisters + POS_REGISTERS_ADDON_MAX,
     )
     // The consequence a clamp would break, stated as the merchant sees it:
     // the 70th register is still creatable, and the 71st is not.
-    expect(checkQuota(maxedRegisters, 'posRegisters', 69).allowed).toBe(true)
-    expect(checkQuota(maxedRegisters, 'posRegisters', 70).allowed).toBe(false)
+    expect(
+      checkHostRegisterQuota(maxedRegisters, 'host-1', 69).allowed,
+    ).toBe(true)
+    expect(
+      checkHostRegisterQuota(maxedRegisters, 'host-1', 70).allowed,
+    ).toBe(false)
     // Same shape for extra sites, the other flat-ceiling kind.
     const maxedHosts = {
       plan: 'agency',

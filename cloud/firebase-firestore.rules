@@ -203,11 +203,20 @@ service cloud.firestore {
       // The only client Web SDK write to a top-level org document is still
       // the erasure batch (re-swept for AGL-1824), so none of the seven has a
       // client writer to lose.
+      //
+      // `registerAllocations` joins all three lists on the same reasoning
+      // (AGL-1775). It is an ENTITLEMENT INPUT — it decides how many POS
+      // registers a site may run, on top of the plan cap — and it is written
+      // only by /api/billing/register-allocations (billing.manage) and by
+      // `eraseHost`, both Admin SDK. A client that could write it would assign
+      // itself the whole purchased pool on every site, which is precisely the
+      // over-entitlement the pool was introduced to close.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'stripeCustomerId', 'subscription',
+             'seatAddons', 'registerAllocations',
+             'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
@@ -215,7 +224,8 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'stripeCustomerId', 'subscription',
+             'seatAddons', 'registerAllocations',
+             'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
@@ -224,7 +234,8 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'releaseFlags',
-             'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
+             'enabledPlugins', 'seatAddons', 'registerAllocations',
+             'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',

@@ -76,10 +76,24 @@ export async function eraseHost(hostId: string): Promise<void> {
     .delete()
     .catch(() => undefined)
   if (orgId) {
+    // The routing entry and the site's POS register seats go in the SAME
+    // write (AGL-1775). `registerAllocations[hostId]` is capacity the org has
+    // paid for and assigned here; a deleted site must return it to the pool
+    // or the org keeps paying $89/mo for a seat pinned to a site that no
+    // longer exists and cannot be reassigned from any surface. Releasing it
+    // by deleting the key rather than by decrementing a counter means the
+    // pool is `purchased - sum(allocations)` by arithmetic and has nothing to
+    // drift out of step with.
     await firestore
       .collection('orgs')
       .doc(orgId)
-      .set({ hosts: { [hostId]: FieldValue.delete() } }, { merge: true })
+      .set(
+        {
+          hosts: { [hostId]: FieldValue.delete() },
+          registerAllocations: { [hostId]: FieldValue.delete() },
+        },
+        { merge: true },
+      )
       .catch(() => undefined)
     // Drop every member's reverse-index row for this host (AGL-844); the
     // members still exist here (recursiveDelete of the org, if any, is later).

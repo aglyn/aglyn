@@ -102,8 +102,16 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     // downgrade (e.g. Business 2 → Pro 1) would otherwise keep every
     // existing register transacting. So re-check the cap at sale time:
     // rank the host's registers by creation order and refuse any whose
-    // rank is beyond the plan's `posRegisters` limit. Deterministic and
+    // rank is beyond THIS SITE's register cap. Deterministic and
     // self-healing — no data is deleted, and re-upgrading restores them.
+    //
+    // The cap is per site and so is the check (AGL-1775):
+    // `checkHostRegisterQuota` is the plan's cap plus the seats the org has
+    // allocated to this host out of the purchased pool. The old
+    // `checkQuota(org, 'posRegisters', …)` read the org-level value, which
+    // since AGL-1775 carries no pool at all — leaving it here would have
+    // stopped sales on registers a merchant is invoiced $89/mo for, which is
+    // the expensive direction of getting this wrong.
     if (!registerId) {
       return res.status(400).json({ error: 'Missing registerId' })
     }
@@ -119,7 +127,9 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (rank < 0) {
       return res.status(404).json({ error: 'Unknown register' })
     }
-    if (!Aglyn.checkQuota(ownerOrg?.org as any, 'posRegisters', rank).allowed) {
+    if (
+      !Aglyn.checkHostRegisterQuota(ownerOrg?.org as any, hostId, rank).allowed
+    ) {
       return res.status(403).json({
         error:
           'This register is over your plan’s limit — remove extra ' +

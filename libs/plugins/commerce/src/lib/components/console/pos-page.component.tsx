@@ -95,7 +95,15 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   // Not until the org doc has arrived (AGL-1064): an absent org resolves to
   // the free tier's `posRegisters: 0`, which empties this list and tells a
   // paying seller their registers exceed a plan nobody has read yet.
-  const registerCap = Aglyn.checkQuota(org, 'posRegisters', registers.length).limit
+  // Per SITE (AGL-1775): the plan's cap plus the register seats the org has
+  // allocated to this host out of the purchased pool. `checkQuota` on the
+  // org-level `posRegisters` no longer carries the pool and would hide
+  // registers this site is paying for.
+  const registerCap = Aglyn.checkHostRegisterQuota(
+    org,
+    hostId,
+    registers.length,
+  ).limit
   const withinCap = CommerceModel.registersWithinCap(registers, registerCap)
   const usableRegisters = planReady
     ? registers.filter((r: any) => withinCap.has(r.$id))

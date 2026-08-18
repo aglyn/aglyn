@@ -1576,26 +1576,32 @@ function resolvePurchasedAddons(
  * Effective entitlements for an org: plan defaults with the org doc's
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
- * `hostLimit`, `seatAddons.posRegisters` raises `posRegisters`, and
- * `seatAddons.eventCalendar` switches the `eventCalendar` feature on.
- * (Seat/dataset add-ons instead fold in at `checkSeatQuota` /
+ * `hostLimit` and `seatAddons.eventCalendar` switches the `eventCalendar`
+ * feature on. (Seat/dataset add-ons instead fold in at `checkSeatQuota` /
  * `checkDatasetQuota`, where the per-plan hard max clamps them.)
  * Missing or unknown plans resolve as `free`.
  *
- * `hostLimit` and `posRegisters` are DELIBERATELY unclamped here (AGL-1738):
- * there is no `maxHostsPerOrg` or `maxPosRegistersPerHost` to clamp against,
- * because those two kinds are sold flat rather than up to a band. Their bound
- * is the purchase ceiling — `EXTRA_HOSTS_ADDON_MAX` / `POS_REGISTERS_ADDON_MAX`
- * — and a band-shaped `Math.min` added here would silently disable resources
- * the org is invoiced for. See those constants before "fixing" this add.
+ * `hostLimit` is DELIBERATELY unclamped here (AGL-1738): there is no
+ * `maxHostsPerOrg` to clamp against, because extra sites are sold flat rather
+ * than up to a band. Their bound is the purchase ceiling,
+ * `EXTRA_HOSTS_ADDON_MAX`, and a band-shaped `Math.min` added here would
+ * silently disable sites the org is invoiced for. See that constant before
+ * "fixing" this add.
  *
- * KNOWN DIVERGENCE, not fixed here: `posRegisters` is enforced PER HOST
- * (`api/hosts/resources` counts `hosts/{hostId}/registers`) while
- * `seatAddons.posRegisters` is bought once, ORG-wide — so one $89/mo register
- * raises the cap on every site the org runs. `eventCalendar` above is
- * deliberately org-wide and priced for it; the register add-on is documented
- * as "per extra register/location" and is not. Allocating a purchase to a
- * host is a pricing/data-model change, not a clamp.
+ * `posRegisters` IS NOT ADDED HERE, and this is the fix, not an omission
+ * (AGL-1775, Zach's 2026-08-17 decision). The register add-on is priced "per
+ * extra register/location" and enforced PER SITE, so folding the org-wide
+ * purchase into an org-level value every site inherits sold one register and
+ * delivered `hostLimit` of them. `seatAddons.posRegisters` is now a POOL and
+ * `org.registerAllocations` says which site holds each seat. The number this
+ * function returns for `posRegisters` is therefore **the plan's cap alone** —
+ * exactly what an unallocated site must resolve to. Per-site capacity comes
+ * from `resolveHostRegisterCap(org, hostId)`; nothing else may add the pool
+ * back in.
+ *
+ * (`eventCalendar` is still org-wide on purpose: it is documented and priced
+ * as "one purchase covers every host in the org". The register add-on never
+ * was, which is the whole difference.)
  */
 export function resolveOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -1632,16 +1638,123 @@ export function resolveOrgEntitlements(
   }
   const purchased = resolvePurchasedAddons(org)
   const extraHosts = Math.max(0, purchased.hosts ?? 0)
-  const extraRegisters = Math.max(0, purchased.posRegisters ?? 0)
   const eventCalendar = (purchased.eventCalendar ?? 0) >= 1
-  if (!extraHosts && !extraRegisters && !eventCalendar) return resolved
+  if (!extraHosts && !eventCalendar) return resolved
   return {
     ...resolved,
     hostLimit: resolved.hostLimit + extraHosts,
-    posRegisters: resolved.posRegisters + extraRegisters,
     features: eventCalendar
       ? { ...resolved.features, eventCalendar: true }
       : resolved.features,
+  }
+}
+
+/**
+ * The org's POS register pool (AGL-1775): how many seats were purchased, how
+ * many are assigned to a site, and how many are left to assign.
+ *
+ * `purchased` runs through `resolvePurchasedAddons`, so a dead subscription
+ * empties the pool exactly as it empties every other add-on — the seats stop
+ * counting when they stop billing.
+ *
+ * `byHost` is the SANITISED allocation, and it never sums past `purchased`.
+ * The write path validates before it stores, so an over-allocated map means
+ * the data is stale or corrupt (a purchase reduced without the allocation
+ * being trimmed, a partial write, a hand edit). Both directions of getting
+ * that wrong cost money, so it is resolved rather than trusted: hosts are
+ * walked in sorted-id order and granted what remains of the pool, which is
+ * deterministic — the same host gets the same answer on every reader — and
+ * cannot hand out capacity nobody paid for.
+ *
+ * Every value is coerced: a non-number, `NaN`, `Infinity` or a negative reads
+ * as zero seats. An `Infinity` in this map would otherwise become an
+ * unbounded per-site register cap, which is the one outcome the guard in
+ * `resolveHostRegisterCap` exists to make impossible.
+ */
+export function resolveRegisterSeatPool(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): {
+  purchased: number
+  allocated: number
+  available: number
+  byHost: Record<string, number>
+} {
+  const rawPurchased = resolvePurchasedAddons(org).posRegisters
+  const purchased =
+    Number.isFinite(rawPurchased) && (rawPurchased as number) > 0
+      ? Math.floor(rawPurchased as number)
+      : 0
+  const raw = org?.registerAllocations
+  const byHost: Record<string, number> = {}
+  let allocated = 0
+  if (raw && typeof raw === 'object') {
+    for (const hostId of Object.keys(raw).sort()) {
+      if (allocated >= purchased) break
+      const value = Number((raw as Record<string, unknown>)[hostId])
+      if (!Number.isFinite(value) || value <= 0) continue
+      const seats = Math.min(Math.floor(value), purchased - allocated)
+      if (seats <= 0) continue
+      byHost[hostId] = seats
+      allocated += seats
+    }
+  }
+  return { purchased, allocated, available: purchased - allocated, byHost }
+}
+
+/**
+ * How many POS registers one SITE may run (AGL-1775): the plan's per-site cap
+ * plus whatever the org has assigned to that site out of the pool.
+ *
+ * THE GUARD, and the reason this is a function rather than a lookup. An
+ * unallocated host — no entry in `registerAllocations`, a missing map, a
+ * missing org, an org still loading — resolves to `resolveOrgEntitlements(org)
+ * .posRegisters`, which since AGL-1775 is the PLAN's cap and nothing else.
+ * Never the pooled total, and never `Infinity` unless the plan itself is
+ * `UNLIMITED` (enterprise, where an unbounded cap is what was sold).
+ *
+ * `checkQuota(undefined)` resolving to the Free tier is the lesson this
+ * inverts: an absent input there quietly answered a question in the
+ * PERMISSIVE direction on the day it mattered. Here the absent input answers
+ * in the direction of the plan, which is the conservative one — a site that
+ * has been assigned seats and whose allocation failed to load runs fewer
+ * registers than it paid for, which the console can say out loud, rather than
+ * more than it paid for, which nothing would ever notice.
+ *
+ * There is deliberately no separate read: the allocation lives on the org doc
+ * beside the entitlements, so a caller holding one holds the other.
+ */
+export function resolveHostRegisterCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  hostId: string | null | undefined,
+): number {
+  const planCap = resolveOrgEntitlements(org).posRegisters
+  if (!hostId) return planCap
+  // An UNLIMITED plan cap plus anything is still UNLIMITED; short-circuit so
+  // `Infinity + n` never has to be reasoned about downstream.
+  if (planCap === UNLIMITED) return UNLIMITED
+  return planCap + (resolveRegisterSeatPool(org).byHost[hostId] ?? 0)
+}
+
+/**
+ * Quota answer for a site's POS registers (AGL-1775) — the register-shaped
+ * `checkQuota`, in the same `{ allowed, limit, remaining }` shape so callers
+ * read identically.
+ *
+ * `checkQuota(org, 'posRegisters', used)` is WRONG for registers now and this
+ * exists so nobody has to remember why: that helper resolves the org-level
+ * value, which is the plan cap with no pool in it, so it would refuse a site
+ * the seats it holds. Everything that gates a register creation calls this.
+ */
+export function checkHostRegisterQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  hostId: string | null | undefined,
+  currentUsage: number,
+): { allowed: boolean; limit: number; remaining: number } {
+  const limit = resolveHostRegisterCap(org, hostId)
+  return {
+    allowed: currentUsage < limit,
+    limit,
+    remaining: Math.max(0, limit - currentUsage),
   }
 }
 
