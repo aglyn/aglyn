@@ -345,21 +345,27 @@ they are not the same quantity:
   `monitoring.googleapis.com/billing/samples_ingested` and
   `billing/bytes_ingested` both return **no data at all** for `aglyn-main` over
   a 30-day window, i.e. this project ingests nothing chargeable.
-- **Executions are the billable dimension** — 1M free per project per month.
-  At one request per location per period that is ~52k/month for a 5-minute
-  check and ~17k/month for a 15-minute one; the eleven checks come to roughly
-  430k/month, about 43% of the allowance. The three checks added for AGL-1923
-  and AGL-1924 account for ~86k of that.
+- **Executions are the billable dimension** — 1M free per project per month —
+  and the point count above does **not** settle how many there are. Read one
+  way (one request per location per period) the eleven checks come to roughly
+  430k/month, about 43% of the allowance; read the other (one request per
+  sample) they come to ~2.1M and we would be 1.1M over, which at $0.30/1,000
+  is roughly $330/month. **The bill decides between those, and the bill says
+  the first one.** A $330 line would have been shouting through the
+  `aglyn-main monthly spend` $20 budget alert every month; it has not. Treat
+  the headroom as real but not precisely known.
 - Consequently the proposed `marketing-home` / `customer-site` 300s → 600s
-  relaxation **saves nothing billable** and should not be made for cost
-  reasons. It would halve the sample density on the two checks that most need
-  it (the customer-visible ones) to buy headroom in an allowance that is
-  already half empty.
+  relaxation is **not worth making for cost reasons**. If we are on the low
+  reading it saves nothing billable at all; if we are on the high reading it
+  saves ~10% of an overage that would be visible in the budget alert and is
+  not. Either way it halves sample density on the two customer-visible checks
+  to buy headroom nobody is short of. Change the period if 10-minute detection
+  is genuinely acceptable for those two pages — not to save money.
 - Not verified here: the invoice itself. The billing account has no BigQuery
   billing export configured and neither the Cloud Billing API nor Monitoring
-  exposes invoice lines, so the check above is against the project's own
-  chargeable-ingestion telemetry, not the PDF. Worth one look at
-  Billing → Cost table filtered to Cloud Monitoring to close the loop.
+  exposes invoice lines, and there is no browser in the loop. **One look at
+  Billing → Cost table, filtered to Cloud Monitoring, closes this for good** —
+  it is the only thing that turns the inference above into a measurement.
 
 The backup probe needed one IAM grant:
 `roles/datastore.backupsViewer` (backups get/list, nothing else) to
