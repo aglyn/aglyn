@@ -248,8 +248,10 @@ Work this list, not the tree.
 - `apiKeys` (creating uid, label, scopes)
 - `ssoDomains`, `consoleDomains`, `orgSlugs` (including rename tombstones)
 - `stripeCustomers`, `apiIdempotency`
-- **`supportTickets` + `messages`** — subject, body, `authorEmail`. **Not
-  swept by any erasure** (AGL-1971)
+- `supportTickets` + `messages` — subject, body, `authorEmail`. An **org**
+  erasure destroys the thread; a **person** erasure redacts their `authorId`
+  and `authorEmail` and leaves the org's thread standing, body included
+  (AGL-1971). On an access request the body is still theirs to see.
 - `publisherProfiles`, `publisherHandles` — swept by `eraseOrg` (AGL-1970), but
   still list them on an **access** request: an erasure reaching them says
   nothing about a tree walk finding them.
@@ -305,7 +307,7 @@ comfortably outlives the response window.
 | We do not know that `privacy@aglyn.com` receives mail. | AGL-1973 |
 | A staff erasure of a **person** has no button. | AGL-1977 |
 | ~~Erasure does not reach `profiles`, `publisherProfiles` or `publisherHandles`.~~ **Closed 2026-08-18 (AGL-1970)** — all three are swept, and a surviving marketplace listing leaves only a content-free tombstone. | AGL-1970 |
-| Erasure does not reach `supportTickets`. **Until that is fixed, an erasure we describe as complete is not.** Say "we have deleted your account and workspace data" — not "we hold nothing about you". | AGL-1971 |
+| ~~Erasure does not reach `supportTickets`.~~ **Closed 2026-08-18 (AGL-1971).** One caveat to say accurately if asked: erasing a **person** redacts their name and email from support threads but does not delete the threads — those belong to the workspace, and only the workspace can ask for them. | AGL-1971 |
 | Assist Q&A has no retention period. | AGL-1972 |
 | Restriction and objection have no product representation. | — |
 | There is no DSAR register. | AGL-1974 |

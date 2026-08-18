@@ -116,7 +116,7 @@ has a sweep in `eraseOrg` or is a defect.
 | `hostIndex` | yes, via `eraseHost` | subdomain/cname routing |
 | `platformRevenue`, `storefrontTaxCollected` | **never, deliberately** | tax records — see below |
 | `contactSuppressions` | **never, deliberately** | do-not-contact list — see below |
-| **`supportTickets` + `messages`** | **NO — defect 3** | subject, body (≤5000 chars), `authorEmail` |
+| `supportTickets` + `messages` | yes (AGL-1971), by `eraseOrg` — `eraseUser` redacts instead | subject, body (≤5000 chars), `authorEmail` |
 | `profiles/{uid}` | yes (AGL-1970), by `eraseUser` | handle, display name, `stripeAccountId` |
 | `publisherHandles` | yes (AGL-1970) | handle reservations **and every rename tombstone** |
 | `publisherProfiles` | yes (AGL-1970) — deleted, or reduced to a content-free tombstone | handle, display name, `stripeAccountId`, `publisherAgreement` |
@@ -139,6 +139,33 @@ happened", which is precisely what Privacy Policy §5 reserves, and it carries n
 byte that sentence calls content. An org with no surviving listing keeps nothing
 at all. Both branches, and the emptiness of the tombstone, are pinned by
 `erase-publisher-identity.emulator.spec.ts`.
+
+**Support threads are erased by the org and redacted by the person (AGL-1971),
+and the asymmetry is deliberate.** `eraseOrg` `recursiveDelete`s each
+`supportTickets` row so the `messages` subtree goes with it — `deleteDocsByOrgId`
+is *not* used here despite the identical query, because it deletes documents and
+not subtrees, and a batch delete would have orphaned every message under a
+vanished parent. `eraseUser` does **not** delete the thread: a ticket is the
+workspace's support history, so for it Aglyn is the processor and the org is the
+controller, and deleting it on one member's instruction is acting without the
+controller's. It sets `authorId`/`authorEmail` to `null` with
+`authorErased: true` on that person's messages only, leaving the body as the
+org's record. That runs as a **collection-group** query on `messages.authorId`
+so it reaches a workspace the person has since left — a walk over current
+memberships would miss those silently, and the residual would grow with tenure.
+It needs the `COLLECTION_GROUP` override on `messages.authorId` in
+`cloud/firebase-firestore.indexes.json`, added with that change: **until it is
+deployed, `eraseUser` reports `deleted.supportMessagesRedacted: null`**, which
+means "this step did not run", not "there was nothing to redact". Pinned by
+`erase-support-tickets.emulator.spec.ts`.
+
+**No retention exception for support threads, and the alternative was
+weighed.** A closed thread is arguable dispute evidence, the class of argument
+that keeps `platformRevenue` alive. It does not reach: that exemption is GDPR
+Art. 17(3)(b), *records retained to comply with a legal obligation*, and nothing
+is filed from a support ticket. DPA §11 commits the other way in terms. What
+survives as evidence is the `adminAudit` row — the erasure happened, when, at
+whose instruction, and how many threads it destroyed.
 
 ### Deliberately retained past erasure
 
@@ -218,7 +245,7 @@ Each of these is a defect, not a note. Filed rather than narrated.
 | --- | --- | --- |
 | 1 | ~~**`profiles/{uid}` survives `eraseUser`.**~~ **CLOSED 2026-08-18.** `eraseUser` now `recursiveDelete`s `profiles/{uid}` before the auth record and reports `deleted.profile` in the audit row. | **AGL-1970** |
 | 2 | ~~**`publisherProfiles/{orgId}` and `publisherHandles/{handle}` survive `eraseOrg`.**~~ **CLOSED 2026-08-18.** Handles — live reservation and rename tombstones alike — are swept by `orgId` field; the profile is deleted, or reduced to a content-free `{ erased: true }` tombstone when a listing outlives it. Both pinned by `erase-publisher-identity.emulator.spec.ts`, whose negative control proves a bystander publisher's profile, handle and payout id are untouched. | **AGL-1970** |
-| 3 | **`supportTickets` survives both erasures.** Top-level, `orgId` as a field, with a `messages` subcollection carrying `authorEmail` and up to 5000 characters of customer prose. `grep -c supportTickets erase.ts` returns `0`. The highest-PII-density collection outside the org tree is the one with no sweep. | **AGL-1971** |
+| 3 | ~~**`supportTickets` survives both erasures.**~~ **CLOSED 2026-08-18.** `eraseOrg` recursive-deletes each thread with its `messages`; `eraseUser` redacts `authorId`/`authorEmail` across every workspace, current or former, and keeps the org's thread. Pinned by `erase-support-tickets.emulator.spec.ts`, whose negative controls hold a bystander org's thread and a co-author's email in a redacted thread. **One deployment step outstanding**: the `messages.authorId` `COLLECTION_GROUP` index must be deployed, or the user-side redaction reports `null`. | **AGL-1971** |
 | 4 | **Assist Q&A has no retention period at all.** `orgs/{orgId}/assistExchanges/{id}` stores the user's `question` and the model's `answer` **verbatim** plus the asking `uid`, with no `expiresAt`, no TTL and no prune. It is reachable by the cascade, so an erasure clears it — but until the org is erased it is kept forever, and Assist is gated on a privacy-policy disclosure for exactly this data (`release_assist`, AGL-1909). A disclosure that states a period we do not enforce is worse than the gap. | **AGL-1972** |
 | 5 | **`privacy@aglyn.com` may not exist.** It is the intake address in Privacy Policy §7, §9, §11 and §13 and the data-importer contact in DPA Annex A. The Drive open-items list records that only `noreply@` and `info@` were live at drafting; `security@`, `legal@`, `abuse@` and `dmca@` are in the same unconfirmed state and each is load-bearing in a published document. | **AGL-1973** |
 | 6 | **No personal-data export exists.** The Privacy Policy grants a portability right (§7, GDPR Art. 20) and there is no "download my data" path for a person or an org. Site export is Pro+ and deliberately excludes PII. A DSAR access request is answered by hand today. | **AGL-1974** |

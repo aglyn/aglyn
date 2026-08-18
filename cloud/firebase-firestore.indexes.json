@@ -739,6 +739,20 @@
       ]
     },
     {
+      "collectionGroup": "messages",
+      "fieldPath": "authorId",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "orders",
       "fieldPath": "paymentIntentId",
       "indexes": [
