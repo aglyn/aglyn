@@ -24,7 +24,10 @@ import {
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import {
   mdiChatQuestionOutline,
+  mdiChevronDown,
+  mdiChevronUp,
   mdiClose,
+  mdiOpenInNew,
   mdiSend,
   mdiThumbDownOutline,
   mdiThumbUpOutline,
@@ -34,12 +37,15 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
+  Collapse,
   Drawer,
   Fab,
   IconButton,
   Link,
+  Paper,
   Stack,
   TextField,
   Tooltip,
@@ -97,12 +103,32 @@ interface AssistDocLink {
   url: string
 }
 
+/**
+ * A level-2 proposal, exactly as the server resolved it (AGL-1988).
+ *
+ * Every field here is inert. There is no method, no endpoint and no body,
+ * because the server type has none: the assistant proposes, the user
+ * confirms, and confirming NAVIGATES. The destination form's own submit
+ * button stays the only thing that writes.
+ */
+interface AssistProposal {
+  id: string
+  label: string
+  outcome: string
+  href: string
+  values: Array<{ name: string; value: string }>
+  prefill: boolean
+}
+
 interface AssistMessage {
   role: 'user' | 'assistant'
   text: string
   exchangeId?: string | null
   feedback?: 'up' | 'down'
   docs?: AssistDocLink[]
+  proposal?: AssistProposal | null
+  /** Set once the user acts on or waves away the card, so it does not linger. */
+  proposalResolved?: boolean
 }
 
 interface AssistQuotaInfo {
@@ -174,6 +200,144 @@ export function renderAssistText(text: string): JSX.Element {
         )
       })}
     </>
+  )
+}
+
+/**
+ * Split an answer into its plain layer and its technical tail (AGL-1988).
+ *
+ * Aglyn's users run from first-time business owners to working developers,
+ * and they get the same message. Two modes would be the obvious build and
+ * the wrong one — it asks a beginner to label themselves before they have a
+ * question, and asks a developer to opt in to being taken seriously. So the
+ * model writes one answer with a technical paragraph at the end, and the
+ * panel collapses it: the beginner never has to read past the plain steps,
+ * the developer never has to ask for the route or the field name.
+ *
+ * Degrades to "no tail" when the marker is absent, which is the common case
+ * and not a failure — plenty of answers have nothing technical to add.
+ */
+export function splitAssistDisclosure(text: string): {
+  plain: string
+  technical: string
+} {
+  const match = text.match(/(?:^|\n)[ \t]*Under the hood:[ \t]*/)
+  if (!match || match.index === undefined) return { plain: text, technical: '' }
+  const plain = text.slice(0, match.index).trimEnd()
+  const technical = text.slice(match.index + match[0].length).trim()
+  // An answer that is ONLY a technical tail is still the answer. Collapsing
+  // the whole thing would show the user an empty bubble with a toggle.
+  if (!plain || !technical) return { plain: text, technical: '' }
+  return { plain, technical }
+}
+
+/** The collapsed developer layer. */
+function UnderTheHood({ technical }: { technical: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Box sx={{ mt: 0.5 }}>
+      <Link
+        component="button"
+        type="button"
+        variant="caption"
+        underline="hover"
+        onClick={() => setOpen((prior) => !prior)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+      >
+        Under the hood
+        <MdiIcon
+          path={open ? mdiChevronUp.path : mdiChevronDown.path}
+          sx={{ fontSize: 14 }}
+        />
+      </Link>
+      <Collapse in={open} unmountOnExit>
+        <Typography
+          variant="caption"
+          component="div"
+          color="text.secondary"
+          sx={{ mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        >
+          {renderAssistText(technical)}
+        </Typography>
+      </Collapse>
+    </Box>
+  )
+}
+
+/**
+ * The confirm card — the whole of "automate current view", and the whole of
+ * its boundary.
+ *
+ * The assistant proposes; this card is the human confirmation; confirming
+ * navigates. There is deliberately no submit path anywhere in this
+ * component, and no network call: a chat assistant that writes without
+ * consent is a far worse launch story than one that only advises, and the
+ * cheapest way to be sure it cannot is for the code that could do it not to
+ * exist. `assist-panel-proposal.spec.tsx` greps this file for exactly that.
+ *
+ * The copy is held to the same standard. While `prefill` is false — no
+ * console page reads `assist_*` params yet — the card says it will open the
+ * page and lists the values to use. It does not say it filled anything in,
+ * because a form that comes up empty after that promise is worse than no
+ * card at all.
+ */
+function ProposalCard({
+  proposal,
+  onConfirm,
+  onDismiss,
+}: {
+  proposal: AssistProposal
+  onConfirm: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ mt: 1, p: 1.5, borderRadius: 2, bgcolor: 'background.paper' }}
+    >
+      <Typography variant="subtitle2">{proposal.label}</Typography>
+      <Typography variant="caption" color="text.secondary" component="div">
+        Opens {proposal.outcome}.
+      </Typography>
+      {proposal.values.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" component="div">
+            {proposal.prefill ? 'Filled in for you:' : 'Values to use:'}
+          </Typography>
+          <Stack component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {proposal.values.map(({ name, value }) => (
+              <Typography key={name} component="li" variant="caption">
+                {name}: <strong>{value}</strong>
+              </Typography>
+            ))}
+          </Stack>
+        </Box>
+      )}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ mt: 1 }}
+      >
+        Aglyn Assist only opens the page. Nothing is saved until you fill the
+        form in and submit it yourself.
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+        <AppLink
+          componentVariant="button"
+          href={proposal.href}
+          variant="contained"
+          size="small"
+          onClick={onConfirm}
+          startIcon={<MdiIcon path={mdiOpenInNew.path} />}
+        >
+          Take me there
+        </AppLink>
+        <Button size="small" color="inherit" onClick={onDismiss}>
+          No thanks
+        </Button>
+      </Stack>
+    </Paper>
   )
 }
 
@@ -319,16 +483,25 @@ export function AssistPanelComponent() {
             patchAnswer((message) => ({ ...message, text: message.text + text }))
           } else if (event.type === 'done') {
             const docs = (event.docs as AssistDocLink[] | undefined) ?? []
+            // Server-resolved and inert: an id from the closed set attached
+            // to the view the question was asked from, plus a destination
+            // this client did not choose. Null on every turn that proposed
+            // nothing, which is most of them.
+            const proposal = (event.proposal as AssistProposal | null) ?? null
             patchAnswer((message) => ({
               ...message,
               exchangeId: (event.exchangeId as string | null) ?? null,
               docs,
+              proposal,
             }))
             if (event.quota) setQuota(event.quota as AssistQuotaInfo)
             trackEvent('assistant_message_sent', {
               tier: entitled ? 'entitled' : 'free',
               grounded: docs.length > 0,
             })
+            if (proposal) {
+              trackEvent('assistant_proposal_shown', { action: proposal.id })
+            }
           } else if (event.type === 'error') {
             failAnswer(String(event.error ?? 'The assistant stream failed.'))
           }
@@ -351,6 +524,19 @@ export function AssistPanelComponent() {
     pathname,
     user,
   ])
+
+  /**
+   * Retire a card once it has been acted on or waved away. Local state only
+   * — there is nothing to tell the server, because the proposal was never
+   * anything the server was waiting on.
+   */
+  const resolveProposal = useCallback((index: number) => {
+    setMessages((prior) =>
+      prior.map((entry, i) =>
+        i === index ? { ...entry, proposalResolved: true } : entry,
+      ),
+    )
+  }, [])
 
   const sendFeedback = useCallback(
     async (index: number, feedback: 'up' | 'down') => {
@@ -506,7 +692,9 @@ export function AssistPanelComponent() {
                   >
                     {message.role === 'assistant' ? (
                       message.text ? (
-                        renderAssistText(message.text)
+                        renderAssistText(
+                          splitAssistDisclosure(message.text).plain,
+                        )
                       ) : (
                         <CircularProgress size={14} />
                       )
@@ -514,6 +702,27 @@ export function AssistPanelComponent() {
                       message.text
                     )}
                   </Typography>
+                  {message.role === 'assistant' &&
+                    splitAssistDisclosure(message.text).technical && (
+                      <UnderTheHood
+                        technical={splitAssistDisclosure(message.text).technical}
+                      />
+                    )}
+                  {message.role === 'assistant' &&
+                    message.proposal &&
+                    !message.proposalResolved && (
+                      <ProposalCard
+                        proposal={message.proposal}
+                        onConfirm={() => {
+                          trackEvent('assistant_proposal_confirmed', {
+                            action: message.proposal?.id ?? '',
+                          })
+                          resolveProposal(index)
+                          setOpen(false)
+                        }}
+                        onDismiss={() => resolveProposal(index)}
+                      />
+                    )}
                   {message.role === 'assistant' && message.exchangeId && (
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
                       <IconButton

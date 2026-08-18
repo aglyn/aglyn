@@ -322,6 +322,19 @@ export interface AnalyticsEventParams {
    * (AGL-1860). `feedback` is `up` | `down`.
    */
   assistant_feedback: { feedback: string }
+  /**
+   * Custom: no GA4 equivalent. Aglyn Assist offered to open a page for the
+   * user (AGL-1988, level 2). `action` is the registry action id — a closed
+   * set, so it carries no user content.
+   *
+   * The pair below is the only read on whether the confirm gate is a real
+   * choice or a speed bump people click through. A shown-to-confirmed ratio
+   * near 1 means the card is not being read, and the copy has to change
+   * BEFORE the ladder goes anywhere near a write.
+   */
+  assistant_proposal_shown: { action: string }
+  /** Custom: no GA4 equivalent. The user confirmed and was navigated. */
+  assistant_proposal_confirmed: { action: string }
 
   // --- Retention (AGL-1859/AGL-1863: the leave path, measurable) -----------
   /**
@@ -674,6 +687,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   click: true,
   assistant_message_sent: true,
   assistant_feedback: true,
+  assistant_proposal_shown: true,
+  assistant_proposal_confirmed: true,
   churn_survey_submitted: true,
   downsell_accepted: true,
   winback_discount_accepted: true,
