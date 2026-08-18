@@ -184,15 +184,27 @@ describe('a staff grant lands in the pool the identity lives in', () => {
 })
 
 describe('the phantom shadow record (AGL-1962) is reported, not silently preferred', () => {
-  it('project pool wins the uid lookup when a shadow exists — the documented hazard', async () => {
-    // Both pools hold the SAME uid. This is the state measured on production
-    // on 2026-08-18. `findUserByUidAcrossPools` checks the project pool first,
-    // so the shadow wins — and a grant lands on the empty shadow while the
-    // real SSO identity gets nothing.
+  it('the SSO identity wins even while the shadow still exists (AGL-2005)', async () => {
+    // Both pools hold the SAME uid — the state measured on production on
+    // 2026-08-18, where `IHumyGGhGxZKjVV26qCRx5Okf573` existed in the project
+    // pool and in `aglyn-org-y5v14` at once.
     //
-    // Pinned as an assertion rather than left as a comment: this is the
-    // behaviour that makes deleting the shadow a REQUIRED remediation, and if
-    // the pool ordering ever changes this test is where that surfaces.
+    // This test used to pin the OPPOSITE outcome and called it "the
+    // documented hazard": the project pool was checked first, so the empty
+    // shadow won every lookup and a staff grant landed on it while the real
+    // SSO identity got nothing — the 404-after-a-successful-grant that cost
+    // two investigations.
+    //
+    // AGL-2005 fixed it. `findUserByUidAcrossPools` no longer returns the
+    // first pool to answer: an UNIDENTIFIED record (no email, no provider —
+    // exactly what a shadow looks like) is held as a fallback rather than
+    // returned, so an identified tenant record outranks it. Deleting the
+    // shadow is now remediation of a duplicate row, not a prerequisite for
+    // grants working at all.
+    //
+    // Kept as an assertion rather than deleted with the hazard: this is where
+    // a regression in pool precedence surfaces, and precedence is the whole
+    // mechanism.
     projectUsers.set('dual-uid', userRecord('dual-uid', null as any))
     tenantUsers.set(
       AGLYN_TENANT,
@@ -200,11 +212,11 @@ describe('the phantom shadow record (AGL-1962) is reported, not silently preferr
     )
     const write = await setClaimsInOwningPool('dual-uid', STAFF)
 
-    expect(write?.tenantId).toBeNull()
-    expect(claimsIn(projectUsers, 'dual-uid')).toEqual(STAFF)
-    // The real identity did NOT get the grant. This is the 404-after-a-
-    // successful-grant that cost two investigations.
-    expect(claimsIn(tenantUsers.get(AGLYN_TENANT), 'dual-uid')).toBeNull()
+    expect(write?.tenantId).toBe(AGLYN_TENANT)
+    expect(claimsIn(tenantUsers.get(AGLYN_TENANT), 'dual-uid')).toEqual(STAFF)
+    // The negative half: the shadow must NOT also receive the grant, or
+    // "which record is authoritative" is undefined again.
+    expect(claimsIn(projectUsers, 'dual-uid')).toBeNull()
   })
 
   it('once the shadow is deleted, the same grant reaches the SSO identity', async () => {

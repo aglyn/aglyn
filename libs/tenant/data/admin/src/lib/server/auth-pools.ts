@@ -401,9 +401,10 @@ export interface StaffClaimWrite {
  * either throws `user-not-found` (loud, fine) or, when a phantom shadow record
  * shares the uid, silently succeeds against the WRONG record. That is not
  * hypothetical: on 2026-08-18 uid `IHumyGGhGxZKjVV26qCRx5Okf573` existed in
- * both the project pool and `aglyn-org-y5v14`, and since
- * {@link findUserByUidAcrossPools} checks the project pool first, the phantom
- * won every lookup until it was deleted.
+ * both the project pool and `aglyn-org-y5v14`. That phantom won every lookup
+ * until AGL-2005 made {@link findUserByUidAcrossPools} rank an IDENTIFIED
+ * record above an unidentified one rather than taking the first pool to
+ * answer.
  *
  * So resolution and mutation are bound together here rather than left to each
  * caller to pair correctly, and the resolved pool is RETURNED so the audit row

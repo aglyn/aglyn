@@ -115,6 +115,28 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       uidAlsoInPools: [null],
     }),
     authForPool: (tenantId: string | null) => recordingPool(tenantId ?? null),
+    // AGL-1993 moved the route's staff grant onto this helper, after this spec
+    // was written — a wholesale module mock is a closed world, so its absence
+    // made the call `undefined` and the route answered 500 for every action.
+    //
+    // Modelled on the real body rather than stubbed to a constant: resolve the
+    // owning pool, write through `authForPool` so the recording pool sees it,
+    // and return the StaffClaimWrite. A stub that just returned `{ tenantId }`
+    // would satisfy the status assertion while writing to no pool at all,
+    // which is precisely the thing this suite exists to pin.
+    setClaimsInOwningPool: async (
+      uid: string,
+      claims: Record<string, unknown>,
+    ) => {
+      const found = { record: targetRecord, tenantId: 'aglyn-org-y5v14' }
+      await recordingPool(found.tenantId).setCustomUserClaims(uid, claims)
+      return {
+        uid,
+        tenantId: found.tenantId,
+        email: found.record.email ?? null,
+        claims,
+      }
+    },
     eraseUser: async () => ({ ok: true, deleted: {} }),
     consumePasswordResetSend: async () => ({ allowed: true }),
     passwordResetThrottleMessage: () => '',

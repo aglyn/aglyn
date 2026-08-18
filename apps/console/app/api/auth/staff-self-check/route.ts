@@ -42,6 +42,12 @@
  * the grant, instead of guessing.
  */
 
+// lockdown-423: exempt — account-scoped read of the caller's OWN identity across the
+// auth pools (AGL-1993/AGL-2005). It takes no orgId, touches no org or host doc, and
+// writes nothing; the same shape as auth/activity. It must also stay reachable under a
+// lock: this is how a staff user establishes which pool they are signed in as while
+// diagnosing the lockdown, and refusing it would hide the answer during the one
+// incident it exists for.
 import {
   authForPool,
   firebaseAdmin,

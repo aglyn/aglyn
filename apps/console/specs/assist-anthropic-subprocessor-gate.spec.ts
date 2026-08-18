@@ -145,6 +145,14 @@ const MENTIONS_ONLY = new Map<string, string>([
     'Local development template.',
   ],
   [
+    '.env.selfhost.example',
+    'The self-host env template (AGL-2014). Names the key so an operator knows Assist needs their OWN Anthropic key; without it both Assist surfaces answer 501. A template, not a flow.',
+  ],
+  [
+    'docs/SELF_HOSTING.md',
+    'The self-host runbook (AGL-2014). Documents the same key as an optional operator-supplied credential. Documentation, not a flow.',
+  ],
+  [
     'libs/plugins/marketplace/src/lib/components/ai-assist-provider.component.tsx',
     'Client component; names the key only to explain the 501 degrade.',
   ],

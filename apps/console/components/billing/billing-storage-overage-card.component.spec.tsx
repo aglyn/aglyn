@@ -299,7 +299,12 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     // card threw "Cannot read properties of undefined (reading 'toFixed')"
     // and took the whole billing page down with it.
     for (const missing of ['pricePerGbUsd', 'includedStoragePerSiteMb']) {
-      const payload: any = { ...NOT_ACKNOWLEDGED }
+      // `UNCAPPED` here, not the `NOT_ACKNOWLEDGED` fixture this test was
+      // written against: AGL-1886 replaced the acknowledge/opt-in pair with a
+      // customer-owned `capUsd`, and this spec arrived afterwards on a rescue
+      // branch that predated it. UNCAPPED is the same shape for this test's
+      // purpose — it carries both pricing fields the loop strips.
+      const payload: any = { ...UNCAPPED }
       delete payload[missing]
       global.fetch = jest.fn(async () =>
         jsonResponse(payload),
