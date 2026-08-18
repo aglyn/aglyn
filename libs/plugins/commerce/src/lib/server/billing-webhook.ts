@@ -37,6 +37,7 @@ import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { flagOrderRestock } from './restock-flag'
+import { recordStorefrontTax } from './storefront-tax-record'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -769,6 +770,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
     brandCache.set(key, brand)
     return brand
   }
+
+  // Storefront sales tax (AGL-1904), FIRST and unconditionally: a
+  // `mode: 'stripe'` store's shopper is charged tax computed on AGLYN's own
+  // registrations — the session is created on the platform account with no
+  // `Stripe-Account` header and no `on_behalf_of`, and Stripe reports
+  // `automatic_tax.liability: { type: 'self' }` on it (measured, see
+  // `storefront-tax.ts`). That money settles into Aglyn's balance and Aglyn's
+  // quarterly return could not see a cent of it.
+  //
+  // Ahead of the branch chain on purpose: every one of the sections below
+  // early-returns on its own redelivery guard (`if (!created) return`), so a
+  // recorder placed inside or after them would silently stop recording the
+  // moment an order document already existed. This is idempotent by Stripe
+  // object id, so running on every delivery is the correct behaviour.
+  //
+  // AWAITED and never allowed to throw: a lost row is an understated tax
+  // return, and `recordStorefrontTax` swallows its own failures precisely so
+  // this cannot turn a recording problem into a redelivered billing webhook.
+  await recordStorefrontTax(String(type), object)
 
   if (
     type === 'customer.subscription.created' ||
