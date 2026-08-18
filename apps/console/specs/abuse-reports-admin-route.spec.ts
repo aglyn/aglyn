@@ -61,7 +61,32 @@ const docHandle = (id: string) => ({
     const base = options?.merge ? (state.reports[id] ?? {}) : {}
     state.reports[id] = { ...base, ...patch }
   },
+  /**
+   * Subcollections, for the AGL-1983 strike ledger at
+   * `orgs/{orgId}/dmcaStrikes`.
+   *
+   * Empty in this file, deliberately: these tests are about the AGL-1964
+   * queue — auth, redaction, the audit row — and none of them seeds a strike.
+   * What the double has to do is EXIST, so the route's ledger read returns
+   * nothing rather than throwing and turning every assertion here into a 500.
+   * The ledger's own behaviour is proved in `dmca-counter-notice-admin.spec`,
+   * against a double that models paths properly.
+   */
+  collection: () => emptyListing(),
 })
+
+/** A listing over nothing, for the collections this file does not seed. */
+const emptyListing = () => {
+  const build = (): any => ({
+    orderBy: () => build(),
+    limit: () => build(),
+    where: () => build(),
+    select: () => build(),
+    get: async () => ({ docs: [] }),
+    doc: (id: string) => docHandle(id),
+  })
+  return build()
+}
 
 const listing = () => {
   const build = () => ({
@@ -77,6 +102,7 @@ const listing = () => {
       state.lastQuery.where = [field, op, value]
       return build()
     },
+    select: () => build(),
     get: async () => {
       const rows = Object.entries(state.reports).filter(([, data]) =>
         state.lastQuery.where
@@ -106,6 +132,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               },
             }
           }
+          // Only `abuseReports` is backed by `state.reports`. Before AGL-1983
+          // this double answered every collection with the reports, which was
+          // harmless while the route read one — but the route now also lists
+          // `dmcaCounterNotices` and reads `hosts`, and a double that handed
+          // those back the reports would have the queue rendering abuse rows
+          // as counter-notices.
+          if (name !== 'abuseReports') return emptyListing()
           return Object.assign(listing(), { doc: (id: string) => docHandle(id) })
         },
       }),
@@ -121,6 +154,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/abuse-report'),
+  // The §512 halves the route grew in AGL-1983. Spread in for the same reason
+  // the catalog above is: a stub would make this file assert that a mock
+  // agreed with itself about a statutory deadline.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/dmca-counter-notice',
+  ),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/repeat-infringer'),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: Object.fromEntries(new URL(request.url).searchParams.entries()),
@@ -135,7 +175,12 @@ import { GET, POST } from '../app/api/admin/abuse-reports/route'
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
-  FieldValue: { serverTimestamp: () => 'server-timestamp' },
+  FieldValue: {
+    serverTimestamp: () => 'server-timestamp',
+    // Removes a FIELD, not a document — the AGL-1983 cancel path clears a
+    // host's scheduled `suspendedUntilMs`. See the deletion guard below.
+    delete: () => 'field-deleted',
+  },
 }))
 
 const REPORT_ID = 'a'.repeat(40)
@@ -430,7 +475,23 @@ describe('acting on a report leaves a record', () => {
       require.resolve('../app/api/admin/abuse-reports/route'),
       'utf8',
     )
-    expect(route).not.toMatch(/\.delete\s*\(/)
+    /**
+     * Narrowed in AGL-1983, and narrowed rather than dropped.
+     *
+     * The invariant is that no DOCUMENT is ever removed. The original
+     * assertion enforced it by banning the substring `.delete(` outright,
+     * which was exact while the route had no other use for the word — and
+     * became wrong the moment the §512(g) cancel path needed
+     * `FieldValue.delete()` to clear a host's scheduled `suspendedUntilMs`.
+     * That removes a FIELD from a host document; it deletes nothing, and the
+     * host row it touches is not in this queue at all.
+     *
+     * So `FieldValue.delete()` is stripped first and the ban stands over what
+     * is left. A `ref.delete()`, a `doc(id).delete()` or a bulk writer's
+     * delete still goes red — verified by mutation, not assumed.
+     */
+    const withoutFieldDeletes = route.replace(/FieldValue\.delete\s*\(\s*\)/g, '')
+    expect(withoutFieldDeletes).not.toMatch(/\.delete\s*\(/)
     expect(route).not.toMatch(/export const DELETE/)
   })
 })
