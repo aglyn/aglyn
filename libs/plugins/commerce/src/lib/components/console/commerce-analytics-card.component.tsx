@@ -16,13 +16,17 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Box, Stack, Typography } from '@mui/material'
+import { checkEntitlement } from '@aglyn/aglyn'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { Alert, Box, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useConsoleHostRoute,
+  useFirestore,
+  useOrgPlan,
+} from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 export interface CommerceAnalyticsCardProps {
@@ -37,9 +41,27 @@ const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
  * AOV, channel split, and top products computed from the loaded order
  * window; storefront GA4 events mirror the funnel into the site's own
  * Google Analytics.
+ *
+ * Gated on `commerceAnalytics` since AGL-2056. AGL-1938 made that flag
+ * non-inert by gating `CommerceGlanceCard` — the dashboard WIDGET — and
+ * stopped there, leaving this, the actual Analytics tab, open to every
+ * plan. `commerce` is true from Starter; `commerceAnalytics` is false
+ * until Pro, so a Starter org read the widget's upgrade prompt and then
+ * found the whole paid surface one tab over.
+ *
+ * The gate is client-side because it has to be: the numbers are derived
+ * from `hosts/{hostId}/orders`, which this org may legitimately read, so
+ * there is no server boundary to put it behind. That makes it a packaging
+ * claim rather than a security one — which is exactly why it has to be
+ * applied at EVERY surface or the claim is simply untrue.
  */
 export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
   const { hostId } = props
+  // Console routes are /[orgSlug]/hosts/[subdomain]/… (AGL-673); this
+  // component only has a host doc id.
+  const consoleRoute = useConsoleHostRoute(hostId)
+  const { org, ready: orgReady } = useOrgPlan(hostId)
+  const entitled = checkEntitlement(org as never, 'commerceAnalytics')
   const firestore = useFirestore()
   const { data: orderDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(500)),
@@ -110,6 +132,55 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
   }, [orderDocs])
 
   const maxDay = Math.max(1, ...stats.days)
+
+  if (!orgReady) {
+    // `checkEntitlement(undefined)` resolves the FREE tier rather than
+    // "unknown" (see `useOrgPlan`), and this card's "no" is an upsell —
+    // never accuse a paying org of being unentitled while the plan doc is
+    // still in flight. Same three-state shape as `CommerceGlanceCard`.
+    return (
+      <CardDisplay
+        header={'Commerce analytics (30 days)'}
+        contentGutterX
+        contentGutterY
+      >
+        <Typography variant="body2" color="text.secondary">
+          {'Checking your plan…'}
+        </Typography>
+      </CardDisplay>
+    )
+  }
+
+  if (!entitled) {
+    return (
+      <CardDisplay
+        header={'Commerce analytics (30 days)'}
+        contentGutterX
+        contentGutterY
+      >
+        <Alert
+          severity="info"
+          action={
+            consoleRoute.orgSlug ? (
+              <AppLink
+                componentVariant="button"
+                color="inherit"
+                size="small"
+                href={`/${consoleRoute.orgSlug}/billing`}
+              >
+                {'Upgrade'}
+              </AppLink>
+            ) : undefined
+          }
+        >
+          {'Commerce analytics — revenue trend, orders, average order ' +
+            'value, channel split and top products — is a Pro feature. ' +
+            'Every order is still being recorded, so the numbers are ' +
+            'waiting the moment you upgrade.'}
+        </Alert>
+      </CardDisplay>
+    )
+  }
 
   return (
     <CardDisplay header={'Commerce analytics (30 days)'} contentGutterX contentGutterY>
