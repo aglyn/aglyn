@@ -42,6 +42,7 @@ import {
   type ChurnSurveyReason,
   type RetentionSurface,
 } from '../../app/api/_lib/retention'
+import { DocsHelpTip } from '../docs-help-tip.component'
 
 /**
  * The why-are-you-leaving options, in the order they are offered.
@@ -417,10 +418,37 @@ export function RetentionFunnelDialog({
 
       {step === 'confirm' && (
         <>
-          <DialogTitle>
+          {/* The one help tip in this dialog, and it belongs on THIS step
+              (AGL-1929). The earlier steps each explain themselves in a
+              sentence; this is where an irreversible decision is made, and
+              it is the step whose consequences a sentence cannot carry —
+              what survives, what stops, what "end of the paid period"
+              actually means for the plan you are on. AGL-1220's rule: a tip
+              is earned only where the inline line cannot tell the whole
+              story, and four question marks in one four-step dialog is the
+              noise that issue warned about. */}
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             {surface === 'account_delete'
               ? 'Delete this organization?'
               : 'Cancel your subscription?'}
+            <DocsHelpTip
+              topic="downgradingAndCanceling"
+              anchor={
+                surface === 'account_delete'
+                  ? '#deleting-your-organization'
+                  : '#canceling-your-subscription'
+              }
+              title={
+                surface === 'account_delete'
+                  ? 'What deleting removes — and the hold before it does'
+                  : 'What canceling changes, and when'
+              }
+              excerpt={
+                surface === 'account_delete'
+                  ? 'Deletion is the only thing that removes your data, and there is a hold period during which you can cancel the request and fully restore.'
+                  : 'Your plan runs to the end of the period you already paid for, then the organization resolves to Free. Nothing is deleted, and you can resume before it ends.'
+              }
+            />
           </DialogTitle>
           <DialogContent>
             <Stack spacing={2}>

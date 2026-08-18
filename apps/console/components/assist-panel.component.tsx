@@ -55,6 +55,7 @@ import {
   useState,
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgScope from '../hooks/use-org-scope'
@@ -393,6 +394,18 @@ export function AssistPanelComponent() {
             {verdict.staffPreview && (
               <Chip size="small" color="warning" label="Staff preview" />
             )}
+            {/* Assist answers from the docs but never says so, and the three
+                questions it provokes — what it can and can't do, why it
+                stopped answering, what happens to what I typed — are exactly
+                the four headings on its docs page (AGL-1929). Nothing in this
+                panel's chrome can carry those, and a chat box is the one
+                surface where a user is most likely to keep asking rather
+                than go and read. */}
+            <DocsHelpTip
+              topic="aglynAssist"
+              anchor="#what-it-can-do"
+              sx={{ color: 'text.secondary' }}
+            />
             <IconButton
               aria-label="Close Aglyn Assist"
               onClick={() => setOpen(false)}

@@ -41,6 +41,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
+import { DocsHelpTip } from '../docs-help-tip.component'
 
 /**
  * The tiers this grid sells, in ladder order. Enterprise is deliberately NOT
@@ -149,19 +150,36 @@ function LowerTierDisclosure(props: {
   if (count < 1) return null
   return (
     <Grid size={{ xs: 12 }}>
-      <Button
-        size="small"
-        color="inherit"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        sx={{ color: 'text.secondary', textTransform: 'none' }}
-      >
-        {expanded
-          ? 'Hide lower plans'
-          : `Looking for something smaller? Show ${count} lower plan${
-              count === 1 ? '' : 's'
-            }`}
-      </Button>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+        <Button
+          size="small"
+          color="inherit"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          sx={{ color: 'text.secondary', textTransform: 'none' }}
+        >
+          {expanded
+            ? 'Hide lower plans'
+            : `Looking for something smaller? Show ${count} lower plan${
+                count === 1 ? '' : 's'
+              }`}
+        </Button>
+        {/* The tip appears only once the lower plans are actually on screen
+            (AGL-1929). Collapsed, this is a disclosure control and there is
+            nothing yet to explain; expanded, the customer is looking at a
+            downgrade, and the one thing no card can say in its own corner is
+            WHEN picking it takes effect — end of the paid period, $0 today,
+            unlike every upgrade beside it. That asymmetry is invisible on
+            the card and is the whole subject of the section this links to. */}
+        {expanded ? (
+          <DocsHelpTip
+            topic="downgradingAndCanceling"
+            anchor="#when-changes-take-effect"
+            title="Moving to a lower plan takes effect later"
+            excerpt="Upgrades apply immediately and prorate. A downgrade waits for the end of the period you already paid for, and $0 is due today."
+          />
+        ) : null}
+      </Stack>
     </Grid>
   )
 }
