@@ -185,18 +185,119 @@ what happened, when, what data, what we have done, what they should do, and a
 named contact for follow-up. **Do not include another customer's details** in a
 message going to several.
 
-### As controller — to a supervisory authority. ⚠️ We cannot currently name one.
+### As controller — to a supervisory authority. There is no single addressee, and there never will be.
 
 GDPR Art. 33(1) gives **72 hours from awareness**, unless the breach is
 unlikely to result in a risk to rights and freedoms. Art. 34 requires notifying
 the **data subjects** without undue delay where the risk is high.
 
-**Aglyn LLC has no EU or UK establishment and no Art. 27 representative**, so
-there is no one-stop-shop lead authority and no addressee written down. That is
-tracked as **AGL-1980** and it is a counsel question, not an engineering one.
-Until it is answered, a breach affecting an EU data subject has a 72-hour clock
-and nobody to file with. **Escalate to counsel on hour one of any such
-incident** rather than spending the window discovering this.
+**Aglyn LLC has no EU or UK establishment.** The consequence is settled law
+rather than an open question, and it is worth stating plainly because the
+instinct is to go looking for "our regulator":
+
+> There is **no lead supervisory authority and no one-stop-shop**. Art. 56
+> confers lead status on the authority of the *main or single establishment*,
+> which is language that cannot attach to a company with no establishment. So
+> notification runs to the authority of **every** Member State where affected
+> data subjects reside, in parallel.
+
+**Appointing an Art. 27 representative does not change this.** EDPB Guidelines
+9/2022 v2.0 §73 is explicit that the mere presence of a representative does not
+trigger the one-stop-shop, and that the breach must therefore be notified to
+every authority whose Member State holds affected data subjects. Anyone hoping
+a representative consolidates the filing should stop hoping for that; it buys
+other things (§ below), not this.
+
+**Where to file — real URLs, checked 2026-08-18.**
+
+| Where | Route |
+| --- | --- |
+| **Directory of every EU/EEA authority** — start here to work out who | `https://www.edpb.europa.eu/about-edpb/about-edpb/members_en` |
+| **Ireland (DPC)** breach webform — has an explicit *no establishment in the EU* branch, i.e. our path | `https://forms.dataprotection.ie/report-a-breach-of-personal-data` |
+| Ireland (DPC) guidance — says cross-border must be flagged as such on the form | `https://www.dataprotection.ie/en/organisations/know-your-obligations/breach-notification` |
+| **UK (ICO)** online form — ~30 min, **cannot be saved and resumed**, so gather §3 first | `https://ico.org.uk/for-organisations/report-a-breach/personal-data-breach/report-a-data-breach-online-form/` |
+| UK (ICO) helpline, if unsure whether it meets the threshold | **0303 123 1113** |
+
+⚠️ **The step before all of these is one we may not be able to perform.**
+Filing per Member State requires knowing *which Member States the affected
+people are in*, inside 72 hours. Nothing in the data model is designed to
+answer that — see **AGL-2008**. Establish it in §3.3 or the URLs above are
+decoration.
+
+### Do we need an Art. 27 representative? Read the questions in this order.
+
+The runbook previously recorded this as a blank. It is no longer blank, but the
+answer is a **position**, not a fact, and counsel signs it — AGL-1980.
+
+**The order matters and is routinely got backwards.** Art. 27 only bites if
+**Art. 3(2) applies at all**. So:
+
+**1. Are we in Art. 3(2) scope?** Offering goods or services to people in the
+Union, or monitoring their behaviour. The EDPB (Guidelines 3/2018, territorial
+scope) is emphatic that **a globally-reachable website is not enough** — the
+processing must *intentionally* target people in the Union, and where a service
+is provided "inadvertently or incidentally" to someone in the Union it falls
+outside. Their factors: naming the EU or a Member State, EU-targeted ad spend
+or paid search, EU dedicated phone/address, an EU or `.eu` TLD, an EU language
+or **currency**, EU customer testimonials, delivery into Member States.
+
+**Our honest read today: probably NOT in scope on the offering limb.** English
+only, USD only, `.com`, no EU-language localisation, no EUR pricing, no
+EU-targeted acquisition, no EU testimonials. That is much closer to the EDPB's
+own out-of-scope example (a Swiss university open to all, no EU-specific
+advertising, local currency) than to its in-scope one (EU languages, Euro
+payment, shipping into six Member States).
+
+**2. If we are in scope, does the Art. 27(2) exemption save us?** ⚠️ **Almost
+certainly not, and this is the trap.** The exemption needs all three of:
+processing that is *occasional*, **and** no large-scale Art. 9/Art. 10 data,
+**and** unlikely to result in a risk. The EDPB reads "occasional" as processing
+**not carried out regularly and occurring outside the regular course of
+business**. Hosting customer sites, storing end-user data, and running accounts
+and billing *is* our regular course of business. **"We only have a handful of
+EU users, so it's occasional" is a misreading** — low volume is not the test.
+Note also the threshold is "a risk", not "a *high* risk", which the EDPB says
+expressly.
+
+So the defensible position is **"we are not targeting the Union"**, not "we are
+in scope but exempt". Anyone who writes the second sentence into a memo has
+written a weaker memo than the facts support.
+
+**3. What flips this?** The position is honest today and fragile. It dies on
+any of: EUR pricing, an EU-language marketing site, ad spend aimed at an EU
+country, an EU sales address or phone, EU customer testimonials on the site.
+It is also independently defeated by the **monitoring limb** — the EDPB counts
+behavioural advertising, marketing geo-location and **tracking via cookies or
+fingerprinting** as monitoring, so what our own marketing site and console run
+for analytics and conversion tracking (AGL-1561 puts a `gtag` conversion on the
+billing page) has to be looked at on its own terms. **Re-open this the moment
+any of those changes, not at the next review date.**
+
+**4. The UK is a SEPARATE appointment.** An EU representative does not cover
+the UK and a UK one does not cover the EU. The ICO states the UK test in its
+own terms — based outside the UK, no UK branch, and either offering goods or
+services to people in the UK or monitoring them — with an exemption mirroring
+Art. 27(2). Same analysis, run twice.
+
+**The options, with real numbers** (vendor pricing as published 2026-08-18):
+
+| Option | Cost | What it commits us to |
+| --- | --- | --- |
+| **A. Appoint now, EU + UK** | **≈€150–€900/yr** at our size. DataRep's small-company package is €150–€250/yr covering ≤1,000 EU/EEA/UK individuals with **UK bundled at no extra cost**; Prighter is €420/yr per jurisdiction at <10 employees with up to 40% off for combining. | Naming the representative and their address **in the published Privacy Policy** — publication-first, so the besigner page moves before the repo snapshot. A written mandate; ⚠️ if we want the representative to help with breach filings that must be **stipulated in the mandate expressly** (Guidelines 9/2022 fn. 37). Ongoing renewal. |
+| **B. Document a reasoned non-applicability position** | Counsel time only. | A dated memo on the Art. 3(2) targeting analysis, the trigger list from (3) above, and a commitment to revisit when any trigger fires. Nothing published changes. Carries the risk of being wrong, and the residual risk sits on the position rather than on a filing. |
+| **C. Defer until the first EU customer** | £0 now. | ⚠️ **The weakest of the three, and on a wrong trigger.** A single EU customer does not by itself create scope — *targeting* does — so "wait for an EU customer" watches the wrong signal and would have us appoint late in one direction and never in another. It also leaves the Privacy Policy published in the meantime. |
+
+**Engineering's recommendation, for counsel to accept or reject:** **B now,
+with A pre-priced and the triggers written down** — because the scope argument
+is genuinely the stronger one and B is the honest description of where we are.
+But note that A costs roughly what one lunch costs per year at our size, which
+is a real argument for simply doing A and never thinking about it again. That
+trade — a defensible position maintained forever, versus €150–€400/yr to stop
+maintaining it — is the actual decision, and it is Zach's.
+
+Until (1) is signed off, **escalate to counsel on hour one** of any incident
+touching an EU or UK data subject rather than spending the window discovering
+this section.
 
 ### As controller — to US residents. This part is concrete.
 
@@ -284,7 +385,8 @@ survived.
 | | Filed |
 | --- | --- |
 | **We would very likely not detect a data breach ourselves.** No server-error-rate monitoring; runtime logs retain ~60 minutes and drain nowhere. Detection is primarily an inbound report. | AGL-1921, AGL-1799 |
-| **We cannot name the regulator to notify inside 72 hours** for an EU/UK data subject. No Art. 27 representative, no lead authority. | AGL-1980 |
+| ~~We cannot name the regulator to notify inside 72 hours.~~ **Answered 2026-08-18 (AGL-1980)** — there is no lead authority and never will be without an EU establishment; §4 now carries the per-Member-State route and the real filing URLs. Residual: whether to appoint an Art. 27 representative is a live decision with costed options, awaiting counsel. | AGL-1980 |
+| **We may not be able to say which Member States affected people are in**, which is the step every per-authority filing starts with. The URLs in §4 are unusable without it. | AGL-2008 |
 | `security@aglyn.com` — the published disclosure address, and therefore our primary detection channel — is **not confirmed to receive mail**. | AGL-1973 |
 | ~~Deletion does not survive a restore automatically.~~ **Closed 2026-08-18 (AGL-1975)** — `replay-erasures.mjs` is a numbered step of the restore procedures. Residual: it reads the 90-day hot `adminAudit` window and cannot see the Storage archive, so a restore from the oldest GCS export is reported `incomplete` rather than clean. | AGL-1975 |
 | No credential-rotation runbook. The list in §2.3 is the closest thing. | — |
@@ -295,3 +397,17 @@ Last reviewed **2026-08-18** against the live DPA (`dpaV2-20260813`) and
 Privacy Policy v4. **Statutory citations here are engineering's reading and
 have not been confirmed by counsel** — AGL-1980 is where that confirmation
 lands.
+
+Primary sources for §4, all fetched and confirmed loading 2026-08-18:
+[EDPB Guidelines 3/2018 on territorial scope](https://www.edpb.europa.eu/our-work-tools/our-documents/guidelines/guidelines-32018-territorial-scope-gdpr-article-3-version_en)
+(the Art. 3(2) targeting factors and the narrow reading of "occasional"),
+[EDPB Guidelines 9/2022 v2.0 on breach notification](https://www.edpb.europa.eu/system/files/2023-04/edpb_guidelines_202209_personal_data_breach_notification_v2.0_en.pdf)
+(§73: no one-stop-shop without an establishment; fn. 37: the representative's
+role must be in the mandate), and the
+[ICO's data-protection-and-the-EU overview](https://ico.org.uk/for-organisations/data-protection-and-the-eu/overview-data-protection-and-the-eu/)
+(the separate UK representative test). ⚠️ The older ICO "European
+representatives" URL that circulates in secondary guidance now 404s; the
+overview above is the live one. Art. 27's own text was read on a mirror rather
+than EUR-Lex, which was unreachable — the operative wording was cross-checked
+against the EDPB's own quotation of it, but a counsel memo should cite EUR-Lex
+directly.
