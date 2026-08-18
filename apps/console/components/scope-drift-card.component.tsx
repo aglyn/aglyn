@@ -22,6 +22,8 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 
+import { docsHelp } from '../constants/docs-links'
+
 /**
  * Scope drift: find it, and repair it (AGL-2062).
  *
@@ -175,7 +177,21 @@ export function ScopeDriftCard() {
   const rows = report ? Object.entries(report.byCollection) : []
 
   return (
-    <CardDisplay header={'Sharing-scope drift'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Sharing-scope drift'}
+      // A repair affordance is the worst kind of card to ship without a route
+      // into the docs (AGL-2095): whoever lands here is being asked to perform
+      // a corrective action they have almost certainly never performed before,
+      // and the two buttons are not equally reversible.
+      help={docsHelp('platformHealth', {
+        anchor: '#sharing-scope-drift',
+        excerpt:
+          'Scan is always a dry run; stamping is a deliberate act. A ' +
+          'truncated legacy scan makes the count a floor, not the total.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'A document with no sharing scope is invisible to every scoped ' +
