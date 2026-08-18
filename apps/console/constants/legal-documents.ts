@@ -55,7 +55,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v4'
+export const LEGAL_DOCUMENT_VERSION = 'v5'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -182,20 +182,89 @@ export interface LegalDocumentManifestEntry {
  * is the mechanism ToS §5.3 and Privacy §12 name for a change taking effect.
  * Same capture method as v1–v3, proven against the v3 hashes before this set
  * was taken.
+ *
+ * v5 (2026-08-18, AGL-1794 + AGL-1860): again one snapshot cycle for two
+ * changes, for the same reason v4 was.
+ *
+ *   - AGL-1794, Terms §10: a new §10.6 "Chargebacks and Payment Disputes"
+ *     AND a rewrite of §10.1 and §10.2. The new clause makes the transfer
+ *     reversal contractual — a lost dispute is recovered from the merchant's
+ *     SHARE (the implemented proportional maths, not the gross charge), a
+ *     reversal may take the connected balance below zero, and the two caps
+ *     already true in code (never more than the merchant received, never
+ *     twice for one purchase) become merchant protections rather than
+ *     implementation details. Aglyn keeps bearing the processor's dispute fee
+ *     and does not recharge the platform transaction fee on a reversed sale,
+ *     with headroom to change that under **§4.7** — the fee-change right.
+ *     NOT §5.1, which is the right to change the SERVICES; an earlier draft
+ *     anchored a money term to a features clause and it was caught on review.
+ *
+ *     §10.1/§10.2 are the correction that clause made unavoidable. Live §10.1
+ *     said "you — not Aglyn — are the merchant of record" and §10.2 said
+ *     "Aglyn does not process, hold, or disburse your sales proceeds". Both
+ *     are false: every storefront checkout is a DESTINATION CHARGE on the
+ *     platform account with no `on_behalf_of` (`cart-checkout.ts`,
+ *     `checkout.ts` one-time and subscription, `draft-order.ts`, `reserve.ts`,
+ *     `pos-order.ts`), so Aglyn's account is the settlement account and
+ *     Aglyn's balance is what a dispute debits. §10.1 is now "You Are the
+ *     Seller" and drops `marketplace` from its feature list, pointing
+ *     marketplace sales at the Marketplace Publisher Agreement — live §10.1
+ *     had been flatly contradicting MPA §8.1/§8.3 on the same charge model.
+ *     §10.2 is now "How Payments Are Processed and Paid Out" and describes the
+ *     real flow, including that a refund gives back Aglyn's platform fee
+ *     (`refund.ts`'s `refund_application_fee: 'true'`), which was disclosed
+ *     nowhere.
+ *
+ *     ⚠️ The rewrite deliberately states the MECHANICS and NO LABEL: it does
+ *     not assert who the merchant of record is for storefront sales. Declaring
+ *     it drags the marketplace-facilitator sales-tax question with it, and
+ *     nobody has decided that. §10.3's "collection and remittance of all
+ *     applicable taxes" is UNTOUCHED for the same reason — changing it would
+ *     be a tax allocation between Aglyn and its customers, which is the most
+ *     dangerous edit available here. Both are recorded as open counsel
+ *     questions on AGL-1794, not as oversights.
+ *
+ *     Also in the same publish: §2's Services definition and §12.3 now say
+ *     "the Aglyn marketplace" (AGL-975), because a fresh snapshot carrying the
+ *     old adjective would red the naming guard on a file that has no
+ *     exemption and cannot be given one.
+ *
+ *   - AGL-1860, Privacy §2 and §5: the Aglyn Assist disclosure, which is that
+ *     feature's legal precondition. §2's `**AI features.**` paragraph now
+ *     names Anthropic as the provider ("currently", not "e.g." — the
+ *     subprocessor register is exhaustive now, so "e.g." reads as an
+ *     undisclosed set), names Assist, and encodes the confirm-before-write
+ *     guardrail. A second paragraph discloses what an Assist exchange retains
+ *     — question, answer, console page, token count, thumbs rating — that it
+ *     is org-scoped and accessible to staff, and enumerates three purposes
+ *     including METERING, because per-org cost telemetry exists purely for
+ *     billing and a policy silent about it would be silent about the one
+ *     field that does. §5 adds the retention sentence, published in the strong
+ *     form only because it was verified against landed code: all three Assist
+ *     collections are true subcollections of `orgs/{orgId}` and `eraseOrg`'s
+ *     `recursiveDelete(orgRef)` reaches them. No new deletion mechanism was
+ *     invented — §5 routes to the §7 that already exists, which is the
+ *     AGL-1592 lesson.
+ *
+ * Same publication-first ordering as every prior set: the besigner edits were
+ * published, the live pages confirmed serving them, and only then were these
+ * snapshots captured. The capture method was re-proven byte-for-byte against
+ * the v4 terms + privacy pins AND the `2026-08-14.1` publisher-agreement pin
+ * before this set was taken.
  */
 export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
   {
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '1ae10b9074cb2e175dd7553180c0bb9a0d77a88c3a263a102a5c6a4c143a1ec2',
-    bytes: 33295,
+      '8f631d705d7a180f3c23b4d3f0535fd6286d60f363cfb113f19e8336a75e8d13',
+    bytes: 35953,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      '96b24414fb39209be36c804cec72d11341474edfadc279f7b252f1431f1906a9',
-    bytes: 12912,
+      '2f4c53a64b0c0023d3fc37e22ea2901c2b90dde1625d02b7e818475d2182356a',
+    bytes: 14377,
   },
 ]

@@ -1,0 +1,159 @@
+Last updated: August 18, 2026
+This Privacy Policy explains how
+Aglyn LLC
+, a Texas limited liability company ("
+Aglyn
+," "
+we
+," "
+us
+," or "
+our
+"), collects, uses, discloses, and protects personal information in connection with the Aglyn platform and related websites and services, including
+aglyn.com
+,
+app.aglyn.com
+(the console), the
+Besigner
+site builder, tenant sites on
+aglyn.app
+,
+docs.aglyn.com
+, our APIs, plugins, and the Aglyn marketplace (collectively, the "
+Services
+").
+Two roles — please note the difference:
+When we act as a controller (business):
+For personal information of our account holders, prospective customers, and visitors to our own sites, Aglyn decides how and why the information is processed. This Policy governs that processing.
+When we act as a processor (service provider):
+When you (a customer) build a website, storefront, form, dataset, or CRM using the Services and collect personal information from
+your
+End Users,
+you
+are the controller of that information and we process it on your behalf under our
+Terms of Service
+and
+Data Processing Addendum
+. Your own privacy policy — not this one — governs your End Users, and you are responsible for it.
+1. Information We Collect
+1.1 Information you provide.
+Account & identity:
+name, email address, password or authentication credentials, and profile details, established through our identity provider (Google Firebase Authentication), which may include third-party sign-in identifiers (e.g., Google account identifiers).
+Phone number:
+a mobile or other telephone number, where you give us one — at signup, in your user or organization profile, or as a billing or support contact — or where your organization's single sign-on identity provider includes a phone number in the assertion it sends us when you sign in. Providing a phone number is optional. See Section 2 for how we use it and Section 11 for how to opt out of marketing calls and texts.
+Organization & membership:
+organization details, team member and invitee email addresses, roles, and permissions.
+Billing:
+plan selection, billing contact, subscription and transaction identifiers, and add-on/seat quantities.
+Payment card details are collected and processed directly by our payment processor (Stripe); Aglyn does not store full card numbers.
+Content & data you submit:
+websites, screens, layouts, media/assets, datasets, products, forms, contacts/CRM records, and other Customer Content — which may itself contain personal information about your End Users.
+Support & communications:
+messages, feedback, and information you share when you contact us.
+1.2 Information collected automatically.
+Usage & device data:
+log data, IP address, browser and device type, pages/screens viewed, actions taken, timestamps, referring URLs, and similar analytics.
+Cookies & similar technologies:
+as described in our
+Cookie Policy
+.
+Security & anti-abuse:
+information used for authentication, session management, rate limiting, and bot protection (including Google reCAPTCHA), and audit/activity logs.
+1.3 Information from third parties.
+We may receive information from authentication providers (e.g., Google), our payment processor (e.g., subscription status), and infrastructure providers, as needed to operate the Services.
+1.4 Data we process on your behalf (as processor).
+When End Users interact with your Hosts (e.g., submit a form, create an account/membership, make a purchase, or browse a storefront), the Services process personal information such as contact details, order and payment metadata, membership/subscription data, and site-analytics data
+on your behalf and under your instructions
+. See the DPA.
+2. How We Use Information (as Controller)
+We use personal information to:
+provide, operate, maintain, secure, and improve the Services;
+create and manage accounts, organizations, and authentication;
+process subscriptions, billing, and usage metering, and prevent payment fraud;
+provide support and respond to requests;
+send service, transactional, and administrative messages (via our email provider, Resend);
+contact you about your own account — including billing, invoicing, payment problems, and collection of overdue amounts, and service, security, and administrative notices — by email and, where you or your identity provider have given us a phone number, by telephone call or text message;
+with your consent where required, send product updates and marketing;
+contact you for sales and marketing purposes — including plan upgrades, add-ons, new features, and other product offers — by email and, where permitted by law and with your prior express consent where the law requires it, by telephone call or text message to a phone number we hold for you;
+monitor, analyze, and improve performance, reliability, and features, including developing new features;
+detect, investigate, and prevent fraud, abuse, security incidents, and violations of our terms; and
+comply with legal obligations and enforce our agreements.
+Legal bases (EEA/UK):
+performance of a contract; our legitimate interests (operating, securing, and improving the Services); consent (where required, e.g., certain cookies and marketing); and compliance with legal obligations.
+AI features.
+Some features use a third-party AI provider — currently
+Anthropic
+— to generate assistance or content. These include
+Aglyn Assist
+, the in-console helper that answers questions about using Aglyn and can carry out actions in the console and the Besigner that you confirm first, and the editor's writing and layout assistance. When you use one of these features, the text you submit — your question or instruction, together with the content of the page, element, or post you are working on — is transmitted to the provider so it can return a result. We do not send your account identifiers, email address, or authentication tokens to the provider. Do not submit sensitive personal information to AI features unless necessary, and review outputs before use.
+Aglyn Assist conversations.
+We keep a record of your use of Aglyn Assist: the question you asked, the answer it gave, which console page you were on when you asked, and the number of tokens the exchange used. If you rate an answer using the thumbs control, we keep that rating alongside the exchange. The record is stored against your Organization, is accessible to us, and is used for three purposes — to find what our documentation and our product fail to explain so we can improve both, to improve the assistant's answers, and to meter and price the feature. We do not use it to build a profile of you, we do not use it for advertising, and we do not sell it. Retention and deletion follow the same rules as the rest of your Organization's data (Section 5).
+3. How We Share Information
+We do
+not
+sell personal information. We may share information with:
+Subprocessors / service providers
+who help us operate the Services (hosting, database, storage, payments, email, security, analytics, AI). See our
+Subprocessors
+list. Current core providers include Google (Firebase/Cloud, including reCAPTCHA), Vercel, Stripe, and Resend.
+Payment processor (Stripe)
+to process subscriptions and, for commerce features, to facilitate your sales via Stripe Connect.
+Other organization members
+— information may be visible to members/administrators of your Organization.
+Legal & safety
+— to comply with law, legal process, or governmental requests; to enforce our terms; and to protect the rights, property, or safety of Aglyn, our users, or others.
+Business transfers
+— in connection with a merger, acquisition, financing, or sale of assets, subject to this Policy.
+With your direction or consent.
+"Sale"/"sharing" under U.S. state laws.
+We do not "sell" personal information and we do not "share" it for cross-context behavioral advertising, as those terms are defined by the CCPA/CPRA and similar U.S. state laws. We use no advertising technology — no ad networks, no advertising or social-media pixels, and nothing that builds cross-context advertising profiles. We do use one third-party analytics provider, Google Analytics, on our marketing site, the console, and our documentation site, and we configure it so that it cannot be used for advertising: Google Signals is off, ads personalization is disabled in every region, no Google Ads account is linked, user-provided data collection is off, email redaction is on, and data is retained for 14 months. Our service providers, including Google Analytics, process personal information only to provide the Services under contracts that restrict them accordingly, and none may use it for their own advertising. Analytics configured this way is neither a "sale" nor a "share" as those laws define them. Because there is no sale or sharing, there is nothing to opt out of; this also means opt-out preference signals such as Global Privacy Control have no sale or sharing to act on. If our practices ever change, we will update this Policy and provide the legally required opt-out mechanisms before any such processing begins.
+4. Cookies & Tracking
+We and our providers use cookies and similar technologies for authentication, security, preferences, and analytics. For details and choices, see the
+Cookie Policy
+.
+5. Data Retention
+We retain personal information for as long as needed to provide the Services, maintain your account, comply with legal obligations, resolve disputes, and enforce agreements. Retention periods vary by data type and context. Some specific periods we operate today: when you request deletion of your organization, a 7-day reversible hold precedes the permanent erasure, so an accidental or malicious request can be cancelled; after the hold, the erasure is a genuine recursive delete and we keep no copy of the erased content — only an internal record that the erasure happened, retained for a limited period. Database backups are kept on a 14-week cycle and deleted media is recoverable for 7 days, so residual copies of deleted data can persist in backups for up to that period before expiring. For data we process on your behalf, retention is governed by your instructions and the DPA. You may request deletion as described in Section 7, subject to legal and operational limits. You are responsible for maintaining your own backups of your content.
+Aglyn Assist conversations
+are retained for as long as your Organization exists and are erased with it, under the same 7-day reversible hold and recursive erasure described above. You may request deletion sooner as described in Section 7.
+6. Security
+We use reasonable technical and organizational measures designed to protect personal information, including authentication controls, access restrictions, encryption in transit, and infrastructure provided by reputable vendors.
+However, no system is completely secure, and we cannot guarantee absolute security.
+You are responsible for safeguarding your credentials and configuring your Hosts securely. See our security-disclosure process at
+security@aglyn.com
+.
+7. Your Privacy Rights
+Depending on where you live, you may have rights to access, correct, delete, port, or restrict processing of your personal information, to object to processing, and to withdraw consent.
+EEA/UK (GDPR):
+rights of access, rectification, erasure, restriction, portability, objection, and to lodge a complaint with a supervisory authority.
+California (CCPA/CPRA) and similar U.S. state laws:
+rights to know, access, delete, correct, and to opt out of "sale"/"sharing" and certain targeted advertising (we do not sell or share personal information, so there is nothing to opt out of today), and not to be discriminated against for exercising rights.
+To exercise rights, contact
+privacy@aglyn.com
+. We will verify your request as required by law.
+If your request concerns personal information we process on behalf of a customer (as processor), please contact that customer directly; we will assist them as required by the DPA.
+You may authorize an agent to act on your behalf where permitted by law.
+8. International Data Transfers
+We and our providers may process and store information in the United States and other countries where our providers operate. These countries may have different data-protection laws than yours. Where required, we rely on appropriate safeguards (such as Standard Contractual Clauses) for cross-border transfers. By using the Services, you understand your information may be transferred to and processed in such countries.
+9. Children's Privacy
+The Services are not directed to children under 13 (or the applicable minimum age), and we do not knowingly collect personal information from them. If you believe a child has provided us personal information, contact
+privacy@aglyn.com
+and we will take appropriate steps. If your Host collects information from children,
+you
+are responsible for compliance with applicable children's-privacy laws (e.g., COPPA, GDPR-K).
+10. Third-Party Sites & Services
+The Services link to and integrate with third-party sites and services that we do not control. Their privacy practices are governed by their own policies. We are not responsible for third-party practices.
+11. Marketing Communications
+You may opt out of marketing emails using the unsubscribe link or by contacting us. You may opt out of marketing telephone calls and text messages at any time — reply
+STOP
+to any marketing text to stop texts, tell us during a call, or email
+privacy@aglyn.com
+to stop calls, texts, or both — and you may ask us to delete the phone number we hold for you. If you do, we will delete it from your account and keep it only on a limited internal do-not-contact list, used for nothing else: that record is the only way we can recognize your number and avoid contacting it again. We may still send you non-promotional, service-related messages, including account, billing, payment, security, and administrative notices, by email and, where we hold a phone number for you, by call or text.
+12. Changes to this Policy
+We may update this Policy at any time. Material changes will be indicated by updating the "Last updated" date and, where appropriate, by additional notice. Your continued use of the Services after changes take effect constitutes acceptance.
+13. Contact Us
+Aglyn LLC
+(a Texas limited liability company)
+Privacy:
+privacy@aglyn.com
+General:
+info@aglyn.com
