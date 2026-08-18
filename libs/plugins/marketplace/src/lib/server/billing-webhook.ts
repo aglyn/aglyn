@@ -328,11 +328,19 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       const taxCents = Number(object?.total_details?.amount_tax ?? 0)
       const sellerCents = Number(transferCents ?? 0)
       const netCents = grossCents - taxCents - sellerCents
-      await firebaseAdmin
+      const purchaseRef = firebaseAdmin
         .app()
         .firestore()
         .collection('marketplacePurchases')
         .doc(String(object.id))
+      // `createdAt` is stamped ONCE (AGL-2109). Merging the write below fixed
+      // the erasure but introduced its own drift: `serverTimestamp()` on a
+      // redelivery would move a three-day-old sale to today, which is the
+      // field the seller ledger and every revenue period read. One read, on a
+      // path that already makes several Stripe round trips, buys a date that
+      // means what it says.
+      const alreadyRecorded = (await purchaseRef.get()).exists
+      await purchaseRef
         .set({
           listingId,
           buyerUid,
@@ -347,8 +355,37 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
           // payment intent, not the session — without this id a refund
           // could never find the purchase it revokes.
           paymentIntentId: String(object?.payment_intent ?? ''),
-          createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+          ...(alreadyRecorded
+            ? {}
+            : {
+                createdAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              }),
+        },
+        // MERGED, like every other write on this path (AGL-2109). This one
+        // was a full document REPLACE, and the document it replaces is not
+        // only the sale: it is the buyer's ENTITLEMENT (`hasLivePurchase`
+        // reads `refundedAt`), the refund trail, the dispute trail, and the
+        // transfer-reversal SETTLE MARKER (`reversedTransferCents`, which
+        // `reverseMarketplaceSellerShare` short-circuits on so a publisher is
+        // never debited twice).
+        //
+        // Stripe redelivers `checkout.session.completed` for up to three days
+        // after any 500, and this endpoint 500s on purpose — for every
+        // transient Stripe failure raised in this file and for any throw from
+        // a sibling plugin handler that runs after this one
+        // (`runBillingWebhookHandlers` awaits them in sequence and lets a
+        // throw propagate). So the redelivery is expected traffic, not an
+        // exotic race. Landing after a refund it erased `refundedAt` — the
+        // refunded buyer silently got their install back — and erased
+        // `reversedTransferCents`, re-opening a second reversal against the
+        // publisher's Connect account.
+        //
+        // Merging is safe in the other direction too: every field written
+        // here is derived from the session event, so a redelivery restamps
+        // identical values.
+        { merge: true },
+      )
       // Marketplace sales are real revenue and belong in the same GA
       // `purchase` stream as subscriptions (AGL-1561), separated by
       // `item_category` so plugin revenue and subscription revenue can be
