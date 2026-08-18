@@ -47,6 +47,9 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'contacts:read', label: 'Contacts — read', description: 'List and read contacts.' },
   { scope: 'sites:read', label: 'Sites — read', description: 'List sites and their details.' },
   { scope: 'forms:read', label: 'Form submissions — read', description: 'Read a site’s form submissions.' },
+  { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },
+  { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
+  { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },
 ]
 
 interface PublicApiKey {

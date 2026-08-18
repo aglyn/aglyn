@@ -22,6 +22,7 @@
  */
 import {
   type AttemptClaim,
+  checkEntitlement,
   claimAttempt,
   coerceDocumentValues,
   createResourceUid,
@@ -533,7 +534,312 @@ async function handleSites(
     return listResponse(data, nextCursor, ctx.headers)
   }
 
+  if (sub === 'orders') return handleOrders(request, ctx, segments, url)
+  if (sub === 'products') return handleProducts(request, ctx, segments, url)
+  if (sub === 'media') return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId))
+
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
+}
+
+// ── Commerce: orders & products (read) ──────────────────────────────────────
+
+/**
+ * Commerce resources need the `commerce` entitlement as well as the scope
+ * (AGL-1906). `apiAccess` alone is the wrong gate here: it says the org may
+ * call the API at all, not that it may still use the store. AGL-1873 closed
+ * exactly this class on the write side — two money doors that asked the
+ * plugin switch (`org.enabledPlugins`) instead of the plan, so a lapsed org
+ * kept selling — and the same reasoning applies to a read. `enabledPlugins`
+ * is the customer's own on/off switch and survives a downgrade; the plan does
+ * not, and the published rule is that paid features stop at the door when the
+ * plan no longer includes them.
+ *
+ * Answered as `plan_required` rather than `not_found`, deliberately. Hiding a
+ * store that plainly exists behind a 404 sends an integrator hunting a wrong
+ * site id; the honest answer names the plan.
+ */
+function requireCommerce(ctx: ApiV1Context): Response | null {
+  return checkEntitlement(ctx.org, 'commerce')
+    ? null
+    : ApiErrors.planRequired({
+        message: 'Commerce is not included in this organization’s plan',
+        code: 'commerce',
+        headers: ctx.headers,
+      })
+}
+
+function hostRef(ctx: ApiV1Context, hostId: string) {
+  return ctx.firestore.collection('hosts').doc(hostId)
+}
+
+/**
+ * Orders carry a legacy Commerce Starter shape (AGL-90) alongside the modern
+ * one: `amountCents`/`feeCents` at the top level rather than a `totals` map.
+ * The console lifts them through `CommerceModel.liftLegacyOrder` and reads
+ * `lifted.totals?.totalCents ?? order.amountCents`. The API cannot publish two
+ * shapes for one object, so the legacy fields are folded into `totals` here
+ * and a client only ever sees the modern one. `channel` defaults to `online`
+ * for the same reason the console's list does — an absent channel is a
+ * pre-channel order, not an unknown one.
+ */
+function orderView(doc: FirebaseFirestore.DocumentSnapshot) {
+  const data = doc.data() ?? {}
+  const totals = (data.totals ?? {}) as Record<string, unknown>
+  const legacyTotal = Number(data.amountCents ?? NaN)
+  const totalCents = Number.isFinite(Number(totals.totalCents))
+    ? Number(totals.totalCents)
+    : Number.isFinite(legacyTotal)
+      ? legacyTotal
+      : null
+  const legacyFee = Number(data.feeCents ?? NaN)
+  return {
+    id: doc.id,
+    object: 'order',
+    number: typeof data.number === 'number' ? data.number : null,
+    status: (data.status as string) ?? null,
+    channel: (data.channel as string) ?? 'online',
+    currency: 'usd',
+    customerEmail: data.customerEmail ?? null,
+    customerName: data.customerName ?? null,
+    lineItems: serialize(data.lineItems ?? []),
+    totals: {
+      itemsCents: Number(totals.itemsCents ?? 0),
+      shippingCents: Number(totals.shippingCents ?? 0),
+      taxCents: Number(totals.taxCents ?? 0),
+      discountCents: Number(totals.discountCents ?? 0),
+      totalCents,
+      // The Connect application fee. NOT subtracted from `totalCents` — it is
+      // Aglyn's cut of a total the shopper already paid in full, so a client
+      // that nets it out of revenue would understate what it collected.
+      feeCents: Number.isFinite(Number(totals.feeCents))
+        ? Number(totals.feeCents)
+        : Number.isFinite(legacyFee)
+          ? legacyFee
+          : 0,
+    },
+    // Money already handed back, for any reason. A chargeback lands here too,
+    // so `refundedCents > 0` does not by itself mean the merchant chose it.
+    refundedCents: Number(data.refundedCents ?? 0),
+    disputed: Boolean(data.dispute),
+    shippingAddress: serialize(data.shippingAddress) ?? null,
+    couponCode: data.couponCode ?? null,
+    created: serialize(data.createdAt) ?? null,
+  }
+}
+
+async function handleOrders(
+  request: Request,
+  ctx: ApiV1Context,
+  segments: string[],
+  url: URL,
+): Promise<Response> {
+  const [, hostId, , orderId] = segments
+  const denied = requireScope(ctx, 'orders:read')
+  if (denied) return denied
+  const unentitled = requireCommerce(ctx)
+  if (unentitled) return unentitled
+  if (request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+  }
+  const collection = hostRef(ctx, hostId).collection('orders')
+
+  if (orderId) {
+    const snap = await collection.doc(orderId).get()
+    if (!snap.exists) {
+      return ApiErrors.notFound({ message: 'No such order', headers: ctx.headers })
+    }
+    return apiJson(orderView(snap), { headers: ctx.headers })
+  }
+
+  let query: FirebaseFirestore.Query = collection
+  const status = url.searchParams.get('status')
+  if (status) query = query.where('status', '==', status)
+  const channel = url.searchParams.get('channel')
+  // `online` is the DEFAULT, not a stored value on older orders, so filtering
+  // for it in Firestore would silently drop every pre-channel order. Those are
+  // exactly the oldest orders an accounting backfill is reaching for, so this
+  // one value is filtered after the read instead. The page can therefore come
+  // back shorter than `limit` while `has_more` is still true — which the
+  // published pagination contract already tells clients to expect (check
+  // `has_more`, never a page's length).
+  if (channel && channel !== 'online') query = query.where('channel', '==', channel)
+  const { docs, nextCursor } = await paginate(query, url)
+  const data = docs
+    .map(orderView)
+    .filter((order) => (channel === 'online' ? order.channel === 'online' : true))
+  return listResponse(data, nextCursor, ctx.headers)
+}
+
+/**
+ * Price and stock live on VARIANTS, never on the product — a product-level
+ * `inventory` exists only as a denormalized sum the console rewrites on every
+ * decrement, and a product-level `priceUsd` is the legacy single-variant
+ * shape. Publishing either as the product's price would be wrong the moment a
+ * product has two variants, so the variant array is the contract and the
+ * product carries only the roll-up, clearly named.
+ *
+ * `inventory: null` on a variant means UNTRACKED and `0` means SOLD OUT.
+ * Collapsing them (the `?? 0` an integrator writes on the first day) turns
+ * every untracked product into an out-of-stock one, so the distinction is
+ * carried through verbatim rather than defaulted.
+ */
+function variantView(variant: Record<string, unknown>) {
+  const inventory = variant.inventory
+  return {
+    id: variant.id ?? null,
+    sku: variant.sku ?? null,
+    barcode: variant.barcode ?? null,
+    options: variant.options ?? {},
+    priceUsd: typeof variant.priceUsd === 'number' ? variant.priceUsd : null,
+    compareAtPriceUsd:
+      typeof variant.compareAtPriceUsd === 'number'
+        ? variant.compareAtPriceUsd
+        : null,
+    weightGrams:
+      typeof variant.weightGrams === 'number' ? variant.weightGrams : null,
+    inventory: typeof inventory === 'number' ? inventory : null,
+    inventoryTracked: typeof inventory === 'number',
+  }
+}
+
+function productView(doc: FirebaseFirestore.DocumentSnapshot) {
+  const data = doc.data() ?? {}
+  const variants = Array.isArray(data.variants)
+    ? (data.variants as Array<Record<string, unknown>>)
+    : []
+  const tracked = variants.filter((v) => typeof v.inventory === 'number')
+  return {
+    id: doc.id,
+    object: 'product',
+    name: data.name ?? null,
+    slug: data.slug ?? null,
+    description: data.description ?? null,
+    type: data.type ?? null,
+    status: data.status ?? null,
+    tags: data.tags ?? [],
+    categoryIds: data.categoryIds ?? [],
+    mediaUrls: data.mediaUrls ?? [],
+    options: data.options ?? [],
+    variants: variants.map(variantView),
+    // The sum across TRACKED variants only, and `null` when none of them is
+    // tracked — so an untracked catalogue reads as "we don't count this"
+    // rather than as a store with nothing left to sell.
+    inventory: tracked.length
+      ? tracked.reduce((sum, v) => sum + Number(v.inventory ?? 0), 0)
+      : null,
+    subscription: serialize(data.subscription) ?? null,
+    created: data.createdAtMs ? new Date(Number(data.createdAtMs)).toISOString() : null,
+    updated: data.updatedAtMs ? new Date(Number(data.updatedAtMs)).toISOString() : null,
+  }
+}
+
+async function handleProducts(
+  request: Request,
+  ctx: ApiV1Context,
+  segments: string[],
+  url: URL,
+): Promise<Response> {
+  const [, hostId, , productId] = segments
+  const denied = requireScope(ctx, 'products:read')
+  if (denied) return denied
+  const unentitled = requireCommerce(ctx)
+  if (unentitled) return unentitled
+  if (request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+  }
+  const collection = hostRef(ctx, hostId).collection('products')
+
+  if (productId) {
+    const snap = await collection.doc(productId).get()
+    // A soft-deleted product is gone as far as a customer is concerned. The
+    // console filters `deletedAt` client-side; the API must not hand back a
+    // product the merchant deleted just because the document survives.
+    if (!snap.exists || snap.get('deletedAt')) {
+      return ApiErrors.notFound({ message: 'No such product', headers: ctx.headers })
+    }
+    return apiJson(productView(snap), { headers: ctx.headers })
+  }
+
+  let query: FirebaseFirestore.Query = collection
+  const status = url.searchParams.get('status')
+  if (status) query = query.where('status', '==', status)
+  const { docs, nextCursor } = await paginate(query, url)
+  const data = docs.filter((doc) => !doc.get('deletedAt')).map(productView)
+  return listResponse(data, nextCursor, ctx.headers)
+}
+
+// ── Media (read) ────────────────────────────────────────────────────────────
+
+/**
+ * Media is stored under BOTH scopes — `orgs/{orgId}/media` is the shared
+ * organization library and `hosts/{hostId}/media` is one site's own files —
+ * so the API publishes it at both `/v1/media` and `/v1/sites/{id}/media`
+ * rather than picking one and lying about the other.
+ *
+ * `url` is the durable download URL and is always present. `cdnUrl` is the
+ * CDN path, which exists only when the plan includes `mediaCdn` AND the asset
+ * is not private, so it is published as a separate nullable field rather than
+ * folded into `url` — an integrator building a public `<img>` needs to know
+ * which one it got. Private assets carry neither a CDN path nor a usable
+ * public link and are marked `private: true`.
+ */
+function mediaView(doc: FirebaseFirestore.DocumentSnapshot, origin: string) {
+  const data = doc.data() ?? {}
+  const cdnPath = data.cdnPath as string | undefined
+  return {
+    id: doc.id,
+    object: 'media',
+    fileName: data.fileName ?? null,
+    contentType: data.contentType ?? null,
+    sizeBytes: Number(data.sizeBytes ?? 0),
+    width: typeof data.width === 'number' ? data.width : null,
+    height: typeof data.height === 'number' ? data.height : null,
+    alt: data.alt ?? null,
+    description: data.description ?? null,
+    tags: data.tags ?? [],
+    folderId: data.folderId ?? null,
+    url: data.url ?? null,
+    cdnUrl: cdnPath ? `${origin}${cdnPath}` : null,
+    private: Boolean(data.private),
+    created: serialize(data.createdAt) ?? null,
+  }
+}
+
+async function handleScopedMedia(
+  request: Request,
+  ctx: ApiV1Context,
+  url: URL,
+  scopeRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const denied = requireScope(ctx, 'media:read')
+  if (denied) return denied
+  if (request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+  }
+  const origin = url.origin
+  const collection = scopeRef.collection('media')
+  const segments = url.pathname.split('/').filter(Boolean)
+  // The trailing segment is the media id only on the `/media/{id}` shape.
+  const mediaId =
+    segments[segments.length - 2] === 'media' ? segments[segments.length - 1] : ''
+
+  if (mediaId) {
+    const snap = await collection.doc(mediaId).get()
+    // `deletedAt` is the soft-delete marker every console read gates on.
+    if (!snap.exists || snap.get('deletedAt')) {
+      return ApiErrors.notFound({ message: 'No such file', headers: ctx.headers })
+    }
+    return apiJson(mediaView(snap, origin), { headers: ctx.headers })
+  }
+
+  let query: FirebaseFirestore.Query = collection
+  const folder = url.searchParams.get('folder')
+  if (folder) query = query.where('folderId', '==', folder)
+  const { docs, nextCursor } = await paginate(query, url)
+  const data = docs
+    .filter((doc) => !doc.get('deletedAt'))
+    .map((doc) => mediaView(doc, origin))
+  return listResponse(data, nextCursor, ctx.headers)
 }
 
 // ── Contacts (read) ─────────────────────────────────────────────────────────
@@ -589,6 +895,15 @@ export async function dispatchResource(
       return handleSites(request, ctx, segments, url)
     case 'contacts':
       return handleContacts(request, ctx, segments, url)
+    case 'media':
+      // The ORGANIZATION library. A site's own files are the same resource
+      // under `/v1/sites/{siteId}/media`.
+      return handleScopedMedia(
+        request,
+        ctx,
+        url,
+        ctx.firestore.collection('orgs').doc(ctx.orgId),
+      )
     default:
       return ApiErrors.notFound({
         message: `Unknown endpoint: /v1/${segments.join('/')}`,
