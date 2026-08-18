@@ -75,7 +75,8 @@ export const RETIRED_COLOURS = [
   {
     hex: '#4fc3f7',
     retiredBy: 'AGL-1293',
-    replacement: 'the primary.dark token (drop the pinned `@scheme dark` slice)',
+    replacement:
+      'the primary.dark token (drop the pinned `@scheme dark` slice)',
     why: 'pinning it into node sx re-creates the hard-coded dark slices that 64a945bc5 removed.',
   },
 ]
@@ -184,4 +185,216 @@ export function describeFinding(finding) {
     ? ` · ${finding.exempt} exempt (palette slot)`
     : ''
   return `${finding.hex} — ${finding.violations} authored${breakdown ? ` (${breakdown})` : ''}${exemptNote}`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The SOURCE sweep (AGL-1939)
+//
+// Everything above counts bytes that were DELIVERED, where a comment cannot
+// exist and every occurrence is therefore real. The source sweep in
+// `retired-colours.test.mjs` reuses that same counter over checked-in files,
+// and inherited an assumption that does not hold there: it counted a hex named
+// in a doc comment as an authored colour.
+//
+// That is not a nitpick — the two hits it went red on were the AGL-1293
+// comments explaining WHICH colour was retired, and the only fixes on offer
+// were to delete the documentation or to exempt the file. Both make the repo
+// worse to answer a question the scanner asked wrong.
+//
+// But "skip comments" on its own is a real widening, and the obvious way to
+// lose the guard: a commented-out `sx` block is still authored colour, one
+// uncomment away from being rendered colour, and it is exactly what someone
+// reaches for when they are told to stop using a hex. So the split is not
+// code-vs-comment, it is ASSIGNED-vs-NAMED:
+//
+//   * anywhere in the code region — every occurrence counts, unchanged;
+//   * inside a comment — it counts if the comment ASSIGNS it
+//     (`color: '#4fc3f7'`, `"color":"#4fc3f7"`, `--brand: #4fc3f7`) or writes
+//     it as a straight-quoted string literal (`'#4fc3f7'`), and does not if
+//     the comment merely NAMES it in prose.
+//
+// Backticks are deliberately not treated as code quoting: ``(`#0073ae` light
+// / `#4fc3f7` dark)`` is the markdown-in-a-docblock house style, and it is the
+// shape this whole exercise is about.
+//
+// The tokeniser below is small and its misparses are one-sided by
+// construction. Anything it wrongly leaves in the code region keeps the strict
+// old behaviour; the only way to lose an occurrence is for it to be wrongly
+// placed in a comment AND be unassigned AND unquoted. Both string state and
+// line-comment state reset at a newline, so any confusion is bounded to a
+// single line.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Line and block comments for the C-family; `<!-- -->` for HTML. Everything
+ * else — `.json`, `.md` — has no comment syntax we honour, so the whole file stays
+ * code and the sweep behaves exactly as it did before. A hex in a markdown
+ * doc IS an instruction an author follows, which is the guard's own stated
+ * rationale.
+ */
+const COMMENT_SYNTAX = {
+  ts: 'c',
+  tsx: 'c',
+  js: 'c',
+  jsx: 'c',
+  mjs: 'c',
+  cjs: 'c',
+  css: 'c',
+  scss: 'c',
+  html: 'html',
+}
+
+/**
+ * Split `text` into two same-length strings: the code region and the comment
+ * region, each with the other's characters blanked to spaces. Offsets are
+ * preserved in both so the key-lookback still reads real context.
+ *
+ * @param {string} text
+ * @param {string} path used only for its extension
+ * @returns {{ code: string, comments: string }}
+ */
+export function splitSourceComments(text, path = '') {
+  const source = String(text ?? '')
+  const ext = (/\.([A-Za-z0-9]+)$/.exec(path)?.[1] ?? '').toLowerCase()
+  const syntax = COMMENT_SYNTAX[ext]
+  if (!syntax) return { code: source, comments: ' '.repeat(source.length) }
+
+  const code = source.split('')
+  const comments = new Array(source.length).fill(' ')
+  const toComment = (at) => {
+    if (source[at] === '\n') return // keep line structure in both regions
+    comments[at] = source[at]
+    code[at] = ' '
+  }
+
+  let i = 0
+  let state = 'code'
+  while (i < source.length) {
+    const ch = source[i]
+    const two = source.slice(i, i + 2)
+    if (state === 'code') {
+      if (syntax === 'html') {
+        if (source.startsWith('<!--', i)) {
+          state = 'block'
+          ;(toComment(i), toComment(i + 1), toComment(i + 2), toComment(i + 3))
+          i += 4
+          continue
+        }
+        i += 1
+        continue
+      }
+      // An escape outside a string is almost always a regex literal; skipping
+      // the pair keeps `/\/\//` from reading as a line comment.
+      if (ch === '\\') {
+        i += 2
+        continue
+      }
+      if (two === '//') {
+        state = 'line'
+        ;(toComment(i), toComment(i + 1))
+        i += 2
+        continue
+      }
+      if (two === '/*') {
+        state = 'block'
+        ;(toComment(i), toComment(i + 1))
+        i += 2
+        continue
+      }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        state = ch
+        i += 1
+        continue
+      }
+      i += 1
+      continue
+    }
+    if (state === 'line') {
+      if (ch === '\n') state = 'code'
+      else toComment(i)
+      i += 1
+      continue
+    }
+    if (state === 'block') {
+      const closer = syntax === 'html' ? '-->' : '*/'
+      if (source.startsWith(closer, i)) {
+        for (let k = 0; k < closer.length; k += 1) toComment(i + k)
+        state = 'code'
+        i += closer.length
+        continue
+      }
+      toComment(i)
+      i += 1
+      continue
+    }
+    // A string literal. Its bytes stay in the code region, where they belong.
+    if (ch === '\\') {
+      i += 2
+      continue
+    }
+    if (ch === state) {
+      state = 'code'
+      i += 1
+      continue
+    }
+    // An unterminated quote is a stray apostrophe, not a string; recover at
+    // the newline so it cannot swallow the rest of the file.
+    if (ch === '\n' && state !== '`') state = 'code'
+    i += 1
+  }
+
+  return { code: code.join(''), comments: comments.join('') }
+}
+
+/**
+ * `color: '#…'`, `"color":"#…"`, `--brand: #…`, `background=#…` — an
+ * identifier handed the hex as a value. Anchored at the end so it matches the
+ * text running up to the hex, like {@link KEY_BEFORE_VALUE}.
+ */
+const ASSIGNED_BEFORE_VALUE =
+  /(?:\\?["'])?([-A-Za-z_$][-A-Za-z0-9_$]*)(?:\\?["'])?\s*[:=]\s*(?:\\?["'])?\s*$/
+
+/** `'#…'` / `"#…"` — a string literal. Backticks are prose formatting. */
+const QUOTED_BEFORE_VALUE = /(?:\\?["'])$/
+
+/**
+ * Occurrences of `hex` in checked-in source, split into the ones that are
+ * authored colour and the ones that are documentation.
+ *
+ * `authored` is what the sweep asserts is zero. `documented` is reported so a
+ * reader can see the scanner did not simply stop looking.
+ *
+ * @param {string} text file contents
+ * @param {string} hex e.g. `#4fc3f7`
+ * @param {string} path used for its extension
+ * @returns {{ total: number, authored: number, documented: number }}
+ */
+export function findSourceOccurrences(text, hex, path = '') {
+  const { code, comments } = splitSourceComments(text, path)
+  const inCode = findColourOccurrences(code, hex)
+
+  const needle = hex.toLowerCase()
+  const haystack = comments.toLowerCase()
+  let authoredInComments = 0
+  let documented = 0
+  let at = haystack.indexOf(needle)
+  while (at !== -1) {
+    const next = haystack[at + needle.length]
+    if (!next || !/[0-9a-f]/.test(next)) {
+      const prefix = comments.slice(Math.max(0, at - LOOKBACK), at)
+      if (
+        ASSIGNED_BEFORE_VALUE.test(prefix) ||
+        QUOTED_BEFORE_VALUE.test(prefix)
+      )
+        authoredInComments += 1
+      else documented += 1
+    }
+    at = haystack.indexOf(needle, at + needle.length)
+  }
+
+  return {
+    total: inCode.total + authoredInComments + documented,
+    authored: inCode.total + authoredInComments,
+    documented,
+  }
 }

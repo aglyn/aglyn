@@ -51,6 +51,8 @@ import {
   RETIRED_COLOURS,
   auditRenderedPage,
   findColourOccurrences,
+  findSourceOccurrences,
+  splitSourceComments,
 } from './retired-colours.mjs'
 
 /** The escaped-JSON shape the flight payload uses. 143 of these on /pricing. */
@@ -94,7 +96,11 @@ test('exempts the theme palette slot but not an authored pin', () => {
   const found = findColourOccurrences(html, '#4fc3f7')
 
   assert.equal(found.total, 21)
-  assert.equal(found.exempt, 2, 'the two palette slots are the theme, not an author')
+  assert.equal(
+    found.exempt,
+    2,
+    'the two palette slots are the theme, not an author',
+  )
   assert.equal(found.exemptByKey.dark, 2)
   assert.equal(found.violations, 19)
 })
@@ -103,7 +109,9 @@ test('a page carrying only the theme palette is clean', () => {
   // `/` and `/product/media` measured exactly this on 2026-08-11: two
   // occurrences of #4fc3f7, zero authored. If this ever reports a violation
   // the check would cry wolf on the pages the migration got right.
-  const { clean, findings } = auditRenderedPage(`${themePalette}${themePalette}`)
+  const { clean, findings } = auditRenderedPage(
+    `${themePalette}${themePalette}`,
+  )
 
   assert.equal(clean, true)
   const dark = findings.find((f) => f.hex === '#4fc3f7')
@@ -134,7 +142,10 @@ test('the retired set stays small and self-describing', () => {
     ['#0090d9', '#4fc3f7'],
   )
   for (const colour of RETIRED_COLOURS) {
-    assert.ok(colour.retiredBy, `${colour.hex} must name the issue that retired it`)
+    assert.ok(
+      colour.retiredBy,
+      `${colour.hex} must name the issue that retired it`,
+    )
     assert.ok(colour.replacement, `${colour.hex} must name a replacement`)
   }
 })
@@ -217,7 +228,9 @@ test('both storage forms produce the same finding', () => {
   // have to agree or the verdict depends on how a page happened to be saved.
   const nodes = { JOPekm0oyE: liveNode }
   const fromMap = findRetiredColoursInNodes(decodeNodesField(nodes).nodes)
-  const fromBytes = findRetiredColoursInNodes(decodeNodesField(encode(nodes)).nodes)
+  const fromBytes = findRetiredColoursInNodes(
+    decodeNodesField(encode(nodes)).nodes,
+  )
 
   assert.equal(decodeNodesField(nodes).form, 'map')
   assert.deepEqual(fromMap.findings, fromBytes.findings)
@@ -304,7 +317,12 @@ test('does not match a longer hex token in node data', () => {
 // generator is by definition in.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+const REPO_ROOT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+)
 
 /**
  * Ships, or writes data. `.github` is deliberately outside: a workflow comment
@@ -387,9 +405,12 @@ test('no source file writes a retired colour down', () => {
   for (const { path, text } of sourceCorpus) {
     if (path in EXEMPT) continue
     for (const colour of RETIRED_COLOURS) {
-      const found = findColourOccurrences(text, colour.hex)
-      if (found.total)
-        offenders.push(`${path} — ${colour.hex} ×${found.total}`)
+      // AUTHORED, not merely present: a hex assigned in code, or assigned
+      // inside a commented-out block, is authored colour; a hex NAMED in a
+      // doc comment is documentation. See `findSourceOccurrences`.
+      const found = findSourceOccurrences(text, colour.hex, path)
+      if (found.authored)
+        offenders.push(`${path} — ${colour.hex} ×${found.authored}`)
     }
   }
 
@@ -401,6 +422,107 @@ test('no source file writes a retired colour down', () => {
       'back-fill applies, or an instruction an author follows. Use the token, ' +
       'or add a path to EXEMPT with a reason.',
   )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The source sweep's own split, pinned BOTH WAYS (AGL-1939)
+//
+// The sweep went red on the AGL-1293 doc comments — prose explaining which
+// colour was retired — and the cheap greens on offer were to delete the
+// documentation or to exempt the file. Teaching it about comments is the right
+// fix and also the dangerous one: a scanner that stops seeing comments must
+// not thereby stop seeing code, and a commented-out `sx` block is code that is
+// one keystroke from rendering.
+//
+// So every case below is paired. Each prose case that must be GREEN sits next
+// to the same hex, in the same syntax, written as an assignment, which must
+// stay RED.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RETIRED = RETIRED_COLOURS[1].hex // #4fc3f7 — the one the docblocks name
+
+/** Authored count for a synthetic file. */
+const authored = (text, path = 'libs/x/src/thing.ts') =>
+  findSourceOccurrences(text, RETIRED, path).authored
+
+test('a docblock that NAMES a retired colour is documentation, not colour', () => {
+  // The exact shape that made this red: `libs/shared/ui/theme/src/lib/util/
+  // accent-text.ts`, AGL-1293's explanation of what was retired.
+  const docblock = [
+    '/**',
+    ' * `dark` is deliberately overloaded rather than a new slot being',
+    ' * invented, and the marketing host already pins it explicitly',
+    ' * (`#0073ae` light / `' + RETIRED + '` dark). A second slot would have',
+    ' * to be whitelisted in `host-theme.ts`.',
+    ' */',
+    "export const ACCENT_TEXT_SHADE = 'dark' as const",
+  ].join('\n')
+  assert.equal(authored(docblock), 0)
+  // …and it is SEEN, not skipped: the scanner still counts it, it just does
+  // not call it authored. A zero here would mean the split stopped reading.
+  assert.equal(findSourceOccurrences(docblock, RETIRED, 'a.ts').documented, 1)
+})
+
+test('a line comment that NAMES one is documentation too', () => {
+  const line = `// keeps the marketing host's hand-pinned #0073ae / ${RETIRED} stable\nexport const x = 1\n`
+  assert.equal(authored(line), 0)
+})
+
+test('a COMMENTED-OUT assignment is still authored colour', () => {
+  // The failure mode the widening could have introduced. Someone told to stop
+  // using the hex comments the slice out rather than deleting it.
+  assert.equal(authored(`// color: '${RETIRED}',\n`), 1)
+  assert.equal(authored(`  // '@scheme dark': { color: '${RETIRED}' },\n`), 1)
+  assert.equal(authored(`/*\n * background: ${RETIRED};\n */\n`), 1)
+  assert.equal(authored(`/* "color":"${RETIRED}" */`), 1)
+  assert.equal(authored(`// --brand-accent: ${RETIRED};\n`, 'apps/x/a.css'), 1)
+})
+
+test('a bare quoted literal inside a comment is authored, backticks are prose', () => {
+  // Straight quotes are how code writes a colour; backticks are how a
+  // docblock writes markdown. The distinction is the whole rule.
+  assert.equal(authored(`// '${RETIRED}',\n`), 1)
+  assert.equal(authored(`// the retired \`${RETIRED}\` dark accent\n`), 0)
+})
+
+test('the comment split does not blind the scanner to real code', () => {
+  // The control the whole widening lives or dies on.
+  assert.equal(authored(`export const BRAND = '${RETIRED}'\n`), 1)
+  assert.equal(authored(`const sx = { color: '${RETIRED}' }\n`), 1)
+  // Unattributed, unassigned, in code — still counted, exactly as before.
+  assert.equal(authored(`const shades = ['${RETIRED}']\n`), 1)
+  assert.equal(authored(`<div style="color:${RETIRED}" />\n`, 'a.tsx'), 1)
+  // A URL's `//` must not be mistaken for a comment and swallow the line.
+  assert.equal(
+    authored(`fetch('https://example.com'); const c = '${RETIRED}'\n`),
+    1,
+  )
+  // Nor may a regex literal.
+  assert.equal(authored(`const re = /\\/\\//; const c = '${RETIRED}'\n`), 1)
+  // A file type with no comment syntax we honour keeps the strict behaviour.
+  assert.equal(authored(`{ "color": "${RETIRED}" }`, 'a.json'), 1)
+  assert.equal(authored(`Use ${RETIRED} for the dark accent.`, 'a.md'), 1)
+})
+
+test('the split is complementary and offset-preserving', () => {
+  // Guards the premise of every case above: a split that dropped or shifted
+  // bytes would make the lookback read the wrong context and quietly decide
+  // everything is prose.
+  const text = `const a = 1 // note ${RETIRED}\n/* block ${RETIRED} */\nconst b = '${RETIRED}'\n`
+  const { code, comments } = splitSourceComments(text, 'a.ts')
+  assert.equal(code.length, text.length)
+  assert.equal(comments.length, text.length)
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '\n') continue
+    // Exactly one region carries each byte.
+    assert.equal(
+      Number(code[i] === text[i]) + Number(comments[i] === text[i]),
+      text[i] === ' ' ? 2 : 1,
+      `byte ${i} (${JSON.stringify(text[i])}) is in neither region or both`,
+    )
+  }
+  assert.equal(findColourOccurrences(code, RETIRED).total, 1)
+  assert.equal(findColourOccurrences(comments, RETIRED).total, 2)
 })
 
 test('every exemption still applies', () => {
