@@ -66,16 +66,21 @@ describe('assertBoundedWinbackCoupon (AGL-1863 / AGL-1620)', () => {
   })
 
   it('refuses `forever`, whatever the percent', () => {
+    // Matched on the guard's OWN words, not on /forever/. The fallthrough
+    // whitelist error echoes the rejected input back — `got "forever"` — so
+    // /forever/ passed even with the dedicated branch deleted, and a mutation
+    // that removed it went green. The assertion has to read something the
+    // fallthrough cannot say.
     expect(() =>
       assertBoundedWinbackCoupon({ percentOff: 5, duration: 'forever' }),
-    ).toThrow(/forever/)
+    ).toThrow(/must be time-boxed/)
   })
 
   it('refuses the 100%-off-forever coupon on BOTH axes', () => {
     // The exact artifact AGL-1620 exists to never see again.
     expect(() =>
       assertBoundedWinbackCoupon({ percentOff: 100, duration: 'forever' }),
-    ).toThrow()
+    ).toThrow(/must be time-boxed/)
     // And 100% off even for a single cycle is over the percent wall.
     expect(() =>
       assertBoundedWinbackCoupon({ percentOff: 100, duration: 'once' }),
