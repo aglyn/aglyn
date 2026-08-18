@@ -19,22 +19,20 @@
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
 
 /**
- * Last boundary of all (AGL-2074): a throw in the ROOT layout.
+ * Last boundary of all for the console (AGL-2074): a throw in the ROOT
+ * layout.
  *
- * `global-error` REPLACES the root layout, so it must render its own
- * `<html>` and `<body>` — and everything the root layout provides is gone
- * with it: no `AppRouterCacheProvider`, so no emotion, so no MUI styling,
- * and no `ErrorBeacon`, so nothing is listening for the report. Hence plain
- * elements with inline styles, and a direct `reportError` at render rather
- * than an effect handing off to a beacon that is not mounted.
+ * It REPLACES the root layout, so it renders its own `<html>`/`<body>` and
+ * loses everything that layout provides — `AppRouterCacheProvider`, so no
+ * emotion and no MUI styling. Plain elements with inline styles are the one
+ * thing that can still paint.
  *
- * In practice this should never render — the root layout does almost nothing.
- * It exists because the alternative when it DOES is Next's own crash page on
- * a customer's domain, which is the entire defect this issue is about, and a
- * boundary that only covers the likely cases leaves the platform's worst
- * moment as its least designed one.
+ * Should never render; the console's root layout does almost nothing. It
+ * exists because the alternative when it does is the framework's crash page
+ * on a paying operator's screen, and a set of boundaries that covers only the
+ * likely cases leaves the product's worst moment as its least designed one.
  */
-export default function GlobalError({
+export default function ConsoleGlobalError({
   error,
 }: {
   error: Error & { digest?: string }
@@ -55,9 +53,7 @@ export default function GlobalError({
         <StatusScreenPlain
           code="500"
           title={'Something went wrong'}
-          message={
-            'This site couldn’t be loaded. Please try again in a moment.'
-          }
+          message={'The console couldn’t be loaded. Please try again in a moment.'}
         />
       </body>
     </html>

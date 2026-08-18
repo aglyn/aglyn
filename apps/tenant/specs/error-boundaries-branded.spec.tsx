@@ -80,6 +80,12 @@ describe('tenant error boundaries (AGL-2074)', () => {
       const code = source
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '')
+        // Import specifiers too. `@aglyn/shared-ui-jsx/...` is our own
+        // package scope on every file in the monorepo — matching it would
+        // make this assertion fire on the act of importing the shared
+        // component, which is the opposite of the rule. What is constrained
+        // is the copy a VISITOR reads.
+        .replace(/^\s*import\s[\s\S]*?from\s+'[^']*'\s*$/gm, '')
       expect(code).not.toMatch(/Aglyn/i)
       expect(code).not.toMatch(/powered by/i)
     },
@@ -92,7 +98,13 @@ describe('tenant error boundaries (AGL-2074)', () => {
     // page it replaces and looks identical in review, so the presence of a
     // real `prefers-color-scheme` rule is asserted rather than assumed.
     const plain = readFileSync(
-      join(__dirname, '..', 'components', 'plain-status-screen.component.tsx'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'libs/shared/ui/jsx/src/lib/components/status-screen-plain.component.tsx',
+      ),
       'utf8',
     )
     expect(plain).toContain('prefers-color-scheme: dark')

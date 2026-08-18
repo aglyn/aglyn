@@ -18,8 +18,14 @@
 import type { ReactNode } from 'react'
 
 /**
- * The status page for boundaries that render ABOVE the host providers
- * (AGL-2074) — `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx`.
+ * The status page for App Router boundaries that render ABOVE every provider
+ * (AGL-2074) — the tenant's and the console's `app/error.tsx`,
+ * `app/global-error.tsx` and root `app/not-found.tsx`.
+ *
+ * Shared rather than duplicated per app, and deliberately NOT re-exported
+ * from the barrel: this lib's index warns that everything it re-exports ships
+ * eagerly on EVERY published customer page, and this component is on the cold
+ * path of both apps. Both callers deep-import it.
  *
  * ## Why it uses no MUI and no theme
  *
@@ -76,7 +82,7 @@ const STYLES = `
 }
 `
 
-export function PlainStatusScreen({
+export function StatusScreenPlain({
   code,
   title,
   message,
@@ -162,6 +168,6 @@ export function PlainStatusScreen({
     </div>
   )
 }
-PlainStatusScreen.displayName = 'PlainStatusScreen'
+StatusScreenPlain.displayName = 'StatusScreenPlain'
 
-export default PlainStatusScreen
+export default StatusScreenPlain

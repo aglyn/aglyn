@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import PlainStatusScreen from '../components/plain-status-screen.component'
+import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
 
 /**
  * Root not-found boundary (AGL-2074).
@@ -32,7 +32,7 @@ import PlainStatusScreen from '../components/plain-status-screen.component'
  */
 export default function RootNotFound() {
   return (
-    <PlainStatusScreen
+    <StatusScreenPlain
       code="404"
       title={'We can’t find that page'}
       message={

@@ -16,23 +16,38 @@
  */
 'use client'
 
-import { useEffect } from 'react'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
+import { useEffect } from 'react'
 
 /**
- * Root error boundary (AGL-2074).
+ * The console's crash page (AGL-2074).
  *
- * The rung above `[host]/error.tsx`: it catches what that one structurally
- * cannot, which is a throw in `[host]/layout.tsx` itself — the host lookup,
- * the theme resolve, the font/favicon/manifest resolution. That is also
- * exactly the case in which no host data exists, so the plain screen is not a
- * shortcut here, it is the only honest option.
+ * The console had branded NOT-FOUND boundaries (AGL-625) and no error
+ * boundary at all, so an uncaught throw anywhere under the root layout
+ * dropped a signed-in operator onto Next's own crash page — the same defect
+ * the tenant had one app over, on the surface a customer is paying to use.
  *
- * The root layout still wraps this, so `ErrorBeacon` is mounted and the
- * document shell is intact. `global-error.tsx` is the rung above again, for
- * when even that is gone.
+ * ## Why the plain screen and not the console chrome
+ *
+ * `not-found.tsx` renders `AuthenticatedLayout > MainLayout` because a 404
+ * is a routing outcome: everything around it is healthy and the chrome is
+ * exactly what the operator needs to get somewhere else. An ERROR is the
+ * opposite case. This boundary catches throws from inside that same provider
+ * stack — `FirebaseAppLayout`, `ConsolePluginsGate`, the org scope — so
+ * re-mounting the chrome to report the failure risks re-entering whatever
+ * just failed and turning one broken page into a loop. A boundary that can
+ * itself throw is not a boundary.
+ *
+ * It also cannot know whose brand to wear. The console renders an agency's
+ * branding for a white-label org (AGL-1097), and that resolution lives inside
+ * the very stack that is unavailable here — so, as on the tenant, the rule is
+ * to name nobody rather than to guess and name us.
+ *
+ * A full-page link home rather than a router push: the router is part of what
+ * may be wrong, and a client navigation that fails leaves the operator on the
+ * same dead page with no feedback.
  */
-export default function RootError({
+export default function ConsoleError({
   error,
   reset,
 }: {
