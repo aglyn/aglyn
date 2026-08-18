@@ -30,7 +30,9 @@
 
 import {
   sendGa4Purchase,
+  sendGa4Refund,
   sendGa4SitePublished,
+  sendGa4SubscriptionCancelled,
   synthesizeClientId,
 } from './ga4-measurement-protocol'
 
@@ -199,6 +201,78 @@ describe('purchase carries billing_interval only when it is known (AGL-1640)', (
     // Absent, not present-and-empty: GA counts a key it receives.
     expect(Object.hasOwn(params, 'billing_interval')).toBe(false)
     expect(params.value).toBe(49)
+  })
+
+  it('a refund wears the ORIGINAL transaction id, so GA nets it against the purchase (AGL-1850)', async () => {
+    await sendGa4Refund({
+      // The invoice id the purchase reported — never the refund's own
+      // charge/event id, which would create a new transaction instead of
+      // netting the old one.
+      transactionId: 'in_test_1',
+      value: 49,
+      currency: 'usd',
+      items: [],
+      stripeCustomerId: 'cus_1',
+    })
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    )
+    expect(body.events[0].name).toBe('refund')
+    expect(body.events[0].params.transaction_id).toBe('in_test_1')
+    expect(body.events[0].params.value).toBe(49)
+    expect(body.events[0].params.currency).toBe('USD')
+    expect(body.non_personalized_ads).toBe(true)
+  })
+
+  it('refund no-ops cleanly without config, like every sender here', async () => {
+    delete process.env.GA4_MEASUREMENT_ID
+    const result = await sendGa4Refund({
+      transactionId: 'in_test_1',
+      value: 49,
+      currency: 'usd',
+      items: [],
+      stripeCustomerId: 'cus_1',
+    })
+    expect(result.reason).toBe('not-configured')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('subscription_cancelled reports the plan being LEFT, the interval and the tenure (AGL-1851)', async () => {
+    const result = await sendGa4SubscriptionCancelled({
+      plan: 'pro',
+      billingInterval: 'annual',
+      tenureDays: 212,
+      clientId: '555444333.1755100000',
+      userId: 'uid-1',
+    })
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    )
+    expect(body.events[0].name).toBe('subscription_cancelled')
+    expect(body.events[0].params).toEqual({
+      plan: 'pro',
+      billing_interval: 'annual',
+      tenure_days: 212,
+    })
+    expect(body.client_id).toBe('555444333.1755100000')
+    expect(body.user_id).toBe('uid-1')
+    expect(result.synthesizedClientId).toBe(false)
+  })
+
+  it('subscription_cancelled omits tenure it cannot know, and synthesizes a client id from the customer', async () => {
+    const result = await sendGa4SubscriptionCancelled({
+      plan: 'starter',
+      stripeCustomerId: 'cus_1',
+    })
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body,
+    )
+    // Absent, not invented: an unknown tenure must stay out of the breakdown
+    // rather than reading as day zero.
+    expect(Object.hasOwn(body.events[0].params, 'tenure_days')).toBe(false)
+    expect(Object.hasOwn(body.events[0].params, 'billing_interval')).toBe(false)
+    expect(body.client_id).toBe(synthesizeClientId('cus_1'))
+    expect(result.synthesizedClientId).toBe(true)
   })
 
   it('joins the browser session when a real client id was captured', async () => {

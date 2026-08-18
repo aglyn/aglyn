@@ -137,6 +137,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     findOrgIdByStripeCustomer: async () => null,
     notifyOrgAdmins: async () => undefined,
+    sendGa4Purchase: async () => undefined,
+    sendGa4Refund: async () => undefined,
+    sendGa4SubscriptionCancelled: async () => undefined,
     writeOrgBilling: async (...args: unknown[]) => mockWriteOrgBilling(...args),
     updateExisting: (...args: unknown[]) => mockUpdateExisting(...args),
   }

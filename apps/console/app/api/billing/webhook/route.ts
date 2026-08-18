@@ -20,6 +20,8 @@ import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
   sendGa4Purchase,
+  sendGa4Refund,
+  sendGa4SubscriptionCancelled,
   notifyOrgAdmins,
   updateExisting,
   writeOrgBilling,
@@ -381,6 +383,51 @@ async function handler(request: Request): Promise<Response> {
           } as never)
         }
 
+        // GA4 churn (AGL-1851): the funnel instruments every step INTO
+        // revenue and, until this, nothing on the way out —
+        // `customer.subscription.deleted` mirrored `plan: 'free'` onto the
+        // org and told GA nothing, so churn rate, plan-tier churn mix and
+        // tenure-at-cancellation were unanswerable. Server-side for the same
+        // reason `purchase` is: a subscription ends with no browser present
+        // (period-end portal cancellations, dunning exhaustion).
+        //
+        // Inside the org-resolved block deliberately — the same claiming
+        // rule as revenue. A tenant shopper's product subscription carries
+        // no `metadata.orgId` naming one of OUR workspaces, so it never
+        // reaches here and a merchant's churn cannot report as ours.
+        //
+        // The params describe the subscription being LEFT: `plan` from the
+        // metadata/price (never the `'free'` the mirror writes), the
+        // interval from the plan item, and whole-day tenure from `created`
+        // to when it actually ended. Fire-and-forget, like every analytics
+        // call on this route.
+        if (canceled) {
+          const createdAt = Number(object?.created ?? 0)
+          const endedAt = Number(
+            object?.ended_at ?? object?.canceled_at ?? Math.floor(Date.now() / 1000),
+          )
+          const interval = planItem?.price?.recurring?.interval
+          void sendGa4SubscriptionCancelled({
+            plan: String(
+              object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'unknown',
+            ),
+            ...(interval === 'year'
+              ? { billingInterval: 'annual' as const }
+              : interval === 'month'
+                ? { billingInterval: 'monthly' as const }
+                : {}),
+            ...(createdAt > 0 && endedAt >= createdAt
+              ? { tenureDays: Math.round((endedAt - createdAt) / 86400) }
+              : {}),
+            // Checkout stamps the browser's GA client id on the
+            // subscription's own metadata; a dashboard-created or pre-AGL-1561
+            // subscription falls back to the synthesized customer id, exactly
+            // as a renewal's `purchase` does.
+            clientId: object?.metadata?.ga_client_id,
+            stripeCustomerId,
+          }).catch(() => undefined)
+        }
+
         // Back-fill the metered usage item (AGL-1352).
         //
         // Checkout and the in-app switch both attach it; NOTHING that changes
@@ -645,6 +692,89 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+
+    // GA4 `refund` for OUR subscription revenue (AGL-1850). The `purchase`
+    // above fires on every paid invoice, so without this GA revenue could
+    // only ever go up — a refunded invoice stayed on the books forever and
+    // GA drifted from Stripe by exactly the refund volume.
+    //
+    // The claiming discrimination is the same double test the `purchase`
+    // uses, because `charge.refunded` arrives on this endpoint for tenant
+    // storefront orders and marketplace sales too: the charge must belong to
+    // an INVOICE (a subscription charge carries one; a storefront session's
+    // or marketplace sale's does not), and its customer must resolve through
+    // the `stripeCustomers` index that only `writeOrgBilling` stamps. The
+    // marketplace's own full-refund reversal lives in its webhook section
+    // and reports platform-net under the session id — different id space,
+    // no double count.
+    //
+    // `transaction_id` is the INVOICE id — the same id the original
+    // `purchase` reported — which is what tells GA to net the two rather
+    // than record a second transaction.
+    //
+    // Stripe's `amount_refunded` is CUMULATIVE across partial refunds, and
+    // GA refund values are additive, so sending it verbatim would
+    // double-report every earlier partial. The AGL-1811 `platformRevenue`
+    // row for the invoice carries the running `refundedCents`, making the
+    // DELTA computable and the tax record refund-aware in the same write.
+    // An invoice from before AGL-1811 has no row: for those, only a FULL
+    // refund reports (`refunded: true`, the cumulative total, once) — a
+    // partial-only refund on a pre-AGL-1811 invoice stays unreported rather
+    // than guessed.
+    if (type === 'charge.refunded') {
+      const invoiceId =
+        typeof object?.invoice === 'string'
+          ? object.invoice
+          : String(object?.invoice?.id ?? '')
+      const customerId = String(object?.customer ?? '')
+      const refundedCents = Number(object?.amount_refunded ?? 0)
+      if (invoiceId && customerId && refundedCents > 0) {
+        const orgId = await findOrgIdByStripeCustomer(customerId)
+        if (orgId) {
+          const revenueRef = firebaseAdmin
+            .app()
+            .firestore()
+            .collection('platformRevenue')
+            .doc(invoiceId)
+          const revenueSnapshot = await revenueRef.get()
+          const previousCents = Number(
+            revenueSnapshot.get('refundedCents') ?? 0,
+          )
+          const deltaCents = refundedCents - previousCents
+          if (revenueSnapshot.exists && deltaCents > 0) {
+            // AWAITED like the revenue row itself: a lost stamp here means
+            // the next partial refund re-reports this one.
+            await revenueRef.set(
+              {
+                refundedCents,
+                refundRecordedAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            )
+            void sendGa4Refund({
+              transactionId: invoiceId,
+              value: deltaCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              items: [],
+              // No browser is present at refund time and the charge carries
+              // no ga_client_id; the synthesized customer id keeps the
+              // reversal on the same synthetic user a renewal's purchase
+              // falls back to.
+              stripeCustomerId: customerId,
+            }).catch(() => undefined)
+          } else if (!revenueSnapshot.exists && object?.refunded === true) {
+            void sendGa4Refund({
+              transactionId: invoiceId,
+              value: refundedCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              items: [],
+              stripeCustomerId: customerId,
+            }).catch(() => undefined)
+          }
+        }
+      }
+    }
 
     // Plugin-owned sections (AGL-418): commerce orders/carts/drafts/
     // reservations/subscriptions, booking payments, and marketplace
