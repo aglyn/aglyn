@@ -209,26 +209,87 @@ const text = (
   props: { variant, children, ...extra },
 })
 
-const heroSection = (prefix: string, headline: string, tagline: string) => ({
-  id: `${prefix}hero`,
-  componentId: 'muiStack',
-  props: { spacing: 2 },
-  sx: { py: 10, px: 4, alignItems: 'center' },
-  children: [
-    text(`${prefix}heroTitle`, 'h2', headline, { align: 'center' }),
-    text(`${prefix}heroSub`, 'h6', tagline, { align: 'center' }),
-    {
-      id: `${prefix}heroCta`,
-      componentId: 'muiButton',
-      props: { variant: 'contained', size: 'large', children: 'Get in touch' },
-    },
-  ],
+/**
+ * The stock widths a starter band may be (AGL-1932, AGL-1298).
+ *
+ * Three cases, and only three, because the standard has three. There is no
+ * pixel case: `1328` is a CONTENT width, not a breakpoint, and the ban on
+ * bespoke numbers is the half of AGL-1298 these templates used to violate
+ * four times over.
+ */
+type SectionWidth = 'md' | 'lg' | 'xl'
+
+/**
+ * One page band: a `Container` at a stock width, carrying the band's own
+ * vertical rhythm (AGL-1932).
+ *
+ * Zach's standard, AGL-1298: *"Every section should have container component.
+ * We should be using the container component for everything and even if we
+ * want something to be full width we use the full width attribute. Otherwise
+ * it would be XL."* These templates seeded **zero** Containers, so every site
+ * a customer created started in violation — and from Sept 1 that is strangers,
+ * not us.
+ *
+ * How the three widths are chosen here, stated so the next audit does not
+ * have to guess:
+ *
+ * - `xl` — a marketing band: hero, feature row, product grid, gallery. The
+ *   default, and Zach confirmed it 2026-08-18 ("XL is fine for the default
+ *   page width on the marketing site, I like that").
+ * - `lg` — the deliberate middle case: wide but text-led and interactive.
+ *   Cart and account are the honest instances, not decoration.
+ * - `md` — long-form prose and narrow form columns, on READING grounds: at
+ *   `xl` a paragraph runs 110–120 characters a line. This is the case the
+ *   `Prose Container` preset exists for.
+ *
+ * Horizontal padding is the Container's own gutters, so bands no longer carry
+ * `px`. Only `py` rides here, which is rhythm rather than width.
+ */
+const section = (
+  id: string,
+  maxWidth: SectionWidth,
+  py: number,
+  children: NodeSpec[],
+): NodeSpec => ({
+  id,
+  componentId: 'muiContainer',
+  props: { maxWidth },
+  sx: { py },
+  children,
 })
+
+const heroSection = (prefix: string, headline: string, tagline: string) =>
+  // The Container is a NEW node (`…heroSection`); `…hero` keeps its id and
+  // stays the Stack. Node ids here are persisted identifiers, so bands are
+  // wrapped rather than re-pointed.
+  section(`${prefix}heroSection`, 'xl', 10, [
+    {
+      id: `${prefix}hero`,
+      componentId: 'muiStack',
+      props: { spacing: 2 },
+      sx: { alignItems: 'center' },
+      children: [
+        text(`${prefix}heroTitle`, 'h2', headline, { align: 'center' }),
+        text(`${prefix}heroSub`, 'h6', tagline, { align: 'center' }),
+        {
+          id: `${prefix}heroCta`,
+          componentId: 'muiButton',
+          props: {
+            variant: 'contained',
+            size: 'large',
+            children: 'Get in touch',
+          },
+        },
+      ],
+    },
+  ])
 
 const featureColumn = (id: string, title: string, body: string): NodeSpec => ({
   id,
   componentId: 'muiStack',
   props: { spacing: 1 },
+  // `flex: 1` is a column's share of its row, not a width cap — it survives
+  // the sweep deliberately. Only `maxWidth` in raw pixels was the violation.
   sx: { flex: 1, p: 2 },
   children: [text(`${id}T`, 'h5', title), text(`${id}B`, 'body1', body)],
 })
@@ -299,15 +360,20 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
             ? 'Instant delivery. Lifetime updates.'
             : 'Quality parts, shipped fast.',
         ),
-        commerceBlock(`${prefix}h_grid`, 'product-grid', {
-          source: 'all',
-          sort: 'newest',
-          columns: 3,
-          maxItems: 6,
-        }),
-        commerceBlock(`${prefix}h_news`, 'newsletter-signup', {
-          heading: 'Get updates and offers',
-        }),
+        section(`${prefix}h_gridSection`, 'xl', 6, [
+          commerceBlock(`${prefix}h_grid`, 'product-grid', {
+            source: 'all',
+            sort: 'newest',
+            columns: 3,
+            maxItems: 6,
+          }),
+        ]),
+        // A newsletter capture is a short text-led band, not a gallery.
+        section(`${prefix}h_newsSection`, 'md', 6, [
+          commerceBlock(`${prefix}h_news`, 'newsletter-signup', {
+            heading: 'Get updates and offers',
+          }),
+        ]),
       ]),
     },
     {
@@ -316,12 +382,14 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       slug: 'shop',
       seo: { title: 'All products' },
       nodes: buildNodes([
-        text(`${prefix}s_title`, 'h3', 'All products'),
-        commerceBlock(`${prefix}s_grid`, 'product-grid', {
-          source: 'all',
-          columns: 4,
-          showFilters: true,
-        }),
+        section(`${prefix}s_section`, 'xl', 6, [
+          text(`${prefix}s_title`, 'h3', 'All products'),
+          commerceBlock(`${prefix}s_grid`, 'product-grid', {
+            source: 'all',
+            columns: 4,
+            showFilters: true,
+          }),
+        ]),
       ]),
     },
     {
@@ -330,7 +398,9 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       slug: 'product',
       seo: { title: 'Product' },
       nodes: buildNodes([
-        commerceBlock(`${prefix}p_detail`, 'product-detail', {}),
+        section(`${prefix}p_section`, 'xl', 6, [
+          commerceBlock(`${prefix}p_detail`, 'product-detail', {}),
+        ]),
       ]),
     },
     {
@@ -338,12 +408,17 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       displayName: 'Cart',
       slug: 'cart',
       seo: { title: 'Your cart' },
+      // LG, the deliberate middle case: a cart is a wide table but it is read
+      // line by line, so a full XL band spreads it further than the eye
+      // tracks. Same for the account screen below.
       nodes: buildNodes([
-        text(`${prefix}c_title`, 'h3', 'Your cart'),
-        commerceBlock(`${prefix}c_cart`, 'cart', {
-          variant: 'inline',
-          showCoupon: true,
-        }),
+        section(`${prefix}c_section`, 'lg', 6, [
+          text(`${prefix}c_title`, 'h3', 'Your cart'),
+          commerceBlock(`${prefix}c_cart`, 'cart', {
+            variant: 'inline',
+            showCoupon: true,
+          }),
+        ]),
       ]),
     },
     {
@@ -352,9 +427,11 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       slug: 'account',
       seo: { title: 'Your account' },
       nodes: buildNodes([
-        commerceBlock(`${prefix}a_account`, 'customer-account', {
-          signedOutHeading: 'Your account',
-        }),
+        section(`${prefix}a_section`, 'lg', 6, [
+          commerceBlock(`${prefix}a_account`, 'customer-account', {
+            signedOutHeading: 'Your account',
+          }),
+        ]),
       ]),
     },
   ]
@@ -382,39 +459,45 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
             'A headline that sells your idea',
             'One clear sentence about the value you deliver.',
           ),
-          {
-            id: 'l_features',
-            componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2 },
-            sx: { px: 4, py: 6 },
-            children: [
-              featureColumn(
-                'l_f1',
-                'Fast',
-                'Explain the first reason customers pick you.',
-              ),
-              featureColumn(
-                'l_f2',
-                'Simple',
-                'Explain the second reason customers pick you.',
-              ),
-              featureColumn(
-                'l_f3',
-                'Reliable',
-                'Explain the third reason customers pick you.',
-              ),
-            ],
-          },
-          {
-            id: 'l_contact',
-            componentId: 'muiStack',
-            props: { spacing: 2 },
-            sx: { px: 4, py: 6, maxWidth: 560 },
-            children: [
-              text('l_contactTitle', 'h4', 'Get in touch'),
-              contactForm('l_'),
-            ],
-          },
+          section('l_featuresSection', 'xl', 6, [
+            {
+              id: 'l_features',
+              componentId: 'muiStack',
+              props: { direction: 'row', spacing: 2 },
+              children: [
+                featureColumn(
+                  'l_f1',
+                  'Fast',
+                  'Explain the first reason customers pick you.',
+                ),
+                featureColumn(
+                  'l_f2',
+                  'Simple',
+                  'Explain the second reason customers pick you.',
+                ),
+                featureColumn(
+                  'l_f3',
+                  'Reliable',
+                  'Explain the third reason customers pick you.',
+                ),
+              ],
+            },
+          ]),
+          // Was `maxWidth: 560`. A band, not an inner measure: it sat at the
+          // top level carrying the section's own gutters and rhythm, so the
+          // pixel value was capping the BAND. MD is the stock width for a
+          // narrow, form-led column.
+          section('l_contactSection', 'md', 6, [
+            {
+              id: 'l_contact',
+              componentId: 'muiStack',
+              props: { spacing: 2 },
+              children: [
+                text('l_contactTitle', 'h4', 'Get in touch'),
+                contactForm('l_'),
+              ],
+            },
+          ]),
         ]),
       },
     ],
@@ -437,17 +520,22 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
             'Your business, done right',
             'Tell visitors what you do and who you do it for.',
           ),
-          {
-            id: 'b_services',
-            componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2 },
-            sx: { px: 4, py: 6 },
-            children: [
-              featureColumn('b_s1', 'Service one', 'Describe this service.'),
-              featureColumn('b_s2', 'Service two', 'Describe this service.'),
-              featureColumn('b_s3', 'Service three', 'Describe this service.'),
-            ],
-          },
+          section('b_servicesSection', 'xl', 6, [
+            {
+              id: 'b_services',
+              componentId: 'muiStack',
+              props: { direction: 'row', spacing: 2 },
+              children: [
+                featureColumn('b_s1', 'Service one', 'Describe this service.'),
+                featureColumn('b_s2', 'Service two', 'Describe this service.'),
+                featureColumn(
+                  'b_s3',
+                  'Service three',
+                  'Describe this service.',
+                ),
+              ],
+            },
+          ]),
         ]),
       },
       {
@@ -456,21 +544,25 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
         slug: 'about-us',
         seo: { title: 'About us' },
         nodes: buildNodes([
-          {
-            id: 'a_wrap',
-            componentId: 'muiStack',
-            props: { spacing: 2 },
-            sx: { px: 4, py: 8, maxWidth: 720 },
-            children: [
-              text('a_title', 'h3', 'About us'),
-              text(
-                'a_body',
-                'body1',
-                'Share your story: how you started, what you believe, and ' +
-                  'why customers trust you.',
-              ),
-            ],
-          },
+          // Was `maxWidth: 720` — the one unambiguous PROSE band in the set,
+          // and the case the Prose Container preset exists for. MD (900px)
+          // lands near the 65–75 characters a line that reads comfortably.
+          section('a_wrapSection', 'md', 8, [
+            {
+              id: 'a_wrap',
+              componentId: 'muiStack',
+              props: { spacing: 2 },
+              children: [
+                text('a_title', 'h3', 'About us'),
+                text(
+                  'a_body',
+                  'body1',
+                  'Share your story: how you started, what you believe, and ' +
+                    'why customers trust you.',
+                ),
+              ],
+            },
+          ]),
         ]),
       },
       {
@@ -479,22 +571,25 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
         slug: 'contact-us',
         seo: { title: 'Contact' },
         nodes: buildNodes([
-          {
-            id: 'c_wrap',
-            componentId: 'muiStack',
-            props: { spacing: 2 },
-            sx: { px: 4, py: 8, maxWidth: 560 },
-            children: [
-              text('c_title', 'h3', 'Contact us'),
-              text(
-                'c_body',
-                'body1',
-                'Questions or quotes — send a message and we reply within ' +
-                  'one business day.',
-              ),
-              contactForm('c_'),
-            ],
-          },
+          // Was `maxWidth: 560`. Same reading as the landing page's contact
+          // band: text plus a form column, so MD.
+          section('c_wrapSection', 'md', 8, [
+            {
+              id: 'c_wrap',
+              componentId: 'muiStack',
+              props: { spacing: 2 },
+              children: [
+                text('c_title', 'h3', 'Contact us'),
+                text(
+                  'c_body',
+                  'body1',
+                  'Questions or quotes — send a message and we reply within ' +
+                    'one business day.',
+                ),
+                contactForm('c_'),
+              ],
+            },
+          ]),
         ]),
       },
     ],
@@ -516,39 +611,44 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
             'Hi, I make things',
             'Designer / developer / photographer — introduce yourself here.',
           ),
-          {
-            id: 'p_grid',
-            componentId: 'muiStack',
-            props: { direction: 'row', spacing: 2 },
-            sx: { px: 4, py: 6 },
-            children: [
-              {
-                id: 'p_img1',
-                componentId: 'image',
-                props: { alt: 'Project one', height: '220px' },
-              },
-              {
-                id: 'p_img2',
-                componentId: 'image',
-                props: { alt: 'Project two', height: '220px' },
-              },
-              {
-                id: 'p_img3',
-                componentId: 'image',
-                props: { alt: 'Project three', height: '220px' },
-              },
-            ],
-          },
-          {
-            id: 'p_contact',
-            componentId: 'muiStack',
-            props: { spacing: 2 },
-            sx: { px: 4, py: 6, maxWidth: 560 },
-            children: [
-              text('p_contactTitle', 'h4', 'Work with me'),
-              contactForm('p_'),
-            ],
-          },
+          section('p_gridSection', 'xl', 6, [
+            {
+              id: 'p_grid',
+              componentId: 'muiStack',
+              props: { direction: 'row', spacing: 2 },
+              children: [
+                {
+                  id: 'p_img1',
+                  componentId: 'image',
+                  // `height` is an image's own intrinsic sizing prop, not a
+                  // band cap — out of scope for the container standard.
+                  props: { alt: 'Project one', height: '220px' },
+                },
+                {
+                  id: 'p_img2',
+                  componentId: 'image',
+                  props: { alt: 'Project two', height: '220px' },
+                },
+                {
+                  id: 'p_img3',
+                  componentId: 'image',
+                  props: { alt: 'Project three', height: '220px' },
+                },
+              ],
+            },
+          ]),
+          // Was `maxWidth: 560`, the third of the three contact bands.
+          section('p_contactSection', 'md', 6, [
+            {
+              id: 'p_contact',
+              componentId: 'muiStack',
+              props: { spacing: 2 },
+              children: [
+                text('p_contactTitle', 'h4', 'Work with me'),
+                contactForm('p_'),
+              ],
+            },
+          ]),
         ]),
       },
     ],
