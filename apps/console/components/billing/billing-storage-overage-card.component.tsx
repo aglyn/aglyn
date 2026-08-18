@@ -152,6 +152,23 @@ export default function BillingStorageOverageCardComponent({
         if (cancelled) return
         if (!outcome.ok) return void setLoadState('error')
         const next = outcome.payload as StorageOverageState
+        // A consent screen that cannot name the price MUST NOT ask for
+        // consent. Both of these numbers appear in the sentence someone
+        // agrees to, and neither has a safe default: a defaulted 0 would
+        // quote "$0.000 per GB" to a person about to accept a charge, and a
+        // missing allowance renders "NaN MB". A wrong price is worse than an
+        // error, so a payload that cannot state the terms is a LOAD FAILURE.
+        //
+        // `strictNullChecks` is off repo-wide, so nothing at compile time
+        // objects to reading `.toFixed()` off an absent field — this check is
+        // the only thing standing between a thinner payload and a billing
+        // page that either white-screens or misquotes the rate.
+        if (
+          !Number.isFinite(Number(next?.pricePerGbUsd)) ||
+          !Number.isFinite(Number(next?.includedStoragePerSiteMb))
+        ) {
+          return void setLoadState('error')
+        }
         setState(next)
         // Seed the field from what is in force: the cap they set, or the
         // default the route would apply if none is sent.

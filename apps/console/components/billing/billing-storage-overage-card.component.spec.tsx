@@ -287,6 +287,40 @@ describe('BillingStorageOverageCard (AGL-1957)', () => {
     expect(screen.queryByRole('button', { name: 'Set a monthly cap' })).toBeNull()
   })
 
+  it('REFUSES to ask for consent it cannot price', async () => {
+    // The double in every other test supplies `pricePerGbUsd`, so none of
+    // them can see what happens when the route stops sending it — the classic
+    // way a fixture fabricates a green. `strictNullChecks` is off repo-wide,
+    // so the compiler does not object to `.toFixed()` on an absent field
+    // either: nothing but this test stands between a thinner payload and a
+    // billing page that white-screens.
+    //
+    // Forced red by removing the finite-number check in the load effect: the
+    // card threw "Cannot read properties of undefined (reading 'toFixed')"
+    // and took the whole billing page down with it.
+    for (const missing of ['pricePerGbUsd', 'includedStoragePerSiteMb']) {
+      const payload: any = { ...NOT_ACKNOWLEDGED }
+      delete payload[missing]
+      global.fetch = jest.fn(async () =>
+        jsonResponse(payload),
+      ) as unknown as typeof fetch
+
+      const { unmount } = render(
+        <BillingStorageOverageCardComponent orgId="org-1" canManage />,
+      )
+
+      await screen.findByText(/couldn.t load your storage settings/)
+      // And it must not offer the opt-in anyway. Consenting to a charge whose
+      // price the screen could not state is exactly the surprise bill the
+      // whole feature exists to prevent.
+      expect(
+        screen.queryByRole('button', { name: 'Turn on metered storage' }),
+      ).toBeNull()
+      expect(screen.queryByText(/\$NaN|\$undefined|NaN MB/)).toBeNull()
+      unmount()
+    }
+  })
+
   it('is read-only without billing.manage', async () => {
     // The same permission the route requires — raising a cap raises what the
     // org can be invoiced, so it buys things in both directions.
