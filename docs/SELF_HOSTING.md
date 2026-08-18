@@ -120,6 +120,28 @@ docker compose up --build
 The first account you create is yours; grant yourself staff access with
 `node tools/scripts/set-staff-claim.mjs` if you want the admin surfaces.
 
+### Optional: require SSO for your company's email domain
+
+If you run SAML SSO and want to guarantee that nobody on your company domain can
+sign in with a password or a personal Google account instead, set both:
+
+```bash
+AGLYN_SSO_REQUIRED_DOMAINS="example.com=your-gcip-tenant-id"
+AGLYN_SSO_DOMAIN_ENFORCEMENT=on
+```
+
+**Both default to empty/off, so a stock install enforces nothing.** Nothing about
+Aglyn's own domain or tenant is compiled in — this is entirely your configuration.
+
+It is a rule about a **domain**, not about staff. It never requires staff to use SSO;
+staff can be granted to any account, on any domain, in any pool. The only sign-in it
+refuses is an address on a domain you listed that arrives with no SSO tenant at all.
+
+**Keep a way back in.** Before switching enforcement on, make sure at least one
+account that the rule *cannot* refuse still has staff — the simplest being an admin on
+a domain you did not list. Otherwise a misconfigured tenant id locks you out of the
+console you would fix it from.
+
 ## 5. Put a reverse proxy in front
 
 Terminate TLS at your proxy (Caddy, nginx, Traefik) and route:

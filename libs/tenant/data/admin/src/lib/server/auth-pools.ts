@@ -253,6 +253,51 @@ export async function listUsersAcrossPools(
   }
 }
 
+/** Where a claim mutation landed, so a caller can audit the POOL as well. */
+export interface StaffClaimWrite {
+  uid: string
+  /** The pool the claim was written to; null = the project pool. */
+  tenantId: string | null
+  email: string | null
+  claims: Record<string, unknown>
+}
+
+/**
+ * Write custom claims to the pool the uid ACTUALLY lives in (AGL-1993).
+ *
+ * The hazard this exists to remove: `setCustomUserClaims` is per-pool, and a
+ * grant aimed at the wrong pool does not error — on the project pool it
+ * either throws `user-not-found` (loud, fine) or, when a phantom shadow record
+ * shares the uid, silently succeeds against the WRONG record. That is not
+ * hypothetical: on 2026-08-18 uid `IHumyGGhGxZKjVV26qCRx5Okf573` existed in
+ * both the project pool and `aglyn-org-y5v14`, and since
+ * {@link findUserByUidAcrossPools} checks the project pool first, the phantom
+ * won every lookup until it was deleted.
+ *
+ * So resolution and mutation are bound together here rather than left to each
+ * caller to pair correctly, and the resolved pool is RETURNED so the audit row
+ * can record which pool was written — "granted staff to uid X" is not a
+ * complete record when a uid can name two accounts.
+ *
+ * Never assumes a pool. Staff may live in the project pool, in Aglyn's own
+ * tenant, or in a CUSTOMER org's tenant, and hard-coding any of them would
+ * silently fail the moment a third exists.
+ */
+export async function setClaimsInOwningPool(
+  uid: string,
+  claims: Record<string, unknown>,
+): Promise<StaffClaimWrite | null> {
+  const found = await findUserByUidAcrossPools(uid)
+  if (!found) return null
+  await authForPool(found.tenantId).setCustomUserClaims(uid, claims)
+  return {
+    uid,
+    tenantId: found.tenantId,
+    email: found.record.email ?? null,
+    claims,
+  }
+}
+
 /**
  * Every uid carrying the `staff` claim, across all pools. Staff is a custom
  * claim, which is not queryable, so this scans — the caller caches it.

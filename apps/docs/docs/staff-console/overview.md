@@ -131,6 +131,125 @@ Deeper runbooks for staff operations live with the platform ops docs, not in thi
 site.
 :::
 
+## Which identity holds staff
+
+A staff claim lives on **one Firebase Auth user record**, and Aglyn has more than one
+pool of them: the project-level pool, plus a separate pool for every organization
+using [SAML SSO](../enterprise/sso.md). The same person can exist in two pools with
+two different records, and **a claim on one is invisible to the other** — which is
+why a grant can look successful while the person still gets a 404.
+
+**Staff can be granted to any identity.** SSO is an option, never a requirement:
+
+- an SSO identity in Aglyn's own tenant;
+- an identity in the project pool, signing in with a password or Google;
+- an SSO identity in a **customer organization's** tenant.
+
+All three are valid and supported. When a grant is made, the audit row records the
+**pool** alongside the uid, because a uid on its own does not identify an account when
+two pools can hold the same one.
+
+### Staff inside a customer's tenant — a property worth knowing
+
+If a staff claim is granted to an identity that lives in a *customer's* SSO tenant,
+**that customer's IdP administrator controls authentication for it.** They cannot mint
+a staff claim — the claim is Aglyn's — but they control who can authenticate *as* the
+identity that holds one, and they control whether it keeps existing.
+
+This is allowed and sometimes unavoidable. Two things make it safe to live with:
+
+- prefer granting staff to an identity in a tenant Aglyn controls, where there is a
+  choice;
+- treat a customer-tenant staff grant as a **reviewable** row: it is exactly what a
+  staff-access review should be looking at, and the staff user list shows the tenant
+  so it is not an undifferentiated email address.
+
+### Offboarding
+
+How a staff person is removed depends on which identity holds the grant:
+
+1. **Revoke the staff claim** in the users admin. This is the step that always applies,
+   and it targets the pool the identity actually lives in.
+2. **Disable or delete the account** in whichever directory owns it — Google Workspace
+   for an `@aglyn.com` identity, the customer's IdP for a customer-tenant identity, or
+   Firebase Auth directly for a project-pool account.
+
+Revoking the claim is not instant on its own: a claim change reaches a signed-in
+session at its next **ID-token refresh**, which the console forces once per page load,
+so a reload picks it up within about an hour at worst. When speed matters, disabling
+the account and revoking its refresh tokens ends the session immediately.
+
+## Break-glass access
+
+**`zachary.w.gover@gmail.com` holds `super` staff in the project pool, permanently and
+by design.** It is not an oversight, not a migration leftover, and should not be
+"tidied up" — it is the account that still works when SSO does not. If SAML is
+misconfigured, the IdP is down, or a domain rule is set wrong, this is the way back in.
+
+It is a deliberate trade, and the cost is real: an identity outside Google Workspace
+has **no enforced MFA, no central offboarding, and no admin session revocation.** The
+whole mitigation sits on the Google account itself —
+
+- strong two-factor, ideally a **passkey** or hardware key;
+- a unique password, never reused anywhere;
+- treated as a privileged credential, because it is one.
+
+The rule below is written so it can never refuse this account: the account is on an
+ungoverned domain, so it falls outside the rule by construction rather than by an
+exception someone has to remember to maintain.
+
+## Requiring SSO for a company domain
+
+An operator can require that **every identity on a given email domain authenticates
+through a specific SSO tenant.** The point is narrow: an address on a company domain
+that signs in with a password or a personal Google account looks like a company
+identity while being governed like a personal one — outside the directory's MFA,
+offboarding and revocation.
+
+**This is a rule about a domain, not about staff.** It applies whether or not the
+person is staff, and it never requires staff to use SSO. Staff on other domains are
+untouched.
+
+Two settings, both empty/off by default:
+
+| Setting | Meaning |
+| --- | --- |
+| `AGLYN_SSO_REQUIRED_DOMAINS` | `domain=tenantId` pairs, e.g. `example.com=example-tenant`. Empty means no domain is governed. |
+| `AGLYN_SSO_DOMAIN_ENFORCEMENT` | `on` to refuse non-compliant sign-ins. Anything else is off. |
+
+Both must be set for anything to be refused, and only one case is ever refused: an
+address on a governed domain signing in with **no SSO tenant at all**. An identity on a
+governed domain that signs in through a *different* tenant is allowed and flagged for
+review, not blocked.
+
+:::info Self-hosting
+These default to empty, so a self-hosted install governs nothing unless its operator
+configures it — with **their** domain and **their** tenant. Aglyn's own domain is not
+compiled in anywhere.
+:::
+
+Turning enforcement on is a one-way door for anyone it refuses, so before flipping it:
+
+1. confirm SSO staff access works through a **real sign-in**, not a token inspection;
+2. migrate or retire every existing identity on the governed domain that has no tenant
+   — including **automation accounts**, which are easy to forget and will simply stop
+   being able to sign in.
+
+## Why am I getting a 404?
+
+`/admin/*` returns a plain 404 with no explanation, deliberately — a stranger should
+not learn the staff console exists. That makes a *genuine* staff member's failure hard
+to tell apart from a broken route.
+
+`GET /api/auth/staff-self-check`, with your own ID token, answers it. It reports the
+uid, email and pool of the session you are actually signed in as, whether that token
+carries the staff claim, and — if **your own address** exists in more than one pool —
+which of those records holds the grant.
+
+It only ever reports on the caller's own identity, so it discloses nothing about anyone
+else and cannot be used to find out who is staff.
+
 ## Related
 
 - [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)
+- [Single sign-on (SAML)](../enterprise/sso.md)

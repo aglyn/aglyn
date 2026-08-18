@@ -25,6 +25,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
   passwordResetThrottleMessage,
+  setClaimsInOwningPool,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -295,6 +296,12 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const requestedRole = String(body?.role ?? '')
+    // Claim writes go through `setClaimsInOwningPool` (AGL-1993) rather than
+    // the `targetAuth` resolved above. Same pool in the ordinary case, but it
+    // re-resolves at write time and RETURNS the pool it wrote to, so the audit
+    // row below can record it — a uid alone does not identify an account when
+    // the same uid can exist in two pools.
+    let claimWrite: Awaited<ReturnType<typeof setClaimsInOwningPool>> = null
     if (action === 'setRole') {
       if (!STAFF_ROLES.includes(requestedRole as any)) {
         return Response.json({ error: 'Unknown role' }, { status: 400 })
@@ -302,13 +309,13 @@ async function handler(request: Request): Promise<Response> {
       if (decoded.uid === uid && requestedRole !== 'super') {
         return Response.json({ error: 'You cannot demote yourself' }, { status: 400 })
       }
-      await targetAuth.setCustomUserClaims(uid, {
+      claimWrite = await setClaimsInOwningPool(uid, {
         ...(target.customClaims ?? {}),
         staff: true,
         staffRole: requestedRole,
       })
     } else if (action === 'grantStaff' || action === 'revokeStaff') {
-      await targetAuth.setCustomUserClaims(uid, {
+      claimWrite = await setClaimsInOwningPool(uid, {
         ...(target.customClaims ?? {}),
         staff: action === 'grantStaff',
         // Grants default to the least-privileged role (AGL-206).
@@ -326,6 +333,11 @@ async function handler(request: Request): Promise<Response> {
         actorUid: decoded.uid,
         action: `user.${action}`,
         target: `users/${uid}`,
+        // WHICH pool the claim landed in (AGL-1993). `null` is the project
+        // pool; a tenant id means an SSO identity. Recorded because a staff
+        // grant on an identity in a CUSTOMER's tenant is exactly the row a
+        // staff-access review needs to see.
+        targetTenantId: claimWrite ? claimWrite.tenantId : (found.tenantId ?? null),
         before,
         after: {
           staff:
