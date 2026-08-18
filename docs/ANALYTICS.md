@@ -883,12 +883,133 @@ from every report.
 **Known gap, accepted:** the first `page_view` of a cold load races the token
 read and goes out unstamped — the same window in which `user_id` is also still
 unset, so it is an existing condition rather than a new one. Every later hit in
-the session carries the stamp.
+the session carries the stamp. The *override* path below closes this for a
+browser that has opted in, because a localStorage read is synchronous and a
+token read is not.
 
-**Still needs Zach:** the parameter does nothing until the data filter exists,
-and `traffic_type` should be registered as a dimension to verify it. Create the
-filter in **Testing** mode first — an Active filter permanently and
-irrecoverably discards matching data. Click-list on AGL-1637.
+### 8b. Claims are not enough — the browser-pinned override (AGL-2064/AGL-2065)
+
+The claims predicate is correct and covers about half the traffic. Two
+populations it cannot reach, and could not be widened to reach:
+
+- **Logged-out browsing of the marketing surface.** `aglyn.com`, `/pricing`,
+  `/legal/*` and every published test site are served by the tenant runtime,
+  which has no account to consult. This is the larger half: it needs no
+  sign-in, so it happens all day.
+- **Drills that REQUIRE a non-staff account.** The marketplace publisher drill
+  cannot be run by staff at all — the thing being exercised is a publisher
+  installing their own unreviewed version. Those sessions emit `sign_up`,
+  `org_created`, `host_created`, `site_published` and `begin_checkout`, and
+  widening the predicate to catch them would flag by identity, which is the
+  point of the drill.
+
+So there is a second, **opt-in** mechanism that asks a different question —
+*is this BROWSER ours* — and never consults the account:
+
+> Visit any surface with **`?aglyn_internal=1`**. Take it back off with
+> `?aglyn_internal=0`.
+
+It is remembered in `localStorage` under `aglyn_traffic_type` and survives
+reloads, client-side navigations, sign-outs and re-auth. `localStorage` is
+**origin-scoped**, so the opt-in must be done **once per surface**:
+
+| Surface | Where to do it |
+| --- | --- |
+| Console | `https://app.aglyn.com/?aglyn_internal=1` |
+| Marketing / tenant | `https://aglyn.com/?aglyn_internal=1` |
+| Docs | `https://docs.aglyn.com/?aglyn_internal=1` |
+| Local dev | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
+
+Being per-origin is a feature as much as a cost: it is what makes it
+impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
+property while we click through their published site.
+
+**Three implementations, one definition.** `INTERNAL_TRAFFIC_PARAM` /
+`INTERNAL_TRAFFIC_VALUE` and both readers live in
+`libs/aglyn/src/lib/app-utils/internal-traffic.ts`:
+
+- The **console** calls `readInternalTrafficOverride()` and ORs it into the
+  claims predicate, inside the one `setDefaultEventParameters` call.
+- The **tenant runtime** inlines `INTERNAL_TRAFFIC_GTAG_SNIPPET` — a
+  *constant* string of JavaScript — into its `ga-init` block, between the
+  `dataLayer` shim and `gtag('config', …)`. Constant because these pages are
+  ISR-cached and the served bytes must not vary by visitor; positioned there
+  because `gtag('set', …)` applies to hits processed *after* it, and the hits
+  that leak are the automatic ones.
+- **`apps/docs`** carries a verbatim copy of the same string in its
+  `headTags`, because a Docusaurus app cannot import from `libs/` (AGL-1595).
+  `apps/console/specs/docs-internal-traffic-snippet.spec.ts` fails if the two
+  drift — a stale copy would run without error and stamp a parameter nobody
+  filters on.
+
+**On our measurement id only.** The tenant stamp is emitted only when the
+resolved id is `G-YW5PG16YTM`. A customer's property gets no opinion of ours:
+wrongly flagging a real visitor erases them from every report, and that is the
+expensive direction.
+
+### 8c. Non-production builds do not report at all (AGL-2067)
+
+The stamp only helps once the filter is Active, and a filter is not
+retroactive. So localhost and preview traffic is handled by not emitting:
+
+| Environment | Emits? |
+| --- | --- |
+| `NODE_ENV !== 'production'` (any dev server, jest, local e2e) | **no** |
+| Vercel **preview** (`NODE_ENV` *is* `production` there) | **no** |
+| Vercel production | yes |
+| Unknown deploy env + `NODE_ENV === 'production'` — **self-host** | **yes**, deliberately |
+
+`libs/aglyn/src/lib/app-utils/analytics-environment.ts` holds the predicate.
+The console's `FirebaseServicesProvider` skips `initializeAnalytics` outright
+and the tenant runtime drops the tag from its render condition — *not*
+initialized rather than initialized-and-suppressed, because a resident tag
+reports on its own (the AGL-1608 lesson).
+
+`VERCEL_ENV` is server-only, so each app maps it into the client bundle as
+`NEXT_PUBLIC_DEPLOY_ENV` through its own `next.config` `env` block. Relying on
+Vercel's "automatically expose System Environment Variables" project setting
+would be a gate no spec in this repo can see.
+
+Self-host emits on purpose: those builds point at the operator's own Firebase
+project and their own GA property, and silencing a customer's analytics to fix
+our leak is the worse failure.
+
+**Escape hatch.** `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD=1` re-enables a
+silenced build for DebugView work, and such a build stamps
+`traffic_type: 'internal'` on **every** hit unconditionally — it emits only
+because someone asked it to. A *production* build with the flag set never
+blanket-stamps; that would delete every paying customer from every report.
+
+**This is why the archived Marketing property reads the way it does.** Its
+whole year-to-date history is 30 views / 6 users, ~24 of them `/signin` on
+Vercel *preview* URLs of the console. Preview traffic reaching a production
+property was not a risk — it was most of what that property ever recorded.
+
+### 8d. What is left for Zach to click
+
+The **Internal Traffic** data filter **exists** in property 302497406 and is
+currently in **Testing** mode. Zach set it Active on 2026-08-18 and reverted it
+to Testing the same day, deliberately, because the coverage above was expanding
+while it was on.
+
+Remaining, and all of it is his click — nothing in this repo can do it:
+
+1. **Verify in Testing mode.** With the filter in Testing, `Test data filter
+   name` is available as a dimension in reports and DebugView. Confirm it
+   matches a staff session, an impersonation session and an opted-in
+   logged-out marketing session, and that an ordinary customer session is
+   **not** matched. Both directions — a filter verified in one direction only
+   is the one that erases real users.
+2. **Register `traffic_type` as a custom dimension** if it is not already, so
+   the match is visible in standard reports rather than only in DebugView.
+3. **Set it Active** once (1) passes. ⚠️ An Active filter **permanently and
+   irrecoverably discards** everything it matches. It is not retroactive in
+   either direction: data already collected is not re-filtered, and data
+   discarded while Active cannot be recovered.
+4. **Opt each browser in, once per origin** — the three URLs in §8b. This is
+   the step most likely to be forgotten, and forgetting it is silent.
+
+Click-list on AGL-1637.
 
 ### 9. Crashlytics cannot be integrated, and the equivalent already is
 
