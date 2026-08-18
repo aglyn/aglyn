@@ -80,7 +80,6 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { POST } = require('../app/api/account/photo/route')
 
 function photoRequest(body: Record<string, unknown>, token = 'tok') {
@@ -181,3 +180,8 @@ describe('POST /api/account/photo', () => {
     expect(mockPropagate).not.toHaveBeenCalled()
   })
 })
+
+// Marks this file a MODULE. Without it every top-level `const` here is
+// global, and two route specs that both name a `POST` handler collide at
+// typecheck time while passing at runtime — a red the test run cannot show.
+export {}

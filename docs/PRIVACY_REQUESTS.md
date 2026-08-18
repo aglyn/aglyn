@@ -140,15 +140,21 @@ sit in the same record (a members roster, a support thread with two authors).
 **A person** — lost account, departed SSO user, request by email from someone
 who will never sign in again:
 
+`/admin/users` → find them → their row → `/admin/users/[uid]` → **Erase
+account** (AGL-1977). Requires the **super** staff role, a reason (a ticket or
+DSAR reference — the uid is all that will be left to identify them by), and a
+typed `DELETE`. It refuses self-erasure; use your own Close account for that.
+
+⚠️ **There is no 7-day hold on a person.** Org erasure flags and waits; this
+deletes immediately and nothing can cancel it. Do not carry the org model over.
+
+The same action by hand, when you need it in a script:
+
 ```
 POST /api/admin/users/manage
 { "action": "erase", "uid": "<uid>", "reason": "<DSAR ref>" }
 Authorization: Bearer <super-staff ID token>
 ```
-
-Requires `staffRole === 'super'`, a non-empty `reason`, and refuses
-self-erasure. **There is no button for this** (AGL-1977) — and note that
-`tools/scripts/lib/erase-org-cli.mjs` tells you there is one; there is not.
 
 It refuses with `skippedReason: 'owns-orgs'` and a `blockers` list if they own
 a workspace. That refusal is correct — deleting a workspace as a side effect of
@@ -305,7 +311,6 @@ comfortably outlives the response window.
 | --- | --- |
 | We cannot export a person's data. Access and portability are answered by hand. | AGL-1974 |
 | We do not know that `privacy@aglyn.com` receives mail. | AGL-1973 |
-| A staff erasure of a **person** has no button. | AGL-1977 |
 | ~~Erasure does not reach `profiles`, `publisherProfiles` or `publisherHandles`.~~ **Closed 2026-08-18 (AGL-1970)** — all three are swept, and a surviving marketplace listing leaves only a content-free tombstone. | AGL-1970 |
 | ~~Erasure does not reach `supportTickets`.~~ **Closed 2026-08-18 (AGL-1971).** One caveat to say accurately if asked: erasing a **person** redacts their name and email from support threads but does not delete the threads — those belong to the workspace, and only the workspace can ask for them. | AGL-1971 |
 | Assist Q&A has no retention period. | AGL-1972 |

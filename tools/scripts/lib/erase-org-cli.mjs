@@ -111,10 +111,18 @@ export async function runEraseOrgCli({
 
   if (legacyTenant) {
     warn(
+      // The path named here has to be one that EXISTS. It did not until
+      // AGL-1977 built it: this string sent operators to "staff console →
+      // Users → Erase" for two months while no such control was rendered
+      // anywhere, which is a dead end reached at the moment somebody is
+      // trying to honour a statutory deadline. It now names the page that
+      // carries the button, so a reader can check it in one click.
       'REFUSED: --tenant is gone (AGL-1481). The legacy `tenants/{uid}` ' +
         'collection was retired by AGL-238 and personal-account erasure is ' +
-        'served by `eraseUser` — staff console → Users → Erase, or the ' +
-        "owner's own Close account. This script erases an ORG.",
+        'served by `eraseUser` — staff console → /admin/users/<uid> → ' +
+        'Erase account (super staff only, immediate, no 7-day hold), or ' +
+        "the owner's own Manage Account → Close account. This script " +
+        'erases an ORG.',
     )
     return 1
   }
