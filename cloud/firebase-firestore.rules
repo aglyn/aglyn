@@ -204,6 +204,13 @@ service cloud.firestore {
       // the erasure batch (re-swept for AGL-1824), so none of the seven has a
       // client writer to lose.
       //
+      // `storageOverage` joins them too (AGL-1886) and is the sharpest of the
+      // set: it is what lets an upload past the plan's `storagePerHostMb`
+      // hard cap, AND it carries the monthly spend ceiling that bounds the
+      // charge. A client able to write it could grant itself unbounded
+      // storage and raise its own spend limit in a single merge. Written only
+      // by /api/billing/storage-overage (billing.manage), Admin SDK.
+      //
       // `registerAllocations` joins all three lists on the same reasoning
       // (AGL-1775). It is an ENTITLEMENT INPUT — it decides how many POS
       // registers a site may run, on top of the plan cap — and it is written
@@ -215,7 +222,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations',
+             'seatAddons', 'registerAllocations', 'storageOverage',
              'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -224,7 +231,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations',
+             'seatAddons', 'registerAllocations', 'storageOverage',
              'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -235,7 +242,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
-             'stripeCustomerId', 'subscription',
+             'storageOverage', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',

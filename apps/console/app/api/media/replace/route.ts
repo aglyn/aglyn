@@ -16,9 +16,9 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { mediaStorageGate } from '../../../../utils/storage-overage'
 import {
   checkEntitlement,
-  checkQuota,
   readImageDimensions,
 } from '@aglyn/aglyn/server'
 import {
@@ -193,15 +193,17 @@ async function handler(request: Request): Promise<Response> {
       // Quota against the NEW total (swap the old bytes for the new).
       const projected = usedBytes - previousBytes + buffer.length
       const usedMb = projected / (1024 * 1024)
-      // usedMb includes the replacement bytes; ceil-1 allows exactly up to
-      // the integer MB cap and no further (AGL-471 off-by-one).
-      const quota = checkQuota(
-        org as any,
-        'storagePerHostMb',
-        Math.ceil(usedMb) - 1,
-      )
-      if (!quota.allowed) {
-        return Response.json({ error: `Storage limit reached (${quota.limit} MB)` }, { status: 403 })
+      const gate = mediaStorageGate({ org: org as any, usedMb })
+      if (!gate.allowed) {
+        return Response.json(
+          {
+            error: gate.error ?? `Storage limit reached (${gate.limitMb} MB)`,
+            code: gate.code,
+            projectedOverageUsd: gate.projectedOverageUsd,
+            ceilingUsd: gate.ceilingUsd,
+          },
+          { status: gate.status },
+        )
       }
     }
 

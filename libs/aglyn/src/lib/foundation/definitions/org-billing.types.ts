@@ -464,6 +464,33 @@ export interface OrgSeatAddons {
 export type OrgRegisterAllocations = Record<string, number>
 
 /**
+ * An org's acknowledged consent to metered storage overage, and its bound
+ * (AGL-1886).
+ *
+ * Zach's condition on billing org-library storage from today was, verbatim:
+ * "also give overage protection and usage alerts, so customers don't get a
+ * surprise bill." This is the protection half. Consent is explicit
+ * (`acknowledgedAt` is stamped server-side when a manager accepts in Billing)
+ * and BOUNDED (`monthlyCeilingUsd`) — an acknowledgement is never consent to
+ * an open-ended amount, so uploads are refused again at the ceiling.
+ *
+ * @see apps/console/utils/storage-overage.ts for the hard-vs-soft-cap
+ * decision and why the bound is part of the consent rather than beside it.
+ */
+export interface OrgStorageOverage {
+  /** When a manager accepted metered storage. Absent = not acknowledged. */
+  acknowledgedAt?: ITimestamp | null
+  /** The uid that accepted, for the audit trail. */
+  acknowledgedBy?: string | null
+  /**
+   * The monthly storage-overage spend the org agreed to. A missing or
+   * malformed value resolves to `STORAGE_OVERAGE_DEFAULT_CEILING_USD`, never
+   * to unbounded — the one direction this must not fail in.
+   */
+  monthlyCeilingUsd?: number
+}
+
+/**
  * A discount applied to the org's OWN Aglyn subscription (AGL-1105) — a
  * comped enterprise deal or a redeemed coupon, mirrored from a Stripe coupon
  * so `orgMonthlyRevenueUsd` can report net-of-discount MRR without a Stripe
