@@ -137,6 +137,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     'Sets a fake key to exercise the 501 gate.',
   ],
   [
+    'libs/plugins/marketplace/src/lib/server/ai-assist.spec.ts',
+    'Sets a fake key (`sk-test`) to exercise the same 501 gate on the besigner route, and asserts the mocked fetch is never called. Added by AGL-2073; not a data flow.',
+  ],
+  [
     'apps/console/.env.development.local.example',
     'Local development template.',
   ],
