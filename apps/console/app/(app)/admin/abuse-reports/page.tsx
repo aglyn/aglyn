@@ -62,6 +62,39 @@
  * truncated page renders that sentence rather than an unqualified number,
  * because a queue that looks calm while it is behind is the failure mode this
  * whole arc exists to prevent.
+ *
+ * ## The §512 additions (AGL-1983), and their own invariants
+ *
+ * **The page does no date arithmetic.** Every instant in the counter-notice
+ * block arrives computed by the route. A second implementation of the
+ * statutory window is a second chance to disagree with the server about the
+ * day a customer's site comes back, and the customer would live with
+ * whichever one was wrong.
+ *
+ * **The window is shown, not just the date.** A restore date on its own asks
+ * the operator to trust it. Rendering the earliest and latest instants either
+ * side of it lets them SEE that our choice sits inside the range
+ * §512(g)(2)(C) draws.
+ *
+ * **A counter-notice's URL is text too.** Same lock as the report rows, same
+ * reason — the address came from outside and the reader is a session that can
+ * suspend anything.
+ *
+ * **The confirmation names what happened to the SITE.** "Forwarded" alone
+ * would let an operator believe a put-back was scheduled when the host was
+ * not suspended and nothing was written. That misunderstanding ends with a
+ * customer still locked out on the statutory date, so the snackbar and the
+ * session log both carry the scheduling outcome.
+ *
+ * **A missing strike count is UNKNOWN, never zero.** The route looks up a
+ * bounded number of accounts per page; past that it says so. A chip reading
+ * "0 strikes" for an account nobody counted is how a repeat infringer looks
+ * clean.
+ *
+ * **The repeat-infringer field appears only when the server has refused.**
+ * Rendering it pre-emptively on every copyright row would turn the §512(i)
+ * decision into a box people fill in reflexively, which is the opposite of
+ * what "reasonably implemented" is asking for.
  */
 
 import { ABUSE_REPORT_CATEGORIES, ABUSE_REPORT_STATUSES } from '@aglyn/aglyn'
@@ -127,8 +160,67 @@ interface AbuseReportRow {
   resolvedAtMs: number | null
 }
 
+/**
+ * One §512(g) counter-notice, as `counterNoticePayload()` hands it over
+ * (AGL-1983).
+ *
+ * The clock fields arrive computed. The page deliberately does no date
+ * arithmetic of its own — a second implementation of the statutory window is
+ * a second chance to disagree with the route about the day a customer's site
+ * comes back.
+ */
+interface CounterNoticeRow {
+  id: string
+  reference: string | null
+  noticeReference: string | null
+  status: string
+  url: string | null
+  reportedHostname: string | null
+  hostId: string | null
+  orgId: string | null
+  material: string | null
+  submissionCount: number
+  receivedAtMs: number | null
+  earliestRestoreMs: number | null
+  restoreAtMs: number | null
+  latestRestoreMs: number | null
+  /** The deadline has passed and the put-back is still owed. */
+  overdue: boolean
+  awaitingRestoration: boolean
+  identityVisible: boolean
+  subscriberName: string | null
+  subscriberEmail: string | null
+  subscriberAddress: string | null
+  subscriberPhone: string | null
+  signature: string | null
+  goodFaithMistake: boolean
+  consentJurisdiction: boolean
+  acceptService: boolean
+  resolution: string | null
+  resolvedBy: string | null
+  forwardedAtMs: number | null
+  restoredAtMs: number | null
+}
+
+/** The §512(i) verdict for one org, as `repeatInfringerVerdict()` computed it. */
+interface RepeatInfringerRow {
+  strikes: number
+  level: string
+  decisionRequired: boolean
+  consequence: string
+}
+
 interface ReportListing {
   reports: AbuseReportRow[]
+  counterNotices: CounterNoticeRow[]
+  /** orgId → verdict, for the orgs with a copyright report on this page. */
+  strikes: Record<string, RepeatInfringerRow>
+  /** Some orgs' counts were past the lookup cap and are UNKNOWN, not zero. */
+  strikesTruncated: boolean
+  counterNoticesTruncated: boolean
+  awaitingForward: number
+  overdueRestorations: number
+  counterNoticeStatuses: string[]
   count: number
   pageSize: number
   /** The page was full, so these counts describe a window, not the queue. */
@@ -141,6 +233,20 @@ interface ReportListing {
 
 /** The pending status change for one row, before it is posted. */
 interface StatusDraft {
+  status: string
+  resolution: string
+  /**
+   * The answer to the repeat-infringer gate, when the route demanded one.
+   *
+   * Held in the draft rather than in a modal so it survives the operator
+   * scrolling away to look at the account's other strikes — which is exactly
+   * what somebody should do before answering it.
+   */
+  repeatInfringerDecision?: string
+}
+
+/** The pending transition for one counter-notice. */
+interface CounterNoticeDraft {
   status: string
   resolution: string
 }
@@ -180,6 +286,47 @@ const CATEGORY_HINT = Object.fromEntries(
   ABUSE_REPORT_CATEGORIES.map((entry) => [entry.id, entry.hint]),
 ) as Record<string, string>
 
+/**
+ * Where a counter-notice sits, for the chip beside the row.
+ *
+ * `received` is `warning` and not `info`, unlike a report's `open`: a
+ * counter-notice sitting at `received` has a statutory deadline already
+ * running against it, so the resting state of this queue is a debt rather
+ * than an inbox.
+ */
+const COUNTER_STATUS_COLOR: Record<
+  string,
+  'info' | 'warning' | 'success' | 'error' | 'default'
+> = {
+  received: 'warning',
+  forwarded: 'info',
+  restored: 'success',
+  suitFiled: 'error',
+  withdrawn: 'default',
+  rejected: 'default',
+}
+
+/** What each counter-notice transition MEANS, in the operator's language. */
+const COUNTER_STATUS_HINT: Record<string, string> = {
+  received: 'Filed by the subscriber. Nothing sent to the complainant yet.',
+  forwarded:
+    'Copy sent to the complainant, and the site’s suspension stamped with the restore date.',
+  restored: 'Access put back. Any strike from the original notice is withdrawn.',
+  suitFiled:
+    'The complainant told us they filed a court action. The material stays down and the scheduled restoration is cancelled.',
+  withdrawn: 'The subscriber took the counter-notice back.',
+  rejected:
+    'Not a counter-notice — a misfiled question, not a judgement on the merits.',
+}
+
+/** How loud the repeat-infringer verdict should be. */
+const STRIKE_COLOR: Record<string, 'default' | 'warning' | 'error'> = {
+  none: 'default',
+  warn: 'warning',
+  final: 'warning',
+  terminate: 'error',
+}
+
 /** A closing status is the one the route refuses without a written note. */
 const isClosingStatus = (status: string): boolean =>
   status === 'actioned' || status === 'dismissed'
@@ -198,6 +345,9 @@ function AdminAbuseReports() {
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, StatusDraft>>({})
+  const [counterDrafts, setCounterDrafts] = useState<
+    Record<string, CounterNoticeDraft>
+  >({})
   const [log, setLog] = useState<
     { atMs: number; text: string; confirmed: boolean }[]
   >([])
@@ -230,6 +380,20 @@ function AdminAbuseReports() {
       }
       setListing({
         reports: Array.isArray(payload.reports) ? payload.reports : [],
+        counterNotices: Array.isArray(payload.counterNotices)
+          ? payload.counterNotices
+          : [],
+        strikes:
+          payload.strikes && typeof payload.strikes === 'object'
+            ? payload.strikes
+            : {},
+        strikesTruncated: payload.strikesTruncated === true,
+        counterNoticesTruncated: payload.counterNoticesTruncated === true,
+        awaitingForward: Number(payload.awaitingForward ?? 0),
+        overdueRestorations: Number(payload.overdueRestorations ?? 0),
+        counterNoticeStatuses: Array.isArray(payload.counterNoticeStatuses)
+          ? payload.counterNoticeStatuses
+          : [],
         count: Number(payload.count ?? 0),
         pageSize: Number(payload.pageSize ?? 0),
         truncated: payload.truncated === true,
@@ -314,9 +478,34 @@ function AdminAbuseReports() {
             id: report.id,
             status: draft.status,
             resolution: draft.resolution.trim(),
+            ...(draft.repeatInfringerDecision?.trim()
+              ? { repeatInfringerDecision: draft.repeatInfringerDecision.trim() }
+              : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
+        /**
+         * The §512(i) gate, answered in place rather than as an error.
+         *
+         * A 409 here is not a failure — it is the repeat-infringer policy
+         * doing the one thing that makes it a policy: refusing to let this
+         * account's next copyright report be closed until somebody says what
+         * is being done about the account. Surfacing it as a red snackbar
+         * would train operators to read it as a glitch and retry, so the
+         * draft grows a decision field instead and the row keeps the
+         * operator's note.
+         */
+        if (response.status === 409 && payload.code === 'repeatInfringerDecisionRequired') {
+          setDrafts((entries) => ({
+            ...entries,
+            [report.id]: { ...draft, repeatInfringerDecision: '' },
+          }))
+          enqueueSnackbar(payload.error ?? 'A repeat-infringer decision is required', {
+            variant: 'warning',
+            allowDuplicate: true,
+          })
+          return
+        }
         if (!response.ok) {
           throw new Error(payload.error ?? `Failed (${response.status})`)
         }
@@ -356,6 +545,82 @@ function AdminAbuseReports() {
     [idToken, enqueueSnackbar, load],
   )
 
+  /**
+   * Move a counter-notice, and report what happened TO THE SITE.
+   *
+   * The status change is the smaller half. Forwarding also stamps the site's
+   * suspension with the restore date, and the route returns which of four
+   * things it did — so the confirmation names it. "Forwarded" alone would let
+   * an operator believe a put-back was scheduled when the host was not
+   * suspended and nothing was written, which is the one misunderstanding on
+   * this page that ends with a customer still locked out on the statutory
+   * date.
+   */
+  const applyCounterNotice = useCallback(
+    async (notice: CounterNoticeRow, draft: CounterNoticeDraft) => {
+      const token = await idToken()
+      if (!token) return
+      setBusy(true)
+      try {
+        const response = await fetch('/api/admin/abuse-reports', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            counterNoticeId: notice.id,
+            counterNoticeStatus: draft.status,
+            resolution: draft.resolution.trim(),
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(payload.error ?? `Failed (${response.status})`)
+        }
+        const confirmed = payload.confirmed !== false
+        const scheduling = String(payload.scheduling ?? '')
+        const consequence =
+          scheduling === 'scheduled'
+            ? ` — restoration scheduled for ${formatMs(payload.counterNotice?.restoreAtMs ?? null)}`
+            : scheduling === 'notSuspended'
+              ? ' — the site was NOT suspended, so nothing was scheduled'
+              : scheduling === 'alreadySooner'
+                ? ' — the existing suspension already ends sooner; left alone'
+                : scheduling === 'cancelled'
+                  ? ' — the scheduled restoration was cancelled'
+                  : scheduling === 'noHost'
+                    ? ' — no site resolved, so nothing was scheduled'
+                    : ''
+        const what = `${notice.reference ?? notice.id} → ${draft.status}${consequence}`
+        setLog((entries) =>
+          [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
+        )
+        enqueueSnackbar(
+          confirmed
+            ? `${what} (audited)`
+            : `${what} was accepted, but re-reading the counter-notice shows a DIFFERENT status. Do not walk away.`,
+          { variant: confirmed ? 'success' : 'error', allowDuplicate: true },
+        )
+        setCounterDrafts((entries) => {
+          const next = { ...entries }
+          delete next[notice.id]
+          return next
+        })
+        await load()
+      } catch (error: any) {
+        console.error(error)
+        enqueueSnackbar(error?.message ?? 'The counter-notice step failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [idToken, enqueueSnackbar, load],
+  )
+
   const copyUrl = useCallback(
     (url: string) => {
       void navigator.clipboard
@@ -371,7 +636,23 @@ function AdminAbuseReports() {
     [enqueueSnackbar],
   )
 
+  /**
+   * The pending step for a counter-notice, defaulting to its current status.
+   *
+   * Note deliberately starts EMPTY rather than echoing the stored resolution
+   * the way a report draft does. Every counter-notice transition is a fresh
+   * legal act — forwarding, then later restoring, are two different things we
+   * did — so pre-filling the previous step's note invites it being saved
+   * again as the description of a different act.
+   */
+  const counterDraftFor = useCallback(
+    (notice: CounterNoticeRow): CounterNoticeDraft =>
+      counterDrafts[notice.id] ?? { status: notice.status, resolution: '' },
+    [counterDrafts],
+  )
+
   const reports = listing?.reports ?? []
+  const counterNotices = listing?.counterNotices ?? []
   // Urgent rows still sitting at `open` are the ones with a clock on them, and
   // the number the route counted is the number this page repeats — recomputing
   // it here would be a second answer to the same question.
@@ -462,9 +743,41 @@ function AdminAbuseReports() {
                   </Alert>
                 ) : null}
 
+                {/*
+                  The §512(g) breach banner, above the truncation notice and
+                  below only the urgent one. An overdue restoration is a
+                  customer locked out of their own work past the date the law
+                  gave us — a harm we are causing, and the only thing on this
+                  page more pressing is active harm to a stranger.
+                */}
+                {listing && listing.overdueRestorations > 0 ? (
+                  <Alert severity="error">
+                    {`${listing.overdueRestorations} counter-notice${
+                      listing.overdueRestorations === 1 ? ' is' : 's are'
+                    } PAST the statutory restoration deadline. Access should already have been restored. Every day this sits is a customer locked out of their own site, and a §512(g) breach we cannot undo by acting later.`}
+                  </Alert>
+                ) : null}
+
+                {listing && listing.awaitingForward > 0 ? (
+                  <Alert severity="warning">
+                    {`${listing.awaitingForward} counter-notice${
+                      listing.awaitingForward === 1 ? ' has' : 's have'
+                    } not been forwarded to the complainant yet. The clock started when the subscriber filed, not when you open this — so the wait comes out of the remaining window rather than being added to theirs.`}
+                  </Alert>
+                ) : null}
+
                 {listing?.truncated ? (
                   <Alert severity="warning">
                     {`This is the first ${listing.pageSize} reports by last update, and the counts above — including the urgent count — describe only those rows. There are more behind them. Filter by status to reach the rest.`}
+                  </Alert>
+                ) : null}
+
+                {listing?.strikesTruncated ? (
+                  <Alert severity="warning">
+                    Some accounts on this page have more copyright reports than
+                    the strike lookup covers, so their strike count is UNKNOWN
+                    rather than zero. Check the account directly before closing
+                    a report on one of them.
                   </Alert>
                 ) : null}
 
@@ -493,6 +806,14 @@ function AdminAbuseReports() {
                 draft.resolution.trim() === (report.resolution ?? '').trim()
               const severity = report.severity ?? 'normal'
               const urgent = severity === 'urgent'
+              // Only for copyright rows, and only when the route actually
+              // looked the account up — an absent entry means UNKNOWN (past
+              // the lookup cap), never zero, so it renders nothing rather
+              // than a reassuring "0 strikes".
+              const verdict =
+                report.category === 'dmca' && report.orgId
+                  ? (listing?.strikes?.[report.orgId] ?? null)
+                  : null
               return (
                 <CardDisplay
                   key={report.id}
@@ -523,6 +844,22 @@ function AdminAbuseReports() {
                           size="small"
                           color="warning"
                           label={`reported ${report.reportCount}×`}
+                        />
+                      ) : null}
+                      {/*
+                        The §512(i) count, only on copyright rows. A strike
+                        chip beside a phishing report would invite reading it
+                        as a general misconduct score, which is not what the
+                        statute counts nor what our published policy says.
+                      */}
+                      {verdict ? (
+                        <Chip
+                          size="small"
+                          color={STRIKE_COLOR[verdict.level] ?? 'default'}
+                          variant={verdict.level === 'terminate' ? 'filled' : 'outlined'}
+                          label={`${verdict.strikes} copyright strike${
+                            verdict.strikes === 1 ? '' : 's'
+                          } on this account`}
                         />
                       ) : null}
                     </Stack>
@@ -817,13 +1154,331 @@ function AdminAbuseReports() {
                         slotProps={{ htmlInput: { maxLength: 2000 } }}
                         sx={{ minWidth: 320, flexGrow: 1 }}
                       />
+                      {/*
+                        THE §512(i) GATE, answered in place.
+
+                        Rendered only once the route has actually refused —
+                        the field appears when `repeatInfringerDecision` is
+                        present on the draft, which `applyStatus` sets on a
+                        409. Showing it pre-emptively on every copyright row
+                        would turn the policy into a form field operators fill
+                        in reflexively, which is the opposite of making the
+                        decision deliberate.
+                      */}
+                      {draft.repeatInfringerDecision !== undefined ? (
+                        <TextField
+                          size="small"
+                          label="Repeat-infringer decision (required)"
+                          helperText={
+                            verdict?.consequence ??
+                            'This account is at the termination threshold. Record what is being done about the ACCOUNT — terminating, or why not this time.'
+                          }
+                          error={!draft.repeatInfringerDecision.trim()}
+                          multiline
+                          minRows={2}
+                          value={draft.repeatInfringerDecision}
+                          onChange={(event) =>
+                            patchDraft(report, {
+                              repeatInfringerDecision: event.target.value,
+                            })
+                          }
+                          slotProps={{ htmlInput: { maxLength: 2000 } }}
+                          sx={{ minWidth: 320, flexGrow: 1 }}
+                        />
+                      ) : null}
                       <Button
                         variant="contained"
-                        disabled={busy || needsNote || unchanged}
+                        disabled={
+                          busy ||
+                          needsNote ||
+                          unchanged ||
+                          (draft.repeatInfringerDecision !== undefined &&
+                            !draft.repeatInfringerDecision.trim())
+                        }
                         onClick={() => void applyStatus(report, draft)}
                       >
                         {'Save status'}
                       </Button>
+                    </Stack>
+                  </Stack>
+                </CardDisplay>
+              )
+            })}
+
+            {/*
+              THE §512(g) QUEUE (AGL-1983).
+              Below the reports, because a counter-notice answers one — but
+              never hidden behind a tab, because the deadline on it runs
+              whether or not anybody clicked through. Ordered oldest-first by
+              the route: the oldest is the closest to becoming a breach.
+            */}
+            <CardDisplay
+              header={'Counter-notices (DMCA put-back)'}
+              help={docsHelp('abuseReports', { anchor: '#counter-notices' })}
+              contentGutterX
+              contentGutterY
+            >
+              <Stack spacing={1}>
+                <Typography variant="body2" color="text.secondary">
+                  {
+                    'A subscriber whose material we removed can answer with a sworn counter-notice. Forward it to the complainant, and unless they tell us they have filed a court action, access goes back on the statutory date. Forwarding is what stamps that date onto the site’s own suspension, so the lock lifts itself.'
+                  }
+                </Typography>
+                {loaded && listing && !counterNotices.length ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {
+                      'No counter-notices. If a removal was wrong this is where the customer would appear, so a long silence is worth checking against the public form at /api/counter-notice rather than read as agreement.'
+                    }
+                  </Typography>
+                ) : null}
+                {listing?.counterNoticesTruncated ? (
+                  <Alert severity="warning">
+                    {`This is the first ${listing.pageSize} counter-notices by receipt. There are older ones behind them, and older means closer to the deadline.`}
+                  </Alert>
+                ) : null}
+              </Stack>
+            </CardDisplay>
+
+            {counterNotices.map((notice) => {
+              const draft = counterDraftFor(notice)
+              const unchanged =
+                draft.status === notice.status && !draft.resolution.trim()
+              return (
+                <CardDisplay
+                  key={notice.id}
+                  header={
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      flexWrap="wrap"
+                      useFlexGap
+                    >
+                      <Typography variant="subtitle1">
+                        {notice.reference ?? notice.id}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={notice.status}
+                        color={COUNTER_STATUS_COLOR[notice.status] ?? 'default'}
+                        variant={notice.status === 'received' ? 'filled' : 'outlined'}
+                      />
+                      {notice.overdue ? (
+                        <Chip size="small" color="error" label="PAST DEADLINE" />
+                      ) : null}
+                      {notice.submissionCount > 1 ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={`resubmitted ×${notice.submissionCount}`}
+                        />
+                      ) : null}
+                    </Stack>
+                  }
+                  contentGutterX
+                  contentGutterY
+                >
+                  <Stack spacing={1.5}>
+                    {notice.overdue ? (
+                      <Alert severity="error">
+                        {
+                          'The restoration deadline has passed and access is still not back. Restore it now, or record why it is lawfully held (a filed court action is the only reason §512(g) recognises).'
+                        }
+                      </Alert>
+                    ) : null}
+
+                    {/*
+                      The URL is text, never a link — same invariant the report
+                      rows keep, and for the same reason: an attacker-supplied
+                      address rendered to the one session that can suspend any
+                      site on the platform.
+                    */}
+                    <Stack spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Where the material was'}
+                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                        >
+                          {notice.url ?? '—'}
+                        </Typography>
+                        {notice.url ? (
+                          <Button
+                            size="small"
+                            onClick={() => copyUrl(notice.url as string)}
+                          >
+                            {'Copy'}
+                          </Button>
+                        ) : null}
+                      </Stack>
+                    </Stack>
+
+                    <Stack spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary">
+                        {'What the subscriber says was removed'}
+                      </Typography>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {notice.material ?? '—'}
+                      </Typography>
+                    </Stack>
+
+                    {/*
+                      The clock, shown as the WINDOW and not just a date — an
+                      operator has to be able to see that the day we picked
+                      sits inside the range §512(g)(2)(C) draws, rather than
+                      take our word for it.
+                    */}
+                    <Alert severity={notice.overdue ? 'error' : 'info'}>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2">
+                          {`Received ${formatMs(notice.receivedAtMs)} — the clock counts from here, not from when we picked it up.`}
+                        </Typography>
+                        <Typography variant="body2">
+                          {`Restore on ${formatMs(notice.restoreAtMs)} (the statute allows ${formatMs(
+                            notice.earliestRestoreMs,
+                          )} at the earliest and ${formatMs(notice.latestRestoreMs)} at the latest).`}
+                        </Typography>
+                        {notice.forwardedAtMs ? (
+                          <Typography variant="body2">
+                            {`Forwarded to the complainant ${formatMs(notice.forwardedAtMs)}.`}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2">
+                            {
+                              'Not yet forwarded. §512(g)(2)(A) asks us to send the complainant a copy promptly.'
+                            }
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Alert>
+
+                    {/*
+                      The sworn statements, as CLAIMS. Nothing here adjudicates
+                      them, and the page must never read as if we had — the
+                      same posture the report side takes with a §512(c)(3)
+                      affirmation.
+                    */}
+                    <Stack spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Sworn by the subscriber'}
+                      </Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={notice.goodFaithMistake ? 'success' : 'error'}
+                          label="Mistake or misidentification (under penalty of perjury)"
+                        />
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={notice.consentJurisdiction ? 'success' : 'error'}
+                          label="Consents to federal jurisdiction"
+                        />
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={notice.acceptService ? 'success' : 'error'}
+                          label="Will accept service of process"
+                        />
+                      </Stack>
+                    </Stack>
+
+                    <Stack spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary">
+                        {'Who filed it — this is what we must pass to the complainant'}
+                      </Typography>
+                      {notice.identityVisible ? (
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {[
+                            notice.subscriberName,
+                            notice.subscriberEmail,
+                            notice.subscriberPhone,
+                            notice.subscriberAddress,
+                          ]
+                            .filter(Boolean)
+                            .join('\n') || '—'}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          {
+                            'Withheld from your staff role. A counter-notice carries a home address and a phone number the filer had no choice about giving, so only super staff — who have to put the two parties in contact — see it.'
+                          }
+                        </Typography>
+                      )}
+                      {notice.noticeReference ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {`Answering notice ${notice.noticeReference}. Restoring will withdraw the strike that notice earned.`}
+                        </Typography>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          {
+                            'The subscriber did not quote a notice reference, so restoring cannot withdraw a strike automatically — match it up by hand before closing.'
+                          }
+                        </Typography>
+                      )}
+                    </Stack>
+
+                    {notice.resolution ? (
+                      <Alert severity="success">
+                        {`${notice.resolution}${
+                          notice.resolvedBy ? ` — ${notice.resolvedBy}` : ''
+                        }`}
+                      </Alert>
+                    ) : null}
+
+                    <Divider />
+
+                    <Stack spacing={1}>
+                      <TextField
+                        select
+                        size="small"
+                        label="Next step"
+                        value={draft.status}
+                        onChange={(event) =>
+                          setCounterDrafts((entries) => ({
+                            ...entries,
+                            [notice.id]: { ...draft, status: event.target.value },
+                          }))
+                        }
+                      >
+                        {(listing?.counterNoticeStatuses ?? []).map((status) => (
+                          <MenuItem key={status} value={status}>
+                            {status}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <Typography variant="caption" color="text.secondary">
+                        {COUNTER_STATUS_HINT[draft.status] ?? ''}
+                      </Typography>
+                      <TextField
+                        size="small"
+                        label="What you did, and why (required)"
+                        placeholder="e.g. Copy of the counter-notice emailed to rights@studio.test"
+                        multiline
+                        minRows={2}
+                        value={draft.resolution}
+                        onChange={(event) =>
+                          setCounterDrafts((entries) => ({
+                            ...entries,
+                            [notice.id]: {
+                              ...draft,
+                              resolution: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="contained"
+                          disabled={busy || unchanged || !draft.resolution.trim()}
+                          onClick={() => void applyCounterNotice(notice, draft)}
+                        >
+                          {'Save step'}
+                        </Button>
+                      </Stack>
                     </Stack>
                   </Stack>
                 </CardDisplay>

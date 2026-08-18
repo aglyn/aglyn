@@ -227,24 +227,149 @@ claim is good. We record what was asserted, by whom, at what time. If the notice
 is facially complete and points at content we host, the proportionate response is
 usually quarantining the specific asset rather than locking the site.
 
-**The site owner has a right to counter-notice.** A counter-notice is how a
-customer says the notice was mistaken, and the process assumes they get one.
+**The site owner has a right to counter-notice.** That path now exists — see
+[Counter-notices](#counter-notices) below.
 
-:::danger Open items — do not assume safe harbour is secured
-Two pieces of the §512 process are **not built and not filed**:
+:::danger The designated agent is still not filed
+The counter-notice path and the repeat-infringer policy are built (AGL-1983).
+**The registration is not.**
 
-- **There is no counter-notice path.** No form, no route, no documented process.
-  A customer who wants to contest a takedown currently has nowhere to do it.
-- **No designated agent is registered with the U.S. Copyright Office.**
-  Registration is a precondition of the §512(c) safe harbour, and it has not been
-  done.
+§512(c)(2) makes registering a designated agent with the U.S. Copyright Office a
+**precondition** of the safe harbour, not a formality. Until that filing is made
+and renewed, a provider does not get the limitation on liability at all, however
+well it handles notices.
 
-Do not tell a reporter, a customer, or yourself that we are operating inside the
-safe harbour. Handle notices carefully and proportionately because it is the
-right thing to do and because it will matter later — not because a legal
-protection is already in place. If a customer asks to counter-notice, escalate to
-Zach rather than inventing a process.
+So: handle notices by the process below because it is right and because it will
+matter later — not because a legal protection is already in place. Do not tell a
+reporter or a customer that we are operating inside the safe harbour.
 :::
+
+## Counter-notices — the put-back {#counter-notices}
+
+A subscriber whose material we removed can answer with a counter-notice under
+§512(g). This is the process that protects us from **the other side**: following
+the put-back procedure is what shields us from a claim by our own customer for
+taking their site down on a stranger's say-so.
+
+**Where they file.** `https://{any-host}/api/counter-notice` — public, no login,
+no JavaScript. It has to be reachable without an account on purpose: a host-scope
+takedown 503s the site and freezes every client write, and an org-scope one keeps
+the customer out of the console entirely. A counter-notice form behind a sign-in
+is unreachable in exactly the circumstances it exists for.
+
+**What the form collects**, all of it required, because a counter-notice missing
+any element is not a weaker document — it is one with no legal effect:
+
+1. **Identification of the material** and where it appeared before removal.
+2. **A statement under penalty of perjury** that it was removed as a result of
+   mistake or misidentification.
+3. **Consent to the jurisdiction** of the Federal District Court for the
+   subscriber's address — or, if they are outside the US, any district in which
+   Aglyn may be found.
+4. **Agreement to accept service of process** from the complainant.
+5. **Name, postal address, telephone number** and an electronic signature.
+
+### The clock, and why it is not yours to move {#counter-notice-clock}
+
+§512(g)(2) gives a sequence with a deadline in it:
+
+- **Promptly** send the complainant a copy and tell them the material goes back.
+- Put it back **not less than 10 and not more than 14 business days** after
+  **receipt of the counter-notice** — unless the complainant first tells us they
+  have filed a court action seeking to restrain the subscriber.
+
+Two things follow, and both are built rather than described:
+
+- **The clock counts from when the subscriber pressed the button**, not from
+  when you opened the queue. Time we take to process a counter-notice comes out
+  of the remaining window; it is never added to the customer's lockout. A
+  counter-notice forwarded eleven days late schedules the *same* restore date as
+  one forwarded the same hour.
+- **Forwarding schedules the reversal.** Moving a counter-notice to `forwarded`
+  stamps the site's own suspension expiry (`suspendedUntilMs`) with the restore
+  instant, so the lock lifts itself on the statutory date. There is no cron job
+  to fail quietly and nobody to remember.
+
+The queue shows the earliest and latest lawful instants either side of the date
+we picked, so you can see it sits inside the window rather than take our word.
+
+### The steps {#counter-notice-steps}
+
+| Step | What it means | What it does to the site |
+| --- | --- | --- |
+| `received` | Filed by the subscriber. Nothing sent yet. | Nothing. The deadline is already running. |
+| `forwarded` | Copy sent to the complainant — the §512(g)(2)(A) obligation. | Stamps the restore date onto the suspension. |
+| `restored` | Access is back. | Withdraws the strike the original notice earned. |
+| `suitFiled` | The complainant told us they filed a court action. | **Cancels** the scheduled restoration; the material stays down. |
+| `withdrawn` | The subscriber took it back. | Cancels the scheduled restoration. |
+| `rejected` | Not a counter-notice at all — a misfiled question. | Cancels the scheduled restoration. |
+
+`rejected` is **not** a ruling on the merits, and must never be used as one. We
+do not adjudicate a counter-notice any more than we adjudicate a notice.
+
+**Two things forwarding will not do**, deliberately:
+
+- It **never creates a suspension.** If the site is not currently suspended,
+  nothing is written and the confirmation says so. Read that message: it means
+  no put-back was scheduled, because there was no lock to schedule the end of.
+- It **never extends one.** If the suspension already ends sooner than the
+  statutory date, the sooner date stands. A subscriber asking for their site
+  back must not be able to keep it down longer than staff imposed.
+
+**An overdue restoration is a breach**, and the queue puts it at the top in red.
+Restoring late is its own §512(g) failure, and unlike most things on this page it
+is a harm *we* are causing to *our own customer*.
+
+## Repeat infringers {#repeat-infringers}
+
+§512(i) conditions the **entire** safe harbour — every limitation in §512, not
+just the hosting one — on having adopted **and reasonably implemented** a policy
+for terminating repeat infringers, and on informing subscribers of it. Providers
+most often lose on the second half: a policy that exists as prose while nothing
+counts anything is what courts have declined to credit.
+
+**What counts as a strike.** One upheld copyright notice: a report with
+`category: dmca` that **you moved to `actioned`**. Not a received notice — anyone
+can send one, and counting receipts would let a competitor close a customer's
+account with three emails. Not a phishing or malware takedown either; §512(i) is
+about infringement.
+
+**Counted against the workspace**, not the site. Someone who loses one site and
+opens another in the same workspace has not been terminated in any sense the
+statute would recognise.
+
+**Strikes come off.** A strike is withdrawn when:
+
+- you move the report back off `actioned` (`staffReversed`);
+- a counter-notice runs its course and access is restored
+  (`counterNoticeRestored`) — the process reversed the takedown, so a strike
+  surviving it would count an infringement we just declined to affirm;
+- the complainant retracts the notice (`noticeWithdrawn`).
+
+Withdrawal *marks* the ledger row rather than deleting it, so the history stays
+answerable.
+
+### The threshold {#repeat-infringer-threshold}
+
+| Strikes | Level | What happens |
+| --- | --- | --- |
+| 1 | Warned | Chip on the report row. Tell the customer. |
+| 2 | Final warning | One more reaches the threshold. |
+| 3+ | Termination threshold | **The queue refuses to close any further copyright report on that account until you record a decision.** |
+
+That refusal is the point. It is **not** an automatic termination — closing a
+paying customer's account on three assertions by strangers, with no human in the
+loop, is nothing §512 asks for. The statute says "in appropriate circumstances",
+and judging the circumstances is the part a person does.
+
+**"Not this time" is a valid answer**, and it is recorded in the audit log
+exactly like a termination. If two of the three strikes are the same complainant
+over the same disputed licence, say so and escalate — that *is* the policy being
+reasonably implemented.
+
+A strike count shown as blank means **unknown**, not zero: the queue looks up a
+bounded number of accounts per page. Check the account directly before closing a
+report on one of them.
 
 ## Known gaps {#known-gaps}
 
@@ -275,5 +400,31 @@ incident.
   send them to `/api/report-abuse`, and the address printed on the form is
   `support@aglyn.com` for exactly this reason.
 - **No NCMEC mechanics.** See [CSAM](#csam) — preserve, suppress, escalate.
-- **No counter-notice path and no designated agent.** See [the DMCA
-  path](#dmca).
+- **No designated agent is filed with the U.S. Copyright Office.** The
+  counter-notice path and the repeat-infringer policy are built; the
+  registration that is a *precondition* of the safe harbour is not. See [the
+  DMCA path](#dmca).
+- **Forwarding a counter-notice is a manual send.** The queue records that you
+  forwarded it and schedules the put-back; it does not email the complainant for
+  you. You send the copy — including the subscriber's name, address and phone,
+  which §512(g)(2)(A) requires us to pass on — and then mark the step. Marking
+  `forwarded` without actually sending it schedules a restoration while leaving
+  the complainant unaware, which is the one sequence here that harms the party
+  who did nothing wrong.
+- **A counter-notice with no notice reference cannot withdraw its strike.** The
+  subscriber is not required to quote one and the form does not insist. When it
+  is missing, restoring leaves the strike standing — match it up and reverse the
+  report by hand.
+- **Nothing warns the customer that they are on a strike.** The count is staff-
+  side. §512(i) requires subscribers to be informed of the policy, which the
+  published policy does; telling *this* customer about *this* strike is still a
+  message a person sends.
+
+## Related {#related}
+
+- [Lockdown](/staff-console/lockdown) — the levers a report is actioned into.
+- [Incident response](https://github.com/aglyn/aglyn/blob/main/docs/INCIDENT_RESPONSE.md)
+  — the wider runbook this queue feeds.
+- [Breach notification](https://github.com/aglyn/aglyn/blob/main/docs/BREACH_NOTIFICATION.md)
+  — when a report turns out to be a personal-data incident rather than an abuse
+  one.
