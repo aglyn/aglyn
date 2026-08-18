@@ -118,6 +118,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The `release_assist` description, which carries the precondition this suite pins.',
   ],
   [
+    'docs/BREACH_NOTIFICATION.md',
+    'The credential-rotation checklist (AGL-1915) lists the key among the secrets to rotate after an incident. Naming a secret in a runbook is the opposite of a data flow — but the suite is right to have stopped on it, because "a new file mentions ANTHROPIC_API_KEY" is exactly the event it exists to make someone look at.',
+  ],
+  [
     'cloud/firebase-remoteconfig.template.json',
     'The DEPLOYED flag seed and its staff-facing description — the one that actually decides the flag in production.',
   ],
@@ -266,7 +270,7 @@ describe('every Anthropic data flow is a known one (AGL-1909)', () => {
  * The retention half of the disclosure, pinned as behaviour.
  *
  * The privacy text can promise that erasing a workspace erases its assistant
- * history only because all three Assist collections are genuine
+ * history only because all four Assist collections are genuine
  * SUBCOLLECTIONS of the org document — `eraseOrg` finishes with
  * `recursiveDelete(orgRef)`, and a path-scoped cascade is structurally blind
  * to anything not under the path. `apiKeys`, `ssoDomains` and the console
@@ -319,13 +323,19 @@ describe('assist records stay reachable by eraseOrg (AGL-1860, AGL-1909)', () =>
       stopReason: 'end_turn',
     })
 
-    // All three: the exchange, the daily counter, the monthly rollup.
-    expect(written).toHaveLength(3)
+    // All FOUR: the exchange, its signal, the daily counter, the monthly
+    // rollup. `assistSignals` is the half AGL-1972 split out so the prose
+    // could be given a TTL without destroying the data loop — and splitting
+    // it created a new collection, which is precisely the moment a cascade
+    // silently stops covering everything. The length is asserted so a fifth
+    // collection added later cannot slip past this list unnoticed.
+    expect(written).toHaveLength(4)
     for (const path of written) {
       expect([path, path.startsWith('orgs/org-1/')]).toEqual([path, true])
     }
     expect(written.map((path) => path.split('/')[2]).sort()).toEqual([
       'assistExchanges',
+      'assistSignals',
       'assistUsage',
       'counters',
     ])

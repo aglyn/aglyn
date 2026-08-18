@@ -114,7 +114,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const {
+  ASSIST_EXCHANGE_RETENTION_DAYS,
   assistEntitledMonthlyLimit,
+  assistExchangeExpiry,
   assistFreeDailyLimit,
   assistUsageDay,
   assistUsageMonth,
@@ -282,7 +284,7 @@ describe('recordAssistExchange', () => {
     stopReason: 'end_turn',
   }
 
-  it('writes the exchange, the daily counter, and the monthly meter', async () => {
+  it('writes the exchange, the signal, the daily counter, and the meter', async () => {
     const store = firestore()
     const exchangeId = await recordAssistExchange(store, ORG, record, NOW)
     expect(exchangeId).toBeTruthy()
@@ -291,6 +293,11 @@ describe('recordAssistExchange', () => {
     expect(exchange).toMatchObject({
       uid: 'user-1',
       question: 'How do I publish?',
+      answer: record.answer,
+    })
+
+    const signal = mockDocs.get(`orgs/${ORG}/assistSignals/${exchangeId}`)
+    expect(signal).toMatchObject({
       tier: 'free',
       feedback: null,
       docsPaths: record.docsPaths,
@@ -328,17 +335,141 @@ describe('recordAssistExchange', () => {
 })
 
 describe('recordAssistFeedback', () => {
-  it('stamps feedback on an existing exchange', async () => {
-    mockDocs.set(`orgs/${ORG}/assistExchanges/x1`, { feedback: null })
+  it('stamps feedback on the SIGNAL, which outlives the prose', async () => {
+    mockDocs.set(`orgs/${ORG}/assistSignals/x1`, { feedback: null })
     const recorded = await recordAssistFeedback(firestore(), ORG, 'x1', 'down')
     expect(recorded).toBe(true)
-    expect(mockDocs.get(`orgs/${ORG}/assistExchanges/x1`)).toMatchObject({
+    expect(mockDocs.get(`orgs/${ORG}/assistSignals/x1`)).toMatchObject({
       feedback: 'down',
+    })
+  })
+
+  it('a thumbs-down survives the exchange being reaped', async () => {
+    // The whole point of the split (AGL-1972). A rating recorded against a
+    // signal whose exchange has already TTL'd away must still land: the
+    // rating is the data loop's most valuable row and it is not prose.
+    // Before the split this wrote to `assistExchanges` and would have
+    // returned false here.
+    mockDocs.set(`orgs/${ORG}/assistSignals/x2`, { feedback: null })
+    // No `assistExchanges/x2` — expired.
+    const recorded = await recordAssistFeedback(firestore(), ORG, 'x2', 'up')
+    expect(recorded).toBe(true)
+    expect(mockDocs.get(`orgs/${ORG}/assistSignals/x2`)).toMatchObject({
+      feedback: 'up',
     })
   })
 
   it('refuses an unknown exchange', async () => {
     const recorded = await recordAssistFeedback(firestore(), ORG, 'nope', 'up')
     expect(recorded).toBe(false)
+  })
+})
+
+describe('assist retention — the period has to be able to go BOTH ways', () => {
+  const record = {
+    uid: 'user-1',
+    question: 'How do I publish?',
+    answer: 'Press Publish.',
+    route: '/acme/screens',
+    hostId: 'host-1',
+    model: 'claude-sonnet-5',
+    tier: 'free' as const,
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    docsPaths: ['/getting-started/publish-your-first-screen'],
+    stopReason: 'end_turn',
+  }
+
+  /**
+   * A TTL cannot be waited out in a unit test, so the assertion is on the
+   * stamped boundary rather than on a deletion — the same reason
+   * `mediaTombstones` is tested through `mediaTombstoneExpiry` and not by
+   * sleeping for a week. The CONFIGURATION half (that a policy exists and
+   * targets this field) is `assist-retention-config.spec.ts`.
+   */
+  it('stamps expiresAt exactly one period ahead, as a Date not a number', async () => {
+    const store = firestore()
+    const id = await recordAssistExchange(store, ORG, record, NOW)
+    const expiresAt = mockDocs.get(`orgs/${ORG}/assistExchanges/${id}`)
+      ?.expiresAt as Date
+
+    // A number here governs NOTHING: a TTL policy keys on a Timestamp and
+    // silently ignores a number field (`bookings.expiresAtMs`). The Admin
+    // SDK converts a Date; it does not convert an epoch integer.
+    expect(expiresAt).toBeInstanceOf(Date)
+    expect(expiresAt.getTime() - NOW.getTime()).toBe(
+      ASSIST_EXCHANGE_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    )
+  })
+
+  it('THE NEGATIVE CONTROL: an exchange INSIDE its period is not expired', async () => {
+    // A retention guard that only proves deletion passes trivially if the
+    // code deletes everything, so this asserts the surviving direction too.
+    //
+    // ⚠️ The bounds are LITERAL DAYS, deliberately not derived from
+    // ASSIST_EXCHANGE_RETENTION_DAYS. Written the obvious way — comparing
+    // against `(RETENTION_DAYS - 1)` — this test is a tautology: it moves
+    // with the constant it is meant to constrain and stays green when the
+    // period is set to zero. It was written that way first and proved
+    // exactly that when the constant was flipped to 0, which is why the
+    // numbers below are hard-coded.
+    //
+    // What they encode is a POLICY BAND, not the current value: a
+    // conversation log must survive long enough to be read late (90 days is
+    // a quarter), and must not become an indefinite archive (a year is the
+    // outer edge of defensible for free-text prose). Any period inside that
+    // band is a product decision; either edge is a defect.
+    const store = firestore()
+    const id = await recordAssistExchange(store, ORG, record, NOW)
+    const expiresAt = mockDocs.get(`orgs/${ORG}/assistExchanges/${id}`)
+      ?.expiresAt as Date
+    const day = 24 * 60 * 60 * 1000
+
+    // SURVIVES: still live a full quarter after it was written.
+    expect(expiresAt.getTime()).toBeGreaterThan(NOW.getTime() + 90 * day)
+    // EXPIRES: and gone within the year.
+    expect(expiresAt.getTime()).toBeLessThan(NOW.getTime() + 365 * day)
+  })
+
+  it('the SIGNAL half carries no expiry and no uid', async () => {
+    // If the signal expired too, the split would buy nothing and the docs
+    // loop would lose its corpus anyway. If it carried the uid, the expiry
+    // would retire the prose and keep the person — the split would be
+    // cosmetic.
+    const store = firestore()
+    const id = await recordAssistExchange(store, ORG, record, NOW)
+    const signal = mockDocs.get(`orgs/${ORG}/assistSignals/${id}`) ?? {}
+    expect(signal.expiresAt).toBeUndefined()
+    expect(signal.uid).toBeUndefined()
+    expect(signal.question).toBeUndefined()
+    expect(signal.answer).toBeUndefined()
+    // …and it still carries what the loop reads.
+    expect(signal.docsPaths).toEqual(record.docsPaths)
+  })
+
+  it('the counters and the monthly meter are NOT given an expiry', async () => {
+    // Deliberate, and stated so a future reader does not "fix" it: these
+    // are integers, not content. The monthly rollup is the cost history the
+    // pricing decision reads, and the daily counter is ONE document per org
+    // keyed by field — TTL deletes documents, so it could only reap the
+    // whole quota state, cap included.
+    const store = firestore()
+    await recordAssistExchange(store, ORG, record, NOW)
+    expect(
+      mockDocs.get(`orgs/${ORG}/assistUsage/2026-08`)?.expiresAt,
+    ).toBeUndefined()
+    expect(
+      mockDocs.get(`orgs/${ORG}/counters/assistMessagesDaily`)?.expiresAt,
+    ).toBeUndefined()
+  })
+
+  it('assistExchangeExpiry is pure and moves with its argument', () => {
+    const a = assistExchangeExpiry(new Date('2026-01-01T00:00:00Z'))
+    const b = assistExchangeExpiry(new Date('2026-01-02T00:00:00Z'))
+    expect(b.getTime() - a.getTime()).toBe(24 * 60 * 60 * 1000)
   })
 })

@@ -30,15 +30,48 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  *   orgs/{orgId}/counters/assistMessagesDaily
  *     fields keyed YYYY-MM-DD → integer (the free-tier daily cap counter;
  *       same field-per-period shape as the other `counters/*` docs)
- *   orgs/{orgId}/assistExchanges/{id}      one doc per Q&A exchange:
- *     { uid, question, answer, route, hostId, model, tier,
- *       inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
- *       estCostUsd, docsPaths, feedback: 'up'|'down'|null, createdAt }
+ *   orgs/{orgId}/assistExchanges/{id}      the VERBATIM half of one exchange:
+ *     { uid, question, answer, hostId, createdAt, expiresAt }
+ *   orgs/{orgId}/assistSignals/{id}        the DERIVED half, same id:
+ *     { route, hostId, model, tier, inputTokens, outputTokens,
+ *       cacheReadTokens, cacheWriteTokens, estCostUsd, docsPaths,
+ *       stopReason, feedback: 'up'|'down'|null, createdAt }
  *
  * Costs are OUR cost estimates at list rates (pricing-tunable telemetry),
  * mirrored after ORG_COGS_UNIT_RATES_USD's posture: cost visibility per org
  * from day one so the paid gate and caps can be tuned with data — Zach's
  * "must not eat margins" constraint.
+ *
+ * ── Why the exchange is split in two (AGL-1972) ────────────────────────────
+ *
+ * One document carrying both halves forces one retention period onto two
+ * kinds of data with opposite needs. The prose is what a person typed; the
+ * data loop is what it cited and what it cost. Keeping them together means
+ * either the prose is retained forever so the loop keeps its corpus, or the
+ * loop's corpus is destroyed so the prose can expire. Neither is the answer,
+ * and picking one number for both is how that false choice gets made.
+ *
+ * So: `assistExchanges` holds the question, the answer and the asking `uid`,
+ * and carries `expiresAt` — a TTL policy reaps it after
+ * ASSIST_EXCHANGE_RETENTION_DAYS. `assistSignals` holds no prose and NO uid,
+ * carries no expiry, and is what the docs-gap view, the thumbs loop and the
+ * cost meters actually read. The corpus the loop needs outlives the words
+ * that produced it, because the corpus was never the words.
+ *
+ * Both subcollections sit under the org, so `recursiveDelete(orgRef)` still
+ * takes them and an erasure still clears everything with no extra sweep. And
+ * both are ABSENT from firebase-firestore.rules deliberately: the org block
+ * matches its subcollections BY NAME and has no wildcard, so an unmatched
+ * name is default-deny for every client (verified against the live ruleset —
+ * the `{subcollection}/{document=**}` catch-all is under `hosts/{hostId}`,
+ * not here).
+ *
+ * ⚠️ The TTL policy is MANUAL gcloud configuration, not repo state. It is
+ * documented in `docs/FIRESTORE_MANUAL_CONFIG.md` and declared as a
+ * `fieldOverrides` entry in `cloud/firebase-firestore.indexes.json` — the
+ * declaration is not decoration, it is what stops the next unrelated index
+ * deploy from DELETING the policy. `apps/console/specs/retention-ttl-config.spec.ts`
+ * fails the build if either half goes missing.
  */
 
 /** Current billing month key, `YYYY-MM`, matching the usage rollup. */
@@ -49,6 +82,43 @@ export function assistUsageMonth(now = new Date()): string {
 /** Current day key, `YYYY-MM-DD` (UTC — same clock as the month key). */
 export function assistUsageDay(now = new Date()): string {
   return now.toISOString().slice(0, 10)
+}
+
+/**
+ * How long the VERBATIM half of an exchange is kept — the question, the
+ * answer and the asking uid (AGL-1972).
+ *
+ * 180 days, and the number is chosen against what actually reads this data
+ * rather than against a round figure:
+ *
+ * - The docs-gap loop mines `docsPaths` and the thumbs rating. Both live on
+ *   the signal document, which has no expiry, so shortening this period
+ *   costs the loop nothing. That separation is what makes 180 affordable;
+ *   without it the honest answer would have been "forever".
+ * - Two full quarters is long enough to read a quarter's questions LATE, and
+ *   long enough to diff what people asked before and after a docs rewrite —
+ *   the one analysis that genuinely needs the prose and not the citations.
+ * - It is short enough that a workspace open for years is not an indefinite
+ *   archive of what its people typed into a text box.
+ *
+ * ⚠️ TTL deletion is best-effort within ~72h of expiry, so nothing may treat
+ * an exchange's absence OR its presence as exact at the boundary. Nothing
+ * does: the only reader addresses an exchange by id and tolerates a miss.
+ */
+export const ASSIST_EXCHANGE_RETENTION_DAYS = 180
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * When an exchange written at `now` expires. A `Date` rather than a number:
+ * a TTL policy keys on a Firestore **Timestamp** and silently governs
+ * nothing when the field is a number (`bookings.expiresAtMs` is the
+ * documented non-target for exactly this reason). The Admin SDK converts a
+ * JS `Date` to a Timestamp on write, which is how `cspViolationDaily` does
+ * it and is why this module needs no firebase-admin type here.
+ */
+export function assistExchangeExpiry(now = new Date()): Date {
+  return new Date(now.getTime() + ASSIST_EXCHANGE_RETENTION_DAYS * DAY_MS)
 }
 
 /**
@@ -228,11 +298,16 @@ export interface AssistExchangeRecord {
 }
 
 /**
- * The data loop + meters, one batch: writes the exchange doc, bumps the
- * daily counter, and folds tokens/cost into the monthly usage doc. Returns
- * the new exchange id (the feedback route addresses it later). Callers
+ * The data loop + meters, one batch: writes the two halves of the exchange,
+ * bumps the daily counter, and folds tokens/cost into the monthly usage doc.
+ * Returns the shared id (the feedback route addresses it later). Callers
  * `await` this — an exchange that fails to record should surface in logs,
  * but the batch is one round trip so it does not add meaningful latency.
+ *
+ * The two halves share one id ON PURPOSE. It is what lets the feedback route
+ * keep its single-id signature, and it is what makes an exchange and its
+ * signal joinable for as long as both exist — without storing a second
+ * pointer that could rot.
  */
 export async function recordAssistExchange(
   firestore: FirebaseFirestore.Firestore,
@@ -244,13 +319,26 @@ export async function recordAssistExchange(
   const serverTimestamp = firebaseAdmin.firestore.FieldValue.serverTimestamp
   const orgRef = firestore.collection('orgs').doc(orgId)
   const exchangeRef = orgRef.collection('assistExchanges').doc()
+  const signalRef = orgRef.collection('assistSignals').doc(exchangeRef.id)
   const estCostUsd = estimateAssistCostUsd(record.usage, record.model)
 
   const batch = firestore.batch()
+  // The personal half. Everything a person typed, everything we said back,
+  // and who asked — and nothing else. Expires.
   batch.set(exchangeRef, {
     uid: record.uid,
     question: record.question,
     answer: record.answer,
+    hostId: record.hostId,
+    createdAt: serverTimestamp(),
+    expiresAt: assistExchangeExpiry(now),
+  })
+  // The analytic half. No prose and NO uid — deliberately, because a signal
+  // row that names the asker is just the exchange with the words removed,
+  // and would re-create as an access-request obligation exactly what the
+  // expiry was meant to retire. What survives answers "which docs gaps, at
+  // what cost, rated how", which is the whole of the data loop.
+  batch.set(signalRef, {
     route: record.route,
     hostId: record.hostId,
     model: record.model,
@@ -292,6 +380,12 @@ export async function recordAssistExchange(
  * Record explicit thumbs feedback on an exchange. Only the exchange's own
  * org path is addressable, and only the two literal values are accepted —
  * the route validates membership before calling this.
+ *
+ * The rating lands on the SIGNAL document, not the exchange (AGL-1972). A
+ * thumbs-down is the single most valuable row in the data loop and it is not
+ * personal content, so it must not be reaped along with the prose that
+ * earned it. Existence is checked on the signal too: it is the document
+ * being written, and after the exchange expires it is the only one left.
  */
 export async function recordAssistFeedback(
   firestore: FirebaseFirestore.Firestore,
@@ -302,7 +396,7 @@ export async function recordAssistFeedback(
   const ref = firestore
     .collection('orgs')
     .doc(orgId)
-    .collection('assistExchanges')
+    .collection('assistSignals')
     .doc(exchangeId)
   const snapshot = await ref.get()
   if (!snapshot.exists) return false

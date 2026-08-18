@@ -550,12 +550,19 @@ describe('the green path', () => {
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
 
+    // The exchange carries the prose; the signal carries the numbers
+    // (AGL-1972). One id addresses both.
     const exchange = mockDocs.get(
       `orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`,
     )
     expect(exchange).toMatchObject({
-      tier: 'free',
       answer: 'Open the screen, then press Publish.',
+    })
+    const signal = mockDocs.get(
+      `orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`,
+    )
+    expect(signal).toMatchObject({
+      tier: 'free',
       inputTokens: 900,
       outputTokens: 42,
       feedback: null,
@@ -602,10 +609,11 @@ describe('the green path', () => {
     expect(system).toContain('What the user can do here:')
     expect(system).toContain('Under the hood')
     expect(system).toContain('id "open.host.screens"')
-    const exchangePath = [...mockDocs.keys()].find((path) =>
-      path.startsWith(`orgs/${PRO_ORG}/assistExchanges/`),
+    // `tier` lives on the signal half since AGL-1972.
+    const signalPath = [...mockDocs.keys()].find((path) =>
+      path.startsWith(`orgs/${PRO_ORG}/assistSignals/`),
     )
-    expect(mockDocs.get(exchangePath ?? '')).toMatchObject({ tier: 'entitled' })
+    expect(mockDocs.get(signalPath ?? '')).toMatchObject({ tier: 'entitled' })
   })
 
   it('GUARD: a hostile route cannot write instructions into the system prompt', async () => {
@@ -857,12 +865,15 @@ describe('the green path', () => {
     const failure = events.find((event) => event.type === 'error')
     expect(String(failure?.error)).toMatch(/could not answer/i)
     const done = events.find((event) => event.type === 'done')
-    const exchange = mockDocs.get(
-      `orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`,
-    )
     // Still recorded: the tokens were spent, and the refusal RATE is the
-    // signal that the prompt or the corpus needs work.
-    expect(exchange).toMatchObject({ stopReason: 'refusal', answer: '' })
+    // signal that the prompt or the corpus needs work — which is why
+    // `stopReason` sits on the non-expiring half (AGL-1972).
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`),
+    ).toMatchObject({ answer: '' })
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`),
+    ).toMatchObject({ stopReason: 'refusal' })
   })
 
   it('a truncated answer says so instead of just stopping', async () => {
