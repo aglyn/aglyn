@@ -123,6 +123,17 @@ const fakeFirestore = {
 const notifications: any[] = []
 const contactUpserts: any[] = []
 
+/**
+ * The OWNING org, as the renewal branch re-reads it per cycle (AGL-2071).
+ * Mutable because the whole point of that gate is that the answer changes
+ * between the sale and the cycle — a fixture frozen at `business` can only
+ * ever prove the entitled path.
+ *
+ * Shaped like the real doc `getOrgDoc` returns: the WHOLE org, no projection,
+ * so `resolveEffectivePlan` has `plan` and `subscription.status` to work with.
+ */
+let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
@@ -135,9 +146,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   findUserByUidAcrossPools: async () => null,
-  getOrgForHost: async () => ({
-    org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
-  }),
+  getOrgForHost: async () => ({ org: orgFixture }),
   meterHostEmail: async () => undefined,
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
@@ -310,6 +319,8 @@ beforeEach(() => {
     ],
   })
   docs.set('hosts/host-1/subscriptions/sub_1', { ...SOLD_SUBSCRIPTION })
+  orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+  process.env.STRIPE_SECRET_KEY = 'sk_test_renewal_spec'
 })
 
 // ---------------------------------------------------------------------------
@@ -1095,5 +1106,197 @@ describe('a renewal whose subscription was never recorded (AGL-1763)', () => {
   it('never calls Stripe', async () => {
     await deliver(RENEWAL_INVOICE)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A LAPSED storefront keeps minting orders at a 0% take (AGL-2071).
+ *
+ * `checkout.ts:132/149` asked the plan when the subscription was SOLD. Nothing
+ * asked it again. Stripe bills the subscriber on its own schedule, so a
+ * merchant whose own Aglyn subscription dies keeps selling forever — and the
+ * charge is a DESTINATION charge, so Stripe's processing fee is debited from
+ * Aglyn's balance while `resolveEffectivePlan` has collapsed the merchant to
+ * `free` and its take rate to nothing. Passive, permanent, loss-making.
+ *
+ * `global.fetch` is still the mock — no Stripe path is exercised for real on
+ * any run, and `STRIPE_SECRET_KEY` is overwritten with a fake in `beforeEach`
+ * so a leaked live key from the root `.env` cannot be read here either.
+ */
+describe('a lapsed storefront stops renewing (AGL-2071)', () => {
+  /** The org's own subscription died: `resolveEffectivePlan` reads `free`. */
+  const LAPSED = {
+    id: 'org-1',
+    plan: 'business',
+    ownerUid: 'owner-1',
+    subscription: { status: 'canceled' },
+  }
+
+  function stripeStopCalls() {
+    return fetchMock.mock.calls.filter((call) =>
+      String(call[0]).includes('/v1/subscriptions/'),
+    )
+  }
+
+  /** Stripe accepting the cancel-at-period-end write. */
+  function acceptStop() {
+    fetchMock.mockImplementation(async (url: any) => {
+      if (String(url).includes('/v1/subscriptions/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 'sub_1', cancel_at_period_end: true }),
+        } as any
+      }
+      throw new Error(`Unexpected fetch to ${String(url)}`)
+    })
+  }
+
+  it('tells Stripe to stop billing at the end of the paid period', async () => {
+    orgFixture = LAPSED
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE)
+
+    const calls = stripeStopCalls()
+    expect(calls).toHaveLength(1)
+    const [url, init] = calls[0] as [string, any]
+    expect(url).toBe('https://api.stripe.com/v1/subscriptions/sub_1')
+    expect(init.method).toBe('POST')
+    // Idempotent across the delivery pair Stripe sends for one payment, and
+    // across the window where the claim is written but no response arrives.
+    expect(init.headers['Idempotency-Key']).toBe('lapsed-stop-sub_1')
+    // `cancel_at_period_end`, NOT an outright cancel: the subscriber keeps
+    // the period they already paid for, and the merchant has a full cycle to
+    // restore their plan — the flag is reversible until it fires.
+    expect(String(init.body)).toBe('cancel_at_period_end=true')
+
+    expect(storedSubscription().cancelAtPeriodEnd).toBe(true)
+    expect(storedSubscription().lapsedStopReason).toBe('plan')
+    // And the merchant is told why, once.
+    expect(
+      notifications.filter((entry) =>
+        String(entry.title).includes('stopped renewing'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  /**
+   * The cycle in hand is money Stripe ALREADY took. Refusing to record it
+   * would be AGL-1732 in reverse — a payment collected and filed nowhere —
+   * and the box the subscriber paid for still has to ship.
+   */
+  it('still records the cycle and still ships the box', async () => {
+    orgFixture = LAPSED
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(invoiceDocs()).toHaveLength(1)
+    expect((invoiceDocs()[0] as any).paidCents).toBe(9000)
+    const order = docs.get('hosts/host-1/orders/in_2') as any
+    expect(order).toBeDefined()
+    expect(order.status).toBe('paid')
+    expect(order.channel).toBe('subscription')
+  })
+
+  /**
+   * BOTH flags, because `checkout.ts` required both to create the
+   * subscription. A Business org that merely drops to Pro still has a
+   * storefront — `commerce` is true there — and must still stop billing
+   * subscribers, because Pro cannot sell a recurring product at all.
+   */
+  it('stops a merchant who downgraded below recurring products', async () => {
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stripeStopCalls()).toHaveLength(1)
+  })
+
+  /**
+   * Once-only across the `invoice.paid` / `invoice.payment_succeeded` pair
+   * Stripe sends for ONE payment, and across any redelivery of either. The
+   * claim marker is what enforces it — not the invoice-existence guard, which
+   * the stop deliberately runs ahead of.
+   */
+  it('claims the stop once across the delivery pair and a redelivery', async () => {
+    orgFixture = LAPSED
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE, 'invoice.payment_succeeded')
+    await deliver(RENEWAL_INVOICE, 'invoice.paid')
+    await deliver(RENEWAL_INVOICE, 'invoice.paid')
+
+    expect(stripeStopCalls()).toHaveLength(1)
+    expect(
+      notifications.filter((entry) =>
+        String(entry.title).includes('stopped renewing'),
+      ),
+    ).toHaveLength(1)
+    // And the ledger still recorded the cycle exactly once.
+    expect(invoiceDocs()).toHaveLength(1)
+  })
+
+  /**
+   * A marker that outlived a FAILED call would leave the subscription billing
+   * forever with the books saying it had been stopped — the exact fail-open
+   * this issue is about, moved one level up.
+   */
+  it('releases the claim when Stripe refuses, so a later cycle retries', async () => {
+    orgFixture = LAPSED
+    fetchMock.mockImplementation(async (url: any) => {
+      if (String(url).includes('/v1/subscriptions/')) {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: 'nope' } }),
+        } as any
+      }
+      throw new Error(`Unexpected fetch to ${String(url)}`)
+    })
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stripeStopCalls()).toHaveLength(1)
+    expect(storedSubscription().lapsedStopRequestedAtMs).toBeNull()
+    expect(storedSubscription().cancelAtPeriodEnd).toBeUndefined()
+    // Nothing was claimed, so the next cycle tries again rather than reading
+    // its own marker and going quiet.
+    acceptStop()
+    await deliver({ ...RENEWAL_INVOICE, id: 'in_3' })
+    expect(stripeStopCalls()).toHaveLength(2)
+  })
+
+  /**
+   * A 5xx is a failure a redelivery can fix, so it must THROW rather than be
+   * swallowed — the ledger write is idempotent on the invoice id, so Stripe's
+   * retry re-runs the stop and nothing else.
+   */
+  it('throws on a transient Stripe failure so the delivery is retried', async () => {
+    orgFixture = LAPSED
+    fetchMock.mockImplementation(async (url: any) => {
+      if (String(url).includes('/v1/subscriptions/')) {
+        return { ok: false, status: 503, json: async () => ({}) } as any
+      }
+      throw new Error(`Unexpected fetch to ${String(url)}`)
+    })
+
+    await expect(deliver(RENEWAL_INVOICE)).rejects.toThrow(
+      /stop lapsed subscription sub_1/,
+    )
+    expect(storedSubscription().lapsedStopRequestedAtMs).toBeNull()
+  })
+
+  /** An entitled merchant is never touched. */
+  it('leaves an entitled storefront alone', async () => {
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stripeStopCalls()).toHaveLength(0)
+    expect(storedSubscription().cancelAtPeriodEnd).toBeUndefined()
+    expect(invoiceDocs()).toHaveLength(1)
   })
 })

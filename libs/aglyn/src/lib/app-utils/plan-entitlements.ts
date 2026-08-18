@@ -1769,11 +1769,41 @@ export function resolveTransactionFeePct(
   productType: 'physical' | 'digital' | 'service',
 ): number {
   const entitlements = resolveOrgEntitlements(org)
-  const pct =
+  const key =
     productType === 'physical'
-      ? entitlements.transactionFeePhysicalPct
-      : entitlements.transactionFeeDigitalPct
-  return Number.isFinite(pct) && pct > 0 ? pct : 0
+      ? 'transactionFeePhysicalPct'
+      : 'transactionFeeDigitalPct'
+  const pct = entitlements[key]
+  if (Number.isFinite(pct) && pct > 0) return pct
+  // The free plan's 0% prices a plan that CANNOT SELL: `features.commerce` is
+  // false there, so on an ordinary free org this rate is never consulted. It
+  // IS consulted for the one org shape that can reach a storefront on the free
+  // entitlement set — a per-org `features.commerce` override — and 0% on a
+  // DESTINATION charge is not "no take rate", it is a loss: Stripe's
+  // processing fee (2.9% + 30¢) and any $15 dispute fee are debited from the
+  // PLATFORM's balance, so every sale costs Aglyn money (AGL-2071).
+  //
+  // `marketplaceFeePct: 30` on the free row is the same decision already made
+  // for marketplace selling, and its comment says so in as many words: the
+  // rate exists to price "an org GRANTED selling via a per-org feature
+  // override". This is the missing equivalent for storefront sales, expressed
+  // here rather than in the table because the plan CARDS render the table —
+  // `billing-plan-cards.component.tsx:444` — and a Free card advertising a
+  // transaction fee for selling it does not permit would be a pricing lie.
+  //
+  // A staff fee override wins even at 0: `resolveOrgEntitlements` merges any
+  // numeric override indistinguishably from the default, so the raw doc is
+  // what separates "nobody set a rate" from a deliberately comped one. That
+  // decision has a name and a reason attached (`org-override-reason.ts`), and
+  // this floor must not silently overrule it.
+  if (
+    resolvePlan(org) === 'free' &&
+    entitlements.features.commerce &&
+    typeof org?.entitlements?.[key] !== 'number'
+  ) {
+    return PLAN_ENTITLEMENTS.starter[key]
+  }
+  return 0
 }
 
 /**
