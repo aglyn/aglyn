@@ -78,6 +78,7 @@ import BillingPlanCardsComponent, {
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingRegisterAllocationsCardComponent from '../../../../components/billing/billing-register-allocations-card.component'
 import BillingStorageOverageCardComponent from '../../../../components/billing/billing-storage-overage-card.component'
+import BillingUsageBudgetCardComponent from '../../../../components/billing/billing-usage-budget-card.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import { RetentionFunnelDialog } from '../../../../components/billing/retention-funnel.dialog'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
@@ -997,6 +998,41 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                     contentGutterY
                   >
                     <BillingStorageOverageCardComponent
+                      orgId={orgId}
+                      canManage={can('billing.manage')}
+                    />
+                  </CardDisplay>
+                </Box>
+              ),
+            },
+            {
+              size: { xs: 12 },
+              children: (
+                // The customer's MONTHLY USAGE BUDGET (AGL-1528) — Zach's
+                // "budgets for usage alerts, similar to how google cloud
+                // charges". Deliberately BELOW the storage cap and visibly
+                // separate from it: the cap refuses uploads, the budget
+                // refuses nothing and only warns. A card that blurred the two
+                // would sell a heads-up as a brake.
+                <Box id="usage-budget">
+                  <CardDisplay
+                    header={'Monthly usage budget'}
+                    subheader={
+                      'Get alerted as your metered usage passes each ' +
+                      'percentage of an amount you choose. A budget warns ' +
+                      'you — it never stops anything.'
+                    }
+                    help={docsHelp('billing', {
+                      anchor: '#usage-budget',
+                      excerpt:
+                        'Set a monthly usage budget and the percentages you ' +
+                        'want to hear about; alerts arrive in the console ' +
+                        'and by email.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <BillingUsageBudgetCardComponent
                       orgId={orgId}
                       canManage={can('billing.manage')}
                     />

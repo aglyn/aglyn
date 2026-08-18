@@ -131,6 +131,30 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 **cap** means anyone who wants a hard ceiling can have one, at a number they choose.
 :::
 
+## Usage budget
+
+A **usage budget** is a monthly amount you choose, plus the percentages of it you want to
+hear about — the same shape as a Google Cloud billing budget. Set it in
+**Billing → Monthly usage budget**.
+
+- **It warns, it never limits.** Passing a budget sends a notification and an email.
+  Nothing stops, no upload is refused, and your bill is unaffected. If you want usage to
+  actually stop, that is the [storage cap](#storage-overage) above — a different control,
+  deliberately kept separate.
+- **You choose the alert points.** The default is **50%, 90% and 100%**; you can set your
+  own, including percentages above 100 so a runaway month keeps speaking. Up to six.
+- **One alert per percentage per month.** Crossing 50% tells you once, not once an hour.
+  Climbing to the next percentage alerts again, and every percentage resets when the month
+  does.
+- **Both channels.** Alerts arrive in the console notification menu **and** by email to
+  your workspace owners and admins, so you do not have to be signed in to find out.
+- **The figure is the invoice's own.** Budget alerts quote the same metered total the
+  billing page shows and the invoice charges — totalled once a day, so the first days of a
+  month may show no total yet.
+
+Changing the amount clears the alert history for the month, so a budget you lower starts
+warning you against the new number straight away.
+
 ## Seats
 
 - **Team seats** (workspace-wide) and per-site **collaborator seats** are metered and
