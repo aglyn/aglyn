@@ -172,3 +172,36 @@ describe('collection entry fallback cover (AGL-1407)', () => {
     )
   })
 })
+
+describe('the fallback shell is the PROSE width (AGL-1298)', () => {
+  const CONTAINER_ID = 'cfb__container'
+
+  it('an entry body renders at stock md, not the xl section default', () => {
+    // Zach 2026-08-18: the Container standard grows a third case for
+    // long-form. A collection entry IS the long-form case, and this is the
+    // one place the repo — not besigner authoring — decides its width.
+    const nodes = build(undefined) as Record<string, any>
+    expect(nodes[CONTAINER_ID].componentId).toBe('muiContainer')
+    expect(nodes[CONTAINER_ID].props.maxWidth).toBe('md')
+  })
+
+  it('a collection LIST renders at the same prose width', () => {
+    const nodes = buildCollectionFallbackNodes({
+      collection,
+      entries: [{ title: 'Hello world', slug: 'hello-world' }],
+      entry: null,
+    }) as Record<string, any>
+    expect(nodes[CONTAINER_ID].props.maxWidth).toBe('md')
+  })
+
+  it('RED on purpose: the width is a stock breakpoint, never a pixel cap', () => {
+    // The shape AGL-1298 exists to keep out. `sx.maxWidth` alongside
+    // `props.maxWidth` is exactly how the 144 bespoke `1328px` caps were
+    // authored, so its absence is asserted rather than assumed.
+    const nodes = build(undefined) as Record<string, any>
+    const props = nodes[CONTAINER_ID].props
+    expect(['xs', 'sm', 'md', 'lg', 'xl']).toContain(props.maxWidth)
+    expect(props.sx?.maxWidth).toBeUndefined()
+    expect(String(JSON.stringify(props))).not.toContain('1328')
+  })
+})

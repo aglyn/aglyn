@@ -117,6 +117,10 @@ function shell(childIds: string[]): NodesMap {
       componentId: 'muiContainer',
       pluginId: 'mui',
       parentId: Aglyn.NODE_ROOT_ID,
+      // `md` is the PROSE case of the Container standard (AGL-1298, Zach
+      // 2026-08-18), not an arbitrary narrow default: a collection entry is
+      // an article body, and `xl` — the section default — runs a paragraph
+      // past 180 characters a line. Stock breakpoint, no bespoke number.
       props: { maxWidth: 'md', sx: { py: 6 } },
       nodes: [id('stack')],
     },
