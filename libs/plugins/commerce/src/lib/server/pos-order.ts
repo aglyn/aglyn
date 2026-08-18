@@ -179,6 +179,47 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       0,
     )
     const discountCents = Math.round((itemsCents * discountPct) / 100)
+    // THE PLATFORM FEE (AGL-2110), and its absence was a straight loss.
+    //
+    // A POS card sale opens a DESTINATION charge
+    // (`payment_intent_data[transfer_data][destination]`, below) with no
+    // `transfer_data[amount]`, so Stripe transfers the whole charge to the
+    // merchant while debiting its own processing fee (2.9% + 30¢) from the
+    // PLATFORM's balance. Without an `application_fee_amount` beside it,
+    // every in-person card sale moved money OUT of Aglyn — the exact shape
+    // `plan-entitlements.ts` documents for a 0% rate on a destination charge
+    // (AGL-2071). Online sales have carried the fee since AGL-307; the
+    // register never did.
+    //
+    // PER LINE BY PRODUCT TYPE, summed — byte-for-byte the arithmetic
+    // `cart-checkout.ts` uses, because a basket can mix a physical good
+    // (Starter 2%) with a digital one (Starter 5%) and a single basket-wide
+    // rate would price one of them wrong. A missing `type` reads as
+    // `physical`, matching `liftLegacyProduct` and the cart.
+    //
+    // Scaled by the cashier's discount, again like the cart: the fee is a cut
+    // of what the shopper actually paid, not of the list basket.
+    const grossFeeCents = lineItems.reduce(
+      (sum, line) =>
+        sum +
+        Math.round(
+          (line.unitAmountCents *
+            line.quantity *
+            Aglyn.resolveTransactionFeePct(
+              ownerOrg?.org as any,
+              (line.productType ?? 'physical') as
+                | 'physical'
+                | 'digital'
+                | 'service',
+            )) /
+            100,
+        ),
+      0,
+    )
+    const feeCents =
+      itemsCents > 0
+        ? Math.round((grossFeeCents * (itemsCents - discountCents)) / itemsCents)
+        : 0
     // Origin tax (AGL-285) — in-person sales are origin-based by nature.
     const storeSettings = await hostRef.collection('settings').doc('store').get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
@@ -206,9 +247,19 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       rate && !taxSettings.pricesIncludeTax
         ? CommerceModel.computeTaxCents(itemsCents - discountCents, rate.pct)
         : 0
+    // `feeCents` rides the CARD totals only. Cash and folio tenders never
+    // touch Stripe, so there is no charge to take an application fee out of —
+    // recording one on those orders would put a number in the merchant's
+    // ledger that nothing will ever collect. (Whether Aglyn should invoice a
+    // fee on cash at all is a pricing decision, not a bug: AGL-2111.)
     const totals = CommerceModel.computeOrderTotals(lineItems, {
       discountCents,
       taxCents,
+    })
+    const cardTotals = CommerceModel.computeOrderTotals(lineItems, {
+      discountCents,
+      taxCents,
+      feeCents,
     })
 
     // Deterministic tender rejections run BEFORE the claim is taken, so they
@@ -302,7 +353,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           // chosen location exists nowhere but on this document.
           ...(locationId ? { locationId } : {}),
           lineItems,
-          totals,
+          // The CARD totals — the only tender that carries a platform fee
+          // (AGL-2110). `totalCents` is identical either way; `feeCents` is
+          // what the merchant's payout is short by, and it belongs on the
+          // document that records the charge.
+          totals: cardTotals,
           customerEmail: customerEmail || null,
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
           createdAtMs: Date.now(),
@@ -335,6 +390,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         'line_items[0][price_data][unit_amount]': String(totals.totalCents),
         'line_items[0][price_data][product_data][name]': 'In-store purchase',
         'payment_intent_data[transfer_data][destination]': String(accountId),
+        // Stripe rejects a zero application fee, so it is omitted rather than
+        // sent as '0' — the same conditional `checkout.ts` uses (AGL-2110).
+        ...(feeCents > 0
+          ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
+          : {}),
         success_url: `${posUrl}?paid=1`,
         cancel_url: `${posUrl}?paid=0`,
         'metadata[type]': 'commerce-draft',
@@ -353,6 +413,12 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         // rebuild totals from the session (it folds in shipping alone), so
         // this cannot double-count against the stored order.
         'metadata[taxCents]': String(Math.max(0, taxCents)),
+        // The fee WITNESS, the twin of the tax one above (AGL-2110): the
+        // `commerce-draft` webhook branch that completes this order reads the
+        // session, and without this key nothing on the Stripe object says
+        // what Aglyn took. Recorded even at zero, so "the plan charges no
+        // fee" is legible as a decision rather than as a missing field.
+        'metadata[feeCents]': String(Math.max(0, feeCents)),
       })
       const response = await fetch(
         'https://api.stripe.com/v1/checkout/sessions',
@@ -380,7 +446,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
-      const cardPayload = { orderId: orderRef.id, url: session.url, totals }
+      const cardPayload = {
+        orderId: orderRef.id,
+        url: session.url,
+        totals: cardTotals,
+      }
       await claim.record(200, cardPayload)
       return res.status(200).json(cardPayload)
     }

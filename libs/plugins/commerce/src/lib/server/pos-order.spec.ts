@@ -382,6 +382,128 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
   })
 })
 
+/**
+ * THE PLATFORM FEE ON AN IN-PERSON CARD SALE (AGL-2110).
+ *
+ * A POS card sale opens a DESTINATION charge with no `transfer_data[amount]`,
+ * so Stripe hands the merchant the whole charge and debits its own processing
+ * fee (2.9% + 30¢) from the PLATFORM's balance. Before this, no
+ * `application_fee_amount` went with it: every in-person card sale moved money
+ * out of Aglyn, on every plan, forever, with no symptom anywhere — the online
+ * paths have carried the fee since AGL-307 and the register simply never did.
+ *
+ * Driven on DIGITAL goods, because of a collision in the plan table that a
+ * careless suite would be defeated by: the only plans that sell POS at all
+ * (`features.pos`) are Business and up, and every one of them charges a
+ * deliberate **0%** on physical goods. A fee suite written on the physical
+ * rate would therefore assert "nothing is sent" and pass just as happily
+ * against the defect. Business's DIGITAL rate is 2%, and that is the rate
+ * driven here. (Starter charges 2% physical but cannot run a register —
+ * `posRegisters: 0` — so it 403s before Stripe.)
+ *
+ * Forced red by deleting the `application_fee_amount` spread in
+ * `pos-order.ts`: the first three expectations below all fail.
+ */
+describe('POS card sales carry the platform fee (AGL-2110)', () => {
+  /** $4.00 digital at Business's 2% = 8¢. No other figure in this file is 8. */
+  const DIGITAL_PRODUCT = {
+    name: 'Recipe PDF',
+    type: 'digital',
+    status: 'active',
+    variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+  }
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', DIGITAL_PRODUCT)
+  })
+
+  it('sends 2% of a $4.00 digital sale as the application fee', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('8')
+    // The witness the completing webhook reads, and the merchant ledger.
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('8')
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(8)
+    // The shopper's charge is untouched — a fee is a split, not a surcharge.
+    expect(
+      stripeCalls[0].body.get('line_items[0][price_data][unit_amount]'),
+    ).toBe('400')
+  })
+
+  /** A cashier discount reduces what was paid, so it reduces the cut too. */
+  it('scales the fee by the cashier discount', async () => {
+    await post({ payment: 'link', discountPct: 50 })
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('4')
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(4)
+  })
+
+  /**
+   * A mixed basket is priced PER LINE. Business charges 2% on digital and a
+   * deliberate 0% on physical, so one basket-wide rate would price one of the
+   * two wrong — this is the assertion that fails if anyone "simplifies" the
+   * reduce into a single `resolveTransactionFeePct(org, type)` call.
+   */
+  it('prices each line at its own product type', async () => {
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 10, inventory: null }],
+    })
+    await post({
+      payment: 'link',
+      lines: [
+        { productId: 'product-1', quantity: 1 },
+        { productId: 'product-2', quantity: 1 },
+      ],
+    })
+    // 2% of 400 = 8, plus 0% of 1000 = 0 → 8. A basket-wide DIGITAL rate
+    // would send 28; a basket-wide PHYSICAL rate would send 0.
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('8')
+  })
+
+  /**
+   * NEGATIVE CONTROL. Stripe rejects `application_fee_amount=0`, and a plan
+   * whose rate is a deliberate 0% must OMIT the parameter rather than send a
+   * zero — otherwise every Business physical sale 400s at Stripe and the
+   * register stops taking cards at all.
+   */
+  it('omits the parameter entirely when the rate is 0%', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 4, inventory: null }],
+    })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.has('payment_intent_data[application_fee_amount]'),
+    ).toBe(false)
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+  })
+
+  /**
+   * Cash never touches Stripe, so there is no charge to take a fee out of.
+   * Recording one would put a number in the merchant's ledger that nothing
+   * will ever collect — see AGL-2111 for the pricing question that is.
+   */
+  it('records no fee on a cash sale, and still rings the sale', async () => {
+    await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(stripeCalls).toHaveLength(0)
+    expect(orderDocs()[0]?.totals?.feeCents).toBe(0)
+    // Not passing on a refusal: the sale landed at its full amount.
+    expect(orderDocs()[0]?.totals?.totalCents).toBe(400)
+    expect(orderDocs()[0]?.status).toBe('paid')
+  })
+})
+
 describe('POS sale idempotency (AGL-1691)', () => {
   it('takes a card sale and returns a Checkout URL', async () => {
     const result = await post(
