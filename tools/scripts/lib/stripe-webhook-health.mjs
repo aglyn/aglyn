@@ -70,6 +70,55 @@ export const WEBHOOK_EVENTS = [
 export const PLATFORM_WEBHOOK_URL = 'https://app.aglyn.com/api/billing/webhook'
 
 /**
+ * How far back `GET /v1/events` can see. Stripe keeps 30 days; older events
+ * are simply absent from the list, with no error and no marker.
+ *
+ * This constant exists because the first version of this audit did not have
+ * it, and asking for `--days 365` printed a header claiming a window back to
+ * the destination's creation — while the data behind it started 30 days ago.
+ * Verified empirically against the live account on 2026-08-18: the oldest
+ * retrievable event was 2026-07-19T06:30:07Z, and the 2026-07-18 monthly
+ * checkout that certainly did deliver was already gone.
+ *
+ * A window wider than the data is exactly the failure this whole audit exists
+ * to prevent — a green check reading less than it claims — so the window is
+ * clamped here rather than trusted from the caller.
+ */
+export const EVENT_RETENTION_DAYS = 30
+
+/**
+ * Resolve the window actually backed by data, and say what narrowed it.
+ *
+ * @param {object} input
+ * @param {number} input.requestedStart Unix seconds the caller asked for.
+ * @param {number} input.end            Unix seconds, inclusive.
+ * @param {number} [input.endpointCreated] Unix seconds the destination was created.
+ * @param {number} [input.now]          Unix seconds; defaults to `end`.
+ */
+export function resolveWindow({
+  requestedStart,
+  end,
+  endpointCreated = null,
+  now = null,
+} = {}) {
+  const reference = now ?? end
+  const retentionFloor = reference - EVENT_RETENTION_DAYS * 86_400
+  const clamps = []
+  let start = requestedStart
+  // An event older than the destination was never attempted against it, so
+  // holding it against the destination would manufacture a failure.
+  if (endpointCreated != null && endpointCreated > start) {
+    start = endpointCreated
+    clamps.push('endpoint-creation')
+  }
+  if (retentionFloor > start) {
+    start = retentionFloor
+    clamps.push('stripe-event-retention')
+  }
+  return { start, end, clamps, retentionFloor }
+}
+
+/**
  * Verdict levels. `unknown` is deliberately NOT a pass: a check that could not
  * run is the exact shape of the 2026-08-14 mis-tick, where "no contrary
  * evidence" was read as "healthy".

@@ -27,9 +27,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  EVENT_RETENTION_DAYS,
   PLATFORM_WEBHOOK_URL,
   WEBHOOK_EVENTS,
   assessWebhookHealth,
+  resolveWindow,
 } from './stripe-webhook-health.mjs'
 
 const WINDOW_START = 1_786_000_000
@@ -247,4 +249,76 @@ test('the required event list carries the ten the platform destination needs', (
   ]) {
     assert.ok(WEBHOOK_EVENTS.includes(required), `${required} missing`)
   }
+})
+
+// ---------------------------------------------------------------------------
+// resolveWindow — the window must never be reported wider than its data.
+//
+// The first version of this audit printed "2026-07-18 → now" for `--days 365`
+// while `GET /v1/events` had only returned data back to 2026-07-19: Stripe
+// keeps 30 days and drops the rest with no error and no marker. A header
+// overstating its own evidence is the defect AGL-1906 is about, so it gets
+// the same treatment as everything else here — a test that fails without it.
+
+const DAY = 86_400
+
+test('a window wider than Stripe retention is clamped, and says so', () => {
+  const now = 1_800_000_000
+  const { start, clamps } = resolveWindow({
+    requestedStart: now - 365 * DAY,
+    end: now,
+    endpointCreated: now - 400 * DAY,
+    now,
+  })
+  assert.equal(start, now - EVENT_RETENTION_DAYS * DAY)
+  assert.deepEqual(clamps, ['stripe-event-retention'])
+})
+
+test('a window inside retention is left alone and reports no clamp', () => {
+  const now = 1_800_000_000
+  const { start, clamps } = resolveWindow({
+    requestedStart: now - 7 * DAY,
+    end: now,
+    endpointCreated: now - 400 * DAY,
+    now,
+  })
+  assert.equal(start, now - 7 * DAY)
+  assert.deepEqual(clamps, [])
+})
+
+test('a destination newer than the retention floor clamps to its creation', () => {
+  const now = 1_800_000_000
+  const { start, clamps } = resolveWindow({
+    requestedStart: now - 365 * DAY,
+    end: now,
+    endpointCreated: now - 3 * DAY,
+    now,
+  })
+  assert.equal(start, now - 3 * DAY)
+  assert.deepEqual(clamps, ['endpoint-creation'])
+})
+
+test('both floors can apply, and both are named', () => {
+  // Destination created 90 days ago: older than retention, newer than the ask.
+  const now = 1_800_000_000
+  const { start, clamps } = resolveWindow({
+    requestedStart: now - 365 * DAY,
+    end: now,
+    endpointCreated: now - 90 * DAY,
+    now,
+  })
+  assert.equal(start, now - EVENT_RETENTION_DAYS * DAY)
+  assert.deepEqual(clamps, ['endpoint-creation', 'stripe-event-retention'])
+})
+
+test('an unknown destination creation date still respects retention', () => {
+  const now = 1_800_000_000
+  const { start, clamps } = resolveWindow({
+    requestedStart: now - 365 * DAY,
+    end: now,
+    endpointCreated: null,
+    now,
+  })
+  assert.equal(start, now - EVENT_RETENTION_DAYS * DAY)
+  assert.deepEqual(clamps, ['stripe-event-retention'])
 })

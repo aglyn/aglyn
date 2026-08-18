@@ -80,8 +80,10 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
 import {
+  EVENT_RETENTION_DAYS,
   PLATFORM_WEBHOOK_URL,
   assessWebhookHealth,
+  resolveWindow,
 } from './lib/stripe-webhook-health.mjs'
 
 const args = process.argv.slice(2)
@@ -178,14 +180,20 @@ const iso = (unix) => new Date(unix * 1000).toISOString()
 async function main() {
   const endpoints = await collect('webhook_endpoints')
 
-  // Clamp to when the destination was created: an event older than the
-  // endpoint was never attempted anywhere, so holding it against the endpoint
-  // would manufacture a failure.
+  // Narrow the window to what is actually backed by data before reporting it.
+  // Two independent floors: the destination's creation (an older event was
+  // never attempted against it) and Stripe's 30-day event retention (an older
+  // event is simply absent, silently). Printing a window wider than its data
+  // is the same defect this audit exists to catch, one level up.
   const created = Math.min(
     ...endpoints.map((e) => e.created ?? Number.MAX_SAFE_INTEGER),
   )
-  const windowStart = Number.isFinite(created) ? Math.max(since, created) : since
-  const clamped = windowStart !== since
+  const { start: windowStart, clamps } = resolveWindow({
+    requestedStart: since,
+    end: until,
+    endpointCreated: Number.isFinite(created) ? created : null,
+    now: Math.floor(Date.now() / 1000),
+  })
 
   const window = { 'created[gte]': String(windowStart), 'created[lte]': String(until) }
   const events = await collect('events', window)
@@ -247,7 +255,13 @@ async function main() {
 
   const report = {
     ok: result.ok,
-    window: { from: iso(windowStart), to: iso(until), clampedToEndpointCreation: clamped },
+    window: {
+      requestedFrom: iso(since),
+      from: iso(windowStart),
+      to: iso(until),
+      clampedBy: clamps,
+      stripeEventRetentionDays: EVENT_RETENTION_DAYS,
+    },
     stripeKeyMode: keyMode,
     envFilesLoaded,
     endpointUrl,
@@ -263,8 +277,12 @@ async function main() {
   console.log(
     `Stripe webhook health (${keyMode} key) — ${iso(windowStart)} → ${iso(until)}`,
   )
-  if (clamped) {
-    console.log('  (window start clamped to the destination creation date)')
+  for (const clamp of clamps) {
+    console.log(
+      clamp === 'stripe-event-retention'
+        ? `  (window start clamped: Stripe retains only ${EVENT_RETENTION_DAYS} days of events — asked for ${iso(since)})`
+        : `  (window start clamped to the destination creation date — asked for ${iso(since)})`,
+    )
   }
   console.log('')
   const icon = { pass: '✓', fail: '✗', unknown: '?' }
