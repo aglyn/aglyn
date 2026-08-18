@@ -713,14 +713,59 @@ service cloud.firestore {
     function canWriteHostContent(hostId) {
       return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
+    /**
+     * Is the `suspended*` family on this document an ACTIVE suspension right
+     * now? (AGL-1981.)
+     *
+     * The one definition of "suspended" both scopes ask, so the org arm
+     * (AGL-210/238) and the host arm (AGL-1965) cannot drift into saying
+     * different things about the same field family — which is exactly why
+     * AGL-1965 declined to make its arm expiry-aware on its own.
+     *
+     * `suspendedUntilMs` is an optional expiry, documented as one on both
+     * `organization.types.ts` and `platform.types.ts`, and honoured
+     * server-side by `isLockdownActive()` since AGL-1512: past it, the tenant
+     * middleware stops rewriting to `/api/locked` and the 38
+     * `lockdownRefusal()` sites stop refusing. Rules read only `suspendedAt`,
+     * so a TIMED suspension came back to life everywhere EXCEPT the client
+     * SDK, and publishing is a client write — the customer got their site
+     * back and could not edit it, with no error that said why. Since AGL-1983
+     * this is also the put-back mechanism: a §512(g) counter-notice restores
+     * access by stamping this field, so an expiry that never fires makes the
+     * restoration clock theatre.
+     *
+     * Two directions of caution, both deliberate:
+     *
+     *  - **No expiry means indefinite**, not expired. Written as "NOT (a
+     *    numeric expiry that has passed)" rather than "the expiry is in the
+     *    future" precisely so an ABSENT field cannot read as a lapsed one.
+     *    The tempting `data.get('suspendedUntilMs', 0) > request.time` form is
+     *    that bug, and it would lift every open-ended takedown on the
+     *    platform.
+     *  - **A malformed expiry keeps the lock.** The field is Admin-SDK-only,
+     *    so a non-number can only arrive through our own bug; `is number`
+     *    makes that case leave the suspension standing. Failing closed is the
+     *    right way round to be wrong here.
+     *
+     * The bypass this opens if the deny-lists ever slip is worth naming: once
+     * rules read `suspendedUntilMs`, WRITING it is lifting the suspension. It
+     * is frozen against clients on the org doc and the host doc alike
+     * (AGL-1507/1517), and the rules suite re-proves that against the timed
+     * fixture rather than trusting the list.
+     */
+    function suspensionActive(carrier) {
+      return carrier.get('suspendedAt', null) != null &&
+        !(carrier.get('suspendedUntilMs', null) is number &&
+          carrier.get('suspendedUntilMs', 0) <= request.time.toMillis());
+    }
     // Suspension write-block (AGL-210/238): a staff-suspended org keeps
     // read access but cannot mutate content. Fail-open when the org doc
     // is missing (pre-org hosts) so legacy data never locks up.
     function orgSuspendedById(orgId) {
       return orgId != null &&
         exists(/databases/$(database)/documents/orgs/$(orgId)) &&
-        get(/databases/$(database)/documents/orgs/$(orgId))
-          .data.get('suspendedAt', null) != null;
+        suspensionActive(
+          get(/databases/$(database)/documents/orgs/$(orgId)).data);
     }
     function hostOrgSuspended(hostId) {
       return orgSuspendedById(
@@ -747,16 +792,18 @@ service cloud.firestore {
      * billed once. Ordered first in `hostWritesFrozen` so the cheap arm
      * short-circuits before the org arm's second get.
      *
-     * Mirrors `orgSuspendedById` deliberately, including its blind spot:
-     * neither consults `suspendedUntilMs`, so a TIMED suspension keeps writes
-     * frozen in rules after the server-side helpers consider it expired.
-     * Making this one expiry-aware and leaving the org arm as it is would put
-     * two different answers in one file; AGL-1981 carries the question for
-     * both scopes. Failing closed is the right way round to be wrong here.
+     * Mirrors `orgSuspendedById` deliberately, and now shares its definition
+     * of "suspended" outright: AGL-1981 moved the `suspendedAt`-plus-expiry
+     * test into `suspensionActive()` and pointed both arms at it, so the blind
+     * spot this comment used to record — neither arm consulting
+     * `suspendedUntilMs`, leaving a timed suspension frozen in rules forever
+     * after the server considered it served — is closed at both scopes in one
+     * move, which is the only way it could be closed without the file saying
+     * two different things about one field.
      */
     function hostSuspended(hostId) {
-      return get(/databases/$(database)/documents/hosts/$(hostId))
-        .data.get('suspendedAt', null) != null;
+      return suspensionActive(
+        get(/databases/$(database)/documents/hosts/$(hostId)).data);
     }
     /**
      * The single predicate every host write rule below asks. Both scopes

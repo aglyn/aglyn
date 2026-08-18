@@ -217,6 +217,25 @@ const SUSPENDED_HOST = 'host-suspended'
 // the scope a support person actually reaches for when one site is the problem
 // and the customer's other sites are innocent.
 const LOCKED_HOST = 'host-locked'
+// The AGL-1981 pair. Both are suspended at HOST scope inside the healthy org,
+// and differ ONLY in which side of `request.time` their `suspendedUntilMs`
+// falls — which is the entire question. Held apart from LOCKED_HOST because
+// that one carries no expiry at all: an indefinite suspension must keep
+// freezing writes forever, and a fix that read a missing expiry as "expired"
+// would lift every takedown on the platform.
+const EXPIRED_HOST = 'host-expired'
+const TIMED_HOST = 'host-timed'
+// The org arm of the same pair. AGL-1981's bar is that both arms move
+// together, so the org scope gets the identical two cases — a fix applied to
+// `hostSuspended()` alone leaves `orgSuspendedById()` saying the opposite
+// thing about the same field, and only these two can tell.
+const EXPIRED_ORG = 'org-expired'
+const EXPIRED_ORG_HOST = 'host-in-expired-org'
+const TIMED_ORG = 'org-timed'
+const TIMED_ORG_HOST = 'host-in-timed-org'
+
+/** Comfortably outside any clock skew between this process and the emulator. */
+const AN_HOUR = 3_600_000
 
 const OWNER = 'uid-owner'
 const EDITOR = 'uid-editor' // hostAccess: HOST=editor
@@ -389,6 +408,75 @@ beforeEach(async () => {
     )
     await setDoc(doc(db, 'hosts', LOCKED_HOST, 'templates', 'tpl-1'), {
       kind: 'page', displayName: 'Hero',
+    })
+
+    /*
+     * AGL-1981 fixtures — a TIMED suspension on each side of its expiry.
+     *
+     * Seeded exactly as `/api/admin/lockdown` leaves a timed takedown: the
+     * same `suspended*` family as LOCKED_HOST plus a numeric
+     * `suspendedUntilMs`. The server-side helpers
+     * (`isLockdownActive` in `libs/aglyn/.../lockdown.ts`) have honoured that
+     * field since AGL-1512; rules never read it, so the site came back and the
+     * editor stayed locked out of it.
+     *
+     * Both live in the HEALTHY org, so nothing `hostOrgSuspended()` reads is
+     * set and the host arm is the only thing that can be deciding.
+     */
+    await setDoc(doc(db, 'hosts', EXPIRED_HOST), {
+      displayName: 'Sentence served', orgId: ORG,
+      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
+      screens: { 's1': { versionId: 'v1', path: '/' } },
+      suspendedAt: new Date(Date.now() - 48 * AN_HOUR),
+      suspendedReasonCode: 'abuse',
+      suspendedMessage: 'Suspended pending review',
+      suspendedUntilMs: Date.now() - AN_HOUR,
+    })
+    await setDoc(doc(db, 'hosts', EXPIRED_HOST, 'screens', 's1'), { name: 'Home' })
+    await setDoc(
+      doc(db, 'hosts', EXPIRED_HOST, 'screens', 's1', 'versions', 'v1'),
+      { screenId: 's1', nodes: { root: {} } },
+    )
+    await setDoc(doc(db, 'hosts', TIMED_HOST), {
+      displayName: 'Still serving it', orgId: ORG,
+      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
+      screens: { 's1': { versionId: 'v1', path: '/' } },
+      suspendedAt: new Date(),
+      suspendedReasonCode: 'abuse',
+      suspendedMessage: 'Suspended pending review',
+      suspendedUntilMs: Date.now() + 48 * AN_HOUR,
+    })
+    await setDoc(doc(db, 'hosts', TIMED_HOST, 'screens', 's1'), { name: 'Home' })
+    await setDoc(
+      doc(db, 'hosts', TIMED_HOST, 'screens', 's1', 'versions', 'v1'),
+      { screenId: 's1', nodes: { root: {} } },
+    )
+
+    // The org arm of the same pair (AGL-210/238's `orgSuspendedById`).
+    await setDoc(doc(db, 'orgs', EXPIRED_ORG), {
+      name: 'Thawed', slug: 'thawed', ownerUid: OWNER, plan: 'pro',
+      suspendedAt: new Date(Date.now() - 48 * AN_HOUR),
+      suspendedUntilMs: Date.now() - AN_HOUR,
+    })
+    await setDoc(doc(db, 'hosts', EXPIRED_ORG_HOST), {
+      displayName: 'Thawed site', orgId: EXPIRED_ORG,
+      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
+    })
+    await setDoc(doc(db, 'hosts', EXPIRED_ORG_HOST, 'screens', 's1'), {
+      name: 'Home',
+    })
+    await setDoc(doc(db, 'orgs', TIMED_ORG), {
+      name: 'Frozen till Friday', slug: 'frozen-friday', ownerUid: OWNER,
+      plan: 'pro',
+      suspendedAt: new Date(),
+      suspendedUntilMs: Date.now() + 48 * AN_HOUR,
+    })
+    await setDoc(doc(db, 'hosts', TIMED_ORG_HOST), {
+      displayName: 'Frozen site', orgId: TIMED_ORG,
+      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor' },
+    })
+    await setDoc(doc(db, 'hosts', TIMED_ORG_HOST, 'screens', 's1'), {
+      name: 'Home',
     })
   })
 })
@@ -3277,6 +3365,238 @@ describe('a host-scope suspension freezes the client SDK too (AGL-1965)', () => 
         `${uid} shortening their own suspension to expire immediately`,
         updateDoc(doc(authed(uid), 'hosts', LOCKED_HOST), {
           suspendedUntilMs: 1,
+        }),
+      )
+    }
+  })
+})
+
+/**
+ * AGL-1981: a TIMED suspension expires in rules, at BOTH scopes.
+ *
+ * Until this, `orgSuspendedById()` and `hostSuspended()` both decided
+ * suspension on `suspendedAt != null` alone. The server-side stack has read
+ * `suspendedUntilMs` since AGL-1512 — `isLockdownActive()` treats a passed
+ * expiry as inactive, the tenant middleware stops rewriting to `/api/locked`,
+ * and the 38 `lockdownRefusal()` sites stop refusing. So when the clock
+ * passed, the site came back and the client SDK stayed frozen forever.
+ * Publishing is a client write, so that is the whole authoring experience,
+ * with no error that explains it.
+ *
+ * Four cases, and all four are load-bearing:
+ *
+ *  - **expired → writes land**, at host scope and at org scope. This is the
+ *    bug. Both, because a fix to one arm leaves the file saying two different
+ *    things about one field, which is precisely why AGL-1965 declined to fix
+ *    the host arm alone.
+ *  - **live timed → writes still refused**, at both scopes. Without this pair
+ *    the two above pass on `hostWritesFrozen()` hard-wired to false — the
+ *    green that proves the takedown was deleted rather than made temporal.
+ *
+ * `LOCKED_HOST`'s indefinite suspension keeps its own block above, which is
+ * the third case: a MISSING expiry must never read as an expired one, or the
+ * fix lifts every open takedown on the platform.
+ */
+describe('a timed suspension expires in rules, at both scopes (AGL-1981)', () => {
+  const editor = () => authed(EDITOR)
+
+  it('the fixtures differ only in the expiry, and nothing else is deciding', async () => {
+    // The AGL-1965 lesson restated: if the two hosts differed in some OTHER
+    // way — a missing `memberRoles`, a suspended org underneath — every
+    // assertion below would pass for a reason that has nothing to do with
+    // `suspendedUntilMs`, and the fix could be absent.
+    const staffDb = authed(STAFF, { staff: true })
+    const expired = await getDoc(doc(staffDb, 'hosts', EXPIRED_HOST))
+    const timed = await getDoc(doc(staffDb, 'hosts', TIMED_HOST))
+    for (const [label, snapshot] of [['expired', expired], ['timed', timed]]) {
+      assert.ok(
+        snapshot.data().suspendedAt != null,
+        `${label} host is not suspended in the fixture — nothing is under test.`,
+      )
+      assert.equal(
+        snapshot.data().orgId, ORG,
+        `${label} host is not in the healthy org — the org arm could be ` +
+          'doing the work.',
+      )
+      assert.equal(
+        snapshot.data().memberRoles?.[EDITOR], 'editor',
+        `${label} host does not grant the editor a role — a deny would be ` +
+          'the membership check, not the freeze.',
+      )
+    }
+    assert.ok(
+      expired.data().suspendedUntilMs < Date.now(),
+      'the expired fixture has not expired.',
+    )
+    assert.ok(
+      timed.data().suspendedUntilMs > Date.now(),
+      'the timed fixture has already expired — it is a second copy of the ' +
+        'expired one and proves nothing.',
+    )
+    // And the org arm's pair, same reasoning.
+    const expiredOrg = await getDoc(doc(staffDb, 'orgs', EXPIRED_ORG))
+    const timedOrg = await getDoc(doc(staffDb, 'orgs', TIMED_ORG))
+    assert.ok(
+      expiredOrg.data().suspendedAt != null &&
+        expiredOrg.data().suspendedUntilMs < Date.now(),
+      'the expired ORG fixture is not a suspension that has expired.',
+    )
+    assert.ok(
+      timedOrg.data().suspendedAt != null &&
+        timedOrg.data().suspendedUntilMs > Date.now(),
+      'the timed ORG fixture is not a suspension that is still running.',
+    )
+  })
+
+  it('host scope: an expired suspension no longer blocks publishing', async () => {
+    // The three writes `screen-publishing.ts` makes. This is the customer
+    // getting their site back and being able to work on it, which is the
+    // whole point of a TIMED suspension as opposed to an open-ended one.
+    await mustAllow(
+      'an editor republishing a screen after the suspension expired',
+      updateDoc(doc(editor(), 'hosts', EXPIRED_HOST, 'screens', 's1'), {
+        name: 'Home, restored',
+      }),
+    )
+    await mustAllow(
+      'an editor moving the live `screens` pointer after expiry',
+      updateDoc(doc(editor(), 'hosts', EXPIRED_HOST), {
+        screens: { s1: { versionId: 'v1', path: '/' } },
+      }),
+    )
+    await mustAllow(
+      'an editor saving canvas nodes after expiry',
+      setDoc(
+        doc(editor(), 'hosts', EXPIRED_HOST, 'screens', 's1', 'versions', 'v1'),
+        { nodes: { root: { text: 'mine again' } } },
+        { merge: true },
+      ),
+    )
+    // A catch-all path too: the freeze reaches every subcollection, so the
+    // thaw has to as well, or the site comes back half-editable.
+    await mustAllow(
+      'an editor creating a media folder after expiry',
+      setDoc(doc(editor(), 'hosts', EXPIRED_HOST, 'mediaFolders', 'f1'), {
+        name: 'Uploads',
+      }),
+    )
+  })
+
+  it('host scope: a suspension still running blocks it', async () => {
+    await mustDeny(
+      'an editor republishing a screen while the clock is still running',
+      updateDoc(doc(editor(), 'hosts', TIMED_HOST, 'screens', 's1'), {
+        name: 'Your bank needs you to sign in',
+      }),
+    )
+    await mustDeny(
+      'an editor moving the live `screens` pointer while still suspended',
+      updateDoc(doc(editor(), 'hosts', TIMED_HOST), {
+        screens: { s1: { versionId: 'v2', path: '/' } },
+      }),
+    )
+    await mustDeny(
+      'an editor saving canvas nodes while still suspended',
+      setDoc(
+        doc(editor(), 'hosts', TIMED_HOST, 'screens', 's1', 'versions', 'v1'),
+        { nodes: { root: { text: 'phish' } } },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'an editor creating a media folder while still suspended',
+      setDoc(doc(editor(), 'hosts', TIMED_HOST, 'mediaFolders', 'f1'), {
+        name: 'Uploads',
+      }),
+    )
+  })
+
+  it('org scope: an expired suspension no longer blocks its hosts', async () => {
+    await mustAllow(
+      'an editor publishing on a host whose ORG suspension expired',
+      updateDoc(doc(editor(), 'hosts', EXPIRED_ORG_HOST, 'screens', 's1'), {
+        name: 'Home, restored',
+      }),
+    )
+    await mustAllow(
+      'an editor renaming a host whose ORG suspension expired',
+      updateDoc(doc(editor(), 'hosts', EXPIRED_ORG_HOST), {
+        displayName: 'Back in business',
+      }),
+    )
+  })
+
+  it('org scope: a suspension still running blocks its hosts', async () => {
+    await mustDeny(
+      'an editor publishing while the ORG clock is still running',
+      updateDoc(doc(editor(), 'hosts', TIMED_ORG_HOST, 'screens', 's1'), {
+        name: 'Still phishing',
+      }),
+    )
+    await mustDeny(
+      'an editor renaming a host while its ORG is still suspended',
+      updateDoc(doc(editor(), 'hosts', TIMED_ORG_HOST), {
+        displayName: 'Renamed under lock',
+      }),
+    )
+  })
+
+  it('an INDEFINITE suspension is untouched by the expiry arithmetic', async () => {
+    // The negative control for the fix's own failure mode. `LOCKED_HOST` has
+    // no `suspendedUntilMs` at all, and every open-ended takedown on the
+    // platform looks like it. A helper that read a missing expiry as a passed
+    // one — `data.get('suspendedUntilMs', 0) > now` is exactly that bug —
+    // would lift the lot, and would pass all four assertions above.
+    const staffDb = authed(STAFF, { staff: true })
+    const locked = await getDoc(doc(staffDb, 'hosts', LOCKED_HOST))
+    assert.equal(
+      locked.data().suspendedUntilMs ?? null, null,
+      'LOCKED_HOST has grown an expiry — it is no longer the indefinite case.',
+    )
+    await mustDeny(
+      'an editor publishing on an indefinitely suspended site',
+      updateDoc(doc(editor(), 'hosts', LOCKED_HOST, 'screens', 's1'), {
+        name: 'Never expires',
+      }),
+    )
+    // And its org twin: SUSPENDED_ORG carries no expiry either.
+    await mustDeny(
+      'an editor publishing under an indefinite ORG suspension',
+      updateDoc(doc(editor(), 'hosts', SUSPENDED_HOST, 'screens', 's1'), {
+        name: 'Never expires',
+      }),
+    )
+  })
+
+  it('a malformed expiry fails CLOSED', async () => {
+    // `suspendedUntilMs` is Admin-SDK-only, so a non-numeric value can only
+    // arrive by our own bug — but the direction of that bug matters. A string
+    // where a number belongs must leave the takedown standing, never lift it.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', TIMED_HOST),
+        { suspendedUntilMs: 'next tuesday' },
+        { merge: true },
+      )
+    })
+    await mustDeny(
+      'an editor publishing on a site whose expiry is unreadable',
+      updateDoc(doc(editor(), 'hosts', TIMED_HOST, 'screens', 's1'), {
+        name: 'Slipped through',
+      }),
+    )
+  })
+
+  it('the site still cannot buy its own thaw', async () => {
+    // The bypass this change would open if the key deny-list ever slipped:
+    // once rules read `suspendedUntilMs`, writing it IS lifting the
+    // suspension. AGL-1507 already froze the key; this restates it against
+    // the fixture where it now has teeth, so the two can never drift apart.
+    for (const uid of [OWNER, EDITOR]) {
+      await mustDeny(
+        `${uid} back-dating suspendedUntilMs to thaw their own site`,
+        updateDoc(doc(authed(uid), 'hosts', TIMED_HOST), {
+          suspendedUntilMs: Date.now() - AN_HOUR,
         }),
       )
     }
