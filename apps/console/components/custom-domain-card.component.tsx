@@ -27,7 +27,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
@@ -51,6 +51,103 @@ export interface CustomDomainCardProps {
 }
 
 /**
+ * What `/api/domains/status` reports (AGL-1913). `none` is a site with no
+ * custom domain; `unknown`/`skipped` mean the platform could not be asked.
+ */
+interface DomainStatus {
+  domain: string | null
+  state:
+    | 'none'
+    | 'serving'
+    | 'certificate-pending'
+    | 'ownership-pending'
+    | 'dns-misconfigured'
+    | 'not-attached'
+    | 'skipped'
+    | 'unknown'
+  verification?: { type: string; domain: string; value: string }[]
+  conflicts?: { type?: string; name?: string; value?: string }[]
+  attachmentPending?: boolean
+}
+
+/**
+ * The chip, per state.
+ *
+ * Every state here used to render as the same green chip, which is the bug:
+ * a certificate still issuing and a domain that will never work are not the
+ * same news, and the customer is the one who has to act on the difference.
+ * `unknown` deliberately falls back to the old label rather than inventing a
+ * problem — a status call that could not answer is not evidence of one.
+ */
+function chipFor(
+  domain: string,
+  status: DomainStatus | null,
+  attachmentPending: boolean,
+): { label: string; color: 'success' | 'warning' | 'error' | 'info' } {
+  switch (status?.state) {
+    case 'serving':
+      return { label: `${domain} — live`, color: 'success' }
+    case 'certificate-pending':
+      return { label: `${domain} — issuing certificate`, color: 'info' }
+    case 'ownership-pending':
+      return { label: `${domain} — ownership check needed`, color: 'warning' }
+    case 'dns-misconfigured':
+      return { label: `${domain} — DNS not pointing here`, color: 'warning' }
+    case 'not-attached':
+      return { label: `${domain} — not attached`, color: 'error' }
+    default:
+      return attachmentPending
+        ? { label: `${domain} — attachment pending`, color: 'warning' }
+        : { label: domain, color: 'success' }
+  }
+}
+
+/** The one thing to do next, in the customer's own terms. */
+function explanationFor(
+  status: DomainStatus | null,
+): { severity: 'success' | 'info' | 'warning' | 'error'; text: string } | null {
+  switch (status?.state) {
+    case 'certificate-pending':
+      return {
+        severity: 'info',
+        text:
+          'DNS checks out and the domain is attached. The certificate is ' +
+          'still being issued — this usually takes a few minutes, and there ' +
+          'is nothing to do but wait. Until it finishes, the domain may show ' +
+          'a security warning.',
+      }
+    case 'ownership-pending':
+      return {
+        severity: 'warning',
+        text:
+          'Your domain is registered to another account on our hosting ' +
+          'platform, so it has to be proven yours before it will serve. Add ' +
+          'the record below at your registrar, then press Re-attach.',
+      }
+    case 'dns-misconfigured':
+      return {
+        severity: 'warning',
+        text:
+          'The domain is attached, but it no longer resolves to us — check ' +
+          'the record at your registrar. This is what you see if DNS was ' +
+          'changed after connecting, or if another record is answering for ' +
+          'the same name.',
+      }
+    case 'not-attached':
+      return {
+        severity: 'error',
+        text:
+          'This domain is saved here but is not attached to our hosting ' +
+          'platform, so it serves nothing. Press Retry attachment; if it ' +
+          'keeps failing, the domain is likely held by another account and ' +
+          'support will need the domain name.',
+      }
+    default:
+      return null
+  }
+}
+
+/**
  * Connect-a-domain wizard (Custom Domain Self-Service): DNS instructions,
  * server-side CNAME verification, `host.cname` persistence, and Vercel
  * attachment (501-tolerant). Gated on the Starter+ customDomain
@@ -70,6 +167,36 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   )
   const connected = host?.cname as string | undefined
   const [domain, setDomain] = useState('')
+  // The LIVE state of the connected domain (AGL-1913), refreshed on mount and
+  // after every action. Not stored on the host document on purpose: it is a
+  // fact about the customer's DNS and the platform's certificate, both of
+  // which change without us, and a cached copy of either is how the console
+  // ends up asserting a domain is fine hours after it stopped being.
+  const [status, setStatus] = useState<DomainStatus | null>(null)
+  const [statusLoading, setStatusLoading] = useState(false)
+
+  const refreshStatus = useCallback(async () => {
+    if (!connected) return void setStatus(null)
+    setStatusLoading(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch(
+        `/api/domains/status?hostId=${encodeURIComponent(hostId)}`,
+        idToken ? { headers: { Authorization: `Bearer ${idToken}` } } : undefined,
+      )
+      // A failed status read leaves the card saying what it said before —
+      // never "broken", which would be a claim this request did not earn.
+      setStatus(response.ok ? await response.json() : null)
+    } catch {
+      setStatus(null)
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [connected, hostId, user])
+
+  useEffect(() => {
+    void refreshStatus()
+  }, [refreshStatus])
   // Which records to offer for the name typed so far, and in which order —
   // ALIAS leads for a bare apex, CNAME for everything else (AGL-1327). The
   // derivation lives in `utils/tenant-dns.ts` beside the values the verify
@@ -154,10 +281,20 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           allowDuplicate: true,
         })
       } else {
-        enqueueSnackbar(`"${value}" connected`, {
-          variant: 'success',
-          persist: false,
-        })
+        // What attach ACTUALLY achieved, not that the request returned 200
+        // (AGL-1913). A domain held pending an ownership challenge, or one the
+        // platform cannot resolve, is connected and not serving — and the card
+        // below says which, so this only has to avoid claiming otherwise.
+        const attached = await attachResponse.json().catch(() => undefined)
+        const serving =
+          attached?.state !== 'ownership-pending' &&
+          attached?.state !== 'dns-misconfigured'
+        enqueueSnackbar(
+          serving
+            ? `"${value}" connected`
+            : `"${value}" connected — one more step before it serves`,
+          { variant: serving ? 'success' : 'warning', persist: false },
+        )
       }
       setDomain('')
     } catch (error) {
@@ -169,8 +306,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     } finally {
       setChecking(false)
       dequeue()
+      void refreshStatus()
     }
-  }, [domain, hostId, user, queueLoading, enqueueSnackbar])
+  }, [domain, hostId, user, queueLoading, enqueueSnackbar, refreshStatus])
 
   // Retry attachment (AGL-166): re-runs the Vercel attach for a saved
   // cname whose platform attachment never happened (501/5xx path).
@@ -189,10 +327,17 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       })
       const payload = await response.json().catch(() => ({}))
       if (response.ok) {
-        enqueueSnackbar(`"${connected}" attached — SSL provisions shortly`, {
-          variant: 'success',
-          persist: false,
-        })
+        // "SSL provisions shortly" was said unconditionally, including for the
+        // two states where it never would (AGL-1913).
+        const serving =
+          payload?.state !== 'ownership-pending' &&
+          payload?.state !== 'dns-misconfigured'
+        enqueueSnackbar(
+          serving
+            ? `"${connected}" attached — SSL provisions shortly`
+            : `"${connected}" attached, but it will not serve yet — see below`,
+          { variant: serving ? 'success' : 'warning', persist: false },
+        )
       } else {
         enqueueSnackbar(payload?.error ?? 'Attachment failed', {
           variant: response.status === 501 ? 'info' : 'error',
@@ -207,8 +352,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       })
     } finally {
       setChecking(false)
+      void refreshStatus()
     }
-  }, [connected, hostId, user, enqueueSnackbar])
+  }, [connected, hostId, user, enqueueSnackbar, refreshStatus])
 
   const handleDisconnect = useCallback(async () => {
     // Goes through the server (AGL-742) so the hostname is also removed from
@@ -256,35 +402,104 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     >
       <Stack spacing={2}>
         {connected ? (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Chip
-              label={
-                host?.cnameAttachmentPending
-                  ? `${connected} — attachment pending`
-                  : connected
-              }
-              color={host?.cnameAttachmentPending ? 'warning' : 'success'}
-            />
+          <Stack spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              {(() => {
+                const chip = chipFor(
+                  connected,
+                  status,
+                  host?.cnameAttachmentPending === true,
+                )
+                return <Chip label={chip.label} color={chip.color} />
+              })()}
+              {/*
+                Always offer re-attach for a connected domain (AGL-166):
+                domains connected before the pending flag existed never got
+                cnameAttachmentPending set, so gating the button on it hid it
+                for exactly the domains that need attaching. Attach is
+                idempotent (Vercel returns domain_already_in_use), so it's
+                safe to run even when already attached.
+              */}
+              <Button
+                size="small"
+                disabled={checking}
+                onClick={handleRetryAttach}
+              >
+                {host?.cnameAttachmentPending
+                  ? 'Retry attachment'
+                  : 'Re-attach'}
+              </Button>
+              {/*
+                A certificate arrives on its own a few minutes later, and the
+                card has no way to know when. Without this the customer's only
+                move is a page reload, which reads like the product does not
+                know either (AGL-1913).
+              */}
+              <Button
+                size="small"
+                disabled={statusLoading}
+                onClick={() => void refreshStatus()}
+              >
+                {statusLoading ? 'Checking…' : 'Check status'}
+              </Button>
+              <Button size="small" color="error" onClick={handleDisconnect}>
+                {'Disconnect'}
+              </Button>
+            </Stack>
+            {(() => {
+              const explanation = explanationFor(status)
+              return explanation ? (
+                <Alert severity={explanation.severity}>{explanation.text}</Alert>
+              ) : null
+            })()}
             {/*
-              Always offer re-attach for a connected domain (AGL-166):
-              domains connected before the pending flag existed never got
-              cnameAttachmentPending set, so gating the button on it hid it
-              for exactly the domains that need attaching. Attach is
-              idempotent (Vercel returns domain_already_in_use), so it's
-              safe to run even when already attached.
+              The exact record Vercel is waiting for. Without it "prove you own
+              the domain" is a dead end: nothing else in the product says which
+              record, on which name, with which value.
             */}
-            <Button
-              size="small"
-              disabled={checking}
-              onClick={handleRetryAttach}
-            >
-              {host?.cnameAttachmentPending
-                ? 'Retry attachment'
-                : 'Re-attach'}
-            </Button>
-            <Button size="small" color="error" onClick={handleDisconnect}>
-              {'Disconnect'}
-            </Button>
+            {status?.state === 'ownership-pending' &&
+            status.verification?.length ? (
+              <Stack spacing={0.5}>
+                {status.verification.map((record) => (
+                  <Typography
+                    key={`${record.type}-${record.domain}-${record.value}`}
+                    variant="body2"
+                    component="code"
+                    sx={{
+                      p: 1,
+                      bgcolor: 'action.hover',
+                      borderRadius: 1,
+                      fontFamily: 'monospace',
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {`${record.type}  ${record.domain}  →  ${record.value}`}
+                  </Typography>
+                ))}
+              </Stack>
+            ) : null}
+            {/*
+              Records answering for the same name that are not ours, as the
+              platform sees them — the stale A record left behind by a previous
+              host, which answers alongside a correct ALIAS and wins some of the
+              time. Shown even when the domain is serving, because that is
+              exactly when it looks fine and is not.
+            */}
+            {status?.conflicts?.length ? (
+              <Alert severity="warning">
+                {'Other DNS records are answering for this name and will make ' +
+                  'the site load intermittently. Remove them at your ' +
+                  'registrar: '}
+                {status.conflicts
+                  .map((conflict) =>
+                    [conflict.type, conflict.name, conflict.value]
+                      .filter(Boolean)
+                      .join(' '),
+                  )
+                  .join(', ')}
+              </Alert>
+            ) : null}
           </Stack>
         ) : null}
         {/*
