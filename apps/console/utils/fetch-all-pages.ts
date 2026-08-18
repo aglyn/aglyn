@@ -51,9 +51,22 @@ export interface PagedResult<T> {
   truncated: boolean
   /** Pages actually fetched — for the message when `truncated`. */
   pages: number
+  /**
+   * Extra array fields accumulated across pages, by
+   * {@link FetchAllPagesOptions.accumulate}.
+   *
+   * Exists for `/api/admin/users`' `tenantTruncated`, which is a SECOND and
+   * narrower kind of short list: walking `nextPageToken` to the end still
+   * misses users in an SSO tenant pool that outgrew its per-tenant cap
+   * *inside* a page. `auth-pools.ts` names those tenants precisely so a
+   * caller can say so — `/admin/users/page.tsx` already does — and a walker
+   * that dropped the field would have made this list look complete again by
+   * a different route.
+   */
+  extras: Record<string, unknown[]>
 }
 
-export interface FetchAllPagesOptions<T> {
+export interface FetchAllPagesOptions {
   /** Base path, without any cursor param. */
   path: string
   /** Response key holding the array (`'hosts'`, `'orgs'`, `'users'`). */
@@ -66,6 +79,12 @@ export interface FetchAllPagesOptions<T> {
   maxPages?: number
   /** Abort check between pages, so an unmounted caller stops fetching. */
   active?: () => boolean
+  /**
+   * Extra ARRAY response fields to concatenate across pages, surfaced on
+   * {@link PagedResult.extras}. Accumulated rather than last-write-wins
+   * because such a field can appear on any page, not only the final one.
+   */
+  accumulate?: string[]
 }
 
 /**
@@ -77,7 +96,7 @@ export interface FetchAllPagesOptions<T> {
  * empty list and a silently short one.
  */
 export async function fetchAllPages<T = unknown>(
-  options: FetchAllPagesOptions<T>,
+  options: FetchAllPagesOptions,
 ): Promise<PagedResult<T>> {
   const {
     path,
@@ -87,13 +106,17 @@ export async function fetchAllPages<T = unknown>(
     headers = {},
     maxPages = MAX_PAGES,
     active,
+    accumulate = [],
   } = options
   const items: T[] = []
+  const extras: Record<string, unknown[]> = Object.fromEntries(
+    accumulate.map((key) => [key, [] as unknown[]]),
+  )
   let cursor: string | null = null
   let pages = 0
 
   for (let page = 0; page < maxPages; page += 1) {
-    if (active && !active()) return { items, truncated: true, pages }
+    if (active && !active()) return { items, truncated: true, pages, extras }
     const separator = path.includes('?') ? '&' : '?'
     const url = cursor
       ? `${path}${separator}${cursorParam}=${encodeURIComponent(cursor)}`
@@ -101,24 +124,28 @@ export async function fetchAllPages<T = unknown>(
     let payload: Record<string, unknown>
     try {
       const response = await fetch(url, { headers })
-      if (!response.ok) return { items, truncated: true, pages }
+      if (!response.ok) return { items, truncated: true, pages, extras }
       payload = await response.json()
     } catch {
-      return { items, truncated: true, pages }
+      return { items, truncated: true, pages, extras }
     }
     pages += 1
     const batch = payload?.[key]
     if (Array.isArray(batch)) items.push(...(batch as T[]))
+    for (const field of accumulate) {
+      const value = payload?.[field]
+      if (Array.isArray(value)) extras[field].push(...value)
+    }
     const next = payload?.[cursorField]
     // `hasMore` is advisory; the CURSOR is what decides. A route that
     // reports `hasMore: true` with a null cursor has nowhere to send us,
     // and looping on the flag alone would refetch page one forever.
     cursor = typeof next === 'string' && next ? next : null
-    if (!cursor) return { items, truncated: false, pages }
+    if (!cursor) return { items, truncated: false, pages, extras }
   }
   // Fell out of the loop with a cursor still in hand: the ceiling stopped
   // us, not the route.
-  return { items, truncated: true, pages }
+  return { items, truncated: true, pages, extras }
 }
 
 export default fetchAllPages

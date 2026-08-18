@@ -138,17 +138,29 @@ export function SystemEmailTestDrawer(props: SystemEmailTestDrawerProps) {
           cursorField: 'nextPageToken',
           headers,
           active: () => active,
+          // A SECOND kind of short list, narrower than the cursor: an SSO
+          // tenant pool that outgrew its per-tenant cap inside a page.
+          // Walking `nextPageToken` to the end does not catch it, so
+          // dropping this field would leave the picker looking complete
+          // again by a different route. `/admin/users` already reports it.
+          accumulate: ['tenantTruncated'],
         }),
       ])
       if (!active) return
       setOrgDocs(orgs.items)
       setHostDocs(hosts.items)
       setUsers(userList.items)
+      const shortTenants = userList.extras.tenantTruncated ?? []
       setTruncated(
         [
           orgs.truncated ? 'organizations' : null,
           hosts.truncated ? 'sites' : null,
           userList.truncated ? 'users' : null,
+          shortTenants.length
+            ? `users in ${shortTenants.length} SSO tenant${
+                shortTenants.length === 1 ? '' : 's'
+              }`
+            : null,
         ].filter(Boolean) as string[],
       )
     })().catch(() => undefined)

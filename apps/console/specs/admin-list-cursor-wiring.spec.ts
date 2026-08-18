@@ -100,6 +100,15 @@ describe('AGL-2083 · paginated staff lists are walked, not sampled', () => {
     for (const route of routes) expect(text).toContain(route)
   })
 
+  it('the drawer reports the SSO-tenant truncation too', () => {
+    // The cursor walk cannot see it, so a drawer that only reported
+    // `truncated` would look complete again for exactly the users an SSO
+    // org cares about.
+    const text = body('components/system-email-test-drawer.component.tsx')
+    expect(text).toContain('tenantTruncated')
+    expect(text).toContain('SSO tenant')
+  })
+
   it.each(CALLERS)('$file reports a short list instead of hiding it', ({ file }) => {
     // The defect was never an error — it was a list that LOOKED complete.
     // A caller that walks the pages but swallows the ceiling reintroduces
@@ -279,6 +288,49 @@ describe('fetchAllPages', () => {
     })
     expect(result.truncated).toBe(true)
     expect(impl).toHaveBeenCalledTimes(1)
+  })
+
+  it('accumulates an extra array field across every page', async () => {
+    // `/api/admin/users` reports `tenantTruncated` — an SSO tenant pool that
+    // outgrew its cap INSIDE a page, which the cursor walk cannot detect.
+    // It can appear on any page, so it is concatenated rather than read off
+    // the last one.
+    let call = 0
+    const impl = jest.fn(async () => {
+      call += 1
+      return {
+        ok: true,
+        json: async () => ({
+          users: [`u${call}`],
+          tenantTruncated: call === 1 ? ['tenant-a'] : ['tenant-b'],
+          nextPageToken: call < 2 ? 'tok' : null,
+        }),
+      }
+    })
+    ;(globalThis as { fetch?: unknown }).fetch = impl
+    const result = await fetchAllPages<string>({
+      path: '/api/admin/users',
+      key: 'users',
+      cursorParam: 'nextPageToken',
+      cursorField: 'nextPageToken',
+      accumulate: ['tenantTruncated'],
+    })
+    expect(result.extras.tenantTruncated).toEqual(['tenant-a', 'tenant-b'])
+  })
+
+  it('always returns extras, even on an early failure', async () => {
+    // Callers read `result.extras.x ?? []`; an undefined `extras` on the
+    // error paths would throw inside the very handler meant to report a
+    // short list.
+    const impl = jest.fn(async () => ({ ok: false, json: async () => ({}) }))
+    ;(globalThis as { fetch?: unknown }).fetch = impl
+    const result = await fetchAllPages<string>({
+      path: '/api/admin/users',
+      key: 'users',
+      accumulate: ['tenantTruncated'],
+    })
+    expect(result.extras).toBeDefined()
+    expect(result.extras.tenantTruncated).toEqual([])
   })
 
   it('has a ceiling that is a real bound', () => {
