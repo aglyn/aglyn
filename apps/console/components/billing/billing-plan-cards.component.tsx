@@ -39,6 +39,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { useState } from 'react'
 import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
 
 /**
@@ -129,10 +130,54 @@ export interface BillingPlanCardsProps {
 }
 
 /**
+ * Tiers BELOW the org's current plan, collapsed behind a disclosure (AGL-1859
+ * §1: "hide or de-emphasize the lower subscription tiers … upgrade paths
+ * prominent and one-click").
+ *
+ * They are hidden, never removed. A customer looking for a cheaper plan finds
+ * it in one click and the copy says exactly where it is — a grid that pretends
+ * the lower tiers do not exist is a dark pattern, and it also loses the
+ * downsell the retention funnel depends on (AGL-1863). What changes is the
+ * DEFAULT: the upgrade path is what the page leads with.
+ */
+function LowerTierDisclosure(props: {
+  count: number
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const { count, expanded, onToggle } = props
+  if (count < 1) return null
+  return (
+    <Grid size={{ xs: 12 }}>
+      <Button
+        size="small"
+        color="inherit"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        sx={{ color: 'text.secondary', textTransform: 'none' }}
+      >
+        {expanded
+          ? 'Hide lower plans'
+          : `Looking for something smaller? Show ${count} lower plan${
+              count === 1 ? '' : 's'
+            }`}
+      </Button>
+    </Grid>
+  )
+}
+
+/**
  * Pricing-page plan picker (AGL-71): quota summary + feature checklist per
  * tier, driven entirely from PLAN_ENTITLEMENTS/PLAN_PRICING. The current
  * plan is outlined and the next tier up is emphasized as the recommended
- * upgrade; lower tiers get a Downgrade CTA.
+ * upgrade.
+ *
+ * Tier visibility is ASYMMETRIC (AGL-1859): tiers above the current plan are
+ * shown by default with a contained one-click Upgrade; tiers below it are
+ * collapsed behind {@link LowerTierDisclosure} and, once shown, dimmed with a
+ * quiet text CTA. Nothing is removed and nothing is disabled — the whole
+ * ladder stays one click away, which is the line between de-emphasis and a
+ * dark pattern.
  *
  * Only the SELF-SERVE tiers appear in the grid (AGL-1118). Enterprise is
  * custom-priced and staff-provisioned, so it gets a full-width contact-sales
@@ -164,11 +209,28 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
         ? currentIndex + 1
         : -1
 
+  // Lower tiers start collapsed (AGL-1859). Only ever collapsed for an org
+  // that HAS a plan to be below: a visitor with no plan yet, or an enterprise
+  // org, sees the whole ladder, because for them nothing is a downgrade.
+  //
+  // Except when a deep link asked for one of them. `?plan=starter` arriving
+  // from the marketing site while the org is on Pro must still land on the
+  // Starter card (AGL-1117) — collapsing the tier the visitor explicitly
+  // clicked would make the link look broken, and de-emphasis is a default,
+  // not an override of a stated intent.
+  const [showLowerTiers, setShowLowerTiers] = useState(
+    () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
+  )
+  const lowerTierCount = currentIndex > 0 ? currentIndex : 0
+
   return (
     <Grid container spacing={2} id="plans">
       {PLAN_ORDER.map((tier, index) => {
         const entitlements = PLAN_ENTITLEMENTS[tier]
         const pricing = PLAN_PRICING[tier]
+        // Below the current plan: de-emphasized, and behind the disclosure.
+        const isLower = currentIndex >= 0 && index < currentIndex
+        if (isLower && !showLowerTiers) return null
         // An enterprise org's stored `plan` may still be the base tier it was
         // provisioned on (AGL-1110) — marking that tier "Current plan" put a
         // second green badge in the grid next to the Enterprise card's. The
@@ -188,6 +250,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     ? 'primary.main'
                     : 'divider',
                 borderWidth: isCurrent || isRecommended ? 2 : 1,
+                // De-emphasis is visual only — every figure stays readable and
+                // no control is disabled. Dimming a card the customer just
+                // asked to see would be a dark pattern, not a nudge.
+                ...(isLower ? { opacity: 0.66 } : {}),
               }}
             >
               <CardContent>
@@ -238,14 +304,25 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Button
                     fullWidth
                     size="small"
-                    variant={index > currentIndex ? 'contained' : 'outlined'}
-                    color="primary"
+                    // Asymmetric by design (AGL-1859 §2). An upgrade is the
+                    // page's loudest control; a downgrade is a quiet text
+                    // button that opens the deliberate confirm flow the
+                    // billing page owns — never a one-click peer of Upgrade
+                    // sitting at equal weight beside it.
+                    variant={
+                      index > currentIndex
+                        ? 'contained'
+                        : isLower
+                          ? 'text'
+                          : 'outlined'
+                    }
+                    color={isLower ? 'inherit' : 'primary'}
                     // Free has no Stripe price to check out; moving down to
                     // it means canceling the subscription (Stripe portal,
                     // not built yet).
                     disabled={tier === 'free'}
                     onClick={() => onSelect(tier)}
-                    sx={{ mb: 1.5 }}
+                    sx={{ mb: 1.5, ...(isLower ? { color: 'text.secondary' } : {}) }}
                   >
                     {/* AGL-1178: while pre-release, the Free card must not
                         promise the price is permanent — no price locks, no
@@ -389,6 +466,11 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
           </Grid>
         )
       })}
+      <LowerTierDisclosure
+        count={lowerTierCount}
+        expanded={showLowerTiers}
+        onToggle={() => setShowLowerTiers((shown) => !shown)}
+      />
       {/* Enterprise (AGL-1118): custom-priced, so it shows what it includes
           and how to get it — never a headline price or a checkout button. */}
       <Grid size={{ xs: 12 }}>
