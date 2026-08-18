@@ -31,6 +31,7 @@ import {
   assertBoundedWinbackCoupon,
   CHURN_SURVEY_DETAIL_MAX_LENGTH,
   CHURN_SURVEY_REASONS,
+  downsellTargetPlan,
   RETENTION_COLLECTION,
   RETENTION_SURFACES,
   WINBACK_DURATION_MONTHS,
@@ -131,17 +132,34 @@ async function handler(request: Request): Promise<Response> {
       // which Firestore rejects).
       const rawDetail = typeof body?.detail === 'string' ? body.detail.trim() : ''
       const detail = rawDetail.slice(0, CHURN_SURVEY_DETAIL_MAX_LENGTH)
+      const plan = (orgSnapshot.get('plan') as string | undefined) ?? null
       const surveyRef = retention.doc()
       await surveyRef.create({
         kind: 'churn_survey',
         surface,
         reason,
         ...(detail ? { detail } : {}),
-        plan: (orgSnapshot.get('plan') as string | undefined) ?? null,
+        plan,
         uid: decoded.uid,
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
-      return Response.json({ ok: true, funnelId: surveyRef.id }, { status: 200 })
+      // The next two steps' TERMS ride the survey response rather than being
+      // decided in the browser. The dialog renders what it is told: which tier
+      // to offer, what the discount is, and whether the org still has its one
+      // winback. A client that computed any of these would eventually offer a
+      // tier the server refuses, or a discount the guard will not mint.
+      const winbackUsed = (await retention.doc('winback').get()).exists
+      return Response.json(
+        {
+          ok: true,
+          funnelId: surveyRef.id,
+          downsellPlan: downsellTargetPlan(plan),
+          winbackAvailable: !winbackUsed,
+          winbackPercentOff: WINBACK_PERCENT_OFF,
+          winbackDurationMonths: WINBACK_DURATION_MONTHS,
+        },
+        { status: 200 },
+      )
     }
 
     // --- winback -----------------------------------------------------------

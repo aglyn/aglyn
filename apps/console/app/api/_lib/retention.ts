@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+// The CLIENT barrel, deliberately: this module is isomorphic. The funnel
+// dialog needs the same closed reason set and the same downsell answer the
+// routes enforce, and a second copy on the client is how the two drift until
+// the browser offers a tier the server refuses. Nothing here touches the
+// Admin SDK or Stripe — those live in the route — so the import costs the
+// routes nothing and buys the dialog one source of truth.
+import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn'
 
 /**
  * Retention-funnel primitives (AGL-1863 / AGL-1859 — Zach's twice-given

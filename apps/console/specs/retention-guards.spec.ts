@@ -31,7 +31,7 @@
 
 export {}
 
-jest.mock('@aglyn/aglyn/server', () => ({
+jest.mock('@aglyn/aglyn', () => ({
   __esModule: true,
   // The REAL ladder — a hand-copied list here would let the downsell answer
   // drift from the tiers the product sells.
