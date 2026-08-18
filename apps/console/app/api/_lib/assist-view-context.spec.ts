@@ -26,7 +26,8 @@ import {
   safeOrgFacts,
   sanitiseId,
   sanitiseRoute,
-  viewContextBlock,
+  viewFactsBlock,
+  viewScreenBlock,
   visibleAssistText,
 } from './assist-view-context'
 
@@ -87,12 +88,9 @@ describe('GUARD: page context never carries another org’s data or a secret', (
     const facts = safeOrgFacts(org)
     expect(facts).toEqual({ name: 'Acme', plan: 'pro' })
 
-    const block = viewContextBlock(describeView('/acme/billing'), {
-      route: '/acme/billing',
-      hostId: '',
-      orgSlug: 'acme',
-      ...facts,
-    })
+    const block =
+      viewScreenBlock(describeView('/acme/billing')) +
+      viewFactsBlock({ route: '/acme/billing', hostId: '', orgSlug: 'acme', ...facts })
     for (const secret of [
       'cus_SECRET',
       'owner@acme.test',
@@ -128,13 +126,9 @@ describe('GUARD: page context never carries another org’s data or a secret', (
     expect(cleaned).not.toContain('`')
     expect(cleaned).not.toContain(ASSIST_ACTION_FENCE)
 
-    const block = viewContextBlock(describeView(hostile), {
-      route: cleaned,
-      hostId: '',
-      orgSlug: 'acme',
-      name: '',
-      plan: '',
-    })
+    const block =
+      viewScreenBlock(describeView(hostile)) +
+      viewFactsBlock({ route: cleaned, hostId: '', orgSlug: 'acme', name: '', plan: '' })
     expect(block).not.toContain(ASSIST_ACTION_FENCE)
     expect(block.split('\n').some((line) => line.startsWith('Ignore previous'))).toBe(
       false,
@@ -371,15 +365,11 @@ describe('the proposal never reaches the user as raw text', () => {
   })
 })
 
-describe('viewContextBlock', () => {
+describe('the view blocks', () => {
   it('names the screen, both disclosure layers, and the action ids', () => {
-    const block = viewContextBlock(describeView('/acme/billing'), {
-      route: '/acme/billing',
-      hostId: '',
-      orgSlug: 'acme',
-      name: 'Acme',
-      plan: 'pro',
-    })
+    const block =
+      viewScreenBlock(describeView('/acme/billing')) +
+      viewFactsBlock({ route: '/acme/billing', hostId: '', orgSlug: 'acme', name: 'Acme', plan: 'pro' })
     expect(block).toContain('Billing & plans')
     expect(block).toContain('What the user can do here:')
     expect(block).toContain('Under the hood')
@@ -387,38 +377,71 @@ describe('viewContextBlock', () => {
   })
 
   it('tells the model to stay quiet where there is nothing to propose', () => {
-    const themed = viewContextBlock(describeView('/acme/hosts/h/theme'), {
-      route: '/acme/hosts/h/theme',
-      hostId: 'h',
-      orgSlug: 'acme',
-      name: '',
-      plan: '',
-    })
+    const themed = viewScreenBlock(describeView('/acme/hosts/h/theme'))
     expect(themed).toContain('no proposable actions')
 
-    const unknown = viewContextBlock(describeView('/acme/nowhere-at-all/deep/path'), {
-      route: '/acme/nowhere-at-all/deep/path',
-      hostId: '',
-      orgSlug: 'acme',
-      name: '',
-      plan: '',
-    })
+    const unknown = viewScreenBlock(describeView('/acme/nowhere-at-all/deep/path'))
     expect(unknown).toContain('not in the assistant’s screen index')
     expect(unknown).toContain('Do not emit an action block')
   })
 
-  it('is stable for a route across users and turns — the cache breakpoint depends on it', () => {
-    // If this block varied per user or per question, giving it its own
-    // breakpoint would write a cache entry per request and never read one.
-    const facts = {
+  it('GUARD: the cached block is tenant-agnostic — no workspace, plan or host in it', () => {
+    // The whole caching design. Fold the workspace name or plan into the
+    // cached block and the prefix becomes unique per tenant, so on a shared
+    // console every org warms its own copy and the entry is usually cold
+    // when it matters. This is the assertion that keeps the block a pure
+    // function of the route.
+    const view = describeView('/acme/hosts/host123/screens')
+    const screen = viewScreenBlock(view)
+    // No tenant VALUES...
+    for (const value of ['Acme', 'host123', '/acme/hosts/host123/screens']) {
+      expect(screen).not.toContain(value)
+    }
+    // ...and none of the LABELS that would carry them, which is the check
+    // that still holds when a workspace happens to be named after a word
+    // the screen description uses.
+    for (const label of [
+      'Console page path:',
+      'Workspace URL slug:',
+      'Selected site (host) id:',
+      'Workspace name:',
+      'Workspace plan:',
+    ]) {
+      expect(screen).not.toContain(label)
+    }
+    // Two different workspaces on the same screen get a byte-identical
+    // block, which is what makes one cache entry serve both.
+    expect(viewScreenBlock(describeView('/beta-corp/hosts/other/screens'))).toBe(
+      screen,
+    )
+  })
+
+  it('FORCED RED: putting the facts back in the cached block breaks tenant-agnosticism', () => {
+    const view = describeView('/acme/hosts/host123/screens')
+    const folded =
+      viewScreenBlock(view) +
+      viewFactsBlock({
+        route: '/acme/hosts/host123/screens',
+        hostId: 'host123',
+        orgSlug: 'acme',
+        name: 'Acme',
+        plan: 'pro',
+      })
+    expect(folded).toContain('Acme')
+    expect(viewScreenBlock(view)).not.toContain('Acme')
+  })
+
+  it('the facts block carries what the screen block must not', () => {
+    const facts = viewFactsBlock({
       route: '/acme/hosts/host123/screens',
       hostId: 'host123',
       orgSlug: 'acme',
       name: 'Acme',
       plan: 'pro',
-    }
-    const view = describeView(facts.route)
-    expect(viewContextBlock(view, facts)).toBe(viewContextBlock(view, facts))
+    })
+    expect(facts).toContain('/acme/hosts/host123/screens')
+    expect(facts).toContain('Acme')
+    expect(facts).toContain('pro')
   })
 })
 

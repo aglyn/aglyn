@@ -384,17 +384,43 @@ export const ASSIST_VIEWS: readonly AssistView[] = [
     screen: 'Data — datasets shared across the whole workspace.',
     plain: [
       'Structured lists defined once here can be used by any site in the workspace.',
+      'If a list only belongs to one site, define it on that site’s own Data page instead.',
+      'Define the fields before building the screen that displays them — screens bind to fields that already exist.',
     ],
-    technical: ['Route: /[orgSlug]/data. The per-site view is /[orgSlug]/hosts/[host]/data.'],
-    actions: [],
+    technical: [
+      'Route: /[orgSlug]/data. The per-site view is /[orgSlug]/hosts/[host]/data.',
+      'Workspace datasets are visible to every site in the workspace, so a field change here reaches all of them.',
+    ],
+    actions: [
+      orgAction(
+        'open.org.data',
+        'Open Data',
+        'the datasets shared across this workspace',
+        '/[orgSlug]/data',
+      ),
+    ],
   },
   {
     key: 'org-media',
     match: /^\/[^/]+\/media(\/|$)/,
     screen: 'Media — images and files for this workspace.',
-    plain: ['Upload once here and use the file on any site in the workspace.'],
-    technical: ['Route: /[orgSlug]/media. The per-site library is /[orgSlug]/hosts/[host]/media.'],
-    actions: [],
+    plain: [
+      'Upload once here and use the file on any site in the workspace.',
+      'If the file belongs to one site only, upload it on that site’s own Media page instead.',
+      'Files are referenced by the screens that use them, so replacing a file changes it everywhere it appears.',
+    ],
+    technical: [
+      'Route: /[orgSlug]/media. The per-site library is /[orgSlug]/hosts/[host]/media.',
+      'Workspace media is shared across every site in the workspace; site media is scoped to that site.',
+    ],
+    actions: [
+      orgAction(
+        'open.org.media',
+        'Open Media',
+        'the images and files shared across this workspace',
+        '/[orgSlug]/media',
+      ),
+    ],
   },
   {
     key: 'org-plugins',
@@ -526,24 +552,25 @@ export function safeOrgFacts(org: Record<string, unknown>): {
 }
 
 /**
- * The per-view system block. Stable for a given route across every user and
- * every turn, which is what makes it worth its own cache breakpoint: the
- * volatile half of the prompt (docs retrieval, which follows the question)
- * sits after it and cannot invalidate it.
+ * The per-VIEW system block — the screen description, and nothing about who
+ * is looking at it.
+ *
+ * The split from `viewFactsBlock` is the whole caching design, and it was
+ * not the first shape this took. Folding the workspace name, plan, slug and
+ * host id in here reads more natural and quietly destroys the cache: a
+ * prefix carrying the tenant's name is unique to that tenant, so on a
+ * multi-tenant console every org warms its own copy and the entry is usually
+ * cold when it matters. Derived purely from the route, the same block serves
+ * every workspace asking anything on that screen — which on a shared console
+ * is the difference between a cache that pays and one that mostly writes.
+ *
+ * So this block is a pure function of the registry, and everything that
+ * varies per request lives after the breakpoint.
  */
-export function viewContextBlock(
-  view: AssistView | null,
-  facts: { route: string; hostId: string; orgSlug: string; name: string; plan: string },
-): string {
-  const lines: string[] = ['Where the user is right now:']
-  lines.push(`- Console page path: ${facts.route}`)
-  if (facts.orgSlug) lines.push(`- Workspace URL slug: ${facts.orgSlug}`)
-  if (facts.hostId) lines.push(`- Selected site (host) id: ${facts.hostId}`)
-  if (facts.name) lines.push(`- Workspace name: ${facts.name}`)
-  if (facts.plan) lines.push(`- Workspace plan: ${facts.plan}`)
-
+export function viewScreenBlock(view: AssistView | null): string {
+  const lines: string[] = []
   if (view) {
-    lines.push('', `This screen: ${view.screen}`)
+    lines.push(`This screen: ${view.screen}`)
     if (view.plain.length) {
       lines.push('What the user can do here:')
       for (const line of view.plain) lines.push(`- ${line}`)
@@ -569,11 +596,33 @@ export function viewContextBlock(
     }
   } else {
     lines.push(
-      '',
       'This exact screen is not in the assistant’s screen index. Answer from the documentation and describe navigation in words rather than asserting what this page contains.',
       'Do not emit an action block.',
     )
   }
+  return lines.join('\n')
+}
+
+/**
+ * The per-REQUEST facts. Everything here varies by workspace or by page, so
+ * it sits after the last cache breakpoint where it invalidates nothing.
+ *
+ * Only `safeOrgFacts`' two allowlisted fields and the three sanitised client
+ * strings ever reach this — see the module header.
+ */
+export function viewFactsBlock(facts: {
+  route: string
+  hostId: string
+  orgSlug: string
+  name: string
+  plan: string
+}): string {
+  const lines: string[] = ['Where the user is right now:']
+  lines.push(`- Console page path: ${facts.route}`)
+  if (facts.orgSlug) lines.push(`- Workspace URL slug: ${facts.orgSlug}`)
+  if (facts.hostId) lines.push(`- Selected site (host) id: ${facts.hostId}`)
+  if (facts.name) lines.push(`- Workspace name: ${facts.name}`)
+  if (facts.plan) lines.push(`- Workspace plan: ${facts.plan}`)
   return lines.join('\n')
 }
 

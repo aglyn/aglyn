@@ -550,19 +550,12 @@ describe('the green path', () => {
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
 
-    // The exchange carries the prose; the signal carries the numbers
-    // (AGL-1972). One id addresses both.
     const exchange = mockDocs.get(
       `orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`,
     )
     expect(exchange).toMatchObject({
-      answer: 'Open the screen, then press Publish.',
-    })
-    const signal = mockDocs.get(
-      `orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`,
-    )
-    expect(signal).toMatchObject({
       tier: 'free',
+      answer: 'Open the screen, then press Publish.',
       inputTokens: 900,
       outputTokens: 42,
       feedback: null,
@@ -609,11 +602,10 @@ describe('the green path', () => {
     expect(system).toContain('What the user can do here:')
     expect(system).toContain('Under the hood')
     expect(system).toContain('id "open.host.screens"')
-    // `tier` lives on the signal half since AGL-1972.
-    const signalPath = [...mockDocs.keys()].find((path) =>
-      path.startsWith(`orgs/${PRO_ORG}/assistSignals/`),
+    const exchangePath = [...mockDocs.keys()].find((path) =>
+      path.startsWith(`orgs/${PRO_ORG}/assistExchanges/`),
     )
-    expect(mockDocs.get(signalPath ?? '')).toMatchObject({ tier: 'entitled' })
+    expect(mockDocs.get(exchangePath ?? '')).toMatchObject({ tier: 'entitled' })
   })
 
   it('GUARD: a hostile route cannot write instructions into the system prompt', async () => {
@@ -663,11 +655,12 @@ describe('the green path', () => {
     }
   })
 
-  it('caches stable-to-volatile: a breakpoint after the static prefix AND after the view', async () => {
-    // Caching is a prefix match, so the second breakpoint covers both blocks
-    // together — the whole per-route prefix, identical for every user asking
-    // anything on this route. Docs retrieval follows the QUESTION and must
-    // come last, where it can invalidate nothing behind it.
+  it('caches stable-to-volatile across four blocks, breakpoints after the first two', async () => {
+    // Caching is a prefix match, so breakpoint 2 covers blocks 1+2. The
+    // split between block 2 (route-derived) and block 3 (tenant facts) is
+    // what makes the cached prefix shareable across workspaces instead of
+    // one cold copy per org. Docs retrieval follows the QUESTION and must
+    // come last, where it invalidates nothing behind it.
     seedOrgs()
     armUpstream()
     const response = await POST(post(QUESTION_BODY(PRO_ORG)))
@@ -676,12 +669,22 @@ describe('the green path', () => {
     const system = request.system as Array<{ text: string; cache_control?: unknown }>
     expect(request.stream).toBe(true)
     expect(request.model).toBe('claude-sonnet-5')
+    expect(system).toHaveLength(4)
     expect(system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
-    expect(system[1].text).toContain('Where the user is right now')
-    // The volatile block is last and carries NO breakpoint.
-    expect(system[system.length - 1].text).toContain('<doc url=')
-    expect(system[system.length - 1].cache_control).toBeUndefined()
+    expect(system[1].text).toContain('This screen: Screens')
+    // GUARD: the cached prefix names no workspace. Fold the org in here and
+    // the entry stops being shareable — the symptom is a cache that mostly
+    // writes, which costs more than not caching at all.
+    expect(system[1].text).not.toContain('Pros')
+    expect(system[1].text).not.toContain('/acme/hosts/host-1/screens')
+    // Block 3 is where those live, after the last breakpoint.
+    expect(system[2].cache_control).toBeUndefined()
+    expect(system[2].text).toContain('Where the user is right now')
+    expect(system[2].text).toContain('Pros')
+    // Block 4 is retrieval, last and uncached.
+    expect(system[3].cache_control).toBeUndefined()
+    expect(system[3].text).toContain('<doc url=')
   })
 
   it('a free request still caches its static prefix on its own', async () => {
@@ -865,15 +868,12 @@ describe('the green path', () => {
     const failure = events.find((event) => event.type === 'error')
     expect(String(failure?.error)).toMatch(/could not answer/i)
     const done = events.find((event) => event.type === 'done')
+    const exchange = mockDocs.get(
+      `orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`,
+    )
     // Still recorded: the tokens were spent, and the refusal RATE is the
-    // signal that the prompt or the corpus needs work — which is why
-    // `stopReason` sits on the non-expiring half (AGL-1972).
-    expect(
-      mockDocs.get(`orgs/${FREE_ORG}/assistExchanges/${done?.exchangeId}`),
-    ).toMatchObject({ answer: '' })
-    expect(
-      mockDocs.get(`orgs/${FREE_ORG}/assistSignals/${done?.exchangeId}`),
-    ).toMatchObject({ stopReason: 'refusal' })
+    // signal that the prompt or the corpus needs work.
+    expect(exchange).toMatchObject({ stopReason: 'refusal', answer: '' })
   })
 
   it('a truncated answer says so instead of just stopping', async () => {

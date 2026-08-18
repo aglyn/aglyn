@@ -45,7 +45,8 @@ import {
   safeOrgFacts,
   sanitiseId,
   sanitiseRoute,
-  viewContextBlock,
+  viewFactsBlock,
+  viewScreenBlock,
   visibleAssistText,
 } from '../../_lib/assist-view-context'
 
@@ -80,21 +81,31 @@ import {
  * ceiling. `effort: low` is the documented posture for a scoped chat
  * workload; both are asserted in the spec so a silent default change fails.
  *
- * Prompt caching: the system array is ordered stable-to-volatile and carries
- * TWO breakpoints — one after the static prefix, one after the per-view
- * block. Caching is a prefix match, so the second covers both blocks
- * together, which is what makes level 2 cost less per turn than it looks:
- * the view block is identical for every user asking anything on the same
- * route, so the whole per-route prefix is written once and read thereafter,
- * while docs retrieval — the one part that follows the QUESTION — sits last
- * where it can invalidate nothing.
+ * Prompt caching: the system array is ordered stable → volatile across FOUR
+ * blocks, with breakpoints after the first two.
  *
- * Two breakpoints rather than one because a request without a view block
- * (free tier, unknown route) would otherwise get no cache at all: the first
- * keeps the global prefix cacheable on its own. `usage.cacheReadTokens` on
- * the exchange doc is where to confirm any of this is live — the minimum
- * cacheable prefix is model-dependent (1024 tokens on Sonnet 5, 512 on
- * Opus 5) and a prefix under it caches silently not at all.
+ *   1. static prompt        [breakpoint]  identical everywhere
+ *   2. screen description   [breakpoint]  identical per ROUTE, any tenant
+ *   3. request facts                      workspace, plan, host, path
+ *   4. docs retrieval                     follows the question
+ *
+ * Caching is a prefix match, so breakpoint 2 covers blocks 1+2 together. The
+ * split between 2 and 3 is the whole design and it is easy to get wrong:
+ * folding the workspace name and plan into block 2 reads more natural and
+ * makes the prefix unique per tenant, so on a shared console every org warms
+ * its own copy and the entry is usually cold when it matters. Derived purely
+ * from the route, block 2 serves every workspace on that screen.
+ *
+ * Two breakpoints rather than one because a request with no screen block
+ * (free tier, unrecognised route) would otherwise get no cache at all.
+ *
+ * Measured: block 1 is ~933 tokens and blocks 1+2 come to ~1,030–1,190
+ * depending on the screen, against Sonnet 5's 1,024-token minimum. So it
+ * caches, with little headroom — and on a shorter screen description it may
+ * not. `usage.cacheReadTokens` on the exchange doc is the only thing that
+ * settles it in production; a prefix under the minimum caches silently not
+ * at all. Note the minimum moves with the model (512 on Opus 5, 4,096 on
+ * Opus 4.6), so ASSIST_MODEL changes the arithmetic.
  */
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
@@ -287,7 +298,10 @@ function buildViewBlock(
   context: NonNullable<AssistRequestBody['context']>,
   org: Record<string, unknown>,
 ): {
-  block: string
+  /** Cacheable, route-derived, tenant-agnostic. */
+  screen: string
+  /** Per-request; sits after the last breakpoint. */
+  facts: string
   view: ReturnType<typeof describeView>
   scope: { orgSlug: string; hostId: string }
 } {
@@ -306,13 +320,8 @@ function buildViewBlock(
   const view = describeView(route)
   const { name, plan } = safeOrgFacts(org)
   return {
-    block: viewContextBlock(view, {
-      route,
-      hostId,
-      orgSlug,
-      name,
-      plan,
-    }),
+    screen: viewScreenBlock(view),
+    facts: viewFactsBlock({ route, hostId, orgSlug, name, plan }),
     view,
     scope: { orgSlug, hostId },
   }
@@ -490,15 +499,16 @@ async function handler(request: Request): Promise<Response> {
             text: STATIC_SYSTEM,
             cache_control: { type: 'ephemeral' },
           },
-          ...(guide
+          ...(guide?.screen
             ? [
                 {
                   type: 'text',
-                  text: guide.block,
+                  text: guide.screen,
                   cache_control: { type: 'ephemeral' },
                 },
               ]
             : []),
+          ...(guide ? [{ type: 'text', text: guide.facts }] : []),
           ...(docsBlock ? [{ type: 'text', text: docsBlock }] : []),
         ],
         messages,
