@@ -416,10 +416,18 @@ export function counterNoticeClock(receivedAtMs: number): CounterNoticeClock {
  * `restored` row is also done: the put-back already happened, and a scheduler
  * that kept acting on it would re-lift a suspension staff may have re-imposed
  * for an entirely different reason.
+ *
+ * Returns a plain `boolean`, NOT a `status is CounterNoticeStatus` predicate,
+ * and the distinction is not cosmetic. This answers a question about a SUBSET
+ * of the statuses — `restored` is a perfectly valid `CounterNoticeStatus` and
+ * still gets `false` — so a type predicate here would be a lie the compiler
+ * believes: narrowing on it would hand a caller a type that includes the very
+ * values the function just rejected. `strictNullChecks` is off repo-wide,
+ * which already makes boolean-discriminant narrowing unreliable in this
+ * codebase; a predicate that is wrong even when narrowing DOES fire is worse
+ * than none. Callers ask this as a question and branch on the answer.
  */
-export function counterNoticeAwaitsRestoration(
-  status: unknown,
-): status is CounterNoticeStatus {
+export function counterNoticeAwaitsRestoration(status: unknown): boolean {
   return (
     isCounterNoticeStatus(status) &&
     status !== 'restored' &&

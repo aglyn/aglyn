@@ -60,19 +60,22 @@ export * from './abuse-report'
 // answers a notice, and the strike ledger that conditions the safe harbour.
 export * from './dmca-counter-notice'
 export * from './repeat-infringer'
-// `addBusinessDays` is defined by BOTH './support-tiers' and
-// './dmca-counter-notice', so two `export *` made the name ambiguous and
-// TS2308'd this barrel — and with it every tsconfig that reads it.
+// `addBusinessDays` briefly existed TWICE — once here in './support-tiers'
+// and once in './dmca-counter-notice' — and two `export *` made the name
+// ambiguous, TS2308'ing this barrel and every tsconfig that reads it. The
+// interleave was fixed twice in parallel: once by naming a winner here, and
+// once by deleting the second definition so './dmca-counter-notice' imports
+// this one. Only the deletion survives, so the disambiguating re-export that
+// stood on this line is gone with it — `export *` is unambiguous again.
 //
-// Resolved the way the compiler suggests, by naming a winner, rather than by
-// deleting one of the two. They are behaviourally equivalent today but they
-// answer to different masters: one is our support SLA, the other is the
-// §512(g)(2)(C) put-back clock. Collapsing them would mean a later tweak to
-// the support window silently moving a statutory legal deadline. Neither
-// module imports the name from this barrel — the DMCA spec imports it from
-// './dmca-counter-notice' directly — so this only decides the barrel, and
-// nothing observable changes.
-export { addBusinessDays } from './support-tiers'
+// The concern that argued for keeping two copies is worth answering rather
+// than dropping: a later tweak to the SUPPORT SLA window must never silently
+// move the §512(g)(2)(C) put-back deadline. It cannot. This function embeds
+// no window — it is "add N business days", and N is the argument. The two
+// windows live in their own constants (`SUPPORT_*` there,
+// `COUNTER_NOTICE_*_BUSINESS_DAYS` in the DMCA module) and never meet. What
+// SHOULD stay shared is the day arithmetic itself: two copies of a weekend
+// rule are two chances to disagree about which day a deadline falls on.
 export * from './org-override-reason'
 export * from './host-tokens'
 export * from './variables'
