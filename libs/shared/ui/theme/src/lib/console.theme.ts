@@ -339,7 +339,13 @@ const baseOptions: ThemeOptions = {
     MuiTab: {
       styleOverrides: {
         root: ({ theme, ownerState }) => {
-          const textColor = ownerState?.textColor
+          // Brackets, not dots: `textColor` comes from an index signature and
+          // `json-editor` compiles this file under
+          // `noPropertyAccessFromIndexSignature` (paths resolve to source, so
+          // a consumer's flags check its dependencies). Dot access reds that
+          // build while this project's own stays green — AGL-1323, and the
+          // same trap create-responsive-theme.ts already carries a note for.
+          const textColor = ownerState?.['textColor']
           const accent =
             textColor === 'primary' || textColor === 'secondary'
               ? accentTextColor(theme, textColor)
