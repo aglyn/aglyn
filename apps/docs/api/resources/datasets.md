@@ -289,16 +289,34 @@ single `400`:
 `fields` maps each failing field id to its reason — see
 [validation errors](../conventions.md#validation-errors).
 
-Plan quotas — records per dataset, dataset storage — are **not** enforced on this
-path, so a bulk import through the API can carry an organization past its included
-storage and into [metered overage](../rate-limits.md#monthly-quota--overage).
+## Plan quotas on record writes {#record-plan-gates}
+
+Creating a record is checked against **both** of the plan's data limits, the same two
+the console enforces on the same write:
+
+| `code` | Means | What fixes it |
+| --- | --- | --- |
+| `record_quota` | The dataset already holds every record the plan includes. The message names the limit. | Upgrade. |
+| `data_storage_quota` | Dataset storage is exhausted, or the plan includes none at all. The message names the included size. | Upgrade. |
+
+On the plans that meter data storage — which is every plan that includes the API —
+crossing the included band **bills as
+[overage](../rate-limits.md#monthly-quota--overage) rather than refusing**, so a bulk
+import runs to completion and shows up on the invoice. The refusals above are what a
+plan that hard-caps answers instead.
+
+Like the dataset gates, **neither consumes an `Idempotency-Key`**: both clear on an
+upgrade, and the retry that should then succeed must not replay the refusal. The
+mirror also holds — a create that consumed the last included row still **replays** on
+retry rather than being refused by the quota it just filled, which is what makes a
+bulk import safe to resume from where it stopped.
 
 ## Errors
 
 | Status | `type` | When |
 | --- | --- | --- |
 | `400` | `bad_request` | `code: "validation_failed"` — the record doesn't satisfy the model, or the dataset body is missing `name`/`fields` or carries an oversized `model`. |
-| `403` | `plan_required` | `code: "data_store"` — the plan doesn't include datasets. `code: "dataset_quota"` — every included dataset slot is used. |
+| `403` | `plan_required` | `code: "data_store"` — the plan doesn't include datasets. `code: "dataset_quota"` — every included dataset slot is used. `code: "record_quota"` — the dataset holds every record the plan includes. `code: "data_storage_quota"` — dataset storage is exhausted. See [plan quotas on record writes](#record-plan-gates). |
 | `403` | `insufficient_scope` | Key lacks `datasets:read` / `datasets:write`. |
 | `404` | `not_found` | `"No such dataset"` or `"No such record"`. |
 | `405` | `method_not_allowed` | Method not supported on that path. The `Allow` header lists what is: `GET, POST` on `/v1/datasets`, `GET, PATCH, DELETE` on one dataset. |
