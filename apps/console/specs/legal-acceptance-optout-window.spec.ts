@@ -41,6 +41,16 @@ import { join } from 'path'
 // The SOURCE module, not the `@aglyn/tenant-data-admin` barrel: the barrel
 // pulls `next/cache` in through the render-cache module, which needs a Next
 // request context this plain node spec has no business standing up.
+//
+// That relative path is what `@nx/enforce-module-boundaries` forbids, and it
+// fails as an ERROR rather than a warning — `console:lint` was red on main
+// from the moment this landed (AGL-2387). Suppressed at the line rather than
+// satisfied, because satisfying it means importing the barrel, which is the
+// one thing the paragraph above says not to do. Same call, and the same
+// spelling, as the five other places this repo makes it: both middlewares,
+// `csp-img-src-report-only.spec.ts` and `csp-script-src-report-only.spec.ts`
+// next door, and the generated plugin manifests.
+// eslint-disable-next-line @nx/enforce-module-boundaries
 import { ARBITRATION_OPT_OUT_DAYS } from '../../../libs/tenant/data/admin/src/lib/server/legal-acceptance'
 import { LEGAL_DOCUMENT_VERSION } from '../constants/legal-documents'
 
