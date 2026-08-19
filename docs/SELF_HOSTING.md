@@ -19,6 +19,15 @@ track.
 ## Prerequisites
 
 - Docker with Compose v2 (BuildKit enabled — default on current Docker).
+- **At least 8 GB of memory available to Docker**, and ideally 4 CPUs. This is
+  the prerequisite most likely to bite you, because Docker Desktop's default
+  allocation on macOS and Windows is 2 CPUs / 4 GB and **the build does not fit
+  in it**. Measured: at 4 GB neither image builds — the Next production build
+  is killed by the OOM killer every time, in about a minute and a half — and at
+  12 GB both build in roughly six minutes including `npm ci`. The exact floor
+  between those two numbers has not been measured; 8 GB is the recommendation,
+  not a tested boundary. Docker Desktop → Settings → Resources. Around 10 GB of
+  disk for the build cache and both images.
 - A Google account to create a free-tier Firebase project.
 - Node ≥ 24 + the Firebase CLI **on your workstation** (one-time setup steps
   only; the containers don't need them).
@@ -47,7 +56,7 @@ cp .env.selfhost.example .env.selfhost
 ```
 
 Fill it in following the comments — the Firebase blocks from step 1 first,
-since the setup scripts in step 3 read them. Three rules matter:
+since the setup scripts in step 3 read them. These rules matter:
 
 - `NEXT_PUBLIC_*` values are **baked into the client bundles at image build
   time**. Changing one means rebuilding the images, not just restarting.
@@ -59,14 +68,56 @@ since the setup scripts in step 3 read them. Three rules matter:
   not control, and makes every published site advertise that address as its
   canonical origin to Google, feed readers and inboxes (AGL-2121).
 - `AGLYN_TENANT_HOST_CNAME` and `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` are
-  **two variables**, and `.env.selfhost.example` ships only the second. The
-  prefixed one is what the console displays and verifies in the custom-domain
-  wizard (`apps/console/utils/tenant-dns.ts`, default `sites.aglyn.app`); the
-  unprefixed one is what the tenant middleware matches the incoming `Host`
-  against, mapped through the `env` block of `apps/tenant/next.config.js` and
-  therefore fixed at image-build time. **Set both, to the same value**, before
-  `docker compose build` — the host-resolution branch AGL-2177 restored has
-  nothing to match against otherwise.
+  **two variables**, both in the template, adjacent — **set both, to the same
+  value**. The prefixed one is what the console displays and verifies in the
+  custom-domain wizard (`apps/console/utils/tenant-dns.ts`, default
+  `sites.aglyn.app`); the unprefixed one is what the tenant middleware matches
+  the incoming `Host` against, mapped through the `env` block of
+  `apps/tenant/next.config.js` and therefore fixed at image-build time — so it
+  must be right before `docker compose build`, not merely before `up`. Leave
+  the unprefixed one blank and the host-resolution branch AGL-2177 restored has
+  nothing to match against, so every visitor to every published site is
+  redirected to your console (AGL-2424).
+
+- **Set the operator identity.** `NEXT_PUBLIC_OPERATOR_NAME` and
+  `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` are not branding — see below.
+
+### Who runs this install
+
+Fill in the **Operator identity** block. These values name *you* on the pages
+where naming the wrong party has consequences:
+
+| Surface | What it shows |
+| --- | --- |
+| `/api/report-abuse` | Public, unauthenticated. Anyone — a bank's fraud team, a browser vendor, a copyright holder — can reach it and report a site you host. |
+| `/api/counter-notice` | Public. A subscriber whose material you removed sends a §512(g) counter-notice here, **under penalty of perjury**, consenting to the jurisdiction where *you* may be found. |
+| Lockdown 503 | The visitor-facing page a suspended site serves. |
+| Quarantine notice | Shown to the customer whose media file you disabled. |
+| Sanctions 451 | The regional refusal page. |
+
+Before this was configuration, all five printed `Aglyn` and `support@aglyn.com`
+regardless of who ran the install. That meant a self-hosted deployment
+published a DMCA intake directing third parties to send statutory notices to
+Aglyn — about content Aglyn does not host, cannot see and cannot remove, while
+the sender's clock ran. **There is no fallback to Aglyn's addresses.** Leave
+these unset and the pages say so plainly rather than naming somebody else.
+
+Because they are `NEXT_PUBLIC_*`, they are compiled into the client bundles:
+set them **before `docker compose build`**, not just before `up`.
+
+### Your DMCA position is your own
+
+The counter-notice flow, the 10–14 business-day put-back clock and the
+repeat-infringer strike ledger all work on your install. **Aglyn's designated
+agent registration does not extend to you.** 17 U.S.C. §512(c)(2) makes
+registering an agent with the U.S. Copyright Office a *precondition* of the
+safe harbour, not a formality — a provider without one does not get the
+limitation on liability however well it handles notices.
+
+So the `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` values default to unset, and unset
+means the product asserts nothing. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED`
+must be exactly `true` before anything claims a registration, and naming an
+agent never implies one. Fill these in only if you have actually filed.
 
 ### Building `apps/docs` as your own documentation (AGL-2124)
 
@@ -137,56 +188,12 @@ npx firebase deploy --only firestore:indexes \
   --project "$FIREBASE_PROJECT_ID" --config cloud/firebase.json
 ```
 
-Composite index builds are asynchronous: `deploy` returning is not "ready".
-Watch Firestore → Indexes until they read **Enabled**.
-
-- `NEXT_PUBLIC_*` values are **baked into the client bundles at image build
-  time**. Changing one means rebuilding the images, not just restarting.
-- `TOKEN_SIGNING_SECRET` must be identical for console and tenant (compose
-  shares one file, so it is). The code fails closed without it.
-- **Set the operator identity.** `NEXT_PUBLIC_OPERATOR_NAME` and
-  `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` are not branding — see below.
-
-### Who runs this install
-
-Fill in the **Operator identity** block. These values name *you* on the pages
-where naming the wrong party has consequences:
-
-| Surface | What it shows |
-| --- | --- |
-| `/api/report-abuse` | Public, unauthenticated. Anyone — a bank's fraud team, a browser vendor, a copyright holder — can reach it and report a site you host. |
-| `/api/counter-notice` | Public. A subscriber whose material you removed sends a §512(g) counter-notice here, **under penalty of perjury**, consenting to the jurisdiction where *you* may be found. |
-| Lockdown 503 | The visitor-facing page a suspended site serves. |
-| Quarantine notice | Shown to the customer whose media file you disabled. |
-| Sanctions 451 | The regional refusal page. |
-
-Before this was configuration, all five printed `Aglyn` and `support@aglyn.com`
-regardless of who ran the install. That meant a self-hosted deployment
-published a DMCA intake directing third parties to send statutory notices to
-Aglyn — about content Aglyn does not host, cannot see and cannot remove, while
-the sender's clock ran. **There is no fallback to Aglyn's addresses.** Leave
-these unset and the pages say so plainly rather than naming somebody else.
-
-Because they are `NEXT_PUBLIC_*`, they are compiled into the client bundles:
-set them **before `docker compose build`**, not just before `up`.
-
-### Your DMCA position is your own
-
-The counter-notice flow, the 10–14 business-day put-back clock and the
-repeat-infringer strike ledger all work on your install. **Aglyn's designated
-agent registration does not extend to you.** 17 U.S.C. §512(c)(2) makes
-registering an agent with the U.S. Copyright Office a *precondition* of the
-safe harbour, not a formality — a provider without one does not get the
-limitation on liability however well it handles notices.
-
-So the `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_*` values default to unset, and unset
-means the product asserts nothing. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED`
-must be exactly `true` before anything claims a registration, and naming an
-agent never implies one. Fill these in only if you have actually filed.
-
 ⚠️ This deploy **deletes anything in your project that is not in the file**.
 That is what you want on a fresh project. On a project you have hand-tuned,
 read [`FIRESTORE_MANUAL_CONFIG.md`](FIRESTORE_MANUAL_CONFIG.md) first.
+
+Composite index builds are asynchronous: `deploy` returning is not "ready".
+Watch Firestore → Indexes until they read **Enabled**.
 
 ### 3c. TTL policies
 
@@ -275,6 +282,30 @@ Every key here is optional and independent. A missing key disables its feature
 | Scheduled jobs (audit archival, erasure, retention sweeps) | `CRON_SECRET` — the job routes stay dormant without it |
 | Customer issue reports → your tracker | `LINEAR_API_KEY`, `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required; unset, the console's "Report an issue" dialog answers 501 and files nowhere |
 
+## Troubleshooting the first build
+
+**`Build process exited due to code 128 and signal SIGKILL`** — followed by
+`NX Running target build for project console failed` and `failed to solve`.
+Nothing in that output says so, but this is the **out-of-memory killer**: the
+build needed more memory than Docker has, and the kernel ended it. Raise
+Docker's memory (Prerequisites above). If you cannot, build the images one at
+a time — `docker compose build console`, then `docker compose build tenant`,
+then `docker compose up` — since `docker compose up --build` builds both
+concurrently and roughly doubles peak demand. Capping Node's heap does **not**
+help: Next builds with Turbopack, which allocates outside the V8 heap that
+`--max-old-space-size` bounds (AGL-2437).
+
+**`npm ci` fails with `EUSAGE … package.json and package-lock.json are not in
+sync`, listing dozens of "Missing:" packages.** The image build must copy the
+repo's `.npmrc` — it sets `legacy-peer-deps=true`, and the lockfile is only
+valid under it. Fixed in AGL-2423; if you see this, your checkout predates that
+fix, so `git pull`.
+
+**`Ports are not available: … bind: address already in use`** — the compose
+file publishes 4200 and 4500 on the host. Something else on your machine has
+one of them (a local dev server, most often). Stop it, or add a
+`docker-compose.override.yml` that maps different host ports.
+
 ## Honest limits
 
 | Area | Self-hosted behavior |
@@ -298,7 +329,9 @@ Every key here is optional and independent. A missing key disables its feature
 | Marketplace | Visible by default and backed by Aglyn's Stripe Connect platform, which you do not have. Browsing works; Buy and payout-onboarding explain themselves only after being clicked. Turn `release_marketplace` off in Remote Config if you do not want it. |
 | Staff / admin surfaces | Built for Aglyn's own operations — the tax-return page in particular carries Aglyn LLC's Texas registration identifiers and is meaningless elsewhere. |
 | Docs site (`apps/docs`) | Not part of `docker compose` — build and publish it separately if you want it. Its configuration is the "Your own docs build" row above. |
-| Deployment shape | **Set `AGLYN_STANDALONE=1` in `.env.selfhost`.** `isDeployedRuntime()` — and the tenant middleware's local copy of it — is what tells the software this is a real deployment rather than a laptop, and it gates the whole host-resolution switch plus the canonical custom-domain redirect. `docker/tenant.Dockerfile` and `docker/console.Dockerfile` set it in their **build** stage; that does not carry into the `runner` stage, and neither `.env.selfhost.example` nor `docker-compose.yml` supplies it at runtime. Without it a stock container reads itself as a developer's machine, matches no host, and 307s every visitor to the configured console (AGL-2177). |
+| Deployment shape | **Nothing to set — the images set it.** `AGLYN_STANDALONE=1` is what tells the software this is a real deployment rather than a laptop; `isDeployedRuntime()` and the tenant middleware's local copy of it gate the whole host-resolution switch plus the canonical custom-domain redirect. Both Dockerfiles now set it in the `runner` stage (AGL-2221), and it is kept out of `.env.selfhost.example` on purpose: compose `env_file` overrides image `ENV`, so a line there would be a way to delete it and silently break serving, whereas image `ENV` survives an env file that never mentions it. It was previously set only in the **build** stage, which does not carry across, so every image built before AGL-2221 ran with it unset and 307'd every visitor to the configured console (AGL-2177). **Rebuild if you are running one.** |
+| Request geo (sanctions + consent region) | `readRequestGeo` reads two headers whose names are now `AGLYN_GEO_COUNTRY_HEADER` / `AGLYN_GEO_REGION_HEADER`, defaulting to Vercel's `x-vercel-ip-country` / `x-vercel-ip-country-region`. On a container nothing sets those, so before AGL-2436 every request had no country and the **embargo gate failed open on all of them** — it logged `[sanctions-geo] FAILING OPEN` once per instance and blocked nothing — while the storefront consent-region endpoint had no region to answer with. Point them at what your proxy sets (`cf-ipcountry` behind Cloudflare; a GeoIP module's header behind Caddy/nginx/Traefik). Baked in at **build** time, because the console's middleware is an edge bundle with no request-time environment. Leave them blank only if you accept that sanctions screening is not running. |
+| Health report `environment` | Was `VERCEL_ENV ?? 'development'`, so `/api/health` on a production container told you — and your monitoring — that it was `development`. It now derives from the deployment shape and reads `production` on a container with `NODE_ENV=production` (AGL-2436). |
 | Custom-domain verification | `/api/domains/verify` has a DEV soft pass that accepts any CNAME, because a laptop has no DNS pointing at a tenant edge. It used to key on `!process.env.VERCEL` — never set on a container — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified: the AGL-733 defect, reinstated. It now keys on `isDevelopmentRuntime()` / `NODE_ENV`, which both Dockerfiles set to `production` in the runner stage (AGL-2180). A relaxation must key on the variable that means "not production", never on the absence of a vendor's. **Upgrade if you run an image built before this.** |
 | Edit-hint bounce | `apps/tenant/app/api/edit-hint/set/route.ts` validates the `return` origin against an allowlist. Aglyn's two console origins are seeded **only when `NEXT_PUBLIC_CONSOLE_URL` is unset**; they used to be unconditional with yours merely added, so an operator could not narrow the list and their tenant runtime kept an open redirect target at a console they do not run (AGL-2176). Name your console and it is the only permitted target. The same variable is the tenant middleware's fallback redirect, so leaving it unset also sends a visitor who lands on an unresolvable host to `app.aglyn.com`. |
 
