@@ -20,6 +20,7 @@ import { checkQuota } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -484,6 +485,17 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           >
             {'Add redirect'}
           </Button>
+          {/* The cap, standing rather than only on refusal (AGL-2113).
+              `redirects.length` is the same count `handleAdd` hands to
+              `checkQuota`, so the readout and the gate cannot disagree. */}
+          <QuotaReadoutComponent
+            ready={org != null}
+            used={redirects.length}
+            limit={
+              checkQuota(org, 'redirectsPerHost', redirects.length).limit
+            }
+            noun="redirect"
+          />
           {/* Inline tester (AGL-375): same matcher as enforcement. */}
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <TextField

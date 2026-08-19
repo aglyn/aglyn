@@ -67,6 +67,15 @@ const CLIENT_ROOTS = [
 const EXEMPT: Record<string, string> = {
   'report-usage':
     'Cron-invoked usage rollup (AGL-635). It is called on a schedule by Vercel Cron against the deployed URL, so there is no in-repo caller and there should not be one — a browser-originated call would let a client decide when usage is billed.',
+  // The three AGL-2115 uncovered. All were already passing, on a comment
+  // apiece, so none is a new exemption in substance — but each is now a
+  // recorded decision instead of an accident of how the grep worked.
+  'usage-alerts':
+    'Cron-invoked threshold sweep (AGL-1528/AGL-2052), scheduled in .github/workflows/scheduled-crons.yml and gated on CRON_SECRET, which no browser holds. It sends the 80%/100% notification and email; a client-triggered run would let a customer decide when they are warned, and re-triggering it is how alert state gets churned. The customer-facing half of this feature IS surfaced — the budget it reads is set on the Billing page through /api/billing/usage-budget.',
+  'usage-email':
+    'Cron-invoked monthly usage summary, scheduled alongside the alerts sweep and gated on CRON_SECRET. Nothing a customer does should send themselves a billing email on demand; the same figures are readable any time on the Billing page.',
+  webhook:
+    'Stripe webhook endpoint. Called by Stripe with a signed payload and verified against STRIPE_WEBHOOK_SECRET — it is the ONLY thing that fulfils a subscription change, so a browser-originated call is precisely what the signature check exists to refuse.',
 }
 
 /** Routes we know exist, so a collapsed sweep cannot pass vacuously. */
@@ -100,22 +109,80 @@ function billingRoutes(): string[] {
 function clientCallers(route: string): string[] {
   let output = ''
   try {
+    // `-n`, not `-l` (AGL-2115). The line is needed to tell a call from a
+    // comment ABOUT a call; see `isCommentLine`.
     output = execFileSync(
       'git',
-      ['grep', '-l', '--', `/api/billing/${route}`, '--', ...CLIENT_ROOTS],
+      ['grep', '-n', '--', `/api/billing/${route}`, '--', ...CLIENT_ROOTS],
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
   } catch {
     // `git grep` exits 1 on no matches. That is a legitimate answer here.
     return []
   }
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((file) => /\.tsx?$/.test(file))
-    .filter((file) => !file.includes('/app/api/'))
-    .filter((file) => !/\.spec\.tsx?$/.test(file))
+  const files = new Set<string>()
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue
+    // `path:lineno:content` — the content may itself contain colons, so
+    // split only the first two fields.
+    const firstColon = line.indexOf(':')
+    const secondColon = line.indexOf(':', firstColon + 1)
+    if (firstColon < 0 || secondColon < 0) continue
+    const file = line.slice(0, firstColon)
+    const content = line.slice(secondColon + 1)
+    if (!/\.tsx?$/.test(file)) continue
+    if (file.includes('/app/api/')) continue
+    if (/\.spec\.tsx?$/.test(file)) continue
+    if (isNonCallReference(content, route)) continue
+    files.add(file)
+  }
+  return [...files]
+}
+
+/**
+ * Whether a matching line NAMES the route rather than CALLS it (AGL-2115).
+ *
+ * THE DEFECT THIS CLOSES. `git grep -l` answers "does this file contain the
+ * string", and three routes passed this sweep on a mention alone. Both
+ * shapes were live in the repo, and they are different:
+ *
+ * 1. **Prose.** `usage-alerts` was satisfied by a doc comment in
+ *    `billing-auto-lock.ts`, `webhook` by a comment in
+ *    `embedded-checkout-dialog.component.tsx`.
+ * 2. **A repo path.** `usage-email` was satisfied by
+ *    `source: 'apps/console/app/api/billing/usage-email/route.ts'` in the
+ *    system-email catalog — real code, on a real code line, and still not a
+ *    call: it is provenance metadata saying where the sender lives. A
+ *    comment filter alone does not catch this one, which is why the first
+ *    version of this fix went red here and was widened rather than trimmed.
+ *
+ * All three are genuinely exempt, so nothing was broken; what was broken is
+ * the guard. A future billing route whose only mention is the comment
+ * explaining why nobody calls it — or the catalog row pointing at its file —
+ * would have shipped with no surface and a green check. This is the AGL-1900
+ * rule applied to its own instrument.
+ *
+ * Deliberately conservative in both directions. It rejects only a line whose
+ * FIRST non-space characters open or continue a comment, so a real
+ * `fetch('/api/billing/x')` with a trailing `// note` still counts; and it
+ * rejects a path reference only when the match is bounded as a module path
+ * (`app/api/…` before, or `/route.ts` after). A false RED here is as broken
+ * as a false green — it would send someone to build a surface that exists.
+ */
+function isNonCallReference(content: string, route: string): boolean {
+  const trimmed = content.trim()
+  if (
+    trimmed.startsWith('*') ||
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('/*')
+  ) {
+    return true
+  }
+  // A reference to the route's own MODULE, not its URL.
+  const path = `/api/billing/${route}`
+  return (
+    content.includes(`app${path}`) || content.includes(`${path}/route.ts`)
+  )
 }
 
 describe('every customer-facing billing route has a surface (AGL-1947)', () => {
@@ -139,6 +206,53 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
     // would be meaningless.
     expect(clientCallers('checkout').length).toBeGreaterThan(0)
     expect(clientCallers('no-such-route-xyz')).toHaveLength(0)
+  })
+
+  it('does not count a MENTION of a route as a surface (AGL-2115)', () => {
+    // The instrument, checked before it is trusted — the same discipline the
+    // called/uncalled check above applies. These are the exact lines that let
+    // three routes pass this sweep without a caller.
+    expect(
+      isNonCallReference(
+        ' * apps/console/app/api/billing/usage-alerts/route.ts.',
+        'usage-alerts',
+      ),
+    ).toBe(true)
+    expect(
+      isNonCallReference('  // calls /api/billing/webhook eventually', 'webhook'),
+    ).toBe(true)
+    // The one a comment filter alone misses: real code, real code line, and
+    // still provenance rather than a call.
+    expect(
+      isNonCallReference(
+        `      source: 'apps/console/app/api/billing/usage-email/route.ts',`,
+        'usage-email',
+      ),
+    ).toBe(true)
+    // And a real call still counts, including one with a trailing comment —
+    // a guard that rejected those would be a false RED, which is as broken
+    // as a false green and sends someone to rebuild a surface that exists.
+    expect(
+      isNonCallReference(`  await fetch('/api/billing/addons', {`, 'addons'),
+    ).toBe(false)
+    expect(
+      isNonCallReference(
+        `  const r = fetch('/api/billing/addons') // note`,
+        'addons',
+      ),
+    ).toBe(false)
+  })
+
+  it('the three mention-only routes are now exempt by decision, not by accident', () => {
+    // Each was green before AGL-2115 on a mention alone. Discounting mentions
+    // turns them red unless the exemption is recorded — so this asserts the
+    // recording, and that they really do have no caller left.
+    for (const route of ['usage-alerts', 'usage-email', 'webhook']) {
+      expect(`${route}: ${EXEMPT[route] ? 'recorded' : 'UNRECORDED'}`).toBe(
+        `${route}: recorded`,
+      )
+      expect(clientCallers(route)).toHaveLength(0)
+    }
   })
 
   it('does not count the route itself, a spec, or build output as a surface', () => {

@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, Stack, TextField, Typography } from '@mui/material'
 import {
@@ -233,15 +234,17 @@ export function LocationsCard(props: LocationsCardProps) {
             {'Add'}
           </Button>
         </Stack>
-        <Typography variant="caption" color="text.secondary">
-          {/* The site's locations, not this card's rows (AGL-1716) — the
-              readout and the gate must agree, and the gate now counts. */}
-          {planReady
-            ? `${locationCount}/${quota.limit === Aglyn.UNLIMITED ? '∞' : quota.limit} locations on your plan`
-            : `${locationCount} location${
-                locationCount === 1 ? '' : 's'
-              } · checking your plan…`}
-        </Typography>
+        {/* The site's locations, not this card's rows (AGL-1716) — the
+            readout and the gate must agree, and the gate now counts.
+            The wording moved to the shared component in AGL-2113 so the five
+            sibling cards that were missing it render the identical string
+            rather than five near-misses; the output here is unchanged. */}
+        <QuotaReadoutComponent
+          ready={planReady}
+          used={locationCount}
+          limit={quota.limit}
+          noun="location"
+        />
       </Stack>
     </CardDisplay>
   )
