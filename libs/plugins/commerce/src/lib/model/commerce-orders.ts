@@ -283,6 +283,28 @@ export interface HostOrder {
   /** Draft orders (AGL-287): the link sent to the buyer. */
   paymentLinkUrl?: string
   refundedCents?: number
+  /**
+   * Line indexes an admin refunded BY NAME (AGL-2454), and therefore the lines
+   * whose digital entitlements are withdrawn.
+   *
+   * A refund carries an AMOUNT, not lines — `refund.ts` takes `amountCents`
+   * and Stripe knows nothing about what was in the basket — so a partial refund
+   * cannot in general be attributed to anything. That is why five entitlement
+   * gates matched the literal `'refunded'` on `status` and a 99%-refunded order
+   * kept every download, licence key, gated page and verified review.
+   *
+   * This is the case where attribution IS possible: the console refund dialog
+   * lets an admin pick the lines they are refunding, and when it does the
+   * amount is computed FROM those lines rather than typed beside them. An
+   * amount-only refund still revokes nothing per-line — deciding for the
+   * merchant which lines a bare figure covers would be a guess about their
+   * goods — but it is no longer silent: `orderRefundState` reports it, the
+   * console shows it, and the order timeline records it.
+   *
+   * Indexes rather than product ids, because a cart can hold two lines of the
+   * same product (different variants) and only one may be coming back.
+   */
+  refundedLineItemIds?: number[]
   /** The card dispute against this charge, open or settled (AGL-1787). */
   dispute?: OrderDispute
   /** Stock a reversal left off the shelf, awaiting the merchant (AGL-1797). */
@@ -980,6 +1002,146 @@ export function orderContainsProduct(
     (order.lineItems ?? []).some((line) => line.productId === productId) ||
     order.productId === productId
   )
+}
+
+/**
+ * Statuses under which an order grants NO entitlement at all (AGL-2454).
+ *
+ * `pending` has not paid, `cancelled` was undone, `refunded` was given back.
+ * The literal list was copied into `download.ts`, `gate.ts`,
+ * `membership-account.ts` and `reviews.ts`; it lives here now so a change to
+ * what "withdrawn" means reaches all of them at once.
+ */
+const WITHDRAWN_ORDER_STATUSES: OrderStatus[] = [
+  'pending',
+  'cancelled',
+  'refunded',
+]
+
+/**
+ * How much of this order has been given back (AGL-2454).
+ *
+ * `full` follows `status` OR the money, because the two can legitimately
+ * disagree for a moment: `refund.ts` reserves `refundedCents` before it calls
+ * Stripe and flips `status` after, and a lost dispute reverses money on an
+ * order whose status is still `paid` until it closes. Reading only the status
+ * would treat that window as "nothing refunded".
+ */
+export function orderRefundState(
+  order: Partial<HostOrder>,
+): 'none' | 'partial' | 'full' {
+  const refundedCents = Math.max(0, Number(order.refundedCents ?? 0))
+  const totalCents =
+    order.totals?.totalCents ?? Number(order.amountCents ?? 0)
+  if (order.status === 'refunded') return 'full'
+  if (!(refundedCents > 0)) return 'none'
+  return totalCents > 0 && refundedCents >= totalCents ? 'full' : 'partial'
+}
+
+/**
+ * Is this line's entitlement withdrawn?
+ *
+ * By INDEX, matching `refundedLineItemIds`. A cart can hold the same product on
+ * two lines and only one may be coming back, so a product-keyed test would
+ * revoke goods the buyer still owns.
+ */
+export function orderLineRefunded(
+  order: Partial<HostOrder>,
+  lineIndex: number,
+): boolean {
+  return (order.refundedLineItemIds ?? []).includes(lineIndex)
+}
+
+/**
+ * THE ONE ENTITLEMENT TEST (AGL-2454). Does this order still entitle the buyer
+ * to `productId`?
+ *
+ * Five gates asked this question and all five asked it as
+ * `!['pending','cancelled','refunded'].includes(status) && orderContainsProduct(…)`.
+ * That reading is why a partial refund revoked NOTHING: `refund.ts` writes
+ * `status: 'refunded'` only when the order is FULLY refunded, so a 99%-refunded
+ * order stayed `paid` and every gate said yes — downloads, licence keys, gated
+ * content and the right to post a verified review, all still live.
+ *
+ * Withdrawn now means either of two things, and both had to be expressible in
+ * one place or the five gates would drift again:
+ *
+ *  - the whole order is withdrawn by `status`, as before; or
+ *  - every line carrying this product was refunded BY NAME, which is the case a
+ *    line-scoped refund creates and the only case where an amount can honestly
+ *    be attributed to goods.
+ *
+ * `'any'` asks whether the order still entitles ANYTHING, which is what the
+ * membership paywall's subscription-shaped probe needs.
+ *
+ * The legacy flat `productId` order (one line, no `lineItems`) is lifted by
+ * `liftLegacyOrder` before it gets here, so index 0 is its only line and a
+ * line-scoped refund of it behaves like a full one.
+ */
+export function orderEntitlesProduct(
+  order: Partial<HostOrder>,
+  productId: string | 'any',
+): boolean {
+  if (WITHDRAWN_ORDER_STATUSES.includes(order.status as OrderStatus)) {
+    return false
+  }
+  const lines = order.lineItems ?? []
+  if (productId === 'any') {
+    if (lines.length === 0) return true
+    return lines.some((_line, index) => !orderLineRefunded(order, index))
+  }
+  const matching = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.productId === productId)
+  if (matching.length === 0) {
+    // The legacy flat shape, which `liftLegacyOrder` normally converts. Kept so
+    // an unlifted row is not silently un-entitled — a false negative here locks
+    // a paying buyer out of goods they bought.
+    return order.productId === productId
+  }
+  return matching.some(({ index }) => !orderLineRefunded(order, index))
+}
+
+/**
+ * Product ids whose entitlement this order has withdrawn line by line
+ * (AGL-2454) — every line for the product refunded, none left standing.
+ *
+ * What `refund.ts` uses to decide which licence keys to RETIRE. Not "any line
+ * refunded": a buyer who returned one of two copies still holds the product.
+ */
+export function refundedProductIds(order: Partial<HostOrder>): string[] {
+  const lines = order.lineItems ?? []
+  const ids = new Set<string>()
+  for (const line of lines) {
+    if (!ids.has(line.productId) && !orderEntitlesProduct(order, line.productId)) {
+      ids.add(line.productId)
+    }
+  }
+  return [...ids]
+}
+
+/**
+ * The refund line the console and the merchant read (AGL-2454).
+ *
+ * Kept in the model because three surfaces show it and "partially refunded"
+ * must not mean different things on two of them. Empty for an order with
+ * nothing refunded — there is nothing to say.
+ */
+export function orderRefundSummary(order: Partial<HostOrder>): string {
+  const state = orderRefundState(order)
+  if (state === 'none') return ''
+  const refundedCents = Math.max(0, Number(order.refundedCents ?? 0))
+  const totalCents = order.totals?.totalCents ?? Number(order.amountCents ?? 0)
+  if (state === 'full') return `Refunded in full ($${usd(refundedCents)})`
+  const revoked = (order.refundedLineItemIds ?? []).length
+  const lines = (order.lineItems ?? []).length
+  const scope =
+    revoked > 0
+      ? `${revoked} of ${lines} line${lines === 1 ? '' : 's'} withdrawn`
+      : 'no lines withdrawn — refunded by amount'
+  return `Partially refunded ($${usd(refundedCents)} of $${usd(
+    totalCents,
+  )}) — ${scope}`
 }
 
 /** `12345` -> `123.45`, the CSV's money format. */

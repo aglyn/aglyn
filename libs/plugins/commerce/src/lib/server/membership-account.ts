@@ -126,13 +126,20 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
     }> = []
     for (const docSnapshot of ordersSnapshot.docs) {
       const order = CommerceModel.liftLegacyOrder(docSnapshot.data() as any)
-      if (['pending', 'cancelled', 'refunded'].includes(order.status)) continue
+      if (!CommerceModel.orderEntitlesProduct(order, 'any')) continue
       const orderKeys = (docSnapshot.get('licenseKeys') ?? {}) as Record<
         string,
         string[]
       >
       for (const line of order.lineItems ?? []) {
         if (line.productType !== 'digital') continue
+        // PER LINE (AGL-2454). The status test above only ever moved on a FULL
+        // refund, so this page went on listing the download link AND the
+        // licence key for a line the merchant had refunded. The key string is
+        // the one thing here that cannot be taken back once mailed — which is
+        // exactly why it is retired from the pool rather than reissued — so
+        // removing it from the account page is the only withdrawal available.
+        if (!CommerceModel.orderEntitlesProduct(order, line.productId)) continue
         downloads.push({
           orderId: docSnapshot.id,
           productId: line.productId,

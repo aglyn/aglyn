@@ -35,6 +35,72 @@ interface RefundClaim {
 }
 
 /**
+ * Retires the licence keys a refund withdrew (AGL-2454).
+ *
+ * Reads the order back so the decision is made from what actually SETTLED
+ * rather than from what this request asked for — a concurrent partial may have
+ * closed a line between the two — and retires only the keys of products the
+ * order no longer entitles at all. `refundedProductIds` is deliberately strict
+ * about that: a buyer who returned one of two copies still holds the product,
+ * so nothing is retired for them.
+ *
+ * `revokedAtMs` with `assignedAtMs` left standing is the retired state. Keeping
+ * `assignedAtMs` matters: `assignLicenseKeys` claims from
+ * `where('assignedAtMs','==',null)`, so clearing it would put the key straight
+ * back in front of the next buyer — the reissue this must not do.
+ *
+ * Swallows everything. The refund has already moved money.
+ */
+async function retireLicenseKeys(
+  hostRef: FirebaseFirestore.DocumentReference,
+  orderRef: FirebaseFirestore.DocumentReference,
+  orderId: string,
+): Promise<number> {
+  try {
+    const fresh = CommerceModel.liftLegacyOrder(
+      ((await orderRef.get()).data() ?? {}) as any,
+    )
+    const withdrawn = new Set(CommerceModel.refundedProductIds(fresh))
+    if (withdrawn.size === 0) return 0
+    const assigned = await hostRef
+      .collection('licenseKeys')
+      .where('orderId', '==', orderId)
+      .limit(500)
+      .get()
+    let retired = 0
+    for (const keySnapshot of assigned.docs) {
+      if (!withdrawn.has(String(keySnapshot.get('productId') ?? ''))) continue
+      // Already retired by an earlier partial, or by the merchant's own Revoke
+      // button. Skipped so a second refund does not restamp the timestamp and
+      // make the retirement look newer than it is.
+      if (keySnapshot.get('revokedAtMs') != null) continue
+      await keySnapshot.ref
+        .set({ revokedAtMs: Date.now(), revokedOrderId: orderId }, { merge: true })
+        .catch(() => undefined)
+      retired++
+    }
+    if (retired > 0) {
+      await orderRef
+        .update({
+          timeline: firebaseAdmin.firestore.FieldValue.arrayUnion({
+            atMs: Date.now(),
+            event: 'license-retired',
+            detail:
+              `${retired} licence key${retired === 1 ? '' : 's'} retired. ` +
+              'The buyer already holds the key string, so it is not returned ' +
+              'to the pool — reissuing it would give two people one secret.',
+          }),
+        })
+        .catch(() => undefined)
+    }
+    return retired
+  } catch (error) {
+    console.error('Licence key retirement failed', orderId, error)
+    return 0
+  }
+}
+
+/**
  * Order refunds (AGL-287): full or partial via Stripe, site-admin only
  * (it moves money). Destination charges reverse the transfer and the
  * platform fee proportionally. Full refunds transition the order to
@@ -78,6 +144,21 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(body.hostId ?? '')
   const orderId = String(body.orderId ?? '')
   const amountCents = body.amountCents == null ? null : Number(body.amountCents)
+  /**
+   * Lines the admin is refunding BY NAME (AGL-2454), and therefore the lines
+   * whose digital entitlements come back. Optional: an amount-only refund is
+   * still a legal refund and still revokes nothing per-line — see the guard
+   * below for why that is a decision rather than an oversight.
+   */
+  const requestedLineIds: number[] = Array.isArray(body.lineItemIds)
+    ? [
+        ...new Set(
+          (body.lineItemIds as unknown[])
+            .map((value) => Math.round(Number(value)))
+            .filter((value) => Number.isFinite(value) && value >= 0),
+        ),
+      ].sort((a, b) => a - b)
+    : []
   // One refund attempt, minted by the console. Node lowercases incoming
   // headers, but read both spellings — the plugin API request type makes no
   // promise about casing.
@@ -164,6 +245,49 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           'taken the disputed amount, and a refund on top of it would pay ' +
           'the shopper twice. Respond to the dispute or accept it in the ' +
           'Stripe dashboard; refund any remainder once it settles.',
+      })
+    }
+    // WHAT THE NAMED LINES ARE WORTH, AND WHY THE AMOUNT MAY NOT BE LESS
+    // (AGL-2454).
+    //
+    // A refund carries an amount, not lines — that is the blocker this issue
+    // names, and `restock-flag.ts:48-55` already records it for stock. It
+    // cannot be solved by inference: deciding for the merchant which lines a
+    // bare figure covers would be a guess about their goods. It CAN be solved
+    // by asking, which is what naming lines does, and the amount is then
+    // derived from them rather than typed beside them.
+    //
+    // An explicit `amountCents` may still be LARGER (the admin is refunding the
+    // line plus its share of tax or shipping, which this items-only sum does
+    // not include). It may not be SMALLER: revoking a line the refund did not
+    // actually cover is the silent over-revocation this issue forbids in the
+    // same breath as silent under-revocation.
+    const orderLines = order.lineItems ?? []
+    const invalidLine = requestedLineIds.find(
+      (index) => index >= orderLines.length,
+    )
+    if (invalidLine != null) {
+      return res
+        .status(400)
+        .json({ error: `Line ${invalidLine} is not on this order` })
+    }
+    const namedLinesCents = requestedLineIds.reduce(
+      (sum, index) =>
+        sum +
+        Math.max(0, Math.round(Number(orderLines[index]?.unitAmountCents ?? 0))) *
+          Math.max(1, Math.round(Number(orderLines[index]?.quantity ?? 1))),
+      0,
+    )
+    if (
+      requestedLineIds.length > 0 &&
+      amountCents != null &&
+      Math.round(amountCents) < namedLinesCents
+    ) {
+      return res.status(400).json({
+        error:
+          'That amount is less than the lines you selected are worth. ' +
+          'Refund the full value of those lines, or refund an amount ' +
+          'without selecting lines.',
       })
     }
     const paymentIntentId =
@@ -266,10 +390,17 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       totalCents = fresh.totals?.totalCents ?? Number(fresh.amountCents ?? 0)
       const alreadyRefunded = Number(fresh.refundedCents ?? 0)
       const remaining = totalCents - alreadyRefunded
-      refundCents =
-        amountCents == null
-          ? remaining
-          : Math.min(Math.round(amountCents), remaining)
+      // Named lines with no amount refund exactly what those lines are worth;
+      // named lines WITH an amount use the amount (already guarded above as
+      // no smaller than the lines). Neither is the whole order, which is what
+      // `amountCents == null` alone still means.
+      const asked =
+        amountCents != null
+          ? Math.round(amountCents)
+          : requestedLineIds.length > 0
+            ? namedLinesCents
+            : remaining
+      refundCents = Math.min(asked, remaining)
       if (!(refundCents > 0)) {
         refundCents = 0
         return
@@ -284,6 +415,34 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       // Nothing moved, so the attempt key is released rather than burned.
       await claim?.release()
       return res.status(400).json({ error: 'Nothing left to refund' })
+    }
+    // The cap bit into the named lines (AGL-2454): earlier partials have left
+    // less on this order than the selected lines are worth. REFUSED rather
+    // than refunded-and-revoked, because revoking a line for less than its
+    // value is precisely the silent over-revocation this issue forbids. The
+    // reservation is given back — the same compensation a Stripe refusal does
+    // below, and for the same reason: nothing has left the account yet.
+    if (requestedLineIds.length > 0 && refundCents < namedLinesCents) {
+      await firestore
+        .runTransaction(async (transaction) => {
+          const current = Number(
+            (await transaction.get(orderRef)).get('refundedCents') ?? 0,
+          )
+          transaction.set(
+            orderRef,
+            { refundedCents: Math.max(0, current - refundCents) },
+            { merge: true },
+          )
+        })
+        .catch(() => undefined)
+      await claim?.release()
+      return res.status(409).json({
+        error:
+          `Only $${(refundCents / 100).toFixed(2)} is left to refund on this ` +
+          `order, and the lines you selected are worth $${(
+            namedLinesCents / 100
+          ).toFixed(2)}. Refund an amount without selecting lines instead.`,
+      })
     }
 
     const params = new URLSearchParams({
@@ -368,11 +527,30 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         orderRef,
         {
           ...(fullyRefunded ? { status: 'refunded' } : {}),
+          // The entitlement withdrawal, recorded WITH the money (AGL-2454).
+          // `arrayUnion` rather than a written-back array: two admins refunding
+          // different lines at once must not erase each other's, and this
+          // transaction re-reads the order but a written array would still lose
+          // a concurrent settle that committed between the two.
+          ...(requestedLineIds.length > 0
+            ? {
+                refundedLineItemIds:
+                  firebaseAdmin.firestore.FieldValue.arrayUnion(
+                    ...requestedLineIds,
+                  ),
+              }
+            : {}),
           timeline: CommerceModel.appendOrderEvent(
             fresh,
             'refund',
             `$${(refundCents / 100).toFixed(2)} refunded` +
-              (fullyRefunded ? ' (full)' : ''),
+              (fullyRefunded
+                ? ' (full)'
+                : requestedLineIds.length > 0
+                  ? ` — ${requestedLineIds.length} line${
+                      requestedLineIds.length === 1 ? '' : 's'
+                    } withdrawn`
+                  : ' — refunded by amount, no lines withdrawn'),
           ),
         },
         { merge: true },
@@ -380,6 +558,27 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
     })
     const payload = { refundedCents, fullyRefunded }
     await claim?.record(200, payload)
+    // LICENCE KEYS ARE RETIRED, NEVER RETURNED TO THE POOL (AGL-2454).
+    //
+    // `assignLicenseKeys` stamps `assignedAtMs`, `orderId` and `email` onto a
+    // pool document and nothing anywhere ever set them back — so a refunded
+    // order consumed the merchant's key forever, and a merchant who sold one
+    // key out of a hundred and refunded it had ninety-nine, permanently.
+    //
+    // Returning it to the pool is NOT the fix, and this is the decision the
+    // issue asked for: the key string was mailed in the receipt and cannot be
+    // invalidated by anything we own, so re-issuing it to the next paying
+    // customer would hand two people one working secret. That is worse than
+    // losing the key. A third state — retired: neither assigned to a live order
+    // nor available — is the honest record, and `revokedAtMs` already IS that
+    // state: the console's key dialog has written exactly this pair since it
+    // shipped, so this reuses the merchant's own vocabulary rather than
+    // inventing a second one.
+    //
+    // Best-effort and after the response is recorded, matching the contact and
+    // restock ledgers below: the money has moved and nothing here may fail a
+    // refund that already left the merchant's account.
+    await retireLicenseKeys(hostRef, orderRef, orderId)
     // The customer's side of the ledger (AGL-1754). Everything above records
     // the money on the ORDER; without this the buyer's `ltvCents` still counts
     // a sale they returned, and only ever rises.

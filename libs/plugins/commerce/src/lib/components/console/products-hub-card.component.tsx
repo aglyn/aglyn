@@ -673,11 +673,22 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             const available = productKeys.filter(
               (key: any) => !key.assignedAtMs,
             )
+            // RETIRED KEYS ARE COUNTED SEPARATELY (AGL-2454). A refund retires
+            // the key rather than returning it to the pool — the buyer already
+            // holds the string, so reissuing it would give two people one
+            // working key — and without this line the merchant simply watches
+            // "available" fall with nothing to explain where the key went.
+            const retired = productKeys.filter((key: any) => key.revokedAtMs)
+            const assigned =
+              productKeys.length - available.length - retired.length
             return (
               <>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {`${available.length} available · ${productKeys.length - available.length} assigned. ` +
-                    'Keys deliver automatically on purchase (receipt + account).'}
+                  {`${available.length} available · ${assigned} assigned` +
+                    (retired.length
+                      ? ` · ${retired.length} retired (refunded or revoked — not reissued)`
+                      : '') +
+                    '. Keys deliver automatically on purchase (receipt + account).'}
                 </Typography>
                 {available.slice(0, 8).map((key: any) => (
                   <Stack

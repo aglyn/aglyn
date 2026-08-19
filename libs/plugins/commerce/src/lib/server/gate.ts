@@ -86,11 +86,10 @@ export async function checkMemberEntitlement(
     .get()
   for (const docSnapshot of orders.docs) {
     const order = CommerceModel.liftLegacyOrder(docSnapshot.data() as any)
-    if (['pending', 'cancelled', 'refunded'].includes(order.status)) continue
-    const owns =
-      (order.lineItems ?? []).some((line) => line.productId === productId) ||
-      order.productId === productId
-    if (owns) return true
+    // The shared entitlement test (AGL-2454), which is where the partial-refund
+    // case lives. The inline status literal this replaced only ever moved on a
+    // FULL refund, so a buyer refunded for the gated product kept their access.
+    if (CommerceModel.orderEntitlesProduct(order, productId)) return true
   }
   return false
 }
