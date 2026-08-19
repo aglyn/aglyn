@@ -37,9 +37,43 @@ entitlement.
 
 Popups give you more control:
 
-- **Triggers** — show on load, on scroll, on exit intent, and similar.
-- **Frequency capping** — don't nag returning visitors.
+- **Triggers** — **After a delay** (a number of seconds), **On scroll** (a percentage of
+  the page), or **On exit intent**.
+- **Frequency capping** — don't nag returning visitors. See below.
 - **Scheduling** — run a popup only during a campaign window.
+
+### Frequency: how often a popup comes back {#frequency}
+
+In the popup editor, **Frequency** offers two mutually exclusive choices.
+
+**Once per session** shows the popup at most once for as long as the visitor keeps the tab
+open. Close the tab, come back tomorrow — or open your site in a second tab — and they see
+it again. This is the right choice for a popup tied to the visit rather than to the person:
+a first-order discount, a cookie or age notice, a "we're closed today" message.
+
+**Re-show after a while** takes a number of days — **Re-show after (days)**, 7 by default —
+and hides the popup for that long after it is dismissed, across sessions and browser
+restarts. This is the right choice for a newsletter capture you do not want to ask twice
+for in a week.
+
+Only one applies. Choosing **Once per session** hides the days field entirely, because a
+popup cannot be capped both ways.
+
+:::note Where the choice is remembered
+The cap is remembered **in the visitor's browser**, not on your site — per-session in
+session storage, per-days in local storage. A visitor who clears their browser data, or
+arrives in a private window, is a new visitor as far as the cap is concerned. If storage
+is unavailable altogether the popup falls back to showing at most once per page view.
+
+The cap is also per popup, keyed to its content. Editing a popup's content resets its cap,
+so an edited popup is shown again to visitors who had already dismissed the old one.
+:::
+
+:::caution The site-wide default popup has only the day cap
+The **Once per session** choice is on the multi-overlay editor, where you manage any number
+of popups. The single always-on default popup card still offers only **Re-show after
+(days)**.
+:::
 
 ### Popup v2
 

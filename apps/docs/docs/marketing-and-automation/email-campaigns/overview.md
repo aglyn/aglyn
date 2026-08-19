@@ -38,12 +38,53 @@ Use `{{name}}`, `{{firstName}}`, or `{{email}}` anywhere in the subject or body 
 resolve per recipient at send time from the audience's stored details. Add a fallback
 with a pipe for recipients without a stored name: `Hi {{firstName|there}}!`.
 
+### See who it will reach, before you send {#recipient-count}
+
+As soon as you pick an audience the composer counts it, and shows the count under the
+audience picker:
+
+> Recipients 1,240 · 12 unsubscribed
+
+The number is not an estimate. It is produced by running the real send path with nothing
+written — the same audience resolution, the same de-duplication, the same suppression list,
+and the same monthly cap — and stopping immediately before the first write. Nothing is
+created, no counter moves, and no campaign appears in your history.
+
+That means the count already reflects things you would otherwise only discover afterwards:
+
+- **Duplicates are removed.** One person on two lists is one recipient.
+- **Unsubscribes are removed**, and reported separately as `· 12 unsubscribed`, so a
+  smaller-than-expected number has a visible reason.
+- **A single send is capped at 500 recipients.** A larger audience is counted at the cap.
+- **A refusal appears here rather than at send time.** An empty audience, an audience where
+  everyone has unsubscribed, or a month already at your plan's send cap all say so while
+  you are still writing.
+
+While it works it reads `Counting recipients…`. It re-counts whenever you change the
+audience.
+
+Counting an audience needs the same permission as sending to it — the size of someone
+else's site's audience is not public information.
+
 ### Schedule a send
 
 Pick a **Send at** time in the composer and the button becomes **Schedule campaign**.
 Scheduled campaigns appear in history with a Scheduled chip and a **Cancel** action
 until the send time; they deliver through the same caps, suppression list, and merge
 tags as an immediate send.
+
+Three things about the timing are worth knowing:
+
+- **Due campaigns are picked up every 15 minutes**, so a send scheduled for 09:00 goes out
+  between 09:00 and about 09:15. Schedule to the quarter hour if the exact minute matters.
+- **The time is your browser's local time** at the moment you set it, stored as an absolute
+  instant. Someone in another timezone reading the history sees the same instant in theirs.
+- **A scheduled campaign is checked against your caps when it actually sends, not when you
+  schedule it.** A month that has since reached its send cap makes the campaign fail rather
+  than send, and it appears in history with a **Failed** chip carrying the reason.
+
+The statuses a scheduled campaign moves through are **Scheduled** → sending → sent, or
+**Canceled** if you cancel it in time, or **Failed** with the reason.
 
 ## Email lists
 
