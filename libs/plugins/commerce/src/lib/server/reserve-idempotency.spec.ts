@@ -47,6 +47,29 @@ import { reserveHandler } from './reserve'
 const docs = new Map<string, Record<string, any>>()
 let autoIdCounter = 0
 
+/**
+ * A version per COLLECTION, which is what a query read has to be validated
+ * against (AGL-2450).
+ *
+ * Firestore serialises a transaction that read a query by failing it when any
+ * document the query covers has changed. Modelling only per-document versions
+ * would miss the case this file exists to test — the conflicting write is a
+ * NEW reservation, a document the first transaction never read — so a
+ * doc-level check would see nothing stale and let both bookings commit, which
+ * is precisely the defect reported as fixed.
+ */
+const collectionVersions = new Map<string, number>()
+
+function bumpCollection(docPath: string): void {
+  const collection = docPath.slice(0, docPath.lastIndexOf('/'))
+  collectionVersions.set(collection, (collectionVersions.get(collection) ?? 0) + 1)
+}
+
+function writeDoc(path: string, value: Record<string, any>, merge: boolean): void {
+  docs.set(path, merge ? { ...(docs.get(path) ?? {}), ...value } : value)
+  bumpCollection(path)
+}
+
 function childPaths(path: string): string[] {
   const prefix = `${path}/`
   return [...docs.keys()].filter(
@@ -70,10 +93,7 @@ function makeDocRef(path: string): any {
     path,
     get: async () => makeSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
-      docs.set(
-        path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
-      )
+      writeDoc(path, value, Boolean(options?.merge))
     },
     /** `create()` rejecting on an existing doc IS the dedupe primitive. */
     create: async (value: Record<string, any>) => {
@@ -84,10 +104,11 @@ function makeDocRef(path: string): any {
         error.code = 6
         throw error
       }
-      docs.set(path, value)
+      writeDoc(path, value, false)
     },
     delete: async () => {
       docs.delete(path)
+      bumpCollection(path)
     },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
@@ -136,6 +157,8 @@ function makeQuery(
   limit: number | null,
 ): any {
   return {
+    /** Read by the transaction double, to version-check the query. */
+    collectionPath: path,
     where: (field: string, op: string, value: any) =>
       makeQuery(path, [...filters, { field, op, value }], order, limit),
     orderBy: (field: string) => makeQuery(path, filters, field, limit),
@@ -173,8 +196,72 @@ function makeCollectionRef(path: string): any {
   }
 }
 
+/** Parked between a transaction's read and its commit, to force interleaving. */
+let afterRead: (() => Promise<void>) | null = null
+let abortedRetries = 0
+
+/**
+ * Optimistic concurrency over QUERY reads (AGL-2450).
+ *
+ * A double that merely buffered the writes and committed them would report
+ * green with the defect in place: both bookings would read an availability set
+ * lacking the other, both would pass `isRangeAvailable`, and both would write.
+ * So the read set is recorded — the version of every collection a query
+ * touched — and the callback re-runs when any of them moved.
+ */
+async function runTransaction(
+  body: (transaction: any) => Promise<any>,
+): Promise<any> {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const readVersions = new Map<string, number>()
+    const writes: { path: string; value: Record<string, any>; merge: boolean }[] =
+      []
+    const transaction = {
+      get: async (target: any) => {
+        if (target?.collectionPath) {
+          readVersions.set(
+            target.collectionPath,
+            collectionVersions.get(target.collectionPath) ?? 0,
+          )
+          return target.get()
+        }
+        return makeSnapshot(target.path)
+      },
+      set: (ref: any, value: Record<string, any>, options?: any) => {
+        writes.push({ path: ref.path, value, merge: Boolean(options?.merge) })
+      },
+      update: (ref: any, value: Record<string, any>) => {
+        writes.push({ path: ref.path, value, merge: true })
+      },
+      create: (ref: any, value: Record<string, any>) => {
+        writes.push({ path: ref.path, value, merge: false })
+      },
+    }
+    const result = await body(transaction)
+    if (afterRead && attempt === 0) {
+      const hook = afterRead
+      afterRead = null
+      await hook()
+    }
+    const stale = [...readVersions.entries()].some(
+      ([collection, version]) =>
+        (collectionVersions.get(collection) ?? 0) !== version,
+    )
+    if (stale) {
+      abortedRetries++
+      continue
+    }
+    for (const write of writes) writeDoc(write.path, write.value, write.merge)
+    return result
+  }
+  const error: any = new Error('ABORTED: too much contention')
+  error.code = 10
+  throw error
+}
+
 const fakeFirestore = {
   collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
 }
 
 const mockOrg: any = {
@@ -310,6 +397,9 @@ beforeAll(() => {
 
 beforeEach(() => {
   docs.clear()
+  collectionVersions.clear()
+  afterRead = null
+  abortedRetries = 0
   stripeCalls.length = 0
   stripeSessionsByKey.clear()
   autoIdCounter = 0
@@ -327,6 +417,72 @@ beforeEach(() => {
 })
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Two guests, one room (AGL-2450).
+ *
+ * The sequential refusal below ("still refuses a fresh attempt for dates a live
+ * hold occupies") passed the whole time the defect was live, and that is the
+ * point of this block: it only ever proved the SECOND request sees the FIRST
+ * one's COMMITTED hold. It says nothing about two requests whose availability
+ * reads both happen before either write — the ordering a real pair of guests
+ * produces, and the one that put two confirmed stays in one room.
+ *
+ * The two requests are driven CONCURRENTLY rather than through an explicit
+ * interleaving hook. That is deliberate: a hook has to be planted at a point
+ * only the fixed code has, so removing the fix would make these tests fail with
+ * "the hook never fired" rather than by double-booking. Run concurrently, the
+ * pre-fix handler interleaves at its own `await`s and writes two holds on the
+ * same nights — the defect itself, which is what a red here should look like.
+ */
+describe('two guests cannot hold the same dates (AGL-2450)', () => {
+  it('refuses the loser instead of writing a second hold on the same nights', async () => {
+    const [first, rival] = await Promise.all([
+      post({}, { 'idempotency-key': 'attempt-a' }),
+      post({}, { 'idempotency-key': 'attempt-b' }),
+    ])
+
+    // Which one loses is deliberately not pinned: the loser is whichever
+    // transaction commits second. Exactly one booking, and the other is told
+    // the truth rather than charged for a room it cannot have.
+    expect([first.status, rival.status].sort()).toEqual([200, 409])
+    expect(
+      [first, rival].find((result) => result.status === 409).body.error,
+    ).toBe('Those dates just sold out')
+    // The contention was real: the losing transaction saw its query go stale
+    // and re-ran. Without this the assertions above would also hold if the two
+    // requests had simply run end to end.
+    expect(abortedRetries).toBeGreaterThan(0)
+
+    // ONE hold on the room, and only the winner was ever sent to Stripe.
+    expect(holdDocs()).toHaveLength(1)
+    expect(stripeCalls).toHaveLength(1)
+  })
+
+  /**
+   * The guard forced red from the other side: two guests wanting nights a month
+   * apart both contend on the collection version, so the loser RETRIES — and
+   * then finds its own dates free and commits. A retry is not a refusal, and a
+   * transaction that refused everything it retried would fail here.
+   */
+  it('books both guests when their dates do not overlap', async () => {
+    const [first, other] = await Promise.all([
+      post({}, { 'idempotency-key': 'attempt-a' }),
+      post(
+        {
+          checkInDayMs: CHECK_IN + 30 * DAY_MS,
+          checkOutDayMs: CHECK_OUT + 30 * DAY_MS,
+        },
+        { 'idempotency-key': 'attempt-b' },
+      ),
+    ])
+
+    expect(first.status).toBe(200)
+    expect(other.status).toBe(200)
+    expect(holdDocs()).toHaveLength(2)
+    expect(stripeCalls).toHaveLength(2)
+  })
+})
 
 describe('reservation idempotency (AGL-1697)', () => {
   it('creates one pending hold with a session and records the claim', async () => {
