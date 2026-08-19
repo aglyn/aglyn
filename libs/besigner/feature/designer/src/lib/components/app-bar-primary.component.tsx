@@ -84,7 +84,7 @@ export const AppBarPrimaryComponent = forwardRef<
             the besigner explains the control it stands next to. */}
         <HelpTip
           title="The Besigner"
-          excerpt="Aglyn's visual editor: drag elements onto the canvas, edit text inline, style per breakpoint, and publish a version."
+          excerpt="The visual editor: drag elements onto the canvas, edit text inline, style per breakpoint, and publish a version."
           href={besignerDocsUrl('besigner', '#what-you-can-do')}
           sx={{ ml: 0.5, fontSize: '0.9em' }}
         />

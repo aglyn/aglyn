@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+
 /**
  * Every cookie the product sets, and where (AGL-1918).
  *
@@ -91,10 +93,17 @@ export interface CookieWriter {
  * the same bar, using the same two vars (and the same defaults) as the console
  * routes that already read them.
  *
- * Dot access, not bracket access: Next inlines `process.env.NEXT_PUBLIC_X` at
- * build time and does NOT inline `process.env['NEXT_PUBLIC_X']` — the bracket
- * form is what left CNAME_TARGET un-substituted in AGL-2037.
+ * Dot access, not bracket access: Next substitutes these names textually at
+ * build time and only in dot form. Indexing `process.env` by a quoted key is
+ * never substituted, so the read is undefined in a browser bundle and the
+ * value silently falls back to its default — which on a self-host install
+ * means ours. That is what left CNAME_TARGET un-substituted in AGL-2037.
+ * (Spelling the bracket form here literally would trip
+ * `check:next-public-access`, which scans source text and does not skip
+ * comments — so the rule is described rather than shown.)
  */
+// The Cookie Policy is customer-facing and a white-label org must not read
+// our brand in it, so the surface prose uses the configured name (AGL-2153).
 const CONSOLE_HOST = (
   process.env.NEXT_PUBLIC_CONSOLE_URL || 'https://app.aglyn.com'
 )
@@ -164,7 +173,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         token: "'aglyn_editor'",
         surface: `${WORKSPACE_DOMAIN} and its subdomains`,
         purpose:
-          'Marks the browser as one an Aglyn editor is signed in on, so a site you can edit offers the edit bar. Its value is the literal 1 — no personal data',
+          `Marks the browser as one an ${PLATFORM_BRAND_NAME} editor is signed in on, so a site you can edit offers the edit bar. Its value is the literal 1 — no personal data`,
         duration: '7 days, cleared on sign-out',
         httpOnly: false,
       },
@@ -178,7 +187,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         token: 'EDIT_HINT_COOKIE',
         surface: `*.${TENANT_DOMAIN}`,
         purpose:
-          'Signed proof that an Aglyn editor is signed in, exchanged for edit access on a site you administer',
+          `Signed proof that an ${PLATFORM_BRAND_NAME} editor is signed in, exchanged for edit access on a site you administer`,
         duration: '7 days',
         httpOnly: true,
       },
