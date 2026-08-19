@@ -208,6 +208,27 @@ const AGLYN_CONFIG = {
     FIREBASE_DATABASE_EMULATOR_ENABLED: process.env.FIREBASE_DATABASE_EMULATOR_ENABLED,
     FIREBASE_FIRESTORE_EMULATOR_ENABLED: process.env.FIREBASE_FIRESTORE_EMULATOR_ENABLED,
     PACKAGE_VERSION: PACKAGE_VERSION,
+    /*
+     * Which BUILD this is, in the CLIENT bundle (AGL-2181).
+     *
+     * This lived in a `webpack()` DefinePlugin, which Turbopack never runs —
+     * so the footer printed `(NULL)` on every deployment the product has ever
+     * had, while PACKAGE_VERSION two lines up resolved fine because the `env`
+     * block is bundler-agnostic. Next inlines NEXT_PUBLIC_* into browser code
+     * and nothing else, so a bare process.env read cannot resolve client-side.
+     *
+     * The chain is deliberate and ordered for THREE deployment shapes, not one:
+     * an explicit BUILD_ID first, so a SELF-HOST operator can stamp their own
+     * build (AGL-2091 — today they have no way to discover what they run); then
+     * the short commit sha, in the same 7-character form /api/health already
+     * reports, so the footer and the health endpoint finally agree; then
+     * undefined, which leaves global.ts's honest 'NULL' as the unset state
+     * rather than inventing a build id nobody can trace.
+     */
+    BUILD_ID:
+      process.env.BUILD_ID ||
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
+      undefined,
     PROCESS_VERSION: process.version,
     PROCESS_VERSIONS: process.versions,
     VERCEL: process.env.VERCEL,
@@ -405,16 +426,14 @@ const AGLYN_CONFIG = {
   },
   // Disable production source maps
   webpack: (config, options) => {
-    const { webpack, buildId, isServer } = options
+    const { webpack, isServer } = options
     // if (!isServer) {
     //   /** @see https://github.com/vercel/next.js/issues/7755#issuecomment-812805708 */
     //   config.resolve.fallback.fs = false
     // }
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.env.BUILD_ID': JSON.stringify(buildId),
-      }),
-    )
+    // BUILD_ID moved to the `env` block above (AGL-2181): this DefinePlugin
+    // never ran, because Turbopack does not execute the `webpack()` hook.
+    // Leaving it here would keep implying the value was set somewhere.
 
     // SVGR: process *.svg files imported from JS/TS with named ReactComponent export.
     // nx.svgr:true is a no-op in @nx/next v22 withNx; the rule must be added explicitly.
