@@ -159,33 +159,48 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     // created from these (AGL-670). Enforced for every org, since a
     // plan-less org resolves as `free` (not unmetered).
     const org = (await getOrgForHost(hostId))?.org
-    {
-      const existing = await hostRef.collection('templates').get()
-      // Templates from THIS listing are about to be replaced, so counting
-      // them would make a re-install look like it doubles the library and
-      // fail the quota on an update the user is entitled to.
-      // Platform-seeded starters are excluded for the same reason the
-      // resources route excludes them (AGL-687): they are not the user's
-      // spend of their template allowance.
-      const count = existing.docs.filter(
+    const templatesRef = hostRef.collection('templates')
+    /**
+     * The library slots this install would spend, off a set of template docs.
+     *
+     * Templates from THIS listing are about to be replaced, so counting them
+     * would make a re-install look like it doubles the library and fail the
+     * quota on an update the user is entitled to. Platform-seeded starters are
+     * excluded for the same reason the resources route excludes them
+     * (AGL-687): they are not the user's spend of their template allowance.
+     *
+     * A function rather than an inlined filter because the count is now taken
+     * TWICE — once here as a fast refusal, once inside the transaction as the
+     * authority — and two copies of a counting rule is how the rule drifts.
+     */
+    const slotsAfterInstall = (
+      docs: Array<FirebaseFirestore.QueryDocumentSnapshot>,
+    ) =>
+      docs.filter(
         (entry) =>
           !entry.get('deletedAt') &&
           entry.get('source.type') !== 'starter' &&
           entry.get('source.listingId') !== listingId,
-      ).length
+      ).length +
+      screens.length -
+      1
+    const overQuota = (limit: number) =>
+      `This template adds ${screens.length} template${
+        screens.length === 1 ? '' : 's'
+      } to your library — your plan allows ${limit}. ` +
+      'See Billing to upgrade.'
+    {
+      // The fast refusal. NOT the enforcement point — see the transaction
+      // below — but it keeps the base-snapshot write and the version tally off
+      // the path of an install that was never going to be allowed, and it is
+      // what answers a caller who is simply over their limit.
       const quota = checkQuota(
         org as any,
         'templatesPerHost',
-        count + screens.length - 1,
+        slotsAfterInstall(await templatesRef.get().then((snap) => snap.docs)),
       )
       if (!quota.allowed) {
-        return res.status(403).json({
-          error:
-            `This template adds ${screens.length} template${
-              screens.length === 1 ? '' : 's'
-            } to your library — your plan allows ${quota.limit}. ` +
-            'See Billing to upgrade.',
-        })
+        return res.status(403).json({ error: overQuota(quota.limit) })
       }
     }
 
@@ -201,6 +216,13 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     // bundle, matching how the bundle is replaced: the published screens carry
     // no stable identity, so per-template bases would key on nothing and could
     // not be paired back up on update.
+    //
+    // Stays OUTSIDE the transaction below: it does its own read and write, and
+    // repeating those on every retry attempt is exactly what a transaction
+    // body must not do. That is safe because the base collection is
+    // content-addressed and shared — a race that ends in a refusal leaves at
+    // most a snapshot of a published version, keyed by its own hash, which the
+    // next successful install of that version reuses.
     const provenance = await recordInstallProvenance({
       firestore,
       listingId,
@@ -209,64 +231,115 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       artifactType: 'template',
       content: { screens, ...(template.theme ? { theme: template.theme } : {}) },
     })
-    // Re-installing the same listing REPLACES its previous bundle rather
-    // than stacking a second copy (AGL-671) — that is what makes "Update
-    // available" actionable with no separate refresh route.
-    //
-    // Matching old templates to new ones individually is not possible: a
-    // published snapshot's screens carry no stable identity, only a
-    // displayName and slug, so any pairing would be a guess. Replacing the
-    // bundle wholesale is honest about that. Pages already created from the
-    // old templates are untouched — they are ordinary screens with no link
-    // back.
-    const superseded = await hostRef
-      .collection('templates')
-      .where('source.listingId', '==', listingId)
-      .get()
-    const batch = firestore.batch()
-    let replaced = 0
-    for (const stale of superseded.docs) {
-      if (stale.get('deletedAt')) continue
-      batch.update(stale.ref, { deletedAt: now, updatedAt: now })
-      replaced += 1
-    }
-    let created = 0
-    for (const screen of screens) {
-      const templateRef = hostRef.collection('templates').doc(createResourceUid())
-      batch.set(templateRef, {
-        kind: 'page',
-        displayName: String(screen.displayName ?? 'Page').slice(0, 80),
-        ...(screen.description && { description: screen.description }),
-        ...(screen.seo && { seo: screen.seo }),
-        // A suggestion only — de-conflicted against the routing map when a
-        // page is actually created from this.
-        ...(screen.slug && { slug: String(screen.slug) }),
-        nodes: screen.nodes,
-        // Carried, not applied: see the note on AglynTemplate.theme. The
-        // `applyTheme` request flag is now meaningless here — nothing is
-        // applied at install — so the theme always travels with the
-        // template and the decision moves to whoever uses it.
-        ...(template.theme ? { theme: template.theme } : {}),
-        source,
-        installedFrom: provenance.installedFrom,
-        createdAt: now,
-        updatedAt: now,
-      })
-      created += 1
-    }
-    await batch.commit()
+    /**
+     * Re-installing the same listing REPLACES its previous bundle rather than
+     * stacking a second copy (AGL-671) — that is what makes "Update available"
+     * actionable with no separate refresh route. Matching old templates to new
+     * ones individually is not possible: a published snapshot's screens carry
+     * no stable identity, only a displayName and slug, so any pairing would be
+     * a guess. Replacing the bundle wholesale is honest about that. Pages
+     * already created from the old templates are untouched — they are ordinary
+     * screens with no link back.
+     *
+     * THE ENFORCEMENT POINT: the count, the decision and every write in ONE
+     * transaction (AGL-2371, the AGL-2231 treatment).
+     *
+     * The check above ran, then `recordInstallProvenance` awaited, then a
+     * second query awaited, and only then did a `WriteBatch` commit. Every
+     * await is a yield, so N concurrent installs each read the same pre-count,
+     * each found room, and each landed — and nothing re-counts afterwards, so
+     * a free plan's ten templates became two hundred by clicking install
+     * twenty times. A batch is atomic but NOT conditional on a read taken
+     * before it, which is the same lesson AGL-2369 paid for one route over.
+     *
+     * `tx.get` on the templates collection takes a pessimistic lock on every
+     * document it matched, so the loser of a race retries, re-reads the higher
+     * count and is refused.
+     *
+     * The `source.listingId` query is GONE: the superseded bundle is a subset
+     * of the rows just counted, so deriving it here costs no read and — more to
+     * the point — cannot disagree with the count the decision was made from.
+     * That disagreement was its own latent bug: the count said one thing about
+     * the library and the replacement set was fetched from a later state.
+     *
+     * A refusal comes back as data and is rendered outside. Building a response
+     * inside a body that can run several times reads as if the transaction were
+     * a place effects happen.
+     *
+     * The 500-write ceiling is unchanged: the `WriteBatch` this replaces
+     * carried the same replacements and the same creates and had the same
+     * limit, so a bundle too large to commit was already too large. That is
+     * why this is not AGL-2370 — there the import chunks PAST 500 deliberately
+     * and cannot be wrapped at all.
+     */
+    const outcome = await firestore.runTransaction<
+      | { error: string }
+      | { created: number; replaced: number; from: string | number | null }
+    >(async (tx) => {
+      const live = await tx.get(templatesRef)
+      const quota = checkQuota(
+        org as any,
+        'templatesPerHost',
+        slotsAfterInstall(live.docs),
+      )
+      if (!quota.allowed) return { error: overQuota(quota.limit) }
 
-    // Per-version tally (AGL-1036). A bundle is one install however many
-    // templates it lands, so the version it left is read off the first
-    // superseded doc rather than counted per template.
+      // ALL READS BEFORE THE WRITES, which Firestore requires.
+      const superseded = live.docs.filter(
+        (entry) => entry.get('source.listingId') === listingId,
+      )
+      let replaced = 0
+      for (const stale of superseded) {
+        if (stale.get('deletedAt')) continue
+        tx.update(stale.ref, { deletedAt: now, updatedAt: now })
+        replaced += 1
+      }
+      let created = 0
+      for (const screen of screens) {
+        tx.set(templatesRef.doc(createResourceUid()), {
+          kind: 'page',
+          displayName: String(screen.displayName ?? 'Page').slice(0, 80),
+          ...(screen.description && { description: screen.description }),
+          ...(screen.seo && { seo: screen.seo }),
+          // A suggestion only — de-conflicted against the routing map when a
+          // page is actually created from this.
+          ...(screen.slug && { slug: String(screen.slug) }),
+          nodes: screen.nodes,
+          // Carried, not applied: see the note on AglynTemplate.theme. The
+          // `applyTheme` request flag is now meaningless here — nothing is
+          // applied at install — so the theme always travels with the
+          // template and the decision moves to whoever uses it.
+          ...(template.theme ? { theme: template.theme } : {}),
+          source,
+          installedFrom: provenance.installedFrom,
+          createdAt: now,
+          updatedAt: now,
+        })
+        created += 1
+      }
+      // Per-version tally input (AGL-1036). A bundle is one install however
+      // many templates it lands, so the version it left is read off the first
+      // superseded doc rather than counted per template — and off the docs the
+      // transaction actually replaced, not a snapshot taken beside it.
+      return {
+        created,
+        replaced,
+        from:
+          superseded[0]?.get('installedFrom.version') ??
+          superseded[0]?.get('source.version') ??
+          null,
+      }
+    })
+    if ('error' in outcome) {
+      return res.status(403).json({ error: outcome.error })
+    }
+    const { created, replaced } = outcome
+
     await recordVersionMove({
       firestore,
       listingRef,
       artifactType: 'template',
-      from:
-        superseded.docs[0]?.get('installedFrom.version') ??
-        superseded.docs[0]?.get('source.version') ??
-        null,
+      from: outcome.from,
       to: listing.latestVersion,
     })
     await listingRef
