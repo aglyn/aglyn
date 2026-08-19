@@ -439,7 +439,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       })
     }
     // The merchant priced shipping and no rate of theirs reaches this cart
-    // (AGL-2230). Released like every other deterministic refusal on this
+    // (AGL-2232). Released like every other deterministic refusal on this
     // path — the shopper can change the basket and retry under the same key.
     if (shippingPlan.refusal === 'cart-unpriceable') {
       await claim.release()

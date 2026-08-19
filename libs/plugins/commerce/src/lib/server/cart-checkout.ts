@@ -266,7 +266,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       })
     }
     // The merchant priced shipping and their table cannot reach this cart
-    // (AGL-2230) — a 3 kg basket at a store whose weight tiers stop at 2 kg.
+    // (AGL-2232) — a 3 kg basket at a store whose weight tiers stop at 2 kg.
     // No `needsShippingCountry`: asking where it goes cannot price it, and a
     // shopper handed the country select would answer it and be refused again.
     if (shippingPlan.refusal === 'cart-unpriceable') {

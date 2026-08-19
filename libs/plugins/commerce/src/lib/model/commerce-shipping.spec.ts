@@ -496,7 +496,7 @@ describe('local pickup does not widen where a store ships (AGL-2325)', () => {
     // A merchant who prices shipping and offers collection: a parcel past
     // every tier still has a real answer — come and collect it — so this is
     // an OFFER, not the `cart-unpriceable` refusal. Pinned because the fix
-    // reorders these two branches and the reorder must not swallow AGL-2230.
+    // reorders these two branches and the reorder must not swallow AGL-2232.
     const tiered: ShippingSettings = {
       zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
       rates: [
@@ -688,7 +688,7 @@ describe('summarizeShippingCoverage', () => {
 })
 
 /**
- * AGL-2230. `planCheckoutShipping` decided "this merchant never set shipping
+ * AGL-2232. `planCheckoutShipping` decided "this merchant never set shipping
  * up" by probing every collectable country WITH THE LIVE CART. A cart that
  * exhausts every tier makes that probe empty too, and an empty probe took the
  * one branch that must complete with no `shipping_options` and nothing
@@ -699,7 +699,7 @@ describe('summarizeShippingCoverage', () => {
  * `{ subtotalCents: 0, totalGrams: 0 }` and is documented as a lower bound, so
  * it reports full coverage for exactly the store that leaks.
  */
-describe('a cart no rate can price (AGL-2230)', () => {
+describe('a cart no rate can price (AGL-2232)', () => {
   /** Weight tiers that stop at 2 kg, and nothing else anywhere. */
   const tiersOnly: ShippingSettings = {
     zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],

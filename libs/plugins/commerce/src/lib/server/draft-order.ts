@@ -324,7 +324,7 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
     }
-    // No rate of the merchant's reaches this order (AGL-2230). Above the
+    // No rate of the merchant's reaches this order (AGL-2232). Above the
     // order write and the payment link, like every other refusal here, so a
     // manager who fixes the tier table and presses Send again strands nothing.
     if (shippingPlan.refusal === 'cart-unpriceable') {

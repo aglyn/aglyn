@@ -540,7 +540,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     ])
   })
   /**
-   * AGL-2230, at the door rather than in the model.
+   * AGL-2232, at the door rather than in the model.
    *
    * The cart is 2 x 400 g = 800 g. Against a table whose only tier stops at
    * 500 g nothing resolves, for any of the six collectable countries — and the
@@ -549,7 +549,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
    * that never set shipping up: a live session, no `shipping_options`, freight
    * charged at nothing.
    */
-  describe('a cart past every tier (AGL-2230)', () => {
+  describe('a cart past every tier (AGL-2232)', () => {
     const stopsAt500g = {
       shipping: {
         zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
