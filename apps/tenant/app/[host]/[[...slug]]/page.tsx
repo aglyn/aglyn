@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import type { Metadata } from 'next'
@@ -70,7 +71,8 @@ function buildMetadata(props: Props): Metadata {
   // white-label site with no SEO/display title never leaks the Aglyn brand
   // into its <title>/OG. `branding` is Aglyn defaults for non-white-label
   // orgs and absent surfaces, resolved through the one shared resolver.
-  const brandName = props.branding?.productName ?? 'Aglyn'
+  const brandName =
+    props.branding?.productName ?? PLATFORM_BRANDING_PROFILE.productName
   /**
    * One title rule for every branch below (AGL-1341).
    *
@@ -307,14 +309,14 @@ function buildMetadata(props: Props): Metadata {
   // routing map so slug renames stay correct; the current screen registers
   // under its own locale (or x-default).
   const localeVariants = screen?.localeVariants as
-    | Record<string, string>
-    | undefined
+    Record<string, string> | undefined
   const languages: Record<string, string> = {}
   if (canonicalBase && localeVariants) {
     for (const [locale, variantId] of Object.entries(localeVariants)) {
       const variantPath = host?.screens?.[variantId]
       if (variantPath != null) {
-        languages[locale] = `${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`
+        languages[locale] =
+          `${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`
       }
     }
     if (canonical) languages[screen?.locale || 'x-default'] = canonical

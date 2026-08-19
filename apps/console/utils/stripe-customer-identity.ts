@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+
 /**
  * Which workspace a Stripe customer belongs to (AGL-941).
  *
@@ -69,8 +71,8 @@ export function stripeCustomerIdentityParams(
   // twice is useless, so this says what the row IS — the distinction that was
   // missing when several customers shared one owner's email.
   params['description'] = slug
-    ? `Aglyn workspace: ${slug}`
-    : `Aglyn workspace ${org.orgId}`
+    ? `${PLATFORM_BRAND_NAME} workspace: ${slug}`
+    : `${PLATFORM_BRAND_NAME} workspace ${org.orgId}`
   return params
 }
 

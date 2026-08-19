@@ -197,3 +197,13 @@ jobs:
       - run: npm run test:hardcoded-colours
 
       - run: npm run check:hardcoded-colours
+
+      # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
+      # roots as the colour one above. AGL-2153 made the platform brand
+      # configuration so a self-host operator can rename the product without
+      # editing source; this is what stops the next hardcoded "Aglyn" from
+      # being written into user-visible copy by someone with no reason to know
+      # that. Its detector is unit-tested separately, because a ratchet whose
+      # detector is wrong is a number nobody can act on.
+      - run: npm run test:brand-literals
+      - run: npm run check:brand-literals

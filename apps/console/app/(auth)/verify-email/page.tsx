@@ -17,9 +17,20 @@
 
 'use client'
 
+// Deep import, not the `@aglyn/aglyn` barrel (AGL-2170): the barrel pulls
+// shared-data-enums -> firebase-auth into every consumer's module graph, which
+// breaks specs that mock firebase wholesale (AuthErrorCodes reads undefined).
+// One brand string is not worth that edge.
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
-import { Button, CircularProgress, Link, Stack, Typography } from '@mui/material'
+import {
+  Button,
+  CircularProgress,
+  Link,
+  Stack,
+  Typography,
+} from '@mui/material'
 import { applyActionCode } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -62,7 +73,8 @@ function VerifyEmail() {
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
   const sessionVerified = signInCheckResult?.user?.emailVerified === true
-  const email = signInCheckResult?.user?.email ?? firebaseAuth.currentUser?.email
+  const email =
+    signInCheckResult?.user?.email ?? firebaseAuth.currentUser?.email
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const sentOnceRef = useRef(false)
@@ -101,11 +113,16 @@ function VerifyEmail() {
         alreadyVerified?: boolean
       }
       if (response.status === 429) {
-        setError('Too many requests — wait a moment before requesting another link.')
+        setError(
+          'Too many requests — wait a moment before requesting another link.',
+        )
         return
       }
       if (!response.ok) {
-        setError(payload.error ?? 'We couldn’t send the verification email. Try again shortly.')
+        setError(
+          payload.error ??
+            'We couldn’t send the verification email. Try again shortly.',
+        )
         return
       }
       // Verified in another tab while this page sat open. Sending a mail
@@ -244,8 +261,12 @@ function VerifyEmail() {
         paperAfter={
           <Typography component="div" variant="body2">
             {sessionVerified ? (
-              <Link component="button" type="button" onClick={() => void goToApp()}>
-                {'Continue to Aglyn'}
+              <Link
+                component="button"
+                type="button"
+                onClick={() => void goToApp()}
+              >
+                {`Continue to ${PLATFORM_BRAND_NAME}`}
               </Link>
             ) : (
               <>
@@ -256,9 +277,12 @@ function VerifyEmail() {
           </Typography>
         }
       >
-        <Typography color="error" variant="body2" sx={{ mt: 2, textAlign: 'center' }}>
-          {error ??
-            'That verification link has expired or was already used.'}
+        <Typography
+          color="error"
+          variant="body2"
+          sx={{ mt: 2, textAlign: 'center' }}
+        >
+          {error ?? 'That verification link has expired or was already used.'}
         </Typography>
         {sessionVerified ? (
           <Typography variant="body2" sx={{ mt: 1.5, textAlign: 'center' }}>
@@ -302,10 +326,18 @@ function VerifyEmail() {
       }
     >
       <Stack spacing={1.5} sx={{ mt: 2, alignItems: 'stretch' }}>
-        <Button variant="contained" color="primary" onClick={() => void checkNow()}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => void checkNow()}
+        >
           {'I’ve verified — continue'}
         </Button>
-        <Typography component="div" variant="body2" sx={{ textAlign: 'center' }}>
+        <Typography
+          component="div"
+          variant="body2"
+          sx={{ textAlign: 'center' }}
+        >
           {sent ? 'Didn’t get it? ' : ''}
           <Link
             component="button"
@@ -318,7 +350,11 @@ function VerifyEmail() {
           </Link>
         </Typography>
         {error ? (
-          <Typography color="error" variant="body2" sx={{ textAlign: 'center' }}>
+          <Typography
+            color="error"
+            variant="body2"
+            sx={{ textAlign: 'center' }}
+          >
             {error}
           </Typography>
         ) : null}

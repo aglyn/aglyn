@@ -17,6 +17,7 @@
 
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { TITLE_TEMPLATE } from './page-title'
 // Deep import (not the barrel) so this Server Component doesn't pull the theme
 // lib's createContext HOCs into the RSC graph (AGL-405).
 import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
@@ -77,9 +78,16 @@ export const metadata: Metadata = {
   // tab is where a console user distinguishes between several open pages.
   // The brand comes from configuration (AGL-2153) — a self-host operator's
   // every browser tab said "· Aglyn" regardless of what they had renamed.
+  // `TITLE_TEMPLATE` is imported rather than restated (AGL-2170). It was a
+  // second copy of the same string, kept honest by a spec asserting the two
+  // matched — which worked while both were the literal '%s · Aglyn' and broke
+  // the moment the brand became configuration (AGL-2153), because a source
+  // substring check cannot compare two interpolations. One definition removes
+  // the drift class rather than re-guarding it, which is what that spec's own
+  // name ("defined once") always claimed.
   title: {
     default: APP_CONSOLE.TITLE ?? PLATFORM_BRAND_NAME,
-    template: `%s · ${PLATFORM_BRAND_NAME}`,
+    template: TITLE_TEMPLATE,
   },
   description: APP_CONSOLE.DESCRIPTION,
   manifest: '/manifest.webmanifest',
