@@ -91,4 +91,47 @@ describe('EditorHintCookie (AGL-1829)', () => {
     expect(editorHintCookieDomain('evilaglyn.com')).toBeNull()
     expect(editorHintCookieDomain('aglyn.com.attacker.net')).toBeNull()
   })
+
+  /**
+   * A self-host install gets the hint on ITS apex (AGL-2197).
+   *
+   * The map was two literal comparisons against `aglyn.com` / `aglyn.io`, so
+   * on any other deployment this returned null for every hostname the
+   * operator serves: the cookie was never written and the in-place-edit probe
+   * on their own first-party sites was dead forever, silently, with nothing
+   * to configure. Every assertion above passed throughout, because they all
+   * run with `NEXT_PUBLIC_WORKSPACE_DOMAIN` unset — where the configured
+   * value and the hard-coded literal are the same string.
+   *
+   * `WORKSPACE_DOMAIN` is read at module scope, so the configured branch is
+   * only observable by re-requiring the module with the variable set.
+   */
+  it('follows a configured workspace domain, and drops our alias with it', () => {
+    const previous = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN
+    process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN = 'example.com'
+    try {
+      jest.isolateModules(() => {
+        const scoped =
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          require('../components/editor-hint-cookie.component')
+            .editorHintCookieDomain as typeof editorHintCookieDomain
+        expect(scoped('console.example.com')).toBe('.example.com')
+        expect(scoped('example.com')).toBe('.example.com')
+        // Ours is gone — not merely joined by theirs. A list of OUR hostnames
+        // must not stay authoritative on somebody else's deployment.
+        expect(scoped('app.aglyn.com')).toBeNull()
+        expect(scoped('app.aglyn.io')).toBeNull()
+        // The lookalike guard still holds against the configured apex.
+        expect(scoped('evilexample.com')).toBeNull()
+        expect(scoped('example.com.attacker.net')).toBeNull()
+      })
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN
+      } else {
+        process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN = previous
+      }
+      jest.resetModules()
+    }
+  })
 })

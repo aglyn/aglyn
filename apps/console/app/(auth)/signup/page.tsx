@@ -88,6 +88,7 @@ import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-int
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
+import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 // Chooser forced on (AGL-1415): signing UP is the worst place to silently
 // reuse the device's account — it decides which identity owns the new org.
@@ -109,7 +110,7 @@ const googleOAuthProvider = createGoogleOAuthProvider()
  */
 const signupOrgNameField = {
   ...FIELD_SCHEMA_ORGANIZATION_NAME,
-  helperText: 'This becomes your workspace address, e.g. acme-inc.aglyn.com',
+  helperText: `This becomes your workspace address, e.g. acme-inc.${WORKSPACE_DOMAIN}`,
   validate: [
     ...(FIELD_SCHEMA_ORGANIZATION_NAME.validate ?? []),
     (value: unknown) =>

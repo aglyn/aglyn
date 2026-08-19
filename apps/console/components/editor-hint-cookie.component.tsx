@@ -17,6 +17,7 @@
 'use client'
 
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { WORKSPACE_DOMAIN } from '../constants/workspace-domain'
 import { useEffect } from 'react'
 
 /**
@@ -50,13 +51,35 @@ export const EDITOR_HINT_COOKIE = 'aglyn_editor'
 const HINT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 /**
+ * Apexes whose subdomains may share the hint (AGL-2197).
+ *
+ * `WORKSPACE_DOMAIN` first, so the operator's own apex is the one this is
+ * really about. It was a two-line literal match on `aglyn.com` / `aglyn.io`,
+ * which meant that on a self-host install this function returned `null` for
+ * every hostname the operator serves — the hint was never written, and the
+ * in-place-edit probe on their own first-party sites was silently dead
+ * forever, with no error and nothing to configure.
+ *
+ * `aglyn.io` is Aglyn's alias apex and is added ONLY while the workspace
+ * domain is still Aglyn's own. Leaving it in unconditionally would be nearly
+ * harmless — nobody else serves it — but "nearly harmless" is how a list of
+ * our hostnames ends up authoritative on someone else's deployment, and the
+ * condition costs one line.
+ */
+const HINT_APEXES: readonly string[] = [
+  WORKSPACE_DOMAIN,
+  ...(WORKSPACE_DOMAIN === 'aglyn.com' ? ['aglyn.io'] : []),
+].filter((apex) => apex.includes('.'))
+
+/**
  * The registrable domain the hint may live on, or null when this hostname
  * must not carry one (localhost, previews, customer console domains).
  */
 export function editorHintCookieDomain(hostname: string): string | null {
   const lower = hostname.toLowerCase()
-  if (lower === 'aglyn.com' || lower.endsWith('.aglyn.com')) return '.aglyn.com'
-  if (lower === 'aglyn.io' || lower.endsWith('.aglyn.io')) return '.aglyn.io'
+  for (const apex of HINT_APEXES) {
+    if (lower === apex || lower.endsWith(`.${apex}`)) return `.${apex}`
+  }
   return null
 }
 
