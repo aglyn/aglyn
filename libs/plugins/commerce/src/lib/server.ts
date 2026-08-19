@@ -28,10 +28,13 @@
 import {
   registerBillingWebhookHandler,
   registerPluginApiRoute,
+  registerPluginJob,
   registerSitePageEnricher,
   registerSitePageResolver,
   registerPluginPermissions,
 } from '@aglyn/aglyn/server'
+import { isEmailConfigured } from '@aglyn/shared-util-email'
+import { BUNDLE_ID } from './constants/bundle-common'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { commerceSitePageEnricher } from './server/site-page-enricher'
@@ -69,10 +72,69 @@ import { fulfillOrderHandler } from './server/fulfill-order'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
 import { posOrderHandler } from './server/pos-order'
-import { processAbandonedHandler } from './server/process-abandoned'
-import { processRestockHandler } from './server/process-restock'
+import {
+  processAbandonedHandler,
+  scanAbandonedCheckouts,
+} from './server/process-abandoned'
+import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { refundHandler } from './server/refund'
 import { supplierUpdateHandler } from './server/supplier-update'
+
+/**
+ * The two commerce beats (AGL-2227).
+ *
+ * `commerce/process-abandoned` and `commerce/process-restock` have existed
+ * since AGL-323/326 as `x-cron-secret` HTTP doors, and `registerCommerceConsoleApi`
+ * below has called them "the scheduler-driven jobs" in a comment that whole
+ * time. **Nothing scheduled them.** Not `scheduled-crons.yml` (its table names
+ * 11 paths; neither of these), not `vercel.json` (no `crons` key at all), not
+ * `registerPluginJob` — the only two registrations in the repo were scheduled
+ * publishing and the bookings hold-expiry.
+ *
+ * The cost was a Pro-tier entitlement (`abandonedCart`) that had never sent an
+ * email, and a storefront "notify me when it's back" form writing into a queue
+ * with no drain. AGL-1793 had already added the collection-group indexes these
+ * two scans need, which is the clearest evidence they were always meant to run.
+ *
+ * Module scope, like the bookings job beside it: the runner route reaches jobs
+ * through `ensureAll(['tenantApi'])`, and a registration inside a `register*`
+ * function would depend on which entry point happened to be loaded.
+ *
+ * 15 minutes, not 1: `process-abandoned` will not remind a checkout younger
+ * than an hour and `process-restock` only mails alerts whose product already
+ * has stock, so a tighter beat buys nothing and costs two collection-group
+ * scans a minute. Both are bounded (200 docs) and idempotent — each pass
+ * stamps what it sent — so an overlapping or repeated beat cannot double-send.
+ */
+const RECOVERY_JOB_INTERVAL_MINUTES = 15
+
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'abandoned-checkout-recovery',
+  intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
+  description:
+    'Email one recovery reminder per stalled checkout (abandonedCart plans).',
+  handler: async () => {
+    // Quietly, not as an error: email is optional per deployment, and a beat
+    // that logs every minute on a self-host without Resend buries everything
+    // else in the log.
+    if (!isEmailConfigured()) return
+    const { sent } = await scanAbandonedCheckouts()
+    if (sent) console.info(`commerce: sent ${sent} abandoned-cart reminders`)
+  },
+})
+
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'back-in-stock-alerts',
+  intervalMinutes: RECOVERY_JOB_INTERVAL_MINUTES,
+  description: 'Email shoppers whose requested product is in stock again.',
+  handler: async () => {
+    if (!isEmailConfigured()) return
+    const { sent } = await scanRestockAlerts()
+    if (sent) console.info(`commerce: sent ${sent} back-in-stock alerts`)
+  },
+})
 
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
@@ -122,8 +184,13 @@ export function registerCommerceApi(): void {
 /**
  * Registers the commerce plugin's console-side API routes (AGL-396):
  * merchant/staff operations (Connect onboarding, refunds, draft & POS
- * orders, member posts) and the scheduler-driven jobs (abandoned-cart,
- * restock alerts, dropship supplier updates).
+ * orders, member posts), the supplier tracking callback, and the HTTP doors
+ * for the abandoned-cart / restock passes.
+ *
+ * Those last two are NOT what schedules them — the `registerPluginJob` calls
+ * above are (AGL-2227). This comment used to call them "the scheduler-driven
+ * jobs", which is how they stayed dark for months: it asserted the wiring
+ * instead of having it.
  */
 export function registerCommerceConsoleApi(): void {
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/

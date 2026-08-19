@@ -33,12 +33,106 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 const REMIND_AFTER_MS = 60 * 60 * 1000
 const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
 
+/** One pass over the open checkouts. Bounded (200) and idempotent. */
+export interface AbandonedScanResult {
+  scanned: number
+  sent: number
+}
+
 /**
- * Abandoned checkout recovery (AGL-323): scheduler-invoked (same
- * `x-cron-secret` convention as report-usage). Open checkouts with an
- * email that stalled for an hour get one recovery email with the
- * resume link; completion (AGL-296 webhook) closes the doc so reminders
- * stop. Pro-plan gated per host.
+ * The abandoned-checkout pass itself, separated from its HTTP door (AGL-2227).
+ *
+ * It was only ever reachable through `processAbandonedHandler`, which is
+ * `x-cron-secret`-gated — and **nothing has ever POSTed to it**. It is not in
+ * `.github/workflows/scheduled-crons.yml`, there is no `crons` key in
+ * `vercel.json`, and it was not a `registerPluginJob`. `server.ts` described
+ * these as "the scheduler-driven jobs" in a comment, which is how a dead
+ * feature stays invisible: the code asserted the wiring rather than having it.
+ *
+ * So `abandonedCart` — a Pro-tier entitlement, sold on /pricing, with a
+ * console row added by AGL-2081 telling the merchant their template needs it —
+ * had never sent one email. Exporting the scan lets `server.ts` register it on
+ * the platform job beat (the every-minute `pluginJobsBeat` that AGL-2176
+ * proved out) while the HTTP door stays for manual/ops invocation and for the
+ * console's "send now" control.
+ */
+export async function scanAbandonedCheckouts(): Promise<AbandonedScanResult> {
+  const firestore = firebaseAdmin.app().firestore()
+  const now = Date.now()
+  // Collection-group over every host's checkouts.
+  const openCheckouts = await firestore
+    .collectionGroup('checkouts')
+    .where('status', '==', 'open')
+    .limit(200)
+    .get()
+  let sent = 0
+  const entitledHosts = new Map<string, boolean>()
+  // White-label brand per host (White-Label Phase 3): resolved once per host
+  // alongside the entitlement, from the same org doc, through the one shared
+  // resolver — so the recovery email's sender reads as the store's brand.
+  const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
+  // Resolve each host's designed template once per run (AGL-770).
+  const templateCache = new Map<string, LoadedHostEmail | null>()
+  for (const docSnapshot of openCheckouts.docs) {
+    const data = docSnapshot.data() as any
+    const createdAtMs = Number(data.createdAtMs ?? 0)
+    if (!data.email || data.remindedAtMs) continue
+    if (now - createdAtMs < REMIND_AFTER_MS) continue
+    if (now - createdAtMs > GIVE_UP_AFTER_MS) {
+      await docSnapshot.ref
+        .set({ status: 'expired' }, { merge: true })
+        .catch(() => undefined)
+      continue
+    }
+    const hostId = docSnapshot.ref.parent.parent?.id
+    if (!hostId) continue
+    if (!entitledHosts.has(hostId)) {
+      const org = await getOrgForHost(hostId).catch(() => null)
+      entitledHosts.set(
+        hostId,
+        Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
+      )
+      brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
+    }
+    if (!entitledHosts.get(hostId)) continue
+    let loaded = templateCache.get(hostId)
+    if (loaded === undefined) {
+      loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart')
+      templateCache.set(hostId, loaded)
+    }
+    const designed = loaded
+      ? renderLoadedHostEmail(loaded, {
+          'cart.url': String(data.resumeUrl ?? ''),
+        })
+      : null
+    await sendEmail({
+      to: String(data.email),
+      subject: designed?.subject ?? 'You left something in your cart',
+      text:
+        designed?.text ||
+        'Your cart is still waiting — pick up where you left off:\n\n' +
+          `${data.resumeUrl ?? ''}\n\n` +
+          'Your items are held but not reserved, so they may sell out.',
+      ...(designed?.html ? { html: designed.html } : {}),
+      fromName: brandingByHost.get(hostId)?.fromName,
+      context: 'abandoned cart',
+    })
+    // Cost meter (AGL-1438). One reminder per abandoned checkout, triggered
+    // by that shopper's own action rather than composed as a broadcast, so
+    // it counts toward cost without entering the campaign cap.
+    await meterHostEmail(hostId)
+    await docSnapshot.ref
+      .set({ remindedAtMs: now }, { merge: true })
+      .catch(() => undefined)
+    sent += 1
+  }
+  return { scanned: openCheckouts.size, sent }
+}
+
+/**
+ * HTTP door for the pass above (AGL-323). Kept `x-cron-secret`-gated so an
+ * external scheduler or an operator can still drive it; the job registration
+ * in `server.ts` is what makes it actually run.
  */
 export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -54,78 +148,8 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
   if (!isEmailConfigured()) {
     return res.status(501).json({ error: 'Email is not configured.' })
   }
-
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const now = Date.now()
-    // Collection-group over every host's checkouts.
-    const openCheckouts = await firestore
-      .collectionGroup('checkouts')
-      .where('status', '==', 'open')
-      .limit(200)
-      .get()
-    let sent = 0
-    const entitledHosts = new Map<string, boolean>()
-    // White-label brand per host (White-Label Phase 3): resolved once per host
-    // alongside the entitlement, from the same org doc, through the one shared
-    // resolver — so the recovery email's sender reads as the store's brand.
-    const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
-    // Resolve each host's designed template once per run (AGL-770).
-    const templateCache = new Map<string, LoadedHostEmail | null>()
-    for (const docSnapshot of openCheckouts.docs) {
-      const data = docSnapshot.data() as any
-      const createdAtMs = Number(data.createdAtMs ?? 0)
-      if (!data.email || data.remindedAtMs) continue
-      if (now - createdAtMs < REMIND_AFTER_MS) continue
-      if (now - createdAtMs > GIVE_UP_AFTER_MS) {
-        await docSnapshot.ref
-          .set({ status: 'expired' }, { merge: true })
-          .catch(() => undefined)
-        continue
-      }
-      const hostId = docSnapshot.ref.parent.parent?.id
-      if (!hostId) continue
-      if (!entitledHosts.has(hostId)) {
-        const org = await getOrgForHost(hostId).catch(() => null)
-        entitledHosts.set(
-          hostId,
-          Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
-        )
-        brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
-      }
-      if (!entitledHosts.get(hostId)) continue
-      let loaded = templateCache.get(hostId)
-      if (loaded === undefined) {
-        loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart')
-        templateCache.set(hostId, loaded)
-      }
-      const designed = loaded
-        ? renderLoadedHostEmail(loaded, {
-            'cart.url': String(data.resumeUrl ?? ''),
-          })
-        : null
-      await sendEmail({
-        to: String(data.email),
-        subject: designed?.subject ?? 'You left something in your cart',
-        text:
-          designed?.text ||
-          'Your cart is still waiting — pick up where you left off:\n\n' +
-            `${data.resumeUrl ?? ''}\n\n` +
-            'Your items are held but not reserved, so they may sell out.',
-        ...(designed?.html ? { html: designed.html } : {}),
-        fromName: brandingByHost.get(hostId)?.fromName,
-        context: 'abandoned cart',
-      })
-      // Cost meter (AGL-1438). One reminder per abandoned checkout, triggered
-      // by that shopper's own action rather than composed as a broadcast, so
-      // it counts toward cost without entering the campaign cap.
-      await meterHostEmail(hostId)
-      await docSnapshot.ref
-        .set({ remindedAtMs: now }, { merge: true })
-        .catch(() => undefined)
-      sent += 1
-    }
-    return res.status(200).json({ scanned: openCheckouts.size, sent })
+    return res.status(200).json(await scanAbandonedCheckouts())
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Processing failed' })

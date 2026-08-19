@@ -28,6 +28,7 @@ import LocationsCard from './console/locations-card.component'
 import MemberPostsCard from './console/member-posts-card.component'
 import PaymentsSettingsCard from './console/payments-settings-card.component'
 import ProductsHubCard from './console/products-hub-card.component'
+import RecoveryQueueCard from './console/recovery-queue-card.component'
 import RegistersCard from './console/registers-card.component'
 import ReservationsCard from './console/reservations-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
@@ -68,7 +69,21 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
         {
           id: 'orders',
           label: 'Orders',
-          content: <HostOrdersCard hostId={hostId} />,
+          content: (
+            <GridItems
+              spacing={3}
+              items={[
+                { size: { xs: 12 }, children: <HostOrdersCard hostId={hostId} /> },
+                // The two queues that feed orders rather than record them
+                // (AGL-2227): checkouts that stalled and shoppers waiting on
+                // stock. Beneath the orders list because both are pre-order.
+                {
+                  size: { xs: 12 },
+                  children: <RecoveryQueueCard hostId={hostId} />,
+                },
+              ]}
+            />
+          ),
         },
         {
           id: 'promotions',
