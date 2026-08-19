@@ -44,6 +44,48 @@
 const mockVerifyIdToken = jest.fn()
 const mockOrgGet = jest.fn()
 
+/**
+ * The attempt-claim store (AGL-1697), modelled rather than stubbed.
+ *
+ * This suite used to drive a request with NO `Idempotency-Key`, which let it
+ * skip the store entirely — `claimAttempt` short-circuits on a missing key.
+ * The real Billing page has never sent that request: it mints a key per
+ * attempt and sends it on every checkout. AGL-2163 made the keyless path
+ * `console.warn` that it is an unprotected money call, and the blanket
+ * `expect(warnings).toHaveLength(0)` below — there to catch a MISSING metered
+ * item — caught the spec's own unfaithful request instead.
+ *
+ * So the fixture now sends the key the client sends, and the double models
+ * the one Firestore behaviour the claim is built on: `create()` REJECTS on an
+ * existing document, which is the whole dedupe primitive. A double that
+ * resolved instead would fabricate a green for a route that double-charges.
+ */
+const mockAttemptDocs = new Map<string, Record<string, unknown>>()
+
+function mockAttemptDocRef(id: string) {
+  return {
+    create: async (data: Record<string, unknown>) => {
+      if (mockAttemptDocs.has(id)) throw new Error('ALREADY_EXISTS')
+      mockAttemptDocs.set(id, { ...data })
+    },
+    get: async () => ({
+      get: (field: string) => mockAttemptDocs.get(id)?.[field],
+    }),
+    set: async (
+      data: Record<string, unknown>,
+      options?: { merge?: boolean },
+    ) => {
+      mockAttemptDocs.set(
+        id,
+        options?.merge ? { ...(mockAttemptDocs.get(id) ?? {}), ...data } : { ...data },
+      )
+    },
+    delete: async () => {
+      mockAttemptDocs.delete(id)
+    },
+  }
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -52,7 +94,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
-        collection: () => ({ doc: () => ({ get: () => mockOrgGet() }) }),
+        collection: (name: string) =>
+          name === 'apiIdempotency'
+            ? { doc: (id: string) => mockAttemptDocRef(id) }
+            : { doc: () => ({ get: () => mockOrgGet() }) },
       }),
     }),
   },
@@ -70,8 +115,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  // The REAL claim helper (AGL-1697): keyless requests — this spec's case —
-  // get a no-op claim with zero store interaction, so requireActual is exact.
+  // The REAL claim helper (AGL-1697), against the modelled store above — a
+  // stub would leave this suite asserting on its own mock while the route's
+  // real answer drifted.
   claimAttempt: jest.requireActual('@aglyn/aglyn/app-utils/api-idempotency')
     .claimAttempt,
   // The REAL predicate, not a re-typed triple (AGL-1715). A hand-written mock
@@ -85,15 +131,30 @@ jest.mock('@aglyn/aglyn/server', () => ({
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   isCustomPricedPlan: (plan: string) => plan === 'enterprise',
   isReleaseFlagOn: () => false,
-  pluginRequestFromWeb: async (request: Request) => ({
-    method: request.method,
-    body: await request.json(),
-    headers: {
-      authorization: request.headers.get('authorization') ?? undefined,
-      origin: 'https://app.aglyn.com',
-      host: 'app.aglyn.com',
-    },
-  }),
+  // The REAL adapter. The hand-written version this replaces forwarded three
+  // headers by name, which made it a CLOSED WORLD: the route reads
+  // `headers['idempotency-key']`, the adapter silently dropped it, and the
+  // route saw every checkout as keyless no matter what the client sent — so
+  // the suite could not have told an unprotected money call from a protected
+  // one. `origin`/`host` are layered UNDER the real headers because the
+  // platform adds them and a bare Web `Request` cannot carry them; everything
+  // the fixture actually sets wins.
+  pluginRequestFromWeb: async (
+    request: Request,
+    params?: Record<string, string | string[]>,
+  ) => {
+    const real = await jest
+      .requireActual('@aglyn/aglyn/app-utils/api-adapter')
+      .pluginRequestFromWeb(request, params)
+    return {
+      ...real,
+      headers: {
+        origin: 'https://app.aglyn.com',
+        host: 'app.aglyn.com',
+        ...real.headers,
+      },
+    }
+  },
   // Read by utils/server/billing-addons, which checkout now imports for the
   // metered price. The plan ladder is the real one so `PAID_PLANS` derives
   // the same set it does in production.
@@ -145,6 +206,15 @@ function loadCheckout(env: Record<string, string> = {}) {
   ) => Promise<Response>
 }
 
+/**
+ * One key per call, because one call here IS one attempt — the same thing the
+ * Billing page does when it mints a key and retires it as the attempt ends.
+ * A key shared across calls would make the second one a REPLAY, and a replay
+ * never reaches Stripe, so `capturedBody` would silently be the previous
+ * request's body and every assertion below would be checking a stale capture.
+ */
+let attemptSeq = 0
+
 function checkout(
   post: (request: Request) => Promise<Response>,
   interval: 'month' | 'year',
@@ -155,6 +225,7 @@ function checkout(
       headers: {
         authorization: 'Bearer tok',
         'content-type': 'application/json',
+        'Idempotency-Key': `attempt-${++attemptSeq}`,
       },
       body: JSON.stringify({ plan: 'starter', interval, orgId: 'org-1' }),
     }),
@@ -164,6 +235,7 @@ function checkout(
 beforeEach(() => {
   capturedBody = null
   warnings = []
+  mockAttemptDocs.clear()
   mockVerifyIdToken.mockResolvedValue({ uid: 'u-1', email_verified: true })
   mockOrgGet.mockResolvedValue({ get: () => 'acme' })
   jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
