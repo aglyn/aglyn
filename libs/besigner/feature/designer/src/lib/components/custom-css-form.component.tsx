@@ -17,6 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiClose, mdiPlus } from '@aglyn/shared-data-mdi'
+import {
+  canonicalSxProperties,
+  expandSxAliases,
+  isAtomicSxValue,
+} from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Autocomplete,
@@ -31,7 +36,8 @@ import {
 import { observer } from 'mobx-react-lite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SxBreakpoint } from '../utils/responsive-sx'
-import { readSxValue, writeSxValue } from '../utils/responsive-sx'
+import { readSxValue } from '../utils/responsive-sx'
+import { applyStylePartialToSx } from '../utils/style-field-groups'
 import { getNodeStyleTarget } from '../utils/style-target'
 
 /**
@@ -67,19 +73,105 @@ export function parseCssDeclarations(css: string): Record<string, string> {
   return result
 }
 
+/**
+ * The scalar declarations the Builder rows and the CSS tab show for `sx`,
+ * named in the Styles panel's own spelling (AGL-2390).
+ *
+ * MUI honours two names for the same declaration, and every other control
+ * in this panel is named for the CSS longhand (AGL-2207). Listing the raw
+ * keys made this form the one place that said `bgcolor` where the Colors
+ * group said `backgroundColor` and BoxStyler said `paddingTop` — the same
+ * node, two vocabularies, and the author with no way to tell that the two
+ * rows were one declaration. The expansion is a pure renaming of what
+ * already renders (order preserved, non-atomic values left alone), and it
+ * is what makes the row's × and the CSS tab's clear reach the key that is
+ * actually painting.
+ *
+ * The JSS tab deliberately does NOT go through here: it edits the stored
+ * document verbatim, which is the escape hatch for everything the named
+ * controls cannot express.
+ */
+export function customCssDeclarations(
+  sx: Record<string, any> | undefined,
+  breakpoint: SxBreakpoint | null,
+): Array<{ property: string; value: string }> {
+  const source = expandSxAliases((sx ?? {}) as Record<string, any>, {
+    deep: true,
+  })
+  const out: Array<{ property: string; value: string }> = []
+  for (const property of Object.keys(source)) {
+    const value = readSxValue(source, property, breakpoint)
+    if (value === undefined || value === null) continue
+    if (typeof value === 'object') continue // selectors/nested — JSON tab
+    out.push({ property, value: String(value) })
+  }
+  return out
+}
+
 /** Serializes scalar sx entries into CSS declarations for the CSS tab. */
 export function serializeCssDeclarations(
   sx: Record<string, any> | undefined,
   breakpoint: SxBreakpoint | null,
 ): string {
-  const lines: string[] = []
-  for (const property of Object.keys(sx ?? {})) {
-    const value = readSxValue(sx, property, breakpoint)
-    if (value === undefined || value === null) continue
-    if (typeof value === 'object') continue // selectors/nested — JSON tab
-    lines.push(`${camelToKebab(property)}: ${String(value)};`)
+  return customCssDeclarations(sx, breakpoint)
+    .map(({ property, value }) => `${camelToKebab(property)}: ${value};`)
+    .join('\n')
+}
+
+/**
+ * The declaration(s) one named property writes, in the panel's spelling.
+ *
+ * The property field is free-solo and the CSS tab takes any declaration, so
+ * an author can type `bgcolor` or `py` at any time — this form is the one
+ * seam in the product where a fresh alias can still enter a document. It
+ * resolves the name the same way {@link expandSxAliases} resolves a stored
+ * one, so what the author typed and what the panel reads back agree.
+ *
+ * A value the expansion cannot carry per-side — `p: '10px 20px'`, the CSS
+ * shorthand's own syntax — keeps the name the author gave it rather than
+ * being copied onto four longhands CSS would drop. Clearing always expands,
+ * because a cleared alias has to take every longhand it was painting with
+ * it.
+ */
+export function canonicalCssPartial(
+  property: string,
+  value: string | undefined,
+): Record<string, unknown> {
+  const canonical = canonicalSxProperties(property)
+  const expandable =
+    canonical.length === 1 || value === undefined || isAtomicSxValue(value)
+  if (!canonical.length || !expandable) return { [property]: value }
+  return Object.fromEntries(canonical.map((name) => [name, value]))
+}
+
+/**
+ * Applies custom-CSS edits to `sx` — the write both the Builder rows and
+ * the CSS tab's Apply go through (AGL-2390).
+ *
+ * Routed through the Styles panel's own write seam so this form cannot
+ * drift from it again: {@link applyStylePartialToSx} expands the alias keys
+ * the edit COLLIDES with before writing, which is what makes clearing a
+ * declaration actually clear (deleting `backgroundColor` while a `bgcolor`
+ * underneath keeps painting is AGL-2207's sharper failure) and what stops a
+ * write leaving two spellings of one declaration in the record.
+ *
+ * Scheme-agnostic (`null`): this form has always written the base slice,
+ * and the dark-preview scoping belongs to the named color fields.
+ */
+export function applyCustomCssEdits(
+  sx: Record<string, any> | undefined,
+  edits: Record<string, string | undefined>,
+  breakpoint: SxBreakpoint | null,
+): Record<string, any> {
+  const partial: Record<string, unknown> = {}
+  for (const [property, value] of Object.entries(edits)) {
+    if (!property) continue
+    Object.assign(
+      partial,
+      canonicalCssPartial(property, value === '' ? undefined : value),
+    )
   }
-  return lines.join('\n')
+  return applyStylePartialToSx(sx, partial, breakpoint, null)
 }
 
 export interface CustomCssFormProps {
@@ -119,19 +211,7 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
   const [error, setError] = useState<string | null>(null)
 
   const rows = useMemo<BuilderRow[]>(
-    () =>
-      Object.keys(nodeSx)
-        .map((property) => ({
-          property,
-          value: readSxValue(nodeSx, property, breakpoint),
-        }))
-        .filter(
-          (row) =>
-            row.value !== undefined &&
-            row.value !== null &&
-            typeof row.value !== 'object',
-        )
-        .map((row) => ({ property: row.property, value: String(row.value) })),
+    () => customCssDeclarations(nodeSx, breakpoint),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(nodeSx), breakpoint],
   )
@@ -183,10 +263,9 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       Aglyn.canvas.transact(
         () => {
           target.setSx(
-            writeSxValue(
+            applyCustomCssEdits(
               (target.sx ?? {}) as Record<string, any>,
-              property,
-              value === '' ? undefined : value,
+              { [property]: value },
               breakpoint,
             ),
           )
@@ -203,17 +282,23 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
     // Uncoalesced: pressing Apply is one deliberate commit, however many
     // declarations it carries (AGL-1204).
     Aglyn.canvas.transact(() => {
-      let sx = (target.sx ?? {}) as Record<string, any>
-      // Clear scalar declarations no longer present, then write the rest.
+      // One edit map, applied once: declarations no longer in the draft
+      // clear, the rest write. Both halves resolve their spelling through
+      // `applyCustomCssEdits`, so a row the author deleted takes the alias
+      // that was painting it with it, and a declaration they typed under
+      // MUI's spelling lands where every other control can read it.
+      const edits: Record<string, string | undefined> = {}
       for (const row of rows) {
-        if (!(row.property in parsed)) {
-          sx = writeSxValue(sx, row.property, undefined, breakpoint)
-        }
+        if (!(row.property in parsed)) edits[row.property] = undefined
       }
-      for (const [property, value] of Object.entries(parsed)) {
-        sx = writeSxValue(sx, property, value, breakpoint)
-      }
-      target.setSx(sx)
+      Object.assign(edits, parsed)
+      target.setSx(
+        applyCustomCssEdits(
+          (target.sx ?? {}) as Record<string, any>,
+          edits,
+          breakpoint,
+        ),
+      )
     })
     setError(null)
   }, [node, target, cssDraft, rows, breakpoint])
