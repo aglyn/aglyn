@@ -270,3 +270,38 @@ they change the execution notes above.
   unreachable cap — and dropping it is still the right call.
 - `host-usage` no longer returns `siteSizeBytes`; its live per-site sweep had
   exactly one reader and that reader now uses the rollup.
+
+---
+
+## Addendum (AGL-2155): the FREE half of the verdict above was wrong
+
+"`bandwidthGb` is already metered … going past it already costs money" is true
+on every plan that carries `meteredInfraPassThrough` — and free does not. On
+free the same sentence inverts: going past the band costs **us** money and the
+customer nothing, because free's `perPageView` rate is `null` by design (see
+`apps/console/specs/free-tier-never-billed.spec.ts`). A metered band is not an
+enforcement mechanism for a plan with no meter, so on free `bandwidthGb` was
+exactly the decoration this document acquitted it of being.
+
+That left bandwidth as the one free dimension with no runtime brace at all
+while every other one had one — media storage (`mediaStorageGate`), form
+submissions (`checkFormSubmissionQuota`), dataset storage and API (zero bands),
+contacts (a hard band). A free site that went viral served a million page views
+— about **$100 of real COGS** — against a $0 invoice, with nothing anywhere
+refusing a view.
+
+AGL-2155 adds `checkBandwidthAbuseCeiling`, built on
+`checkFormSubmissionAbuseCeiling`'s precedent: a containment ceiling an order
+of magnitude above the included band (floor 100,000 page views/month), not a
+plan gate. It is evaluated in `/api/analytics/collect` — where the counter is
+already written, after the render — and stamps `hosts/{id}.bandwidthCeiling`,
+which the tenant loader reads off a host document it already loads. The render
+path therefore pays **no extra Firestore read**, which is the objection that
+kept this open.
+
+Crossing it flags the host and escalates to staff on every plan. It changes
+what visitors see only where the overage is **uncompensated** — i.e. free —
+because taking a paying customer's site off the air would trade a bill they
+agreed to for an outage they did not. Whether a paying host past its own
+ceiling should also be degraded is left open: it is the single
+`bandwidthCeilingDegradesRender` predicate.

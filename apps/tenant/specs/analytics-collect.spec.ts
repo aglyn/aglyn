@@ -45,6 +45,10 @@ const mockIsIncrement = (value: unknown): value is Increment =>
 let mockStore: Record<string, Record<string, any>> = {}
 let mockEmitted: Array<{ hostId: string; event: string }> = []
 let mockHostReads = 0
+/** The owning org the ceiling resolves the plan from (AGL-2155). */
+let mockOrgForHost: Record<string, any> | undefined
+let mockStaffNotices: Array<Record<string, unknown>> = []
+let mockManagerNotices: Array<Record<string, unknown>> = []
 
 /** Recursive merge with increments applied at the leaves, like Firestore. */
 const mockApplyMerge = (
@@ -112,8 +116,45 @@ const mockDocHandle = (path: string) => ({
   collection: (name: string) => mockCollectionHandle(`${path}/${name}`),
 })
 
+/**
+ * Documents-by-id range query (AGL-2155). The bandwidth ceiling sums the
+ * month's `analytics/{day}` docs with the SAME documentId range query
+ * `report-usage` uses, so the fake has to model that query and not a
+ * convenient stand-in: an `.get()` that returned every doc in the collection
+ * would make a ceiling that ignored the month boundary look correct.
+ */
+const mockQueryHandle = (
+  path: string,
+  bounds: { gte?: string; lte?: string },
+) => ({
+  where: (_field: unknown, op: string, value: string) =>
+    mockQueryHandle(path, {
+      ...bounds,
+      ...(op === '>=' ? { gte: value } : {}),
+      ...(op === '<=' ? { lte: value } : {}),
+    }),
+  get: async () => {
+    const prefix = `${path}/`
+    const docs = Object.entries(mockStore)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, data]) => ({ id: key.slice(prefix.length), data }))
+      .filter(({ id }) => !id.includes('/'))
+      .filter(({ id }) => (bounds.gte === undefined ? true : id >= bounds.gte))
+      .filter(({ id }) => (bounds.lte === undefined ? true : id <= bounds.lte))
+    return {
+      docs: docs.map(({ id, data }) => ({
+        id,
+        get: (field: string) => data?.[field],
+        data: () => data,
+      })),
+    }
+  },
+})
+
 const mockCollectionHandle = (path: string) => ({
   doc: (id: string) => mockDocHandle(`${path}/${id}`),
+  where: (field: unknown, op: string, value: string) =>
+    mockQueryHandle(path, {}).where(field, op, value),
 })
 
 jest.mock('firebase-admin/firestore', () => ({
@@ -144,6 +185,27 @@ jest.mock('@aglyn/tenant-data-admin', () => {
           collection: (name: string) => mockCollectionHandle(name),
         }),
       }),
+      // The documentId() sentinel the ceiling's month query uses. Opaque —
+      // `mockQueryHandle` filters on the doc id regardless, which is the only
+      // field path this route ever ranges on.
+      firestore: { FieldPath: { documentId: () => '__name__' } },
+    },
+    // AGL-2155. Present in the mock because the route calls them; a wholesale
+    // mock is a closed world and a missing export here is a TypeError inside
+    // the route's try/catch — i.e. a silently skipped ceiling that every
+    // assertion below would still pass.
+    getOrgForHost: async (hostId: string) =>
+      mockOrgForHost === undefined
+        ? null
+        : { orgId: 'org-1', org: mockOrgForHost, hostId },
+    notifyStaff: async (payload: Record<string, unknown>) => {
+      mockStaffNotices.push(payload)
+    },
+    notifyHostManagers: async (
+      hostId: string,
+      payload: Record<string, unknown>,
+    ) => {
+      mockManagerNotices.push({ hostId, ...payload })
     },
   }
 })
@@ -188,6 +250,9 @@ beforeEach(() => {
   }
   mockEmitted = []
   mockHostReads = 0
+  mockOrgForHost = { $id: 'org-1', plan: 'free' }
+  mockStaffNotices = []
+  mockManagerNotices = []
 })
 
 describe('pageview counting (AGL-82 baseline)', () => {
@@ -370,3 +435,140 @@ describe('spoofed-host gate (AGL-1844, AGL-510)', () => {
   })
 })
 
+
+/**
+ * The bandwidth abuse ceiling, evaluated where the counter is WRITTEN
+ * (AGL-2155).
+ *
+ * This is the half of the fix that has to happen off the render path. The
+ * other half — the loader actually refusing — is forced through the real
+ * loader in `loader-bandwidth-ceiling.spec.ts`; between them the two ends of
+ * the mechanism are proved separately, so neither can pass on the other's
+ * behalf.
+ *
+ * ⚠️ Free's ceiling is the FLOOR (100,000), not 10× its 5 GB band (~87,381).
+ * Starter's is 10× its 50 GB band (873,813). 150,000 views therefore sits
+ * between them, which is what makes the plan pair below a real forced branch
+ * rather than two runs of the same arithmetic.
+ */
+describe('bandwidth abuse ceiling (AGL-2155)', () => {
+  const MONTH = new Date().toISOString().slice(0, 7)
+  const flag = () => mockStore[`hosts/${HOST_ID}`]?.['bandwidthCeiling']
+
+  /**
+   * Plant a month's traffic as the day docs `report-usage` meters.
+   *
+   * Deliberately on a day that is NOT today, so the planted total and the
+   * beacon's own increment stay separable and no assertion here becomes
+   * date-fragile on the 1st.
+   */
+  const PLANTED_DAY = DAY.endsWith('-01') ? '02' : '01'
+  const plantMonthViews = (total: number) => {
+    mockStore[`hosts/${HOST_ID}/analytics/${MONTH}-${PLANTED_DAY}`] = { total }
+  }
+
+  /**
+   * Distinct source addresses: this route's per-IP limiter is 120/60s and is
+   * the REAL one here, so a loop from one address would stop being a test of
+   * the sampling cadence and start being a test of the rate limiter.
+   */
+  const spread = (i: number) => ({ ip: `203.0.113.${(i % 200) + 10}` })
+
+  it('CONTROL: ordinary traffic leaves no flag and notifies nobody', async () => {
+    plantMonthViews(9_000) // past free's 5 GB band, nowhere near the ceiling
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toBeUndefined()
+    expect(mockStaffNotices).toHaveLength(0)
+    expect(mockManagerNotices).toHaveLength(0)
+    // …and the pageview itself was still counted. A "containment" that
+    // quietly stopped counting would pass every assertion above.
+    expect(dayDoc().total).toBe(1)
+  })
+
+  it('a FREE host past the ceiling is flagged, degraded and escalated', async () => {
+    plantMonthViews(150_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toMatchObject({
+      month: MONTH,
+      ceiling: 100_000,
+      degraded: true,
+    })
+    expect(flag().used).toBeGreaterThanOrEqual(150_000)
+    expect(flag().trippedAtMs).toBeGreaterThan(0)
+    // Staff AND the site's managers — the incident and the customer.
+    expect(mockStaffNotices).toHaveLength(1)
+    expect(mockStaffNotices[0]['type']).toBe('system.bandwidthCeilingTripped')
+    expect(mockManagerNotices).toHaveLength(1)
+  })
+
+  it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
+    // Same traffic, same route, same month — only the plan differs. Starter's
+    // ceiling is 873,813, so 150,000 is ordinary growth and nothing happens.
+    mockOrgForHost = { $id: 'org-1', plan: 'starter' }
+    plantMonthViews(150_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toBeUndefined()
+    expect(mockStaffNotices).toHaveLength(0)
+  })
+
+  it('a PAID host past its OWN ceiling is flagged but NOT degraded', async () => {
+    // The distinction the whole design turns on: the ceiling detects on every
+    // plan, but only an UNCOMPENSATED overage changes what a visitor sees.
+    // A metered plan's traffic bills, so taking the site down would trade a
+    // bill the customer agreed to for an outage they did not.
+    mockOrgForHost = { $id: 'org-1', plan: 'starter' }
+    plantMonthViews(1_000_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toMatchObject({ ceiling: 873_813, degraded: false })
+    expect(mockStaffNotices).toHaveLength(1) // still an incident
+  })
+
+  it('an org with NO plan resolves as free and is contained', async () => {
+    // `resolvePlan` defaults to free, and the unknown-org case is the one
+    // that must not fail open — an unindexed host serving a million views is
+    // exactly the shape nobody is billing for.
+    mockOrgForHost = undefined // getOrgForHost returns null
+    plantMonthViews(150_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toMatchObject({ ceiling: 100_000, degraded: true })
+  })
+
+  it('LAST month’s traffic does not trip THIS month', async () => {
+    // The month key is the self-clearing mechanism; a range query that ignored
+    // it would contain every successful site forever.
+    const lastMonth = new Date()
+    lastMonth.setUTCDate(1)
+    lastMonth.setUTCMonth(lastMonth.getUTCMonth() - 1)
+    mockStore[
+      `hosts/${HOST_ID}/analytics/${lastMonth.toISOString().slice(0, 7)}-15`
+    ] = { total: 5_000_000 }
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toBeUndefined()
+  })
+
+  it('is SAMPLED: 199 further beacons re-run neither the query nor the notice', async () => {
+    // The cost discipline this endpoint is built on. Proven by leaving the
+    // count BELOW the ceiling for the first (sampled) beacon and then raising
+    // it: if every beacon evaluated, the flag would appear on beacon 2.
+    const route = loadRoute()
+    plantMonthViews(9_000)
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(flag()).toBeUndefined()
+    plantMonthViews(150_000)
+    for (let i = 0; i < 50; i++) {
+      await route.POST(beacon({ hostId: HOST_ID, path: '/' }, spread(i)))
+    }
+    expect(flag()).toBeUndefined()
+  })
+
+  it('an already-tripped host does not re-notify on every later sample', async () => {
+    const route = loadRoute()
+    plantMonthViews(150_000)
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(mockStaffNotices).toHaveLength(1)
+    for (let i = 0; i < 400; i++) {
+      await route.POST(beacon({ hostId: HOST_ID, path: '/' }, spread(i)))
+    }
+    expect(mockStaffNotices).toHaveLength(1)
+  })
+})

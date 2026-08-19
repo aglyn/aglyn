@@ -22,6 +22,8 @@
 // (AGL-405). The specific modules underneath are safe in both.
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
+  bandwidthGbFromPageViews,
+  pageViewsFromBandwidthGb,
   planMetersInfraOverage,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -81,35 +83,22 @@ export const METERED_UNIT_RATES_USD = {
 }
 
 /**
- * Average transfer per page view (HTML + JS + a few images) used to turn
- * the analytics view counter into a bandwidth estimate — same assumption
- * the `perPageView` rate is built on.
- */
-export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024
-
-/**
- * Bandwidth ⇄ page views: the one conversion three surfaces used to each
- * write out by hand (AGL-1371).
+ * Bandwidth ⇄ page views — RE-EXPORTED, not defined here (AGL-2155).
  *
- * `bandwidthGb` is not a second cap next to metered page views — it IS the
- * included band of the page-view meter, expressed in the unit customers
- * understand. It is therefore used in both directions: forward by
- * `meteredIncludedAllowance` to size the band the invoice subtracts, backward
- * by the usage-alerts cron and the console meter to render live page views as
- * GB. Three hand-rolled copies of `× 1024³ / ESTIMATED_PAGE_TRANSFER_BYTES` is
- * how the numerators drifted apart in the first place; there is one now.
+ * The definitions moved down to `@aglyn/aglyn/app-utils/plan-entitlements`
+ * because the bandwidth abuse ceiling is evaluated in the TENANT app, at the
+ * beacon that writes the page-view counter, and the tenant app cannot import
+ * anything under `apps/console`. Re-exported from here so the console's three
+ * routes and the Billing card keep importing them from the module they always
+ * did — one definition, no drift, no import churn.
+ *
+ * @see checkBandwidthAbuseCeiling
  */
-export function pageViewsFromBandwidthGb(bandwidthGb: number): number {
-  return (bandwidthGb * 1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
-}
-
-/** @see pageViewsFromBandwidthGb — the same constant, the other way. */
-export function bandwidthGbFromPageViews(pageViews: number): number {
-  return (
-    (Math.max(0, Number(pageViews) || 0) * ESTIMATED_PAGE_TRANSFER_BYTES) /
-    (1024 * 1024 * 1024)
-  )
-}
+export {
+  ESTIMATED_PAGE_TRANSFER_BYTES,
+  pageViewsFromBandwidthGb,
+  bandwidthGbFromPageViews,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * Org-wide monthly bandwidth from per-SITE page-view readings.

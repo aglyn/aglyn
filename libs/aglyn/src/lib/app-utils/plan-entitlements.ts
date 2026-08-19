@@ -2462,3 +2462,248 @@ export function checkFormSubmissionAbuseCeiling(
   const used = Math.max(0, usedThisMonth)
   return { exceeded: used >= ceiling, ceiling, used }
 }
+
+/**
+ * Average transfer per page view (HTML + JS + a few images), the constant
+ * that turns the analytics view counter into a bandwidth number and back.
+ *
+ * Lives HERE rather than beside the metering rates (AGL-2155). It used to sit
+ * in `apps/console/utils/usage-metering.ts`, which the console imports and the
+ * tenant app cannot — and the bandwidth ceiling below has to be evaluated in
+ * the tenant app, at the beacon that writes the counter. Re-deriving the
+ * conversion there would have been a fourth hand-rolled copy of
+ * `× 1024³ / 600KB`, which is the exact drift AGL-1371 collapsed into one
+ * function. `usage-metering` now re-exports these three, so every existing
+ * importer is unchanged and there is still one definition.
+ */
+export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024
+
+/**
+ * Bandwidth ⇄ page views: the one conversion three surfaces used to each
+ * write out by hand (AGL-1371).
+ *
+ * `bandwidthGb` is not a second cap next to metered page views — it IS the
+ * included band of the page-view meter, expressed in the unit customers
+ * understand. It is therefore used in both directions: forward by
+ * `meteredIncludedAllowance` to size the band the invoice subtracts, backward
+ * by the usage-alerts cron and the console meter to render live page views as
+ * GB.
+ */
+export function pageViewsFromBandwidthGb(bandwidthGb: number): number {
+  return (bandwidthGb * 1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
+}
+
+/** @see pageViewsFromBandwidthGb — the same constant, the other way. */
+export function bandwidthGbFromPageViews(pageViews: number): number {
+  return (
+    (Math.max(0, Number(pageViews) || 0) * ESTIMATED_PAGE_TRANSFER_BYTES) /
+    (1024 * 1024 * 1024)
+  )
+}
+
+/**
+ * How far past a plan's own included bandwidth the abuse ceiling sits
+ * (AGL-2155) — the same posture, and the same number, as
+ * {@link FORM_ABUSE_CEILING_MULTIPLE}. Ten times the bandwidth the customer
+ * bought is not growth; it is an upgrade conversation, or it is not the
+ * customer's traffic at all.
+ */
+export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 10
+
+/**
+ * Absolute floor for the bandwidth ceiling, in PAGE VIEWS per month, so the
+ * small plans get real headroom instead of a second, tighter plan limit
+ * wearing a different name.
+ *
+ * Free includes 5 GB ≈ 8,948 views; 10× would be ~89,500, which a genuinely
+ * successful hobby site (a post that lands on Hacker News) reaches in an
+ * afternoon and would be a miserable first experience of the platform.
+ * 100,000 views/month ≈ 58.6 GB ≈ **$10 of real COGS** at
+ * `METERED_UNIT_RATES_USD.perPageView` — an order of magnitude above the free
+ * band, and an order of magnitude below the $100 a million views costs. It is
+ * the number that makes "free stays free" true without making it stingy.
+ */
+export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
+
+/**
+ * Ceiling for plans whose bandwidth band is UNLIMITED (Enterprise), where a
+ * multiple has nothing to multiply. Kept at or above the ceiling of every
+ * finite plan below it — Agency includes 20,000 GB ≈ 35.8M views, so its
+ * ceiling is ~358M — so the ladder never inverts and a bigger plan never
+ * inherits a smaller ceiling.
+ */
+export const BANDWIDTH_ABUSE_CEILING_UNLIMITED = 500_000_000
+
+/**
+ * Machine-readable marker for a bandwidth containment, so a capped response
+ * is distinguishable from the maintenance/lockdown notices it shares a shell
+ * with. Deliberately NOT a {@link LockdownReasonCode}: a lockdown is a staff
+ * takedown, this is a billing containment that clears itself at the month
+ * boundary with nobody doing anything.
+ */
+export const BANDWIDTH_CEILING_CODE = 'bandwidth_ceiling'
+
+export interface BandwidthAbuseCeilingResult {
+  /** True once this month's page views for the SITE reached the ceiling. */
+  exceeded: boolean
+  /** The ceiling this site's plan resolves to, in page views. Finite. */
+  ceiling: number
+  used: number
+}
+
+/**
+ * Per-site monthly bandwidth abuse ceiling (AGL-2155).
+ *
+ * ## The hole this closes
+ *
+ * Every other free dimension had a runtime brace — `mediaStorageGate`,
+ * `checkFormSubmissionQuota`, a zero band for dataset storage and API, a
+ * hard band for contacts. Bandwidth had **none**: nothing anywhere refused a
+ * page view, so a free site that went viral served a million views — roughly
+ * **$100 of real COGS** — with no wall, no throttle and no alert. It was
+ * protected only by the structural zero on the billing side (free carries no
+ * rate, so the invoice stays $0), which protects the *bill* and not the
+ * *bleeding*. `free-tier-never-billed.spec.ts` said so in its own table.
+ *
+ * ## Why an abuse ceiling and not a plan gate
+ *
+ * Exactly the distinction {@link checkFormSubmissionAbuseCeiling} draws, and
+ * for the same reason. A plan gate answers "did the customer buy this?" — and
+ * for a metered plan the answer past the band is *yes, and we bill it*. This
+ * answers "is this still a customer's traffic at all?", and crossing it is an
+ * INCIDENT rather than a quota: the site is flagged, staff are told, and the
+ * render path degrades to a static notice instead of paying ~40 Firestore
+ * reads and ~600 KB of egress per view.
+ *
+ * ## Where it is evaluated
+ *
+ * NOT in the render path. The page-view counter is written *after* the render
+ * by `/api/analytics/collect`; that route evaluates this on a sampled cadence
+ * and stamps `bandwidthCeiling` onto the host document. The render path reads
+ * that field off a host doc **it already loads** (`load-page-data.ts` reads
+ * `hostRes.host` for the lockdown branch), so the containment costs the happy
+ * path exactly zero extra reads.
+ *
+ * An edge/CDN rule would be the other natural home and is deliberately not
+ * the answer here: it is not a repo change, nothing in this suite could
+ * verify it, and it cannot see which plan a host is on.
+ */
+export function checkBandwidthAbuseCeiling(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedPageViewsThisMonth: number,
+): BandwidthAbuseCeilingResult {
+  const includedGb = resolveOrgEntitlements(org).bandwidthGb ?? 0
+  const includedViews = pageViewsFromBandwidthGb(includedGb)
+  const ceiling = Number.isFinite(includedViews)
+    ? Math.max(
+        BANDWIDTH_ABUSE_CEILING_FLOOR,
+        Math.round(includedViews * BANDWIDTH_ABUSE_CEILING_MULTIPLE),
+      )
+    : BANDWIDTH_ABUSE_CEILING_UNLIMITED
+  const used = Math.max(0, Number(usedPageViewsThisMonth) || 0)
+  return { exceeded: used >= ceiling, ceiling, used }
+}
+
+/**
+ * Does crossing the ceiling **degrade what visitors see**, or only raise the
+ * incident? (AGL-2155)
+ *
+ * Only on a plan that does NOT meter the infra pass-through — which today is
+ * free/hobby, and is precisely Zach's requirement that free "always actually
+ * stays free". On free the traffic is uncompensated, so serving it is a
+ * straight loss and the least destructive way to stop the bleeding is to stop
+ * paying for the expensive render.
+ *
+ * On a metered plan the same traffic is *invoiced*, so taking a paying
+ * customer's site off the air would trade a bill they agreed to for an outage
+ * they did not. Their ceiling still trips, still flags the host and still
+ * escalates to staff — it just does not change what a visitor gets. Whether a
+ * paying host past its OWN ceiling should also be degraded is a product call
+ * and is left open on purpose; flipping it is this one function.
+ */
+export function bandwidthCeilingDegradesRender(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return !planMetersInfraOverage(org)
+}
+
+/**
+ * `hosts/{id}.bandwidthCeiling` — the flag the beacon stamps and the render
+ * path reads. Month-scoped so it **self-clears at the month boundary** with
+ * no staff action and no write, the same property `LockdownState.untilMs`
+ * has: a site contained in August serves normally on September 1.
+ *
+ * Admin-SDK-only. It is frozen against client writes in
+ * `cloud/firebase-firestore.rules` alongside the `suspendedAt` family, for
+ * the identical reason: a site that could clear its own containment does not
+ * have one.
+ */
+export interface HostBandwidthCeiling {
+  /** `YYYY-MM` (UTC) the trip belongs to. */
+  month: string
+  /** The ceiling that was crossed, in page views. */
+  ceiling: number
+  /** The month count observed when it tripped. */
+  used: number
+  trippedAtMs: number
+  /** False when the plan meters the overage — flagged, not degraded. */
+  degraded: boolean
+}
+
+/**
+ * Read the host document's containment flag, tolerantly. Returns null unless
+ * the flag is present, well-formed AND belongs to `month` — an August trip
+ * must not silence a September visitor.
+ */
+export function normalizeHostBandwidthCeiling(
+  host: Record<string, any> | null | undefined,
+  month: string,
+): HostBandwidthCeiling | null {
+  const raw = host?.['bandwidthCeiling']
+  if (!raw || typeof raw !== 'object') return null
+  if (String(raw.month ?? '') !== month) return null
+  const ceiling = Number(raw.ceiling ?? 0)
+  if (!Number.isFinite(ceiling) || ceiling <= 0) return null
+  return {
+    month,
+    ceiling,
+    used: Math.max(0, Number(raw.used ?? 0) || 0),
+    trippedAtMs: Math.max(0, Number(raw.trippedAtMs ?? 0) || 0),
+    degraded: raw.degraded === true,
+  }
+}
+
+/**
+ * Is the render path required to serve the capped notice instead of the page?
+ *
+ * Both halves must hold: the flag is for THIS month, and the trip was
+ * recorded as one that degrades. `degraded` is written by the evaluator from
+ * {@link bandwidthCeilingDegradesRender} at trip time rather than re-derived
+ * here, so a host that upgrades mid-month is not still being degraded by a
+ * flag written while it was free — and, in the other direction, a flag from a
+ * paying host can never take that host down.
+ */
+export function bandwidthCeilingDegradesHost(
+  host: Record<string, any> | null | undefined,
+  month: string,
+): boolean {
+  return normalizeHostBandwidthCeiling(host, month)?.degraded === true
+}
+
+/** UTC `YYYY-MM`, the key both the beacon and the render path agree on. */
+export function bandwidthCeilingMonthKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 7)
+}
+
+/**
+ * Visitor-facing copy for a contained site. Says what happened and that it
+ * ends, and names nothing about the plan, the count or the owner — this is
+ * read by a stranger to the site, exactly like the form ceiling's refusal
+ * body (AGL-1666).
+ */
+export function bandwidthCeilingNotice(): { title: string; body: string } {
+  return {
+    title: 'This site is temporarily unavailable',
+    body: 'It has served more traffic this month than its plan includes. It will be back at the start of next month, or sooner if the owner upgrades.',
+  }
+}

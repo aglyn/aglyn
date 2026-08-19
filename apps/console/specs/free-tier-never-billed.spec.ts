@@ -43,17 +43,30 @@
  * | dimension | braces (runtime) | belt (structural) |
  * | -- | -- | -- |
  * | media storage | `mediaStorageGate` refuses past the band | `meteredInfraPassThrough: false` ⇒ `billableCostUsd: 0` |
- * | bandwidth / page views | *(none — page views are never refused)* | same flag, same zero |
+ * | bandwidth / page views | `checkBandwidthAbuseCeiling` contains past 100,000 views/month | same flag, same zero |
  * | form submissions | `checkFormSubmissionQuota` walls at the band | same flag, same zero |
  * | dataset storage | `checkDataStorageQuota().allowed` false at the band | `extraDataGbMonthlyUsd: null` ⇒ `overageMonthlyUsd: 0` |
  * | API requests | route refuses (`apiAccess` absent) | `extraApiRequestsUsdPer1k: null` ⇒ 0 |
  * | contacts | `checkContactQuota().allowed` false at the band | `extraContactsUsdPer1k: null` ⇒ 0 |
  *
- * **Bandwidth is the one with no braces at all** — nothing refuses a page
- * view, so a free site that goes viral exceeds its 5 GB band with no gate
- * anywhere in the path. It is protected *only* by the structural zero. That is
- * the dimension to watch, and the reason this suite asserts the belt directly
- * rather than trusting any gate.
+ * **Bandwidth used to be the one with no braces at all** (AGL-2155). Nothing
+ * refused a page view, so a free site that went viral exceeded its 5 GB band
+ * with no gate anywhere in the path — the invoice stayed $0 (the belt held)
+ * while ~$100 of real COGS went out the door on a million views. It now has
+ * the same shape as the form meter: a plan gate that meters, and an
+ * `checkBandwidthAbuseCeiling` ABOVE it that contains.
+ *
+ * The brace is evaluated where the counter is written — `/api/analytics/
+ * collect`, after the render — and stamps `hosts/{id}.bandwidthCeiling`,
+ * which the tenant loader reads off a host document it already loads. So the
+ * render path pays ZERO extra reads for it, which is the objection that kept
+ * the hole open. The forced-branch proof (a free host refused, a paying host
+ * at the same count not) is `apps/tenant/specs/loader-bandwidth-ceiling.spec
+ * .ts`; the write side is `apps/tenant/specs/analytics-collect.spec.ts`.
+ *
+ * This suite still asserts the BELT directly for every dimension, braces or
+ * not: "the upload was refused" and "the invoice was zero" remain different
+ * claims, and only the second one is what Zach said.
  *
  * ## Why the numbers below are what they are
  *
@@ -71,7 +84,10 @@ import {
 } from '../utils/usage-metering'
 import { mediaStorageGate } from '../utils/storage-overage'
 import {
+  BANDWIDTH_ABUSE_CEILING_FLOOR,
+  bandwidthCeilingDegradesRender,
   checkApiRequestQuota,
+  checkBandwidthAbuseCeiling,
   checkContactQuota,
   checkDataStorageQuota,
   PLAN_ENTITLEMENTS,
@@ -151,11 +167,12 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(estimate.billedCents).toBe(0) // …and nothing is billed.
   })
 
-  it('bandwidth / page views: 100× the band, still $0 — the one with NO gate', () => {
-    // 5 GB ≈ 8948 page views included. A free site that goes viral serves a
-    // million, and nothing anywhere refuses a page view. This dimension is
-    // protected by the structural zero alone, so it is the one that would
-    // start billing first if `meteredInfraPassThrough` were ever flipped.
+  it('bandwidth / page views: 100× the band, still $0', () => {
+    // 5 GB ≈ 8,738 page views included. A free site that goes viral serves a
+    // million; the belt keeps the invoice at zero, and it is the $100 on the
+    // `costUsd` line — OUR money, not the customer's — that AGL-2155's brace
+    // exists to stop. Kept as a metered-arithmetic assertion: this file is
+    // about the bill.
     const estimate = estimateMonthlyUsageCost(
       [{ storageBytes: 0, pageViews: 1_000_000, formSubmissions: 0 }],
       freeOrg(),
@@ -163,6 +180,23 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(estimate.billablePageViews).toBeGreaterThan(900_000)
     expect(estimate.costUsd).toBeCloseTo(100, 0) // $0.0001 × 1M — real COGS
     expect(estimate.billedCents).toBe(0)
+  })
+
+  it('bandwidth: the BRACES, containing a free site an order past the band', () => {
+    // The dimension's runtime check, asserted here so the table above stops
+    // being the only place it is claimed. 1,000,000 views is 10× the free
+    // ceiling and ~114× the included band.
+    const contained = checkBandwidthAbuseCeiling(freeOrg(), 1_000_000)
+    expect(contained.ceiling).toBe(BANDWIDTH_ABUSE_CEILING_FLOOR)
+    expect(contained.exceeded).toBe(true)
+    expect(bandwidthCeilingDegradesRender(freeOrg())).toBe(true)
+    // POSITIVE CONTROL: the paid plan is not contained at the same count —
+    // its overage bills, which is the whole difference.
+    expect(checkBandwidthAbuseCeiling(paidOrg(), 150_000).exceeded).toBe(false)
+    expect(bandwidthCeilingDegradesRender(paidOrg())).toBe(false)
+    // …and free UNDER the ceiling is untouched: a hobby site with real
+    // traffic must not meet a wall dressed up as an abuse control.
+    expect(checkBandwidthAbuseCeiling(freeOrg(), 99_999).exceeded).toBe(false)
   })
 
   it('form submissions: 500× the band, still $0', () => {

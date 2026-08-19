@@ -285,6 +285,58 @@ const loadPageDataCached = cache(
       }
     }
 
+    // Bandwidth abuse ceiling (AGL-2155) — the free tier's missing brace.
+    //
+    // COSTS THIS PATH ZERO EXTRA READS, and that is the whole reason the flag
+    // has the shape it does. `hostRes.host` is already in hand (the redirect,
+    // screen-directory and lockdown branches above all read it), so the
+    // containment is a field test on a document this render already paid for.
+    // The alternative — reading a page-view counter before every render — is
+    // the objection that kept this hole open, and it is answered by
+    // evaluating the ceiling where the counter is WRITTEN
+    // (`/api/analytics/collect`) and reading only the verdict here.
+    //
+    // Placed after lockdown and before maintenance: a staff takedown outranks
+    // a billing containment, and a contained site must not be able to look
+    // like it is merely under maintenance.
+    //
+    // Only `degraded` trips serve this — a metered plan's overage bills, so
+    // its ceiling flags and escalates without changing what a visitor gets.
+    // Month-scoped, so this clears itself on the 1st with no write and no
+    // staff action.
+    if (
+      Aglyn.bandwidthCeilingDegradesHost(
+        hostRes.host as any,
+        Aglyn.bandwidthCeilingMonthKey(),
+      )
+    ) {
+      const notice = Aglyn.bandwidthCeilingNotice()
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            maintenanceFallback: true,
+            // Reuses the notice slot the lockdown branch renders through
+            // (`catch-all-client`), with its own reason code so a contained
+            // site is distinguishable from a takedown by anything reading
+            // props. Deliberately NOT a `LockdownReasonCode`: lockdown is a
+            // staff action, this is arithmetic on a counter.
+            lockdown: {
+              reason: Aglyn.BANDWIDTH_CEILING_CODE,
+              title: notice.title,
+              message: notice.body,
+            },
+          }),
+        ),
+        // Shorter than the lockdown branch's 30s would gain nothing: the
+        // containment lasts until the month ends or the owner upgrades, and
+        // an upgrade already revalidates. 60s bounds how long a cleared flag
+        // keeps serving the notice.
+        revalidate: 60,
+      }
+    }
+
     // Maintenance mode (AGL-131): every path renders the assigned 503
     // screen (noindex) or a built-in notice; short revalidate so flipping
     // the toggle recovers quickly.
