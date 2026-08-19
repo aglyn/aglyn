@@ -69,6 +69,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import ScopeDriftCard from '../../../../components/scope-drift-card.component'
+import PendingErasuresCard from '../../../../components/pending-erasures-card.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -519,6 +520,8 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                 act on what it found was a curl carrying a hand-harvested
                 staff token. */}
             <ScopeDriftCard />
+
+            <PendingErasuresCard />
           </Stack>
         </StaffOnly>
       </Container>

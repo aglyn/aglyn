@@ -684,7 +684,7 @@ export const DOCS_HELP_ANCHORS = {
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#tips', '#related'],
   onboardingDeepLinks: ['#the-contract', '#what-the-console-does-with-it', '#rules-this-parser-follows-and-why', '#known-gap'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
-  platformHealth: ['#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#csp-violations', '#sharing-scope-drift', '#re-checking', '#related'],
+  platformHealth: ['#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#csp-violations', '#sharing-scope-drift', '#pending-erasures', '#re-checking', '#related'],
   pluginManagerApi: ['#console-extensions--feature-plugins', '#loading--plugin-loader', '#server-apis--api-plugins-server-only', '#site-pipeline--site-runtime-site-page-hooks-server-for-hooks', '#billing--billing-webhook-hooks-server', '#enablement-flags-config-fields-permissions-jobs', '#remote-bundles--realm-plugins-isomorphic-realm-server-server', '#sandbox--plugin-bridge'],
   plugins: ['#install--upgrade', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
   pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
