@@ -48,10 +48,14 @@ are paid.
 - Installs are **version-pinned**, and you can **upgrade** deliberately.
 - Installed plugins appear as named entries in the Besigner **drawer**, alongside built-in
   components.
-- Manage everything from the marketplace's **Installed** tab: first-party plugin toggles
-  (with release state), per-plugin configuration, plus every marketplace install with
-  upgrade, uninstall, and share-with-organization actions. A listing's own detail page
-  also carries **Uninstall** (or **Uninstall org-wide**) once you have it installed.
+- Manage what you have from the marketplace's **Installed** section: every marketplace
+  install, with upgrade, uninstall, and share-with-organization actions. A listing's own
+  detail page also carries **Uninstall** (or **Uninstall org-wide**) once you have it
+  installed.
+- **Turning a plugin on or off is the Plugins section, not Marketplace.** **Plugins** in
+  the organization navigation lists **Installed from the marketplace** and **Built in**,
+  each row with its switch, its release state, and a link through to that plugin's own
+  settings. If you are hunting for a switch, that is where it is.
 - Rating a listing needs a **verified email** and an organization that actually installed
   it; commenting is open to any signed-in user.
 - Installing enables the plugin for the workspace automatically; uninstalling disables
