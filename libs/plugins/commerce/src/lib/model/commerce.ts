@@ -392,6 +392,63 @@ export function canPurchase(
 }
 
 /**
+ * What the register has to SAY about a line it is about to sell (AGL-2357).
+ *
+ * ## The defect
+ *
+ * `pos-order.ts` contains no `canPurchase` call. Every storefront door gates on
+ * it; the register does not, so a merchant who set `oversellPolicy: 'deny'` in
+ * the product editor silently got `backorder` at the counter — the count floors
+ * at zero underneath and nothing anywhere says so.
+ *
+ * ## The decision, and why it is a shortfall and not a refusal
+ *
+ * Warn, never block. A till is the wrong place for a stale number to stop a
+ * real sale: the cashier is holding the goods, the physical shelf is the truth,
+ * and refusing loses a sale over data that is behind. But "deny" must at least
+ * SAY something. So this reports the shortfall and the caller sells anyway.
+ * Honouring the policy with a manager-level override is the post-launch shape
+ * (AGL-2372) and wants an audit trail this deliberately does not build.
+ *
+ * ## Why the test is `canPurchase`
+ *
+ * Exactly the gate the register was missing, and no wider. An untracked variant
+ * has no number to be short against, and a `backorder` product's merchant chose
+ * to sell past zero — warning them would be noise about a setting they set on
+ * purpose. So a shortfall is reported only where a purchase would have been
+ * refused anywhere else in the product.
+ */
+export interface StockShortfall {
+  productId: string
+  variantId?: string
+  /** Product name at the time of sale, for a message the cashier can read. */
+  name: string
+  variantLabel?: string
+  /** Units the cashier is ringing up. */
+  requested: number
+  /** Units the count says are on the shelf; never negative. */
+  available: number
+}
+
+export function stockShortfall(
+  product: Pick<HostProduct, 'variants' | 'oversellPolicy'>,
+  variantId: string | undefined,
+  quantity = 1,
+): { available: number } | null {
+  if (canPurchase(product, variantId, quantity)) return null
+  const variant = variantId
+    ? product.variants?.find((item) => item.id === variantId)
+    : product.variants?.[0]
+  // `canPurchase` answers false for a variant that does not exist at all. That
+  // is not a stock shortfall and must not be reported as "0 in stock" — the
+  // register's own line builder falls back to `variants[0]`, so the case is
+  // unreachable from the counter, and inventing a count for it would be the
+  // one failure mode this feature must not have.
+  if (!variant || variant.inventory == null) return null
+  return { available: Math.max(0, Math.round(Number(variant.inventory) || 0)) }
+}
+
+/**
  * Whether stock tracking MEANS anything on a product (AGL-1744).
  *
  * `canPurchase` above gates every checkout on stock, subscription sessions

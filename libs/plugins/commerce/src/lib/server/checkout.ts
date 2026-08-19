@@ -517,6 +517,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               : {}),
             'subscription_data[transfer_data][destination]':
               String(accountId),
+            // A PERCENT here, and Stripe applies it to the whole invoice —
+            // tax and shipping included — because it offers no items-only
+            // base for `application_fee_percent` and a Subscription carries
+            // no `application_fee_amount` to send instead. The basis is
+            // corrected on the paid invoice, where the composition is finally
+            // knowable and no event is racing: see
+            // `chargeSubscriptionFeeOnItemsOnly` in `billing-webhook.ts`
+            // (AGL-2317), which refunds the part taken on tax and shipping
+            // back to the merchant. `metadata[feeCents]` below — the
+            // items-only figure — is therefore what Aglyn ends up keeping.
             ...(feePct > 0
               ? {
                   'subscription_data[application_fee_percent]':

@@ -188,10 +188,35 @@ jest.mock('@aglyn/shared-util-email', () => ({
  * them in the wire shape too.
  */
 const defaultFetch = async (url: any, _init?: any): Promise<any> => {
-  if (String(url).includes('/v1/subscriptions/')) {
+  const href = String(url)
+  if (href.includes('/v1/subscriptions/')) {
     return { ok: true, status: 200, json: async () => ({ id: 'sub_1' }) } as any
   }
-  throw new Error(`Unexpected fetch to ${String(url)}`)
+  // The items-only fee correction (AGL-2317). Any fixture here whose invoice
+  // carries tax or shipping now reaches it, so the double has to answer the
+  // charge lookup, the fee list and the refund — a double that cannot model
+  // the real call sequence fabricates a red that is about the double.
+  // The correction itself is asserted in `billing-webhook-fee-basis.spec.ts`.
+  if (href.includes('/v1/payment_intents/')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'pi_2', latest_charge: 'ch_2' }),
+    } as any
+  }
+  if (href.includes('/v1/application_fees') && href.includes('/refunds')) {
+    return { ok: true, status: 200, json: async () => ({ id: 'fr_1' }) } as any
+  }
+  if (href.includes('/v1/application_fees')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [{ id: 'fee_1', amount: 180, amount_refunded: 0 }],
+      }),
+    } as any
+  }
+  throw new Error(`Unexpected fetch to ${href}`)
 }
 
 const fetchMock = jest.fn(defaultFetch)

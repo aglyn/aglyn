@@ -1901,3 +1901,192 @@ describe('who may ring a sale (AGL-2262)', () => {
   })
 })
 
+
+/**
+ * The register WARNS about a shortfall, and never refuses (AGL-2357).
+ *
+ * `pos-order.ts` had no `canPurchase` call at all — every storefront door
+ * gates on it and the register did not — so a merchant who chose
+ * `oversellPolicy: 'deny'` in the product editor silently got `backorder` at
+ * the counter. That silence is the defect.
+ *
+ * Zach's decision: warn, never block. A till is the wrong place for a stale
+ * number to stop a real sale, because the cashier is holding the goods. So
+ * EVERY case here asserts both halves — the warning is reported AND the sale
+ * completes with an order document and a 200. A test that asserted only the
+ * warning would pass just as happily against a register that refused.
+ */
+describe('the register warns about a shortfall and sells anyway (AGL-2357)', () => {
+  /** A tracked variant with `deny`, which is the product editor's default. */
+  function denyProduct(inventory: number) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [{ id: 'default', priceUsd: 4, inventory }],
+    })
+  }
+
+  it('reports the shortfall on a cash sale — and rings it through', async () => {
+    denyProduct(1)
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 3 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.error).toBeUndefined()
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-1',
+        name: 'Flat white',
+        requested: 3,
+        available: 1,
+      },
+    ])
+    // THE SALE HAPPENED. Not a refusal dressed as a warning.
+    expect(orderDocs()).toHaveLength(1)
+    expect((orderDocs()[0] as any).status).toBe('paid')
+    expect((orderDocs()[0] as any).totals.itemsCents).toBe(1200)
+  })
+
+  it('reports it on a card sale too, and still mints the QR', async () => {
+    denyProduct(0)
+
+    const result = await post({
+      payment: 'link',
+      lines: [{ productId: 'product-1', quantity: 2 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.url).toContain('https://')
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-1',
+        name: 'Flat white',
+        requested: 2,
+        available: 0,
+      },
+    ])
+  })
+
+  /**
+   * POSITIVE CONTROL — the quiet branch, asserted separately. A warning that
+   * fired on every sale would satisfy the cases above and be useless at the
+   * counter.
+   */
+  it('says nothing when the shelf covers the basket', async () => {
+    denyProduct(5)
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 3 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  /**
+   * A `backorder` merchant CHOSE to sell past zero. Warning them would be
+   * noise about a setting they set on purpose, and it is the deny promise —
+   * not the count — that the register was breaking.
+   */
+  it('says nothing on a backorder product, however short', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'backorder',
+      variants: [{ id: 'default', priceUsd: 4, inventory: 0 }],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 4 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  it('says nothing about an untracked variant, which has no count to be short against', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 9900,
+      lines: [{ productId: 'product-1', quantity: 20 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+  })
+
+  /** One entry per short line, and only for the short ones. */
+  it('reports each short line and leaves the covered one out', async () => {
+    denyProduct(1)
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Croissant',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [
+        { id: 'large', priceUsd: 3, inventory: 9, options: { size: 'Large' } },
+      ],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [
+        { productId: 'product-1', quantity: 2 },
+        { productId: 'product-2', variantId: 'large', quantity: 2 },
+      ],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toHaveLength(1)
+    expect(result.body.stockWarnings[0].productId).toBe('product-1')
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  /**
+   * The variant label rides along, because a cashier holding one of three
+   * sizes needs to know WHICH one the count is short on.
+   */
+  it('names the variant when the short line has one', async () => {
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Croissant',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [
+        { id: 'large', priceUsd: 3, inventory: 1, options: { size: 'Large' } },
+      ],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [{ productId: 'product-2', variantId: 'large', quantity: 4 }],
+    })
+
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'large',
+        name: 'Croissant',
+        variantLabel: 'Large',
+        requested: 4,
+        available: 1,
+      },
+    ])
+    expect(orderDocs()).toHaveLength(1)
+  })
+})

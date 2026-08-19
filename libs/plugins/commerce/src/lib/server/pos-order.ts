@@ -192,6 +192,43 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (lineItems.length === 0) {
       return res.status(400).json({ error: 'No valid lines' })
     }
+    // WHAT THE COUNT SAYS, said out loud (AGL-2357). This handler had no
+    // `canPurchase` call at all — every storefront door gates on it and the
+    // register did not — so a merchant who chose `oversellPolicy: 'deny'` in
+    // the product editor was silently getting `backorder` at the till.
+    //
+    // The decision (AGL-2357, Zach): WARN, NEVER BLOCK. A till is the wrong
+    // place for a stale number to stop a real sale — the cashier is holding
+    // the goods — but a merchant who set "deny" is entitled to have the
+    // register say something before it sells past zero. So the shortfall is
+    // reported and the sale proceeds: there is no refusal anywhere below this
+    // line, and adding one is a separate decision (AGL-2358, the
+    // manager-override variant).
+    //
+    // Computed from the SERVER's product documents, not the register's cached
+    // grid, and returned on both tenders. The client shows its own warning as
+    // the basket is built (`pos-page.component.tsx`), which is the surface the
+    // cashier reads; this is the authoritative one, taken at the moment of
+    // sale and available to any other register client.
+    const stockWarnings: CommerceModel.StockShortfall[] = []
+    for (const line of lineItems) {
+      const product = productsById.get(line.productId)
+      if (!product) continue
+      const shortfall = CommerceModel.stockShortfall(
+        product,
+        line.variantId ?? product.variants[0]?.id,
+        line.quantity,
+      )
+      if (!shortfall) continue
+      stockWarnings.push({
+        productId: line.productId,
+        ...(line.variantId ? { variantId: line.variantId } : {}),
+        name: line.name,
+        ...(line.variantLabel ? { variantLabel: line.variantLabel } : {}),
+        requested: line.quantity,
+        available: shortfall.available,
+      })
+    }
     const itemsCents = lineItems.reduce(
       (sum, line) => sum + line.unitAmountCents * line.quantity,
       0,
@@ -503,6 +540,10 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         orderId: orderRef.id,
         url: session.url,
         totals: cardTotals,
+        // AGL-2357. Present on both tenders and on the recorded replay, so a
+        // cashier who re-submits the same key still sees what they were told
+        // the first time.
+        ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
       }
       await claim.record(200, cardPayload)
       return res.status(200).json(cardPayload)
@@ -730,6 +771,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       totals,
       changeCents:
         payment === 'cash' ? cashReceivedCents - totals.totalCents : 0,
+      ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
     }
     await claim.record(200, cashPayload)
     return res.status(200).json(cashPayload)

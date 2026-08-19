@@ -210,6 +210,41 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     )
   }, [products, search])
 
+  const productsById = useMemo(
+    () => new Map(products.map((product: any) => [product.$id, product])),
+    [products],
+  )
+  /**
+   * WHAT THE COUNT SAYS, at the line the cashier is looking at (AGL-2357).
+   *
+   * The register ignored `oversellPolicy` entirely — `pos-order.ts` had no
+   * `canPurchase` call — so a merchant who chose "deny" in the product editor
+   * silently got "backorder" at the counter. That silence is the defect.
+   *
+   * WARNS, NEVER BLOCKS (Zach's decision on AGL-2357). Nothing here touches
+   * `disabled` on the settle buttons, and nothing gates `settle`: a till is the
+   * wrong place for a stale number to stop a real sale, because the cashier is
+   * holding the goods. Honouring the policy behind a manager override is the
+   * post-launch shape (AGL-2372).
+   *
+   * Indexed alongside `lines` rather than keyed, because the line list is
+   * rendered by index and two lines of the same product/variant cannot exist —
+   * `addProduct` merges them into one quantity.
+   */
+  const shortfalls = useMemo(
+    () =>
+      lines.map((line) => {
+        const product: any = productsById.get(line.productId)
+        if (!product) return null
+        return CommerceModel.stockShortfall(
+          product,
+          line.variantId ?? product.variants?.[0]?.id,
+          line.quantity,
+        )
+      }),
+    [lines, productsById],
+  )
+
   const itemsCents = lines.reduce(
     (sum, line) => sum + line.unitAmountCents * line.quantity,
     0,
@@ -535,31 +570,40 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
               </Typography>
             ) : (
               lines.map((line, index) => (
-                <Stack
-                  key={index}
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', py: 0.5 }}
-                >
-                  <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                    {`${line.quantity}× ${line.name}`}
-                    {line.variantLabel ? ` (${line.variantLabel})` : ''}
-                  </Typography>
-                  <Typography variant="body2">
-                    {usd(line.unitAmountCents * line.quantity)}
-                  </Typography>
-                  <Button
-                    size="small"
-                    color="error"
-                    onClick={() =>
-                      setLines((prev) =>
-                        prev.filter((_item, itemIndex) => itemIndex !== index),
-                      )
-                    }
+                <Box key={index} sx={{ py: 0.5 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
                   >
-                    {'✕'}
-                  </Button>
-                </Stack>
+                    <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                      {`${line.quantity}× ${line.name}`}
+                      {line.variantLabel ? ` (${line.variantLabel})` : ''}
+                    </Typography>
+                    <Typography variant="body2">
+                      {usd(line.unitAmountCents * line.quantity)}
+                    </Typography>
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() =>
+                        setLines((prev) =>
+                          prev.filter((_item, itemIndex) => itemIndex !== index),
+                        )
+                      }
+                    >
+                      {'✕'}
+                    </Button>
+                  </Stack>
+                  {shortfalls[index] ? (
+                    // AGL-2357: said, not enforced. The cashier reads it and
+                    // rings the sale through — the settle buttons below are
+                    // untouched by this.
+                    <Typography variant="caption" color="warning.main">
+                      {`Only ${shortfalls[index]?.available} in stock — selling ${line.quantity}`}
+                    </Typography>
+                  ) : null}
+                </Box>
               ))
             )}
           </Box>

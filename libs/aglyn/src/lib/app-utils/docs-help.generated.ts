@@ -165,7 +165,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   plugins: ['#install--upgrade', '#browse-card', '#whats-included', '#what-the-badges-on-a-listing-mean', '#how-plugins-run', '#configure', '#publish-your-own', '#related'],
-  pos: ['#registers', '#the-register', '#when-something-disconnects', '#reservations', '#related'],
+  pos: ['#registers', '#the-register', '#selling-past-the-count', '#when-something-disconnects', '#reservations', '#related'],
   publisherHandbook: ['#before-your-first-publish', '#the-publisher-agreement', '#where-to-publish-from', '#what-installing-each-type-does', '#publishing-a-version', '#before-you-publish', '#review-what-happens-after-you-publish', '#the-two-badges-and-what-each-one-promises', '#asking-to-be-verified', '#testing-a-version-before-it-is-approved', '#watching-your-own-submission', '#private-plugins', '#authoring-your-listing', '#versioning--updates', '#shipping-a-new-version', '#how-installs-work-the-buyer-side', '#getting-paid'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],

@@ -402,12 +402,19 @@ describe('the items-only fee base (AGL-2317)', () => {
     ).toBe(0)
   })
 
-  /** A cent, never zero, wherever a rate applies — matching `checkout.ts`. */
+  /**
+   * A cent, never zero, wherever a rate applies — matching `checkout.ts`.
+   *
+   * The base has to be small enough against the total that the scaled figure
+   * rounds DOWN to zero, or the floor is not what the assertion is measuring:
+   * $40.00 of goods under $73.25 of tax scales a 1¢ fee to 0.35¢. A fixture
+   * where the arithmetic lands on 1 anyway passes with the floor deleted.
+   */
   it('floors a surviving fee at one cent', () => {
     expect(
       subscriptionInvoiceItemsOnlyFeeCents({
-        ...TAXED_INVOICE,
         total: 11325,
+        tax: 7325,
         application_fee_amount: 1,
       }),
     ).toBe(1)
