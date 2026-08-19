@@ -129,9 +129,24 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest verdict matters; a delayed run must not pile up.
-  group: tools-guards
-  cancel-in-progress: true
+  # A push is grouped by its own COMMIT, so two pushes never contend and no
+  # push can evict another: every commit on main gets its own verdict. Only
+  # non-push events (pull_request, schedule, workflow_dispatch) share a
+  # ref-scoped group and supersede each other, which is where superseding is
+  # actually what you want — on a PR the newest tree is the only one anyone
+  # will read, and a delayed scheduled run must not pile up.
+  #
+  # AGL-2378: the group key is the fix, NOT `cancel-in-progress`. A constant
+  # group with cancel-in-progress:true discarded 47 of 82 push runs on main
+  # here on 2026-08-19 — each killed mid-job by the next push, which is a
+  # DIFFERENT tree. Setting cancel-in-progress:false would not have saved
+  # them either: a concurrency group holds one running run plus at most ONE
+  # pending run, so a third arrival cancels the pending one before it starts
+  # a single job. emulator-guards.yml proved that separately — 39 cancelled
+  # runs on main, every one of them with zero jobs, under a guard that
+  # already declined to cancel in progress.
+  group: tools-guards-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
