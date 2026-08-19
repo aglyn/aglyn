@@ -102,7 +102,7 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     // Publishing is ORG-ONLY (AGL-652).
     const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
     // Profile, payouts AND the publisher agreement, in one gate
-    // (AGL-2252) — see `publishPreconditionRefusal`.
+    // (AGL-2282) — see `publishPreconditionRefusal`.
     const refusal = publishPreconditionRefusal(publisher, {
       priceUsd,
       sells: 'templates',

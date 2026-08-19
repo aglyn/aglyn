@@ -92,7 +92,7 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
 
     const publisher = await resolvePublisherProfile(firestore, orgId)
     // Profile, payouts AND the publisher agreement, in one gate
-    // (AGL-2252) — see `publishPreconditionRefusal`.
+    // (AGL-2282) — see `publishPreconditionRefusal`.
     const refusal = publishPreconditionRefusal(publisher, {
       priceUsd,
       sells: 'schemas',

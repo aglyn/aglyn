@@ -18,7 +18,7 @@
  */
 
 /**
- * The publisher agreement holds on EVERY publish door (AGL-2252).
+ * The publisher agreement holds on EVERY publish door (AGL-2282).
  *
  * `publish-plugin-agreement.spec.ts` proves the gate on the plugin route. It
  * proved nothing about the other six, and the other six did not have it: a
@@ -58,7 +58,7 @@ const PROFILE = {
   agreement: CURRENT,
 }
 
-describe('publishPreconditionRefusal (AGL-2252)', () => {
+describe('publishPreconditionRefusal (AGL-2282)', () => {
   it('lets a fully set-up publisher through', () => {
     expect(publishPreconditionRefusal(PROFILE, { priceUsd: 9, sells: 'themes' })).toBeNull()
   })
@@ -149,7 +149,7 @@ describe('publishPreconditionRefusal (AGL-2252)', () => {
  * the gate fails here on the day it is written — which is the only mechanism
  * that would have caught the six that already had.
  */
-describe('every publish door runs the shared gate (AGL-2252)', () => {
+describe('every publish door runs the shared gate (AGL-2282)', () => {
   const dir = __dirname
   const sources = readdirSync(dir)
     .filter((name) => name.endsWith('.ts') && !name.includes('.spec.'))

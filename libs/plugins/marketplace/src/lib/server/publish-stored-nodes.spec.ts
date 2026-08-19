@@ -32,6 +32,7 @@
  */
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
+import { PUBLISHER_AGREEMENT_VERSION } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { sanitizeMarketplaceDefinition } from '../model/marketplace'
 
@@ -109,12 +110,15 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
-  // A CURRENT acceptance by default, because these routes now refuse without
-  // one (AGL-2252), read through a mutable store so the two cases at the foot
-  // of this file can make it stale. Deliberately the real constant rather than
-  // a literal: the gate compares against `PUBLISHER_AGREEMENT_VERSION`, so
-  // pinning a string here would turn the next agreement bump into a mystery
-  // failure in a spec that is otherwise about node storage.
+  // The acceptance is read at CALL time through a mutable store, so the cases
+  // at the foot of this file can make it stale. `seed()` establishes a CURRENT
+  // one before every test — these routes now refuse without it (AGL-2282).
+  //
+  // The default is assigned there rather than in this factory because reaching
+  // the real `PUBLISHER_AGREEMENT_VERSION` from in here needs a `require` (a
+  // jest factory cannot close over an import), and ONE dynamic import of
+  // `@aglyn/aglyn` makes nx forbid every STATIC import of it across the whole
+  // project — 61 lint errors, none of them in the file that caused them.
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
     handle: 'acme',
@@ -125,12 +129,7 @@ jest.mock('./publisher-profile', () => ({
       }
     ).__agreement,
   }),
-  __agreement: {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    version: (require('@aglyn/aglyn/app-utils/publisher-agreement') as {
-      PUBLISHER_AGREEMENT_VERSION: string
-    }).PUBLISHER_AGREEMENT_VERSION,
-  } as { version: string } | undefined,
+  __agreement: undefined as { version: string } | undefined,
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -211,8 +210,17 @@ function respond() {
   return { res, result }
 }
 
+const profileMock = jest.requireMock('./publisher-profile') as {
+  __agreement: { version: string } | undefined
+}
+
 /** Seeds a host whose one screen and one layout carry `nodes` as given. */
 function seed(nodes: unknown) {
+  // A CURRENT acceptance unless a test says otherwise. The real constant, not
+  // a literal: the gate compares against `PUBLISHER_AGREEMENT_VERSION`, so
+  // pinning a string here would turn the next agreement bump into a mystery
+  // failure in a spec that is otherwise about node storage.
+  profileMock.__agreement = { version: PUBLISHER_AGREEMENT_VERSION }
   store = {}
   store['hosts/host-1'] = {
     memberRoles: { 'uid-1': 'admin' },
@@ -464,7 +472,7 @@ describe('an undecoded definition does not read as an authoring mistake', () => 
 })
 
 /**
- * The publisher agreement, observed refusing on a LIVE route (AGL-2252).
+ * The publisher agreement, observed refusing on a LIVE route (AGL-2282).
  *
  * `publish-agreement-gate.spec.ts` unit-tests the decision and guards that
  * every publish door calls it. This is the other half of that pair: a pure
@@ -476,19 +484,13 @@ describe('an undecoded definition does not read as an authoring mistake', () => 
  * The mocked profile is otherwise perfect — a real org, payouts enabled — so
  * what changes the answer is the agreement and nothing else.
  */
-describe('a publish door refuses without a current agreement (AGL-2252)', () => {
-  const profileMock = jest.requireMock('./publisher-profile') as {
-    __agreement: { version: string } | undefined
-  }
-  const current = profileMock.__agreement
-
-  afterEach(() => {
-    profileMock.__agreement = current
-  })
-
+describe('a publish door refuses without a current agreement (AGL-2282)', () => {
+  // No restore hook: `seed` re-establishes the current acceptance, and every
+  // case below seeds before it changes anything — so the order is always
+  // seed-then-break, never the reverse.
   it('refuses a TEMPLATE publish when the org has never accepted', async () => {
-    profileMock.__agreement = undefined
     seed(SCREEN_NODES)
+    profileMock.__agreement = undefined
 
     const result = await publishTemplate()
 
@@ -500,8 +502,8 @@ describe('a publish door refuses without a current agreement (AGL-2252)', () => 
   })
 
   it('refuses a LAYOUT publish when the acceptance is stale', async () => {
-    profileMock.__agreement = { version: '1999-01-01.1' }
     seed(LAYOUT_NODES)
+    profileMock.__agreement = { version: '1999-01-01.1' }
 
     const result = await publishLayout()
 

@@ -292,7 +292,7 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
 
     const publisher = await resolvePublisherProfile(firestore, orgForUser.orgId)
     // Profile, payouts AND the publisher agreement, in one gate
-    // (AGL-2252) — see `publishPreconditionRefusal`.
+    // (AGL-2282) — see `publishPreconditionRefusal`.
     const refusal = publishPreconditionRefusal(publisher, {
       priceUsd,
       sells: 'plugins',

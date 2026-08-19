@@ -29,7 +29,7 @@ export interface PublishRefusal {
 }
 
 /**
- * EVERY precondition a marketplace publish shares, in one place (AGL-2252).
+ * EVERY precondition a marketplace publish shares, in one place (AGL-2282).
  *
  * THE DEFECT THIS CLOSES. The publisher agreement (AGL-1077) is the document
  * that says what Aglyn may do with a listing, what the publisher warrants,
