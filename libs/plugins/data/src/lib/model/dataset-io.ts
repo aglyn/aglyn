@@ -34,7 +34,7 @@ export {
   datasetRecordsToCsv,
   exportShortfall,
   serializeDatasetValue,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/dataset-csv'
 
 /** Minimal RFC-4180 CSV parser (quoted fields, escaped quotes, CRLF). */
 export function parseCsv(text: string): string[][] {
