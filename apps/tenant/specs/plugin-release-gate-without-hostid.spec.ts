@@ -83,6 +83,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/plugin-manager/enabled-plugins',
   ),
+  // Same reason as plugin-api-visitor-write-rate-limit.spec.ts: the dispatcher
+  // gained a cross-origin refusal (AGL-1880) AFTER this mock was written, and a
+  // hand-built factory only provides what it names — so all 7 tests here died
+  // on `crossOriginPluginWriteRefusal is not a function` rather than on
+  // anything about the release gate they exist to test. Spread the real
+  // module; the refusal is part of the path under test, not a collaborator
+  // worth faking (AGL-2419).
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plugin-api-cross-origin',
+  ),
   resolvePluginApiRoute: jest.fn(() => ({ path: 'bookings/reserve' })),
   runLegacyHandler: jest.fn(async () => {
     mockHandlerCalls += 1
