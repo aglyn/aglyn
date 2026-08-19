@@ -1,0 +1,244 @@
+# Dependabot version updates (AGL-2058).
+#
+# Before this file the repo had `dependabot_security_updates: enabled` and
+# nothing else, which is alert-driven only: GitHub opens a PR once a package
+# has a PUBLISHED advisory and a reachable fix. Ordinary "bump X from 1.2.3 to
+# 1.2.4" PRs need this file, so routine drift was invisible until it turned
+# into a CVE. That is exactly how AGL-2051 happened — `monaco-editor` sat on
+# 0.55.1 carrying a vendored DOMPurify 3.2.7 through eighteen successive
+# advisories, when a routine 0.55.1 -> 0.56.0 bump would have arrived on its
+# own and none of them would have accumulated.
+#
+# THE ECOSYSTEMS BELOW ARE ENUMERATED FROM WHAT IS ON DISK, not guessed:
+#
+#   npm             /                    package-lock.json  (201 deps)
+#   npm             /apps/docs           package-lock.json  (Docusaurus site)
+#   npm             /cloud/functions     package-lock.json  (Cloud Functions)
+#   github-actions  /                    .github/workflows/*.yml (11 workflows)
+#   docker          /docker              console.Dockerfile, tenant.Dockerfile
+#
+# There is no yarn.lock, pnpm-lock.yaml, Gemfile.lock, go.sum, Cargo.lock or
+# requirements.txt anywhere outside node_modules, and the root package.json
+# declares no `workspaces` — so /apps/docs and /cloud/functions really are
+# three separate installs, not one tree seen three times.
+#
+# `docker-compose.yml` is deliberately NOT an entry: every service in it is
+# `build:` from the two Dockerfiles above. It pins no `image:`, so there is
+# nothing there for Dependabot to update, and the `/docker` entry already
+# covers the base images those builds use.
+#
+# NOTHING HERE EDITS A LOCKFILE BY HAND. Dependabot regenerates the lockfile
+# with the real package manager on its own branch. A blanket textual rewrite
+# of a lockfile once produced an unregistered scope in this repo — a
+# dependency-confusion hazard — which is why lockfile edits only ever happen
+# through the tool that owns the file.
+#
+# FLOOD CONTROL, because this switches on ten days before the September 1
+# public beta:
+#
+#  - Weekly on SATURDAY, never monthly. `interval: monthly` fires on the 1st,
+#    and September 1 is launch day; a burst of dependency PRs is the last
+#    thing that morning needs.
+#  - Grouped. 201 root dependencies ungrouped is ~40 PRs. Grouped it is at
+#    most one PR per family per week.
+#  - `open-pull-requests-limit` is low everywhere (4 root, 1-2 elsewhere), so
+#    the ceiling on open Dependabot PRs across the whole repo is 11 and in
+#    practice far fewer. Raise these AFTER launch, once someone has time to
+#    merge them.
+#
+# The lockstep groups (nx, next+react, mui+emotion, firebase, jest) are not
+# cosmetic: those families must move together or the build breaks, so a
+# per-package PR for one of them would be red on arrival.
+
+version: 2
+
+updates:
+  # ── npm: the Nx monorepo root ──────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: '09:00'
+      timezone: America/Chicago
+    open-pull-requests-limit: 4
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    ignore:
+      # `typescript` is an npm ALIAS here — package.json pins
+      # `npm:@typescript/typescript6@6.0.2`. Dependabot resolves the alias
+      # name rather than the target and would propose a bump to the wrong
+      # package. Remove this entry when the pin becomes a plain version.
+      - dependency-name: typescript
+    groups:
+      # A dependency lands in the FIRST group whose patterns match, so the
+      # order of these blocks is load-bearing: `eslint-config-next` belongs
+      # with next/react, not with the linters, and is matched there first.
+      nx-workspace:
+        patterns:
+          - nx
+          - '@nx/*'
+          - '@nrwl/*'
+      next-react:
+        patterns:
+          - next
+          - '@next/*'
+          - eslint-config-next
+          - react
+          - react-dom
+          - react-is
+          - '@types/react'
+          - '@types/react-dom'
+          - '@types/react-is'
+      mui-emotion:
+        patterns:
+          - '@mui/*'
+          - '@emotion/*'
+      firebase:
+        patterns:
+          - firebase
+          - 'firebase-*'
+          - '@firebase/*'
+      jest:
+        patterns:
+          - jest
+          - 'jest-*'
+          - ts-jest
+          - babel-jest
+          - '@types/jest'
+      linters:
+        patterns:
+          - eslint
+          - 'eslint-*'
+          - '@typescript-eslint/*'
+          - prettier
+          - 'prettier-*'
+      types:
+        patterns:
+          - '@types/*'
+      # Everything not named above, split by dependency type so a dev-tool
+      # bump can be merged on sight while a production bump gets read. Both
+      # are minor+patch only — a major of an ungrouped package arrives as its
+      # own PR, which is the one case worth reading alone.
+      dev-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - '*'
+      prod-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - '*'
+
+  # ── npm: the Docusaurus documentation site ─────────────────────────────
+  - package-ecosystem: npm
+    directory: /apps/docs
+    schedule:
+      interval: weekly
+      day: saturday
+      time: '09:00'
+      timezone: America/Chicago
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      docusaurus:
+        patterns:
+          - '@docusaurus/*'
+          - 'docusaurus-*'
+          - '@easyops-cn/docusaurus-search-local'
+          - '@mdx-js/*'
+      docs-minor-patch:
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - '*'
+
+  # ── npm: Cloud Functions (its own install, Node 22 runtime) ────────────
+  - package-ecosystem: npm
+    directory: /cloud/functions
+    schedule:
+      interval: weekly
+      day: saturday
+      time: '09:00'
+      timezone: America/Chicago
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      firebase:
+        patterns:
+          - 'firebase-*'
+      functions-minor-patch:
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - '*'
+
+  # ── GitHub Actions used by the 11 workflows ────────────────────────────
+  # A pinned action is a supply-chain surface that nothing else in this repo
+  # watches: no lockfile records it and no install step re-resolves it, so a
+  # `@v5` that stops being maintained simply keeps running.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: '09:00'
+      timezone: America/Chicago
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  # ── Docker base images for the self-host build (AGL-905) ───────────────
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: saturday
+      time: '09:00'
+      timezone: America/Chicago
+    open-pull-requests-limit: 1
+    labels:
+      - dependencies
+    commit-message:
+      prefix: build
+      include: scope
+    ignore:
+      # Both Dockerfiles run `node:24-slim`, matching the Node 24 that Vercel
+      # runs and the `engines.node: ">=24"` in package.json. A major bump is a
+      # runtime decision to make deliberately in all three places at once, not
+      # a PR to merge; patch/minor rebuilds of the 24 line still arrive.
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
+    groups:
+      base-images:
+        patterns:
+          - '*'
