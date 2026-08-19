@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-metadata'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import { mdiFileDocumentMultipleOutline } from '@aglyn/shared-data-mdi'
 import {
@@ -435,6 +436,11 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     excerpt: string
     body: string
     coverImage: string
+    /**
+     * `og:image:alt` for the entry's share card (AGL-2417). Defaulted from
+     * the chosen asset's own alt at pick time; blank stores nothing.
+     */
+    coverImageAlt: string
     // Entry model v2 (AGL-582): SEO overrides + taxonomy. Tags stay a
     // comma-separated STRING while editing; saved as string[].
     seoTitle: string
@@ -618,6 +624,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             excerpt: editor.excerpt.trim(),
             body: editor.body,
             coverImage: editor.coverImage.trim(),
+            // Removed rather than stored blank, and removed outright when the
+            // cover is: an alt beside no image describes nothing, and an
+            // `og:image:alt=""` asserts the image conveys nothing, which is
+            // not what "nobody has described it" means (AGL-2417).
+            ...(editor.coverImage.trim() && editor.coverImageAlt.trim()
+              ? { coverImageAlt: editor.coverImageAlt.trim() }
+              : { coverImageAlt: deleteField() }),
             // Entry model v2 (AGL-582): SEO overrides + taxonomy.
             seoTitle: editor.seoTitle.trim(),
             seoDescription: editor.seoDescription.trim(),
@@ -974,6 +987,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       excerpt: '',
                       body: '',
                       coverImage: '',
+                      coverImageAlt: '',
                       seoTitle: '',
                       seoDescription: '',
                       authorName: '',
@@ -1030,6 +1044,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           excerpt: entry.excerpt ?? '',
                           body: entry.body ?? '',
                           coverImage: entry.coverImage ?? '',
+                          coverImageAlt: entry.coverImageAlt ?? '',
                           seoTitle: entry.seoTitle ?? '',
                           seoDescription: entry.seoDescription ?? '',
                           authorName: entry.authorName ?? '',
@@ -1388,6 +1403,36 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               {'Choose'}
             </Button>
           </Stack>
+          {/*
+            `og:image:alt` (AGL-2417). Shown only beside a cover, because a
+            description with nothing to describe is a field nobody can
+            answer. Pre-filled from the chosen asset's own alt and editable —
+            this is the surface a customer shares most deliberately.
+          */}
+          {editor?.coverImage?.trim() ? (
+            <TextField
+              label="Cover image description"
+              placeholder="What the picture shows"
+              value={editor?.coverImageAlt ?? ''}
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        coverImageAlt: event.target.value.slice(
+                          0,
+                          MEDIA_ALT_MAX_LENGTH,
+                        ),
+                      }
+                    : prev,
+                )
+              }
+              size="small"
+              helperText={
+                'Read aloud by screen readers when this entry is shared.'
+              }
+            />
+          ) : null}
           <Stack direction="row" spacing={1}>
             {/* Category is a LOOKUP (AGL-582): entries store the stable
                 categoryId, names resolve at render — renames never touch
@@ -1673,7 +1718,23 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               assetAlt: (media as any).alt,
             }) ?? ''
             if (pickerTarget === 'cover') {
-              setEditor((prev) => (prev ? { ...prev, coverImage: src } : prev))
+              setEditor((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      coverImage: src,
+                      // The asset's own alt, through the same shared rule the
+                      // body insert above uses (AGL-1896/AGL-2417). An alt
+                      // the author already wrote wins; an asset with no alt
+                      // leaves the field empty and honest.
+                      coverImageAlt:
+                        Aglyn.inheritedMediaAlt({
+                          placementAlt: prev.coverImageAlt,
+                          assetAlt: (media as { alt?: unknown }).alt,
+                        }) ?? prev.coverImageAlt,
+                    }
+                  : prev,
+              )
             } else if (bodyTab === 'visual') {
               // Visual tab (AGL-582): insert as an image block at the caret
               // row; the editor serializes it back to ![alt](src).

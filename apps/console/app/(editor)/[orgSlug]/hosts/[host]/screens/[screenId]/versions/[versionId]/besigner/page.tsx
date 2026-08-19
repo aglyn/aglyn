@@ -1321,6 +1321,10 @@ function BesignerPage(props) {
           <ScreenSocialImageField
             hostId={hostId}
             saved={screenResult?.data?.seo?.image}
+            // See the twin on the screen detail page (AGL-2417).
+            savedAlt={screenResult?.data?.seo?.imageAlt}
+            savedWidth={screenResult?.data?.seo?.imageWidth}
+            savedHeight={screenResult?.data?.seo?.imageHeight}
             value={seoImage}
             onChange={setSeoImage}
           />

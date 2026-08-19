@@ -285,3 +285,138 @@ describe('collection pages share the same chain', () => {
     expect(metadata.openGraph.images[0].url).toBe(`${CDN}/host-og`)
   })
 })
+
+/**
+ * `og:image:alt` / `twitter:image:alt` (AGL-2417).
+ *
+ * Until this, NO tenant page emitted either — `ResolvedSocialImage` had no
+ * `alt` to hold, so every card a customer deliberately shared announced
+ * itself to a screen reader as an undescribed image.
+ *
+ * Asserted on the HEAD rather than only on the resolver for the same reason
+ * the rest of this file is: the resolver could be right and the emit site
+ * still spread a bare URL string, which is what left the marketplace card's
+ * Twitter half undescribed after its OG half was fixed.
+ */
+describe('the card is DESCRIBED (AGL-2417)', () => {
+  it('emits the alt stored beside the screen’s image', async () => {
+    givenScreen({
+      screenSeo: {
+        image: SCREEN_IMAGE,
+        imageWidth: 1200,
+        imageHeight: 630,
+        imageAlt: 'The Q3 report cover',
+      },
+    })
+
+    const metadata = await metadataFor(['about'])
+
+    expect(metadata.openGraph.images[0]).toMatchObject({
+      url: `${CDN}/screen-og`,
+      alt: 'The Q3 report cover',
+    })
+    // Both halves. The Twitter block takes the same descriptor object, and a
+    // bare string there emits no alt at all.
+    expect(metadata.twitter.images[0]).toMatchObject({
+      alt: 'The Q3 report cover',
+    })
+  })
+
+  it('falls back to the site default’s image AND its description together', async () => {
+    givenScreen({
+      hostSeo: {
+        image: HOST_IMAGE,
+        imageWidth: 1200,
+        imageHeight: 630,
+        imageAlt: 'The Acme logo',
+      },
+      screenSeo: {},
+    })
+
+    const metadata = await metadataFor(['about'])
+
+    expect(metadata.openGraph.images[0]).toMatchObject({
+      url: `${CDN}/host-og`,
+      alt: 'The Acme logo',
+    })
+  })
+
+  it('NEVER describes a screen’s image with the site default’s words', async () => {
+    // The failure a pick-time default on one storage site would have shipped:
+    // the screen's picture, confidently captioned as the site logo, to the
+    // one reader who cannot see that it is wrong.
+    givenScreen({
+      hostSeo: { image: HOST_IMAGE, imageAlt: 'The Acme logo' },
+      screenSeo: { image: SCREEN_IMAGE },
+    })
+
+    const metadata = await metadataFor(['about'])
+
+    expect(metadata.openGraph.images[0].url).toBe(`${CDN}/screen-og`)
+    expect(metadata.openGraph.images[0].alt).toBeUndefined()
+  })
+
+  it('emits no alt key at all when nothing was described', async () => {
+    // `og:image:alt=""` asserts the image conveys nothing — the decorative
+    // case — and a share card is by definition not decorative. Assert the
+    // KEY is absent: `strictNullChecks` is off repo-wide and a present key
+    // holding undefined still emits `content=""`.
+    givenScreen({ screenSeo: { image: SCREEN_IMAGE, imageAlt: '  ' } })
+
+    const metadata = await metadataFor(['about'])
+
+    expect(metadata.openGraph.images[0].url).toBe(`${CDN}/screen-og`)
+    expect(Object.keys(metadata.openGraph.images[0])).not.toContain('alt')
+  })
+
+  it('describes a collection entry with its OWN cover description', async () => {
+    mockLoad.mockResolvedValue({
+      props: {
+        data: { host: hostWith({ image: HOST_IMAGE, imageAlt: 'The Acme logo' }) },
+        nodes: null,
+        content: {
+          collection: { slug: 'blog', displayName: 'Blog' },
+          entry: {
+            $id: 'e1',
+            title: 'Hello',
+            slug: 'hello',
+            coverImage: 'media:host-1/cover',
+            coverImageAlt: 'A stack of printed reports',
+          },
+          entries: [],
+        },
+      },
+    })
+
+    const metadata = await metadataFor(['blog', 'hello'])
+
+    expect(metadata.openGraph.images[0]).toMatchObject({
+      url: `${CDN}/cover`,
+      alt: 'A stack of printed reports',
+    })
+  })
+
+  it('does not lend the site default’s words to an entry cover', async () => {
+    mockLoad.mockResolvedValue({
+      props: {
+        data: { host: hostWith({ image: HOST_IMAGE, imageAlt: 'The Acme logo' }) },
+        nodes: null,
+        content: {
+          collection: { slug: 'blog', displayName: 'Blog' },
+          entry: {
+            $id: 'e1',
+            title: 'Hello',
+            slug: 'hello',
+            coverImage: 'media:host-1/cover',
+          },
+          entries: [],
+        },
+      },
+    })
+
+    const metadata = await metadataFor(['blog', 'hello'])
+
+    expect(metadata.openGraph.images[0].url).toBe(`${CDN}/cover`)
+    expect(metadata.openGraph.images[0].alt).toBeUndefined()
+  })
+})

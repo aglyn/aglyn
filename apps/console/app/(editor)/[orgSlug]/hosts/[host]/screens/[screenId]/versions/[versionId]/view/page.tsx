@@ -1268,6 +1268,13 @@ function ScreenDetails() {
                       <ScreenSocialImageField
                         hostId={hostId}
                         saved={screen?.seo?.image}
+                        // The alt and the dimensions travel WITH the
+                        // reference (AGL-2417): editing the description
+                        // restages the whole group, so the field needs the
+                        // stored size or a save would drop it.
+                        savedAlt={screen?.seo?.imageAlt}
+                        savedWidth={screen?.seo?.imageWidth}
+                        savedHeight={screen?.seo?.imageHeight}
                         value={seoImage}
                         onChange={setSeoImage}
                       />
