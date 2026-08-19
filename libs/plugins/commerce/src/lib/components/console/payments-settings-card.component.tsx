@@ -204,9 +204,20 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 {'Selling requires a paid plan — upgrade on the billing page.'}
               </Alert>
             ) : null}
+            {/*
+                THE LEGAL NAME, not the org's resolved `productName`
+                (AGL-2351). This sentence says who takes money off the
+                merchant's own Stripe account, and the application fee lands in
+                the platform Stripe account — held by the operating entity, not
+                by a white-label agency reselling the console. Naming the
+                agency here would assert a fee relationship that does not
+                exist. `PLATFORM_BRAND_LEGAL_NAME` still configures cleanly for
+                a self-host operator, who really is the entity collecting it.
+            */}
             <Typography variant="body2" color="text.secondary">
-              {'Buyers pay on your own Stripe account; Aglyn collects a ' +
-                'platform fee per sale based on your plan:'}
+              {'Buyers pay on your own Stripe account; ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} collects a platform fee ` +
+                'per sale based on your plan:'}
             </Typography>
             {/* The DIGITAL rate is not products-only (AGL-2315). A paid
                 booking is a service sale and resolves through the same

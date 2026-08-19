@@ -42,6 +42,18 @@ import {
   publisherAgreementPresentation,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
+/*
+  THE LEGAL NAME, not `useBranding().branding.productName` (AGL-2351).
+
+  Every other customer-facing string in the console reads the org's resolved
+  product name, and doing that here would be false: the two sentences below say
+  which entity holds a sales-tax registration and remits against it. A
+  white-label agency holds neither. The value has to name the company that
+  actually stands behind the money — the same reasoning that keeps
+  `tx-return-webfile.ts` naming the entity rather than the product, and the
+  reason these two were left out of the AGL-2319 sweep instead of swept wrong.
+*/
+import { PLATFORM_BRAND_LEGAL_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { useRouter } from 'next/navigation'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
@@ -998,7 +1010,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           anchor: '#paid-listings',
           excerpt:
             'Net paid out is your share after the platform fee — sales tax ' +
-            'is collected on Aglyn’s registration and is never yours.',
+            `is collected on ${PLATFORM_BRAND_LEGAL_NAME}’s registration and ` +
+            'is never yours.',
         })}
         contentGutterX
         contentGutterY
@@ -1043,8 +1056,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             <Typography variant="caption" color="text.secondary">
               {'Net paid out is what reached your Stripe account: the ' +
                 'pre-tax price less the platform fee. Sales tax is collected ' +
-                'and remitted by Aglyn under its marketplace-provider ' +
-                'registration and was never part of your share.'}
+                `and remitted by ${PLATFORM_BRAND_LEGAL_NAME} under its ` +
+                'marketplace-provider registration and was never part of ' +
+                'your share.'}
             </Typography>
           </Stack>
         )}

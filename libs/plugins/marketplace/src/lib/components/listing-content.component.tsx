@@ -40,6 +40,7 @@ import {
   type MarkdownBlock,
   type MarkdownInline,
   parseMarkdownLite,
+  PLATFORM_BRAND_NAME,
   PLUGIN_HOST_ABI_VERSION,
   pluginDocsHelp,
   resolveMediaSrc,
@@ -1198,11 +1199,20 @@ export function MarketplaceListingContent({
                             )
                           ) : null}
                           {/* Two claims, shown separately (AGL-1121): who
-                              wrote it, and whether these bytes were read. */}
+                              wrote it, and whether these bytes were read.
+
+                              Both name `PLATFORM_BRAND_NAME`, not the viewing
+                              org's `productName` (AGL-2351): they say who did
+                              the verifying and the reading, and that is the
+                              deployment's own review queue — one catalog
+                              shared by every org. A white-label agency's brand
+                              here would claim the agency vetted a publisher it
+                              has never heard of. */}
                           {listing?.reviewStatus === 'verified' ? (
                             <Tooltip
                               title={
-                                'A human at Aglyn confirmed who this ' +
+                                `A human at ${PLATFORM_BRAND_NAME} confirmed ` +
+                                'who this ' +
                                 'publisher is, and that the listing describes ' +
                                 'what the code does. A claim about the ' +
                                 'publisher, not this release — it survives a ' +
@@ -1219,7 +1229,8 @@ export function MarketplaceListingContent({
                           {listing?.latestVersionReviewState === 'approved' ? (
                             <Tooltip
                               title={
-                                'A human at Aglyn read these exact bytes — ' +
+                                `A human at ${PLATFORM_BRAND_NAME} read these ` +
+                                'exact bytes — ' +
                                 'the version on offer — against a required ' +
                                 'checklist. Re-earned per version. Not a ' +
                                 'security guarantee: every plugin runs in the ' +
