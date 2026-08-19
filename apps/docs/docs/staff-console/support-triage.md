@@ -143,10 +143,15 @@ worse than one that admits the gap:
 - **There is no status page.** Incident communication is email only. If several
   customers are affected, the incident runbook's comms section is the only
   mechanism.
-- **`security@`, `abuse@` and `dmca@` are not confirmed to deliver** (AGL-1973)
-  — and `security@` is the declared primary breach-detection channel. Until
-  that is closed, a report arriving through the support queue may be the only
-  copy that reaches anyone. Treat §2 as load-bearing.
+- **`security@`, `abuse@` and `dmca@` deliver** — confirmed 2026-08-19
+  (AGL-1911) from Google Workspace group configuration: each is a Google Group
+  accepting posts from anyone on the web, unmoderated, with `zach@aglyn.com`
+  subscribed to every message. What is *not* closed is that each has exactly one
+  member and sends no auto-acknowledgement (AGL-2400) — so mail is accepted and
+  archived whether or not anyone is reading. `security@` is the declared primary
+  breach-detection channel, and the 72-hour clock runs from awareness, so a
+  report arriving through the support queue may still be the copy someone
+  actually sees. Treat §2 as load-bearing.
 
 ## Related
 

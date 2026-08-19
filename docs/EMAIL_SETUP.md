@@ -26,6 +26,55 @@ Postmark / Mailgun), chosen because it's purpose-built for app email
 ~18 call sites. Google Workspace SMTP is **not** used for app mail — it caps at
 ~2,000/day and would risk locking the real mailboxes.
 
+## Inbound: the published intake addresses
+
+Everything above is about mail we **send**. These are the addresses we have
+**promised** in published documents, so they have to receive. All of them are
+Google **Groups** in the Workspace (not aliases on a personal mailbox), which is
+deliberate: a group gains and loses members without the address changing, keeps
+its archive across a membership change, and can carry an auto-reply later
+without re-plumbing.
+
+| Address | Promised in | Delivers to |
+| --- | --- | --- |
+| `privacy@aglyn.com` | Privacy Policy §7, §9, §11, §13; DPA Annex A data-importer contact; `/legal/subprocessors` | `zach@aglyn.com` |
+| `legal@aglyn.com` | Terms §18.1, §18.5 (arbitration opt-out), §19.8, §19.11; Marketplace Publisher Agreement §14 | `zach@aglyn.com` |
+| `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | `zach@aglyn.com` |
+| `abuse@aglyn.com` | Acceptable Use Policy | `zach@aglyn.com` |
+| `dmca@aglyn.com` | Copyright/DMCA Policy | `zach@aglyn.com` |
+| `support@aglyn.com` | Terms; `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
+
+Also live as groups: `info@`, `hello@`, `help@`, `sales@`, `billing@`,
+`accounting@`, `admin@`, `talent@`, `copyright@`, `webmaster@` (the DMARC `rua`
+destination and the ICANN registrant contact).
+
+### How to verify one of these — and how *not* to
+
+⚠️ **Do not verify by test send.** A default routing rule (AGL-1577) accepts
+mail for *non-existent* `@aglyn.com` addresses and suppresses the bounce, so
+"I sent it and it didn't bounce" is exactly as true of an address that was never
+created. That check cannot fail, so it proves nothing.
+
+Verify by **configuration**, which can fail:
+
+```
+https://groups.google.com/a/aglyn.com/g/<name>/members
+```
+
+A real group renders its member list. An address that does not exist returns
+**404** — run it against something like `nosuchbox` as a negative control before
+trusting a positive. Check `Settings → Who can post` is **Anyone on the web**
+too: a group that exists but only accepts posts from members will reject a
+stranger's DSAR or §512 notice.
+
+Note that the Groups **"All groups"** listing is *not* a complete enumeration —
+`abuse@` is absent from it while demonstrably existing. Only the direct probe
+above is conclusive.
+
+Last verified **2026-08-19** (AGL-1911): all six accept unmoderated posts from
+anyone on the web and deliver each message to `zach@aglyn.com`. Each has a
+single member and no auto-acknowledgement — AGL-2400.
+
 ## Current DNS facts (aglyn.com)
 
 - **DNS host:** **Vercel DNS** (`ns1/ns2.vercel-dns.com`) — manage records with
