@@ -43,6 +43,15 @@
  * Aglyn's own purchases) is not in `platformRevenue`; the line says NOT
  * COMPUTED rather than printing a zero that would pass for a derived one.
  *
+ * **Never leave a bucket in the JSON.** The route computes THREE sets of
+ * figures and this page showed one (AGL-2163). Storefront (AGL-1904) reached
+ * the screen only as an attention count and two Webfile footnotes; marketplace
+ * (AGL-2137) did not reach it at all — two of the three buckets a human files
+ * from existed only in a response nobody sees, which is the same failure this
+ * page was raised to fix. Both are rendered below, each as its own card, each
+ * with its own liability sentence, and with NO grand total anywhere: adding
+ * them is the mistake the three-way split exists to prevent.
+ *
  * Read-only, like the route: this page files nothing and writes nothing. The
  * filing happens at the Comptroller's Webfile keyboard, which is why the
  * export is a spreadsheet of working papers and the credentials ride along.
@@ -84,8 +93,10 @@ import {
   taxReturnCsv,
   taxReturnCsvFilename,
   taxReturnJurisdictionRows,
+  taxReturnMarketplaceLines,
   taxReturnPeriodOptions,
   taxReturnRegistration,
+  taxReturnStorefrontRows,
   taxReturnWebfileLines,
   type TaxReturnPayload,
 } from '../../../../utils/tx-return-webfile'
@@ -146,6 +157,15 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
   const webfileLines = useMemo(() => taxReturnWebfileLines(payload), [payload])
   const jurisdictions = useMemo(
     () => taxReturnJurisdictionRows(payload),
+    [payload],
+  )
+  // The other two of the three buckets the route computes (AGL-2163).
+  const storefrontBuckets = useMemo(
+    () => taxReturnStorefrontRows(payload),
+    [payload],
+  )
+  const marketplaceLines = useMemo(
+    () => taxReturnMarketplaceLines(payload),
     [payload],
   )
 
@@ -496,6 +516,194 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                 },
               ]}
             />
+
+            {/*
+              THE SECOND BUCKET (AGL-1904/2163): tax on MERCHANTS' storefront
+              sales. Split by who owes it, never summed — `aglynLiable` is
+              money in Aglyn's balance under Aglyn's own registrations, and
+              `merchantManual` never touched them. One "storefront tax" total
+              would merge those two facts into a number that is true of
+              neither.
+            */}
+            <CardDisplay
+              header={'Storefront commerce tax — merchants’ sales'}
+              help={docsHelp('salesTaxReturn', {
+                anchor: '#the-figures',
+                excerpt:
+                  'Tax charged to shoppers on merchants’ storefronts, split by who owes it. None of it is in the Webfile figures above.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1.5 }}
+              >
+                {'None of this is in the Webfile figures above, which sum ' +
+                  'Aglyn’s OWN sales only. The first row is the one that ' +
+                  'needs a decision: those sessions are created on Aglyn’s ' +
+                  'platform account, so Stripe computed that tax against ' +
+                  'Aglyn’s registrations and it settled into Aglyn’s balance.'}
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{'Bucket'}</TableCell>
+                    <TableCell align="right">{'Sales'}</TableCell>
+                    <TableCell align="right">{'Gross'}</TableCell>
+                    <TableCell align="right">{'Taxable sales'}</TableCell>
+                    <TableCell align="right">{'Tax collected'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {storefrontBuckets.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <Typography variant="body2" color="text.secondary">
+                          {payload
+                            ? 'This period’s response carries no storefront figures.'
+                            : loading
+                              ? 'Loading…'
+                              : '—'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    storefrontBuckets.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <Stack spacing={0.5}>
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                            >
+                              <Typography variant="body2">
+                                {row.label}
+                              </Typography>
+                              {row.aglynLiable ? (
+                                <Chip
+                                  size="small"
+                                  color="warning"
+                                  label="Aglyn holds this"
+                                />
+                              ) : null}
+                            </Stack>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {row.liability}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell align="right">
+                          {row.transactionCount}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`$${row.grossDollars}`}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {`$${row.taxableSalesDollars}`}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontFamily: 'monospace',
+                            fontWeight: row.aglynLiable ? 600 : 400,
+                          }}
+                        >
+                          {`$${row.taxCollectedDollars}`}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              {payload?.storefront?.truncated ? (
+                <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                  {'Storefront rows exceeded the row cap — these figures are ' +
+                    'a lower bound.'}
+                </Typography>
+              ) : null}
+            </CardDisplay>
+
+            {/*
+              THE THIRD BUCKET (AGL-2137/2163). One liability arm, not three:
+              marketplace checkout adds the tax EXCLUSIVE on the platform's own
+              charge and pays the publisher from the pre-tax price, so all of
+              it is Aglyn's. Stated as a platform figure with no jurisdiction
+              breakdown because purchase rows store no buyer address — a
+              "Texas" slice here would be a guess printed as a total.
+            */}
+            <CardDisplay
+              header={'Marketplace tax — plugin and theme purchases'}
+              help={docsHelp('salesTaxReturn', {
+                anchor: '#the-figures',
+                excerpt:
+                  'Tax on marketplace purchases. Charged on the platform’s own charge, kept platform-side, and in no Webfile line above.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1.5 }}
+              >
+                {'All of this tax is Aglyn’s: it is added on top of the ' +
+                  'listing price on Aglyn’s own charge, and the publisher’s ' +
+                  'transfer is computed from the pre-tax price. No buyer ' +
+                  'address is stored on a purchase row, so none of it can be ' +
+                  'placed in a state — which is why it is absent from the ' +
+                  'jurisdiction table below.'}
+              </Typography>
+              <Stack spacing={1}>
+                {marketplaceLines.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {payload
+                      ? 'This period’s response carries no marketplace figures.'
+                      : loading
+                        ? 'Loading…'
+                        : '—'}
+                  </Typography>
+                ) : (
+                  marketplaceLines.map((line) => (
+                    <Stack key={line.label} spacing={0.25}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ justifyContent: 'space-between' }}
+                      >
+                        <Typography variant="body2">{line.label}</Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontFamily: 'monospace' }}
+                        >
+                          {line.value}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {line.note}
+                      </Typography>
+                    </Stack>
+                  ))
+                )}
+              </Stack>
+              {payload?.marketplace?.truncated ? (
+                <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                  {'Marketplace rows exceeded the row cap — these figures are ' +
+                    'a lower bound.'}
+                </Typography>
+              ) : null}
+            </CardDisplay>
 
             <CardDisplay
               header={'All jurisdictions'}

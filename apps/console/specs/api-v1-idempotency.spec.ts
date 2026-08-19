@@ -166,6 +166,19 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // against its own mock, and the `create()`-rejection-as-dedupe primitive is
   // the entire subject.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
+  // The REAL quota functions too (AGL-2163). `authenticateApiV1` now enforces
+  // `checkApiRequestQuota(...).allowed` at this chokepoint, and a wholesale
+  // mock is a CLOSED WORLD: omitting them here turned every request in this
+  // suite into `TypeError: apiRequestEnforcementShape is not a function`,
+  // caught by the route's outer handler and served as a 500. Real, not
+  // stubbed — the org below is `business`, which resolves to `'never-blocks'`,
+  // so the quota is transparent to this suite exactly as it is in production.
+  apiRequestEnforcementShape: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).apiRequestEnforcementShape,
+  checkApiRequestQuota: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkApiRequestQuota,
   checkEntitlement: () => true,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>

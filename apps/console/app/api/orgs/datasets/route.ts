@@ -21,9 +21,11 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
+  checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
+  dataStorageEnforcementShape,
   coerceDocumentValues,
   createResourceUid,
   effectiveDatasetModel,
@@ -39,6 +41,74 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 
+/**
+ * Enforce `checkDataStorageQuota(...).allowed` at the record write (AGL-2163).
+ *
+ * The gap this closes: the check existed, was documented as a hard block for
+ * plans with no overage rate, was listed in `free-tier-never-billed.spec.ts`
+ * as one of free's runtime braces — and had no reader. `report-usage` calls
+ * it for `overageMonthlyUsd` and ignores `allowed`. The blast radius was
+ * small only by accident (free carries `dataStorageMbPerOrg: 0`,
+ * `datasetsPerOrg: 0` and `features.dataStore: false`, so the entitlement gate
+ * above usually fires first); a per-org `features.dataStore` override reaches
+ * straight past it, and then a free org can store unbounded dataset bytes
+ * that nothing refuses and nothing bills.
+ *
+ * Modelled on the ENFORCED precedent, `checkFormSubmissionQuota` at
+ * `apps/tenant/app/api/forms/submit/route.ts`: read the count, ask the check,
+ * refuse before the write.
+ *
+ * COSTS A PAYING CUSTOMER NOTHING. Every plan with an
+ * `extraDataGbMonthlyUsd` rate resolves to `'never-blocks'`, so the metered
+ * case returns `null` without a single read and without any possibility of a
+ * refusal — the overage bills, exactly as `checkDataStorageQuota`'s docblock
+ * says it should. Only the two other shapes cost anything.
+ */
+async function refuseIfDataStorageBlocked(
+  org: unknown,
+  orgRef: FirebaseFirestore.DocumentReference,
+): Promise<Response | null> {
+  const shape = dataStorageEnforcementShape(org as never)
+  if (shape === 'never-blocks') return null
+  if (shape === 'always-blocks') {
+    // The band is zero and the plan meters nothing — no measurement can
+    // change the answer, so this refuses without reading anything.
+    return Response.json(
+      {
+        error:
+          'Dataset storage is not included on this plan — upgrade in Billing',
+      },
+      { status: 403 },
+    )
+  }
+  // `'measure'` — a finite, non-zero band on a plan with no overage rate.
+  // No plan shipping today has that shape; it exists only where staff have
+  // set an `entitlementOverrides.dataStorageMbPerOrg` on a plan that meters
+  // nothing, which is why paying a read here is affordable.
+  //
+  // Measured from the monthly rollup rather than re-summing the org's
+  // datasets: `report-usage`'s `orgDatasetBytes` is O(datasets) reads with two
+  // aggregate queries EACH, which is not a per-record-write cost. The reading
+  // is therefore up to a month stale, and that is stated rather than hidden —
+  // it can only ever under-refuse, never refuse a write it should have
+  // allowed, and the org this can reach is one staff configured by hand.
+  const usage = await orgRef
+    .collection('usage')
+    .doc(new Date().toISOString().slice(0, 7))
+    .get()
+  const usedMb = Number(usage.get('dataStorageMb') ?? 0)
+  const quota = checkDataStorageQuota(org as never, usedMb)
+  if (quota.allowed) return null
+  return Response.json(
+    {
+      error:
+        `Dataset storage limit reached (${quota.includedMb} MB) — ` +
+        'upgrade in Billing',
+    },
+    { status: 403 },
+  )
+}
+
 /** Roles allowed to create org data — mirrors rules' canWriteOrgData(). */
 const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
 
@@ -53,6 +123,12 @@ const WRITER_ROLES = new Set(['owner', 'admin', 'editor'])
  * - `create-record`:  `recordsPerDataset` quota; values are re-coerced
  *   and re-validated against the dataset's model server-side.
  * - `import-records`: batch create with the whole batch fitting the cap.
+ *
+ * Since AGL-2163 both record actions ALSO enforce `checkDataStorageQuota`.
+ * See {@link refuseIfDataStorageBlocked}: that check's `allowed` field had no
+ * reader anywhere in the platform while its docblock said free "hard-blocks
+ * at the included size", so the byte band was documentation. `recordsPerDataset`
+ * counts ROWS and does not bound their size, so it was never the same limit.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -208,6 +284,10 @@ async function handler(request: Request): Promise<Response> {
             error: `Record limit reached (${quota.limit}) — upgrade in Billing`,
           }, { status: 403 })
         }
+        // Bytes, not rows (AGL-2163). Before the write, like every other
+        // quota on this route.
+        const storageRefusal = await refuseIfDataStorageBlocked(org, orgRef)
+        if (storageRefusal) return storageRefusal
         const id = createResourceUid()
         await datasetRef.collection('records').doc(id).create({
           values: coerced,
@@ -238,6 +318,11 @@ async function handler(request: Request): Promise<Response> {
             `allows ${quota.limit} per dataset. See Billing to upgrade.`,
         }, { status: 403 })
       }
+      // Bytes, not rows (AGL-2163). An import is the path that moves the
+      // most bytes in one request, so leaving it out would have left the
+      // enforcement exactly where the customer does not meet it.
+      const importStorageRefusal = await refuseIfDataStorageBlocked(org, orgRef)
+      if (importStorageRefusal) return importStorageRefusal
       const prepared = rows.map((row, index) => {
         const coerced = coerceDocumentValues(
           model,

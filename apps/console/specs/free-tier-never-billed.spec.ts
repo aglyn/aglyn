@@ -45,8 +45,8 @@
  * | media storage | `mediaStorageGate` refuses past the band | `meteredInfraPassThrough: false` ⇒ `billableCostUsd: 0` |
  * | bandwidth / page views | `checkBandwidthAbuseCeiling` contains past 100,000 views/month | same flag, same zero |
  * | form submissions | `checkFormSubmissionQuota` walls at the band | same flag, same zero |
- * | dataset storage | `checkDataStorageQuota().allowed` false at the band | `extraDataGbMonthlyUsd: null` ⇒ `overageMonthlyUsd: 0` |
- * | API requests | route refuses (`apiAccess` absent) | `extraApiRequestsUsdPer1k: null` ⇒ 0 |
+ * | dataset storage | `checkDataStorageQuota().allowed`, enforced at the record write (AGL-2163) | `extraDataGbMonthlyUsd: null` ⇒ `overageMonthlyUsd: 0` |
+ * | API requests | `apiAccess` gate + `checkApiRequestQuota().allowed` at the /v1 chokepoint (AGL-2163) | `extraApiRequestsUsdPer1k: null` ⇒ 0 |
  * | contacts | `checkContactQuota().allowed` false at the band | `extraContactsUsdPer1k: null` ⇒ 0 |
  *
  * **Bandwidth used to be the one with no braces at all** (AGL-2155). Nothing
@@ -63,6 +63,16 @@
  * the hole open. The forced-branch proof (a free host refused, a paying host
  * at the same count not) is `apps/tenant/specs/loader-bandwidth-ceiling.spec
  * .ts`; the write side is `apps/tenant/specs/analytics-collect.spec.ts`.
+ *
+ * ⚠️ Two of the "braces" above were, until AGL-2163, DOCUMENTATION.
+ * `checkDataStorageQuota().allowed` and `checkApiRequestQuota().allowed` had
+ * no reader anywhere in the platform — their only call site was
+ * `report-usage`, which takes `overageMonthlyUsd` and ignores `allowed`. This
+ * table asserted them by naming them, which is the failure mode it should
+ * least have had. They are enforced at real call sites now
+ * (`apps/console/specs/dataset-storage-quota-enforced.spec.ts`,
+ * `apps/console/specs/api-v1-request-quota.spec.ts`), and both suites force
+ * the branch through the route rather than checking a return value.
  *
  * This suite still asserts the BELT directly for every dimension, braces or
  * not: "the upload was refused" and "the invoice was zero" remain different

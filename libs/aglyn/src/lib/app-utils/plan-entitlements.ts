@@ -2707,3 +2707,69 @@ export function bandwidthCeilingNotice(): { title: string; body: string } {
     body: 'It has served more traffic this month than its plan includes. It will be back at the start of next month, or sooner if the owner upgrades.',
   }
 }
+
+/**
+ * What a quota check costs a caller that intends to ENFORCE it (AGL-2163).
+ *
+ * `checkDataStorageQuota` and `checkApiRequestQuota` each carry an `allowed`
+ * field, and their docblocks promise it refuses — "plans without one (free)
+ * hard-block at the included size", "plans without API access have
+ * `included: 0` and always block". Nothing read it. Both functions appeared
+ * only in `/api/billing/report-usage`, which reads `overageMonthlyUsd` and
+ * ignores `allowed`, so the promise was documentation and the free tier's
+ * "runtime braces" on those two dimensions did not exist.
+ *
+ * Enforcing them naively means measuring first, and for dataset storage the
+ * measurement is O(datasets) reads — far too much for a per-record write.
+ * This makes the cheap answer available: for every plan shipping today the
+ * verdict does not depend on the measurement at all, because a plan either
+ * has an overage RATE (then it always allows and meters) or a band of zero
+ * (then it always refuses). Measuring is required only for the shape a staff
+ * `entitlementOverrides` can create — a finite, non-zero band on a plan with
+ * no rate — and only then does the caller pay a read.
+ *
+ * - `'always-blocks'` — refuse now; no measurement, no read.
+ * - `'never-blocks'` — proceed; no measurement, no read. **This is every
+ *   metered/paid plan**, so enforcement costs a paying customer nothing and
+ *   can never refuse them.
+ * - `'measure'` — the verdict depends on usage; measure and call the check.
+ */
+export type QuotaEnforcementShape =
+  | 'always-blocks'
+  | 'never-blocks'
+  | 'measure'
+
+function enforcementShape(
+  atZero: boolean,
+  atCeiling: boolean,
+): QuotaEnforcementShape {
+  if (!atZero && !atCeiling) return 'always-blocks'
+  if (atZero && atCeiling) return 'never-blocks'
+  return 'measure'
+}
+
+/**
+ * Enforcement shape of {@link checkDataStorageQuota} for this org, before
+ * anything has been measured. @see QuotaEnforcementShape
+ */
+export function dataStorageEnforcementShape(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): QuotaEnforcementShape {
+  return enforcementShape(
+    checkDataStorageQuota(org, 0).allowed,
+    checkDataStorageQuota(org, Number.MAX_SAFE_INTEGER).allowed,
+  )
+}
+
+/**
+ * Enforcement shape of {@link checkApiRequestQuota} for this org, before
+ * anything has been measured. @see QuotaEnforcementShape
+ */
+export function apiRequestEnforcementShape(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): QuotaEnforcementShape {
+  return enforcementShape(
+    checkApiRequestQuota(org, 0).allowed,
+    checkApiRequestQuota(org, Number.MAX_SAFE_INTEGER).allowed,
+  )
+}
