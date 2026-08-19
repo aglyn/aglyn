@@ -2681,6 +2681,36 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
 })
 
 describe('staff RBAC on org billing keys (AGL-206/238)', () => {
+  // AGL-2131. `staffRole()` defaulted to 'super' here long after AGL-495 made
+  // every /api/admin/* route default to 'support', so ONE claim-less staff
+  // token was simultaneously super at the rules layer and support at the
+  // handlers. This pins the default at the least privilege, and it is the
+  // assertion that fails against `token.get('staffRole', 'super')`.
+  it('a staff token with NO staffRole gets support, not super', async () => {
+    const rolelessDb = authed(STAFF, { staff: true })
+    const superDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    // The negative control's twin: the same write, under an EXPLICIT super
+    // role, must still succeed — otherwise this case would also pass against
+    // rules that denied staff everything.
+    await assertSucceeds(
+      updateDoc(doc(superDb, 'orgs', ORG), { enabledPlugins: ['paid'] }),
+    )
+    await mustDeny(
+      'a role-less staff token taking the super branch on orgs/{orgId}',
+      updateDoc(doc(rolelessDb, 'orgs', ORG), { enabledPlugins: ['paid'] }),
+    )
+    // And it does not fall through to the billing branch either: `name` is
+    // the key that branch may still write, and support may not.
+    await mustDeny(
+      'a role-less staff token taking the billing branch on orgs/{orgId}',
+      updateDoc(doc(rolelessDb, 'orgs', ORG), { name: 'Roleless Rename' }),
+    )
+    // Plain `isStaff()` surfaces are UNAFFECTED — the role only ever gated
+    // the org doc, and a claim-less account must keep its read access or the
+    // migration this default was protecting turns into a lockout.
+    await assertSucceeds(getDoc(doc(rolelessDb, 'orgs', ORG)))
+  })
+
   it('the billing-staff branch is alive but cannot smuggle a suspension or slug', async () => {
     const billingStaffDb = authed(STAFF, { staff: true, staffRole: 'billing' })
     // This used to write `plan` — the role's whole purpose, and the natural
