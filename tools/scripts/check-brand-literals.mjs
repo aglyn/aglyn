@@ -37,7 +37,8 @@
  * Exit codes: 0 clean · 1 a file gained a literal, or a baseline row is stale.
  */
 
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,22 +55,6 @@ const BASELINE_PATH = join(
 /** Ships, or generates something that ships. Mirrors the colour ratchet. */
 const SWEEP_ROOTS = ['apps', 'libs', 'cloud']
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  '.next',
-  'coverage',
-  '.nx',
-  'tmp',
-  '.turbo',
-  '.git',
-  // Generated FROM apps/docs frontmatter and served as in-console Assist
-  // content. It is saturated with the brand because the documentation is
-  // about a product called Aglyn, and re-running the generator would put
-  // every one of them straight back — a ratchet row here would measure the
-  // docs, not the code.
-  'constants',
-])
 
 const SWEPT = /\.(?:tsx?|jsx?|mjs|cjs)$/
 
@@ -84,6 +69,14 @@ const EXEMPT = [
   /^tools\/scripts\/check-brand-literals\.mjs$/,
   // The canonical definition states the default exactly once, on purpose.
   /^libs\/aglyn\/src\/lib\/app-utils\/platform-brand\.ts$/,
+  // Generated FROM apps/docs frontmatter and served as in-console Assist
+  // content. It is saturated with the brand because the documentation is
+  // about a product called Aglyn, and re-running the generator would put
+  // every one of them straight back — a ratchet row here would measure the
+  // docs, not the code. Was a `constants` entry in the directory skip-list
+  // the `git ls-files` change below replaced; kept as a PATH rule so it
+  // still excludes exactly what it always did.
+  /(^|\/)constants\//,
 ]
 
 const args = process.argv.slice(2)
@@ -91,25 +84,36 @@ const asJson = args.includes('--json')
 const write = args.includes('--write')
 const list = args.includes('--list')
 
-function sweptFiles(dir, found = []) {
-  let entries
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return found
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) sweptFiles(full, found)
-      continue
-    }
-    if (SWEPT.test(entry.name)) found.push(full)
-  }
-  return found
+/**
+ * TRACKED files only, via `git ls-files` — never a filesystem walk.
+ *
+ * This started as a `readdirSync` walk with a directory skip-list, which is
+ * the same mistake the colour ratchet made and AGL-2025 corrected: a walk
+ * sweeps whatever happens to be on disk, so the guard measures machine state
+ * rather than the repo. `apps/docs/build/` and `apps/docs/.docusaurus/` are
+ * untracked build OUTPUT, and minified Docusaurus bundles are saturated with
+ * the product name — a developer who had built the docs saw 106 files "gain"
+ * a brand literal off the same commit where a developer who had not saw a
+ * clean run. Worse for a ratchet than for a plain scan: `--write` against a
+ * built tree would have BAKED those files into the baseline, and every row
+ * would then read as `stale` in CI, where they do not exist.
+ *
+ * Enumerating what git tracks makes the guard deterministic and means
+ * generated output can never trip it.
+ */
+function trackedFiles() {
+  const out = execFileSync('git', ['ls-files', '-z', '--', ...SWEEP_ROOTS], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  return out
+    .split('\0')
+    .filter((path) => path && SWEPT.test(path))
+    .map((path) => join(REPO_ROOT, path))
 }
 
-const files = SWEEP_ROOTS.flatMap((root) => sweptFiles(join(REPO_ROOT, root)))
+const files = trackedFiles()
 
 const counts = {}
 const occurrences = {}
