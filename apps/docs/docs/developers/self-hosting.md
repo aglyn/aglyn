@@ -44,6 +44,18 @@ node tools/scripts/set-firestore-ttl.mjs
 docker compose up --build
 ```
 
+:::caution There is no image to pull — you build it
+Aglyn publishes **no** Docker images, on any registry. `docker compose up
+--build` from a clone is the only supported path, and that is deliberate
+rather than pending: Next inlines every `NEXT_PUBLIC_*` value into the client
+bundles when the image is **built**, and this deployment has 27 of them — your
+Firebase client config, your console URL and tenant apex, your brand name, and
+the operator and DMCA-agent details shown on your public abuse intake. An
+image built by someone else would ship their answers to all of those inside
+your bundles. If you find something claiming Aglyn offers prebuilt images, it
+is wrong.
+:::
+
 :::caution Give Docker more memory than it starts with
 Docker Desktop allocates **2 CPUs and 4 GB** by default on macOS and Windows,
 and the Next production build does not fit in it — it is killed by the

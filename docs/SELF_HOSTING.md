@@ -8,6 +8,21 @@ VPS, or bare metal. (AGL-904..906)
 pointed at **your own Firebase project** and your own Stripe/Resend keys. You
 own the data, the infrastructure, and the domains.
 
+**You build the images; we do not publish any.** There is no `docker pull` for
+Aglyn — not on GHCR, not on Docker Hub, nowhere. The one supported path is
+`git clone`, fill in `.env.selfhost`, `docker compose up --build`. This is not
+an oversight, and a generic image is not a packaging step we have skipped:
+Next inlines every `NEXT_PUBLIC_*` value into the client bundles at **build**
+time, and `.env.selfhost.example` declares 27 of them — your Firebase client
+config, your console URL and tenant apex, your brand name, and the operator
+and DMCA-agent details printed on the public abuse and §512 intakes. An image
+built by us would carry **our** answers to all of those into **your**
+deployment, in bundles you cannot change without rebuilding. That is worse
+than no image, because it looks like it works. That becomes possible only
+once the operator-facing public configuration moves from build time to request
+time (AGL-2434); until then, treat any claim that Aglyn ships prebuilt images
+as false.
+
 **What it is not (yet):** Google-free. Firebase (Auth, Firestore, Storage,
 Realtime Database, Remote Config) is the platform's identity and data layer.
 A vendor-neutral backend (Postgres/S3/OIDC-style) is a separate roadmap track
