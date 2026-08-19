@@ -29,7 +29,14 @@ RUN --mount=type=secret,id=selfhost_env,target=/workspace/.env.production \
 
 # ── runner ───────────────────────────────────────────────────────────────────
 FROM node:24-slim AS runner
-ENV NODE_ENV=production \
+# AGLYN_STANDALONE marks "this is a deployment" for code that used to key off
+# Vercel's own variable (AGL-2221). It is set in the build stage too, but ENV
+# does not cross a stage boundary and the middleware reads it at REQUEST time,
+# not at build time — so setting it only there left `isDeployedRuntime()` false
+# in every shipped container and the AGL-2177 host-resolution fix inert. A
+# visitor to a self-hosted site fell through to the console redirect.
+ENV AGLYN_STANDALONE=1 \
+    NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=4500 \
     HOSTNAME=0.0.0.0
