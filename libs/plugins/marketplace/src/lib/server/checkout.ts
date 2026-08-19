@@ -192,6 +192,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       billing_address_collection: 'required',
       'payment_intent_data[transfer_data][destination]': String(accountId),
       'payment_intent_data[transfer_data][amount]': String(transferCents),
+      // THE DISCRIMINATOR THE REFUND DOOR HAS NO OTHER WAY TO GET (AGL-2148).
+      //
+      // `metadata[type]` below rides on the SESSION, and `charge.refunded`
+      // never sees a session — its object is the charge. The platform
+      // endpoint receives `charge.refunded` for storefront orders and
+      // subscription charges too, so the webhook cannot tell a marketplace
+      // refund from any other one except by joining on the payment intent,
+      // which is exactly the join that comes up empty during the window this
+      // metadata exists to close (the purchase document is written by
+      // `checkout.session.completed`, and that delivery retries).
+      //
+      // Stripe copies a PaymentIntent's metadata onto the charge it creates,
+      // so stamping it here makes `charge.metadata.type` readable straight
+      // off the refund event — no Firestore join, no Stripe round trip, and
+      // no orphan record written for the commerce and subscription refunds
+      // that share this endpoint.
+      //
+      // `listingId`/`buyerUid` ride along for forensics only: an orphan that
+      // never drains is a support case, and the payment intent alone does not
+      // say whose purchase of what it was.
+      'payment_intent_data[metadata][type]': 'marketplace-purchase',
+      'payment_intent_data[metadata][listingId]': listingId,
+      'payment_intent_data[metadata][buyerUid]': decoded.uid,
       success_url: `${origin}${returnPath}?purchase=success`,
       cancel_url: `${origin}${returnPath}?purchase=canceled`,
       client_reference_id: decoded.uid,

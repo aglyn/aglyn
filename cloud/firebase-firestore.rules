@@ -1743,6 +1743,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Refunds and lost disputes that arrived BEFORE their purchase document
+    // (AGL-2148), keyed by payment intent. Written and drained only by the
+    // Stripe webhook (Admin SDK); a document here means marketplace money is
+    // in flight, so staff can see the queue and nobody can write to it.
+    match /marketplaceRefundOrphans/{paymentIntentId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
     // Staff-only, append-only audit log of admin actions
     // ({ actorUid, action, target, before, after, at }), plus an optional
     // top-level { reason, note } pair recording WHY — required by the staff

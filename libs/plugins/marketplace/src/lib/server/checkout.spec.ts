@@ -284,6 +284,32 @@ describe('marketplace checkout take rate + sale-time gates (AGL-1543)', () => {
     expect(params.get('metadata[feeCents]')).toBe('2000')
   })
 
+  it('stamps the marketplace marker on the PAYMENT INTENT, not only the session (AGL-2148)', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    const { params } = stripeCalls[0]
+    // `charge.refunded` never sees a session — its object is the charge — and
+    // the platform endpoint receives refunds for storefront orders and
+    // subscription charges too. Stripe copies a PaymentIntent's metadata onto
+    // its charge, so this is the ONLY thing that lets the refund door tell a
+    // marketplace refund apart without a Firestore join, which is precisely
+    // the join that comes up empty while the purchase document is still being
+    // written. Drop it and the orphan store parks nothing (or, worse, parks
+    // one for every commerce refund on the platform).
+    expect(params.get('payment_intent_data[metadata][type]')).toBe(
+      'marketplace-purchase',
+    )
+    expect(params.get('payment_intent_data[metadata][listingId]')).toBe(
+      'listing-1',
+    )
+    expect(params.get('payment_intent_data[metadata][buyerUid]')).toBe(
+      'buyer-1',
+    )
+    // The session marker stays where `checkout.session.completed` reads it.
+    expect(params.get('metadata[type]')).toBe('marketplace-purchase')
+  })
+
   it('409s when the publisher has not finished Stripe onboarding', async () => {
     seed()
     publisherMock.__publisher = {
