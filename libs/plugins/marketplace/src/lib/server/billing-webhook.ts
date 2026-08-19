@@ -317,6 +317,267 @@ async function reverseMarketplaceSellerShare(
 }
 
 /**
+ * WHERE A REFUND THAT ARRIVED TOO EARLY WAITS (AGL-2148).
+ *
+ * THE WINDOW IS REAL, not exotic. `checkout.session.completed` is what writes
+ * `marketplacePurchases/{sessionId}`, and that delivery RETRIES: this endpoint
+ * 500s on every transient Stripe failure raised in this file and on any throw
+ * from a sibling plugin handler, and Stripe then redelivers for up to three
+ * days. A dashboard refund issued inside that window joins on the payment
+ * intent, finds nothing, and — before this — the branch simply ended. No
+ * `else`. The buyer got their money, the publisher kept their 80%, Aglyn ate
+ * the gross, and `hasLivePurchase` saw no `refundedAt`, so the refunded buyer
+ * kept the install forever.
+ *
+ * WHY NOT SIMPLY THROW so Stripe redelivers the refund. Because
+ * `charge.refunded` and `charge.dispute.*` arrive on this same endpoint for
+ * storefront orders and subscription charges, whose payment intents will never
+ * match a marketplace purchase. Throwing on "not found" would 500 the webhook
+ * for every non-marketplace refund, and the route drops its idempotency claim
+ * on a throw — so the commerce and bookings handlers' non-idempotent effects
+ * would re-run. The containment would cost more than the defect.
+ *
+ * SO THE EVENT IS PARKED, and the session landing drains it. Keyed by PAYMENT
+ * INTENT, which is the only id the refund door, the dispute door and the
+ * session landing all carry: the drain is one `get()` on a known document id,
+ * with no query and no composite index.
+ *
+ * NOTHING IS PARKED SPECULATIVELY. Both doors gate the write on a
+ * marketplace discriminator (`metadata.type`, stamped on the PaymentIntent at
+ * checkout — see checkout.ts), so a commerce refund writes no orphan at all.
+ * That is why this store needs no TTL and no sweeper: a document here means a
+ * marketplace purchase is mid-flight, and the session landing removes it.
+ */
+const REFUND_ORPHAN_COLLECTION = 'marketplaceRefundOrphans'
+
+/** A cause plus everything the revocation and the GA hit need to replay it. */
+interface RefundOutcomeCause extends SellerShareReversalCause {
+  /** The join key, and the orphan document id. */
+  paymentIntentId: string
+  /** GA `refund` currency — the event's, never assumed. */
+  currency: string
+  /** Stripe customer for the GA hit; falls back to the buyer uid. */
+  stripeCustomerId: string
+}
+
+/**
+ * The three effects a full refund or a LOST dispute applies to a purchase:
+ * revoke, report, pull the seller's share back.
+ *
+ * ONE function for three call sites — the refund door, the dispute door, and
+ * the orphan drain — deliberately, and it is the AGL-1994 lesson again: the
+ * drain must apply *the same* effects the door would have, and a second copy
+ * of them is how the two drift. The drain therefore cannot forget the GA hit
+ * or the reversal, because it is not in a position to.
+ *
+ * IDEMPOTENT AT EVERY LAYER. `refundedAt` read BEFORE the stamp is the GA
+ * guard (a redelivery reports nothing twice); `reversedTransferCents` is the
+ * reversal's settle marker, so a redelivery — or a drain running after the
+ * door already ran — returns before any Stripe call; and the reversal POST
+ * carries `Idempotency-Key: <kind>-reversal-<causeId>`, which is the SAME key
+ * either path would have used because it is derived from the cause, not from
+ * who is applying it. A drained refund and a redelivered `charge.refunded`
+ * are therefore indistinguishable to Stripe, and the publisher cannot be
+ * debited twice.
+ */
+async function applyMarketplaceRefundOutcome(
+  purchaseRef: FirebaseFirestore.DocumentReference,
+  cause: RefundOutcomeCause,
+  /** Dispute-only fields stamped in the same write. */
+  extraStamp: Record<string, unknown> = {},
+): Promise<void> {
+  const snapshot = await purchaseRef.get()
+  if (!snapshot.exists) return
+  // Read BEFORE the stamp: `refundedAt` doubles as the GA guard, so a
+  // redelivery that slips past the route's event claim finds the purchase
+  // already refunded and reports nothing a second time.
+  const alreadyRefunded = Boolean(snapshot.get('refundedAt'))
+  await purchaseRef.set(
+    {
+      ...extraStamp,
+      refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      refundedCents: cause.amountCents,
+    },
+    { merge: true },
+  )
+  // GA4 `refund` (AGL-1850) — the reversal of the AGL-1639 purchase, in the
+  // SAME accounting. The purchase reported the platform NET (gross − tax −
+  // transfer), so the refund must reverse that number: refunding the
+  // tax-inclusive gross would net MORE out of GA than the sale ever put in.
+  // Fire-and-forget, after the stamp: an analytics failure must never
+  // un-claim a Stripe event.
+  if (!alreadyRefunded) {
+    const grossCents = Number(snapshot.get('amountCents') ?? 0)
+    const taxCents = Number(snapshot.get('taxCents') ?? 0)
+    const sellerCents = Number(snapshot.get('transferCents') ?? 0)
+    const netCents = grossCents - taxCents - sellerCents
+    if (netCents > 0) {
+      void sendGa4Refund({
+        transactionId: String(purchaseRef.id),
+        value: netCents / 100,
+        currency: cause.currency,
+        items: [],
+        stripeCustomerId:
+          cause.stripeCustomerId || String(snapshot.get('buyerUid') ?? ''),
+      }).catch(() => undefined)
+    }
+  }
+  // AFTER the revocation, so the entitlement never stays live because a
+  // Stripe read failed: this half throws on transient failures (the
+  // redelivery is the retry, and everything above is idempotent under it) and
+  // settles definitively otherwise.
+  await reverseMarketplaceSellerShare(purchaseRef, cause)
+}
+
+/**
+ * Parks a cause whose purchase document does not exist yet.
+ *
+ * FIRST CAUSE WINS. The document is not merged over: a redelivery of the same
+ * refund would otherwise move `createdAt`, and the (vanishingly unlikely)
+ * refund-then-dispute pair inside one window would otherwise blend into a
+ * chimera carrying one cause's id and the other's amount. The first cause is
+ * the one that revoked, and the reversal settle marker means only one
+ * pull-back can happen regardless of which is replayed.
+ */
+async function recordRefundOrphan(
+  firestore: FirebaseFirestore.Firestore,
+  cause: RefundOutcomeCause,
+): Promise<void> {
+  if (!cause.paymentIntentId || !cause.id) return
+  const orphanRef = firestore
+    .collection(REFUND_ORPHAN_COLLECTION)
+    .doc(cause.paymentIntentId)
+  if ((await orphanRef.get()).exists) return
+  await orphanRef.set(
+    {
+      kind: cause.kind,
+      id: cause.id,
+      paymentIntentId: cause.paymentIntentId,
+      amountCents: cause.amountCents,
+      chargeId: cause.chargeId,
+      currency: cause.currency,
+      stripeCustomerId: cause.stripeCustomerId,
+      createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+  // Loud on purpose: this is money in flight. If the matching session never
+  // lands (a buyer who abandoned checkout cannot be refunded, so in practice
+  // it always does), the row is the only trace, and it is queryable.
+  console.error(
+    'Marketplace refund landed before its purchase — parked for the session handler (AGL-2148)',
+    {
+      kind: cause.kind,
+      causeId: cause.id,
+      paymentIntentId: cause.paymentIntentId,
+      amountCents: cause.amountCents,
+    },
+  )
+}
+
+/**
+ * Applies — and removes — a cause parked before this purchase existed.
+ *
+ * WHETHER THE SESSION PATH MAY REVOKE AND REVERSE FOR A CAUSE IT DID NOT
+ * RECEIVE: yes, and it is not really a choice. The alternative is a purchase
+ * document that reads as live for money the buyer already got back — a free
+ * install and a publisher paid for a sale that was undone.
+ *
+ * THE DELETE IS LAST, after the reversal returns. A transient Stripe failure
+ * inside `reverseMarketplaceSellerShare` THROWS on purpose so the session
+ * delivery 500s and Stripe redelivers; if the orphan were dropped first, that
+ * redelivery would find nothing to replay and the reversal would be lost
+ * permanently. Deleting after a DEFINITIVE settle is correct and deliberate:
+ * that settle wrote `reversalFailedAt` / `reversalFailedReason` /
+ * `reversalOwedCents` onto the purchase, so the money lands in AGL-2140's
+ * existing recovery queue rather than in a second one invented here.
+ */
+async function drainMarketplaceRefundOrphan(
+  firestore: FirebaseFirestore.Firestore,
+  purchaseRef: FirebaseFirestore.DocumentReference,
+  paymentIntentId: string,
+): Promise<void> {
+  if (!paymentIntentId) return
+  const orphanRef = firestore
+    .collection(REFUND_ORPHAN_COLLECTION)
+    .doc(paymentIntentId)
+  const orphan = await orphanRef.get()
+  if (!orphan.exists) return
+  const causeId = String(orphan.get('id') ?? '')
+  const kind = orphan.get('kind') === 'dispute' ? 'dispute' : 'refund'
+  if (causeId) {
+    await applyMarketplaceRefundOutcome(
+      purchaseRef,
+      {
+        kind,
+        id: causeId,
+        paymentIntentId,
+        amountCents: Math.round(Number(orphan.get('amountCents') ?? 0)),
+        chargeId: String(orphan.get('chargeId') ?? ''),
+        currency: String(orphan.get('currency') ?? 'usd'),
+        stripeCustomerId: String(orphan.get('stripeCustomerId') ?? ''),
+      },
+      // A parked dispute is always a LOST one — the only dispute state that
+      // moves money — so the outcome lands on the record too, exactly as the
+      // dispute door would have stamped it.
+      kind === 'dispute'
+        ? { disputeId: causeId, disputeStatus: 'lost' }
+        : {},
+    )
+  }
+  await orphanRef.delete()
+}
+
+/**
+ * A dispute has no metadata of ours to read — the event object is the DISPUTE,
+ * not the charge — so the discriminator costs one Stripe read.
+ *
+ * Only ever reached when the payment-intent join came up empty, so a normal
+ * marketplace dispute (purchase present) pays nothing for it, and a commerce
+ * or subscription dispute pays one GET before being correctly ignored.
+ * Disputes are rare enough for that to be the right trade against parking an
+ * orphan for every chargeback on the platform.
+ *
+ * A FAILED READ DOES NOT THROW, deliberately, and this is the one place the
+ * fix accepts a loss. Throwing would 500 the endpoint for a dispute we have
+ * not established is ours — the exact blast radius that ruled out "just throw"
+ * in the first place — and the route drops its idempotency claim on a throw.
+ * So a marketplace dispute landing inside the purchase window WHILE the charge
+ * read fails loses its orphan. It is logged, and it is two independent
+ * unlikely events deep.
+ */
+async function recordDisputeOrphanIfMarketplace(
+  firestore: FirebaseFirestore.Firestore,
+  object: any,
+  paymentIntentId: string,
+): Promise<void> {
+  const chargeId = String(object?.charge ?? '')
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!chargeId || !stripeKey) return
+  const charge = await stripeGet(
+    `https://api.stripe.com/v1/charges/${chargeId}`,
+    stripeKey,
+  )
+  if (!charge.ok) {
+    console.error(
+      'Could not classify a dispute with no matching purchase — orphan NOT parked (AGL-2148)',
+      { chargeId, paymentIntentId, status: charge.status },
+    )
+    return
+  }
+  if (charge.body?.metadata?.type !== 'marketplace-purchase') return
+  await recordRefundOrphan(firestore, {
+    kind: 'dispute',
+    id: String(object?.id ?? ''),
+    paymentIntentId,
+    amountCents: Math.round(Number(object?.amount ?? 0)),
+    chargeId,
+    currency: String(object?.currency ?? 'usd'),
+    stripeCustomerId: '',
+  })
+}
+
+/**
  * Marketplace-purchase section of the platform Stripe webhook (AGL-46/418):
  * keyed by session id (idempotent on Stripe redelivery) — relocated
  * verbatim from the console route; registered via
@@ -475,6 +736,16 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         clientId: object?.metadata?.ga_client_id,
         stripeCustomerId: String(object?.customer ?? '') || String(buyerUid),
       }).catch(() => undefined)
+      // A refund or a lost dispute that arrived before this document existed
+      // is applied NOW (AGL-2148) — revocation, GA and the transfer reversal,
+      // by the same function the refund door uses. Last on this path, and
+      // awaited: it can throw on a transient Stripe failure, which is exactly
+      // the redelivery this branch is already idempotent under.
+      await drainMarketplaceRefundOrphan(
+        firebaseAdmin.app().firestore(),
+        purchaseRef,
+        String(object?.payment_intent ?? ''),
+      )
     }
   }
 
@@ -494,79 +765,42 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         .where('paymentIntentId', '==', paymentIntentId)
         .limit(1)
         .get()
+      // Everything a refund does to a purchase, and everything it needs to
+      // wait for one — assembled once so the two paths cannot describe the
+      // same refund differently.
+      const cause: RefundOutcomeCause = {
+        kind: 'refund',
+        // `charge.refunded` carries the CHARGE, so the charge id is both the
+        // cause id and the chargeId — unchanged from AGL-1995.
+        id: String(object?.id ?? ''),
+        paymentIntentId,
+        amountCents: Math.round(Number(object?.amount_refunded ?? 0)),
+        chargeId: String(object?.id ?? ''),
+        currency: String(object?.currency ?? 'usd'),
+        stripeCustomerId: String(object?.customer ?? ''),
+      }
       if (!purchases.empty) {
-        const purchase = purchases.docs[0]
-        // Read BEFORE the stamp: `refundedAt` doubles as the GA guard, so
-        // a redelivery that slips past the route's event claim finds the
-        // purchase already refunded and reports nothing a second time.
-        const alreadyRefunded = Boolean(purchase.get('refundedAt'))
-        await purchase.ref.set(
-          {
-            refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-            refundedCents: Number(object?.amount_refunded ?? 0),
-          },
-          { merge: true },
-        )
-        // GA4 `refund` (AGL-1850) — the reversal of the AGL-1639 purchase,
-        // in the SAME accounting. The purchase reported the platform NET
-        // (gross − tax − transfer), so the refund must reverse that number:
-        // refunding the tax-inclusive gross would net MORE out of GA than
-        // the sale ever put in. The ledger doc read above holds the split
-        // the sale was recorded with, so the two cannot disagree.
+        // The publisher's share comes back (AGL-1995), the entitlement is
+        // revoked (AGL-1546) and GA nets the sale out (AGL-1850) — see
+        // `applyMarketplaceRefundOutcome`. FULL refunds only, matching the
+        // revocation and GA gates: the branch is already inside
+        // `object?.refunded === true`. A partial refund is a concession the
+        // ledger's split cannot decompose, so it stays one — the seller keeps
+        // their share, exactly as the entitlement survives. There is no
+        // marketplace refund UI, so every refund is issued from the Stripe
+        // Dashboard and this webhook is the only code that sees one.
+        await applyMarketplaceRefundOutcome(purchases.docs[0].ref, cause)
+      } else if (object?.metadata?.type === 'marketplace-purchase') {
+        // THE ELSE THAT DID NOT EXIST (AGL-2148). The purchase document is
+        // written by `checkout.session.completed`, that delivery retries, and
+        // a refund issued inside the window found nothing and was DROPPED.
         //
-        // `transaction_id` is the purchase's own — the checkout session id
-        // the ledger and the original `purchase` are keyed by — which is
-        // what tells GA WHICH revenue to net out.
-        //
-        // Full refunds only, matching the revocation gate: the ledger's
-        // split does not decompose an arbitrary partial amount (whose share
-        // came back is a Stripe-side question), so a partial refund stays a
-        // concession in GA exactly as it does for the entitlement.
-        //
-        // Fire-and-forget, after the stamp, same posture as the purchase:
-        // an analytics failure must never un-claim a Stripe event.
-        if (!alreadyRefunded) {
-          const grossCents = Number(purchase.get('amountCents') ?? 0)
-          const taxCents = Number(purchase.get('taxCents') ?? 0)
-          const sellerCents = Number(purchase.get('transferCents') ?? 0)
-          const netCents = grossCents - taxCents - sellerCents
-          if (netCents > 0) {
-            void sendGa4Refund({
-              transactionId: String(purchase.id),
-              value: netCents / 100,
-              currency: String(object?.currency ?? 'usd'),
-              items: [],
-              stripeCustomerId:
-                String(object?.customer ?? '') ||
-                String(purchase.get('buyerUid') ?? ''),
-            }).catch(() => undefined)
-          }
-        }
-        // The publisher's share comes back (AGL-1995).
-        //
-        // Until this, a refund made the buyer whole, left the publisher their
-        // 80%, and Aglyn absorbed the entire gross — the exact inverse of the
-        // commerce door, and of the lost-dispute branch a few lines below
-        // which has always reversed. There is no marketplace refund UI, so
-        // every refund is issued from the Stripe Dashboard and this webhook is
-        // the only code that sees one.
-        //
-        // FULL refunds only, matching the revocation and GA gates above: the
-        // branch is already inside `object?.refunded === true`. A partial
-        // refund is a concession the ledger's split cannot decompose, so it
-        // stays one — the seller keeps their share, exactly as the
-        // entitlement survives.
-        //
-        // AFTER the revocation stamp, for the reason the dispute branch
-        // states: this half throws on transient Stripe failures so the
-        // redelivery retries it, and everything above is idempotent under
-        // that redelivery.
-        await reverseMarketplaceSellerShare(purchase.ref, {
-          kind: 'refund',
-          id: String(object?.id ?? ''),
-          amountCents: Math.round(Number(object?.amount_refunded ?? 0)),
-          chargeId: String(object?.id ?? ''),
-        })
+        // Gated on the PaymentIntent metadata stamped at marketplace checkout
+        // (checkout.ts) and copied by Stripe onto the charge, so the
+        // storefront and subscription refunds that share this endpoint park
+        // nothing. A charge predating that stamp is not parked either — its
+        // purchase document has long existed, so the join above finds it.
+        await recordRefundOrphan(firestore, cause)
       }
     }
   }
@@ -611,44 +845,25 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             { merge: true },
           )
         } else if (status === 'lost') {
-          // Read BEFORE the stamp, the refund branch's own GA guard: a
-          // purchase already refunded (or a redelivery that slipped the
-          // route's event claim) reports nothing a second time.
-          const alreadyRefunded = Boolean(purchase.get('refundedAt'))
-          await purchase.ref.set(
+          // Revoke, report, pull the seller's share back — the same three
+          // effects the refund door applies, through the same function
+          // (AGL-2148), so the two doors and the orphan drain cannot drift.
+          // The dispute outcome is stamped in the same write.
+          await applyMarketplaceRefundOutcome(
+            purchase.ref,
             {
-              disputeId,
-              disputeStatus: status,
-              refundedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-              refundedCents: Math.round(Number(object?.amount ?? 0)),
+              kind: 'dispute',
+              id: disputeId,
+              paymentIntentId,
+              amountCents: Math.round(Number(object?.amount ?? 0)),
+              chargeId: String(object?.charge ?? ''),
+              currency: String(object?.currency ?? 'usd'),
+              // A dispute event carries no Stripe customer; the GA hit falls
+              // back to the buyer uid on the purchase, as it always has.
+              stripeCustomerId: '',
             },
-            { merge: true },
+            { disputeId, disputeStatus: status },
           )
-          if (!alreadyRefunded) {
-            const grossCents = Number(purchase.get('amountCents') ?? 0)
-            const taxCents = Number(purchase.get('taxCents') ?? 0)
-            const sellerCents = Number(purchase.get('transferCents') ?? 0)
-            const netCents = grossCents - taxCents - sellerCents
-            if (netCents > 0) {
-              void sendGa4Refund({
-                transactionId: String(purchase.id),
-                value: netCents / 100,
-                currency: String(object?.currency ?? 'usd'),
-                items: [],
-                stripeCustomerId: String(purchase.get('buyerUid') ?? ''),
-              }).catch(() => undefined)
-            }
-          }
-          // AFTER the revocation, so the entitlement never stays live
-          // because a Stripe read failed: this half throws on transient
-          // failures (the redelivery is the retry, and everything above is
-          // idempotent under it) and settles definitively otherwise.
-          await reverseMarketplaceSellerShare(purchase.ref, {
-            kind: 'dispute',
-            id: disputeId,
-            amountCents: Math.round(Number(object?.amount ?? 0)),
-            chargeId: String(object?.charge ?? ''),
-          })
         } else {
           // `won` or `warning_closed`: the money stayed, the entitlement
           // stays, and the outcome lands on the record for whoever flagged
@@ -658,6 +873,14 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
             { merge: true },
           )
         }
+      } else if (type === 'charge.dispute.closed' &&
+        String(object?.status ?? '') === 'lost') {
+        // The refund branch's window, by the bank's door (AGL-2148): only a
+        // LOST closed dispute moves money, so only that state is worth
+        // parking. A `created` landing in the same window loses nothing but
+        // the staff flag — the `closed` that follows days later always finds
+        // the purchase document.
+        await recordDisputeOrphanIfMarketplace(firestore, object, paymentIntentId)
       }
     }
   }

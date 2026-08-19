@@ -55,6 +55,10 @@ import EditListingDialog from './marketplace/edit-listing-dialog.component'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import mediaSrc from '../utils/media-src'
 import { payoutReadiness } from '../utils/payout-readiness'
+import {
+  summarizeSellerLedger,
+  type SellerLedgerSale,
+} from '../utils/seller-ledger-totals'
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -155,14 +159,12 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     [firestore, orgId],
     { idField: '$id' },
   )
-  const grossCents = (sales ?? []).reduce(
-    (sum: number, sale: any) => sum + (sale.amountCents ?? 0),
-    0,
-  )
-  const feeCents = (sales ?? []).reduce(
-    (sum: number, sale: any) => sum + (sale.feeCents ?? 0),
-    0,
-  )
+  // What the publisher was actually paid (AGL-2158) — see
+  // `summarizeSellerLedger`, where the arithmetic and the reasoning live. This
+  // card used to render `amountCents − feeCents` as "net", which is
+  // `pretax + tax − fee`: the payout PLUS sales tax that was never the
+  // publisher's, summed over refunded sales as well as live ones.
+  const totals = summarizeSellerLedger(sales as SellerLedgerSale[] | undefined)
 
   const [payoutsBusy, setPayoutsBusy] = useState(false)
   const handlePayouts = useCallback(async () => {
@@ -995,28 +997,54 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         help={docsHelp('publishAPlugin', {
           anchor: '#paid-listings',
           excerpt:
-            'Your sales ledger — gross, platform fee, and net across every ' +
-            'paid listing.',
+            'Net paid out is your share after the platform fee — sales tax ' +
+            'is collected on Aglyn’s registration and is never yours.',
         })}
         contentGutterX
         contentGutterY
       >
         {(sales ?? []).length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'No sales yet. Paid listings appear here with gross, platform ' +
-              'fee, and your net.'}
+            {'No sales yet. Paid listings appear here with what buyers paid ' +
+              'and what was paid out to you.'}
           </Typography>
         ) : (
           <Stack spacing={0.5}>
             <Typography variant="body2">
-              {`${(sales ?? []).length} sale${
-                (sales ?? []).length === 1 ? '' : 's'
-              }`}
+              {`${totals.paidCount} sale${totals.paidCount === 1 ? '' : 's'}`}
+              {totals.refundedCount > 0
+                ? ` · ${totals.refundedCount} refunded or charged back`
+                : ''}
+            </Typography>
+            {/*
+              The payout FIRST, and named for what it is. It is the number a
+              publisher reconciles against their Stripe account, and it is the
+              one this card used to get wrong.
+            */}
+            <Typography variant="body2">
+              {`Net paid out $${(totals.netPaidCents / 100).toFixed(2)}`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {`Gross $${(grossCents / 100).toFixed(2)} · ` +
-                `platform fee $${(feeCents / 100).toFixed(2)} · ` +
-                `net $${((grossCents - feeCents) / 100).toFixed(2)}`}
+              {`Buyers paid $${(totals.buyersPaidCents / 100).toFixed(2)} · ` +
+                `sales tax $${(totals.salesTaxCents / 100).toFixed(2)} · ` +
+                `platform fee $${(totals.platformFeeCents / 100).toFixed(2)}`}
+            </Typography>
+            {totals.refundedCount > 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {`$${(totals.returnedCents / 100).toFixed(2)} returned on refunded ` +
+                  'and charged-back sales, and excluded above'}
+              </Typography>
+            ) : null}
+            {/*
+              THE COPY THAT LANDS WITH THE SMALLER NUMBER. A publisher who
+              read `net $88.25` yesterday and reads `net paid out $80.00`
+              today is owed the reason on the same card, not in a changelog.
+            */}
+            <Typography variant="caption" color="text.secondary">
+              {'Net paid out is what reached your Stripe account: the ' +
+                'pre-tax price less the platform fee. Sales tax is collected ' +
+                'and remitted by Aglyn under its marketplace-provider ' +
+                'registration and was never part of your share.'}
             </Typography>
           </Stack>
         )}

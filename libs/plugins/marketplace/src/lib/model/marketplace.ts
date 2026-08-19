@@ -1553,4 +1553,60 @@ export function listingInclusions(
     tone: 'included',
   })
   return rows
+/**
+ * WHO STILL OWNS WHAT THEY BOUGHT — the one predicate (AGL-2158).
+ *
+ * `hasLivePurchase` (server/purchase-entitlement.ts) is the gate on all eight
+ * ways into paid content, and it reads exactly one field: a purchase with
+ * `refundedAt` — stamped by the `charge.refunded` and lost-`charge.dispute`
+ * doors of the marketplace billing webhook — no longer entitles.
+ *
+ * The listing page carried its OWN copy of that question,
+ * `some(p => p.listingId === listingId)`, with no refund test at all. The two
+ * then disagreed on the one buyer they must not disagree on: the refunded
+ * one. The page showed "Purchased", hid the buy button, and the install
+ * routes answered 402 — a buyer who could neither install nor re-purchase.
+ *
+ * It lives HERE, in the model, rather than in the server module, because the
+ * server module is the wrong side of the client/server boundary for a React
+ * component and copying four characters of predicate is precisely how the two
+ * came apart. This module is context-free by construction (see the header) —
+ * importable from a client component, an API route and another plugin alike.
+ */
+export interface PurchaseLiveness {
+  /** Stamped when a full refund or a lost dispute un-buys the listing. */
+  refundedAt?: unknown
+  listingId?: unknown
+}
+
+/**
+ * True when this purchase document still entitles.
+ *
+ * Deliberately a truthiness test and not `!= null`: `refundedAt` is a
+ * Firestore Timestamp on the server, a client Timestamp in the browser and a
+ * sentinel in the webhook's own tests, and every one of those is truthy while
+ * a missing field (every purchase written before AGL-1546) is not.
+ */
+export function isLivePurchase(
+  purchase: PurchaseLiveness | null | undefined,
+): boolean {
+  return Boolean(purchase) && !purchase?.refundedAt
+}
+
+/**
+ * True when this buyer's purchase documents include a live one for `listingId`.
+ *
+ * Both callers pass everything they read — the server's query is already
+ * narrowed to the listing, the client's is narrowed only to the buyer — so the
+ * listing filter belongs inside the shared predicate too, not beside it.
+ */
+export function hasLivePurchaseOf(
+  purchases: readonly (PurchaseLiveness | null | undefined)[] | null | undefined,
+  listingId: string,
+): boolean {
+  if (!listingId) return false
+  return (purchases ?? []).some(
+    (purchase) =>
+      purchase?.listingId === listingId && isLivePurchase(purchase),
+  )
 }

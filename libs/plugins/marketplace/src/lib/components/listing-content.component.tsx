@@ -22,6 +22,7 @@ import {
   installsUnreviewedFallback,
   listingArtifactLabel,
   listingInclusions,
+  hasLivePurchaseOf,
   installTargetsFor,
   isPrivateListing,
   resolveInstallPlan,
@@ -791,11 +792,15 @@ export function MarketplaceListingContent({
       ),
     [installedDocs, listingId],
   )
+  // The SERVER's predicate, imported rather than restated (AGL-2158). This
+  // used to be `some(p => p.listingId === listingId)` with no refund test,
+  // while `hasLivePurchase` — the gate on all eight ways into paid content —
+  // treats a purchase carrying `refundedAt` as absent. The one buyer the two
+  // must agree about is the refunded one, and they disagreed: the page said
+  // "Purchased" and hid the buy button, the install routes answered 402, and
+  // the buyer could neither install nor buy it again.
   const purchased = useMemo(
-    () =>
-      (purchaseDocs ?? []).some(
-        (purchase: any) => purchase.listingId === listingId,
-      ),
+    () => hasLivePurchaseOf(purchaseDocs ?? [], listingId),
     [purchaseDocs, listingId],
   )
 

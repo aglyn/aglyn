@@ -42,6 +42,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const writes: Array<{ path: string; data: Record<string, unknown> }> = []
   const store: Record<string, Record<string, unknown> | undefined> = {}
   const docFor = (path: string) => ({
+    // A real DocumentReference carries its own id, and production code reads
+    // it: the reversal stamps `metadata[purchaseId]` from it and the GA
+    // `refund` is keyed by it. A double without it fabricates an `undefined`
+    // transaction id that no assertion here could have distinguished from a
+    // real one.
+    id: path.split('/').pop() ?? path,
     set: (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       writes.push({ path, data })
       store[path] = options?.merge ? { ...(store[path] ?? {}), ...data } : data
@@ -52,6 +58,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       data: () => store[path],
       get: (field: string) => (store[path] ?? {})[field],
     }),
+    // Firestore's delete removes the document and is a no-op on one that is
+    // already absent — never an error, which is why the drain can call it
+    // unconditionally.
+    delete: () => {
+      delete store[path]
+      return Promise.resolve()
+    },
   })
   const ga4: Ga4PurchaseInput[] = []
   const ga4Refunds: Ga4PurchaseInput[] = []
