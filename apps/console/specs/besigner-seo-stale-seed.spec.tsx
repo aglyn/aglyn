@@ -179,9 +179,25 @@ jest.mock('@aglyn/besigner-ui', () => ({
   useRenderedCanvasElements: () => ({ elements: { current: {} } }),
   withBesignerContext: (component: unknown) => component,
   nodeElementSelector: () => '',
+  // The REAL URL builder (AGL-2167), not a stub. This mock is a closed
+  // world — it lists exports rather than spreading the module — so a new
+  // one the page uses arrives here as `undefined is not a function`. The
+  // help link's href is a docs URL either way; a fake returning a constant
+  // would let the page point anywhere and still render.
+  besignerDocsUrl: (
+    ...args: unknown[]
+  ): string =>
+    jest
+      .requireActual('../../../libs/besigner/feature/designer/src/lib/utils/docs-help')
+      .besignerDocsUrl(...args),
 }))
 jest.mock('@aglyn/shared-ui-theme', () => ({
   getGoogleFontsUrl: () => undefined,
+  // Real merge (AGL-2167) — HelpTip composes its icon sx through it, and a
+  // stub returning either argument alone silently drops half the styling.
+  mergeSxProps: jest.requireActual(
+    '../../../libs/shared/ui/theme/src/lib/util/merge-sx-props',
+  ).mergeSxProps,
   HostThemeDocumentContext: {
     Provider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   },
@@ -189,6 +205,11 @@ jest.mock('@aglyn/shared-ui-theme', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   useLoading: () => ({ queueLoading: () => () => undefined, loading: false }),
+  // Real component (AGL-2167): it is a tooltip around a link, cheap to
+  // render, and stubbing it would hide a malformed href.
+  HelpTip: jest.requireActual(
+    '../../../libs/shared/ui/jsx/src/lib/components/help-tip.component',
+  ).HelpTip,
 }))
 jest.mock('@aglyn/shared-ui-jsx/const/prebuilt-components', () => ({
   LOADING_OVERLAY_ELEMENT: null,

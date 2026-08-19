@@ -108,7 +108,7 @@ export function ReusableComponentsProvider(
         icon: definition.icon?.iconPath
           ? { path: definition.icon.iconPath }
           : { path: mdiPackageVariant.path, sx: { color: '#9c27b0' } },
-        category: 'Your components',
+        category: Aglyn.REUSABLE_COMPONENT_CATEGORY,
         data: {
           $id: null,
           componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
