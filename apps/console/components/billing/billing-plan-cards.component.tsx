@@ -500,6 +500,15 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}
                   </Typography>
+                  {/* AGL-2246: `templatesPerHost` is enforced by
+                      /api/hosts/resources but was the one quota key of 31
+                      with no customer-facing surface anywhere — not here,
+                      not on the templates card, not in the usage meters. A
+                      cap a shopper for a plan cannot see is not a plan
+                      differentiator, it is a future refusal. */}
+                  <Typography variant="body2">
+                    {`${quotaLabel(entitlements.templatesPerHost)} saved templates per host`}
+                  </Typography>
                   {/* Media storage only. The `totalSiteSizeMb` figure used to
                       sit beside it and was dropped in AGL-1370: it is
                       structurally unreachable (the 900 KB node-map wall of
