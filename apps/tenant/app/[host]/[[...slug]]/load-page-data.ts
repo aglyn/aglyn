@@ -177,7 +177,16 @@ const loadPageDataCached = cache(
     if (
       canonicalDomain &&
       !host.startsWith(CNAME_HOST_PREFIX) &&
-      process.env.VERCEL_ENV === 'production'
+      // Any PRODUCTION deployment, not Vercel's alone (AGL-2180). Gated on
+      // `VERCEL_ENV === 'production'`, this never fired on a self-host
+      // container, so every site was served at BOTH its platform subdomain and
+      // its connected custom domain — the split-ranking outcome our own docs
+      // warn about, on the deployment shape that had no way to avoid it.
+      //
+      // Production specifically, not `isDeployedRuntime`: the comment above
+      // explains why a preview must not redirect, and the broader predicate
+      // would have started bouncing reviewers onto customers' live sites.
+      Aglyn.isProductionDeployment()
     ) {
       // Path preserved segment by segment, re-encoded: `params` arrives
       // URL-decoded, and a decoded segment goes straight into a `Location`

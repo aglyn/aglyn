@@ -65,6 +65,14 @@ jest.mock('@aglyn/aglyn/server', () => {
     HostScreenVisibility: { AUTHENTICATED: 'authenticated' },
     liveCustomDomain: actual.liveCustomDomain,
     hostPublicOrigin: actual.hostPublicOrigin,
+    // The REAL deployment predicates (AGL-2180), for the same reason the
+    // lockdown resolver above is real: this suite's whole subject is WHICH
+    // environments redirect, so a stub returning a constant would assert the
+    // opposite of the thing under test. This mock is a closed world — when the
+    // loader began importing one of these, every case here returned undefined.
+    ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/deployment-shape',
+    ),
     resolveSiteRedirect: jest.fn(async () => null),
     resolveSitePage: jest.fn(async () => undefined),
     runSitePageEnrichers: jest.fn(async () => ({})),
