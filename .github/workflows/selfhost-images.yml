@@ -92,23 +92,17 @@ jobs:
       - name: Synthesise an operator's env file
         run: node tools/scripts/selfhost-ci-env.mjs
 
-      - name: Build the console image
-        run: |
-          docker build -f docker/console.Dockerfile \
-            --secret id=selfhost_env,src=.env.selfhost \
-            -t aglyn-console:ci .
-
-      - name: Build the tenant image
-        run: |
-          docker build -f docker/tenant.Dockerfile \
-            --secret id=selfhost_env,src=.env.selfhost \
-            -t aglyn-tenant:ci .
+      - name: Build both images, with the command the runbook gives
+        run: docker compose build
 
       - name: The tenant container serves its own apex instead of redirecting
         run: |
           set -euo pipefail
-          docker run -d --name tenant-smoke --env-file .env.selfhost \
-            -p 4500:4500 aglyn-tenant:ci
+          # `docker compose up`, never `docker run --env-file`: only compose
+          # strips the quotes around a value, and FIREBASE_PRIVATE_KEY has to be
+          # quoted in the file (AGL-2443). This is also simply the command the
+          # runbook gives, which is the command that should be under test.
+          docker compose up -d tenant
 
           # A container that never listens must FAIL this step, not slip past
           # it: every assertion below is about the response, and no response is
@@ -122,17 +116,17 @@ jobs:
             sleep 2
           done
           if [ "$listening" != "yes" ]; then
-            docker logs tenant-smoke || true
+            docker compose logs tenant || true
             echo "::error::the tenant container never answered on :4500"
             exit 1
           fi
 
-          status=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
             -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
           location=$(curl -s -o /dev/null -w '%{redirect_url}' -m 15 \
             -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/)
-          echo "status=$status location=${location:-<none>}"
-          docker logs tenant-smoke || true
+          echo "status=$code location=${location:-<none>}"
+          docker compose logs tenant || true
 
           # Aglyn's own host in the redirect is the sharpest form of the
           # failure and is named separately, because "self-host deployment
@@ -148,13 +142,39 @@ jobs:
           # host-resolution branch did not match. A 404 or a 500 does not: those
           # mean the request got past middleware and into a project that has no
           # such site, which is the correct outcome for placeholder Firebase.
-          case "$status" in
+          case "$code" in
             30[1278])
-              echo "::error::the tenant redirected ($status → ${location:-unknown}) a request for a host under its own AGLYN_TENANT_HOST_CNAME apex instead of resolving it to a site."
+              echo "::error::the tenant redirected ($code → ${location:-unknown}) a request for a host under its own AGLYN_TENANT_HOST_CNAME apex instead of resolving it to a site."
+              exit 1
+              ;;
+          esac
+
+          # The status alone is too weak, and this was measured rather than
+          # assumed: with placeholder Firebase, a host the apex branch resolves
+          # and a host that falls through to the custom-domain branch BOTH
+          # answer 404. A check that only reads the status cannot tell them
+          # apart, which is a check that certifies its own subject.
+          #
+          # `x-middleware-rewrite` can. Resolved through the apex it is the bare
+          # subdomain — `/acme/`; fallen through it is the custom-domain form,
+          # `/cname--acme.sites.example.com/`.
+          rewrite=$(curl -s -o /dev/null -D- -m 15 \
+            -H 'Host: acme.sites.example.com' http://127.0.0.1:4500/ \
+            | tr -d '\r' | awk 'tolower($1) == "x-middleware-rewrite:" { print $2 }')
+          echo "x-middleware-rewrite=${rewrite:-<none>}"
+          case "${rewrite:-}" in
+            /acme/*|/acme)
+              ;;
+            '')
+              echo "::error::no x-middleware-rewrite on a request for the operator's own apex — middleware did not route it at all."
+              exit 1
+              ;;
+            *)
+              echo "::error::a host under the operator's own AGLYN_TENANT_HOST_CNAME apex was routed as '${rewrite}' instead of to the site 'acme'. Anything of the form /cname--… means the apex branch matched nothing and the request fell through to the custom-domain path (AGL-2177/AGL-2424)."
               exit 1
               ;;
           esac
 
       - name: Stop the smoke container
         if: always()
-        run: docker rm -f tenant-smoke || true
+        run: docker compose down || true
