@@ -302,6 +302,43 @@ switch; including commerce is your plan's. See
   inclusive pricing supported) or **Stripe Tax** automatic calculation;
   products can be tax-exempt.
 
+### Storefront sales tax
+
+**Analytics → Storefront sales tax** shows what your storefront collected in a
+period. Until this existed, the number was recorded on every taxed sale and
+shown to you nowhere — you could open one order at a time and read its Tax
+line, and that was all.
+
+The report **groups the figures by how each was calculated**, and never adds
+them together:
+
+- **Tax Stripe calculated against Aglyn's registrations** — automatic tax was
+  on, Stripe computed the rate against registrations on Aglyn's platform
+  account, and Aglyn holds what was collected.
+- **Tax your store calculated at your own rate** — automatic tax was off, and
+  the rate came from the tax settings you configured, applied to your own
+  declared origin.
+- **Tax Stripe calculated against your connected account** — automatic tax was
+  on and Stripe named your connected account as the liable party.
+
+Each group breaks down by jurisdiction, with the sales, the taxable base
+Stripe stated, and the tax.
+
+:::warning Aglyn does not provide tax advice
+Who must remit sales tax to a given authority depends on the jurisdiction and
+on marketplace facilitator rules. Aglyn records what was collected and how it
+was calculated; it does **not** determine which portion is yours to remit, and
+nothing in this report should be read as making that determination. Confirm
+your obligations with a qualified tax professional.
+:::
+
+Two things the figures do not yet include, both stated on the card itself:
+
+- **Refunds are not reflected.** A refunded sale keeps its full tax, so the
+  figures over-state whenever you have refunded in the period.
+- **A sale whose taxable base Stripe did not state** is counted in the tax
+  total but not in the taxable base, and the card says how many.
+
 ### Destination coverage
 
 Checkout collects a shipping address for six countries — **United States,
