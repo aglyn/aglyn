@@ -49,6 +49,9 @@ export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
 export * from './plan-entitlements'
+// The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
+// `plan-entitlements`, which owns the predicate it keys off.
+export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
 export * from './health-report'
 export * from './support-tiers'

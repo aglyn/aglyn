@@ -43,17 +43,30 @@
  * | dimension | braces (runtime) | belt (structural) |
  * | -- | -- | -- |
  * | media storage | `mediaStorageGate` refuses past the band | `meteredInfraPassThrough: false` ⇒ `billableCostUsd: 0` |
- * | bandwidth / page views | *(none — page views are never refused)* | same flag, same zero |
+ * | bandwidth / page views | `bandwidthCapEngaged` refuses every page | same flag, same zero |
  * | form submissions | `checkFormSubmissionQuota` walls at the band | same flag, same zero |
  * | dataset storage | `checkDataStorageQuota().allowed` false at the band | `extraDataGbMonthlyUsd: null` ⇒ `overageMonthlyUsd: 0` |
  * | API requests | route refuses (`apiAccess` absent) | `extraApiRequestsUsdPer1k: null` ⇒ 0 |
  * | contacts | `checkContactQuota().allowed` false at the band | `extraContactsUsdPer1k: null` ⇒ 0 |
  *
- * **Bandwidth is the one with no braces at all** — nothing refuses a page
- * view, so a free site that goes viral exceeds its 5 GB band with no gate
- * anywhere in the path. It is protected *only* by the structural zero. That is
- * the dimension to watch, and the reason this suite asserts the belt directly
- * rather than trusting any gate.
+ * **Bandwidth had no braces at all until AGL-2155**, and this comment said so
+ * for months: nothing refused a page view, so a free site that went viral
+ * exceeded its 5 GB band with no gate anywhere in the path and was protected
+ * *only* by the structural zero. That is no longer true. Zach chose
+ * enforcement on 2026-08-19 — "before public signups arrive, so the cap is
+ * proven under real traffic while the cohort is small and a mistake is cheap"
+ * — and `bandwidthCapEngaged` now refuses the pages of a free org past its
+ * band, in the middleware ahead of the ISR cache and again in the loader.
+ * The refusal is proven end to end, with its paid positive control, in
+ * `apps/tenant/specs/bandwidth-cap-refusal.spec.ts`.
+ *
+ * **What this suite still claims is the BELT**, and the belt is unchanged: a
+ * free org cannot reach a billable state even with the gate removed. The two
+ * are deliberately separate — the braces protect Aglyn's egress bill, the
+ * belt protects the customer's invoice, and only the second is what Zach's
+ * "always actually stays free" is about. So the bandwidth case below still
+ * drives 100× the band and still asserts a literal zero: if the cap were
+ * reverted tomorrow the customer would still owe nothing.
  *
  * ## Why the numbers below are what they are
  *
@@ -71,6 +84,9 @@ import {
 } from '../utils/usage-metering'
 import { mediaStorageGate } from '../utils/storage-overage'
 import {
+  bandwidthCapEngaged,
+  bandwidthCapMonthKey,
+  bandwidthCapShouldEngage,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
@@ -119,6 +135,35 @@ describe('the free plan carries no price on any billable dimension', () => {
     expect(planMetersInfraOverage(paidOrg())).toBe(true)
   })
 
+  it('BANDWIDTH NOW HAS BRACES TOO (AGL-2155), and they are free-only', () => {
+    // The table in this file's header names a gate for every dimension. That
+    // is a comment asserting behaviour, which is worth nothing unless
+    // something checks it — the exact shape that let "bandwidth has no gate"
+    // stay accurate for months and then quietly stop being. So the claim is
+    // asserted here, at the source, and it is asserted in BOTH directions.
+    const capped = { month: bandwidthCapMonthKey(), engagedAt: 1 }
+    expect(bandwidthCapEngaged({ ...freeOrg(), bandwidthCap: capped })).toBe(
+      true,
+    )
+    expect(bandwidthCapEngaged({ ...paidOrg(), bandwidthCap: capped })).toBe(
+      false,
+    )
+    expect(
+      bandwidthCapShouldEngage({
+        org: freeOrg(),
+        usedBandwidthGb: FREE.bandwidthGb * 100,
+        includedBandwidthGb: FREE.bandwidthGb,
+      }),
+    ).toBe(true)
+    expect(
+      bandwidthCapShouldEngage({
+        org: paidOrg(),
+        usedBandwidthGb: FREE.bandwidthGb * 100,
+        includedBandwidthGb: FREE.bandwidthGb,
+      }),
+    ).toBe(false)
+  })
+
   it('the free bands are the published ones', () => {
     for (const [key, value] of Object.entries(FREE)) {
       expect((PLAN_ENTITLEMENTS.free as never as Record<string, number>)[key]).toBe(
@@ -151,11 +196,13 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     expect(estimate.billedCents).toBe(0) // …and nothing is billed.
   })
 
-  it('bandwidth / page views: 100× the band, still $0 — the one with NO gate', () => {
+  it('bandwidth / page views: 100× the band, still $0 — belt only, no gate assumed', () => {
     // 5 GB ≈ 8948 page views included. A free site that goes viral serves a
-    // million, and nothing anywhere refuses a page view. This dimension is
-    // protected by the structural zero alone, so it is the one that would
-    // start billing first if `meteredInfraPassThrough` were ever flipped.
+    // million. Since AGL-2155 the pages ARE refused, but this assertion
+    // deliberately does not depend on that: it measures the invoice with the
+    // gate out of the picture, so it stays the answer to "would a free org be
+    // billed" even if the cap were reverted or failed open — which it does on
+    // purpose, on every unreadable org doc.
     const estimate = estimateMonthlyUsageCost(
       [{ storageBytes: 0, pageViews: 1_000_000, formSubmissions: 0 }],
       freeOrg(),

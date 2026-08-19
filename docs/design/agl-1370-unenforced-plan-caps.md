@@ -2,6 +2,25 @@
 
 Status: decided and **half implemented**. Filed out of AGL-1367's quota sweep.
 
+> **SUPERSEDED FOR THE FREE PLAN (2026-08-19, AGL-1967/2070/2155).** The
+> verdict below — "Neither answer is 'add a wall'. Recommended change is
+> copy-only" — held for as long as bandwidth was purely a metered band. It no
+> longer holds for **free**, which has no subscription to meter onto, so its
+> band was a published number nothing could enforce. Zach, asked to choose
+> between enforcing now, enforcing with a raised ceiling, and leaving it off
+> through launch, chose to enforce now: *"before public signups arrive, so the
+> cap is proven under real traffic while the cohort is small and a mistake is
+> cheap."* A free org past its band now has its pages refused — see
+> `libs/aglyn/src/lib/app-utils/bandwidth-cap.ts`.
+>
+> **Nothing about the paid plans changed**, and the analysis below is still
+> the reason why. `bandwidthGb` remains the included band of the page-view
+> meter on Starter through Agency, the overage is still itemized rather than
+> refused, and the `/pricing` sentence quoted below — which scopes "You are
+> not cut off" to *"Starter through Agency plans"* — is still accurate as
+> written. The cap keys off `planMetersInfraOverage`, the same predicate that
+> sentence describes, so the two cannot drift apart.
+
 The code half of the execution list below is landed: the plan card's `· {n}
 site` clause (step 1), the console usage meter's site-size row (step 2), and
 the dead `siteSize` check in the usage-alerts cron (step 4) are gone; the
