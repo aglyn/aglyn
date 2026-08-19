@@ -44,10 +44,11 @@
  * Ground truth is MUI's own tables, not this file's memory:
  * `@mui/system/styleFunctionSx/defaultSxConfig` gives
  * `bgcolor.cssProperty === 'backgroundColor'`, and `@mui/system/spacing`
- * builds `CSS_PROPERTIES` from `{m: 'margin', p: 'padding'}` ×
- * `{t: 'Top', r: 'Right', b: 'Bottom', l: 'Left', x: ['Left','Right'],
- * y: ['Top','Bottom']}`, with `paddingX`/`paddingY`/`marginX`/`marginY`
- * pointing at `px`/`py`/`mx`/`my`. `sx-property-aliases.spec.ts` asserts
+ * builds its `CSS_PROPERTIES` table by crossing the two property roots
+ * (`m` is margin, `p` is padding) with six direction suffixes — `t` Top,
+ * `r` Right, `b` Bottom, `l` Left, `x` Left and Right, `y` Top and Bottom
+ * — and then points `paddingX`/`paddingY`/`marginX`/`marginY` at
+ * `px`/`py`/`mx`/`my`. `sx-property-aliases.spec.ts` asserts
  * this table against those modules so a MUI upgrade cannot open a spelling
  * we do not know about.
  *
@@ -121,10 +122,10 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
  *
  * A number does (`p: 2` → four `padding*: 2`, each through the same MUI
  * spacing transform, so 16px on all four sides either way). A single-token
- * string does (`px: '2rem'`). A multi-token string does NOT: `p: '10px
- * 20px'` is the CSS shorthand's own per-side syntax, and copying it onto
- * `paddingTop` would silently turn 10px into "10px 20px" — a value CSS
- * drops. Those are left as they are: still rendering, still not editable,
+ * string does (`px: '2rem'`). A multi-token string does NOT: a value like
+ * `'10px 20px'` is the CSS shorthand's own per-side syntax, and copying it
+ * onto `paddingTop` would silently turn 10px into a two-value declaration
+ * CSS drops. Those are left as they are: still rendering, still not editable,
  * but not corrupted either. The panel has no control that could express
  * them anyway.
  *
