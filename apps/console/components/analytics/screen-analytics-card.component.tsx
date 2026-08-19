@@ -199,10 +199,11 @@ export function ScreenAnalyticsCard(props: {
     <CardDisplay
       header={'Screen traffic (14 days)'}
       help={docsHelp('analytics', {
-        anchor: '#per-screen-traffic',
+        anchor: '#dwell-time',
         excerpt:
-          "This screen's pageviews over the last 14 days, with its " +
-          'device split and top referrers.',
+          "This screen's views over the last 14 days, its device split and " +
+          'top referrers, and the average time a visitor stayed — measured ' +
+          'over the visits that reported one, capped at 30 minutes.',
       })}
       contentGutterX
       contentGutterY

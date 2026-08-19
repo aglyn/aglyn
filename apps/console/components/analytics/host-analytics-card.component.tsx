@@ -192,9 +192,11 @@ export function HostAnalyticsCard(props: {
     <CardDisplay
       header={'Traffic'}
       help={docsHelp('analytics', {
+        anchor: '#traffic-card',
         excerpt:
-          'Pageviews from the built-in beacon — daily totals, top ' +
-          'pages, top referrers, and the device split.',
+          'Page views, visitors, the device split, your top page and top ' +
+          'referrer — over the range you pick. The growth figure compares ' +
+          'that range against the one before it.',
       })}
       contentGutterX
       contentGutterY

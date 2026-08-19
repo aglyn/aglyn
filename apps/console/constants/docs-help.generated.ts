@@ -71,7 +71,7 @@ export const DOCS_HELP_TOPICS = {
   analytics: {
     path: '/marketing-and-automation/analytics/overview',
     title: 'Analytics',
-    excerpt: 'Built-in pageview analytics, traffic insights, and per-screen metrics.',
+    excerpt: 'Built-in pageview analytics, the Traffic card and its growth figure, per-screen metrics, and average time on a screen.',
   },
   architectureMultiTenancy: {
     path: '/staff-console/architecture-multi-tenancy',
@@ -633,7 +633,7 @@ export const DOCS_HELP_ANCHORS = {
   addSearch: ['#steps', '#tips', '#related'],
   aglynAssist: ['#what-it-can-do', '#answers-for-beginners-and-developers', '#offers-to-open-a-page', '#message-limits', '#feedback', '#privacy'],
   aiAssist: ['#copy-assist', '#ai-generate-section', '#limits', '#related'],
-  analytics: ['#pageview-tracking', '#visitors-approximate', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#google-analytics', '#related'],
+  analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
