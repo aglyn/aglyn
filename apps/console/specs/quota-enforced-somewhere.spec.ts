@@ -80,9 +80,9 @@ const EXEMPT: Record<string, string> = {}
  * Block comments first, then line comments. A `//` inside a string literal —
  * a URL — has its tail removed too, which is imprecise in exactly one
  * direction: it can only HIDE a match, never invent one, so the guard errs
- * strict. Line-by-line matching was tried first and is not enough: a JSX
- * `{​/* … *​/}` block's continuation lines carry no marker at all, and two of
- * the three `totalSiteSizeMb` comments are that shape.
+ * strict. Line-by-line matching was tried first and is not enough: the
+ * continuation lines of a JSX block comment carry no marker at all, and two
+ * of the three `totalSiteSizeMb` comments are that shape.
  */
 function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ')
