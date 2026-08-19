@@ -146,16 +146,37 @@ describe('every staff-writable quota has a non-comment reader (AGL-2133)', () =>
 
   it('does not count a comment as a reader', () => {
     // The discrimination this guard turns on, proven directly rather than
-    // asserted. `totalSiteSizeMb` is retired and its only surviving mentions
-    // are the three comments recording why — so a raw grep finds it and this
-    // filter must not.
-    const raw = execFileSync(
+    // asserted. `totalSiteSizeMb` is retired, and `git grep` still reaches
+    // several source files that name it — every one of them a comment
+    // recording why it is dead. A guard satisfied by the corpse's epitaph is
+    // precisely what this test exists to prevent, so the candidate set is
+    // measured before the filter and must be more than one file.
+    const candidates = execFileSync(
       'git',
-      ['grep', '-c', '--', 'totalSiteSizeMb', '--', 'apps', 'libs'],
+      ['grep', '-l', '--', 'totalSiteSizeMb', '--', 'apps', 'libs', 'tools'],
       { cwd: REPO_ROOT, encoding: 'utf8' },
     )
-    expect(raw.trim().length).toBeGreaterThan(0)
-    expect(readerFiles('totalSiteSizeMb')).toEqual([])
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((file) => /\.(tsx?|mts)$/.test(file))
+      .filter((file) => !/\.spec\.tsx?$/.test(file))
+      .filter((file) => !EXCLUDED.includes(file))
+    expect(candidates.length).toBeGreaterThan(1)
+
+    // What survives the filter is exactly one file, and its mention is not a
+    // comment at all but a STRING: `build-pricing-tables.mts` records in
+    // `EXPECTED_EXTRA` why the published compare table carries a row the
+    // codegen deliberately does not emit (AGL-1278). Named here rather than
+    // stripped, because the obvious generalisation is wrong — extending the
+    // stripper to string literals was measured to leave `servicesPerHost`,
+    // `redirectsPerHost`, `inventoryLocations` and `extraDataGbMonthlyUsd`
+    // with NO reader at all, since a quota handed to a checker as `'key'` is a
+    // perfectly real read. So the stripper stays comment-only and the single
+    // documented string is stated (AGL-2365).
+    expect(readerFiles('totalSiteSizeMb')).toEqual([
+      'tools/marketing/build-pricing-tables.mts',
+    ])
   })
 
   it.each(
