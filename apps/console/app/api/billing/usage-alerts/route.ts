@@ -18,11 +18,17 @@
 import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import {
+  bandwidthCapMonthKey,
+  bandwidthCapShouldEngage,
+  type OrgBandwidthCap,
   planMetersInfraOverage,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
-import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
+import {
+  bandwidthGbFromPageViews,
+  pageViewsFromBandwidthGb,
+} from '../../../../utils/usage-metering'
 import {
   usageAlertApproachPct,
   usageAlertThreshold,
@@ -96,9 +102,17 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const month = new Date().toISOString().slice(0, 7)
+    // ONE month boundary for the whole sweep, and the SAME function the
+    // bandwidth cap is stamped and read with (AGL-2155). Frozen here rather
+    // than recomputed per org so a run straddling midnight UTC on the 1st
+    // cannot engage a cap for one month while deduping its alert guards
+    // against another — the same discipline `approachPct` below is read once
+    // for.
+    const month = bandwidthCapMonthKey()
     const orgs = await firestore.collection('orgs').limit(500).get()
     const alerted: Array<Record<string, unknown>> = []
+    /** Orgs whose free-plan bandwidth cap engaged on THIS run (AGL-2155). */
+    const capped: Array<Record<string, unknown>> = []
 
     for (const org of orgs.docs) {
       const orgData = org.data()
@@ -372,10 +386,26 @@ async function handler(request: Request): Promise<Response> {
         },
         {
           // AGL-1106: bandwidth was displayed but never alerted/enforced.
+          //
+          // ⚠️ THIS FIELD WAS MISSING UNTIL AGL-2070, and its absence was a
+          // lie in both directions. A falsy `billsOverage` selects the "the
+          // product stops at the band" copy below — so a free customer was
+          // told they had been cut off while their site kept serving every
+          // page, and a PAID customer, whose bandwidth overage does bill, was
+          // told to "upgrade to raise the limit" as though they were stuck.
+          //
+          // Both halves are now true, and the second half is why the copy
+          // could not simply be softened: the cap added in this same commit
+          // (AGL-2155) makes free genuinely stop at the band, so the wall
+          // wording is the correct wording for the plan that gets it.
+          // `metersInfra` is the same predicate the cap keys off, which is
+          // what keeps the sentence and the behaviour from drifting apart
+          // again.
           key: 'bandwidth',
           label: 'monthly bandwidth',
           used: bandwidthGb,
           limit: entitlements.bandwidthGb,
+          billsOverage: metersInfra,
         },
         // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
         // never fire: `measure-node-map.ts` refuses any node map over 900 KB
@@ -621,11 +651,69 @@ async function handler(request: Request): Promise<Response> {
         })
       }
 
+      /*==========================================
+       * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155).
+       *
+       * ZACH, 2026-08-19, choosing to enforce now rather than at launch:
+       * "before public signups arrive, so the cap is proven under real
+       * traffic while the cohort is small and a mistake is cheap."
+       *
+       * THE DECISION IS MADE HERE because the numbers are already here. This
+       * sweep has just summed the org's page views for the current month and
+       * converted them to `bandwidthGb` against `entitlements.bandwidthGb` —
+       * the identical comparison the `bandwidth` alert above thresholds on.
+       * The serving path then reads the VERDICT off the org doc it already
+       * loads, so the cap costs no read on any render. Re-deriving the figure
+       * anywhere else would be the AGL-1371 mistake: a cap that engages on a
+       * number the customer's own alert does not show.
+       *
+       * ONE WRITE, not two. This rides the `usageAlerts` set below rather than
+       * issuing its own, so engaging a cap costs nothing beyond what the sweep
+       * already spends on this org.
+       *
+       * NOTHING IS EVER CLEARED. The marker names its month; next month it
+       * stops matching. An org that UPGRADES is released faster still and
+       * without any write at all, because `bandwidthCapEngaged` re-reads the
+       * plan — see that function for why the asymmetry is deliberate.
+       *=========================================*/
+      const existingCap = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
+      const orgUpdates: Record<string, unknown> = {}
+      if (
+        bandwidthCapShouldEngage({
+          org: orgData as never,
+          usedBandwidthGb: bandwidthGb,
+          includedBandwidthGb: entitlements.bandwidthGb,
+        }) &&
+        existingCap?.month !== month
+      ) {
+        // Guarded on the month so a cap engages once and the following 30
+        // days of sweeps write nothing. The diagnostics are recorded at
+        // ENGAGE time on purpose: they answer "what tripped this" for a
+        // customer asking, and re-stamping them daily would replace the
+        // moment the site was paused with the moment it was last swept.
+        orgUpdates['bandwidthCap'] = {
+          month,
+          engagedAt: Date.now(),
+          pageViews: Math.round(pageViews),
+          includedPageViews: Math.round(
+            pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+          ),
+        } satisfies OrgBandwidthCap
+        capped.push({ orgId: org.id, month })
+      }
+
       if (Object.keys(guardUpdates).length) {
-        await org.ref.set(
-          { usageAlerts: { ...guards, ...guardUpdates } },
-          { merge: true },
-        )
+        orgUpdates['usageAlerts'] = { ...guards, ...guardUpdates }
+      }
+      if (Object.keys(orgUpdates).length) {
+        // NO CACHE FAN-OUT (deliberate). The tenant's org doc is cached for 60
+        // seconds and the middleware's verdict memo for 30, so the cap engages
+        // within about a minute of this write on its own. Busting
+        // `tenant-data:{hostId}` from here would mean one revalidate call per
+        // host of every capped org, from a cron that sweeps the whole
+        // platform — cost, and a fan-out that can fail, bought against a
+        // latency already dwarfed by this sweep's own daily period.
+        await org.ref.set(orgUpdates, { merge: true })
       }
 
       /*==========================================
@@ -688,7 +776,19 @@ async function handler(request: Request): Promise<Response> {
         }
       }
     }
-    return Response.json({ alerted: alerted.length, details: alerted }, { status: 200 })
+    return Response.json(
+      {
+        alerted: alerted.length,
+        details: alerted,
+        // Reported separately from `alerted` (AGL-2155): engaging a cap takes
+        // a customer's site off the air, which is a different event from
+        // warning them, and a run that capped somebody must say so in its own
+        // field rather than inside a count of notifications.
+        capped: capped.length,
+        cappedDetails: capped,
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Usage alert run failed' }, { status: 500 })

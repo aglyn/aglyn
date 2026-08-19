@@ -60,6 +60,25 @@ jest.mock('@aglyn/aglyn/server', () => {
     // these fixtures it answers null; faking it would re-implement the
     // precedence table here.
     ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
+    // …and the REAL bandwidth cap beside it (AGL-2155), for the same reason:
+    // with no `bandwidthCap` marker on these fixtures it answers false, and a
+    // stub would be one more copy of a rule that lives in one place.
+    ...jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/bandwidth-cap',
+    ),
+    // …and the REAL abuse ceiling beside the cap. It lives in
+    // `plan-entitlements` rather than `bandwidth-cap` because it is the other,
+    // higher brace (10x the band, any plan) — two controls, two modules. Pulled
+    // by name rather than spreading the whole module, which would also override
+    // the deliberate stubs below. With no `bandwidthCeiling` marker on these
+    // fixtures it answers false; absent entirely it threw into the loader's
+    // catch and 404'd every case here for a reason unrelated to the subject.
+    bandwidthCeilingMonthKey: jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+    ).bandwidthCeilingMonthKey,
+    bandwidthCeilingDegradesHost: jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+    ).bandwidthCeilingDegradesHost,
     SCREEN_ROOT_PATH: '/',
     COLLECTION_LIST_PAGE_SIZE: 10,
     HostScreenVisibility: { AUTHENTICATED: 'authenticated' },

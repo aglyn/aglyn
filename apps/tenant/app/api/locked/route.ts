@@ -35,6 +35,9 @@
  */
 
 import {
+  bandwidthCapEngaged,
+  bandwidthCapNotice,
+  BANDWIDTH_CAP_RETRY_AFTER_SECONDS,
   lockdownNotice,
   lockdownRetryAfterSeconds,
   normalizeHostLockdown,
@@ -55,14 +58,30 @@ const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
-function noticeHtml(state: LockdownState | null): string {
-  const notice = state
-    ? lockdownNotice(state)
-    : {
-        title: 'Temporarily unavailable',
-        body: 'This site is temporarily unavailable. Please check back shortly.',
-        contact: undefined as string | undefined,
-      }
+/**
+ * Which of the two refusals is this? (AGL-2155)
+ *
+ * `lock` outranks `cap` wherever both are true, and the order below is the
+ * whole of that rule. A staff takedown described to a visitor as a traffic
+ * limit would be a false statement about why a site is gone, and would hand
+ * anyone probing a suspended site a tidier story than the truth.
+ */
+type Refusal =
+  | { kind: 'lock'; state: LockdownState }
+  | { kind: 'cap' }
+  | { kind: 'none' }
+
+function noticeHtml(refusal: Refusal): string {
+  const notice =
+    refusal.kind === 'lock'
+      ? lockdownNotice(refusal.state)
+      : refusal.kind === 'cap'
+        ? { ...bandwidthCapNotice(), contact: undefined as string | undefined }
+        : {
+            title: 'Temporarily unavailable',
+            body: 'This site is temporarily unavailable. Please check back shortly.',
+            contact: undefined as string | undefined,
+          }
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -104,13 +123,13 @@ export async function GET(request: Request): Promise<Response> {
     request.headers.get('x-aglyn-tenant-host') ??
     url.searchParams.get('host') ??
     ''
-  let state: LockdownState | null = null
+  let refusal: Refusal = { kind: 'none' }
   try {
     if (host && !host.includes('/')) {
       const hostRes = await getHost({ host })
       if (hostRes.host) {
         const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
-        state = resolveLockdown(
+        const state = resolveLockdown(
           {
             platform: await getPlatformLockdown(),
             org: normalizeOrgLockdown(orgRes.org as never),
@@ -118,13 +137,27 @@ export async function GET(request: Request): Promise<Response> {
           },
           Date.now(),
         )
+        // RE-DERIVED, like the lockdown state beside it and for the same
+        // reason: a visitor who navigates straight to this path must not be
+        // able to forge a "this site is over its traffic limit" notice for a
+        // healthy site. Nothing about the refusal is taken from the request.
+        refusal = state
+          ? { kind: 'lock', state }
+          : bandwidthCapEngaged(orgRes.org)
+            ? { kind: 'cap' }
+            : { kind: 'none' }
       }
     }
   } catch (error) {
     console.error('[locked] verdict re-derivation failed', error)
   }
-  const retryAfter = state ? lockdownRetryAfterSeconds(state, Date.now()) : undefined
-  return new Response(noticeHtml(state), {
+  const retryAfter =
+    refusal.kind === 'lock'
+      ? lockdownRetryAfterSeconds(refusal.state, Date.now())
+      : refusal.kind === 'cap'
+        ? BANDWIDTH_CAP_RETRY_AFTER_SECONDS
+        : undefined
+  return new Response(noticeHtml(refusal), {
     status: 503,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

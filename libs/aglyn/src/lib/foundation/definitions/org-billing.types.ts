@@ -611,6 +611,30 @@ export interface OrgSubscription {
  * entitlement resolvers carry. (Formerly `AglynTenant`; the alias was
  * removed in AGL-444.)
  */
+/**
+ * `orgs/{orgId}.bandwidthCap` — the engaged free-plan bandwidth cap
+ * (AGL-1967/2070/2155).
+ *
+ * STAMPED WITH THE MONTH IT IS FOR, and never cleared. A new month simply
+ * stops matching, so the cap lifts on its own with no write: a marker whose
+ * removal depends on a cron running is a marker that stays engaged when the
+ * cron fails, which would take a customer's site down over an infrastructure
+ * problem rather than over their traffic.
+ *
+ * Plain numbers rather than `ITimestamp`, matching `suspendedUntilMs`, so the
+ * value survives the tenant's cache serialization unchanged.
+ */
+export interface OrgBandwidthCap {
+  /** UTC `YYYY-MM` this cap was engaged for. Only the current month refuses. */
+  month: string
+  /** When the sweep engaged it. Diagnostic only; nothing gates on it. */
+  engagedAt?: number
+  /** The org-wide page views measured at engage time. Diagnostic. */
+  pageViews?: number
+  /** The band those page views were measured against. Diagnostic. */
+  includedPageViews?: number
+}
+
 export interface AglynOrgBilling extends AglynDocument {
   /** The document id, injected by the reader — never a stored field. */
   $id: OrgUid
@@ -684,6 +708,22 @@ export interface AglynOrgBilling extends AglynDocument {
    * @see OrgRegisterAllocations
    */
   registerAllocations?: OrgRegisterAllocations
+  /**
+   * The free plan's engaged BANDWIDTH CAP (AGL-1967/2070/2155), denormalized
+   * onto this doc by the `usage-alerts` cron so the serving path can refuse a
+   * capped site without a read of its own.
+   *
+   * An ENTITLEMENT INPUT in the strongest sense: it is the only thing standing
+   * between a free site that has blown its band and unmetered egress, so a
+   * client-writable value would let an org admin lift their own cap by
+   * deleting one field. Admin-SDK only; denied in the rules.
+   *
+   * Read exclusively through `bandwidthCapEngaged` (`app-utils/bandwidth-cap`),
+   * never directly — the marker on its own is not the answer. The resolver
+   * re-derives the plan on every read, which is what lets an org that upgrades
+   * mid-month start serving again without waiting for a cron to clear it.
+   */
+  bandwidthCap?: OrgBandwidthCap
   stripeCustomerId?: string
   subscription?: OrgSubscription
   /**
