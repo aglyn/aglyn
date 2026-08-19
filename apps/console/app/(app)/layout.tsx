@@ -20,6 +20,7 @@ import type { ReactNode } from 'react'
 import AssistPanelComponent from '../../components/assist-panel.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import MainLayout from '../../components/layouts/main.layout'
+import LegalReacceptanceBanner from '../../components/legal-reacceptance-banner.component'
 import PlatformLockdownGate from '../../components/platform-lockdown-gate.component'
 import SecondaryNavBarComponent from '../../components/secondary-nav-bar.component'
 
@@ -47,6 +48,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <PlatformLockdownGate>
         <MainLayout>
           <SecondaryNavBarComponent />
+          {/* Re-acceptance when the published Terms move past what this
+              account agreed to (AGL-2316). Mounted here for the same reason
+              the secondary app bar is: it is the one position above every
+              route boundary, so the ask survives a navigation instead of
+              appearing on whichever page happened to render it. */}
+          <LegalReacceptanceBanner />
           {children}
           {/* Aglyn Assist (AGL-1860): the floating helper on every console
               page — this is the one slot above every route boundary, same

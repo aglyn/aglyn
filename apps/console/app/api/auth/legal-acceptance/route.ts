@@ -18,6 +18,7 @@
 import {
   featureLockdownRefusal,
   firebaseAdmin,
+  getLegalAcceptanceStatus,
   recordLegalAcceptance,
 } from '@aglyn/tenant-data-admin'
 import {
@@ -122,4 +123,69 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export { handler as POST }
+/**
+ * What the signed-in account has accepted (AGL-2316).
+ *
+ * The read that makes the write worth having. Two questions, both of which
+ * had no answer at all before this: has this person accepted the version we
+ * publish TODAY — and if not, is it because they never accepted anything or
+ * because the documents moved under them — and is ToS §18.5's 30-day
+ * arbitration opt-out window still open for them.
+ *
+ * SELF ONLY. The uid comes from the verified ID token and from nowhere else;
+ * there is no `?uid=` parameter to add later by accident. Somebody else's
+ * acceptance history is staff-surface material (`/api/admin/users/detail`),
+ * and it carries an IP address and a user agent.
+ *
+ * NOT lockdown-gated and NOT email-verification gated, for the same reason
+ * the POST beside it is neither: this runs on the sign-up path seconds after
+ * account creation, and it is a read of the caller's own consent state, which
+ * a maintenance freeze has no interest in refusing.
+ */
+async function statusHandler(request: Request): Promise<Response> {
+  const authorization = request.headers.get('authorization') ?? ''
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) {
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+
+  let uid: string
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    uid = decoded.uid
+  } catch {
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+
+  try {
+    const status = await getLegalAcceptanceStatus(uid, {
+      currentVersion: LEGAL_DOCUMENT_VERSION,
+    })
+    return Response.json(
+      {
+        currentVersion: status.currentVersion,
+        accepted: status.accepted,
+        acceptedVersions: status.acceptedVersions,
+        latestAcceptedVersion: status.latestAcceptedVersion,
+        currentVersionAcceptedAt: status.currentVersionAcceptedAt,
+        reacceptanceRequired: status.reacceptanceRequired,
+        reacceptanceReason: status.reacceptanceReason,
+        arbitration: status.arbitration,
+        // The full history is NOT returned here. This endpoint drives a
+        // banner, and a banner needs a verdict; the IP and user agent on each
+        // record are evidence for a dispute, not payload for every page load.
+      },
+      { status: 200 },
+    )
+  } catch (error) {
+    console.error('[auth/legal-acceptance] status read failed', error)
+    // Fails SILENT, not closed: a read that could not run must not nag a user
+    // who has accepted. The staff surface is where an unreadable record has
+    // to be visible, and it says so there.
+    return Response.json({ error: 'Could not read acceptance' }, { status: 500 })
+  }
+}
+
+export { handler as POST, statusHandler as GET }

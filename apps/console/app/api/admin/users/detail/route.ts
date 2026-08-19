@@ -21,9 +21,12 @@ import {
   findUserByUidAcrossPools,
   firebaseAdmin,
   getContactSuppression,
+  getLegalAcceptanceStatus,
   isImpersonationSession,
   type ContactChannel,
+  type LegalAcceptanceStatus,
 } from '@aglyn/tenant-data-admin'
+import { LEGAL_DOCUMENT_VERSION } from '../../../../../constants/legal-documents'
 
 /**
  * Staff user detail (AGL-244): everything the console needs to answer
@@ -133,6 +136,67 @@ async function readPhoneDisclosure(profile: {
     }
   }
 }
+/**
+ * What this account agreed to, and whether §18.5's clock is still running
+ * (AGL-2316).
+ *
+ * The clickwrap records were written from the day sign-up started recording
+ * them and read by nothing, so the two questions the record exists to answer
+ * — "did this person accept, and which version" and "is the 30-day
+ * arbitration opt-out window still open" — had no surface at all. This is
+ * that surface: the disputes it settles are staff-answered, and this page
+ * already assembles everything else staff need about one human.
+ *
+ * FAILS LOUD, NOT SILENT — the opposite direction from the phone lookup above
+ * and for the opposite reason. A suppression list we cannot read must be
+ * treated as "do not contact", because acting is the harm. Here the harm is
+ * ASSERTING: rendering "no acceptance on file" when the truth is "we could
+ * not look" would tell a staff member the company holds no evidence, in the
+ * exact conversation where that claim is most expensive. So a failure returns
+ * `lookupFailed: true` and every verdict null, and the page says so.
+ */
+type LegalDisclosure =
+  | (LegalAcceptanceStatus & { lookupFailed: false })
+  | {
+      lookupFailed: true
+      currentVersion: string
+      accepted: null
+      acceptedVersions: []
+      latestAcceptedVersion: null
+      currentVersionAcceptedAt: null
+      reacceptanceRequired: null
+      reacceptanceReason: null
+      arbitration: null
+      acceptances: []
+    }
+
+async function readLegalDisclosure(
+  uid: string,
+  firestore: unknown,
+): Promise<LegalDisclosure> {
+  try {
+    const status = await getLegalAcceptanceStatus(uid, {
+      currentVersion: LEGAL_DOCUMENT_VERSION,
+      firestore,
+    })
+    return { ...status, lookupFailed: false }
+  } catch (error) {
+    console.error('[admin/users/detail] legal acceptance read failed', error)
+    return {
+      lookupFailed: true,
+      currentVersion: LEGAL_DOCUMENT_VERSION,
+      accepted: null,
+      acceptedVersions: [],
+      latestAcceptedVersion: null,
+      currentVersionAcceptedAt: null,
+      reacceptanceRequired: null,
+      reacceptanceReason: null,
+      arbitration: null,
+      acceptances: [],
+    }
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -178,7 +242,10 @@ async function handler(request: Request): Promise<Response> {
       firestore.collection('users').doc(uid).collection('orgs').limit(50).get(),
       firestore.collection('users').doc(uid).get(),
     ])
-    const phone = await readPhoneDisclosure(profile)
+    const [phone, legal] = await Promise.all([
+      readPhoneDisclosure(profile),
+      readLegalDisclosure(uid, firestore),
+    ])
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
         const orgId = entry.id
@@ -261,6 +328,12 @@ async function handler(request: Request): Promise<Response> {
       },
       memberships,
       audit,
+      /**
+       * Clickwrap acceptance history + the §18.5 verdicts (AGL-2316). Beside
+       * the phone disclosure because both are compliance answers about the
+       * same human, and both were written long before anything read them.
+       */
+      legal,
     }, { status: 200 })
   } catch (error) {
     console.error(error)

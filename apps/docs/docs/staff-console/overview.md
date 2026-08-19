@@ -115,6 +115,22 @@ Aglyn once and then search their email again.
 Each account opens a **detail page** showing identity/auth state, staff role, every
 organization membership with roles and per-site access, and its recent audit trail.
 
+A **Legal acceptances** card on the same page answers the two questions a terms
+dispute asks: which version of the Terms and Privacy Policy this person accepted and
+when, and whether the **30-day arbitration opt-out window** (ToS §18.5) is still open.
+The window runs from the person's **first** acceptance of any version, so a later
+re-acceptance does not restart it. Each row carries the content hashes of the exact
+documents that were shown, the door the acceptance came through, and the IP recorded
+at the time. The card is read-only — those records are evidence about the account
+holder, and nothing in the product can add, amend or delete one.
+
+If the card says the records **could not be read**, that is not the same as "no
+acceptance on file": do not answer a dispute from that screen until it loads. An
+account can also legitimately have no record — accounts created before clickwrap
+capture, and SSO/invite doors, never passed a consent checkbox. Those accounts are
+asked to accept by a banner in the console the next time they sign in, as is anyone
+whose accepted version has been superseded by a newer publish.
+
 ### Password help {#password-help}
 
 On that detail page, a **Password** card can email the account a
