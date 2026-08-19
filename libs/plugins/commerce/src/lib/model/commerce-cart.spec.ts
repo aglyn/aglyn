@@ -86,3 +86,69 @@ describe('mergeCarts', () => {
     ])
   })
 })
+
+/**
+ * AGL-2285. `Math.round(line.quantity)` was the whole sanitiser, and
+ * `Math.round(NaN)` is `NaN` — which walked straight past the `<= 0` guard,
+ * because `NaN <= 0` is `false`. A cart line with `quantity: NaN` (a legal
+ * Firestore double) was stored, and from there `cart-checkout.ts` computed
+ * `itemsCents`, the platform fee and the Stripe `line_items[n][quantity]` as
+ * `NaN` too. Stripe 400s, so the shopper could not check out AT ALL until they
+ * found the poisoned line and removed it — a lost sale, persisted in their own
+ * cart.
+ */
+describe('a quantity that is not a number (AGL-2285)', () => {
+  it('does not add a line for one', () => {
+    const lines = upsertCartLine(
+      { lines: [] },
+      { productId: 'p1', quantity: Number('x') },
+    )
+    expect(lines).toEqual([])
+  })
+
+  it('does not poison a line that already exists', () => {
+    const lines = upsertCartLine(
+      { lines: [{ productId: 'p1', quantity: 2 }] },
+      { productId: 'p1', quantity: Number('x') },
+      'add',
+    )
+    expect(lines).toEqual([{ productId: 'p1', quantity: 2 }])
+    expect(Number.isFinite(lines[0].quantity)).toBe(true)
+  })
+
+  it('heals a line already stored with one', () => {
+    // `set` mode with a real quantity, over a stored NaN.
+    const lines = upsertCartLine(
+      { lines: [{ productId: 'p1', quantity: Number('x') }] },
+      { productId: 'p1', quantity: 3 },
+      'set',
+    )
+    expect(lines).toEqual([{ productId: 'p1', quantity: 3 }])
+  })
+
+  it('keeps the mini-cart badge a number when one is stored', () => {
+    const count = cartCount({
+      lines: [
+        { productId: 'p1', quantity: 2 },
+        { productId: 'p2', quantity: Number('x') },
+      ],
+    })
+    // The real item still counts — the badge does not go blank over the bad one.
+    expect(count).toBe(2)
+  })
+
+  /**
+   * POSITIVE CONTROL: the ordinary paths are untouched, so the assertions
+   * above are not satisfied by a cart that refuses everything.
+   */
+  it('POSITIVE CONTROL: real quantities still add, accumulate and cap', () => {
+    let lines = upsertCartLine({ lines: [] }, { productId: 'p1', quantity: 2 })
+    expect(lines).toEqual([{ productId: 'p1', quantity: 2 }])
+    lines = upsertCartLine({ lines }, { productId: 'p1', quantity: 3 }, 'add')
+    expect(lines).toEqual([{ productId: 'p1', quantity: 5 }])
+    lines = upsertCartLine({ lines }, { productId: 'p1', quantity: 500 }, 'set')
+    expect(lines[0].quantity).toBe(CART_MAX_QUANTITY)
+    expect(cartCount({ lines })).toBe(CART_MAX_QUANTITY)
+  })
+})
+

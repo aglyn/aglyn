@@ -47,6 +47,28 @@ function lineKey(line: Pick<CartLine, 'productId' | 'variantId'>): string {
 }
 
 /**
+ * A line quantity, coerced to a whole finite number (AGL-2285).
+ *
+ * `Math.round(line.quantity)` was the whole sanitiser, and `Math.round(NaN)` is
+ * `NaN` — which then walked past the guard below, because `NaN <= 0` is
+ * `false`. A cart line with `quantity: NaN` (a legal Firestore double) was
+ * stored, and from there `cartCount` reported `NaN` in the mini-cart badge and
+ * `cart-checkout.ts` computed `itemsCents`, the platform fee and the Stripe
+ * `line_items[n][quantity]` as `NaN` too — so Stripe 400s and the shopper
+ * cannot check out AT ALL until they find the poisoned line and remove it.
+ *
+ * Answering 0 is what makes the existing `<= 0` guard do its job: an
+ * unusable quantity removes the line (or refuses to add one) rather than
+ * writing a value nothing downstream can compare against. The same lesson as
+ * AGL-2229 one collection over — `Math.max`/`Math.min`/`Math.round` propagate
+ * `NaN`, they do not discard it.
+ */
+function wholeQuantity(value: unknown): number {
+  const quantity = Math.round(Number(value ?? 0))
+  return Number.isFinite(quantity) ? quantity : 0
+}
+
+/**
  * Adds/merges a line (quantities accumulate), clamped to per-line and
  * line-count caps. Quantity ≤ 0 removes the line.
  */
@@ -55,7 +77,7 @@ export function upsertCartLine(
   line: CartLine,
   mode: 'add' | 'set' = 'add',
 ): CartLine[] {
-  const quantity = Math.round(line.quantity)
+  const quantity = wholeQuantity(line.quantity)
   const key = lineKey(line)
   const existing = cart.lines.find((item) => lineKey(item) === key)
   if (!existing) {
@@ -66,8 +88,11 @@ export function upsertCartLine(
       { ...line, quantity: Math.min(CART_MAX_QUANTITY, quantity) },
     ]
   }
+  // The STORED side is coerced too (AGL-2285): a line written before this
+  // guard, or by any other writer, can still hold a non-finite quantity, and
+  // adding to it would carry that forward forever.
   const nextQuantity =
-    mode === 'add' ? existing.quantity + quantity : quantity
+    mode === 'add' ? wholeQuantity(existing.quantity) + quantity : quantity
   if (nextQuantity <= 0) {
     return cart.lines.filter((item) => lineKey(item) !== key)
   }
@@ -88,7 +113,12 @@ export function removeCartLine(
 
 /** Total units across lines (the mini-cart badge). */
 export function cartCount(cart: Pick<HostCart, 'lines'> | undefined): number {
-  return (cart?.lines ?? []).reduce((sum, line) => sum + line.quantity, 0)
+  // Coerced per line (AGL-2285) so one stored `NaN` cannot make the badge read
+  // `NaN` for a cart that otherwise has real items in it.
+  return (cart?.lines ?? []).reduce(
+    (sum, line) => sum + wholeQuantity(line?.quantity),
+    0,
+  )
 }
 
 /**
