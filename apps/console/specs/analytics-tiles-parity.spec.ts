@@ -30,6 +30,7 @@ import {
   deviceSplit,
   deviceSplitLabel,
   deviceSplitValue,
+  formatDwell,
   rollUp,
   splitTrafficWindows,
   trafficDeltaPct,
@@ -140,5 +141,32 @@ describe('rollUp', () => {
   it('tolerates a day document missing the field entirely', () => {
     expect(rollUp([{}, day('d', 1, { referrers: { 'x.com': 2 } })], 'referrers'))
       .toEqual([['x.com', 2]])
+  })
+})
+
+describe('formatDwell (AGL-2182)', () => {
+  it('reads exactly as the mockup does', () => {
+    expect(formatDwell(124_000)).toBe('2m 04s')
+  })
+
+  it('zero-pads the seconds so a column stays aligned', () => {
+    expect(formatDwell(65_000)).toBe('1m 05s')
+    expect(formatDwell(119_000)).toBe('1m 59s')
+  })
+
+  it('drops the minute part below a minute', () => {
+    // `0m 04s` reads like a broken clock.
+    expect(formatDwell(4_000)).toBe('4s')
+    expect(formatDwell(0)).toBe('0s')
+  })
+
+  it('rolls over to hours rather than printing 90m', () => {
+    expect(formatDwell(3_600_000)).toBe('1h 00m')
+    expect(formatDwell(5_400_000)).toBe('1h 30m')
+  })
+
+  it('never renders a negative duration', () => {
+    // A clock skew between the visitor and the server can produce one.
+    expect(formatDwell(-5_000)).toBe('0s')
   })
 })

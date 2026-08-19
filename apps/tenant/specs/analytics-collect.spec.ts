@@ -370,3 +370,104 @@ describe('spoofed-host gate (AGL-1844, AGL-510)', () => {
   })
 })
 
+
+/**
+ * Dwell time (AGL-2182). `/product/analytics`'s per-screen mockup shows
+ * `Avg. time 2m 04s / on this screen`, and nothing in this pipeline
+ * recorded duration of any kind — the metric was not under-reported, it
+ * was unmeasurable.
+ *
+ * The first assertion is the one that matters most: a dwell beacon must
+ * not be a pageview. These counters are metered-invoice inputs, and a
+ * second beacon per visit landing in `total` would double every customer's
+ * page-view bill.
+ */
+describe('dwell time (AGL-2182)', () => {
+  const screenDoc = () =>
+    mockStore[`hosts/${HOST_ID}/screenAnalytics/screen-1:${DAY}`]
+
+  it('records the dwell WITHOUT counting a pageview', async () => {
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, screenId: 'screen-1', dwellMs: 124_000 }),
+    )
+    expect(response.status).toBe(204)
+    expect(screenDoc().dwellMs).toBe(124_000)
+    expect(screenDoc().dwellSamples).toBe(1)
+    // The host-wide day doc must not exist at all — no total, no path, no
+    // device, and no `pageView` automation fired.
+    expect(dayDoc()).toBeUndefined()
+    expect(screenDoc().total).toBeUndefined()
+    expect(mockEmitted).toEqual([])
+  })
+
+  it('sums across visits so the average has a divisor', async () => {
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, screenId: 'screen-1', dwellMs: 10_000 }),
+    )
+    await route.POST(
+      beacon({ hostId: HOST_ID, screenId: 'screen-1', dwellMs: 20_000 }),
+    )
+    expect(screenDoc().dwellMs).toBe(30_000)
+    expect(screenDoc().dwellSamples).toBe(2)
+  })
+
+  it('clamps a tab left open overnight rather than dropping it', async () => {
+    // One 9-hour reading would drag a screen's average past every real
+    // one. Clamped, not discarded: a long visit IS a visit, and dropping
+    // it biases the mean downward on exactly the screens people read.
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, screenId: 'screen-1', dwellMs: 9 * 3_600_000 }),
+    )
+    expect(screenDoc().dwellMs).toBe(30 * 60_000)
+    expect(screenDoc().dwellSamples).toBe(1)
+  })
+
+  it('ignores a sub-second reading', async () => {
+    // A bounce or a prefetch. Counting it as a sample would drag the
+    // average down with a number that says nothing about reading.
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: HOST_ID, screenId: 'screen-1', dwellMs: 300 }),
+    )
+    expect(screenDoc()).toBeUndefined()
+  })
+
+  it('writes nothing for a dwell with no screen to attribute it to', async () => {
+    // The host-wide day doc has no time dimension and the console reads
+    // this per screen, so there is nowhere for it to go.
+    const route = loadRoute()
+    const response = await route.POST(
+      beacon({ hostId: HOST_ID, dwellMs: 60_000 }),
+    )
+    expect(response.status).toBe(204)
+    expect(dayDoc()).toBeUndefined()
+    expect(
+      Object.keys(mockStore).filter((path) => path.includes('screenAnalytics')),
+    ).toHaveLength(0)
+  })
+
+  it('still refuses a spoofed host', async () => {
+    // The AGL-1844 gate runs before the branch, not inside the pageview
+    // path — a new branch must not open a new door.
+    const route = loadRoute()
+    await route.POST(
+      beacon({ hostId: 'no-such-host', screenId: 'screen-1', dwellMs: 60_000 }),
+    )
+    expect(
+      Object.keys(mockStore).filter((path) => path.includes('screenAnalytics')),
+    ).toHaveLength(0)
+  })
+
+  it('leaves an ordinary pageview beacon untouched', async () => {
+    // The control. A branch that swallowed beacons with no `dwellMs`
+    // would pass every case above and stop counting page views entirely.
+    const route = loadRoute()
+    await route.POST(beacon({ hostId: HOST_ID, path: '/', screenId: 'screen-1' }))
+    expect(dayDoc().total).toBe(1)
+    expect(screenDoc().total).toBe(1)
+    expect(screenDoc().dwellSamples).toBeUndefined()
+  })
+})

@@ -143,3 +143,21 @@ export function rollUp(
   }
   return Object.entries(totals).sort(([, a], [, b]) => b - a)
 }
+
+/**
+ * `2m 04s` — the dwell format `/product/analytics`'s per-screen mockup
+ * shows (AGL-2182).
+ *
+ * Seconds are zero-padded so a column of these stays aligned, and the
+ * minute part is dropped below a minute rather than rendering `0m 04s`,
+ * which reads like a broken clock.
+ */
+export function formatDwell(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes === 0) return `${seconds}s`
+  if (minutes < 60) return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`
+}

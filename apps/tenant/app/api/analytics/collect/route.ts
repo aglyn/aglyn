@@ -261,6 +261,56 @@ export async function POST(request: Request): Promise<Response> {
       return noContent()
     }
 
+    /*
+     * Dwell time (AGL-2182). `/product/analytics`'s per-screen mockup
+     * shows `Avg. time 2m 04s / on this screen`, and nothing in the
+     * pipeline recorded duration of any kind — the metric was not
+     * under-reported, it was unmeasurable.
+     *
+     * Its own beacon, sent on `pagehide`, and its own early return: it is
+     * NOT a pageview, and folding it into the one above would double every
+     * count on every visit.
+     *
+     * Only ever a SUM and a SAMPLE COUNT. Storing per-visit durations
+     * would make the day doc unbounded and turn a coarse engagement
+     * measure into a behavioural record; two integers answer the question
+     * the mockup asks and nothing finer.
+     */
+    const dwellMs = Number(body.dwellMs ?? 0)
+    if (dwellMs > 0) {
+      // A dwell without a screen has nowhere to go — the host-wide day doc
+      // has no time dimension and the console reads this per screen.
+      if (!screenId || screenId.length > 64) return noContent()
+      // Clamped both ends. Under a second is a bounce or a prefetch and
+      // says nothing; over half an hour is a tab left open, and one of
+      // those would drag a screen's average past every real reading.
+      // Clamped rather than dropped: a long visit IS a visit, and
+      // discarding it would bias the mean downward on exactly the screens
+      // people read.
+      const bounded = Math.min(Math.max(Math.round(dwellMs), 0), 30 * 60_000)
+      if (bounded < 1000) return noContent()
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection('screenAnalytics')
+        .doc(`${screenId}:${new Date().toISOString().slice(0, 10)}`)
+        .set(
+          {
+            screenId,
+            day: new Date().toISOString().slice(0, 10),
+            dwellMs: FieldValue.increment(bounded),
+            dwellSamples: FieldValue.increment(1),
+            expiresAt: analyticsDayExpiresAt(
+              new Date().toISOString().slice(0, 10),
+            ),
+          },
+          { merge: true },
+        )
+      return noContent()
+    }
+
     // Referrer host (AGL-138): external sources only — same-host and
     // unparsable referrers are dropped.
     let referrerHost = ''

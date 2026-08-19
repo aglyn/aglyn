@@ -29,6 +29,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
+import { formatDwell } from '../../utils/analytics-summary'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -41,6 +42,10 @@ interface DayStat {
   total: number
   referrers: Record<string, number>
   devices: Record<string, number>
+  /** Summed dwell across the day's samples (AGL-2182). */
+  dwellMs: number
+  /** How many visits reported a dwell — the divisor. */
+  dwellSamples: number
 }
 
 /**
@@ -87,8 +92,17 @@ export function ScreenAnalyticsCard(props: {
               number
             >,
             devices: (snapshot.get('devices') ?? {}) as Record<string, number>,
+            dwellMs: Number(snapshot.get('dwellMs') ?? 0),
+            dwellSamples: Number(snapshot.get('dwellSamples') ?? 0),
           }))
-          .catch(() => ({ day: id, total: 0, referrers: {}, devices: {} })),
+          .catch(() => ({
+            day: id,
+            total: 0,
+            referrers: {},
+            devices: {},
+            dwellMs: 0,
+            dwellSamples: 0,
+          })),
       ),
     ).then((stats) => {
       if (active) setDays(stats)
@@ -147,6 +161,15 @@ export function ScreenAnalyticsCard(props: {
   }
 
   const total = (days ?? []).reduce((sum, day) => sum + day.total, 0)
+  // Averaged over SAMPLES, not over views (AGL-2182). Not every visit
+  // reports a dwell — a killed tab sends nothing — so dividing by views
+  // would report a number lower than any visit actually spent.
+  const dwellTotalMs = (days ?? []).reduce((sum, day) => sum + day.dwellMs, 0)
+  const dwellSamples = (days ?? []).reduce(
+    (sum, day) => sum + day.dwellSamples,
+    0,
+  )
+  const avgDwell = dwellSamples > 0 ? dwellTotalMs / dwellSamples : null
   const max = Math.max(1, ...(days ?? []).map((day) => day.total))
   const topReferrers = Object.entries(
     (days ?? []).reduce<Record<string, number>>((acc, day) => {
@@ -192,7 +215,30 @@ export function ScreenAnalyticsCard(props: {
         </Typography>
       ) : (
         <Stack spacing={2}>
-          <Typography variant="h4">{total.toLocaleString()}</Typography>
+          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+            <Stack>
+              <Typography variant="h4">{total.toLocaleString()}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {'Screen views'}
+              </Typography>
+            </Stack>
+            {/*
+              `Avg. time 2m 04s / on this screen` (AGL-2182). Rendered
+              only when visits actually reported a dwell: the beacon is
+              fire-and-forget on `pagehide`, so the honest failure is a
+              missing tile, never a zero that reads as "nobody stayed".
+             */}
+            {avgDwell === null ? null : (
+              <Stack>
+                <Typography variant="h4">
+                  {formatDwell(avgDwell)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {'Avg. time on this screen'}
+                </Typography>
+              </Stack>
+            )}
+          </Stack>
           <Stack
             direction="row"
             spacing={0.5}
