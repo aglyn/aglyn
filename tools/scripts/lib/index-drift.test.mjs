@@ -776,8 +776,11 @@ describe('the checker is wired (workflow + package.json)', () => {
     // Asserted only from inside index-drift.yml, "the workflow runs the
     // self-test" is circular: deleting the step deletes the check on the
     // deletion. rules-drift.yml is the second home — and deliberately NOT
-    // nx-ci.yml, which is disabled_manually and therefore runs nowhere. A
-    // redundancy that never executes is not redundancy.
+    // nx-ci.yml. That workflow is ACTIVE (the `disabled_manually` claim here
+    // was false — AGL-2381), but it runs its guard steps behind `typecheck`
+    // and `docs:typecheck` in one sequential job: 26 of 72 runs on 2026-08-19.
+    // A redundancy that answers a third of the time is not the one to hang a
+    // non-circularity argument on.
     const rulesDrift = readFileSync(
       join(repoRoot, '.github', 'workflows', 'rules-drift.yml'),
       'utf8',

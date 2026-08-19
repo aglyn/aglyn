@@ -3,6 +3,7 @@
   "figmaNodeId": "124:3072",
   "figmaFrameName": "Product — Analytics",
   "frameSize": { "width": 1440, "height": 5201 },
+  "contentColumnBasis": "UNVERIFIED PROSE MEASUREMENT \u2014 do not treat as a target. The \"1280px column\" / \"1280px wide\" figures in this file's notes are hand-written descriptions with no recorded widthPx behind them, and they are contradicted by every extract that DOES record one: pricing-copy measures 1392 at 1440, 1488 at 1920, 688 at 768, and 1280 appears nowhere. The build's invariant is a stock MUI Container at maxWidth 'xl', which resolves to min(viewport,1536) minus 48px of gutter \u2014 1392 on this 1440 frame, matching the design exactly. 1328 is not a design column either; it is 1280 + 48 and AGL-1298 banned it. Left verbatim because this file is an extraction, a record of the design and its errors, never of the truth (see tools/marketing/README.md). Re-measure the frame before acting on these numbers; never sweep them.",
   "skeleton": "Matches the /product/besigner 8-section skeleton exactly: Hero · Statement · Capabilities · Deep-dive · How it works · Explore the platform · Early access · CTA. (There is no separate Canvas/visual section — the visual sits inside the Deep-dive, whose Figma layer is literally named 'Deep-dive · canvas'.)",
   "sections": [
     {

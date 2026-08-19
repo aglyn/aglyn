@@ -109,6 +109,13 @@ const STRIPE_ENV = {
   STRIPE_PRICE_STARTER: 'price_starter_monthly',
   STRIPE_PRICE_PRO: 'price_pro_monthly',
   STRIPE_PRICE_METERED: 'price_metered_usage',
+  STRIPE_PRICE_PRO_EXTRA_SEAT: 'price_pro_seat',
+  STRIPE_PRICE_STARTER_EXTRA_SEAT: 'price_starter_seat',
+  // The annual variants (AGL-532), so a same-tier INTERVAL switch has real
+  // prices to move onto rather than falling out as "Unknown target plan".
+  STRIPE_PRICE_PRO_YEARLY: 'price_pro_yearly',
+  STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
+  STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
 
 /** 2026-01-01T00:00:00Z — the subscription's current period end. */
@@ -117,6 +124,16 @@ const PERIOD_END = 1767225600
 /** The subscription the mocked Stripe returns; tests override these. */
 let subscriptionItems: any[] = []
 let subscriptionSchedule: string | null = null
+/** `cancel_at_period_end` on the subscription Stripe returns (AGL-2151). */
+let subscriptionCancelAtPeriodEnd = false
+/**
+ * Tail of the Stripe path that should FAIL, standing in for any of the
+ * refusals the outer catch turns into a generic 502 (AGL-2151). Matched on the
+ * END of the URL, so failing the schedule CREATE
+ * (`…/v1/subscription_schedules`) does not also fail the RELEASE
+ * (`…/v1/subscription_schedules/{id}/release`) that runs before it.
+ */
+let failStripePathEndingWith: string | null = null
 let capturedSubUpdateBody: URLSearchParams | null = null
 /**
  * Extra fields Stripe puts on phase 0 when a schedule is created
@@ -172,6 +189,14 @@ const METERED_ITEM = {
 beforeEach(() => {
   subscriptionItems = [PRO_ITEM, METERED_ITEM]
   subscriptionSchedule = null
+  subscriptionCancelAtPeriodEnd = false
+  failStripePathEndingWith = null
+  // These are module-scope `jest.fn()`s, so `restoreAllMocks` does not empty
+  // them: without an explicit clear, "was this ever written?" accumulates
+  // across the file and can never be false.
+  mockWriteOrgBilling.mockClear()
+  mockVerifyIdToken.mockClear()
+  mockOrgGet.mockClear()
   capturedSubUpdateBody = null
   schedulePhaseExtras = {}
   capturedScheduleCreateBody = null
@@ -187,6 +212,14 @@ beforeEach(() => {
   mockWriteOrgBilling.mockResolvedValue(undefined)
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
+    // Modelled the way Stripe answers a refusal: a non-2xx carrying
+    // `error.message`, which `stripeRequest` turns into the throw the route's
+    // outer catch sees. Checked BEFORE the branches so a failed call records
+    // no side effect — a release that "failed" must not appear in
+    // `releasedScheduleIds`.
+    if (failStripePathEndingWith && href.endsWith(failStripePathEndingWith)) {
+      return { ok: false, json: async () => ({ error: { message: 'nope' } }) }
+    }
     let payload: unknown
     if (href.includes('/subscriptions?customer=')) {
       payload = {
@@ -196,6 +229,7 @@ beforeEach(() => {
             status: 'active',
             current_period_end: PERIOD_END,
             currency: 'usd',
+            cancel_at_period_end: subscriptionCancelAtPeriodEnd,
             schedule: subscriptionSchedule,
             items: { data: subscriptionItems },
           },
@@ -453,5 +487,370 @@ describe('a downgrade preserves the terms it did not change (AGL-2146)', () => {
     expect(update?.get('phases[0][collection_method]')).toBeNull()
     // The move itself still happened.
     expect(update?.get('phases[1][items][0][price]')).toBe('price_starter_monthly')
+  })
+})
+
+
+/**
+ * A schedule phase is an ABSOLUTE item list; the instant switch is a DELTA
+ * (AGL-2150).
+ *
+ * That difference is the whole bug. The instant path names the items it
+ * wants changed and leaves everything else exactly where it is, so an item
+ * `addonKindFromPriceId` cannot classify survives a switch untouched. Phase 1
+ * was built from the recognised kinds alone, so the same item was DELETED —
+ * at the period end, on a timer, with no log line and nothing in the response
+ * naming it. `droppedAddons` carries recognised kinds only, so it read as a
+ * complete account of what was lost while being silent about exactly the
+ * lines it could not name.
+ *
+ * `addonKindFromPriceId` resolves by comparing against the CURRENT env values,
+ * so "cannot classify" is not exotic: a legacy add-on whose `STRIPE_PRICE_*`
+ * was rotated or unset, a price attached by hand in the Stripe dashboard, a
+ * negotiated line item, and the flat POS-register / event-calendar add-ons in
+ * any environment that does not configure those env names all land here. Each
+ * is recurring revenue.
+ */
+describe('a downgrade carries the items it cannot classify (AGL-2150)', () => {
+  /** A price no `STRIPE_PRICE_*` in `STRIPE_ENV` resolves to. */
+  const LEGACY_ADDON_ITEM = {
+    id: 'si_legacy',
+    quantity: 3,
+    price: { id: 'price_legacy_rotated_addon', recurring: { interval: 'month' } },
+  }
+  const PRO_SEAT_ITEM = {
+    id: 'si_seat',
+    quantity: 4,
+    price: { id: 'price_pro_seat', recurring: { interval: 'month' } },
+  }
+
+  function phaseItemPrices(index: number): string[] {
+    const prices: string[] = []
+    for (let i = 0; ; i += 1) {
+      const price = capturedScheduleUpdateBody?.get(
+        `phases[${index}][items][${i}][price]`,
+      )
+      if (!price) return prices
+      prices.push(price)
+    }
+  }
+
+  async function downgrade() {
+    const post = loadSubscription()
+    return call(post, { action: 'switch', plan: 'starter', interval: 'month' })
+  }
+
+  it('passes an unrecognised item through to phase 1, quantity and all', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    expect((await downgrade()).status).toBe(200)
+    const prices = phaseItemPrices(1)
+    expect(prices).toContain('price_legacy_rotated_addon')
+    const index = prices.indexOf('price_legacy_rotated_addon')
+    expect(
+      capturedScheduleUpdateBody?.get(`phases[1][items][${index}][quantity]`),
+    ).toBe('3')
+  })
+
+  it('names it in the response and in a log line — the loss was silent', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const payload = await (await downgrade()).json()
+    expect(payload.unrecognizedItems).toEqual(['price_legacy_rotated_addon'])
+    expect(
+      warn.mock.calls.some(([message]) =>
+        String(message).includes('cannot classify'),
+      ),
+    ).toBe(true)
+  })
+
+  it('the INSTANT path already left it alone — this is the parity', async () => {
+    subscriptionItems = [STARTER_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    // Nothing in the delta touches it: no `deleted`, no re-price.
+    const body = capturedSubUpdateBody
+    const touched = [...(body?.keys() ?? [])].some(
+      (key) => key.startsWith('items[') && body?.get(key) === 'si_legacy',
+    )
+    expect(touched).toBe(false)
+  })
+
+  it('NEGATIVE CONTROL: a RECOGNISED add-on still re-prices to the target', async () => {
+    // The pass-through must not swallow the AGL-528 re-pricing: a known seat
+    // price has to become the TARGET plan's seat price, not survive verbatim
+    // at the old plan's rate.
+    subscriptionItems = [PRO_ITEM, PRO_SEAT_ITEM, METERED_ITEM]
+    const payload = await (await downgrade()).json()
+    const prices = phaseItemPrices(1)
+    expect(prices).toContain('price_starter_seat')
+    expect(prices).not.toContain('price_pro_seat')
+    expect(payload.unrecognizedItems).toEqual([])
+  })
+
+  it('NEGATIVE CONTROL: the metered item is still attached once, not twice', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    expect((await downgrade()).status).toBe(200)
+    const metered = phaseItemPrices(1).filter(
+      (price) => price === 'price_metered_usage',
+    )
+    expect(metered).toHaveLength(1)
+  })
+})
+
+/**
+ * Cancel and downgrade must not contradict each other, and a failed schedule
+ * swap must not leave the mirror lying (AGL-2151).
+ *
+ * Two separate faults with one shared cause — this branch does things to
+ * Stripe in a sequence and assumed every step lands.
+ */
+describe('a pending cancel and a pending downgrade cannot both stand (AGL-2151)', () => {
+  it('a downgrade clears the cancellation instead of racing it', async () => {
+    // Straight out of the retention funnel: cancelled, changed their mind,
+    // trying to stay on something smaller. Refusing them would be the save
+    // the funnel exists to make, lost.
+    subscriptionCancelAtPeriodEnd = true
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'starter',
+      interval: 'month',
+    })
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    // The cancellation was cleared FIRST — a schedule created underneath a
+    // pending cancel is the contradiction, not the fix for it.
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBe('false')
+    // ...and the downgrade still happened.
+    expect(capturedScheduleCreateBody?.get('from_subscription')).toBe('sub_1')
+    expect(payload.scheduled).toBe(true)
+    expect(payload.clearedPendingCancel).toBe(true)
+    // The mirror stops rendering both chips.
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+    expect(lastBillingPatch()?.pendingDowngrade).toMatchObject({
+      plan: 'starter',
+    })
+  })
+
+  it('an UPGRADE clears it too — buying more is not leaving', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    subscriptionCancelAtPeriodEnd = true
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBe('false')
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+  })
+
+  it('NEGATIVE CONTROL: an ordinary downgrade never touches the cancel flag', async () => {
+    // Sending `cancel_at_period_end=false` on every switch would silently
+    // resume a subscription nobody asked to resume.
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: an ordinary UPGRADE sends no cancel flag either', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBeNull()
+  })
+})
+
+/**
+ * The mirror must never assert a schedule that is not there (AGL-2151).
+ *
+ * Every one of these branches RELEASES the subscription's schedule and then
+ * does more work. A failure after the release used to return a generic 502
+ * while the org doc kept the OLD `pendingDowngrade` naming the just-released
+ * `scheduleId`: Stripe has no pending downgrade, the console insists there is
+ * one, and the customer goes on being billed at the higher tier while the page
+ * says they are dropping. An ABSENT pending downgrade is recoverable by
+ * re-requesting; a PHANTOM one is invisible as wrong to everybody.
+ */
+describe('a failed schedule swap clears the mirror (AGL-2151)', () => {
+  it('a downgrade that dies at the schedule create leaves nothing pending', async () => {
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscription_schedules'
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'starter',
+      interval: 'month',
+    })
+    expect(response.status).toBe(502)
+    // The old schedule is genuinely gone...
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    // ...so the mirror must not go on naming it.
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('and states the cancel it cleared, so the mirror is true in failure too', async () => {
+    subscriptionCancelAtPeriodEnd = true
+    failStripePathEndingWith = 'v1/subscription_schedules'
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(502)
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('the same window in the CANCEL path is closed', async () => {
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscriptions/sub_1'
+    const post = loadSubscription()
+    expect((await call(post, { action: 'cancel' })).status).toBe(502)
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('and in the instant UPGRADE path', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscriptions/sub_1'
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(502)
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: a failure BEFORE the release leaves the mirror ALONE', async () => {
+    // The old schedule still exists, so the pending marker naming it is
+    // ACCURATE. Clearing it here would invent the opposite lie — the console
+    // saying nothing is pending while Stripe still flips the plan.
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = '/release'
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(502)
+    expect(releasedScheduleIds).toEqual([])
+    expect(mockWriteOrgBilling).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * "Keep my plan" must not swallow an INTERVAL change (AGL-2156 §2).
+ *
+ * The same-tier guard keyed on the plan alone and ignored `targetInterval`,
+ * which is resolved a few lines earlier. A `pro/month → pro/year` switch
+ * therefore returned `ok: true` having changed nothing, and the page would
+ * snackbar "Plan switched to pro" over an untouched subscription. Latent while
+ * the current tier's button is disabled — and it closed the only server path
+ * an annual-conversion UI could use. Annual conversion is a retention lever.
+ */
+describe('a same-tier interval change actually switches (AGL-2156)', () => {
+  it('pro/month → pro/year re-prices the plan item onto the annual price', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'pro',
+      interval: 'year',
+    })
+    expect(response.status).toBe(200)
+    expect(capturedSubUpdateBody?.get('items[0][price]')).toBe(
+      'price_pro_yearly',
+    )
+    // The metered item follows the interval too — Stripe rejects a
+    // subscription whose items mix `recurring.interval` (AGL-1340/1280).
+    expect(capturedSubUpdateBody?.get('items[1][price]')).toBe(
+      'price_metered_usage_yearly',
+    )
+    expect(lastBillingPatch()?.interval).toBe('year')
+  })
+
+  it('NEGATIVE CONTROL: same plan AND same interval is still release-only', async () => {
+    // "Keep my plan" — the undo for a pending downgrade — must keep working.
+    subscriptionSchedule = 'sub_sched_old'
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'switch', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.releasedPendingDowngrade).toBe(true)
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+})
+
+/**
+ * `pro → free` must not answer "Unknown target plan" (AGL-2156 §1).
+ *
+ * `'free'` IS in `SELF_SERVE_PLANS` and `isLadderDowngrade` classifies the
+ * move as a downgrade; only `PRICE_ENV` having no `free` entry stopped it, and
+ * the message it produced described a bug rather than the product. The one
+ * thing keeping a user off this path was a disabled button on one card.
+ */
+describe('moving to Free is named as a cancel, not an unknown plan (AGL-2156)', () => {
+  it('says what the route actually is', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'free',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload.code).toBe('cancel_required')
+    expect(payload.error).toMatch(/canceling your subscription/i)
+    expect(payload.error).not.toMatch(/Unknown target plan/)
+    // And nothing was done to the subscription on the way to saying so.
+    expect(capturedSubUpdateBody).toBeNull()
+    expect(capturedScheduleCreateBody).toBeNull()
+  })
+
+  it('the same is true of a PREVIEW', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'preview',
+      plan: 'free',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).code).toBe('cancel_required')
+  })
+
+  it('NEGATIVE CONTROL: a genuinely unknown plan still says so', async () => {
+    // The Free branch must not become a catch-all that hides a real
+    // misconfiguration behind a cancel message.
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'platinum',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('Unknown target plan')
   })
 })

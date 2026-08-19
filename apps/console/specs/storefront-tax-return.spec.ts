@@ -244,6 +244,138 @@ describe('storefrontTaxSummary (AGL-1904)', () => {
  * appears on no line of the return. That is the shortfall an auditor finds,
  * so the figure is BLOCKING rather than informational.
  */
+/*==========================================
+ * THE STOREFRONT WORKING PAPERS (AGL-2329).
+ *
+ * `storefront-tax.ts` writes `jurisdiction`, `rateState` and `percentage` on
+ * every line and annotates all three "for the working papers". Those working
+ * papers had no reader — in the console or in the Webfile mapper — so the
+ * storefront half of the return could state a jurisdiction's tax and not say
+ * which rate produced it, which is the first thing checked against a rate
+ * table.
+ *
+ * The fixture uses a state rate and a local rate with DIFFERENT percentages
+ * and different money, so an accumulator attributing one line's figures to
+ * both dies here.
+ *=========================================*/
+describe('storefront working papers (AGL-2329)', () => {
+  const SPLIT_RATE_ROW: StorefrontTaxReturnRowInput = {
+    ...AGLYN_LIABLE_ROW,
+    id: 'cs_split_rate',
+    taxCents: 825,
+    taxLines: [
+      {
+        amountCents: 625,
+        taxableAmountCents: 10000,
+        taxabilityReason: 'standard_rated',
+        taxRateId: 'txr_tx_state',
+        percentage: 6.25,
+        rateState: 'TX',
+        jurisdiction: 'Texas',
+      },
+      {
+        amountCents: 200,
+        taxableAmountCents: 10000,
+        taxabilityReason: 'standard_rated',
+        taxRateId: 'txr_austin_local',
+        percentage: 2,
+        rateState: 'TX',
+        jurisdiction: 'Austin',
+      },
+    ],
+  }
+
+  it('names the rate behind each part of a jurisdiction total', () => {
+    const rates = storefrontTaxSummary([SPLIT_RATE_ROW], Q3_2026).aglynLiable
+      .byJurisdiction['US-TX'].rates
+
+    expect(rates).toHaveLength(2)
+    // Dearest first, and the fixture lists them that way already — so the
+    // discriminating assertion is that each carries its OWN percentage and
+    // its OWN money, not that the order happens to match.
+    expect(rates[0]).toEqual({
+      taxRateId: 'txr_tx_state',
+      percentage: 6.25,
+      rateState: 'TX',
+      jurisdiction: 'Texas',
+      lines: 1,
+      taxableAmountCents: 10000,
+      taxCollectedCents: 625,
+    })
+    expect(rates[1]).toEqual({
+      taxRateId: 'txr_austin_local',
+      percentage: 2,
+      rateState: 'TX',
+      jurisdiction: 'Austin',
+      lines: 1,
+      taxableAmountCents: 10000,
+      taxCollectedCents: 200,
+    })
+    // 6.25 + 2.00 = 8.25%, the measured rate. The papers reconcile with the
+    // figure above them.
+    expect(rates[0].taxCollectedCents + rates[1].taxCollectedCents).toBe(
+      storefrontTaxSummary([SPLIT_RATE_ROW], Q3_2026).aglynLiable
+        .byJurisdiction['US-TX'].taxCollectedCents,
+    )
+  })
+
+  it('keeps the merchant bucket\'s papers out of Aglyn\'s', () => {
+    // The three buckets must never be summed, and neither must their
+    // papers: a merchant's own configured rate appearing under Aglyn's
+    // registrations would have Aglyn filing another company's tax, which is
+    // the failure the bucket split exists to prevent.
+    const merchantRow: StorefrontTaxReturnRowInput = {
+      ...SPLIT_RATE_ROW,
+      id: 'cs_merchant',
+      taxMode: 'manual',
+      taxLiability: 'merchant',
+      taxLines: [
+        {
+          amountCents: 500,
+          taxableAmountCents: 10000,
+          taxabilityReason: 'standard_rated',
+          taxRateId: 'merchant_rate',
+          percentage: 5,
+          rateState: 'TX',
+          jurisdiction: 'Merchant configured',
+        },
+      ],
+    }
+    const summary = storefrontTaxSummary(
+      [SPLIT_RATE_ROW, merchantRow],
+      Q3_2026,
+    )
+    expect(
+      summary.aglynLiable.byJurisdiction['US-TX'].rates.map(
+        (rate) => rate.taxRateId,
+      ),
+    ).toEqual(['txr_tx_state', 'txr_austin_local'])
+    expect(
+      summary.merchantManual.byJurisdiction['US-TX'].rates.map(
+        (rate) => rate.taxRateId,
+      ),
+    ).toEqual(['merchant_rate'])
+  })
+
+  it('records a line that states no rate as `unknown` rather than inventing one', () => {
+    // The pre-AGL-2329 row shape: an amount and a base, nothing else. It
+    // must still appear, or the papers stop reconciling with the total.
+    const rates = storefrontTaxSummary([AGLYN_LIABLE_ROW], Q3_2026).aglynLiable
+      .byJurisdiction['US-TX'].rates
+    expect(rates).toEqual([
+      {
+        taxRateId: 'unknown',
+        percentage: null,
+        rateState: null,
+        jurisdiction: null,
+        lines: 1,
+        taxableAmountCents: 10000,
+        taxCollectedCents: 825,
+      },
+    ])
+  })
+})
+
 describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', () => {
   const basePayload: TaxReturnPayload = {
     period: '2026-Q3',
@@ -258,17 +390,24 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
       taxableSalesCents: 8000,
       taxCollectedCents: 660,
       byJurisdiction: {
+        // Working-paper fields (AGL-2329) empty: this fixture stands in for
+        // the AGLYN half of the payload while the storefront half is under
+        // test, and their arithmetic is proved in `tx-return.spec.ts`.
         'US-TX': {
           transactionCount: 1,
           totalSalesCents: 10000,
           taxableSalesCents: 8000,
           taxCollectedCents: 660,
+          taxabilityReasons: {},
+          rates: [],
         },
       },
       refunds: {
         rowsRefundedInPeriod: 0,
         refundedGrossCents: 0,
         estimatedRefundedTaxCents: 0,
+        chargedBackCents: 0,
+        rowsChargedBack: 0,
       },
       attention: {
         untaxedRows: 0,
@@ -276,6 +415,7 @@ describe('the Webfile report cannot be filed past storefront tax (AGL-1904)', ()
         rowsMissingAddress: 0,
         nonUsdRows: 0,
         rowsMissingPaidAt: 0,
+        rowsWithNetMismatch: 0,
       },
     },
   }

@@ -25,6 +25,8 @@
 
 const listings = new Map<string, Record<string, unknown>>()
 const versions = new Map<string, Record<string, unknown>>()
+/** `revocations/{listingId}` — the kill switch (AGL-2307). */
+const revocations = new Map<string, Record<string, unknown>>()
 
 const snapshot = (data: Record<string, unknown> | undefined) => ({
   exists: Boolean(data),
@@ -39,7 +41,13 @@ jest.mock('./firebase-admin', () => ({
         collection: (name: string) => ({
           doc: (listingId: string) => ({
             get: async () =>
-              snapshot(name === 'marketplaceListings' ? listings.get(listingId) : undefined),
+              snapshot(
+                name === 'marketplaceListings'
+                  ? listings.get(listingId)
+                  : name === 'revocations'
+                    ? revocations.get(listingId)
+                    : undefined,
+              ),
             collection: () => ({
               doc: (version: string) => ({
                 get: async () => snapshot(versions.get(`${listingId}/${version}`)),
@@ -59,6 +67,7 @@ const SHA = 'a'.repeat(64)
 beforeEach(() => {
   listings.clear()
   versions.clear()
+  revocations.clear()
   versions.set('listing1/1.0.0', {
     sha256: SHA,
     signature: 'sig',
@@ -104,5 +113,53 @@ describe('resolveMarketplacePluginVersion — takedown gate', () => {
     await expect(
       resolveMarketplacePluginVersion('listing1', '9.9.9'),
     ).resolves.toBeNull()
+  })
+})
+
+/**
+ * The kill switch, at the chokepoint (AGL-2307).
+ *
+ * It used to be applied one level up, in `resolveRealmPluginInstalls` — the
+ * path the tenant render and the console gate take. `loadRemoteServerBundles`
+ * resolves through THIS function and never reaches that join, so a
+ * per-version revocation left a realm server handler running. `hiddenAt`
+ * caught a full takedown, but a targeted revocation deliberately does not hide
+ * the listing, which is the entire difference between the two controls.
+ */
+describe('resolveMarketplacePluginVersion — kill switch (AGL-2307)', () => {
+  beforeEach(() => {
+    listings.set('listing1', { reviewStatus: 'listed' })
+  })
+
+  it('resolves when nothing is revoked — the control', async () => {
+    expect(
+      await resolveMarketplacePluginVersion('listing1', '1.0.0'),
+    ).toMatchObject({ trust: 'realm' })
+  })
+
+  it('refuses a version named in the revocation', async () => {
+    revocations.set('listing1', { versions: ['1.0.0'] })
+    expect(await resolveMarketplacePluginVersion('listing1', '1.0.0')).toBeNull()
+  })
+
+  it('refuses every version under a listing-wide kill', async () => {
+    revocations.set('listing1', { versions: 'all', source: 'takedown' })
+    expect(await resolveMarketplacePluginVersion('listing1', '1.0.0')).toBeNull()
+  })
+
+  it('leaves a DIFFERENT version alone — the control that keeps it targeted', async () => {
+    // A per-version revocation exists precisely so a reviewer can stop one
+    // build without de-listing; refusing every version would make it a
+    // takedown by another name.
+    versions.set('listing1/2.0.0', {
+      sha256: 'b'.repeat(64),
+      signature: 'sig',
+      trust: 'realm',
+      manifest: { hostAbi: 2 },
+    })
+    revocations.set('listing1', { versions: ['1.0.0'] })
+    expect(
+      await resolveMarketplacePluginVersion('listing1', '2.0.0'),
+    ).toMatchObject({ trust: 'realm' })
   })
 })

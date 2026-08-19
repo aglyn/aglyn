@@ -5,12 +5,17 @@ service cloud.firestore {
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
     function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
-    // Staff RBAC (AGL-206): roles ride a second claim; a missing role
-    // means 'super' so pre-RBAC staff keep full access (migration path).
+    // Staff RBAC (AGL-206): roles ride a second claim. A missing role means
+    // 'support', the LEAST privileged (AGL-2131) — it meant 'super' here
+    // long after AGL-495 inverted that default in every API route, so a
+    // claim-less staff token was super at the rules layer and support at the
+    // handlers. Role-less accounts are found with
+    // tools/scripts/audit-staff-claims.mjs and given an explicit role with
+    // tools/scripts/set-staff-claim.mjs; they are not admitted by a default.
     // support = read-only surfaces; billing = plan/entitlement writes;
     // super = everything including suspension and user management.
     function staffRole() {
-      return request.auth.token.get('staffRole', 'super');
+      return request.auth.token.get('staffRole', 'support');
     }
     function isBillingStaff() {
       return isStaff() && (staffRole() == 'super' || staffRole() == 'billing');
@@ -223,7 +228,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'storageOverage',
-             'stripeCustomerId', 'subscription',
+             'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode'])) ||
@@ -232,7 +237,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'registerAllocations', 'storageOverage',
-             'stripeCustomerId', 'subscription',
+             'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
@@ -242,7 +247,8 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
-             'storageOverage', 'stripeCustomerId', 'subscription',
+             'storageOverage', 'bandwidthCap',
+             'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -914,6 +920,14 @@ service cloud.firestore {
       // shorten their own takedown and could still republish through it.
       // `hostWritesFrozen` is the other half: the whole non-staff branch now
       // stands down while `suspendedAt` is set, at host scope as well as org.
+      //
+      // `bandwidthCeiling` is the free-tier bandwidth containment (AGL-2155),
+      // written only by /api/analytics/collect through the Admin SDK and read
+      // by the tenant loader to serve the capped notice. Frozen for exactly
+      // the reason `suspendedAt` is: a site whose editors could clear their
+      // own containment does not have one, and this one is cheaper to clear
+      // than a takedown — it is an ordinary map field on a document editors
+      // otherwise write on every publish.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
@@ -921,7 +935,7 @@ service cloud.firestore {
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
-                     'suspendedUntilMs', 'suspendedMode',
+                     'suspendedUntilMs', 'suspendedMode', 'bandwidthCeiling',
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
@@ -1078,12 +1092,35 @@ service cloud.firestore {
       // or deletes an order — creates are checkout/POS/draft/webhook routes,
       // and delete stays closed because delete-and-recreate would re-mint
       // the document with any status at all.
+      // AN ALLOWLIST, NOT A STATUS DENYLIST (AGL-2233). The paragraph above
+      // states what the client legitimately writes — the note's `timeline`
+      // and the restock answer's `restockCheck` — and `hasOnly` is what
+      // actually says it. `hasAny(['status'])` said only "not the status",
+      // which left every OTHER field on an order client-writable, and an
+      // order carries the money:
+      //
+      //  - `refundedCents` and `totals` are the two figures `refund.ts` reads
+      //    inside its reserve transaction to cap an over-refund. Zeroing one
+      //    resets the cap; raising the other lifts the ceiling.
+      //  - Pre-writing `refundedCents` up to the total makes
+      //    `recordDisputeClosed` compute a `reversedCents` of 0, so a LOST
+      //    chargeback records nothing and `reverseSellerShare` never pulls
+      //    the seller's share back — Aglyn eats the whole principal.
+      //  - `dispute.reversedTransferCents` is that reversal's own once-only
+      //    marker; present, it short-circuits before any Stripe call.
+      //  - `supplierToken` is the bearer credential for the unauthenticated
+      //    supplier-update route, and `downloadAttempts` is the download cap.
+      //
+      // None of those has a client writer, so an allowlist costs nothing and
+      // is the shape the comment already claimed. `diff()` reports CHANGED
+      // keys only, so a patch that spells out an unchanged `status` still
+      // passes — the AGL-1795/1813/1824 property, unchanged.
       match /orders/{orderId} {
         allow read: if isStaff() || canWriteHostContent(hostId);
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-           !request.resource.data.diff(resource.data)
-             .affectedKeys().hasAny(['status']));
+           request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['timeline', 'restockCheck']));
       }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
@@ -1255,12 +1292,27 @@ service cloud.firestore {
         // this comment is here and `registers` is NOT in both lists below,
         // the same clobber has happened a third time — the coverage spec
         // host-subcollection-write-deny-coverage is what catches it.
+        //
+        // `inventoryAdjustments` joins UPDATE and DELETE, not create
+        // (AGL-2269). It is an append-only LEDGER, and it is load-bearing
+        // rather than historical: `cancel-order.ts` reads its
+        // `reason: 'sale'` rows to decide whether a POS card order decremented
+        // at all, and caps the units it releases at each row's
+        // `appliedDelta` (AGL-2149) so a backordered sale cannot be
+        // cancelled into stock nobody has. A row an editor can rewrite or
+        // delete is a row that changes how much inventory a cancellation
+        // invents — the AGL-1367 shape again, one collection over.
+        //
+        // CREATE stays client-side, deliberately: the products hub's "Adjust
+        // stock" writes a row with `addDoc` in the same act as the count, and
+        // moving that server-side is a different change. Appending is also the
+        // one operation a ledger is supposed to allow.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'screenAnalytics', 'members',
-              'mediaTombstones']));
+              'mediaTombstones', 'inventoryAdjustments']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -1271,7 +1323,8 @@ service cloud.firestore {
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'collections',
               'datasets', 'orders', 'registers', 'counters', 'analytics',
-              'screenAnalytics', 'members', 'mediaTombstones']));
+              'screenAnalytics', 'members', 'mediaTombstones',
+              'inventoryAdjustments']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
       // identity keys. `slug` is its public address (uniqueness is claimed in
@@ -1740,6 +1793,15 @@ service cloud.firestore {
       allow read: if isStaff() || (isSignedIn() &&
         (resource.data.buyerUid == request.auth.uid ||
          exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
+      allow write: if false;
+    }
+
+    // Refunds and lost disputes that arrived BEFORE their purchase document
+    // (AGL-2148), keyed by payment intent. Written and drained only by the
+    // Stripe webhook (Admin SDK); a document here means marketplace money is
+    // in flight, so staff can see the queue and nobody can write to it.
+    match /marketplaceRefundOrphans/{paymentIntentId} {
+      allow read: if isStaff();
       allow write: if false;
     }
 

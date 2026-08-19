@@ -63,6 +63,7 @@ import {
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { DocsHelpTip } from './docs-help-tip.component'
 import { HostIdContext } from './host-id-provider'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useOrgScope, { useOrgSlug } from '../hooks/use-org-scope'
 import useReleaseFlags, { useReleaseFlag } from '../hooks/use-release-flags'
@@ -290,6 +291,8 @@ function ProposalCard({
   onConfirm: () => void
   onDismiss: () => void
 }) {
+  const { branding } = useBranding()
+  const brand = branding.productName
   return (
     <Paper
       variant="outlined"
@@ -319,8 +322,8 @@ function ProposalCard({
         component="div"
         sx={{ mt: 1 }}
       >
-        Aglyn Assist only opens the page. Nothing is saved until you fill the
-        form in and submit it yourself.
+        {`${brand} Assist only opens the page. Nothing is saved until you `}
+        {'fill the form in and submit it yourself.'}
       </Typography>
       <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
         <AppLink
@@ -345,6 +348,10 @@ export function AssistPanelComponent() {
   const verdict = useReleaseFlag('release_assist')
   const { isStaff } = useReleaseFlags()
   const { org, orgId, ready: orgReady } = useCurrentOrg()
+  // The assistant is named after the product, so its name follows the brand
+  // (AGL-2319). `useBranding` returns the deployment brand on any route the
+  // URL does not scope to an org, which is every non-org console page.
+  const { branding } = useBranding()
   const { orgSlug, pathOrgSlug, currentOrg } = useOrgScope()
   // Whether the URL itself scopes this page to a workspace (AGL-1130), and
   // whether the org that answered contradicts the one it names — a shared
@@ -452,7 +459,9 @@ export function AssistPanelComponent() {
         if (locked) {
           failAnswer(lockdownRefusalText(locked))
         } else if (response.status === 501) {
-          failAnswer('Aglyn Assist is not configured on this deployment.')
+          failAnswer(
+            `${branding.productName} Assist is not configured on this deployment.`,
+          )
         } else if (response.status === 429 && payload?.reason === 'quota') {
           if (payload.quota) setQuota(payload.quota as AssistQuotaInfo)
           failAnswer(String(payload?.error ?? 'Message limit reached.'))
@@ -583,11 +592,11 @@ export function AssistPanelComponent() {
   return (
     <>
       {!open && (
-        <Tooltip title="Aglyn Assist" placement="left">
+        <Tooltip title={`${branding.productName} Assist`} placement="left">
           <Fab
             color="primary"
             size="medium"
-            aria-label="Open Aglyn Assist"
+            aria-label={`Open ${branding.productName} Assist`}
             onClick={() => setOpen(true)}
             sx={{
               position: 'fixed',
@@ -624,7 +633,7 @@ export function AssistPanelComponent() {
           >
             <MdiIcon path={mdiChatQuestionOutline.path} />
             <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              Aglyn Assist
+              {`${branding.productName} Assist`}
             </Typography>
             {verdict.staffPreview && (
               <Chip size="small" color="warning" label="Staff preview" />
@@ -641,20 +650,22 @@ export function AssistPanelComponent() {
               anchor="#what-it-can-do"
               sx={{ color: 'text.secondary' }}
             />
-            <IconButton
-              aria-label="Close Aglyn Assist"
-              onClick={() => setOpen(false)}
-            >
-              <MdiIcon path={mdiClose.path} />
-            </IconButton>
+            <Tooltip title={`Close ${branding.productName} Assist`}>
+              <IconButton
+                aria-label={`Close ${branding.productName} Assist`}
+                onClick={() => setOpen(false)}
+              >
+                <MdiIcon path={mdiClose.path} />
+              </IconButton>
+            </Tooltip>
           </Stack>
 
           <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
             {!messages.length && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                Ask anything about using Aglyn — building your site,
-                publishing, domains, commerce, billing. Answers link the docs
-                and the console page to use.
+                {`Ask anything about using ${branding.productName} — building `}
+                {'your site, publishing, domains, commerce, billing. Answers '}
+                {'link the docs and the console page to use.'}
                 {orgReady && !entitled && !isStaff && (
                   <>
                     {' '}
@@ -725,30 +736,55 @@ export function AssistPanelComponent() {
                     )}
                   {message.role === 'assistant' && message.exchangeId && (
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        aria-label="Helpful answer"
-                        color={message.feedback === 'up' ? 'primary' : 'default'}
-                        disabled={Boolean(message.feedback)}
-                        onClick={() => void sendFeedback(index, 'up')}
+                      {/* The span is load-bearing (AGL-2128): a disabled MUI
+                          button fires no pointer events, so a Tooltip on it
+                          directly never opens — and "already answered" is
+                          precisely the state a reader most needs explained,
+                          because the greyed thumbs otherwise look broken. */}
+                      <Tooltip
+                        title={
+                          message.feedback
+                            ? 'Thanks — you already rated this answer'
+                            : 'Helpful answer'
+                        }
                       >
-                        <MdiIcon
-                          path={mdiThumbUpOutline.path}
-                          sx={{ fontSize: 16 }}
-                        />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        aria-label="Unhelpful answer"
-                        color={message.feedback === 'down' ? 'primary' : 'default'}
-                        disabled={Boolean(message.feedback)}
-                        onClick={() => void sendFeedback(index, 'down')}
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Helpful answer"
+                            color={message.feedback === 'up' ? 'primary' : 'default'}
+                            disabled={Boolean(message.feedback)}
+                            onClick={() => void sendFeedback(index, 'up')}
+                          >
+                            <MdiIcon
+                              path={mdiThumbUpOutline.path}
+                              sx={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          message.feedback
+                            ? 'Thanks — you already rated this answer'
+                            : 'Unhelpful answer'
+                        }
                       >
-                        <MdiIcon
-                          path={mdiThumbDownOutline.path}
-                          sx={{ fontSize: 16 }}
-                        />
-                      </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Unhelpful answer"
+                            color={message.feedback === 'down' ? 'primary' : 'default'}
+                            disabled={Boolean(message.feedback)}
+                            onClick={() => void sendFeedback(index, 'down')}
+                          >
+                            <MdiIcon
+                              path={mdiThumbDownOutline.path}
+                              sx={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Stack>
                   )}
                 </Box>
@@ -804,18 +840,24 @@ export function AssistPanelComponent() {
                   }
                 }}
               />
-              <IconButton
-                color="primary"
-                aria-label="Send message"
-                disabled={busy || !input.trim()}
-                onClick={() => void send()}
+              <Tooltip
+                title={busy ? 'Waiting for an answer…' : 'Send message'}
               >
-                {busy ? (
-                  <CircularProgress size={20} />
-                ) : (
-                  <MdiIcon path={mdiSend.path} />
-                )}
-              </IconButton>
+                <span>
+                  <IconButton
+                    color="primary"
+                    aria-label="Send message"
+                    disabled={busy || !input.trim()}
+                    onClick={() => void send()}
+                  >
+                    {busy ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <MdiIcon path={mdiSend.path} />
+                    )}
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Stack>
           </Stack>
         </Stack>

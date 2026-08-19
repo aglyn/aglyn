@@ -53,6 +53,29 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           0,
           Math.round(Number(object?.amount_total ?? 0)),
         )
+        // WHAT A REFUND WILL NEED (AGL-2315). A paid booking is now a
+        // destination charge to the merchant's connected account, and
+        // reversing one requires the PaymentIntent — which lives only on this
+        // event. The booking document recorded `paidAmountCents` and nothing
+        // that identifies the charge, so a refund had no handle to pull and
+        // the information was gone the moment the webhook returned. Unlike
+        // most gaps this one cannot be backfilled from our own data later:
+        // every booking taken before this line landed can only be refunded by
+        // hand in the Stripe dashboard.
+        //
+        // `feeCents` is Aglyn's cut as CHARGED, read back off the session's
+        // own metadata rather than re-derived from the org at refund time. The
+        // rate follows the plan (AGL-2289's rule) and the plan moves, so
+        // re-resolving it during a refund would reverse a share that was never
+        // taken. `'0'` is a real recorded answer on the 0%-rate tiers.
+        const paymentIntentId =
+          typeof object?.payment_intent === 'string'
+            ? object.payment_intent
+            : String(object?.payment_intent?.id ?? '')
+        const chargedFeeCents = Math.max(
+          0,
+          Math.round(Number(object?.metadata?.feeCents ?? 0)),
+        )
         // Redelivery guard (AGL-1755), the AGL-1748 shape. This was an
         // unconditional merge-set with no status check at all — idempotent
         // only by accident, because every value it wrote was fixed. A
@@ -81,12 +104,38 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             const snapshot = await transaction.get(bookingRef)
             if (!snapshot.exists) return false
             if (snapshot.get('status') === 'confirmed') return false
+            // "Already processed" is WIDER than `confirmed` once money can
+            // flow back out (AGL-2315). A refunded booking is moved off
+            // `confirmed`, so a redelivery arriving afterwards would otherwise
+            // read as unprocessed and re-confirm an appointment the merchant
+            // has already cancelled and refunded — re-sending the guest a
+            // confirmation for it and re-metering the email. Any evidence this
+            // handler has run before is the real test, and a refund counter or
+            // a recorded PaymentIntent is exactly that evidence.
+            if (
+              Number(snapshot.get('refundedCents') ?? 0) > 0 ||
+              snapshot.get('paymentIntentId')
+            ) {
+              return false
+            }
             booking = (snapshot.data() as any) ?? {}
             transaction.set(
               bookingRef,
               {
                 status: 'confirmed',
                 paidAmountCents,
+                // The refund handles (AGL-2315). Written inside the same
+                // transaction as the status, so a booking can never read
+                // `confirmed` while the means to refund it are missing.
+                ...(paymentIntentId ? { paymentIntentId } : {}),
+                feeCents: chargedFeeCents,
+                // NOTE the absent `refundedCents: 0`. Seeding it here would be
+                // the AGL-1758 shape: a defaulted field written through
+                // `merge` destroying the real one. This handler can re-enter
+                // after a refund has already accumulated a counter (see the
+                // widened guard above), and a zero written back over it would
+                // re-open the full amount for refunding a second time. Absent
+                // IS zero — every reader coerces with `?? 0`.
                 expiresAtMs: firebaseAdmin.firestore.FieldValue.delete(),
                 confirmedAt:
                   firebaseAdmin.firestore.FieldValue.serverTimestamp(),

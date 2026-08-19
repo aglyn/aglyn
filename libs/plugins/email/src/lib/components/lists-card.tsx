@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid, pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -187,6 +187,7 @@ export function OrgListsCard(props: OrgListsCardProps) {
   return (
     <CardDisplay
       header="Email lists"
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#email-lists' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

@@ -28,27 +28,35 @@ import {
  * True when the keystroke belongs to text the user is editing, not to the
  * element tree — in which case the browser's own copy/paste must win.
  *
- * Two surfaces have to be recognised. The attributes panel and every dialog
- * live in the light DOM, so `document.activeElement` identifies them. The
- * canvas does not: it renders into a CLOSED shadow root, so a keydown from
- * an inline text editor retargets to the shadow host and looks exactly like
- * "the canvas has focus". The inline editor's own store is the only honest
- * signal there, so it is consulted directly.
+ * Three surfaces have to be recognised. The attributes panel, every dialog
+ * and the raw JSON editor live in the light DOM, so the event target and
+ * `document.activeElement` identify them — that is
+ * {@link Besigner.isTextEntryElement} / {@link Besigner.isTextEntryFocused},
+ * which enumerate the real surfaces (fields, `contenteditable`, ARIA text
+ * roles, and **Monaco**, whose focused node under the EditContext API is a
+ * bare `<div class="native-edit-context">`; missing it is what made Cmd+C in
+ * the raw JSON editor copy canvas ELEMENTS — AGL-2211).
+ *
+ * The canvas is the exception: it renders into a CLOSED shadow root, so a
+ * keydown from an inline text editor retargets to the shadow host and looks
+ * exactly like "the canvas has focus". The inline editor's own store is the
+ * only honest signal there, so it is consulted directly.
  *
  * The in-place markdown editor (AGL-1624) needs the same treatment for a
  * second reason: its toolbar buttons, link popover and URL dialog take focus,
  * so `document.activeElement` is often a BUTTON while the author is very much
  * editing a document — and Cmd+C would then copy canvas ELEMENTS.
+ *
+ * @param target - Optional event target — the keydown's own target, which is
+ *   more precise than `activeElement` and is checked first.
  */
-export function isEditingText(): boolean {
+export function isEditingText(target?: EventTarget | null): boolean {
   if (inlineTextEdit.node) return true
   if (inlineMarkdownEdit.node) return true
 
-  const active = document.activeElement as HTMLElement | null
-  if (!active) return false
-  if (active.isContentEditable) return true
-  const tag = active.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (Besigner.isTextEntryElement(target)) return true
+  if (Besigner.isTextEntryFocused()) return true
+  if (!document.activeElement) return false
 
   // A real text selection means the user is copying words, not structure.
   const selection = window.getSelection()
@@ -72,7 +80,7 @@ export function useClipboardShortcuts(): void {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return
       const key = event.key.toLowerCase()
       if (key !== 'c' && key !== 'v' && key !== 'a') return
-      if (isEditingText()) return
+      if (isEditingText(event.target)) return
 
       if (key === 'a') {
         // Nothing selected means no anchor to pick a depth from, and

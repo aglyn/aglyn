@@ -57,9 +57,19 @@ that's the submitted field values. Pick an operator in the **"Only run when"** s
 - **A field contains…** — a partial match, handy for checkbox groups that submit
   all ticked options joined with `, ` (e.g. `topics` contains `Pricing`).
 
-When the condition isn't met the action is simply skipped — it doesn't count as a
-metered run. Conditions are the no-code sibling of the free-text **Filter**
-expression; use whichever reads better (both must pass when both are set).
+When the condition isn't met the action is skipped, and the skip is **recorded**: the
+[run history](#run-history) gets a `Skipped` row naming the field or fields whose
+condition stopped it — *"Condition on subscribe, plan not met"*. That row is the answer
+to "why didn't my automation fire?", and it sits in the same place as the runs that did
+fire. A skip still **doesn't count as a metered run**: nothing executed, so nothing is
+charged.
+
+Conditions are the no-code sibling of the free-text **Filter** expression; use whichever
+reads better (both must pass when both are set). One difference worth knowing: only a
+condition writes a `Skipped` row. A **Filter** expression that evaluates false — or that
+throws, which also stops the action — records nothing at all, so an automation that
+never fires because of a broken filter has an empty run history rather than an
+explanation. Prefer a condition when you want the skip on the record.
 
 **Example — grow an email list from a signup form:** add a **Checkboxes** field named
 `subscribe` with a single option `Yes, keep me posted` to your form. Then create an
@@ -82,7 +92,8 @@ Each row keeps the single-condition operators and semantics unchanged (trimmed,
 case-insensitive matching). Existing automations with a single condition keep working
 exactly as before — editing one simply shows it as a one-row chain.
 
-Each automation row offers a **Runs** log (its recent executions) and, for page
+Each automation row offers a **Runs** log — its recent executions, including the
+skipped ones, described under [Run history](#run-history) below — and, for page
 triggers, a **Test** button that exercises the server-side steps immediately.
 
 ## Steps
@@ -109,6 +120,59 @@ workflow, and computed-variable reference and lists any that point at something 
 longer exists.
 
 ![The Logic page in the Aglyn console: Variables and Functions cards with the Reference health audit reporting that every reference resolves](/img/workflows-and-actions/logic-page.png)
+
+## Run history {#run-history}
+
+Every automation row has a **Runs** button. It opens **Runs — *your automation*** with a
+**Recent runs** table of that one automation's executions, in four columns:
+
+| Column | What's in it |
+| --- | --- |
+| **Time** | The clock time of the run; hover it for the full date and time. |
+| **Trigger** | The event, in words — `formSubmission` shows as **Form submitted**. A custom event keeps the name you gave it. |
+| **Result** | **Succeeded**, **Failed**, or **Skipped**. |
+| **What happened** | For a run, what each step did, joined with `·`. For a failure, the errors. For a skip, which condition stopped it. |
+
+**Skipped** is a result, not an absence — see
+[Only run when a field matches](#only-run-when-a-field-matches). A run that fired but
+whose steps errored is **Failed**, and the errors are in the last column rather than in a
+log you have to go and find.
+
+At the top of the **Actions** tab — and again on the **Workflows** tab, counting workflow
+runs — a line reads `1,284 action runs this month · 50,000 included`: how many metered
+runs this site has used this calendar month, against the number your plan includes. This
+line is the only place action runs are counted for you — the
+[billing usage meters](../../workspace-and-billing/billing-and-plans/overview.md#usage-meters)
+meter *workflow* runs, not action runs. Watch it: once the month's runs reach the limit,
+triggered automations stop running rather than queueing or billing on. The line renders
+nothing at all while the counter or the plan is still loading —
+`0 runs this month` on a site that has run thousands is the one reading that would make
+you stop debugging.
+
+### What is and isn't recorded {#what-is-and-isnt-recorded}
+
+Reference detail. Runs and skips are recorded on different rules, and the gaps are
+deliberate:
+
+- **A skip on `pageView` is never logged.** Page-view actions run on every visit to
+  every published page, so a record per visitor per non-matching action would be a write
+  storm, not a run history. A `pageView` run that **does** execute is logged like any
+  other. Page-view conditions are tuned by watching the site, not by reading this table.
+- **A skip is only recorded for server events** — form submissions, sign-ups, bookings,
+  leads. An action dispatched from an in-page trigger (scroll depth, element click, exit
+  intent, time on page) logs its runs, but a condition that stops one of those writes
+  nothing.
+- **A `Filter` expression rejection writes nothing**, as above.
+- **The table is a recent sample, not a guaranteed tail.** It reads a bounded window of
+  the site's activity records — which also carry publishes, media saves and member
+  changes — keeps this automation's runs from that window, sorts them newest-first and
+  shows up to 25. On a quiet site that is your last 25 runs. On a busy one the window can
+  fill with other activity, and the newest runs are not guaranteed to be in it. There's
+  no paging in the dialog.
+- **Nothing prunes run records on a schedule**, so an automation's history keeps
+  accumulating in the site's activity log even though this dialog only ever shows a
+  window of it. **Setup → Activity** is the full log, ordered newest-first and paginated
+  — go there when the Runs dialog doesn't show the run you're looking for.
 
 ## Interactions from the Besigner
 

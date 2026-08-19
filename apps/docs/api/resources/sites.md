@@ -1,13 +1,16 @@
 ---
 sidebar_position: 3
-title: Sites & form submissions
-description: List your organization's sites and read the submissions their forms collect.
+title: Sites
+description: List your organization's sites and read their details.
 ---
 
-# Sites & form submissions
+# Sites
 
-List the sites in your organization and read the submissions collected by their
-[forms](/content-and-data/forms/overview). Both are read-only.
+List the sites in your organization and read their details. Sites are read-only over
+the API — creating, renaming and deleting one is a console action.
+
+Their [form submissions](form-submissions.md) are a resource of their own, and that
+one is **not** read-only.
 
 ## The site object
 
@@ -71,47 +74,17 @@ A site your organization doesn't own returns `404 not_found` (`"No such site"`) 
 than `403` — the API doesn't reveal whether an id exists elsewhere. So a `404` here
 means "not yours or not real", not "your key is missing a scope".
 
-### List form submissions
+### Form submissions
 
-`GET /v1/sites/{siteId}/form-submissions` — scope **`forms:read`** (not `sites:read`).
-[Paginated](../conventions.md#pagination).
-
-| Param | Notes |
-| --- | --- |
-| `form` | Filter to one form by exact name. Omit for every form on the site. |
-| `limit`, `cursor` | [Standard pagination](../conventions.md#pagination). |
-
-```bash
-curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?form=contact" \
-  -H "Authorization: Bearer aglyn_sk_…"
-```
-
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "sub_1",
-      "object": "form_submission",
-      "form": "contact",
-      "path": "/contact",
-      "fields": { "email": "hi@example.com", "message": "Hello!" },
-      "read": false,
-      "created": "2026-07-20T18:23:23.950Z"
-    }
-  ],
-  "next_cursor": null,
-  "has_more": false
-}
-```
-
-Submissions are ordered by id, not by date — to process new ones, page through and
-track the ids you've already handled. See [ordering](../conventions.md#ordering).
+Moved to their own page: [Form submissions](form-submissions.md). They live under a
+site (`/v1/sites/{siteId}/form-submissions`) but carry their own scopes — `forms:read`
+to read, `forms:write` to mark read or delete — and, unlike a site, they can be
+written.
 
 ## Errors
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `403` | `insufficient_scope` | Key lacks `sites:read` (or `forms:read` for submissions). |
+| `403` | `insufficient_scope` | Key lacks `sites:read`. |
 | `404` | `not_found` | Unknown or unowned site; unknown sub-path. |
 | `405` | `method_not_allowed` | Anything other than `GET`. |

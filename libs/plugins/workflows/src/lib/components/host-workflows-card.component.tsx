@@ -24,6 +24,7 @@ import {
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
+  pluginDocsHelp,
   runWorkflow,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -52,7 +53,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import HostActivityCard from './host-activity-card.component'
+import HostRunHistoryCard from './host-run-history-card.component'
 import { WhereUsedDialog } from '@aglyn/plugins-logic'
 import {
   fetchWhereUsed,
@@ -374,7 +375,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   )
 
   return (
-    <CardDisplay header={'Workflows'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Workflows'}
+      help={pluginDocsHelp('buildAWorkflow', {
+        anchor: '#1-open-the-workflows-page',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {workflows.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
@@ -737,7 +745,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         <DialogTitle>{`Runs — ${runsFor?.name ?? ''}`}</DialogTitle>
         <DialogContent>
           {runsFor ? (
-            <HostActivityCard
+            <HostRunHistoryCard
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"

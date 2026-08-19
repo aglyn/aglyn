@@ -18,6 +18,7 @@
 import { after } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
+import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
@@ -227,8 +228,23 @@ async function handler(request: Request): Promise<Response> {
           .trim()
           .slice(0, max)
       const logoUrl = clean(body?.logoUrl, 500)
-      if (logoUrl && !/^https:\/\//i.test(logoUrl)) {
-        return Response.json({ error: 'Logo URLs must be https://' }, { status: 400 })
+      // Same rule as the white-label logo below, and for the same reason
+      // (AGL-2286): the Organization Settings logo field is a `MediaUrlField`
+      // whose helper text reads "Browse the org media library or paste an
+      // https URL", and Browse writes `media.cdnPath` — always relative. The
+      // bare `^https://` test that stood here refused every asset the picker
+      // could produce, so the only way to set an org logo was to paste a URL
+      // from somewhere the customer hosts themselves. The relative form is
+      // legal at the read sites (the org switcher renders it straight into an
+      // Avatar `src`); the validator was the one reader that did not know.
+      if (logoUrl && !isBrandingImageUrl(logoUrl)) {
+        return Response.json(
+          {
+            error:
+              'Logo URL must be an https:// URL or an image from your media library',
+          },
+          { status: 400 },
+        )
       }
       // The org's address is STRUCTURED (AGL-1133). It was a 400-character
       // free-text blob, which reads as an address to a human and is unusable
@@ -456,16 +472,34 @@ async function handler(request: Request): Promise<Response> {
       const emailLogoUrl = clean(input.emailLogoUrl, 500)
       const primaryColor = clean(input.primaryColor, 32)
       let customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
-      const urlFields: Array<[string, string]> = [
-        ['Support URL', supportUrl],
+      /**
+       * `supportUrl` is NAVIGATED, so it stays https-only: it is a link a
+       * customer clicks out to from an inbox or a branded page, where a
+       * site-relative path means nothing.
+       *
+       * The other three are RENDERED, and each one's "Browse" button writes a
+       * site-relative CDN path — so one shared https-only rule made Browse a
+       * dead button on the tier that costs the most (AGL-2247). Both
+       * predicates stay allowlists; see `branding-url.ts` for which shapes and
+       * why.
+       */
+      if (supportUrl && !isBrandingLinkUrl(supportUrl)) {
+        return Response.json(
+          { error: 'Support URL must be an https:// URL' },
+          { status: 400 },
+        )
+      }
+      const imageFields: Array<[string, string]> = [
         ['Logo URL', logoUrl],
         ['Favicon URL', faviconUrl],
         ['Email logo URL', emailLogoUrl],
       ]
-      for (const [label, url] of urlFields) {
-        if (url && !/^https:\/\//i.test(url)) {
+      for (const [label, url] of imageFields) {
+        if (url && !isBrandingImageUrl(url)) {
           return Response.json(
-            { error: `${label} must be an https:// URL` },
+            {
+              error: `${label} must be an https:// URL or an image from your media library`,
+            },
             { status: 400 },
           )
         }

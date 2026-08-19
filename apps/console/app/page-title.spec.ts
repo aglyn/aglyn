@@ -307,10 +307,29 @@ describe('console tab titles keep the brand (AGL-1059)', () => {
       TITLE_TEMPLATE: string
     }
     expect(TITLE_TEMPLATE).toMatch(/^%s .+/)
-    // The root declares the same template `segmentTitle` hands down. If
-    // these drift, routes render under two different brand strings
-    // depending on depth — the bug this file exists to prevent, wearing a
-    // different hat.
-    expect(rootLayout).toContain(TITLE_TEMPLATE)
+
+    // The root now IMPORTS the template `segmentTitle` hands down, rather
+    // than restating it (AGL-2170). This assertion used to be
+    // `expect(rootLayout).toContain(TITLE_TEMPLATE)` — a source substring
+    // check, which held only while the template was a bare literal and
+    // silently stopped being checkable when the brand became configuration
+    // (AGL-2153): two interpolations that produce the same string share no
+    // substring. Rather than re-guard a duplicate, the duplicate is gone, and
+    // what is pinned is that it stays gone.
+    expect(rootLayout).toContain("import { TITLE_TEMPLATE } from './page-title'")
+    expect(rootLayout).toContain('template: TITLE_TEMPLATE')
+    // And the root must not re-mint one, which is the regression that would
+    // reintroduce the drift.
+    expect(rootLayout).not.toMatch(/template:\s*[`'"]%s/)
+  })
+
+  it('builds the brand template from configuration, not a literal', () => {
+    // A self-host operator renames the product with
+    // NEXT_PUBLIC_PLATFORM_BRAND_NAME and must not have to edit source
+    // (AGL-2153). A literal here would put every browser tab in the console
+    // back on our brand regardless of what they configured.
+    const source = readFileSync(join(APP_DIR, 'page-title.ts'), 'utf8')
+    expect(source).toContain('PLATFORM_BRAND_NAME')
+    expect(source).not.toMatch(/TITLE_TEMPLATE\s*=\s*['"]%s · Aglyn['"]/)
   })
 })

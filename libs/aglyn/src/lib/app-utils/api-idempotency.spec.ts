@@ -165,3 +165,53 @@ describe('claimAttempt stamps the field the TTL policy keys on', () => {
     expect(second).toEqual({ replay: { status: 201, body: { id: 'rec_1' } } })
   })
 })
+
+/**
+ * The keyless claim is a NO-OP, and it is now audible (AGL-2163).
+ *
+ * The policy is unchanged and is not this suite's to change: synthesising a
+ * key from the request body would make a genuine second purchase of the same
+ * listing read as a replay. What is asserted here is only that an
+ * UNPROTECTED money call leaves a trace, so the question "how often is this
+ * path actually taken?" — the input the policy decision needs — has an answer
+ * in production instead of being unknowable.
+ */
+describe('a keyless claim is observable (AGL-2163)', () => {
+  let warn: jest.SpyInstance
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => warn.mockRestore())
+
+  it('warns, names the scope, and still returns the no-op claim', async () => {
+    const { store, docs } = makeStore()
+    const result = await claimAttempt(store, { ...SCOPE, key: '' })
+    if (!('claim' in result)) throw new Error('expected a claim')
+    // The behaviour is deliberately unchanged: no document, no Stripe key,
+    // inert record/release. Changing any of that is a policy change.
+    expect(docs.size).toBe(0)
+    expect(result.claim.stripeKey).toBeNull()
+    await expect(result.claim.record(200, {})).resolves.toBeUndefined()
+    await expect(result.claim.release()).resolves.toBeUndefined()
+    // …and it is no longer silent.
+    expect(warn).toHaveBeenCalledTimes(1)
+    const [message, context] = warn.mock.calls[0]
+    expect(String(message)).toContain('UNPROTECTED')
+    // The scope has to be IN the line: a bare "this happened" cannot answer
+    // which surface is unprotected, which is the only useful question.
+    expect(context).toMatchObject({
+      kind: SCOPE.kind,
+      scopeId: SCOPE.scopeId,
+      orgId: SCOPE.orgId,
+    })
+  })
+
+  it('THE NEGATIVE CONTROL: a keyed claim is silent', async () => {
+    // Without this the warn could be unconditional, which would bury the
+    // signal in exactly the log volume it needs to stand out from.
+    const { store } = makeStore()
+    await claimAttempt(store, SCOPE)
+    expect(warn).not.toHaveBeenCalled()
+  })
+})

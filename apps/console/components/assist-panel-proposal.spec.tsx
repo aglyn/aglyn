@@ -178,7 +178,14 @@ async function ask(question = 'How do I publish?'): Promise<void> {
   fireEvent.change(await screen.findByPlaceholderText('How do I…'), {
     target: { value: question },
   })
-  fireEvent.click(screen.getByLabelText('Send message'))
+  // `getByRole` rather than `getByLabelText` (AGL-2128): the send button now
+  // sits inside a MUI Tooltip, which wraps it in a <span> and copies the
+  // title onto that span as an aria-label — so a label query matches two
+  // elements. The role query names the BUTTON, which is what this is
+  // clicking, and is the more precise question either way.
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Send message' }),
+  )
 }
 
 beforeEach(() => {

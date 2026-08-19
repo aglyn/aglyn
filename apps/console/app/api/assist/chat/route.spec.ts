@@ -144,9 +144,19 @@ function mockMakeFirestore() {
   }
 }
 
+// A wholesale `jest.mock` is a CLOSED WORLD: every export the route reaches
+// must be here or it is `undefined` at the call site. `resolveBrandingProfile`
+// and `PLATFORM_BRAND_NAME` are spliced in REAL rather than faked (AGL-2352) —
+// the resolver's entitlement gate and its fallback-to-deployment-brand are
+// precisely the behaviour the brand block's tests are asserting, and a stub
+// returning a fixed name would assert nothing at all.
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   checkEntitlement: mockPlanEntitlements.checkEntitlement,
+  resolveBrandingProfile: mockPlanEntitlements.resolveBrandingProfile,
+  PLATFORM_BRAND_NAME: jest.requireActual(
+    '../../../../../../libs/aglyn/src/lib/app-utils/platform-brand',
+  ).PLATFORM_BRAND_NAME,
 }))
 
 // The reservation/metering module moved into the admin lib (AGL-2073) so the
@@ -208,6 +218,8 @@ const { POST } = require('./route') as {
 
 const FREE_ORG = 'org-free'
 const PRO_ORG = 'org-pro'
+/** Agency tier is the plan that grants `whiteLabel` (AGL-2352). */
+const AGENCY_ORG = 'org-agency'
 const TODAY = new Date().toISOString().slice(0, 10)
 const MONTH = new Date().toISOString().slice(0, 7)
 
@@ -217,6 +229,12 @@ function seedOrgs(): void {
     name: 'Pros',
     plan: 'pro',
     billingStatus: 'active',
+  })
+  mockDocs.set(`orgs/${AGENCY_ORG}`, {
+    name: 'Northwind Studio',
+    plan: 'agency',
+    billingStatus: 'active',
+    brandingProfile: { productName: 'Northwind' },
   })
 }
 
@@ -599,6 +617,23 @@ describe('the green path', () => {
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
 
+    // AGL-2238: the standing the panel renders, pinned against the counter
+    // that was actually moved. Nothing asserted this before, which is how
+    // the route kept re-applying an increment `reserveAssistMessage` had
+    // already made — the free tier's first message reported 8 of 10 left.
+    expect(done?.quota).toMatchObject({
+      period: 'day',
+      limit: 10,
+      used: 1,
+      remaining: 9,
+    })
+    // And the claim is checked against the STORE, not just the payload: a
+    // `done` event describing one message spent while the counter says two
+    // is the same defect wearing the other face.
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`)?.[TODAY],
+    ).toBe((done?.quota as { used: number }).used)
+
     // The exchange carries the prose; the signal carries the numbers
     // (AGL-1972). One id addresses both.
     const exchange = mockDocs.get(
@@ -712,7 +747,7 @@ describe('the green path', () => {
     }
   })
 
-  it('caches stable-to-volatile across four blocks, breakpoints after the first two', async () => {
+  it('caches stable-to-volatile across five blocks, breakpoints after the first two', async () => {
     // Caching is a prefix match, so breakpoint 2 covers blocks 1+2. The
     // split between block 2 (route-derived) and block 3 (tenant facts) is
     // what makes the cached prefix shareable across workspaces instead of
@@ -726,7 +761,7 @@ describe('the green path', () => {
     const system = request.system as Array<{ text: string; cache_control?: unknown }>
     expect(request.stream).toBe(true)
     expect(request.model).toBe('claude-sonnet-5')
-    expect(system).toHaveLength(4)
+    expect(system).toHaveLength(5)
     expect(system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].cache_control).toEqual({ type: 'ephemeral' })
     expect(system[1].text).toContain('This screen: Screens')
@@ -735,13 +770,75 @@ describe('the green path', () => {
     // writes, which costs more than not caching at all.
     expect(system[1].text).not.toContain('Pros')
     expect(system[1].text).not.toContain('/acme/hosts/host-1/screens')
-    // Block 3 is where those live, after the last breakpoint.
+    // Block 3 is the brand, first thing after the last breakpoint (AGL-2352).
     expect(system[2].cache_control).toBeUndefined()
-    expect(system[2].text).toContain('Where the user is right now')
-    expect(system[2].text).toContain('Pros')
-    // Block 4 is retrieval, last and uncached.
+    expect(system[2].text).toContain('called Aglyn')
+    // Block 4 is where the tenant facts live.
     expect(system[3].cache_control).toBeUndefined()
-    expect(system[3].text).toContain('<doc url=')
+    expect(system[3].text).toContain('Where the user is right now')
+    expect(system[3].text).toContain('Pros')
+    // Block 5 is retrieval, last and uncached.
+    expect(system[4].cache_control).toBeUndefined()
+    expect(system[4].text).toContain('<doc url=')
+  })
+
+  it('a white-label org is told ITS product name, and no cached block carries it', async () => {
+    // AGL-2352. The assistant introduced itself, and named the product it
+    // was answering about, with the DEPLOYMENT brand — so an agency's
+    // members read our product name in the middle of a console that carries
+    // none of it anywhere else.
+    //
+    // The second half is the reason this is a separate block rather than an
+    // interpolation back into the static prompt. Caching is a prefix match:
+    // a per-org byte inside block 1 or 2 would give every distinct brand its
+    // own copy of the ~950-token prefix, each written off that brand's own
+    // thin traffic and mostly never read. Both breakpoints must stay
+    // brand-free for the whole deployment to share ONE prefix.
+    seedOrgs()
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(AGENCY_ORG)))
+    await response.text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const system = request.system as Array<{ text: string; cache_control?: unknown }>
+    const brandIndex = system.findIndex((block) =>
+      block.text.includes('Northwind Assist'),
+    )
+    expect(brandIndex).toBeGreaterThanOrEqual(0)
+    expect(system[brandIndex].cache_control).toBeUndefined()
+    expect(system[brandIndex].text).toContain('called Northwind')
+    // The invariant is POSITIONAL, not per-block: caching is a prefix match,
+    // so a per-org block sitting anywhere at or before the last breakpoint is
+    // inside a cached prefix even though it carries no `cache_control` of its
+    // own. Asserting only "the brand block is uncached" misses exactly that
+    // move — it was checked, and it stayed green.
+    const lastBreakpoint = system.reduce(
+      (last, block, index) => (block.cache_control ? index : last),
+      -1,
+    )
+    expect(lastBreakpoint).toBeGreaterThanOrEqual(0)
+    expect(brandIndex).toBeGreaterThan(lastBreakpoint)
+    for (const block of system.slice(0, lastBreakpoint + 1)) {
+      expect(block.text).not.toContain('Northwind')
+      // And not ours either — the static prompt names no product at all
+      // now, it says a later block will.
+      expect(block.text).not.toContain('Aglyn')
+    }
+  })
+
+  it('a NON-white-label org still gets the deployment brand, from the same resolver', async () => {
+    // The fallback has to be the resolver's, not a second code path: an org
+    // that white-labeled and then downgraded must revert cleanly, and that
+    // is `resolveBrandingProfile`'s job, not this route's.
+    seedOrgs()
+    armUpstream()
+    const response = await POST(post(QUESTION_BODY(FREE_ORG)))
+    await response.text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const system = request.system as Array<{ text: string }>
+    // Free tier assembles NO view block, so the brand block must be
+    // unconditional or a free workspace is told nothing at all.
+    expect(system.some((block) => block.text.includes('called Aglyn'))).toBe(true)
+    expect(system[0].text).not.toContain('Aglyn')
   })
 
   it('a free request still caches its static prefix on its own', async () => {

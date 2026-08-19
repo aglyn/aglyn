@@ -89,6 +89,9 @@ const BASE_ENV = { STRIPE_WEBHOOK_SECRET: 'whsec_fake' }
  */
 const mockGa4Calls: Ga4PurchaseInput[] = []
 
+/** How each captured call was scheduled, index-aligned with `mockGa4Calls`. */
+const mockGa4Scheduling: Array<'after' | 'bare'> = []
+
 /** Every document, keyed by `collection/id`. */
 let docs = new Map<string, Record<string, unknown>>()
 
@@ -132,6 +135,36 @@ function mockMakeFirestore() {
   }
 }
 
+/**
+ * `after()` from `next/server` is how this route schedules post-response work
+ * (AGL-2346), and outside a real request scope Next's own `after` throws — so
+ * a direct handler invocation needs a double. This one records every scheduled
+ * callback AND runs it inline, leaving every existing assertion (all of which
+ * observe the effect) unchanged, while `mockAfterScheduled` becomes the
+ * evidence that the work was SCHEDULED rather than fired and forgotten. Revert
+ * the route to a bare `void promise` and this array stays empty.
+ */
+const mockAfterScheduled: Array<() => unknown> = []
+/**
+ * True only while an `after()` callback is executing, so the captured beacon
+ * below can record WHERE it was invoked from. Merely counting `after()` calls
+ * is not enough — this route schedules several unrelated things through it, and
+ * a count is satisfied by any one of them. Measured: with the purchase beacon
+ * reverted to a bare `void`, the count assertion still passed.
+ */
+let mockInsideAfter = false
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    mockAfterScheduled.push(work)
+    mockInsideAfter = true
+    try {
+      return work()
+    } finally {
+      mockInsideAfter = false
+    }
+  },
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
@@ -173,6 +206,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Captured, not stubbed — the input IS the subject of this file.
   sendGa4Purchase: async (input: Ga4PurchaseInput): Promise<Ga4SendResult> => {
     mockGa4Calls.push(input)
+    mockGa4Scheduling.push(mockInsideAfter ? 'after' : 'bare')
     return { sent: true, synthesizedClientId: !input.clientId }
   },
   writeOrgBilling: async () => undefined,
@@ -269,6 +303,8 @@ describe('invoice.paid reaches sendGa4Purchase with the right object (AGL-1684)'
     docs = new Map()
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
     mockGa4Calls.length = 0
+    mockAfterScheduled.length = 0
+    mockGa4Scheduling.length = 0
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({}),
@@ -317,6 +353,29 @@ describe('invoice.paid reaches sendGa4Purchase with the right object (AGL-1684)'
     // The fallback seed, so a renewal without a client id still lands on
     // one stable synthetic user instead of vanishing.
     expect(sent.stripeCustomerId).toBe('cus_own_1')
+  })
+
+  it('the beacon is SCHEDULED through `after()`, not fired and forgotten (AGL-2346)', async () => {
+    // AGL-1133 measured on production that a bare `void promise` in a route
+    // handler never runs — the serverless function is frozen when the response
+    // is sent. The GA4 revenue beacons were scheduled exactly that way, so a
+    // test asserting only that `sendGa4Purchase` was CALLED passes identically
+    // either way and proves nothing about delivery.
+    //
+    // This asserts the scheduling mechanism instead: the work must be handed
+    // to `after()`, which is what keeps the invocation alive until it settles.
+    // Revert the route to `void sendGa4Purchase(...)` and `mockAfterScheduled`
+    // stays empty while every other assertion in this file still passes.
+    const post = loadWebhook()
+    const response = await post(signed(invoiceEvent(ANNUAL_INVOICE)))
+    expect(response.status).toBe(200)
+
+    expect(mockGa4Calls).toHaveLength(1)
+    // The discriminating assertion. `mockAfterScheduled.length > 0` is NOT
+    // enough and was measured failing to fail: this handler also schedules the
+    // invoice tagging and the admin notification through `after()`, so the
+    // count is satisfied with the purchase beacon still on a bare `void`.
+    expect(mockGa4Scheduling).toEqual(['after'])
   })
 
   it('a TAXED invoice reports NET of tax — the state\'s money is not revenue (AGL-1872)', async () => {

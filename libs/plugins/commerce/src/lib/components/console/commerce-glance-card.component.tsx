@@ -17,7 +17,7 @@
 'use client'
 
 import { formatOrderNumber, isLowStock, liftLegacyProduct } from '../../model'
-import { checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Button, Chip, Divider, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
@@ -126,6 +126,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     return (
       <CardDisplay
         header={'Commerce'}
+        help={pluginDocsHelp('commerce')}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: openStoreAction }}
@@ -141,6 +142,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
     return (
       <CardDisplay
         header={'Commerce'}
+        help={pluginDocsHelp('commerce')}
         contentGutterX
         contentGutterY
         HeaderProps={{ action: openStoreAction }}
@@ -171,6 +173,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Commerce'}
+      help={pluginDocsHelp('commerce')}
       contentGutterX
       contentGutterY
       HeaderProps={{ action: openStoreAction }}

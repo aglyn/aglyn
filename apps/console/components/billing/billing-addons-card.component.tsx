@@ -31,6 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import useBranding from '../../hooks/use-branding'
 import { useUser } from '@aglyn/tenant-feature-instance'
 
 /**
@@ -54,7 +55,7 @@ interface AddonRow {
   toggle?: boolean
 }
 
-const ADDON_ROWS: readonly AddonRow[] = [
+const addonRows = (brand: string): readonly AddonRow[] => [
   {
     kind: 'managers',
     label: 'Manager seats',
@@ -86,7 +87,7 @@ const ADDON_ROWS: readonly AddonRow[] = [
     label: 'Event Calendar',
     description:
       'The Event Calendar add-on for your whole workspace, supported ' +
-      'directly by Aglyn.',
+      `directly by ${brand}.`,
     toggle: true,
   },
 ]
@@ -123,6 +124,8 @@ export default function BillingAddonsCardComponent({
   canManage,
 }: BillingAddonsCardProps) {
   const { data: user } = useUser()
+  // Org-scoped billing copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { confirm } = useConfirmationContext()
@@ -359,7 +362,7 @@ export default function BillingAddonsCardComponent({
 
   return (
     <Stack spacing={2}>
-      {ADDON_ROWS.map((row) => {
+      {addonRows(branding.productName).map((row) => {
         const entry = state.catalog[row.kind]
         const current = state.quantities[row.kind] ?? 0
         const draft = drafts[row.kind] ?? current

@@ -17,6 +17,10 @@
 
 import type { MarketplaceArtifactType } from './marketplace-provenance'
 import { resolveProvenance } from './marketplace-provenance'
+import {
+  offeredPluginVersion,
+  type PluginRevocation,
+} from './plugin-manifest'
 
 /**
  * "Is what I have installed still what the publisher ships?" (AGL-1016).
@@ -135,15 +139,26 @@ const UNKNOWN: UpdateStatus = {
 /**
  * Compares what is installed against what the listing offers (AGL-1016).
  *
- * For plugins the offer is the newest APPROVED version, never `latestVersion`.
- * Installs already resolve it that way; advertising `latestVersion` would leak
- * AGL-966's guarantee straight back out through a badge, telling a workspace an
- * update exists that the install route would then refuse to give them.
+ * For plugins the offer is the newest INSTALLABLE version, never
+ * `latestVersion`. Installs already resolve it that way; advertising
+ * `latestVersion` would leak AGL-966's guarantee straight back out through a
+ * badge, telling a workspace an update exists that the install route would
+ * then refuse to give them.
+ *
+ * `revocation` is the same leak one state over (AGL-2368). Approval is a
+ * review verdict and the kill switch does not clear it, so `latestApprovedVersion`
+ * could name a stopped version — an "Update to vX" for bytes `install-plugin`
+ * answers 409 to. Optional because it is a second document and not every
+ * caller holds it; every writer of the mirror derives it from
+ * `newestInstallableVersion` since AGL-2306, so a caller without one is
+ * reading a cache that is correct except in the window between two writes.
+ * A caller that HAS it should pass it.
  */
 export function resolveUpdateState(
   installed: UpdateComparableInstall | null | undefined,
   listing: UpdateComparableListing | null | undefined,
   artifactType?: MarketplaceArtifactType,
+  revocation?: PluginRevocation | null,
 ): UpdateStatus {
   const provenance = resolveProvenance(installed as never, artifactType)
   if (!installed || provenance.state === 'unknown' || !provenance.version) {
@@ -153,7 +168,7 @@ export function resolveUpdateState(
   const type = provenance.artifactType ?? artifactType ?? null
   const available =
     type === 'plugin'
-      ? listing?.latestApprovedVersion
+      ? offeredPluginVersion(listing, revocation)
       : listing?.latestVersion
   if (available == null || available === '') {
     return {

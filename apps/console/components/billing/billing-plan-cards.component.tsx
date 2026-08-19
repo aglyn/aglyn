@@ -17,9 +17,14 @@
 'use client'
 
 import {
+  type AglynOrgBilling,
+  checkEntitlement,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
+  PLATFORM_BRAND_NAME,
+  resolveOrgEntitlements,
+  resolveTransactionFeePct,
   SELF_SERVE_PLANS,
   type OrgPlan,
   UNLIMITED,
@@ -40,6 +45,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
+import useBranding from '../../hooks/use-branding'
 import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
 import { DocsHelpTip } from '../docs-help-tip.component'
 
@@ -52,8 +58,8 @@ export const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
 export { PLAN_LABELS }
 
-const PLAN_TAGLINES: Record<OrgPlan, string> = {
-  free: 'Try Aglyn and publish your first site.',
+const planTaglines = (brand: string): Record<OrgPlan, string> => ({
+  free: `Try ${brand} and publish your first site.`,
   starter: 'Everything a single production site needs.',
   pro: 'For growing teams shipping several sites.',
   business: 'Subscriptions, scheduling, and priority limits.',
@@ -61,15 +67,100 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   advanced: 'High-volume commerce with zero platform fees.',
   agency: 'Run many sites under one org at agency scale.',
   enterprise: 'Unlimited everything, SSO, and a dedicated agreement.',
-}
+})
 
-/** What the Enterprise card promises over Agency (the top self-serve tier). */
-const ENTERPRISE_HIGHLIGHTS = [
-  'Unlimited sites, screens, seats, and storage',
-  'SAML / OIDC single sign-on for your whole team',
-  'Full white-label — your brand, not ours',
-  '0% platform fees on every sale',
-  'Custom pricing, invoicing, and terms',
+/**
+ * What the Enterprise card promises over Agency (the top self-serve tier) —
+ * and, for an org already ON an Enterprise arrangement, whether it actually
+ * holds each one (AGL-2297).
+ *
+ * ## Why every row carries a predicate
+ *
+ * This was a bare `string[]` rendered with a green tick beside each line,
+ * unconditionally. That is fine for a PROSPECT, where the card is an offer
+ * describing the tier. It was wrong for a customer, because `isEnterpriseOrg`
+ * is true in three ways and only one of them grants anything:
+ *
+ *  - `plan === 'enterprise'` — resolves the Enterprise entitlement row;
+ *  - `org.enterprise === true` — a comped marker, read NOWHERE except
+ *    `isEnterpriseOrg`;
+ *  - `subscription.customMonthlyUsd > 0` — a negotiated price, also read
+ *    nowhere else.
+ *
+ * The last two are display overlays on a LOWER base plan. `ssoEnabled`'s own
+ * docblock says so outright: a legacy enterprise org gets SSO through a
+ * per-org `entitlements` override, "which is how enterprise orgs provisioned
+ * before that plan existed still get it". So an org whose overrides granted
+ * SSO but not white-label was shown a green tick against **"Full white-label —
+ * your brand, not ours"** above a `Current plan` badge, while the branding card
+ * two pages away correctly refused it as not entitled.
+ *
+ * ## Why derived rather than hand-written
+ *
+ * The feature grid 500 lines below already carries `FEATURE_ROW_EXCLUSIONS`
+ * with the reason spelled out — "a hand-written row list with no derivation is
+ * what decayed to 19 of 34 (AGL-2079)". This list was exactly that artifact,
+ * sitting above the guard built to prevent it. Each row now ASKS the
+ * entitlement model rather than asserting an answer, so a re-cut tier moves
+ * the card with it.
+ *
+ * ⚠️ Two labels here are advertising claims the code cannot make true, and
+ * they are deliberately NOT edited to match reality:
+ *   - **OIDC.** No OIDC code path exists — `/api/orgs/sso` hardcodes
+ *     `protocol: 'saml'` at both write sites, and `enterprise/sso.md` is
+ *     titled "Single sign-on (SAML)" and never mentions OIDC. Building it is a
+ *     real feature, not a copy fix, so the claim stands until that decision is
+ *     made. Tracked on AGL-2297.
+ *   - **"every sale"** → corrected to **storefront sales**, because
+ *     `marketplaceFeePct` is 20 on Enterprise exactly as on every paid tier,
+ *     and the price list is frozen — so "change the product to match the
+ *     advertising" is not available here. `billing-and-plans/overview.md`
+ *     already scopes the 0% to storefront sales; this makes the card agree
+ *     with the price list rather than overstate it.
+ */
+export const ENTERPRISE_HIGHLIGHTS: Array<{
+  label: string
+  /** Whether THIS org actually holds the claim. */
+  holds: (org: Partial<AglynOrgBilling> | null | undefined) => boolean
+}> = [
+  {
+    label: 'Unlimited sites, screens, seats, and storage',
+    holds: (org) => {
+      const entitlements = resolveOrgEntitlements(org)
+      return (
+        entitlements.hostLimit === UNLIMITED &&
+        entitlements.screensPerHost === UNLIMITED &&
+        entitlements.managersPerOrg === UNLIMITED &&
+        entitlements.storagePerHostMb === UNLIMITED
+      )
+    },
+  },
+  {
+    label: 'SAML / OIDC single sign-on for your whole team',
+    holds: (org) => checkEntitlement(org, 'ssoEnabled'),
+  },
+  {
+    label: 'Full white-label — your brand, not ours',
+    holds: (org) => checkEntitlement(org, 'whiteLabel'),
+  },
+  {
+    // Bookings ride the digital axis too (AGL-2315), so the predicate below
+    // was already right — only the wording scoped it to the storefront. It
+    // still has to say WHICH sales, though: `marketplaceFeePct` is 20 on
+    // Enterprise exactly as on every paid tier, so a bare "sales" promises a
+    // 0% that is not on the price list (AGL-2297, re-broken and re-fixed in
+    // AGL-2365).
+    label: '0% platform fees on storefront sales and bookings',
+    holds: (org) =>
+      resolveTransactionFeePct(org, 'physical') === 0 &&
+      resolveTransactionFeePct(org, 'digital') === 0,
+  },
+  {
+    // Not an entitlement — it is what having an agreement at all means, and
+    // every org this card marks as current has one by construction.
+    label: 'Custom pricing, invoicing, and terms',
+    holds: () => true,
+  },
 ]
 
 const quotaLabel = (value: number, unit?: string) =>
@@ -120,10 +211,12 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
  * most consequential purchase decisions in the product were missing from the
  * one surface whose job is answering "does my plan include this".
  */
-const FEATURE_GROUPS: Array<{
+const featureGroups = (
+  brand: string,
+): Array<{
   title: string
   rows: Array<{ key: FeatureKey; label: string }>
-}> = [
+}> => [
   {
     title: 'Build & publish',
     rows: [
@@ -131,7 +224,7 @@ const FEATURE_GROUPS: Array<{
       { key: 'versioning', label: 'Screen versioning' },
       { key: 'scheduledPublishing', label: 'Scheduled publishing' },
       { key: 'customDomain', label: 'Custom domain' },
-      { key: 'removeBranding', label: 'Remove Aglyn branding' },
+      { key: 'removeBranding', label: `Remove ${brand} branding` },
       { key: 'multilingual', label: 'Multilingual sites' },
       { key: 'redirects', label: 'URL redirects' },
       { key: 'siteExport', label: 'Site backup & restore' },
@@ -178,9 +271,16 @@ const FEATURE_GROUPS: Array<{
   },
 ]
 
-/** Flat row list, for the guard and for anything that wants the whole set. */
+/**
+ * Flat row list, for the guard and for anything that wants the whole set.
+ *
+ * Built against the DEPLOYMENT brand rather than any org's, because it has no
+ * org: its only consumer is `billing-plan-feature-rows.spec.ts`, which asserts
+ * key coverage and non-empty labels. The rendered grid calls `featureGroups`
+ * with the org's resolved `productName` instead (AGL-2319).
+ */
 export const FEATURE_ROWS: Array<{ key: FeatureKey; label: string }> =
-  FEATURE_GROUPS.flatMap((group) => group.rows)
+  featureGroups(PLATFORM_BRAND_NAME).flatMap((group) => group.rows)
 
 
 export interface BillingPlanCardsProps {
@@ -199,6 +299,36 @@ export interface BillingPlanCardsProps {
    * us, not by clicking Downgrade.
    */
   enterprise?: boolean
+  /**
+   * The org's billing doc, for checking what an Enterprise arrangement
+   * ACTUALLY grants this org (AGL-2297).
+   *
+   * `enterprise` above answers "does this org read as Enterprise", which is
+   * true for a comped marker and a negotiated price as well as for the real
+   * plan — and those two are display overlays on a lower base plan that grant
+   * nothing. Without the org doc the card could only tick every highlight
+   * unconditionally, which is what it did.
+   *
+   * Optional, and its absence is handled the safe way round: undefined checks
+   * as the free plan, so a card rendered without it ticks nothing rather than
+   * claiming everything. Only consulted when `enterprise` is true — a prospect
+   * is being shown the tier as an offer, and every line of that offer is
+   * accurate about the tier.
+   */
+  org?: Partial<AglynOrgBilling> | null
+  /**
+   * True when the org has a LIVE subscription (AGL-2156).
+   *
+   * It decides what the FREE card is. For a prospect it is an offer, and "No
+   * credit card required" behind a disabled button is the right copy. For a
+   * SUBSCRIBER that same card was prospect copy on a dead control: the one
+   * thing a paying customer needs to know — that the route to Free is to
+   * cancel — was nowhere on the grid, and the disabled button was the only
+   * thing stopping a `pro → free` switch from 400ing "Unknown target plan"
+   * server-side. That matters to retention specifically: moving to Free is the
+   * cheapest save available, and the grid offered no route to it.
+   */
+  subscriptionActive?: boolean
   /**
    * Plan the visitor already chose on the marketing site (AGL-1117), read off
    * `?plan=` by the billing page. It emphasizes that card instead of the
@@ -286,9 +416,17 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     plan,
     interval = 'month',
     enterprise = false,
+    org,
+    subscriptionActive = false,
     highlight,
     onSelect,
   } = props
+  // Copy that names the product reads the org's RESOLVED brand, not a literal
+  // and not the deployment default (AGL-2319): a white-label org's admins see
+  // their own product name on the grid that sells them the tier.
+  const { branding } = useBranding()
+  const taglines = planTaglines(branding.productName)
+  const groups = featureGroups(branding.productName)
   // An enterprise org sits above the ladder: nothing in the grid is its
   // "current" plan, and nothing there is an upgrade for it either.
   const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)
@@ -328,6 +466,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
   )
   const lowerTierCount = currentIndex > 0 ? currentIndex : 0
+  // A subscriber on a paid tier has a real route to Free, and it is the cancel
+  // flow (AGL-2156). Enterprise is excluded for the same reason every other
+  // self-serve CTA is: that agreement is changed by talking to us.
+  const canCancelToFree = subscriptionActive && !enterprise && currentIndex > 0
 
   return (
     <Grid container spacing={2} id="plans">
@@ -397,7 +539,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   color="text.secondary"
                   sx={{ mb: 1.5, minHeight: 40 }}
                 >
-                  {PLAN_TAGLINES[tier]}
+                  {taglines[tier]}
                 </Typography>
                 {enterprise ? (
                   // An enterprise agreement is not swapped for a list-price
@@ -407,6 +549,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     {'Contact us to change'}
                   </Button>
                 ) : !isCurrent ? (
+                  <>
                   <Button
                     fullWidth
                     size="small"
@@ -423,10 +566,12 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                           : 'outlined'
                     }
                     color={isLower ? 'inherit' : 'primary'}
-                    // Free has no Stripe price to check out; moving down to
-                    // it means canceling the subscription (Stripe portal,
-                    // not built yet).
-                    disabled={tier === 'free'}
+                    // Free has no Stripe price to check out. For a PROSPECT
+                    // that makes the card an offer with nothing to click; for
+                    // a SUBSCRIBER it has a real route, and it is the cancel
+                    // flow (AGL-2156) — which the page owns, and which states
+                    // what happens and when.
+                    disabled={tier === 'free' && !canCancelToFree}
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5, ...(isLower ? { color: 'text.secondary' } : {}) }}
                   >
@@ -434,11 +579,30 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         promise the price is permanent — no price locks, no
                         grandfathering. Enforced by no-price-commitment.spec. */}
                     {tier === 'free'
-                      ? 'No credit card required'
+                      ? canCancelToFree
+                        ? 'Cancel & move to Free'
+                        : 'No credit card required'
                       : currentIndex < 0 || index > currentIndex
                         ? 'Upgrade'
                         : 'Downgrade'}
                   </Button>
+                  {/* The button name alone would still be a surprise — a
+                      customer clicking it deserves to know their paid plan
+                      runs out rather than stopping today, and that nothing is
+                      deleted. The funnel repeats it at the decision; this is
+                      the version visible while they are still choosing. */}
+                  {tier === 'free' && canCancelToFree ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: -1, mb: 1.5 }}
+                    >
+                      {'Your paid plan runs to the end of the period you have ' +
+                        'already paid for, then this organization moves to ' +
+                        'Free. Nothing is deleted.'}
+                    </Typography>
+                  ) : null}
+                  </>
                 ) : (
                   <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
                     {'Your plan'}
@@ -459,6 +623,15 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.sharedLayoutsPerHost)} shared layouts`}
+                  </Typography>
+                  {/* AGL-2246: `templatesPerHost` is enforced by
+                      /api/hosts/resources but was the one quota key of 31
+                      with no customer-facing surface anywhere — not here,
+                      not on the templates card, not in the usage meters. A
+                      cap a shopper for a plan cannot see is not a plan
+                      differentiator, it is a future refusal. */}
+                  <Typography variant="body2">
+                    {`${quotaLabel(entitlements.templatesPerHost)} saved templates per host`}
                   </Typography>
                   {/* Media storage only. The `totalSiteSizeMb` figure used to
                       sit beside it and was dropped in AGL-1370: it is
@@ -526,14 +699,17 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </Typography>
                   {/* Declining platform-fee ladder (AGL-892): charged at
                       checkout as the Stripe Connect application fee;
-                      memberships/gated content bill at the digital rate. */}
+                      memberships, gated content and paid BOOKINGS all bill at
+                      the digital rate (AGL-2315 — a booking is a service sale
+                      and resolves through the same `'service'`/digital axis,
+                      not a rate of its own). */}
                   <Typography variant="body2">
                     {entitlements.features.commerce
                       ? entitlements.transactionFeePhysicalPct > 0 ||
                         entitlements.transactionFeeDigitalPct > 0
                         ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
-                          `${entitlements.transactionFeeDigitalPct}% digital & ` +
-                          'membership fees'
+                          `${entitlements.transactionFeeDigitalPct}% digital, ` +
+                          'membership & booking fees'
                         : '0% platform fees'
                       : 'No storefront'}
                   </Typography>
@@ -543,7 +719,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       to the full flag set, and 32 undifferentiated ticks is a
                       wall nobody reads. The headings are the difference
                       between a longer list and a legible one. */}
-                  {FEATURE_GROUPS.map((group) => (
+                  {groups.map((group) => (
                   <Stack key={group.title} spacing={0.5}>
                   <Typography
                     variant="overline"
@@ -625,25 +801,58 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   {'Custom pricing'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {PLAN_TAGLINES.enterprise}
+                  {taglines.enterprise}
                 </Typography>
               </Stack>
               <Stack spacing={0.5} sx={{ flex: 2 }}>
-                {ENTERPRISE_HIGHLIGHTS.map((label) => (
-                  <Stack
-                    key={label}
-                    direction="row"
-                    spacing={0.75}
-                    sx={{ alignItems: 'center' }}
+                {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
+                  // A PROSPECT is being shown the tier, and every line is
+                  // accurate about the tier — so the offer ticks in full. A
+                  // CURRENT org is being told what it has, and that is a
+                  // different question with a different answer whenever the
+                  // Enterprise reading came from a comped marker or a
+                  // negotiated price rather than the plan itself.
+                  const held = enterprise ? holds(org) : true
+                  return (
+                    <Stack
+                      key={label}
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ alignItems: 'center' }}
+                    >
+                      <MdiIcon
+                        fontSize="inherit"
+                        sx={{ color: held ? 'success.main' : 'text.disabled' }}
+                        path={
+                          held
+                            ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                            : ICON_VARIANT_SYMBOL_MINUS.path
+                        }
+                      />
+                      <Typography
+                        variant="body2"
+                        color={held ? 'text.primary' : 'text.secondary'}
+                      >
+                        {label}
+                      </Typography>
+                    </Stack>
+                  )
+                })}
+                {enterprise &&
+                ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
+                  // Actionable, not just honest: the fix for a legacy
+                  // arrangement is a per-org entitlements override or a move
+                  // onto the real plan, and neither is something the admin can
+                  // do from here.
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ pt: 0.5 }}
                   >
-                    <MdiIcon
-                      fontSize="inherit"
-                      sx={{ color: 'success.main' }}
-                      path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
-                    />
-                    <Typography variant="body2">{label}</Typography>
-                  </Stack>
-                ))}
+                    {'Your agreement does not currently enable everything ' +
+                      'Enterprise can include — talk to us to turn the rest on.'}
+                  </Typography>
+                ) : null}
               </Stack>
               <Stack
                 spacing={1}

@@ -50,6 +50,7 @@ import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import useBranding from '../../../../../hooks/use-branding'
 import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 
 /**
@@ -62,6 +63,8 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   const uid = params?.uid as string
   const router = useRouter()
   const orgSlug = useOrgSlug()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const { currentOrg } = useOrgScope()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -256,6 +259,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: displayName,
         icon: { path: mdiAccountOutline.path },
       }}
+      help={{ topic: 'team', anchor: '#site-membership' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
@@ -469,9 +473,10 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
                   email={passwordInfo.email}
                   subjectLabel={displayName}
                   description={
-                    'For a teammate who cannot get into their Aglyn ' +
-                    'account. Aglyn accounts are personal and can span ' +
-                    'several organizations, so a reset email is the ' +
+                    `For a teammate who cannot get into their ` +
+                    `${branding.productName} account. ` +
+                    `${branding.productName} accounts are personal and can ` +
+                    'span several organizations, so a reset email is the ' +
                     'normal route.'
                   }
                   setPasswordBlockedReason={passwordInfo.blockedReason}

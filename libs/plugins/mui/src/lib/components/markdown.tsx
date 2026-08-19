@@ -30,6 +30,8 @@ import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
 export const MARKDOWN_ID: Aglyn.ComponentId = 'markdown'
+/** A compose-time token the tenant has not substituted — never a document. */
+const UNRESOLVED_TOKEN = /^\{\{[^}]+\}\}$/
 export const TABLE_OF_CONTENTS_ID: Aglyn.ComponentId = 'tableOfContents'
 
 /**
@@ -77,7 +79,7 @@ const HEADING_SX = {
  * scrolls the heading to y=0 — underneath the bar — so a working link looks
  * like a broken one.
  */
-const ANCHOR_SCROLL_MARGIN = 96
+const ANCHOR_SCROLL_MARGIN = Aglyn.HEADING_ANCHOR_SCROLL_MARGIN
 
 /**
  * Inline runs as elements (AGL-1162), following the entry-body renderer:
@@ -156,15 +158,11 @@ const Markdown = forwardRef<HTMLDivElement, MarkdownProps>((props, ref) => {
     [source],
   )
   // Slugs are derived rather than stored (see collectMarkdownHeadings), and
-  // keyed by block index here so the ids land on the right headings even
-  // when two of them carry the same words.
-  const slugs = useMemo(() => {
-    const map: Record<number, string> = {}
-    for (const heading of Aglyn.collectMarkdownHeadings(blocks)) {
-      map[heading.index] = heading.slug
-    }
-    return map
-  }, [blocks])
+  // keyed by block index so the ids land on the right headings even when two
+  // of them carry the same words. The map is built in `markdown-lite` now,
+  // because every renderer needs exactly this and five of the six were not
+  // getting it (AGL-1162).
+  const slugs = useMemo(() => Aglyn.markdownHeadingSlugs(blocks), [blocks])
 
   if (!source) {
     // Editing surfaces get somewhere to click; the published page renders
@@ -418,11 +416,30 @@ export function resolveMarkdownSource(
   const found: Array<{ $id: string; content: string }> = []
   const walk = (node: Aglyn.NodeSchema | undefined): void => {
     if (!node) return
-    if (node.componentId === MARKDOWN_ID) {
-      const props = (node.resolvedProps ?? node.props ?? {}) as {
-        content?: string
+    // Two element types hold a markdown-lite document, and an aside beside a
+    // blog article is the case this issue was opened for (AGL-1162): the
+    // Collection Entry Body carries the post, under `markdown` rather than
+    // `content`, and used to be invisible here — so "On this page" on an
+    // article template rendered its authoring affordance forever.
+    const source =
+      node.componentId === MARKDOWN_ID
+        ? 'content'
+        : node.componentId === Aglyn.COLLECTION_ENTRY_BODY_COMPONENT_ID
+          ? 'markdown'
+          : undefined
+    if (source) {
+      const props = (node.resolvedProps ?? node.props ?? {}) as Record<
+        string,
+        unknown
+      >
+      const content = String(props[source] ?? '')
+      // An entry body on an unresolved surface is the literal
+      // `{{entry.body}}` token. It is not a document, and treating it as one
+      // would let it win over a real Markdown element further down the page
+      // and empty the aside on the canvas.
+      if (!UNRESOLVED_TOKEN.test(content.trim())) {
+        found.push({ $id: node.$id, content })
       }
-      found.push({ $id: node.$id, content: String(props.content ?? '') })
     }
     for (const child of node.children ?? []) walk(child)
   }

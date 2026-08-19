@@ -18,6 +18,7 @@
 import {
   CHECKOUT_SHIPPING_COUNTRIES,
   MAX_CHECKOUT_SHIPPING_OPTIONS,
+  merchantPricesShipping,
   normalizeCheckoutShippingCountry,
   planCheckoutShipping,
   resolveCheckoutShippingOptions,
@@ -429,6 +430,101 @@ describe('planCheckoutShipping', () => {
  * exactly what a bare served/unserved partition would do to every merchant
  * who ships nothing at all.
  */
+/**
+ * Local pickup is a COLLECTION choice, not a destination (AGL-2325).
+ *
+ * `resolveShippingRates` appends it after and independent of zone matching,
+ * so before this the resolved list was non-empty for every country on earth
+ * and `planCheckoutShipping` returned an offer before it could refuse anyone.
+ * A shopper in France picked `Local pickup — Free` on a physical order from a
+ * US-only store, Stripe collected the French address the session still
+ * allowed, and the merchant was paid nothing to carry the parcel there.
+ */
+describe('local pickup does not widen where a store ships (AGL-2325)', () => {
+  const cart = { subtotalCents: 2000, totalGrams: 400 }
+  const usOnly: ShippingSettings = {
+    zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+    rates: [
+      { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+    ],
+  }
+
+  it('refuses an unserved destination with pickup on exactly as with it off', () => {
+    // Run BOTH ways on purpose. A refusal assertion made only with pickup
+    // enabled cannot distinguish a fixed refusal from a zone that never
+    // matched anyway, and one made only with it disabled never touches the
+    // defect at all. The pair is the measurement.
+    for (const localPickup of [false, true]) {
+      const plan = planCheckoutShipping({ ...usOnly, localPickup }, cart, 'FR')
+      expect(plan.refusal).toBe('destination-unserved')
+      expect(plan.options).toEqual([])
+      // The refusal must not narrow the session to the country it refused —
+      // the shopper is being handed the country select back.
+      expect(plan.countries).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    }
+  })
+
+  it('still offers pickup at a destination the store does ship to', () => {
+    // The other half: refusing France must not cost the US shopper their
+    // collection choice, or the fix would just be "delete local pickup".
+    const plan = planCheckoutShipping(
+      { ...usOnly, localPickup: true },
+      cart,
+      'US',
+    )
+    expect(plan.refusal).toBeUndefined()
+    expect(plan.countries).toEqual(['US'])
+    expect(plan.options.map((option) => option.rateId)).toEqual([
+      'pickup',
+      'std',
+    ])
+  })
+
+  it('refuses nobody at a store whose only choice is collection', () => {
+    // The configuration the old spec pinned, and the one this must not
+    // break: a merchant who delivers nowhere is refusing no one, so every
+    // destination keeps completing with the free pickup option.
+    const pickupOnly: ShippingSettings = { localPickup: true }
+    for (const country of CHECKOUT_SHIPPING_COUNTRIES) {
+      const plan = planCheckoutShipping(pickupOnly, cart, country)
+      expect(plan.refusal).toBeUndefined()
+      expect(plan.options.map((option) => option.rateId)).toEqual(['pickup'])
+    }
+  })
+
+  it('leaves a cart no tier can price refusable rather than free-pickup', () => {
+    // A merchant who prices shipping and offers collection: a parcel past
+    // every tier still has a real answer — come and collect it — so this is
+    // an OFFER, not the `cart-unpriceable` refusal. Pinned because the fix
+    // reorders these two branches and the reorder must not swallow AGL-2230.
+    const tiered: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+      rates: [
+        {
+          id: 'wt',
+          zoneId: 'world',
+          name: 'By weight',
+          kind: 'weight_tiers',
+          tiers: [{ upTo: 2000, amountCents: 500 }],
+        },
+      ],
+    }
+    const heavy = { subtotalCents: 2000, totalGrams: 9000 }
+    expect(planCheckoutShipping(tiered, heavy, 'US').refusal).toBe(
+      'cart-unpriceable',
+    )
+    const withPickup = planCheckoutShipping(
+      { ...tiered, localPickup: true },
+      heavy,
+      'US',
+    )
+    expect(withPickup.refusal).toBeUndefined()
+    expect(withPickup.options.map((option) => option.rateId)).toEqual([
+      'pickup',
+    ])
+  })
+})
+
 describe('summarizeShippingCoverage', () => {
   const cart = { subtotalCents: 0, totalGrams: 0 }
 
@@ -493,15 +589,50 @@ describe('summarizeShippingCoverage', () => {
     expect(refusalsAgree(world)).toBe(true)
   })
 
-  it('counts local pickup as reaching every destination', () => {
-    // `resolveShippingRates` appends pickup whatever the destination, so a
-    // merchant offering it refuses nobody — the checkout agrees, and the
-    // card must not claim a gap the shopper would not hit.
+  it('reports a pickup-only store as shipping nowhere and refusing nobody', () => {
+    // This test used to assert `served === every destination`, on the reading
+    // that "a merchant offering pickup refuses nobody" (AGL-2325). That is
+    // true of THIS merchant and only this one, and it was measured on the one
+    // configuration where the wrong rule and the right rule agree — so it
+    // pinned the rule rather than the case, and the case it did not cover is
+    // the money one below. A store that delivers to no one ships nowhere; it
+    // still refuses nobody, because it promised nobody delivery.
     const pickup: ShippingSettings = { localPickup: true }
     const coverage = summarizeShippingCoverage(pickup)
-    expect(coverage.served).toEqual([...CHECKOUT_SHIPPING_COUNTRIES])
+    expect(coverage.served).toEqual([])
     expect(coverage.unserved).toEqual([])
+    expect(coverage.shipsNowhere).toBe(true)
+    expect(coverage.offersLocalPickup).toBe(true)
     expect(refusalsAgree(pickup)).toBe(true)
+  })
+
+  it('does not let pickup hide the destinations checkout refuses', () => {
+    // The card is the merchant's only view of this, and counting pickup as
+    // coverage made it say "checkout can price shipping to every destination"
+    // to a US-only store — the sentence that hid the refusal defect for as
+    // long as it shipped. Asserted against the SAME settings with pickup off,
+    // so the test cannot pass by measuring the zones alone.
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    for (const localPickup of [false, true]) {
+      const coverage = summarizeShippingCoverage({ ...usOnly, localPickup })
+      expect(coverage.served).toEqual(['US'])
+      expect(coverage.unserved).toEqual(['CA', 'GB', 'AU', 'DE', 'FR'])
+      expect(coverage.shipsNowhere).toBe(false)
+      expect(coverage.offersLocalPickup).toBe(localPickup)
+      expect(refusalsAgree({ ...usOnly, localPickup })).toBe(true)
+    }
+    // And pickup IS the thing that makes checkout ask where the parcel is
+    // going, because it changes what US is offered relative to the rest.
+    expect(summarizeShippingCoverage(usOnly).asksDestination).toBe(true)
+    expect(
+      summarizeShippingCoverage({ ...usOnly, localPickup: true })
+        .asksDestination,
+    ).toBe(true)
   })
 
   it('sees a specific zone with no rates hide the rest-of-world zone', () => {
@@ -555,3 +686,207 @@ describe('summarizeShippingCoverage', () => {
     )
   })
 })
+
+/**
+ * AGL-2230. `planCheckoutShipping` decided "this merchant never set shipping
+ * up" by probing every collectable country WITH THE LIVE CART. A cart that
+ * exhausts every tier makes that probe empty too, and an empty probe took the
+ * one branch that must complete with no `shipping_options` and nothing
+ * charged — so a 3 kg order at a store whose weight tiers stop at 2 kg was
+ * carried for free, on all three doors, with no refusal and no log.
+ *
+ * The console coverage card cannot catch it either: it probes with
+ * `{ subtotalCents: 0, totalGrams: 0 }` and is documented as a lower bound, so
+ * it reports full coverage for exactly the store that leaks.
+ */
+describe('a cart no rate can price (AGL-2230)', () => {
+  /** Weight tiers that stop at 2 kg, and nothing else anywhere. */
+  const tiersOnly: ShippingSettings = {
+    zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+    rates: [
+      {
+        id: 'wt',
+        zoneId: 'world',
+        name: 'By weight',
+        kind: 'weight_tiers',
+        tiers: [
+          { upTo: 500, amountCents: 499 },
+          { upTo: 2000, amountCents: 999 },
+        ],
+      },
+    ],
+  }
+  const heavy = { subtotalCents: 4000, totalGrams: 3000 }
+  const light = { subtotalCents: 4000, totalGrams: 300 }
+
+  it('refuses rather than shipping a 3 kg parcel for nothing', () => {
+    const plan = planCheckoutShipping(tiersOnly, heavy)
+    expect(plan.refusal).toBe('cart-unpriceable')
+    expect(plan.options).toEqual([])
+  })
+
+  it('refuses the same cart when a destination was declared', () => {
+    const plan = planCheckoutShipping(tiersOnly, heavy, 'US')
+    expect(plan.refusal).toBe('cart-unpriceable')
+    expect(plan.options).toEqual([])
+  })
+
+  /**
+   * THE BRANCH THAT MUST NOT MOVE. A merchant who configured nothing charges
+   * no shipping and always has; refusing them would break every storefront
+   * that predates shipping settings.
+   */
+  it('leaves a merchant who configured NO shipping completing untouched', () => {
+    expect(planCheckoutShipping(undefined, heavy).refusal).toBeUndefined()
+    expect(planCheckoutShipping({}, heavy).refusal).toBeUndefined()
+    expect(planCheckoutShipping({ zones: [], rates: [] }, heavy).refusal)
+      .toBeUndefined()
+    // Rates pointing at zones that do not exist are unreachable by every
+    // resolver, so they are not a shipping decision either.
+    expect(
+      planCheckoutShipping(
+        {
+          zones: [],
+          rates: [
+            { id: 'x', zoneId: 'gone', name: 'Ghost', kind: 'flat', amountCents: 500 },
+          ],
+        },
+        heavy,
+      ).refusal,
+    ).toBeUndefined()
+  })
+
+  it('POSITIVE CONTROL: the same store still prices a cart inside its tiers', () => {
+    const plan = planCheckoutShipping(tiersOnly, light)
+    expect(plan.refusal).toBeUndefined()
+    expect(plan.options).toEqual([
+      { rateId: 'wt', name: 'By weight', amountCents: 499 },
+    ])
+  })
+
+  it('POSITIVE CONTROL: a destination the store does not serve still says so', () => {
+    // `destination-unserved` is the more specific answer and must keep
+    // winning when the cart itself IS priceable somewhere.
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    expect(planCheckoutShipping(usOnly, light, 'FR').refusal).toBe(
+      'destination-unserved',
+    )
+  })
+
+  describe('merchantPricesShipping', () => {
+    it('reads a decision from the settings, never from the cart', () => {
+      expect(merchantPricesShipping(tiersOnly)).toBe(true)
+      expect(merchantPricesShipping({ localPickup: true })).toBe(true)
+      expect(merchantPricesShipping(undefined)).toBe(false)
+      expect(merchantPricesShipping({})).toBe(false)
+      expect(
+        merchantPricesShipping({
+          zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+          rates: [],
+        }),
+      ).toBe(false)
+    })
+  })
+})
+
+/**
+ * AGL-2298. Two ways the zone matcher misread a merchant's own settings, both
+ * silent and both expensive.
+ */
+describe('reading a zone that was not written by the console (AGL-2298)', () => {
+  it('trims a stored country code before matching it', () => {
+    // The console trims on save; an import, the REST API or a hand edit does
+    // not. `' US'` upper-cases to `' US'`, matched nothing, and the store then
+    // refused every US shopper with "This store does not ship to the United
+    // States" while its settings card showed `US` right there.
+    const imported: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: [' US '] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    expect(
+      resolveShippingRates(imported, 'US', { subtotalCents: 5000 }),
+    ).toEqual([{ rateId: 'std', name: 'Standard', amountCents: 799 }])
+    expect(planCheckoutShipping(imported, { subtotalCents: 5000 }, 'US')
+      .refusal).toBeUndefined()
+  })
+
+  it('trims a stored wildcard too', () => {
+    const imported: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: [' * '] }],
+      rates: [
+        { id: 'std', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    expect(
+      resolveShippingRates(imported, 'FR', { subtotalCents: 5000 }),
+    ).toEqual([{ rateId: 'std', name: 'Standard', amountCents: 999 }])
+  })
+
+  /**
+   * A zone spelled `['*','US']` matches EVERY country through its wildcard.
+   * The old specificity test was `!countries.every(code => code === '*')`, so
+   * such a zone counted as specific for all six destinations and suppressed
+   * every genuine rest-of-world zone — a merchant's worldwide rate vanished
+   * because one zone listed a country beside its wildcard.
+   */
+  it('does not let a wildcard-plus-country zone suppress rest-of-world', () => {
+    const mixed: ShippingSettings = {
+      zones: [
+        { id: 'odd', name: 'US and everywhere', countries: ['*', 'US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'domestic', zoneId: 'odd', name: 'Domestic', kind: 'flat', amountCents: 500 },
+        { id: 'intl', zoneId: 'world', name: 'International', kind: 'flat', amountCents: 2500 },
+      ],
+    }
+    // FR is served by BOTH wildcards, so both rates are on offer.
+    expect(
+      resolveShippingRates(mixed, 'FR', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic', 'intl'])
+    // US names the odd zone outright, so specificity applies and the
+    // rest-of-world zone is suppressed — which is the documented rule.
+    expect(
+      resolveShippingRates(mixed, 'US', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic'])
+  })
+
+  /**
+   * POSITIVE CONTROL: the documented precedence is untouched — a plain
+   * specific zone still hides a plain rest-of-world one.
+   */
+  it('POSITIVE CONTROL: a named zone still beats rest-of-world', () => {
+    const ordinary: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'domestic', zoneId: 'us', name: 'Domestic', kind: 'flat', amountCents: 500 },
+        { id: 'intl', zoneId: 'world', name: 'International', kind: 'flat', amountCents: 2500 },
+      ],
+    }
+    expect(
+      resolveShippingRates(ordinary, 'US', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic'])
+    expect(
+      resolveShippingRates(ordinary, 'FR', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['intl'])
+  })
+})
+

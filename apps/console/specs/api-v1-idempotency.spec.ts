@@ -133,6 +133,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   )
   return {
     __esModule: true,
+    // The REAL storage gate (AGL-2253). A wholesale mock of this module is a
+    // CLOSED WORLD: `dataStorageRefusal` would be `undefined` and the route
+    // would 500 rather than enforce. Required actual so this suite exercises
+    // the shape logic it is about, not a stub of it.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/data-storage-gate',
+    ),
     ...apiHttp,
     verifyApiKey: async () => ({
       orgId: 'org-1',
@@ -166,6 +173,33 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // against its own mock, and the `create()`-rejection-as-dedupe primitive is
   // the entire subject.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
+  // The REAL quota functions too (AGL-2163). `authenticateApiV1` now enforces
+  // `checkApiRequestQuota(...).allowed` at this chokepoint, and a wholesale
+  // mock is a CLOSED WORLD: omitting them here turned every request in this
+  // suite into `TypeError: apiRequestEnforcementShape is not a function`,
+  // caught by the route's outer handler and served as a 500. Real, not
+  // stubbed — the org below is `business`, which resolves to `'never-blocks'`,
+  // so the quota is transparent to this suite exactly as it is in production.
+  apiRequestEnforcementShape: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).apiRequestEnforcementShape,
+  checkApiRequestQuota: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkApiRequestQuota,
+  // Same reasoning for the record-write quotas (AGL-2253): `createRecord` now
+  // enforces `recordsPerDataset` and — through `dataStorageRefusal`, which
+  // resolves ITS imports through this same mock — `dataStorageMbPerOrg`.
+  // Business carries 100,000 rows and a metered byte rate, so both are
+  // transparent here exactly as they are in production.
+  checkQuota: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkQuota,
+  checkDataStorageQuota: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkDataStorageQuota,
+  dataStorageEnforcementShape: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).dataStorageEnforcementShape,
   checkEntitlement: () => true,
   effectiveDatasetModel: () => ({ fields: [] }),
   coerceDocumentValues: (_model: unknown, values: Record<string, unknown>) =>

@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -138,7 +139,7 @@ export function AccountIdentitiesCard() {
                   <Chip
                     size="small"
                     variant="outlined"
-                    label={`Aglyn staff · ${row.staffRole}`}
+                    label={`${PLATFORM_BRAND_NAME} staff · ${row.staffRole}`}
                   />
                 ) : null}
               </Stack>

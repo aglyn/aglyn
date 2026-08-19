@@ -48,7 +48,16 @@ export * from './org-permissions'
 export * from './password-policy'
 export * from './idp-profile'
 export * from './onboarding-deep-link'
+export * from './deployment-shape'
+// The docs-help subset the first-party plugin consoles read (AGL-2213) — the
+// console's own registry lives in apps/console/constants and a lib cannot
+// import an app.
+export * from './docs-help'
+export * from './platform-brand'
 export * from './plan-entitlements'
+// The free plan's bandwidth hard cap (AGL-1967/2070/2155). After
+// `plan-entitlements`, which owns the predicate it keys off.
+export * from './bandwidth-cap'
 export * from './form-abuse-ceiling'
 export * from './health-report'
 export * from './support-tiers'
@@ -109,6 +118,7 @@ export * from './media-metadata'
 export * from './media-ref'
 export * from './author-css'
 export * from './dataset-models'
+export * from './dataset-csv'
 export * from './marketplace-merge'
 export * from './marketplace-provenance'
 export * from './marketplace-update-state'

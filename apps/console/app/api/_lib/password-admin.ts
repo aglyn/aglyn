@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from './auth-action-link'
@@ -75,7 +76,10 @@ export async function blockedReasonForOrgSetPassword(
     return "The organization owner's password can't be set here."
   }
   if (target.customClaims?.['staff'] === true) {
-    return 'This account belongs to Aglyn staff — send a reset email instead.'
+    return (
+      `This account belongs to ${PLATFORM_BRAND_NAME} staff — send a reset ` +
+      'email instead.'
+    )
   }
   // The reverse index (users/{uid}/orgs) is the cheap way to ask "does this
   // account live anywhere but here?". A second org means setting the
@@ -153,7 +157,8 @@ export async function sendAuthPasswordResetEmail(
     // what makes that true, and it is the same one-time code either way.
     const resetUrl = await generateAuthActionLink('resetPassword', email, origin)
     const fallbackText =
-      `${actorName} started a password reset for your Aglyn account. ` +
+      `${actorName} started a password reset for your ${PLATFORM_BRAND_NAME} ` +
+      'account. ' +
       'Choose a new password here:\n\n' +
       `${resetUrl}\n\n` +
       'The link expires shortly. If you were not expecting this, you can ' +
@@ -164,7 +169,7 @@ export async function sendAuthPasswordResetEmail(
     })
     const result = await sendEmail({
       to: email,
-      subject: designed?.subject ?? 'Reset your Aglyn password',
+      subject: designed?.subject ?? `Reset your ${PLATFORM_BRAND_NAME} password`,
       text: designed?.text || fallbackText,
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'admin-password-reset',
@@ -195,7 +200,8 @@ export async function sendPasswordChangedNotice(
   if (!isEmailConfigured()) return false
   try {
     const fallbackText =
-      `${actorName} set a new password on your Aglyn account. You have ` +
+      `${actorName} set a new password on your ${PLATFORM_BRAND_NAME} ` +
+      'account. You have ' +
       'been signed out everywhere and will need the new password to sign ' +
       `back in at ${origin}.\n\n` +
       'If you did not expect this, contact whoever administers your ' +
@@ -206,7 +212,9 @@ export async function sendPasswordChangedNotice(
     })
     const result = await sendEmail({
       to: email,
-      subject: designed?.subject ?? 'Your Aglyn password was changed',
+      subject:
+        designed?.subject ??
+        `Your ${PLATFORM_BRAND_NAME} password was changed`,
       text: designed?.text || fallbackText,
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'password-changed-by-admin',

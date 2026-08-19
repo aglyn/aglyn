@@ -29,6 +29,11 @@ import {
   isImpersonationSession,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
+import {
+  copyManagerOnTicket,
+  readSuccessManager,
+  type OrgSuccessManager,
+} from '../../_lib/success-manager'
 
 // lockdown-423: exempt — support must stay reachable: the lockdown notice itself says
 // "contact support", and a locked member doing so is the happy path.
@@ -43,6 +48,55 @@ const MAX_BODY = 5000
  * claim for the support side. Tickets are org-scoped (AGL-238): keyed by
  * the caller's organization, whose doc carries the plan.
  */
+/**
+ * Copies the org's named success manager on a ticket event (AGL-2332).
+ *
+ * `support-tiers.md` promises Enterprise a named success manager, and the
+ * console tells the customer, in so many words, that they are *copied on
+ * every ticket*. Nothing read `namedManager` here: `notifyStaff` raises one
+ * generic alert to the whole staff roster, which is the opposite of a named
+ * human. This is the mechanism that sentence was missing.
+ *
+ * Two conditions, both required. The TIER must promise a manager, and one
+ * must actually be ASSIGNED — a field nobody populates would render the same
+ * sentence with the same nothing behind it, now with a schema implying
+ * otherwise. So an org owed a manager with none appointed sends no mail, and
+ * the console (see the tickets page) tells it what it does get rather than
+ * repeating a claim we are not keeping.
+ *
+ * Returns what to stamp on the ticket. The outcome is RECORDED rather than
+ * assumed: `sendEmail` resolves `{ sent: false }` on an unconfigured
+ * environment instead of throwing, and a cc whose result is dropped is the
+ * same shape of defect as the sentence with no mechanism.
+ */
+async function managerCopyOutcome(
+  commitment: { namedManager: boolean },
+  orgId: string | null | undefined,
+  org: { name?: string } | null | undefined,
+  details: {
+    ticketId: string
+    subject: string
+    fromEmail: string | null
+    body: string
+    kind: 'opened' | 'reply'
+  },
+): Promise<{ email: string; sent: boolean; reason?: string } | null> {
+  if (!commitment.namedManager || !orgId) return null
+  const manager: OrgSuccessManager | null = await readSuccessManager(orgId)
+  if (!manager) return null
+  const result = await copyManagerOnTicket(manager, {
+    orgId,
+    orgName: org?.name ?? null,
+    ...details,
+  })
+  // Widened deliberately: `strictNullChecks` is off repo-wide, so narrowing
+  // this discriminated union on `sent` does not reach `reason`. Same value
+  // either way; the cast is about the checker, not the contract.
+  const outcome = result as { sent: boolean; reason?: string }
+  if (outcome.sent) return { email: manager.email, sent: true }
+  return { email: manager.email, sent: false, reason: outcome.reason }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, body: payload, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -118,7 +172,17 @@ async function handler(request: Request): Promise<Response> {
         ? ticketsRef.orderBy('updatedAt', 'desc').limit(100)
         : ticketsRef.where('orgId', '==', orgId).limit(100)
       const snapshot = await listQuery.get()
+      // Who the org's named manager actually is (AGL-2332), so the console
+      // can name them instead of asserting that one exists. Only sent when
+      // the tier promises one AND one is assigned: those are two different
+      // facts and the page has to be able to tell them apart, because the
+      // sentence it used to render was true of neither.
+      const commitment = supportForPlan(resolved?.org?.plan as OrgPlan | null)
+      const successManager = commitment.namedManager
+        ? await readSuccessManager(orgId)
+        : null
       return Response.json({
+        successManager,
         tickets: snapshot.docs.map((doc) => ({
           $id: doc.id,
           ...doc.data(),
@@ -190,6 +254,18 @@ async function handler(request: Request): Promise<Response> {
         link: `/admin/support?ticketId=${ticketRef.id}`,
         orgId: orgId ?? undefined,
       })
+      const managerCopy = await managerCopyOutcome(commitment, orgId, resolved?.org, {
+        ticketId: ticketRef.id,
+        subject,
+        fromEmail: decoded.email ?? null,
+        body,
+        kind: 'opened',
+      })
+      // On the ticket, so "was the manager actually copied" is a fact rather
+      // than an inference from the tier.
+      if (managerCopy) {
+        await ticketRef.set({ managerCopy }, { merge: true })
+      }
       return Response.json({ ticketId: ticketRef.id }, { status: 200 })
     }
 
@@ -237,6 +313,23 @@ async function handler(request: Request): Promise<Response> {
             link: `/admin/support?ticketId=${ticketId}`,
             orgId: (ticket['orgId'] as string | undefined) ?? undefined,
           })
+          // "Every ticket" includes the follow-ups (AGL-2332). The tier is
+          // read off the TICKET's frozen `supportTier`, not off today's
+          // plan: AGL-1103 froze the commitment at open time precisely so a
+          // mid-thread plan change cannot rewrite what was owed.
+          const replyCopy = await managerCopyOutcome(
+            supportForPlan((ticket['plan'] as OrgPlan | null) ?? null),
+            (ticket['orgId'] as string | undefined) ?? null,
+            resolved?.org,
+            {
+              ticketId,
+              subject: String(ticket['subject'] ?? ''),
+              fromEmail: decoded.email ?? null,
+              body,
+              kind: 'reply',
+            },
+          )
+          if (replyCopy) updates['managerCopy'] = replyCopy
         }
       }
       if (status === 'open' || status === 'closed') {

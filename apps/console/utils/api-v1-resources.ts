@@ -22,23 +22,33 @@
  */
 import {
   type AttemptClaim,
+  checkApiRequestQuota,
+  checkContactQuota,
+  checkDataStorageQuota,
+  checkDatasetQuota,
   checkEntitlement,
+  checkQuota,
   claimAttempt,
   coerceDocumentValues,
   createResourceUid,
+  defaultScopeForNewResource,
   effectiveDatasetModel,
+  newResourceScopeFields,
+  normalizeContactEmail,
+  ORG_SCOPE_TOKEN,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
   apiJson,
   ApiErrors,
+  dataStorageRefusal,
   decodeCursor,
   encodeCursor,
   listResponse,
   parseLimit,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from './api-v1'
+import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
@@ -126,16 +136,43 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
  * and which no amount of documentation makes safe. `POST` keeps `records`
  * verbatim: changing its digest orphans keys in flight, and AGL-1709 already
  * paid that cost once.
+ *
+ * `scopeSuffix` is the object the key is scoped WITHIN — a dataset id for the
+ * record operations and for `DELETE /v1/datasets/{id}`, the site for
+ * `DELETE …/form-submissions/{id}`, and `*` — the ORGANIZATION — for
+ * `POST /v1/datasets` (AGL-2126), where there is no dataset id yet because
+ * the request is what creates one, and for both contact writes (AGL-2276),
+ * where the organization genuinely IS the containing object: contacts are
+ * org-scoped (AGL-237), so there is no site or parent collection to scope to
+ * and pretending otherwise would invent a boundary the data does not have.
+ * `*` cannot collide with a resource id: `createResourceUid()` never emits
+ * one, and the `kind` is separate anyway. The suffix is not the whole story —
+ * `kind` is hashed in too, which is what keeps a create's key from replaying
+ * into a delete, and what keeps `contacts` and `contact-deletes` apart while
+ * they share a suffix.
+ *
+ * This paragraph used to say `*` covered "the two that act on the dataset
+ * collection itself", which the delete has never done — it passes
+ * `datasetRef.id`. The published contract in `apps/docs/api/conventions.md` was
+ * written from this comment and inherited the error (AGL-2218), which is the
+ * argument for reading the call rather than the docblock above it.
  */
 async function claimWrite(
   ctx: ApiV1Context,
-  datasetId: string,
+  scopeSuffix: string,
   key: string | null,
-  kind: 'records' | 'record-deletes',
+  kind:
+    | 'records'
+    | 'record-deletes'
+    | 'datasets'
+    | 'dataset-deletes'
+    | 'form-submission-deletes'
+    | 'contacts'
+    | 'contact-deletes',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
     kind,
-    scopeId: `${ctx.orgId}:${datasetId}`,
+    scopeId: `${ctx.orgId}:${scopeSuffix}`,
     // The field `eraseOrgIdempotencyKeys` sweeps on (AGL-1448).
     orgId: ctx.orgId,
     key: key ?? '',
@@ -199,6 +236,270 @@ function datasetsCollection(ctx: ApiV1Context) {
   return ctx.firestore.collection('orgs').doc(ctx.orgId).collection('datasets')
 }
 
+/** Serialized `model` ceiling, matching the console's create route. */
+const DATASET_MODEL_MAX_BYTES = 64 * 1024
+const DATASET_NAME_MAX = 120
+const DATASET_FIELDS_MAX = 100
+
+/**
+ * Validate the writable half of a dataset document (AGL-2126). Returns the
+ * cleaned values, or the per-field map `conventions.md` publishes under
+ * `validation_failed` — the same shape `validateDocument` produces for a
+ * record, so a client branches on one thing across the whole resource.
+ *
+ * `partial` is what separates PATCH from POST: a create must be told a name
+ * and at least one field, an update may send either alone. Absent keys are
+ * left alone rather than cleared, because a PATCH that silently emptied
+ * `fields` would take a dataset's schema away on a typo'd request body.
+ */
+function readDatasetInput(
+  body: Record<string, unknown>,
+  { partial }: { partial: boolean },
+):
+  | { values: { name?: string; fields?: string[]; model?: unknown } }
+  | { errors: Record<string, string> } {
+  const errors: Record<string, string> = {}
+  const values: { name?: string; fields?: string[]; model?: unknown } = {}
+
+  const hasName = body.name !== undefined
+  if (hasName || !partial) {
+    const name = String(body.name ?? '').trim().slice(0, DATASET_NAME_MAX)
+    if (!name) errors.name = 'Required'
+    else values.name = name
+  }
+
+  const hasFields = body.fields !== undefined
+  if (hasFields || !partial) {
+    if (!Array.isArray(body.fields)) {
+      errors.fields = 'Must be an array of field names'
+    } else {
+      const fields = (body.fields as unknown[])
+        .map((field) => String(field).trim())
+        .filter((field) => field.length > 0)
+        .slice(0, DATASET_FIELDS_MAX)
+      if (fields.length === 0) errors.fields = 'At least one field is required'
+      else values.fields = fields
+    }
+  }
+
+  if (body.model !== undefined) {
+    if (!body.model || typeof body.model !== 'object') {
+      errors.model = 'Must be an object'
+    } else if (JSON.stringify(body.model).length > DATASET_MODEL_MAX_BYTES) {
+      errors.model = `Must serialize to under ${DATASET_MODEL_MAX_BYTES} bytes`
+    } else {
+      values.model = body.model
+    }
+  }
+
+  return Object.keys(errors).length ? { errors } : { values }
+}
+
+/**
+ * `POST /v1/datasets` (AGL-2126) — the call that lets the API bootstrap itself.
+ *
+ * Until this shipped, `/v1` could create and edit RECORDS but not the dataset
+ * holding them, so an agency provisioning a client workspace, or a developer
+ * keeping a schema in source control, had to click a dataset into existence
+ * before their first API call could do anything. The console has been able to
+ * do this all along (`apps/console/app/api/orgs/datasets`, `create-dataset`).
+ *
+ * The gates are the console route's, not a looser set. `dataStore` is the
+ * entitlement, `checkDatasetQuota` is add-on aware, and — the one that is
+ * invisible until it bites — `newResourceScopeFields` stamps `visibleTo`.
+ * A dataset created without it matches no `array-contains-any` and therefore
+ * renders on NO site at all (AGL-1044): the API would happily create data
+ * that never appears anywhere, which is worse than refusing.
+ */
+async function createDataset(
+  request: Request,
+  ctx: ApiV1Context,
+): Promise<Response> {
+  if (!checkEntitlement(ctx.org, 'dataStore')) {
+    return ApiErrors.planRequired({
+      message: 'Datasets are not included in this organization’s plan',
+      code: 'data_store',
+      headers: ctx.headers,
+    })
+  }
+
+  const parsed = readDatasetInput(await readJsonBody(request), {
+    partial: false,
+  })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Dataset failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+
+  /*
+   * CLAIM ABOVE THE QUOTA (AGL-2296), and release on the refusal.
+   *
+   * This used to check the quota first and claim after, so that a refusal an
+   * integrator can act on never consumed their key — a plan refusal is the
+   * most retried failure there is, and it clears when somebody buys an
+   * add-on. That reasoning is right and is preserved by the `release()`
+   * below; the ORDERING it produced was not. A create that consumed the LAST
+   * included slot could not be retried at all: the retry re-counts, is now AT
+   * the band, and is refused before the claim is ever consulted — so the
+   * replay never happens and the integrator cannot tell whether the dataset
+   * exists. `conventions.md` publishes the opposite promise.
+   *
+   * Claiming first and releasing on each refusal gets both properties at
+   * once, which is the trade `deleteRecord` already argues for and
+   * `createContact` follows. Validation stays above: a deterministic 400 must
+   * never take a key at all.
+   */
+  const collection = datasetsCollection(ctx)
+  const claimed = await claimWrite(
+    ctx,
+    '*',
+    request.headers.get('Idempotency-Key'),
+    'datasets',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const datasetCount = (await collection.count().get()).data().count
+    const quota = checkDatasetQuota(ctx.org, datasetCount)
+    if (!quota.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message:
+          `Dataset limit reached (${quota.limit}). ` +
+          (quota.upgradeRequired
+            ? 'Upgrade the plan to add more.'
+            : `Buy extra datasets for $${quota.addonPriceUsd}/mo each, or upgrade.`),
+        code: 'dataset_quota',
+        headers: ctx.headers,
+      })
+    }
+
+    const id = createResourceUid()
+    await collection.doc(id).create({
+      displayName: parsed.values.name,
+      fields: parsed.values.fields,
+      ...(parsed.values.model ? { model: parsed.values.model } : {}),
+      // AGL-1484: the required argument exists so a creator that has not
+      // decided cannot compile. No site is in context on an org-scoped API
+      // key, so the org's own default is the only honest answer.
+      ...newResourceScopeFields(
+        defaultScopeForNewResource({
+          defaultResourceScope: (
+            ctx.org as { defaultResourceScope?: 'org' | 'host' }
+          )?.defaultResourceScope,
+          hostId: null,
+        }),
+      ),
+      createdAt: Timestamp.now(),
+    })
+    const view = datasetView(await collection.doc(id).get())
+    // Stored as 200 so a replay is distinguishable from the fresh 201 — the
+    // rule `conventions.md` publishes and `createRecord` already follows.
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    // Same direction as every other v1 write: a stranded key is irreversible
+    // from outside, a duplicate dataset is one DELETE away.
+    await claim.release()
+    throw error
+  }
+}
+
+/**
+ * `PATCH /v1/datasets/{id}` — rename, re-field, or re-model. Takes no
+ * `Idempotency-Key` and does not need one, for `updateRecord`'s reason: the
+ * same body twice lands the same state AND returns the same `200`.
+ */
+async function updateDataset(
+  request: Request,
+  ctx: ApiV1Context,
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const snap = await datasetRef.get()
+  if (!snap.exists) {
+    return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+  }
+  const parsed = readDatasetInput(await readJsonBody(request), { partial: true })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Dataset failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+  const { name, fields, model } = parsed.values
+  const update: Record<string, unknown> = {}
+  if (name !== undefined) update.displayName = name
+  if (fields !== undefined) update.fields = fields
+  if (model !== undefined) update.model = model
+  // An empty body is a no-op, answered with the current dataset rather than a
+  // 400: a client re-sending an unchanged object should not have to special-
+  // case it, and there is no state to disagree about.
+  if (Object.keys(update).length > 0) await datasetRef.update(update)
+  return apiJson(datasetView(await datasetRef.get()), { headers: ctx.headers })
+}
+
+/**
+ * `DELETE /v1/datasets/{id}` — refuses while records remain.
+ *
+ * A recursive delete is not something a single REST call should do quietly:
+ * the records are the customer's content, and one mistyped id would take all
+ * of them with no receipt naming what went. So this answers `409 conflict`
+ * with the count, and the integrator deletes the records first — with the
+ * same key semantics, through an endpoint that already exists.
+ */
+async function deleteDataset(
+  request: Request,
+  ctx: ApiV1Context,
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    datasetRef.id,
+    request.headers.get('Idempotency-Key'),
+    'dataset-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await datasetRef.get()
+    if (!snap.exists) {
+      // Release: a wrong id is the integrator's to correct and retry with the
+      // same key, exactly as `deleteRecord` does.
+      await claim.release()
+      return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+    }
+    const records = (await datasetRef.collection('records').count().get()).data()
+      .count
+    if (records > 0) {
+      // Release too — this refusal clears once the records are gone, and the
+      // retry that should then succeed must not replay the refusal.
+      await claim.release()
+      return ApiErrors.conflict({
+        message: `Dataset still holds ${records} record${
+          records === 1 ? '' : 's'
+        }. Delete them first.`,
+        code: 'dataset_not_empty',
+        headers: ctx.headers,
+      })
+    }
+    await datasetRef.delete()
+    const view = { id: datasetRef.id, object: 'dataset', deleted: true }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
+}
+
 async function handleDatasets(
   request: Request,
   ctx: ApiV1Context,
@@ -209,23 +510,48 @@ async function handleDatasets(
 
   // /v1/datasets
   if (!datasetId) {
-    const denied = requireScope(ctx, 'datasets:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const { docs, nextCursor } = await paginate(datasetsCollection(ctx), url)
-    return listResponse(docs.map(datasetView), nextCursor, ctx.headers)
+    if (request.method === 'GET') {
+      const denied = requireScope(ctx, 'datasets:read')
+      if (denied) return denied
+      const { docs, nextCursor } = await paginate(datasetsCollection(ctx), url)
+      return listResponse(docs.map(datasetView), nextCursor, ctx.headers)
+    }
+    if (request.method === 'POST') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return createDataset(request, ctx)
+    }
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, POST' },
+    })
   }
 
   const datasetRef = datasetsCollection(ctx).doc(datasetId)
 
   // /v1/datasets/{id}
   if (!sub) {
-    const denied = requireScope(ctx, 'datasets:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const snap = await datasetRef.get()
-    if (!snap.exists) return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
-    return apiJson(datasetView(snap), { headers: ctx.headers })
+    if (request.method === 'GET') {
+      const denied = requireScope(ctx, 'datasets:read')
+      if (denied) return denied
+      const snap = await datasetRef.get()
+      if (!snap.exists) {
+        return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+      }
+      return apiJson(datasetView(snap), { headers: ctx.headers })
+    }
+    if (request.method === 'PATCH') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return updateDataset(request, ctx, datasetRef)
+    }
+    if (request.method === 'DELETE') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return deleteDataset(request, ctx, datasetRef)
+    }
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
+    })
   }
 
   if (sub !== 'records') {
@@ -298,11 +624,33 @@ async function createRecord(
     })
   }
 
+  /*
+   * THE TWO QUOTAS THIS ROUTE DID NOT HAVE (AGL-2253).
+   *
+   * `POST /v1/datasets/{id}/records` counted rows only to compute `order` and
+   * checked nothing: not `recordsPerDataset`, not `dataStorageMbPerOrg`. The
+   * console route (`/api/orgs/datasets`) enforces both on the same write, and
+   * the tenant form path enforces the rows half — so `/v1` was the one door
+   * into `orgs/{id}/datasets/{id}/records` with no cap on it, and a customer
+   * could blow a limit through the REST API that the UI refuses.
+   *
+   * They sit BELOW the idempotency claim (AGL-2296), which is a change from
+   * how they shipped. Checking them first protected the key on a refusal —
+   * right, and kept by the `release()` calls below — but it made a create
+   * that consumed the LAST included row impossible to retry: the retry
+   * re-counts, is now AT the band, and is refused before the claim is
+   * consulted, so the replay never happens. The bytes leg is worse in
+   * practice, because a bulk import crosses the storage band mid-run and
+   * every retry from that point on is refused rather than replayed.
+   *
+   * The row count is reused for `order`, so this adds no read on the rows
+   * leg. The bytes leg adds no read either on any plan that meters the
+   * overage; see `dataStorageRefusal`.
+   */
   // Idempotency: replay a prior create for the same key instead of
   // duplicating. Claimed HERE, below validation, so a deterministic 400 never
   // takes the key at all — an integrator fixes the payload and retries with
-  // the same key, exactly as the POS cashier does (AGL-1691). Cheaper than
-  // taking-and-releasing, and it cannot leak a claim on a rejection path.
+  // the same key, exactly as the POS cashier does (AGL-1691).
   const claimed = await claimWrite(
     ctx,
     datasetSnap.id,
@@ -314,6 +662,31 @@ async function createRecord(
 
   try {
     const order = (await recordsRef.count().get()).data().count
+    const recordQuota = checkQuota(ctx.org, 'recordsPerDataset', order)
+    if (!recordQuota.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message: `Record limit reached (${recordQuota.limit}). Upgrade the plan to add more.`,
+        code: 'record_quota',
+        headers: ctx.headers,
+      })
+    }
+    const storageRefusal = await dataStorageRefusal(
+      ctx.org,
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+    )
+    if (storageRefusal) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message:
+          storageRefusal.basis === 'always'
+            ? 'Dataset storage is not included in this organization’s plan'
+            : `Dataset storage limit reached (${storageRefusal.includedMb} MB). Upgrade the plan to add more.`,
+        code: 'data_storage_quota',
+        headers: ctx.headers,
+      })
+    }
+
     const recordId = createResourceUid()
     await recordsRef.doc(recordId).create({
       values: coerced,
@@ -335,10 +708,10 @@ async function createRecord(
      * strands the key on a throw. Same reasoning, applied where its money term
      * is absent.
      *
-     * `datasets/records` is the entire `/v1` write surface — `sites` and
-     * `contacts` are read-only and `dispatchResource` 404s the rest — so
-     * nothing here moves money and "a released key costs a second refund" has
-     * no analogue. The costs invert instead. A duplicate record is visible and
+     * NOTHING on `/v1` moves money — the write surface is datasets, records,
+     * the form-submission `read` flag and contacts (AGL-2276), while orders
+     * and products stay read-only precisely because writing them would — so
+     * "a released key costs a second refund" has no analogue here. The costs invert instead. A duplicate record is visible and
      * reversible BY THE INTEGRATOR with `DELETE /v1/datasets/{id}/records/{id}`
      * — same API, same scope, one extra call. A stranded key is irreversible
      * from outside: keys are documented as never expiring, and an integrator
@@ -402,9 +775,9 @@ async function updateRecord(
  * it spends a signal to buy one — a caller that never saw the resource would
  * get a success for a typo'd id, losing the only feedback the API gives that
  * it is asking about the wrong thing. Consistency points the same way: `GET`
- * and `PATCH` on this very path answer 404 for a missing record, and since
- * `sites` and `contacts` are read-only this is the ONLY `DELETE` on `/v1`,
- * so there is no sibling convention that a 204 would be matching.
+ * and `PATCH` on this very path answer 404 for a missing record, and every
+ * sibling `DELETE` on `/v1` — the dataset, the form submission, the contact —
+ * answers the same way, so there is no convention a 204 would be matching.
  *
  * So the key identifies the ATTEMPT rather than the resource, which is what
  * the shared claim is already for. A retry of the attempt that did the
@@ -512,33 +885,197 @@ async function handleSites(
   }
 
   if (sub === 'form-submissions') {
-    const denied = requireScope(ctx, 'forms:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    let query: FirebaseFirestore.Query = ctx.firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('formSubmissions')
-    const form = url.searchParams.get('form')
-    if (form) query = query.where('formName', '==', form)
-    const { docs, nextCursor } = await paginate(query, url)
-    const data = docs.map((doc) => ({
-      id: doc.id,
-      object: 'form_submission',
-      form: doc.get('formName') ?? null,
-      path: doc.get('path') ?? null,
-      fields: doc.get('fields') ?? {},
-      read: Boolean(doc.get('read')),
-      created: serialize(doc.get('createdAt')) ?? null,
-    }))
-    return listResponse(data, nextCursor, ctx.headers)
+    return handleFormSubmissions(request, ctx, segments, url)
   }
 
   if (sub === 'orders') return handleOrders(request, ctx, segments, url)
   if (sub === 'products') return handleProducts(request, ctx, segments, url)
   if (sub === 'media') return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId))
+  // Kept below the sub-resources so an unknown one still 404s here.
 
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
+}
+
+// ── Form submissions ────────────────────────────────────────────────────────
+
+function formSubmissionView(doc: FirebaseFirestore.DocumentSnapshot) {
+  return {
+    id: doc.id,
+    object: 'form_submission',
+    form: doc.get('formName') ?? null,
+    path: doc.get('path') ?? null,
+    fields: doc.get('fields') ?? {},
+    read: Boolean(doc.get('read')),
+    created: serialize(doc.get('createdAt')) ?? null,
+  }
+}
+
+/**
+ * `/v1/sites/{siteId}/form-submissions[/{submissionId}]` (AGL-2127).
+ *
+ * The list was the whole surface, and that shaped every integration written
+ * against it badly. A lead sync polls, pushes new rows into a CRM, and then
+ * has nowhere to record that it did — so it either re-pushes the same lead
+ * next poll, or keeps its own high-water mark of ids against a list that
+ * `conventions.md` publishes as ordered by DOCUMENT ID, not by time. The
+ * `read` flag the console's inbox toggles on the very same document is the
+ * state the integration needed and could not write.
+ *
+ * `read` is the ONLY writable field. A submission is what a visitor typed,
+ * and an API that let an integration quietly rewrite it would make the
+ * inbox's contents unattributable — so anything else in the body is a
+ * `validation_failed` naming the offending key rather than a silent drop.
+ */
+async function handleFormSubmissions(
+  request: Request,
+  ctx: ApiV1Context,
+  segments: string[],
+  url: URL,
+): Promise<Response> {
+  const [, hostId, , submissionId] = segments
+  const collection = ctx.firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('formSubmissions')
+
+  if (!submissionId) {
+    const denied = requireScope(ctx, 'forms:read')
+    if (denied) return denied
+    if (request.method !== 'GET') {
+      return ApiErrors.methodNotAllowed({
+        headers: { ...ctx.headers, Allow: 'GET' },
+      })
+    }
+    let query: FirebaseFirestore.Query = collection
+    const form = url.searchParams.get('form')
+    if (form) query = query.where('formName', '==', form)
+    const { docs, nextCursor } = await paginate(query, url)
+    return listResponse(docs.map(formSubmissionView), nextCursor, ctx.headers)
+  }
+
+  const submissionRef = collection.doc(submissionId)
+
+  if (request.method === 'GET') {
+    const denied = requireScope(ctx, 'forms:read')
+    if (denied) return denied
+    const snap = await submissionRef.get()
+    if (!snap.exists) {
+      return ApiErrors.notFound({
+        message: 'No such form submission',
+        headers: ctx.headers,
+      })
+    }
+    return apiJson(formSubmissionView(snap), { headers: ctx.headers })
+  }
+
+  if (request.method === 'PATCH') {
+    const denied = requireScope(ctx, 'forms:write')
+    if (denied) return denied
+    return updateFormSubmission(request, ctx, submissionRef)
+  }
+
+  if (request.method === 'DELETE') {
+    const denied = requireScope(ctx, 'forms:write')
+    if (denied) return denied
+    return deleteFormSubmission(request, ctx, hostId, submissionRef)
+  }
+
+  return ApiErrors.methodNotAllowed({
+    headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
+  })
+}
+
+/**
+ * Mark one submission read or unread. No `Idempotency-Key`: the same body
+ * twice lands the same state AND returns the same `200`, which is the test
+ * `updateRecord` and `updateDataset` are held to.
+ */
+async function updateFormSubmission(
+  request: Request,
+  ctx: ApiV1Context,
+  submissionRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const body = await readJsonBody(request)
+  const unknown = Object.keys(body).filter((key) => key !== 'read')
+  if (unknown.length > 0) {
+    // Named, not dropped. `values` on a record drops unknown fields because a
+    // dataset model defines what exists; a submission has no model, so a
+    // silent drop here would read as "we stored your correction" when nothing
+    // was stored, and the visitor's answers are exactly the thing that must
+    // not be quietly editable.
+    return ApiErrors.badRequest({
+      message: 'Only `read` can be changed on a form submission',
+      code: 'validation_failed',
+      fields: Object.fromEntries(
+        unknown.map((key) => [key, 'Not writable on a form submission']),
+      ),
+      headers: ctx.headers,
+    })
+  }
+  if (typeof body.read !== 'boolean') {
+    return ApiErrors.badRequest({
+      message: 'Form submission failed validation',
+      code: 'validation_failed',
+      fields: { read: 'Must be true or false' },
+      headers: ctx.headers,
+    })
+  }
+
+  const snap = await submissionRef.get()
+  if (!snap.exists) {
+    return ApiErrors.notFound({
+      message: 'No such form submission',
+      headers: ctx.headers,
+    })
+  }
+  await submissionRef.update({ read: body.read })
+  return apiJson(formSubmissionView(await submissionRef.get()), {
+    headers: ctx.headers,
+  })
+}
+
+/**
+ * Delete one submission. Accepts an `Idempotency-Key` for the reason
+ * `deleteRecord` does: a purge that runs after an export is the operation
+ * most likely to be retried on a timer, and without a key the retry cannot
+ * tell "already gone" from "wrong id".
+ */
+async function deleteFormSubmission(
+  request: Request,
+  ctx: ApiV1Context,
+  hostId: string,
+  submissionRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    hostId,
+    request.headers.get('Idempotency-Key'),
+    'form-submission-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await submissionRef.get()
+    if (!snap.exists) {
+      await claim.release()
+      return ApiErrors.notFound({
+        message: 'No such form submission',
+        headers: ctx.headers,
+      })
+    }
+    await submissionRef.delete()
+    const view = {
+      id: submissionRef.id,
+      object: 'form_submission',
+      deleted: true,
+    }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
 }
 
 // ── Commerce: orders & products (read) ──────────────────────────────────────
@@ -844,6 +1381,21 @@ async function handleScopedMedia(
 
 // ── Contacts (read) ─────────────────────────────────────────────────────────
 
+/**
+ * The contact object as published.
+ *
+ * `notes` and `marketingConsent` are here because `PATCH` writes them
+ * (AGL-2276). A projection that omits a field the same resource accepts is
+ * the shape that has shipped broken before: the client writes, reads back,
+ * sees nothing, and cannot tell a dropped write from a narrow view. Every
+ * writable field appears here, and `contact-writes.spec.ts` asserts that as a
+ * property of the pair rather than field by field.
+ *
+ * `email`, `sources` and `interactions` are read-only and stay that way —
+ * `email` is the dedupe key the whole CRM unifies on, and the other two are
+ * provenance. `interactions` is not published at all; the console's timeline
+ * is not part of the API contract.
+ */
 function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
   const data = doc.data() ?? {}
   return {
@@ -852,9 +1404,353 @@ function contactView(doc: FirebaseFirestore.DocumentSnapshot) {
     email: data.email ?? null,
     name: data.name ?? null,
     tags: data.tags ?? [],
+    notes: data.notes ?? null,
+    marketingConsent: Boolean(data.marketingConsent),
     sources: data.sources ? Object.keys(data.sources) : [],
     created: serialize(data.createdAt) ?? null,
     updated: serialize(data.updatedAt) ?? null,
+  }
+}
+
+const CONTACT_NAME_MAX = 120
+const CONTACT_NOTES_MAX = 2000
+const CONTACT_TAGS_MAX = 50
+const CONTACT_TAG_MAX = 60
+
+/** Fields a client may send. Anything else is named, never silently dropped. */
+const CONTACT_WRITABLE = ['name', 'tags', 'notes', 'marketingConsent'] as const
+
+/**
+ * Validate the writable half of a contact (AGL-2276). `partial` separates
+ * PATCH from POST exactly as `readDatasetInput` does: a create must carry an
+ * `email`, an update may send any one field alone and leaves the rest alone.
+ *
+ * Unknown keys are REFUSED rather than dropped, following
+ * `updateFormSubmission` and not `createRecord`: a record has a dataset model
+ * that defines what exists, and a contact does not, so a silent drop would
+ * read as "we stored your correction" when nothing was stored. `email` gets
+ * its own message on PATCH because sending it is the honest mistake an
+ * integrator makes first — it is the field their own system keys on.
+ */
+function readContactInput(
+  body: Record<string, unknown>,
+  { partial }: { partial: boolean },
+):
+  | {
+      values: {
+        email?: string
+        name?: string
+        tags?: string[]
+        notes?: string
+        marketingConsent?: boolean
+      }
+    }
+  | { errors: Record<string, string> } {
+  const errors: Record<string, string> = {}
+  const values: {
+    email?: string
+    name?: string
+    tags?: string[]
+    notes?: string
+    marketingConsent?: boolean
+  } = {}
+
+  const allowed = new Set<string>([
+    ...CONTACT_WRITABLE,
+    ...(partial ? [] : ['email']),
+  ])
+  for (const key of Object.keys(body)) {
+    if (allowed.has(key)) continue
+    errors[key] =
+      key === 'email'
+        ? 'Not writable — a contact is identified by its email'
+        : key === 'sources' || key === 'interactions'
+          ? 'Not writable — set by the capture point that recorded it'
+          : 'Not writable on a contact'
+  }
+
+  if (!partial) {
+    // The SAME normalizer every capture point uses. Re-implementing the
+    // check here would let the API accept an address `upsertHostContact`
+    // would reject, and the two would then disagree about who is a duplicate.
+    const email = normalizeContactEmail(body.email)
+    if (!email) errors.email = 'A valid email address is required'
+    else values.email = email
+  }
+
+  if (body.name !== undefined) {
+    const name = String(body.name ?? '').trim().slice(0, CONTACT_NAME_MAX)
+    if (name) values.name = name
+    else errors.name = 'Must not be empty'
+  }
+
+  if (body.tags !== undefined) {
+    if (!Array.isArray(body.tags)) {
+      errors.tags = 'Must be an array of strings'
+    } else {
+      // An EMPTY array is legal and means "clear the tags" — the console's
+      // own tag editor can empty the field, and an API that could only ever
+      // add tags would leave an integration unable to undo its own mistake.
+      values.tags = (body.tags as unknown[])
+        .map((tag) => String(tag).trim().slice(0, CONTACT_TAG_MAX))
+        .filter((tag) => tag.length > 0)
+        .slice(0, CONTACT_TAGS_MAX)
+    }
+  }
+
+  if (body.notes !== undefined) {
+    values.notes = String(body.notes ?? '').slice(0, CONTACT_NOTES_MAX)
+  }
+
+  if (body.marketingConsent !== undefined) {
+    if (typeof body.marketingConsent !== 'boolean') {
+      errors.marketingConsent = 'Must be true or false'
+    } else {
+      values.marketingConsent = body.marketingConsent
+    }
+  }
+
+  return Object.keys(errors).length ? { errors } : { values }
+}
+
+const contactsCollection = (ctx: ApiV1Context) =>
+  ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts')
+
+/**
+ * `POST /v1/contacts` (AGL-2276) — the call that lets an integration own the
+ * customer list.
+ *
+ * ## The audience band
+ *
+ * `checkContactQuota` is the gate, and it is the SAME one `upsertHostContact`
+ * applies to a form capture (AGL-890). Metered plans always create and bill
+ * the overage through the `report-usage` rollup, which counts
+ * `orgs/{orgId}/contacts` without caring who wrote them — so an API-created
+ * contact meters exactly like a captured one, and there is no unbilled door.
+ * Free hard-bands at its included count; free cannot reach `/v1` at all
+ * without a staff `features.apiAccess` override, which is precisely the shape
+ * AGL-2163 found running unbounded, so the gate is here rather than assumed
+ * unreachable.
+ *
+ * Where capture DROPS a refused contact (silently, onto a
+ * `counters/contactsDropped` the console alerts on), this refuses out loud
+ * with a `403`: a form must never fail a visitor's signup because of billing,
+ * and an API call has an operator on the other end who needs to be told.
+ *
+ * ## Duplicates
+ *
+ * A contact is unified on its normalized email, so a second create for an
+ * address already present is a `409 conflict` naming the existing id rather
+ * than a second row. Silently upserting instead would hide a real integration
+ * bug — two upstream systems both claiming to own the record — and would make
+ * `POST` and `PATCH` the same call.
+ *
+ * ## Why the claim is taken ABOVE both refusals
+ *
+ * `createRecord` and `createDataset` check their quota FIRST and claim after,
+ * so that a plan refusal never burns a key. That ordering has a hole this one
+ * deliberately does not copy, and `api-v1-contact-writes.spec.ts` is what
+ * found it: **a create that exactly fills the band cannot be retried.** The
+ * first call succeeds and consumes the last slot; the retry — same key, lost
+ * response — re-counts, is now AT the band, and gets a `403` instead of the
+ * replay `conventions.md` promises ("if the original succeeded, the same
+ * response comes back"). The integrator is left unable to tell whether the
+ * contact exists, which is the exact confusion the key exists to remove. The
+ * duplicate check has the same shape, and worse: the retry's own successful
+ * write is what makes the email a duplicate, so EVERY retry of a successful
+ * create would answer `409 contact_exists`.
+ *
+ * Claiming first and RELEASING on each refusal gets both properties at once:
+ * a settled key replays before any of this is reached, and a refusal gives
+ * the key back so the retry that should finally succeed still can. It is the
+ * ordering `deleteRecord` already argues for, and it pays the same price —
+ * taking-and-releasing on a genuine refusal. AGL-2278 applies it to the two
+ * older creates.
+ *
+ * `visibleTo` is stamped with `ORG_SCOPE_TOKEN`, as capture does. A contact
+ * written without it matches no `array-contains-any` and is therefore visible
+ * on NO site (AGL-1044) — the API would create data nobody can see, which is
+ * worse than refusing.
+ */
+async function createContact(
+  request: Request,
+  ctx: ApiV1Context,
+): Promise<Response> {
+  // Validation stays above the claim, as `createRecord` argues: a
+  // deterministic 400 must never take the key at all, so an integrator fixes
+  // the payload and retries with the same one.
+  const parsed = readContactInput(await readJsonBody(request), {
+    partial: false,
+  })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+  const { email, name, tags, notes, marketingConsent } = parsed.values
+
+  const collection = contactsCollection(ctx)
+  const claimed = await claimWrite(
+    ctx,
+    '*',
+    request.headers.get('Idempotency-Key'),
+    'contacts',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const existing = await collection.where('email', '==', email).limit(1).get()
+    if (!existing.empty) {
+      // Released: the conflict clears if that contact is deleted or merged
+      // upstream, and the retry that should then succeed must not replay it.
+      await claim.release()
+      return ApiErrors.conflict({
+        message: `A contact with this email already exists (${existing.docs[0].id}). Update it instead.`,
+        code: 'contact_exists',
+        headers: ctx.headers,
+      })
+    }
+
+    // One aggregate read, the same one `upsertHostContact` and the monthly
+    // rollup take. Unconditional, matching `createDataset` — the alternative
+    // is a per-plan shape check like `dataStorageEnforcementShape`, and a
+    // `count()` costs one read against a write that costs one anyway.
+    const count = (await collection.count().get()).data().count
+    const quota = checkContactQuota(ctx.org as never, count)
+    if (!quota.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message:
+          `Audience limit reached (${quota.included} contacts). ` +
+          'Upgrade the plan to add more.',
+        code: 'contact_quota',
+        headers: ctx.headers,
+      })
+    }
+
+    const id = createResourceUid()
+    await collection.doc(id).create({
+      email,
+      ...(name ? { name } : {}),
+      tags: tags ?? [],
+      ...(notes ? { notes } : {}),
+      ...(marketingConsent
+        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+        : {}),
+      // `sources.api` — a first-class provenance value beside `form`,
+      // `member`, `order` and `booking`, so a merchant reading the console
+      // can see which people an integration put there.
+      sources: { api: true },
+      interactions: [],
+      // AGL-1044/AGL-1037: without this the contact matches no scoped read.
+      visibleTo: [ORG_SCOPE_TOKEN],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    })
+    const view = contactView(await collection.doc(id).get())
+    // Stored as 200 so a replay is distinguishable from the fresh 201.
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
+}
+
+/**
+ * `PATCH /v1/contacts/{id}` — the tag/notes edit the console's Contacts page
+ * already makes, plus the name and the marketing flag.
+ *
+ * No `Idempotency-Key`, for `updateRecord`'s reason: the same body twice
+ * lands the same state AND returns the same `200`. No quota either — an edit
+ * does not grow the audience, and charging a plan refusal for renaming
+ * somebody would make a downgraded org unable to correct its own data.
+ */
+async function updateContact(
+  request: Request,
+  ctx: ApiV1Context,
+  contactRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const parsed = readContactInput(await readJsonBody(request), { partial: true })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Contact failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+  const snap = await contactRef.get()
+  if (!snap.exists) {
+    return ApiErrors.notFound({
+      message: 'No such contact',
+      headers: ctx.headers,
+    })
+  }
+
+  const { name, tags, notes, marketingConsent } = parsed.values
+  const update: Record<string, unknown> = {}
+  if (name !== undefined) update.name = name
+  if (tags !== undefined) update.tags = tags
+  if (notes !== undefined) update.notes = notes
+  if (marketingConsent !== undefined) {
+    update.marketingConsent = marketingConsent
+    // The consent timestamp is the evidence, so it is stamped when consent is
+    // GIVEN and left alone when it is withdrawn — an audit needs to know when
+    // the person opted in, and clearing it would destroy that record.
+    if (marketingConsent) update.marketingConsentAtMs = Date.now()
+  }
+  // An empty body is a no-op answered with the current contact, matching
+  // `updateDataset`: a client re-sending an unchanged object should not have
+  // to special-case it.
+  if (Object.keys(update).length > 0) {
+    await contactRef.update({ ...update, updatedAt: Timestamp.now() })
+  }
+  return apiJson(contactView(await contactRef.get()), { headers: ctx.headers })
+}
+
+/**
+ * `DELETE /v1/contacts/{id}` — the console's own delete, over the API.
+ *
+ * Takes an `Idempotency-Key` with `deleteRecord`'s exact semantics, and for a
+ * sharper reason: an erasure request is the operation most likely to be run
+ * from a script on somebody else's deadline, and a retry after a lost
+ * response must be able to tell "already erased" from "wrong id".
+ */
+async function deleteContact(
+  request: Request,
+  ctx: ApiV1Context,
+  contactRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    '*',
+    request.headers.get('Idempotency-Key'),
+    'contact-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await contactRef.get()
+    if (!snap.exists) {
+      await claim.release()
+      return ApiErrors.notFound({
+        message: 'No such contact',
+        headers: ctx.headers,
+      })
+    }
+    await contactRef.delete()
+    const view = { id: contactRef.id, object: 'contact', deleted: true }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
   }
 }
 
@@ -864,19 +1760,179 @@ async function handleContacts(
   segments: string[],
   url: URL,
 ): Promise<Response> {
-  const denied = requireScope(ctx, 'contacts:read')
-  if (denied) return denied
-  if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-  const collection = ctx.firestore.collection('orgs').doc(ctx.orgId).collection('contacts')
+  const collection = contactsCollection(ctx)
   const [, contactId] = segments
 
-  if (contactId) {
-    const snap = await collection.doc(contactId).get()
-    if (!snap.exists) return ApiErrors.notFound({ message: 'No such contact', headers: ctx.headers })
+  if (!contactId) {
+    if (request.method === 'GET') {
+      const denied = requireScope(ctx, 'contacts:read')
+      if (denied) return denied
+      const { docs, nextCursor } = await paginate(collection, url)
+      return listResponse(docs.map(contactView), nextCursor, ctx.headers)
+    }
+    if (request.method === 'POST') {
+      const denied = requireScope(ctx, 'contacts:write')
+      if (denied) return denied
+      return createContact(request, ctx)
+    }
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, POST' },
+    })
+  }
+
+  const contactRef = collection.doc(contactId)
+
+  if (request.method === 'GET') {
+    const denied = requireScope(ctx, 'contacts:read')
+    if (denied) return denied
+    const snap = await contactRef.get()
+    if (!snap.exists) {
+      return ApiErrors.notFound({ message: 'No such contact', headers: ctx.headers })
+    }
     return apiJson(contactView(snap), { headers: ctx.headers })
   }
-  const { docs, nextCursor } = await paginate(collection, url)
-  return listResponse(docs.map(contactView), nextCursor, ctx.headers)
+  if (request.method === 'PATCH') {
+    const denied = requireScope(ctx, 'contacts:write')
+    if (denied) return denied
+    return updateContact(request, ctx, contactRef)
+  }
+  if (request.method === 'DELETE') {
+    const denied = requireScope(ctx, 'contacts:write')
+    if (denied) return denied
+    return deleteContact(request, ctx, contactRef)
+  }
+  return ApiErrors.methodNotAllowed({
+    headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
+  })
+}
+
+// ── Usage (read) ────────────────────────────────────────────────────────────
+
+/**
+ * One metered dimension, as published (AGL-2277).
+ *
+ * `included`/`remaining` are `null` for an UNLIMITED band rather than the
+ * sentinel itself: `UNLIMITED` is `Number.POSITIVE_INFINITY`, which
+ * `JSON.stringify` silently turns into `null` anyway — so the choice is
+ * between a `null` that means "unlimited" on purpose and the same `null`
+ * arriving by accident, indistinguishable from a bug. Stated explicitly, and
+ * documented, so an integrator can branch on it.
+ *
+ * `metered` is the field that actually answers "what happens when I cross
+ * this" — true means the excess bills, false means the next call is refused.
+ * It is read off the plan's own overage rate through the `check*Quota`
+ * helpers rather than re-derived here, because a second copy of that rule
+ * would drift from the one the enforcement path uses, and this endpoint's
+ * whole value is telling a customer what the enforcement path will do.
+ */
+function usageBand(
+  used: number,
+  included: number,
+  remaining: number,
+  overageRateUsd: number | null,
+) {
+  const unlimited = !Number.isFinite(included)
+  return {
+    used,
+    included: unlimited ? null : included,
+    remaining: unlimited ? null : remaining,
+    metered: overageRateUsd !== null,
+  }
+}
+
+/**
+ * `GET /v1/usage` (AGL-2277) — the caller's own meter, for the current
+ * billing month.
+ *
+ * `/v1` is the metered surface: an integration is the thing generating
+ * `apiRequestsPerMonth`, and until this shipped it had no way to ask how much
+ * of the band it had spent. The only signal was the `429` at the end of the
+ * month with a `Retry-After` pointing at the month boundary — a wall with no
+ * approach — and no way at all to check whether a bulk import was about to
+ * cross an audience or storage band.
+ *
+ * NO SCOPE, like `GET /v1/me`. An API key is an organization credential and
+ * this is that organization's own meter; requiring, say, `datasets:read`
+ * would mean a key scoped to contacts could not see the quota that refuses
+ * it. It is metered as one request like everything else, which is why the
+ * number it reports may be one behind — see the note on `apiRequests`.
+ *
+ * `apiRequests` is read from `orgs/{orgId}/apiUsage/{month}` — the LIVE
+ * counter `refuseIfApiQuotaExhausted` enforces from, not the swept monthly
+ * rollup, so what this reports and what refuses a request are the same
+ * number. `dataStorageMb` is the opposite case by necessity: bytes are
+ * measured by the `report-usage` sweep, so the honest field to publish is the
+ * swept one that billing actually prices from, and its staleness is
+ * documented rather than hidden behind a fresh but differently-derived
+ * figure.
+ */
+export async function handleUsage(
+  request: Request,
+  ctx: ApiV1Context,
+): Promise<Response> {
+  if (request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET' },
+    })
+  }
+  const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
+  const month = apiUsageMonth()
+  const [apiSnap, storageSnap, contactsSnap, datasetsSnap] = await Promise.all([
+    orgRef.collection('apiUsage').doc(month).get(),
+    orgRef.collection('usage').doc(month).get(),
+    orgRef.collection('contacts').count().get(),
+    orgRef.collection('datasets').count().get(),
+  ])
+
+  const apiQuota = checkApiRequestQuota(
+    ctx.org as never,
+    Number(apiSnap.get('count') ?? 0),
+  )
+  const contactQuota = checkContactQuota(
+    ctx.org as never,
+    contactsSnap.data().count,
+  )
+  const datasetQuota = checkDatasetQuota(ctx.org, datasetsSnap.data().count)
+  const storageQuota = checkDataStorageQuota(
+    ctx.org as never,
+    Number(storageSnap.get('dataStorageMb') ?? 0),
+  )
+
+  return apiJson(
+    {
+      object: 'usage',
+      month,
+      apiRequests: usageBand(
+        apiQuota.used,
+        apiQuota.included,
+        apiQuota.remaining,
+        apiQuota.overageRateUsd,
+      ),
+      contacts: usageBand(
+        contactQuota.used,
+        contactQuota.included,
+        contactQuota.remaining,
+        contactQuota.overageRateUsd,
+      ),
+      // Datasets are the one band with no overage RATE — extra slots are an
+      // add-on you buy, not usage that meters — so `metered` is always false
+      // and `included` is the effective limit INCLUDING purchased add-ons,
+      // which is the number that actually refuses a create.
+      datasets: usageBand(
+        datasetsSnap.data().count,
+        datasetQuota.limit,
+        datasetQuota.remaining,
+        null,
+      ),
+      dataStorageMb: usageBand(
+        storageQuota.usedMb,
+        storageQuota.includedMb,
+        storageQuota.remainingMb,
+        storageQuota.overageRateUsd,
+      ),
+    },
+    { headers: ctx.headers },
+  )
 }
 
 // ── Dispatch ────────────────────────────────────────────────────────────────

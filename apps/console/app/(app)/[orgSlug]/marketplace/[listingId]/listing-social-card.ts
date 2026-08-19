@@ -58,6 +58,7 @@
  * `aglyn:addons`); the marketplace plugin re-exports them unchanged.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { resolveSeoTitle } from '@aglyn/aglyn/app-utils/seo-title'
 import { resolveSocialImage } from '@aglyn/aglyn/app-utils/social-image'
 import {
@@ -185,7 +186,7 @@ export function listingSocialCard(
     openGraph: {
       title,
       ...(description ? { description } : {}),
-      siteName: 'Aglyn',
+      siteName: PLATFORM_BRAND_NAME,
       type: 'website',
       ...(image ? { images: [image] } : {}),
     },

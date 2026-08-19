@@ -72,7 +72,10 @@ export interface ShippingRate {
 export interface ShippingSettings {
   zones?: ShippingZone[]
   rates?: ShippingRate[]
-  /** Offer free local pickup as a delivery choice. */
+  /**
+   * Offer free local pickup as a delivery choice. Does NOT widen where the
+   * store ships: a destination no rate reaches is still refused (AGL-2325).
+   */
   localPickup?: boolean
 }
 
@@ -82,9 +85,36 @@ export interface ResolvedShippingRate {
   amountCents: number
 }
 
+/**
+ * The rate id appended for local pickup (AGL-2325).
+ *
+ * Exported because pickup is the one entry in a resolved list that is NOT a
+ * shipping promise: it is appended AFTER and INDEPENDENT of zone matching, so
+ * it resolves for every destination on earth. Anything asking "does this store
+ * ship there" — the checkout refusal, the console coverage card — has to be
+ * able to tell it apart from a rate, or it reads a merchant who offers
+ * collection as a merchant who delivers worldwide.
+ */
+export const LOCAL_PICKUP_RATE_ID = 'pickup'
+
+/**
+ * One stored country code, normalised (AGL-2298).
+ *
+ * TRIMMED as well as upper-cased. The console trims on save, so this only
+ * matters for a document written any other way — an import, the REST API, a
+ * hand edit — but the failure it produces is silent and expensive: `' US'`
+ * upper-cases to `' US'`, matches nothing, and the store refuses every US
+ * shopper with "This store does not ship to the United States" while its
+ * settings card shows `US` right there.
+ */
+const zoneCode = (code: unknown): string => String(code ?? '').trim().toUpperCase()
+
+/** Whether a stored code is the rest-of-world wildcard. */
+const isWildcard = (code: unknown): boolean => zoneCode(code) === '*'
+
 function zoneMatches(zone: ShippingZone, country: string): boolean {
-  return zone.countries.some(
-    (code) => code === '*' || code.toUpperCase() === country,
+  return (zone.countries ?? []).some(
+    (code) => isWildcard(code) || zoneCode(code) === country,
   )
 }
 
@@ -105,6 +135,13 @@ function tierAmount(
  * Rates available for a destination + cart, cheapest first. Specific
  * country zones beat '*' zones: when any specific zone matches, '*'
  * zones are ignored (rest-of-world semantics).
+ *
+ * Local pickup is appended AFTER and INDEPENDENT of zone matching, so this
+ * list is never empty for a merchant who offers it, at any destination. That
+ * is correct for a resolver — a shopper anywhere may choose to come and
+ * collect — but it means A NON-EMPTY RESULT IS NOT A PROMISE TO SHIP THERE.
+ * Callers deciding whether a destination is served must filter pickup out
+ * first; `planCheckoutShipping` and `summarizeShippingCoverage` do (AGL-2325).
  */
 export function resolveShippingRates(
   settings: ShippingSettings | undefined,
@@ -114,10 +151,15 @@ export function resolveShippingRates(
   if (!settings || !destinationCountry) return []
   const country = destinationCountry.toUpperCase()
   const zones = settings.zones ?? []
-  const specific = zones.filter(
-    (zone) =>
-      zoneMatches(zone, country) &&
-      !zone.countries.every((code) => code === '*'),
+  // A zone is SPECIFIC when it names this country outright — not merely when
+  // it is "not wildcard-only" (AGL-2298). The old test was `!every(code ===
+  // '*')`, so a zone spelled `['*','US']` counted as specific for all six
+  // destinations (it matches every country through the `*`) and suppressed
+  // every genuine rest-of-world zone globally. Asking the narrower question
+  // makes such a zone specific for `US` and wildcard for the rest, which is
+  // what its two entries actually say.
+  const specific = zones.filter((zone) =>
+    (zone.countries ?? []).some((code) => zoneCode(code) === country),
   )
   const matched = specific.length
     ? specific
@@ -149,9 +191,26 @@ export function resolveShippingRates(
     resolved.push({ rateId: rate.id, name: rate.name, amountCents })
   }
   if (settings.localPickup) {
-    resolved.push({ rateId: 'pickup', name: 'Local pickup', amountCents: 0 })
+    resolved.push({
+      rateId: LOCAL_PICKUP_RATE_ID,
+      name: 'Local pickup',
+      amountCents: 0,
+    })
   }
   return resolved.sort((a, b) => a.amountCents - b.amountCents)
+}
+
+/**
+ * The resolved options that actually carry a parcel (AGL-2325).
+ *
+ * Safe to apply AFTER `MAX_CHECKOUT_SHIPPING_OPTIONS` truncation: pickup is
+ * 0¢ and sorts first, so it occupies at most one of the five slots and a
+ * merchant with any shippable rate at all keeps at least one of them.
+ */
+function shippableOnly(
+  options: readonly ResolvedShippingRate[],
+): ResolvedShippingRate[] {
+  return options.filter((option) => option.rateId !== LOCAL_PICKUP_RATE_ID)
 }
 
 /** Stripe Checkout accepts at most 5 `shipping_options` on one session. */
@@ -272,9 +331,58 @@ export interface CheckoutShippingPlan {
    *   there is no set of options honest for every address Stripe would accept.
    *   Ask the shopper where they are shipping and plan again.
    * - `destination-unserved` — the merchant ships somewhere, but not there.
+   * - `cart-unpriceable` — the merchant priced shipping, but no rate of theirs
+   *   resolves for THIS cart at ANY destination (AGL-2230). A tier table that
+   *   stops at 2 kg says nothing about a 3 kg parcel, and the honest answer is
+   *   to refuse rather than to ship it for nothing.
    */
-  refusal?: 'destination-required' | 'destination-unserved'
+  refusal?: 'destination-required' | 'destination-unserved' | 'cart-unpriceable'
 }
+
+/**
+ * Whether this merchant prices shipping AT ALL (AGL-2230).
+ *
+ * A pure question about the SETTINGS, deliberately taking no cart, and that is
+ * the whole point of it existing. `planCheckoutShipping` used to ask "does any
+ * rate resolve for any destination?" and pass the live cart into the probe, so
+ * a cart that exhausted every tier made the probe empty too — and an empty
+ * probe reads as "this merchant never set shipping up", the one case that must
+ * complete with no `shipping_options` and nothing charged. A 3 kg order at a
+ * store whose weight tiers stop at 2 kg therefore shipped free, silently, on
+ * every one of the three doors.
+ *
+ * Answered from the stored zones and rates instead: a rate bound to a zone
+ * that exists, or local pickup, means the merchant made a shipping decision
+ * and a cart their table cannot price is a REFUSAL. A merchant with no zones,
+ * no rates and no pickup has made no such decision, and their session stays
+ * byte-identical to the one AGL-1707 shipped.
+ */
+export function merchantPricesShipping(
+  settings: ShippingSettings | undefined,
+): boolean {
+  if (!settings) return false
+  if (settings.localPickup) return true
+  const zoneIds = new Set((settings.zones ?? []).map((zone) => zone.id))
+  // A rate whose `zoneId` names no zone is unreachable by every resolver here,
+  // so it is not evidence of a decision — counting it would refuse carts at a
+  // store with nothing but orphaned rows.
+  return (settings.rates ?? []).some((rate) => zoneIds.has(rate.zoneId))
+}
+
+/**
+ * What a shopper is told when `cart-unpriceable` refuses (AGL-2230).
+ *
+ * One string, shared by all three doors, because the three used to phrase the
+ * two existing refusals identically and drifting here would make the same
+ * store say different things depending on which button was pressed. It names
+ * the cart rather than the destination on purpose — a `Ship to` select cannot
+ * fix a parcel no tier covers, so the refusal deliberately does NOT set
+ * `needsShippingCountry`.
+ */
+export const CART_UNPRICEABLE_SHIPPING_MESSAGE =
+  'This store cannot price shipping for this order — it falls outside every ' +
+  'shipping rate the store has set up. Try removing an item, or contact the ' +
+  'store.'
 
 /** Identity of a resolved list, for comparing two destinations' offers. */
 function optionsKey(options: readonly ResolvedShippingRate[]): string {
@@ -329,15 +437,40 @@ export function planCheckoutShipping(
       [destination],
       cart,
     )
+    // REFUSAL IS DECIDED ON SHIPPABLE RATES, PICKUP IS OFFERED AFTERWARDS
+    // (AGL-2325). `resolveShippingRates` appends pickup independent of zone
+    // matching, so a merchant who turned it on had a non-empty list for every
+    // destination on earth and this branch returned before it could refuse
+    // anyone: a shopper in France picked `Local pickup — Free` on a physical
+    // order from a US-only store, Stripe collected their French address
+    // because the session still allowed it, and the merchant was paid nothing
+    // to carry the parcel there. Pickup is collection, not delivery, so it
+    // cannot answer "do you ship to France".
+    //
+    // `shipsElsewhere` is the same question the old probe asked, narrowed to
+    // shippable rates, and it keeps the same two-way fork: a merchant who
+    // configured NO shipping is not refusing anyone, so that store keeps
+    // completing exactly as it does today, while a merchant who ships
+    // elsewhere but not here is refusing and saying so is the honest answer.
+    // A merchant who ships NOWHERE is untouched by this: pickup-only is a
+    // real configuration — they deliver to no one and refuse no one — and it
+    // falls through to the offer below exactly as it did.
+    const shipsElsewhere = countries.some(
+      (country) =>
+        shippableOnly(resolveCheckoutShippingOptions(settings, [country], cart))
+          .length > 0,
+    )
+    if (shippableOnly(options).length === 0 && shipsElsewhere) {
+      return { countries, options: [], refusal: 'destination-unserved' }
+    }
     if (options.length > 0) return { countries: [destination], options }
-    // No rate reaches there. A merchant who configured NO shipping at all is
-    // not refusing anyone — that store charges no shipping and always has, so
-    // it keeps completing exactly as it does today. A merchant who ships
-    // elsewhere but not here is refusing, and saying so is the honest answer:
-    // the alternative is shipping a parcel to a destination they priced no
-    // rate for, for free.
-    return resolveCheckoutShippingOptions(settings, countries, cart).length > 0
-      ? { countries, options: [], refusal: 'destination-unserved' }
+    // NOTHING resolves anywhere for this cart, and the two reasons that can be
+    // true of are opposite (AGL-2230). Asked of the SETTINGS rather than of
+    // this cart, because the probe above cannot tell them apart: a merchant
+    // who priced shipping and whose table simply does not reach this order is
+    // refusing, and used to be handed the "never set shipping up" branch.
+    return merchantPricesShipping(settings)
+      ? { countries, options: [], refusal: 'cart-unpriceable' }
       : { countries, options: [] }
   }
   const offers = new Set(
@@ -351,10 +484,15 @@ export function planCheckoutShipping(
   if (offers.size > 1) {
     return { countries, options: [], refusal: 'destination-required' }
   }
-  return {
-    countries,
-    options: resolveCheckoutShippingOptions(settings, countries, cart),
+  const union = resolveCheckoutShippingOptions(settings, countries, cart)
+  // Every destination agrees, and what they agree on is NOTHING. The same
+  // fork as the declared-destination branch above (AGL-2230): a store with no
+  // shipping settings completes untouched, a store whose rates cannot reach
+  // this cart refuses instead of carrying the parcel for free.
+  if (union.length === 0 && merchantPricesShipping(settings)) {
+    return { countries, options: [], refusal: 'cart-unpriceable' }
   }
+  return { countries, options: union }
 }
 
 /**
@@ -398,6 +536,19 @@ export interface ShippingCoverage {
   asksDestination: boolean
   /** Some zone already claims rest of world, so `*` is not the missing piece. */
   hasRestOfWorldZone: boolean
+  /**
+   * The merchant offers local pickup, so checkout presents a free collection
+   * choice at every destination it does not refuse (AGL-2325).
+   *
+   * Deliberately NOT folded into `served`: pickup resolves for every country
+   * because it is appended independent of zone matching, so counting it as
+   * coverage told a US-only merchant who had switched it on that checkout
+   * "can price shipping to every destination", which is the sentence that
+   * hid the defect. It is reported alongside instead, so the card can say
+   * both true things: these destinations are refused, and pickup is offered
+   * to the ones that are not.
+   */
+  offersLocalPickup: boolean
 }
 
 /**
@@ -428,14 +579,20 @@ export function summarizeShippingCoverage(
       [country],
       COVERAGE_PROBE_CART,
     )
+    // `asksDestination` is asked of the FULL list — pickup is a real option a
+    // shopper picks, so a merchant whose US destination offers a rate plus
+    // pickup while France offers only pickup genuinely does make checkout ask.
     offers.add(optionsKey(options))
-    ;(options.length > 0 ? served : unserved).push(country)
+    // `served` is asked of the SHIPPABLE list, so that it answers the same
+    // question `planCheckoutShipping` refuses on (AGL-2325).
+    ;(shippableOnly(options).length > 0 ? served : unserved).push(country)
   }
   return {
     served,
     unserved: served.length > 0 ? unserved : [],
     shipsNowhere: served.length === 0,
     asksDestination: offers.size > 1,
+    offersLocalPickup: Boolean(settings?.localPickup),
     hasRestOfWorldZone: (settings?.zones ?? []).some((zone) =>
       zone.countries.some((code) => code === '*'),
     ),

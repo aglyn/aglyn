@@ -137,6 +137,61 @@ describe('normalizeMemberPhotoUrl', () => {
       normalizeMemberPhotoUrl(`https://cdn.example/${'z'.repeat(600)}.png`),
     ).toEqual({ ok: false, reason: 'too-long' })
   })
+
+  /**
+   * AGL-2286 — the same defect AGL-2247 fixed for the white-label branding
+   * profile, on the field every user has.
+   *
+   * Manage Account → Profile image is a `MediaUrlField` whose helper text
+   * reads "Browse the org media library or paste an https URL". Browse writes
+   * `media.cdnPath` — `/api/media/cdn/{scope}/{mediaId}`, never absolute — so
+   * the `^https://`-only rule here refused every asset its own picker could
+   * produce. Browse was a dead control on every account.
+   */
+  describe('the picker output (AGL-2286)', () => {
+    /** Exactly what `media-picker-dialog`'s `onPick` hands `MediaUrlField`. */
+    const PICKER_OUTPUT = '/api/media/cdn/org:org-1/media-1'
+
+    it('accepts the CDN path the media picker actually writes', () => {
+      expect(normalizeMemberPhotoUrl(PICKER_OUTPUT)).toEqual({
+        ok: true,
+        photoURL: PICKER_OUTPUT,
+        clearing: false,
+      })
+    })
+
+    it('accepts the host-qualified form for a restricted org asset', () => {
+      const value = '/api/media/cdn/org:org-1:host-9/media-1'
+      expect(normalizeMemberPhotoUrl(value)).toEqual({
+        ok: true,
+        photoURL: value,
+        clearing: false,
+      })
+    })
+
+    /**
+     * The widening is only safe because it is an ALLOWLIST of one more exact
+     * shape. A predicate that had simply started accepting relative paths
+     * would satisfy the two cases above and turn the avatar into an open
+     * redirect target — so the refusals carry equal weight, and a reviewer
+     * should read this block as the reason the block above is allowed.
+     */
+    it.each([
+      ['protocol-relative, which names a FOREIGN host', '//evil.example/x.png'],
+      ['a path outside the media CDN', '/api/admin/secrets'],
+      ['the CDN prefix with a traversal escape', '/api/media/cdn/../../etc/pw'],
+      ['a CDN path with no media id', '/api/media/cdn/org:org-1'],
+      ['a CDN path with an extra segment', '/api/media/cdn/org:org-1/med/1'],
+      ['a query smuggled onto a CDN path', '/api/media/cdn/org:org-1/m?x=1'],
+      ['a bare relative path', 'avatar.png'],
+      ['a root-relative path that only looks like ours', '/api/media/cdnx/a/b'],
+    ])('still refuses %s', (_label, value) => {
+      expect(normalizeMemberPhotoUrl(value)).toEqual({
+        ok: false,
+        reason: 'not-https',
+      })
+    })
+  })
 })
 
 describe('propagateMemberPhoto', () => {

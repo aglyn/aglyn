@@ -76,6 +76,23 @@ You can list a plugin as **paid**:
 - Payments run through **Stripe Connect**.
 - Earnings are tracked in a publisher **ledger**.
 
+The Sales card reports **net paid out** — what actually reached your Stripe
+account. It is the pre-tax listing price less the platform fee, which is the
+fixed amount Stripe transfers to you on each sale.
+
+Three things it deliberately is not:
+
+- **Not what the buyer paid.** Buyers are charged sales tax on top of your
+  price. Aglyn collects and remits that tax under its marketplace-provider
+  registration, so it is never part of your share. The card shows what buyers
+  paid, the tax and the platform fee beside your payout so the four reconcile.
+- **Not gross minus the fee.** The fee is calculated on the pre-tax price, so
+  subtracting it from the tax-inclusive gross would count the tax as your
+  earnings.
+- **Not counting refunds or chargebacks.** A refunded sale and a lost dispute
+  leave the payout total; the amount pulled back out of your account is shown
+  on its own line so a total that shrank can be reconciled.
+
 ## Your publisher profile
 
 Your publisher profile is a **storefront**: its own page in the marketplace listing

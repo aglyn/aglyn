@@ -82,6 +82,11 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       .collection('leads')
       .add({
         email,
+        // The name the person just typed (AGL-2303). `campaign-send` reads
+        // `leads.name` for merge tags and NOTHING wrote it, so every campaign
+        // to the leads audience addressed a blank — with the name sitting one
+        // line above, already stored on the member document.
+        ...(displayName ? { name: displayName } : {}),
         source: 'signup',
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })

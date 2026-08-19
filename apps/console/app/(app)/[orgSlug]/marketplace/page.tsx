@@ -89,7 +89,7 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
         },
       ]}
-      help="plugins"
+      help={{ topic: 'plugins', anchor: '#install--upgrade' }}
       header={{
         children: 'Marketplace',
         icon: { path: mdiStorefrontOutline.path },

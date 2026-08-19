@@ -63,6 +63,19 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   consumeRateLimit: (...args: unknown[]) => mockConsumeRateLimit(...args),
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
+  /*
+   * AGL-2190. The invites route grew a collaborator-seat refusal, and this
+   * closed-world mock did not carry the helper it calls — so every case
+   * here died on `collaboratorSeatRefusalResponse is not a function`
+   * before it asserted a single thing about rate limiting.
+   *
+   * `null` is the REAL semantics and the load-bearing part: the helper
+   * returns a 403 only for a `CollaboratorSeatLimitError` and null for
+   * everything else, which is how the route re-throws anything it does not
+   * recognise. A mock returning a Response would turn every error in this
+   * file into a seat-limit refusal and quietly assert the wrong thing.
+   */
+  collaboratorSeatRefusalResponse: () => null,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -128,7 +141,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // seat quota is skipped — which is exactly why a rate limit is needed.
   isOrgWideMember: ({ role, allHosts }: { role: string; allHosts: boolean }) =>
     allHosts === true || role === 'admin',
-  resolveBrandingProfile: () => ({ productName: 'Aglyn', fromName: 'Aglyn' }),
+  resolveBrandingProfile: () => ({
+    productName: 'Aglyn',
+    fromName: 'Aglyn',
+    supportUrl: 'https://aglyn.com/support',
+  }),
+  /*
+   * AGL-2190, second instance in this file. The invite email grew
+   * white-label merge tokens, and this closed-world mock did not carry
+   * the helper that builds them.
+   *
+   * The real shape, not an empty object: the tokens are substituted into
+   * the invite body, so a `{}` would render the merge markers as literal
+   * text in the email and nothing here would notice.
+   */
+  brandMergeTokens: (branding: Record<string, string>) => ({
+    'brand.productName': branding.productName,
+    'brand.fromName': branding.fromName,
+    'brand.supportUrl': branding.supportUrl,
+  }),
   resolveIdpDisplayName: () => 'Admin Person',
   resolveIdpPhotoUrl: () => null,
 }))

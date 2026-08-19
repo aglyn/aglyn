@@ -16,6 +16,11 @@
  */
 'use client'
 
+import {
+  marketplacePriceCostNote,
+  offeredPluginVersion,
+  type PluginRevocation,
+} from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -260,6 +265,12 @@ export interface PublishPluginFormProps {
    * can say what is about to happen.
    */
   listing?: UpdateTargetListing | null
+  /**
+   * The listing's kill switch (AGL-2368), so `liveVersion` below can answer
+   * "what installs today" rather than "what review last approved". Those are
+   * different questions and `latestApprovedVersion` only answers the second.
+   */
+  revocation?: PluginRevocation | null
 }
 
 /**
@@ -278,7 +289,7 @@ export interface PublishPluginFormProps {
  * to go afterwards.
  */
 export function PublishPluginForm(props: PublishPluginFormProps) {
-  const { orgId, orgSlug, listing } = props
+  const { orgId, orgSlug, listing, revocation } = props
   const isUpdate = Boolean(listing?.$id)
   const { data: user } = useUser()
   const router = useRouter()
@@ -401,8 +412,21 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
       typedManifestId !== listing.pluginId,
   )
 
+  /**
+   * What is serving customers right now (AGL-2368).
+   *
+   * This prints as "v{X} is what installs today", which is an INSTALL claim,
+   * and it was reading a REVIEW verdict — the kill switch does not clear
+   * `latestApprovedVersion`, so a publisher whose live version had been
+   * stopped was told it was still installing, on the page they had come to
+   * to ship its replacement.
+   *
+   * Falls through to nothing rather than to `latestVersion` when the offer is
+   * revoked: the alert's other branch already says "nothing installs until a
+   * reviewer approves it", which is the truth in that state.
+   */
   const liveVersion = String(
-    listing?.latestApprovedVersion ?? listing?.latestVersion ?? '',
+    offeredPluginVersion(listing, revocation) ?? listing?.latestVersion ?? '',
   )
 
   const readManifest = async (): Promise<Record<string, unknown> | null> => {
@@ -881,10 +905,14 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
             // send the publisher through Stripe onboarding to sell to
             // themselves.
             disabled={draft.visibility === 'private'}
+            // See `marketplacePriceCostNote` (AGL-2343): the same advisory the
+            // artifact publish dialog shows, from the same function, so the two
+            // forms cannot quote different figures at a publisher.
             helperText={
               draft.visibility === 'private'
                 ? 'Private plugins are free — nobody else can install them.'
-                : '0 for free. Paid listings need payouts set up.'
+                : (marketplacePriceCostNote(draft.priceUsd) ??
+                  '0 for free. Paid listings need payouts set up.')
             }
             type="number"
             value={draft.visibility === 'private' ? '0' : draft.priceUsd}

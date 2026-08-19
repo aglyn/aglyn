@@ -76,6 +76,16 @@ const mockEntries = {
 }
 
 jest.mock('@aglyn/aglyn', () => ({
+  // A wholesale mock of the barrel is a CLOSED WORLD: every export the page
+  // reaches has to be present here, and an export it GAINS later is a
+  // `TypeError` at render rather than a missing stub anyone can see coming.
+  // `hostPublicOrigin` arrived that way (AGL-2195), so it is the REAL
+  // function taken from its leaf module — this suite asserts nothing about
+  // the live-entry link, and a stub would only have to be corrected again the
+  // next time the origin rules move.
+  hostPublicOrigin: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/host-naming',
+  ).hostPublicOrigin,
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,

@@ -97,9 +97,15 @@ const ERROR_SLOTS = HOST_ERROR_SCREEN_SLOTS.map((key) => ({
  * AGL-2074 built the fallback the label was describing, so the option is
  * finally truthful — but truthful is not the same as informative, and an
  * operator reading "default" has no reason to pick anything. The copy now
- * says what the fallback actually is and what assigning a screen buys: the
- * fallback carries the site's own logo and a link home, and the site's real
- * header, nav and footer come only from a screen you designed.
+ * says what the fallback actually is and what assigning a screen buys.
+ *
+ * AGL-2187 moved that line again, and it has to keep moving with the tenant:
+ * the fallback now carries the site's logo, links to its public top-level
+ * pages and site search, so "logo and a link home" had become the same kind
+ * of stale promise "Built-in default" was. What assigning a screen buys is
+ * now the narrower and permanent thing — the header, nav and footer the
+ * operator DESIGNED, which no boundary can reconstruct because they live in
+ * the nodes of the screen that was not found.
  *
  * ## Why the pick is a fetch and not an `updateDoc` (AGL-2092)
  *
@@ -233,9 +239,9 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Leave a slot on the built-in fallback and visitors still get a ' +
-          'page carrying your logo and a link to your homepage — but only a ' +
-          'screen you design here can show your site’s own header, ' +
-          'navigation and footer.'}
+          'page under your theme, carrying your logo, links to your public ' +
+          'top-level pages and site search — but only a screen you design ' +
+          'here can show the header, navigation and footer you built.'}
       </Typography>
       <Stack spacing={2}>
         {ERROR_SLOTS.map((slot) => {
@@ -261,10 +267,10 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
               >
                 {/* Not "default" (AGL-2074). This is the fallback the
                     tenant app renders when nothing is assigned — the site's
-                    logo, the status, and a link home. Naming it that way is
-                    the difference between an operator thinking the slot is
-                    already handled and knowing there is a better page to be
-                    had. */}
+                    logo, the status, its public top-level pages and search
+                    (AGL-2187). Naming it that way is the difference between
+                    an operator thinking the slot is already handled and
+                    knowing there is a better page to be had. */}
                 <MenuItem value="">{'Built-in fallback page'}</MenuItem>
                 {screens.map((screen: any) => (
                   <MenuItem key={screen.$id} value={screen.$id}>

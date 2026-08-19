@@ -51,6 +51,7 @@ import {
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface CatalogOrganizationCardProps {
   hostId: string
@@ -573,7 +574,12 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
   }
 
   return (
-    <CardDisplay header={'Categories & collections'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Categories & collections'}
+      help={pluginDocsHelp('catalog', { anchor: '#categories-and-tags' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <Typography variant="subtitle2">{'Categories'}</Typography>
         {categories.length === 0 ? (

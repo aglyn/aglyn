@@ -25,6 +25,7 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostMarketingSummaryCardProps {
   hostId: string
@@ -130,7 +131,14 @@ export function HostMarketingSummaryCard(props: HostMarketingSummaryCardProps) {
   ]
 
   return (
-    <CardDisplay header={'At a glance'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'At a glance'}
+      help={pluginDocsHelp('marketingOverlays', {
+        anchor: '#engagement-stats',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack
         direction="row"
         spacing={3}

@@ -88,6 +88,17 @@ const ROUTES = walk(
   .sort()
 
 /**
+ * The AGL-1501 pair's refusal must be RETURNED, not merely named. Matching
+ * the bare identifier was satisfied by the `lockdownJsonResponse` IMPORT
+ * line alone, so deleting `return lockdownJsonResponse(lockdown)` from a
+ * route left the verdict computed and thrown away — and this sweep green
+ * on all six pair-wired routes, five of them the org-scoped content writes
+ * a lock exists to stop. Both shipped idioms return it: directly, or via
+ * the `locked` local the cookie-clearing routes append headers to first.
+ */
+const RETURNS_PAIR_REFUSAL = /return\s+(?:lockdownJsonResponse\(|locked\b)/
+
+/**
  * The wired idiom, both halves. Presence of the call alone is not
  * wiring — a computed verdict that never becomes the response is the
  * defect `feedback_verify_control_is_wired` exists about — so the return
@@ -96,8 +107,7 @@ const ROUTES = walk(
 const isWired = (source: string): boolean =>
   (source.includes('lockdownRefusal(') &&
     source.includes('if (locked) return locked')) ||
-  (source.includes('getLockdownVerdict(') &&
-    source.includes('lockdownJsonResponse'))
+  (source.includes('getLockdownVerdict(') && RETURNS_PAIR_REFUSAL.test(source))
 
 const VIA = /lockdown-423: via (\S+)/
 const EXEMPT = /lockdown-423: exempt — (.*)/
@@ -151,6 +161,30 @@ describe('AGL-1506 · every org-scoped console API route answers the 423', () =>
     ]) {
       expect(`${anchor}: ${byFile.get(anchor)?.kind}`).toBe(`${anchor}: wired`)
     }
+  })
+
+  it('does not read an import line as wiring', () => {
+    // Regression, found by deleting the refusal return from
+    // hosts/versions and watching this whole sweep stay green: the pair
+    // branch matched the bare identifier, which the import satisfies.
+    // Synthetic sources, so a future edit to a real route cannot quietly
+    // retire the check.
+    const importOnly = [
+      "import { getLockdownVerdict, lockdownJsonResponse } from '@/utils/server/org-lockdown'",
+      'const lockdown = await getLockdownVerdict({ orgId, intent })',
+      'if (lockdown) { /* refusal deleted */ }',
+    ].join('\n')
+    expect(isWired(importOnly)).toBe(false)
+    // Returned directly (hosts/*), and through the cookie-clearing local
+    // (auth/session) — both must still read as wired.
+    expect(
+      isWired(`${importOnly}\nreturn lockdownJsonResponse(lockdown)`),
+    ).toBe(true)
+    expect(
+      isWired(
+        `${importOnly}\nconst locked = lockdownJsonResponse(lockdown)\nreturn locked`,
+      ),
+    ).toBe(true)
   })
 
   it('leaves no route unwired, undelegated and unexplained', () => {

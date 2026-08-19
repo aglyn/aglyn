@@ -115,7 +115,10 @@ export const presets: Aglyn.PresetSchema[] = [
       // edits `node.sx`, so an outline authored in `props.sx` was one no
       // click could remove.
       sx: {
-        p: 2,
+        paddingTop: 2,
+        paddingRight: 2,
+        paddingBottom: 2,
+        paddingLeft: 2,
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 1,

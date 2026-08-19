@@ -493,7 +493,7 @@ function AdminMediaQuarantine() {
           href: buildRoute(Route.ADMIN_MEDIA_QUARANTINE),
         },
       ]}
-      help="lockdown"
+      help={{ topic: 'lockdown', anchor: '#disabled-files-page' }}
       header={{
         children: 'Disabled files',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

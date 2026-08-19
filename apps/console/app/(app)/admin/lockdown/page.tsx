@@ -38,6 +38,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import {
+  SuperStaffOnlyNotice,
+  useSuperStaffGate,
+} from '../../../../components/staff-super-only.component'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -159,6 +163,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const isStaff = useIsStaff()
   const [records, setRecords] = useState<LockdownRecord[]>([])
   const [busy, setBusy] = useState(false)
+  // AGL-2131. Every lock and lift on this page POSTs to /api/admin/lockdown,
+  // which is super-only; GET (Check state) is open to all staff and stays
+  // enabled. `blocked` is false while the claim resolves, so no control
+  // flickers disabled for the super staff who use this page under pressure.
+  const { blocked: notSuper } = useSuperStaffGate()
   /** Server clock at the last successful state load — shown, never assumed. */
   const [readAtMs, setReadAtMs] = useState<number | null>(null)
   /**
@@ -434,6 +443,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
           <Stack spacing={2}>
+            <SuperStaffOnlyNotice what="Locking and lifting" />
             {/* The banner names the MODE first when it is read-only
                 (AGL-1511): "PLATFORM LOCKDOWN IS ACTIVE" in front of an
                 operator whose customers' sites are all still serving would
@@ -476,7 +486,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   <Button
                     variant="contained"
                     color="success"
-                    disabled={busy}
+                    disabled={busy || notSuper}
                     onClick={() =>
                       void act({ action: 'unlock', scope: 'platform' }, () => {
                         setPlatformConfirm('')
@@ -528,7 +538,9 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     <Button
                       variant="contained"
                       color="error"
-                      disabled={busy || platformConfirm !== PLATFORM_CONFIRM_PHRASE}
+                      disabled={
+                        busy || notSuper || platformConfirm !== PLATFORM_CONFIRM_PHRASE
+                      }
                       onClick={() =>
                         void act(
                           {
@@ -626,7 +638,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             size="small"
                             variant="outlined"
                             color="success"
-                            disabled={busy}
+                            disabled={busy || notSuper}
                             onClick={() =>
                               void act(
                                 {
@@ -645,7 +657,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                             size="small"
                             variant="contained"
                             color="error"
-                            disabled={busy}
+                            disabled={busy || notSuper}
                             onClick={() =>
                               void act(
                                 {
@@ -749,7 +761,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   <Button
                     variant="contained"
                     color="error"
-                    disabled={busy || !targetId.trim()}
+                    disabled={busy || notSuper || !targetId.trim()}
                     onClick={() =>
                       void act(
                         {
@@ -774,7 +786,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   <Button
                     variant="outlined"
                     color="success"
-                    disabled={busy || !targetId.trim()}
+                    disabled={busy || notSuper || !targetId.trim()}
                     onClick={() =>
                       void act(
                         { action: 'unlock', scope, targetId: targetId.trim() },
@@ -1058,6 +1070,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Actions taken in this session'}
+              help={docsHelp('lockdown', {
+                excerpt:
+                  'What you changed since this page loaded, so a session of edits can ' +
+                  'be read back before you leave it.',
+              })}
               contentGutterX
               contentGutterY
             >
@@ -1092,6 +1109,11 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={'Active platform, feature & account lockdowns'}
+              help={docsHelp('lockdown', {
+                excerpt:
+                  'Every lock currently in force, at every scope. This is the list to ' +
+                  'check before asking why a customer is refused.',
+              })}
               contentGutterX
               contentGutterY
             >

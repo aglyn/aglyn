@@ -89,7 +89,7 @@ export const HEALTH_PROBES: readonly HealthProbeDescriptor[] = [
     meaning:
       'The client-error beacon can still reach Cloud Logging. Degraded means browser errors are being collected by nothing — and a dead beacon reads as ZERO errors everywhere else, which is indistinguishable from a clean day.',
     remedy:
-      'no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe at aglyn.com.',
+      'no-credential is the deployment FIREBASE_* env, http-401/403 is a lost logging.logEntries.create grant, http-429 is quota. Clears on the next heartbeat that lands. The tenant runtime has its own credential and its own copy of this probe.',
   },
   {
     id: 'backups',

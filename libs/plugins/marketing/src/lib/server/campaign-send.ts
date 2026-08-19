@@ -27,6 +27,7 @@ import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@agl
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
   campaignEmailSendsForMonth,
   orgDataCollectionForHost,
@@ -79,6 +80,12 @@ export interface CampaignSendOptions {
   audience: string
   segmentId?: string
   listId?: string
+  /**
+   * Resolve the audience and return the count WITHOUT sending anything
+   * (AGL-2178). Returns before the first write, so it mints no campaign
+   * id and touches no counter.
+   */
+  dryRun?: boolean
   emails?: string[]
   campaignId?: string
   experimentId?: string
@@ -191,7 +198,16 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
  */
 export async function performCampaignSend(
   options: CampaignSendOptions,
-): Promise<{ campaignId: string; recipients: number; sent: number }> {
+): Promise<{
+  campaignId: string
+  recipients: number
+  sent: number
+  /** Dry run only (AGL-2178): recipients left after the suppression list. */
+  sendable?: number
+  /** Dry run only: how many of `recipients` have unsubscribed. */
+  suppressed?: number
+  dryRun?: boolean
+}> {
   const unsubscribeSecret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
   if (!isEmailConfigured() || !unsubscribeSecret) {
@@ -240,7 +256,15 @@ export async function performCampaignSend(
     throw new CampaignSendError('Unknown site', 404)
   }
 
-  // Audience resolution. Names ride along for merge tags (AGL-272).
+  /*
+    Audience resolution. Names ride along for merge tags (AGL-272).
+
+    ⚠️ THE FIELD NAME IS PER COLLECTION AND THEY DO NOT AGREE (AGL-2303).
+    `contacts` and `leads` store `name`; `siteMembers` stores `displayName`.
+    A merge tag whose source field does not exist does not error — it
+    substitutes an empty string into mail that has already been sent. Whenever
+    an audience is added here, check what its collection actually writes.
+  */
   let recipients: string[] = []
   const names = new Map<string, string>()
   const collectName = (email: string, name: unknown) => {
@@ -260,7 +284,21 @@ export async function performCampaignSend(
     const members = await hostRef.collection('siteMembers').limit(1000).get()
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
-      collectName(email, doc.get('name'))
+      /*==========================================
+       * `displayName`, NOT `name` (AGL-2303).
+       *
+       * `siteMembers` has never had a `name` field — sign-up, the account
+       * page and the admin password route all write `displayName`. So this
+       * read matched nothing on every member campaign ever sent, `names` was
+       * empty for the whole audience, and `{{contact.name}}` and
+       * `{{contact.firstName}}` rendered as EMPTY STRINGS in mail that went
+       * out to real people. `resolveMergeTags` substitutes rather than
+       * failing, so nothing errored and nothing looked wrong here.
+       *
+       * `name` is kept as a fallback and read second: a lead promoted to a
+       * member, or a future writer, may carry either.
+       *=========================================*/
+      collectName(email, doc.get('displayName') ?? doc.get('name'))
       return email
     })
   } else if (audience === 'segment') {
@@ -377,10 +415,44 @@ export async function performCampaignSend(
     }
   }
 
-  const subdomain = hostSnapshot.get('subdomain')
-  const siteBase = hostSnapshot.get('cname')
-    ? `https://${hostSnapshot.get('cname')}`
-    : `https://${subdomain}.aglyn.app`
+  /*
+   * Recipient PREVIEW (AGL-2178). The campaign composer mockup shows
+   * `Recipients 1,240` beside the audience picker, and the console had no
+   * count before a send at all — the number appeared afterwards, in a
+   * snackbar.
+   *
+   * It returns from HERE rather than from a counting function of its own,
+   * and that is the whole point: the figure has already been through
+   * audience resolution, normalisation, de-duplication, the
+   * `MAX_RECIPIENTS_PER_SEND` cap, the suppression list and the monthly
+   * quota. A second implementation would be a second set of rules to
+   * drift, and the one number a merchant checks before pressing Send is
+   * the worst possible place for an estimate that disagrees with what
+   * happens.
+   *
+   * Nothing has been written above this line — every step so far is a
+   * read — so an early return here leaves no campaign document, no
+   * counter and no id behind.
+   */
+  if (options.dryRun) {
+    return {
+      campaignId: '',
+      recipients: recipients.length,
+      sendable: sendable.length,
+      suppressed: recipients.length - sendable.length,
+      sent: 0,
+      dryRun: true,
+    }
+  }
+
+  // `hostPublicOrigin`, not a hand-rolled apex (AGL-2195). Campaign links are
+  // mailed out and clicked days later; a wrong apex sends the operator's whole
+  // audience to a domain the operator does not control.
+  const siteBase =
+    hostPublicOrigin({
+      cname: hostSnapshot.get('cname'),
+      subdomain: hostSnapshot.get('subdomain'),
+    }) ?? ''
 
   // White-label sender identity (White-Label Phase 3): a campaign sent from a
   // white-label store reads as that store's brand. Resolved once for the whole
@@ -643,6 +715,26 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         senderUid: decoded.uid,
       })
       return res.status(200).json({ ...result, test: true })
+    }
+
+    if (action === 'preview') {
+      // Read-only, and it needs the same admin/editor role as a send: the
+      // audience size of someone else's site is not public information.
+      const result = await performCampaignSend({
+        hostId,
+        subject: subject || 'preview',
+        body: body || 'preview',
+        audience,
+        segmentId: String(req.body?.segmentId ?? ''),
+        listId: String(req.body?.listId ?? ''),
+        emails: Array.isArray(req.body?.emails)
+          ? req.body.emails.map(String)
+          : undefined,
+        templateScreenId: templateScreenId || undefined,
+        senderUid: decoded.uid,
+        dryRun: true,
+      })
+      return res.status(200).json(result)
     }
 
     if (action === 'schedule') {

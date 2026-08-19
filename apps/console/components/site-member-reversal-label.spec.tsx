@@ -47,9 +47,27 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: jest.fn(async () => undefined),
 }))
 
+/**
+ * Stable identities, deliberately (AGL-2374).
+ *
+ * The real `useFirestore`/`useUser` return the same instance on every call.
+ * A mock returning a fresh literal per call does not, and `useConfirmedDoc`
+ * lists `firestore` in an effect whose first statement is a `setState` — so
+ * render → effect → setState → render → NEW `{}` → effect → … forever. That
+ * loop is pure microtasks, which starves jest's real-timer `testTimeout`, so
+ * the suite cannot fail: it just never returns, and `console:test` produces
+ * no verdict at all. Hoisting the returns is what keeps it terminating.
+ * (`mock`-prefixed names are the only out-of-scope refs jest lets a module
+ * factory close over.)
+ */
+const mockFirestore = {}
+const mockUser = {
+  data: { uid: 'uid-admin', getIdToken: async () => 'tok' },
+}
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useFirestore: () => ({}),
-  useUser: () => ({ data: { uid: 'uid-admin', getIdToken: async () => 'tok' } }),
+  useFirestore: () => mockFirestore,
+  useUser: () => mockUser,
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({

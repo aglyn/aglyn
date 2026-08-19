@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -38,6 +39,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../../../components/staff-only.component'
+import { SuperStaffOnly } from '../../../../../../../components/staff-super-only.component'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../../../constants/docs-links'
@@ -45,7 +47,16 @@ import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 
-const TENANT_ROOT = 'aglyn.app'
+/**
+ * The published-site apex, from the ONE shared source (AGL-2195).
+ *
+ * Was a bare `'aglyn.app'` literal, so this staff page printed — and linked —
+ * Aglyn's apex on a self-hosted install for sites Aglyn does not serve, while
+ * `NEXT_PUBLIC_TENANT_DOMAIN` was already honoured by the console's own
+ * `tenant-links.ts` and by `/api/screens/revalidate`. Aliased rather than
+ * renamed at the call sites below so the diff stays about the value.
+ */
+const TENANT_ROOT = TENANT_APEX
 
 /**
  * Staff host detail (AGL-392): a per-site view under an org — live link,
@@ -164,6 +175,10 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: host?.displayName ?? 'Host',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{
+        topic: 'architectureMultiTenancy',
+        anchor: '#workspace-subdomains',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
@@ -235,19 +250,24 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
                           sx={{ flex: 1 }}
                         />
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={
-                            busy ||
-                            !subdomain.trim() ||
-                            subdomain === (host?.subdomain ?? '')
-                          }
-                          onClick={() => void handleSubdomainSave()}
-                          sx={{ mt: 0.5 }}
-                        >
-                          {'Save'}
-                        </Button>
+                        {/* Retargeting a subdomain is super-only at
+                            /api/admin/host (AGL-2131). Support staff saw a
+                            live Save and got a raw 403. */}
+                        <SuperStaffOnly>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={
+                              busy ||
+                              !subdomain.trim() ||
+                              subdomain === (host?.subdomain ?? '')
+                            }
+                            onClick={() => void handleSubdomainSave()}
+                            sx={{ mt: 0.5 }}
+                          >
+                            {'Save'}
+                          </Button>
+                        </SuperStaffOnly>
                       </Stack>
                     </Stack>
                   </CardDisplay>

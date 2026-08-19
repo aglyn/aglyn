@@ -24,7 +24,7 @@ import MuiAccordionSummary from '@mui/material/AccordionSummary'
 import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import type { SxProps } from '@mui/material/styles'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef, isValidElement, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -127,6 +127,27 @@ const SUMMARY_TOGGLE_SX = {
 } as const
 
 /**
+ * The visible text of a React children tree, for naming a control that has no
+ * text of its own (AGL-2349).
+ *
+ * It has to walk, not test: what arrives here is the node renderer's output,
+ * which wraps the authored string in a `<ShadowDom.AglynText>` element inside an
+ * array (`libs/aglyn-node-renderer/src/lib/components/leaf.tsx`), so the string
+ * is a grandchild at best and never the value itself. Descends `props.children`
+ * rather than reading DOM text, because an `<aglyn-text>` host renders its
+ * content into a shadow root where `innerText` reads back empty.
+ */
+const childText = (node: ReactNode): string => {
+  if (node == null || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(childText).join('')
+  if (isValidElement(node)) {
+    return childText((node.props as { children?: ReactNode })?.children)
+  }
+  return ''
+}
+
+/**
  * The always-visible header row. Supplies the expand chevron MUI leaves
  * to the caller — without it the control looks like inert text and gives
  * no hint that there is anything to open.
@@ -172,7 +193,16 @@ export const AccordionSummaryElement = forwardRef<
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
   // The chevron button's only content is an icon, so it needs a name of its
   // own — "Product" the link and "Product" the toggle are two controls.
-  const label = typeof children === 'string' ? children.trim() : ''
+  //
+  // This USED to be `typeof children === 'string'`, which is never true in
+  // production (AGL-2349). A summary's label is authored through
+  // FIELD_TEXT_CONTENT, and the node renderer does not pass that string down as
+  // `children` — `Leaf` lifts it out as `textContent` and renders
+  // `<Component>{children}<ShadowDom.AglynText>{textContent}</…></Component>`,
+  // so `children` is always an ARRAY holding an element. The string branch was
+  // reachable only from a spec that handed the component a bare string, so
+  // every published split summary named its chevron "Toggle section".
+  const label = childText(children).trim()
   return (
     <Box ref={ref} {...rowRest} sx={[SUMMARY_ROW_SX, ...nodeSx]}>
       {href && !suppressNavigation ? (

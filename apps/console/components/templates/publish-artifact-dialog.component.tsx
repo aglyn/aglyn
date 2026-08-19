@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { marketplacePriceCostNote } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -181,7 +182,16 @@ export function PublishArtifactDialog({
             size="small"
             label="Price (USD)"
             placeholder="0 = free"
-            helperText="Paid listings need payouts set up on your marketplace profile"
+            // What a very low price costs to process (AGL-2343). Marketplace
+            // checkout is a destination charge, so Stripe's fee comes out of
+            // the PLATFORM's balance while the seller is transferred a fixed
+            // share — at $1 the fee is larger than the whole platform cut.
+            // Advisory: nothing here refuses the price, because a minimum is
+            // publisher-facing policy and pricing is locked for the beta.
+            helperText={
+              marketplacePriceCostNote(price) ??
+              'Paid listings need payouts set up on your marketplace profile'
+            }
             value={price}
             onChange={(event) =>
               setPrice(event.target.value.replace(/[^0-9]/g, ''))

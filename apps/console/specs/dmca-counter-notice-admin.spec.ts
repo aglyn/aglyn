@@ -773,6 +773,118 @@ describe('the queue shows the deadline', () => {
     expect(body.strikesTruncated).toBe(false)
   })
 
+  /*==========================================
+   * THE EVIDENCE BEHIND THE COUNT (AGL-2328).
+   *
+   * `syncStrikeLedger` writes `url`, `recordedAt`, `recordedByEmail`,
+   * `withdrawnReason` and `withdrawnByEmail`, and its docblock says why
+   * withdrawal MARKS rather than deletes: *"'Did we know, and when' is the
+   * question this queue exists to answer."* The route projected
+   * `withdrawnAt` alone, so nothing could answer it — the §512(i)
+   * repeat-infringer defence was write-only.
+   *
+   * The fixture gives every row DIFFERENT values, and one row is withdrawn.
+   * A reader that returned the first row N times, or a constant row, or that
+   * dropped the withdrawn one, produces a visibly wrong answer here rather
+   * than a plausible one.
+   *=========================================*/
+  it('returns the ledger rows behind the strike count, each with its own facts', async () => {
+    seedDispute()
+    store[`orgs/${ORG}/dmcaStrikes/prior-1`] = {
+      reportId: 'prior-1',
+      url: 'https://acme.aglyn.app/gallery/one',
+      recordedAt: { toMillis: () => 1_700_000_000_000 },
+      recordedByEmail: 'alice@aglyn.com',
+      withdrawnAt: null,
+    }
+    store[`orgs/${ORG}/dmcaStrikes/prior-2`] = {
+      reportId: 'prior-2',
+      url: 'https://acme.aglyn.app/gallery/two',
+      recordedAt: { toMillis: () => 1_700_000_500_000 },
+      recordedByEmail: 'bob@aglyn.com',
+      withdrawnAt: null,
+    }
+    store[`orgs/${ORG}/dmcaStrikes/prior-3`] = {
+      reportId: 'prior-3',
+      url: 'https://acme.aglyn.app/gallery/three',
+      recordedAt: { toMillis: () => 1_700_000_900_000 },
+      recordedByEmail: 'carol@aglyn.com',
+      withdrawnAt: { toMillis: () => 1_700_100_000_000 },
+      withdrawnReason: 'counterNoticeRestored',
+      withdrawnByEmail: 'dave@aglyn.com',
+    }
+
+    const body = await (await get()).json()
+    const ledger = body.strikes[ORG].ledger
+
+    // The count is unchanged by any of this — the arithmetic and the
+    // evidence read the same rows.
+    expect(body.strikes[ORG].strikes).toBe(2)
+    expect(ledger).toHaveLength(3)
+
+    // NEWEST FIRST. Seeded in ascending order, so insertion order and the
+    // required order disagree and an unsorted list is visibly wrong.
+    expect(ledger.map((row: any) => row.reportId)).toEqual([
+      'prior-3',
+      'prior-2',
+      'prior-1',
+    ])
+
+    // Each row's OWN url and timestamp, asserted per row.
+    expect(ledger.map((row: any) => row.url)).toEqual([
+      'https://acme.aglyn.app/gallery/three',
+      'https://acme.aglyn.app/gallery/two',
+      'https://acme.aglyn.app/gallery/one',
+    ])
+    expect(ledger.map((row: any) => row.recordedByEmail)).toEqual([
+      'carol@aglyn.com',
+      'bob@aglyn.com',
+      'alice@aglyn.com',
+    ])
+    expect(ledger.map((row: any) => row.recordedAt)).toEqual([
+      1_700_000_900_000,
+      1_700_000_500_000,
+      1_700_000_000_000,
+    ])
+
+    // The WITHDRAWN row survives, marked, with why and by whom. Dropping it
+    // would answer a flattering question instead of the statutory one.
+    expect(ledger.map((row: any) => row.standing)).toEqual([false, true, true])
+    expect(ledger[0]).toMatchObject({
+      withdrawnReason: 'counterNoticeRestored',
+      withdrawnByEmail: 'dave@aglyn.com',
+      withdrawnAt: 1_700_100_000_000,
+    })
+  })
+
+  it('carries the ledger back with the verdict after an action', async () => {
+    seedDispute()
+    store[`abuseReports/${NOTICE_ID}`].status = 'open'
+    const response = await POST(
+      new Request('https://console.aglyn.com/api/admin/abuse-reports', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer super-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: NOTICE_ID,
+          status: 'actioned',
+          resolution: 'Removed the page and notified the publisher.',
+        }),
+      }),
+    )
+    const body = await response.json()
+    // The strike this very action created, with the URL it was recorded
+    // against — so the card does not have to re-list the queue to show the
+    // evidence for the number it just changed.
+    expect(body.repeatInfringer.strikes).toBe(1)
+    expect(body.repeatInfringer.ledger).toHaveLength(1)
+    expect(body.repeatInfringer.ledger[0].reportId).toBe(NOTICE_ID)
+    expect(body.repeatInfringer.ledger[0].standing).toBe(true)
+    expect(body.repeatInfringer.ledger[0].url).toContain('gallery')
+  })
+
   it('does not attach a strike count to a phishing-only org', async () => {
     seedDispute()
     store[`abuseReports/${NOTICE_ID}`].category = 'phishing'

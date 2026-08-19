@@ -29,6 +29,13 @@ export type ContactSource =
   | 'order'
   | 'booking'
   | 'newsletter'
+  // AGL-2276: `POST /v1/contacts`. A first-class source rather than a blank
+  // one, because "where did this person come from" is the question the
+  // console's source filter exists to answer, and an integration importing a
+  // CRM is a different answer from a visitor filling in a form. Adding it to
+  // the union is what makes `SOURCE_LABELS` and the filter cover it — a raw
+  // string written past the type would render as `api` and match no filter.
+  | 'api'
 
 export interface ContactInteraction {
   type: ContactSource

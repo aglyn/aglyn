@@ -231,6 +231,16 @@ export interface OrderRestockCheck {
   resolvedBy?: string
 }
 
+/**
+ * A cart line a paid order could not record (AGL-2149). All that survives a
+ * deleted product is what the shopper's cart asked for.
+ */
+export interface OrderUnresolvedLine {
+  productId: string
+  variantId?: string
+  quantity: number
+}
+
 /** `hosts/{hostId}/orders/{id}` doc. */
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
@@ -277,6 +287,17 @@ export interface HostOrder {
   dispute?: OrderDispute
   /** Stock a reversal left off the shelf, awaiting the merchant (AGL-1797). */
   restockCheck?: OrderRestockCheck
+  /**
+   * Cart lines the webhook could not price because the product was deleted
+   * between session creation and payment (AGL-2149). Present ONLY on an order
+   * that is short of what the shopper was charged: `totals.itemsCents` is
+   * missing these lines while `amountCents` still holds the full
+   * `amount_total`, and this is the record of which lines the difference is.
+   *
+   * Deliberately NOT an `OrderLineItem[]`: the product doc is gone, so there is
+   * no name, no price and no type to record — only what the cart asked for.
+   */
+  unresolvedLines?: OrderUnresolvedLine[]
   createdAtMs?: number
   // Legacy Commerce Starter fields (AGL-90) kept readable.
   productId?: string
@@ -287,6 +308,26 @@ export interface HostOrder {
 /**
  * Legal status transitions. Refund/cancel policies: anything paid can
  * refund; only unfulfilled orders cancel (refund instead once shipped).
+ *
+ * `cancelled` IS NOT TERMINAL, and treating it as one trapped money (AGL-2149).
+ * `cancel-order.ts` accepts a **paid** order — `paid: [… 'cancelled' …]` above
+ * — and moves no money when it does: it flips the status and returns the stock.
+ * `refund.ts` gates on `canTransitionOrder(order.status, 'refunded')`, so with
+ * `cancelled: []` the refund door closed behind the cancel and answered "orders
+ * in cancelled cannot refund" forever. An admin who cancelled a paid order
+ * instead of refunding it — the two buttons sit next to each other in the order
+ * dialog — had permanently locked the shopper's money out of every refund route
+ * this product has. The shopper's only remaining recourse was a chargeback,
+ * which costs the merchant the goods, the money AND the dispute fee.
+ *
+ * Whether cancelling a PAID order should refuse, or refund on the merchant's
+ * behalf, is a real product question and is deliberately NOT answered here:
+ * either would change what an existing console button does to money. Making the
+ * money reachable is the part that must not wait for that answer.
+ *
+ * A cancelled order that never took money simply has nothing to refund —
+ * `refund.ts` resolves no payment intent and answers "No payment to refund" —
+ * so the widened edge costs a lapsed `pending` order nothing.
  */
 const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['paid', 'cancelled'],
@@ -294,7 +335,7 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   partially_fulfilled: ['fulfilled', 'refunded'],
   fulfilled: ['delivered', 'refunded'],
   delivered: ['refunded'],
-  cancelled: [],
+  cancelled: ['refunded'],
   refunded: [],
 }
 
@@ -305,20 +346,44 @@ export function canTransitionOrder(
   return (ORDER_TRANSITIONS[from] ?? []).includes(to)
 }
 
+/**
+ * One money part, coerced to a whole non-negative number of cents (AGL-2224).
+ *
+ * `Math.max(0, Math.round(x))` is NOT this guard, and the difference is the
+ * whole defect: `Math.max` and `Math.min` PROPAGATE `NaN` rather than
+ * discarding it, so a single non-finite input made every field below `NaN` and
+ * `totalCents` with them. That is not a cosmetic wrong number — it is a number
+ * that defeats comparison. `cashReceivedCents < NaN` is `false`, so the POS
+ * "cash received is short" guard passed a sale that had taken no money; and a
+ * `NaN` written to Firestore (a legal double there) poisons every downstream
+ * sum, so ONE bad order renders a merchant's whole revenue figure `NaN`
+ * forever after.
+ *
+ * The inputs that can be non-finite are real, not theoretical: a POS
+ * `discountPct` that is not a number, a product whose `priceUsd` is a string
+ * or absent (`Number(undefined) * 100`), a `taxCents` derived from either. So
+ * this coerces at the boundary every order in the product passes through,
+ * rather than at each of the five callers, and answers 0 — the only value that
+ * cannot silently overstate what the shopper owes.
+ */
+const wholeCents = (value: unknown): number => {
+  const cents = Math.round(Number(value ?? 0))
+  return Number.isFinite(cents) && cents > 0 ? cents : 0
+}
+
 /** Sums line items and folds in shipping/tax/discount/fee, all cents. */
 export function computeOrderTotals(
   lineItems: OrderLineItem[],
   parts?: Partial<Pick<OrderTotals, 'shippingCents' | 'taxCents' | 'discountCents' | 'feeCents'>>,
 ): OrderTotals {
-  const itemsCents = lineItems.reduce(
-    (sum, line) =>
-      sum + Math.max(0, Math.round(line.unitAmountCents * line.quantity)),
+  const itemsCents = (lineItems ?? []).reduce(
+    (sum, line) => sum + wholeCents(line?.unitAmountCents * line?.quantity),
     0,
   )
-  const shippingCents = Math.max(0, Math.round(parts?.shippingCents ?? 0))
-  const taxCents = Math.max(0, Math.round(parts?.taxCents ?? 0))
+  const shippingCents = wholeCents(parts?.shippingCents)
+  const taxCents = wholeCents(parts?.taxCents)
   const discountCents = Math.min(
-    Math.max(0, Math.round(parts?.discountCents ?? 0)),
+    wholeCents(parts?.discountCents),
     itemsCents + shippingCents,
   )
   return {
@@ -326,7 +391,7 @@ export function computeOrderTotals(
     shippingCents,
     taxCents,
     discountCents,
-    feeCents: Math.max(0, Math.round(parts?.feeCents ?? 0)),
+    feeCents: wholeCents(parts?.feeCents),
     totalCents: itemsCents + shippingCents + taxCents - discountCents,
   }
 }
@@ -637,6 +702,81 @@ export interface SubscriptionInvoiceSource {
   lines?: { data?: readonly SubscriptionInvoiceLine[] | null } | null
 }
 
+/**
+ * The base a subscription invoice's platform fee SHOULD be taken on
+ * (AGL-2317): post-discount items, with tax and shipping removed.
+ *
+ * Every one-time door — `checkout.ts`, `cart-checkout.ts`, `draft-order.ts`,
+ * `pos-order.ts` and (since AGL-2315) bookings — sends a cents amount computed
+ * on items alone. The recurring door sent `application_fee_percent`, which
+ * Stripe applies to the WHOLE invoice, so Aglyn took a cut of sales tax — money
+ * that is the state's — and of shipping. On the issue's worked example ($30/mo
+ * digital, Business 2%, an 8.25% TX rate) the one-time base is $30.00 → 60¢ and
+ * the invoice total is $32.48 → 65¢.
+ *
+ * `total` and not a re-summed `lines.data[]`, deliberately. Stripe's own total
+ * is already net of every invoice-level discount and of any proration CREDIT,
+ * both of which `computeSubscriptionInvoiceOrder` drops (it floors a line at 0,
+ * which is right for a stored line item and wrong for a fee base — a mid-cycle
+ * downgrade credit reduces what the merchant is actually paid). Subtracting the
+ * two parts Stripe reports separately leaves exactly what was charged for goods.
+ *
+ * Tax is read on both spellings for the reason stated on `SubscriptionInvoiceSource`
+ * — the scalar was removed on newer API versions and the endpoint's version is
+ * dashboard configuration this repo cannot see. Reading only one of them would
+ * silently value tax at 0 and hand back the whole invoice total as the base,
+ * which is the very bug this closes.
+ */
+export function subscriptionInvoiceFeeBasisCents(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): number {
+  const totalCents = metadataCents(invoice?.total)
+  if (totalCents <= 0) return 0
+  const scalarTax = Number(invoice?.tax ?? NaN)
+  const taxCents =
+    Number.isFinite(scalarTax) && scalarTax > 0
+      ? scalarTax
+      : sumAmounts(invoice?.total_taxes ?? invoice?.total_tax_amounts)
+  const shippingCents = metadataCents(invoice?.shipping_cost?.amount_total)
+  return Math.max(0, totalCents - Math.max(0, taxCents) - shippingCents)
+}
+
+/**
+ * What the platform fee on a paid subscription invoice WOULD have been on the
+ * items-only base, at the rate Stripe actually applied (AGL-2317).
+ *
+ * ## The rate is never named here, on purpose
+ *
+ * Pricing is locked for Sept 1, so this is a BASE correction and must not be
+ * able to become a rate change. It therefore takes no plan, no entitlement and
+ * no `resolveTransactionFeePct` call: it scales the fee Stripe already charged
+ * by `base / total`. Whatever rate produced `application_fee_amount` — the
+ * sale-time one, a rate AGL-2289 has since re-priced, or a staff override —
+ * comes through untouched, and the only thing removed is the portion that was
+ * taken on tax and shipping. A test that changed a rate could not make this
+ * function agree with it.
+ *
+ * `Math.max(1, …)` matches `checkout.ts`: where a rate applies at all, the
+ * floor is a cent, never zero. An invoice with no fee, no total, or nothing but
+ * tax answers 0 and asks for no correction it cannot justify.
+ */
+export function subscriptionInvoiceItemsOnlyFeeCents(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): number {
+  const chargedCents = metadataCents(invoice?.application_fee_amount)
+  if (chargedCents <= 0) return 0
+  const totalCents = metadataCents(invoice?.total)
+  // Nothing to scale against — leave what Stripe took rather than inventing a
+  // reduction from a total we cannot read.
+  if (totalCents <= 0) return chargedCents
+  const basisCents = subscriptionInvoiceFeeBasisCents(invoice)
+  if (basisCents <= 0) return 0
+  // Tax-free and shipping-free invoices — the majority — land here and are
+  // byte-identical to today, which is what makes this safe inside the freeze.
+  if (basisCents >= totalCents) return chargedCents
+  return Math.max(1, Math.round((chargedCents * basisCents) / totalCents))
+}
+
 /** Sum of an `[{ amount }]` list, ignoring anything unreadable. */
 function sumAmounts(list: readonly { amount?: unknown }[] | null | undefined) {
   return (list ?? []).reduce((sum, entry) => {
@@ -845,6 +985,172 @@ export function orderContainsProduct(
 /** `12345` -> `123.45`, the CSV's money format. */
 function usd(cents: number): string {
   return (cents / 100).toFixed(2)
+}
+
+/**
+ * Display labels for {@link OrderStatus}, and the MUI chip colour each one
+ * carries (AGL-2136). The orders screen advertised on `/product/commerce`
+ * shows the status as a COLOURED pill — `Paid`, `Fulfilled`, `Refunded` in
+ * three different colours — where the console rendered every status as the
+ * same default outlined chip, so the one column a merchant scans first
+ * carried no signal at all.
+ *
+ * Kept in the model rather than in the card because three surfaces render a
+ * status (the orders list, the detail dialog and the dashboard glance
+ * widget) and a colour that means "refunded" on one of them must not mean
+ * something else on the next.
+ */
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  partially_fulfilled: 'Partly fulfilled',
+  fulfilled: 'Fulfilled',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
+}
+
+/**
+ * Chip colour per status. `pending` is deliberately `default` rather than
+ * `warning`: an unpaid order is not a problem, it is simply not money yet,
+ * and reserving the alarming colours for `cancelled`/`refunded` is what
+ * makes them readable at a glance.
+ */
+export const ORDER_STATUS_COLOR: Record<
+  OrderStatus,
+  'default' | 'success' | 'info' | 'warning' | 'error'
+> = {
+  pending: 'default',
+  paid: 'success',
+  partially_fulfilled: 'warning',
+  fulfilled: 'info',
+  delivered: 'info',
+  cancelled: 'default',
+  refunded: 'error',
+}
+
+/** Display labels for {@link OrderChannel}. */
+export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
+  online: 'Online',
+  pos: 'POS',
+  draft: 'Draft',
+  subscription: 'Subscription',
+}
+
+/** Human label for a channel, tolerating a legacy/unknown value. */
+export function orderChannelLabel(channel: string | undefined): string {
+  return ORDER_CHANNEL_LABELS[(channel ?? 'online') as OrderChannel] ?? channel ?? 'Online'
+}
+
+/**
+ * Net cents an order actually earned: the charged total less anything
+ * refunded. The three commerce surfaces each had their own inline copy of
+ * this expression; a refunded order counted as revenue on whichever one
+ * was written first.
+ */
+export function orderNetCents(order: Partial<HostOrder>): number {
+  const gross = Number(
+    (order as { totals?: { totalCents?: number } }).totals?.totalCents ??
+      (order as { amountCents?: number }).amountCents ??
+      0,
+  )
+  return gross - Number((order as { refundedCents?: number }).refundedCents ?? 0)
+}
+
+/** Milliseconds an order was created at, across every writer's field shape. */
+export function orderCreatedAtMs(order: Partial<HostOrder> & {
+  createdAtMs?: number
+  createdAt?: { seconds?: number; toDate?: () => Date }
+}): number {
+  if (typeof order.createdAtMs === 'number') return order.createdAtMs
+  const seconds = order.createdAt?.seconds
+  if (typeof seconds === 'number') return seconds * 1000
+  const date = order.createdAt?.toDate?.()
+  return date ? date.getTime() : 0
+}
+
+/** One window's totals, plus how it moved against the window before it. */
+export interface OrderWindowSummary {
+  /** Net revenue in cents over the window. */
+  revenueCents: number
+  /** Orders counted in the window. */
+  orders: number
+  /** Average order value in cents, 0 when the window is empty. */
+  aovCents: number
+  /**
+   * Percentage change vs the immediately preceding window of the same
+   * length, rounded to one decimal. `null` when the prior window is EMPTY —
+   * "+100%" against zero is not a growth rate, it is a first sale, and the
+   * tile must say nothing rather than say something false.
+   */
+  revenueDeltaPct: number | null
+  ordersDeltaPct: number | null
+  aovDeltaPct: number | null
+}
+
+const ORDER_WINDOW_DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Percentage change from `previous` to `current`, or `null` when there is
+ * no baseline to divide by.
+ */
+function deltaPct(current: number, previous: number): number | null {
+  if (!previous) return null
+  return Math.round(((current - previous) / previous) * 1000) / 10
+}
+
+/**
+ * Summarises a window of orders and the window before it (AGL-2136).
+ *
+ * Every commerce mockup we advertise shows the money tiles carrying a
+ * period-over-period delta — `Revenue $26,540 +8.1%` — and the product had
+ * no prior-window computation anywhere in the repo, so no surface could
+ * have rendered one.
+ *
+ * `pending` and `cancelled` orders are excluded, matching the analytics
+ * card: neither is money. Refunds are subtracted rather than dropped, so a
+ * refund inside the window pushes the delta DOWN, which is the whole point
+ * of showing it.
+ */
+export function summarizeOrderWindow(
+  orders: readonly (Partial<HostOrder> & {
+    createdAtMs?: number
+    createdAt?: { seconds?: number; toDate?: () => Date }
+  })[],
+  options: { nowMs: number; days?: number } ,
+): OrderWindowSummary {
+  const days = options.days ?? 30
+  const spanMs = days * ORDER_WINDOW_DAY_MS
+  const { nowMs } = options
+  let revenueCents = 0
+  let count = 0
+  let priorRevenueCents = 0
+  let priorCount = 0
+  for (const order of orders) {
+    const lifted = liftLegacyOrder(order)
+    if (lifted.status === 'pending' || lifted.status === 'cancelled') continue
+    const age = nowMs - orderCreatedAtMs(order)
+    if (age < 0) continue
+    if (age < spanMs) {
+      revenueCents += orderNetCents(order)
+      count += 1
+    } else if (age < spanMs * 2) {
+      priorRevenueCents += orderNetCents(order)
+      priorCount += 1
+    }
+  }
+  const aovCents = count ? Math.round(revenueCents / count) : 0
+  const priorAovCents = priorCount
+    ? Math.round(priorRevenueCents / priorCount)
+    : 0
+  return {
+    revenueCents,
+    orders: count,
+    aovCents,
+    revenueDeltaPct: deltaPct(revenueCents, priorRevenueCents),
+    ordersDeltaPct: deltaPct(count, priorCount),
+    aovDeltaPct: deltaPct(aovCents, priorAovCents),
+  }
 }
 
 /**

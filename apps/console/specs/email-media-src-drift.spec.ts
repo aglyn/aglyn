@@ -37,6 +37,13 @@ import {
  * besigner canvas keeps showing it — the exact shape of the original bug,
  * which is why this is table-driven rather than a couple of spot checks.
  */
+/**
+ * `require` behind a non-literal specifier — see the note on the configured-
+ * apex case below for why the indirection exists.
+ */
+const reRequire = (id: string): any =>
+  (require as unknown as (spec: string) => any)(id)
+
 describe('email media resolution does not drift from @aglyn/aglyn', () => {
   const HOST_IDS = [
     undefined,
@@ -132,5 +139,60 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     expect(hostEmailOrigin({ cname: 'shop.acme.com', subdomain: 'acme' })).toBe(
       'https://shop.acme.com',
     )
+  })
+
+  /**
+   * The half that was NOT mirrored (AGL-2195).
+   *
+   * `hostPublicOrigin` has read `NEXT_PUBLIC_TENANT_DOMAIN` since AGL-2022;
+   * the email copy wrote `aglyn.app` in flat. Every table above agreed
+   * anyway, because every one of them runs with the variable unset — where
+   * the configured value and the hard-coded literal are the same string. A
+   * drift guard that only ever exercises the default cannot see a missing
+   * default, which is how a self-hosted deployment came to mail absolute
+   * links on Aglyn's apex while this file stayed green.
+   *
+   * Both modules read the variable at MODULE scope, so the only way to
+   * observe the configured branch is to set it and re-require them. That is
+   * what `isolateModules` is for; `resetModules` afterwards puts the shared
+   * registry back for whatever runs next.
+   *
+   * The re-require goes through `reRequire` rather than a literal
+   * `require('@aglyn/aglyn')`, and that indirection is load-bearing for the
+   * BUILD, not for this test. `@nx/enforce-module-boundaries` reads a literal
+   * specifier inside a callback as a DYNAMIC graph edge, and dynamic edges are
+   * transitive — one here turned every static `@aglyn/aglyn` import in the
+   * console app into "a static import of a lazy-loaded library" and reddened
+   * `console:lint` on twenty-odd unrelated pages (the AGL-949 shape). Nothing
+   * is concealed by it: both packages are STATICALLY imported at the top of
+   * this file, so the dependency is already declared and only its KIND was
+   * being mis-read.
+   */
+  it('both follow a configured tenant apex, not only the default', () => {
+    const previous = process.env.NEXT_PUBLIC_TENANT_DOMAIN
+    process.env.NEXT_PUBLIC_TENANT_DOMAIN = 'sites.example.com'
+    try {
+      jest.isolateModules(() => {
+        const email = reRequire('@aglyn/shared-util-email')
+        const framework = reRequire('@aglyn/aglyn')
+        const host = { subdomain: 'acme' }
+        expect(email.hostEmailOrigin(host)).toBe(
+          'https://acme.sites.example.com',
+        )
+        expect(email.hostEmailOrigin(host)).toBe(
+          framework.hostPublicOrigin(host),
+        )
+        // A custom domain still wins over the configured apex, in both.
+        const custom = { cname: 'shop.acme.com', subdomain: 'acme' }
+        expect(email.hostEmailOrigin(custom)).toBe('https://shop.acme.com')
+        expect(email.hostEmailOrigin(custom)).toBe(
+          framework.hostPublicOrigin(custom),
+        )
+      })
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
+      else process.env.NEXT_PUBLIC_TENANT_DOMAIN = previous
+      jest.resetModules()
+    }
   })
 })

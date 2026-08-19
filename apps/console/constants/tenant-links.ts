@@ -16,6 +16,7 @@
  */
 
 import type { AglynHost, ScreenUid } from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import type { CollectionTemplateRoute } from './collection-templates'
 
 /**
@@ -31,14 +32,20 @@ import type { CollectionTemplateRoute } from './collection-templates'
  * sites we do not serve. Configured value first, our value only as the
  * default, so a self-host install is never pointed at our origin.
  *
- * Dot notation is load-bearing: this module reaches client components
- * (`host-switcher-nav`), and Next inlines `NEXT_PUBLIC_*` into the browser
- * bundle by substituting `process.env.NAME` textually. The bracket form the
- * two server-side readers use is never substituted, and would read
- * `undefined` in the browser.
+ * Re-exported from `TENANT_APEX` rather than read again here (AGL-2195).
+ * This module had its own `process.env.NEXT_PUBLIC_TENANT_DOMAIN ||
+ * 'aglyn.app'`, byte-for-byte the third copy of the same expression, and a
+ * fourth copy with the apex written in flat was still live in the staff host
+ * page. One reader means an operator's apex cannot be honoured on some
+ * surfaces and ignored on others.
+ *
+ * Dot notation is load-bearing and `TENANT_APEX` uses it: this module reaches
+ * client components (`host-switcher-nav`), and Next inlines `NEXT_PUBLIC_*`
+ * into the browser bundle by substituting `process.env.NAME` textually. The
+ * bracket form the two server-side readers use is never substituted, and
+ * would read `undefined` in the browser.
  */
-const TENANT_PRODUCTION_ROOT =
-  process.env.NEXT_PUBLIC_TENANT_DOMAIN || 'aglyn.app'
+const TENANT_PRODUCTION_ROOT = TENANT_APEX
 
 // Preview consoles link to the tenant preview deployment, which carries
 // no tenant subdomain and resolves the host via the ?tenantHost= override.
@@ -76,6 +83,26 @@ export function hostDisplayDomain(
     host.cname ||
     (host.subdomain ? `${host.subdomain}.${TENANT_PRODUCTION_ROOT}` : undefined)
   )
+}
+
+/**
+ * The site's address on the PLATFORM apex specifically, ignoring any custom
+ * domain — `{subdomain}.{apex}` (AGL-2172).
+ *
+ * Distinct from {@link hostDisplayDomain}, which answers "what does this site
+ * call itself" and prefers the custom domain. The Sites list shows both as
+ * separate rows, so it needs the platform address even when a custom domain
+ * exists, and it was re-deriving the `sub.aglyn.app` form by hand to get it —
+ * printing our apex on a self-hoster's own console. Exported as a function
+ * rather than exporting `TENANT_PRODUCTION_ROOT` so the apex stays owned by
+ * this module and call sites cannot start concatenating it again.
+ */
+export function hostPlatformDomain(
+  host: { subdomain?: string } | undefined,
+): string | undefined {
+  return host?.subdomain
+    ? `${host.subdomain}.${TENANT_PRODUCTION_ROOT}`
+    : undefined
 }
 
 export function isPreviewConsole(hostname: string): boolean {

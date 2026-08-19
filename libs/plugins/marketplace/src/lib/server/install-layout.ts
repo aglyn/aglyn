@@ -19,7 +19,10 @@ import { checkQuota, createResourceUid } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { listingArtifactType } from '../model/marketplace'
+import {
+  isPrivateListing,
+  listingArtifactType,
+} from '../model/marketplace'
 import { canActAsPublisher } from './publisher-profile'
 import { requirePurchase } from './purchase-entitlement'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
@@ -76,6 +79,18 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     if (
       !listing ||
       listing.deletedAt ||
+      // Staff takedown blocks new installs on EVERY artifact type
+      // (AGL-2290). AGL-948 extended takedown past plugins in the browse
+      // predicate and in `resolveMarketplacePluginVersion`, but the gate that
+      // decides whether content is HANDED OVER was only ever added to
+      // `install-plugin.ts`. So a component, theme, template, layout, email
+      // template or dataset schema that staff had taken down stayed
+      // installable by anyone holding its listing id — which makes takedown a
+      // suggestion for six of the seven artifact types.
+      //
+      // No owner exemption, matching `install-plugin.ts`: a takedown is a
+      // moderation decision about the artifact, not about who is asking.
+      listing.hiddenAt ||
       listingArtifactType(listing) !== 'layout'
     ) {
       return res.status(404).json({ error: 'Unknown layout' })
@@ -87,6 +102,16 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
       decoded.uid,
       listing.profileId,
     )
+    // Private listings install ONLY for the owning org (AGL-2290).
+    //
+    // `install-plugin.ts` has carried this since AGL-968; the other six never
+    // did, so a private component, theme, template, layout, email template or
+    // dataset schema was installable by anyone who knew its listing id. Browse
+    // hides them and the detail page 404s, but neither is a control — the
+    // route is.
+    if (isPrivateListing(listing) && !ownsListing) {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     // A FULLY refunded purchase stops entitling (AGL-1546), and until
     // AGL-1699 only the component route knew that: this one asked whether a
     // purchase doc EXISTED, so buy/install/refund kept the artifact. The
@@ -110,17 +135,40 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     }
 
     const org = (await getOrgForHost(hostId))?.org
-    const existing = await hostRef.collection('templates').get()
-    const count = existing.docs.filter(
-      (entry) =>
-        !entry.get('deletedAt') && entry.get('source.listingId') !== listingId,
-    ).length
-    const quota = checkQuota(org as any, 'templatesPerHost', count)
-    if (!quota.allowed) {
-      return res.status(403).json({
-        error:
-          `Your plan allows ${quota.limit} templates — see Billing to upgrade.`,
-      })
+    const templatesRef = hostRef.collection('templates')
+    /**
+     * The library slots this install would spend, off a set of template docs.
+     *
+     * The copy this listing already installed is about to be replaced, so
+     * counting it would fail the quota on an update the user is entitled to.
+     *
+     * A function rather than an inlined filter because the count is now taken
+     * TWICE — once here as a fast refusal, once inside the transaction as the
+     * authority — and two copies of a counting rule is how the rule drifts.
+     */
+    const slotsAfterInstall = (
+      docs: Array<FirebaseFirestore.QueryDocumentSnapshot>,
+    ) =>
+      docs.filter(
+        (entry) =>
+          !entry.get('deletedAt') && entry.get('source.listingId') !== listingId,
+      ).length
+    const overQuota = (limit: number) =>
+      `Your plan allows ${limit} templates — see Billing to upgrade.`
+    const existing = await templatesRef.get()
+    {
+      // The fast refusal. NOT the enforcement point — see the transaction
+      // below — but it keeps the base-snapshot write and the version tally off
+      // the path of an install that was never going to be allowed, and it is
+      // what answers a caller who is simply over their limit.
+      const quota = checkQuota(
+        org as any,
+        'templatesPerHost',
+        slotsAfterInstall(existing.docs),
+      )
+      if (!quota.allowed) {
+        return res.status(403).json({ error: overQuota(quota.limit) })
+      }
     }
 
     // Replacing a layout the workspace has edited destroys those edits — the
@@ -152,6 +200,13 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
     // Provenance + base snapshot (AGL-1015) — the layout tree as published,
     // without the display name the user is free to change.
+    //
+    // Stays OUTSIDE the transaction below: it does its own read and write, and
+    // repeating those on every retry attempt is exactly what a transaction
+    // body must not do. That is safe because the base collection is
+    // content-addressed and shared — a race that ends in a refusal leaves at
+    // most a snapshot of a published version, keyed by its own hash, which the
+    // next successful install of that version reuses.
     const provenance = await recordInstallProvenance({
       firestore,
       listingId,
@@ -160,42 +215,88 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
       artifactType: 'layout',
       content: { rootId: layout.rootId, nodes: layout.nodes },
     })
-    // Re-install replaces the prior copy rather than stacking (AGL-671).
-    const batch = firestore.batch()
-    let replaced = 0
-    for (const stale of existing.docs) {
-      if (stale.get('deletedAt')) continue
-      if (stale.get('source.listingId') !== listingId) continue
-      batch.update(stale.ref, { deletedAt: now, updatedAt: now })
-      replaced += 1
-    }
-    const templateRef = hostRef.collection('templates').doc(createResourceUid())
-    batch.set(templateRef, {
-      kind: 'layout',
-      displayName: String(listing.displayName ?? 'Layout').slice(0, 80),
-      ...(listing.description && { description: listing.description }),
-      rootId: layout.rootId,
-      nodes: layout.nodes,
-      source: {
-        type: 'marketplace' as const,
-        listingId,
-        version: listing.latestVersion ?? null,
-      },
-      installedFrom: provenance.installedFrom,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await batch.commit()
+    /**
+     * Re-install replaces the prior copy rather than stacking (AGL-671).
+     *
+     * THE ENFORCEMENT POINT: the count, the decision and every write in ONE
+     * transaction (AGL-2371, the AGL-2231 treatment).
+     *
+     * The check above ran, then `hasDivergedFromBase` awaited, then
+     * `recordInstallProvenance` awaited, and only then did a `WriteBatch`
+     * commit. Every await is a yield, so N concurrent installs each read the
+     * same pre-count, each found room, and each landed — and nothing re-counts
+     * afterwards, so the extra templates were permanent. A batch is atomic but
+     * NOT conditional on a read taken before it, which is the same lesson
+     * AGL-2369 paid for one route over.
+     *
+     * `tx.get` on the templates collection takes a pessimistic lock on every
+     * document it matched, so the loser of a race retries, re-reads the higher
+     * count and is refused.
+     *
+     * The DIVERGENCE gate above deliberately stays outside. It is not a count:
+     * it asks whether this workspace edited its own copy, which no concurrent
+     * install of a different listing can change, and it reads a base snapshot
+     * through a helper that does its own `get`.
+     *
+     * A refusal comes back as data and is rendered outside. Building a response
+     * inside a body that can run several times reads as if the transaction were
+     * a place effects happen.
+     */
+    const outcome = await firestore.runTransaction<
+      { error: string } | { replaced: number; from: string | number | null }
+    >(async (tx) => {
+      const live = await tx.get(templatesRef)
+      const quota = checkQuota(
+        org as any,
+        'templatesPerHost',
+        slotsAfterInstall(live.docs),
+      )
+      if (!quota.allowed) return { error: overQuota(quota.limit) }
 
-    // Per-version tally (AGL-1036): the replaced copy leaves its version.
+      // ALL READS BEFORE THE WRITES, which Firestore requires.
+      const superseded = live.docs.filter(
+        (entry) =>
+          !entry.get('deletedAt') && entry.get('source.listingId') === listingId,
+      )
+      for (const stale of superseded) {
+        tx.update(stale.ref, { deletedAt: now, updatedAt: now })
+      }
+      tx.set(templatesRef.doc(createResourceUid()), {
+        kind: 'layout',
+        displayName: String(listing.displayName ?? 'Layout').slice(0, 80),
+        ...(listing.description && { description: listing.description }),
+        rootId: layout.rootId,
+        nodes: layout.nodes,
+        source: {
+          type: 'marketplace' as const,
+          listingId,
+          version: listing.latestVersion ?? null,
+        },
+        installedFrom: provenance.installedFrom,
+        createdAt: now,
+        updatedAt: now,
+      })
+      // Per-version tally input (AGL-1036): the replaced copy leaves its
+      // version — read off the doc the transaction actually replaced, not off
+      // the snapshot taken before it opened.
+      return {
+        replaced: superseded.length,
+        from:
+          superseded[0]?.get('installedFrom.version') ??
+          superseded[0]?.get('source.version') ??
+          null,
+      }
+    })
+    if ('error' in outcome) {
+      return res.status(403).json({ error: outcome.error })
+    }
+    const { replaced } = outcome
+
     await recordVersionMove({
       firestore,
       listingRef,
       artifactType: 'layout',
-      from:
-        installedLayout?.get('installedFrom.version') ??
-        installedLayout?.get('source.version') ??
-        null,
+      from: outcome.from,
       to: listing.latestVersion,
     })
     await listingRef

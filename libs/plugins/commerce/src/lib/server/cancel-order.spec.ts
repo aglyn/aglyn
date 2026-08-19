@@ -53,9 +53,12 @@ import { cancelOrderHandler } from './cancel-order'
  * that wrote OUTSIDE the transaction would look atomic here and would not be.
  * Nothing under test writes outside it.
  *
- * NO STRIPE PATH IS EXERCISED — localhost carries the LIVE secret key. This
- * handler makes no network call at all, and `global.fetch` is a throwing stub
- * asserted UNCALLED after every case.
+ * ONE STRIPE PATH IS EXERCISED, AND ONLY ONE — the Checkout Session expiry a
+ * cancelled `pending` order now sends (AGL-2244). `global.fetch` is a throwing
+ * stub and every case asserts the EXACT number of calls it expected, which
+ * defaults to zero; a test that wants the expiry opts in by naming it. That
+ * keeps the original negative control — localhost carries the LIVE secret key
+ * — everywhere it still applies, instead of trading it for a blanket allowance.
  */
 
 // ---------------------------------------------------------------------------
@@ -401,9 +404,23 @@ function adjustments(): Record<string, any>[] {
   )
 }
 
-const fetchMock = jest.fn(async (url: any) => {
+/**
+ * The return type is ANNOTATED, not inferred (AGL-2255).
+ *
+ * A function body that only throws infers `Promise<never>`, and `jest.fn`
+ * carries that onto `mockImplementationOnce` — where no value is assignable to
+ * `never`, so the two Stripe-expiry cases below could not supply a response at
+ * all. `{ ok: boolean }` is exactly what the code under test consumes:
+ * `cancel-order.ts` reads one property off the expiry response, `!expiry?.ok`.
+ * Naming it here is what lets those overrides be type-checked for real instead
+ * of cast past.
+ */
+const fetchMock = jest.fn(async (url: any): Promise<{ ok: boolean }> => {
   throw new Error(`Unexpected fetch to ${String(url)}`)
 })
+
+/** How many Stripe calls THIS case expects. Reset to 0 before every one. */
+let expectedStripeCalls = 0
 
 let consoleError: jest.SpyInstance
 
@@ -419,6 +436,7 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  expectedStripeCalls = 0
   docs.clear()
   productReads = []
   failProductRead = ''
@@ -432,8 +450,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // No network, ever. Localhost carries the LIVE Stripe key.
-  expect(fetchMock).not.toHaveBeenCalled()
+  // Exactly what this case declared, which is zero unless it said otherwise.
+  // Localhost carries the LIVE Stripe key, so an unexpected call is a defect
+  // whichever direction it goes in.
+  expect(fetchMock).toHaveBeenCalledTimes(expectedStripeCalls)
 })
 
 // ---------------------------------------------------------------------------
@@ -864,6 +884,201 @@ describe('a POS card order (AGL-1825)', () => {
 // The open restock question (AGL-1797)
 // ---------------------------------------------------------------------------
 
+/**
+ * THE FLOOR THE SALE HIT, AND WHAT COMES BACK BECAUSE OF IT (AGL-2149).
+ *
+ * `adjustVariantInventory` clamps at zero, and on a BACKORDER product that
+ * clamp silently absorbs the overshoot: `canPurchase` admits any quantity when
+ * `oversellPolicy` is `backorder`, so a variant sitting at 0 can sell 3,
+ * `Math.max(0, 0 + -3)` leaves the count at 0 — correctly, a shelf count does
+ * not go negative — and the ledger row still said `-3`.
+ *
+ * Cancelling then read that `-3` and put back three units that never existed:
+ * the merchant's count went from 0 to 3, the stock badge offered them, and the
+ * next shopper bought goods nobody had. A silent under-count turned into a
+ * silent OVER-count, which is strictly worse — under-counting refuses a sale
+ * that could have been made, over-counting takes one that cannot be filled.
+ *
+ * The sale rows now carry `appliedDelta` when the floor absorbed something, and
+ * this is the reader. Rows the ledger does NOT describe are untouched, which is
+ * what keeps the pre-AGL-1807 paths (decremented with no row at all) from
+ * having their stock stranded — pinned below.
+ */
+describe('a sale the inventory floor clamped (AGL-2149)', () => {
+  function seedSaleRow(
+    id: string,
+    row: Record<string, any>,
+  ): void {
+    docs.set(`hosts/${HOST}/inventoryAdjustments/${id}`, {
+      reason: 'sale',
+      orderId: ORDER,
+      atMs: 3,
+      ...row,
+    })
+  }
+
+  /**
+   * THE DEFECT. Backorder sale of 3 against a variant at 0: the count never
+   * moved, so nothing may come back.
+   */
+  it('restores nothing when the sale took nothing off the shelf', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedProduct('prod-mug', [{ id: 'var-one', inventory: 5 }])
+    seedOrder()
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -3,
+      appliedDelta: 0,
+    })
+    seedSaleRow('sale-mug', {
+      productId: 'prod-mug',
+      variantId: 'var-one',
+      delta: -2,
+    })
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    // The tee stays at 0 — three units that never existed are not invented.
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(0)
+    // …and the mug, whose sale really did decrement, comes back in full.
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 2 })
+    // No `cancellation` row for stock that did not move — the same rule
+    // AGL-1797 applied to the flag: a ledger row for an unmoved count would
+    // corrupt the history the products hub renders.
+    expect(
+      adjustments().filter((row) => row.reason === 'cancellation'),
+    ).toEqual([
+      expect.objectContaining({
+        productId: 'prod-mug',
+        variantId: 'var-one',
+        delta: 2,
+      }),
+    ])
+    expect(storedOrder().status).toBe('cancelled')
+  })
+
+  /** A PARTIAL clamp: 5 sold against 2 in stock gives back exactly 2. */
+  it('restores only the part the floor let through', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedOrder({
+      lineItems: [
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+      ],
+    })
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: -2,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(2)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 2 })
+    expect(storedOrder().timeline.at(-1).detail).toBe(
+      '2 units returned to stock',
+    )
+  })
+
+  /**
+   * THE NEGATIVE CONTROL that matters most: an ordinary sale, whose row carries
+   * no `appliedDelta` because nothing was clamped, still restores in full. A
+   * "fix" that simply stopped restoring would pass every test above.
+   */
+  it('restores the full quantity on an ordinary sale', async () => {
+    seedTrackedShop()
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -3,
+    })
+    seedSaleRow('sale-mug', {
+      productId: 'prod-mug',
+      variantId: 'var-one',
+      delta: -2,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+  })
+
+  /**
+   * And the other negative control: an order the ledger says NOTHING about is
+   * not capped to zero. A pre-AGL-1807 draft link decremented without writing
+   * any row, and gating those on the ledger would strand their stock — the same
+   * reasoning that kept the AGL-1825 guard scoped to card orders.
+   */
+  it('restores in full when the ledger describes the order at all', async () => {
+    seedTrackedShop()
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+  })
+
+  /**
+   * Two lines of the same product+variant share ONE budget. Ten sold against
+   * four in stock, split across two lines of five: four units come back in
+   * total, not four per line.
+   */
+  it('shares one cap across two lines of the same variant', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedOrder({
+      lineItems: [
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+      ],
+    })
+    seedSaleRow('sale-tee-1', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: -4,
+    })
+    seedSaleRow('sale-tee-2', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: 0,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(4)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 4 })
+  })
+})
+
 describe('an open restockCheck', () => {
   const openCheck = {
     kind: 'refund',
@@ -1074,5 +1289,95 @@ describe('access', () => {
 
     expect(result.status).toBe(500)
     expect(storedOrder().status).toBe('paid')
+  })
+})
+
+/**
+ * AGL-2244. A `pending` draft order or POS card sale is a LIVE Stripe Checkout
+ * Session, and cancelling the order did nothing to it: the URL is in the email
+ * the merchant sent or on the customer's phone, and Stripe keeps it payable.
+ * Paying it captured real money on the merchant's account, and the completing
+ * webhook then discarded the event — its `status !== 'pending'` guard cannot
+ * tell a redelivery from a cancelled order — so the sale existed in Stripe and
+ * nowhere in the product.
+ *
+ * The expiry is best-effort BY DESIGN: the cancellation has already committed
+ * and released stock, and failing it to report a network blip would undo the
+ * thing the merchant asked for. A refusal is logged and the webhook's own
+ * backstop records the payment if one still arrives.
+ */
+describe('the payment link a cancelled order orphans (AGL-2244)', () => {
+  const realKey = process.env.STRIPE_SECRET_KEY
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterEach(() => {
+    if (realKey === undefined) delete process.env.STRIPE_SECRET_KEY
+    else process.env.STRIPE_SECRET_KEY = realKey
+  })
+
+  // `null`, not `undefined` — an omitted argument would take the default
+  // and the no-session case would silently test the session case instead.
+  function seedPendingLink(sessionId: string | null = 'cs_test_live') {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 12 }])
+    seedOrder({
+      status: 'pending',
+      lineItems: [
+        { productId: 'prod-tee', variantId: 'var-m', quantity: 3 },
+      ],
+      ...(sessionId ? { checkoutSessionId: sessionId } : {}),
+    })
+  }
+
+  it('expires the session so the link cannot be paid after the cancel', async () => {
+    seedPendingLink()
+    expectedStripeCalls = 1
+    fetchMock.mockImplementationOnce(async () => ({ ok: true }))
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, any]
+    expect(url).toBe(
+      'https://api.stripe.com/v1/checkout/sessions/cs_test_live/expire',
+    )
+    expect(init.method).toBe('POST')
+  })
+
+  it('still cancels, and says so in the log, when Stripe refuses', async () => {
+    seedPendingLink()
+    expectedStripeCalls = 1
+    fetchMock.mockImplementationOnce(async () => ({ ok: false }))
+
+    const result = await post()
+
+    // The cancel is what the merchant asked for and it already released
+    // stock — a failed expiry must not undo it.
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
+    expect(consoleError).toHaveBeenCalled()
+  })
+
+  it('calls nothing for a PAID order — there is no live link to expire', async () => {
+    // The default fixture is `paid`, whose session completed long ago.
+    seedTrackedShop({ checkoutSessionId: 'cs_test_done' })
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    // `expectedStripeCalls` is still 0, and the afterEach is the assertion.
+  })
+
+  it('calls nothing for a pending order with no session id', async () => {
+    seedPendingLink(null)
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
   })
 })

@@ -18,7 +18,11 @@
 
 import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'
 import type { OrgFeatureFlags } from '@aglyn/aglyn'
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  CardDisplay,
+  type HelpTipContent,
+} from '@aglyn/shared-ui-jsx'
 import { Alert, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useConsoleHostRoute, useOrgPlan } from '@aglyn/tenant-feature-instance'
@@ -109,6 +113,18 @@ export interface EntitlementGatedCardProps {
   hostId: string
   feature: keyof OrgFeatureFlags
   header: string
+  /**
+   * Help affordance for the two branches this component renders itself
+   * (AGL-2213).
+   *
+   * Required, not optional. The entitled branch renders `children`, which is
+   * the real card and carries its own help; the branches rendered HERE are
+   * "checking your plan" and the refusal — and the refusal is the one a
+   * reader reaches precisely because they do not have what it takes. That is
+   * the branch AGL-2130 found carrying no explanation on two console cards,
+   * and an optional prop would let it happen again silently.
+   */
+  help: HelpTipContent
   /** Locked-state copy: what this does, so the upsell sells something. */
   upsell: ReactNode
   children: ReactNode
@@ -124,7 +140,7 @@ export interface EntitlementGatedCardProps {
  * same defect with better manners.
  */
 export function EntitlementGatedCard(props: EntitlementGatedCardProps) {
-  const { hostId, feature, header, upsell, children } = props
+  const { hostId, feature, header, help, upsell, children } = props
   const { ready, entitled, upgradeHref, planLabel } = useCommerceEntitlement(
     hostId,
     feature,
@@ -132,7 +148,7 @@ export function EntitlementGatedCard(props: EntitlementGatedCardProps) {
 
   if (!ready) {
     return (
-      <CardDisplay header={header} contentGutterX contentGutterY>
+      <CardDisplay header={header} help={help} contentGutterX contentGutterY>
         <Typography variant="body2" color="text.secondary">
           {'Checking your plan…'}
         </Typography>
@@ -142,7 +158,7 @@ export function EntitlementGatedCard(props: EntitlementGatedCardProps) {
 
   if (!entitled) {
     return (
-      <CardDisplay header={header} contentGutterX contentGutterY>
+      <CardDisplay header={header} help={help} contentGutterX contentGutterY>
         <EntitlementUpsell planLabel={planLabel} upgradeHref={upgradeHref}>
           {upsell}
         </EntitlementUpsell>

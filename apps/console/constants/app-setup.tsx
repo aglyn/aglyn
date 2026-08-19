@@ -93,7 +93,11 @@ try {
     _Aglyn = globalThis.Aglyn = initializeBesignerApp({
       logLevel: 'debug',
     })
-    if (!IS_PRODUCTION) console.info('set global Aglyn', _Aglyn)
+    // Names the global it just assigned — `globalThis.Aglyn` — not the
+    // product. Dotted so the brand ratchet reads it as the identifier it is
+    // (AGL-2279); it was `'set global Aglyn'`, which is the same fact written
+    // so that a gate looking for brand copy could not tell.
+    if (!IS_PRODUCTION) console.info('set globalThis.Aglyn', _Aglyn)
     if (!IS_PRODUCTION) {
       ;(window as unknown as { AglynModule: typeof Aglyn }).AglynModule = Aglyn
     }

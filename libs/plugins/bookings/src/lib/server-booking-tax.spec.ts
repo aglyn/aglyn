@@ -50,6 +50,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   registerBillingWebhookHandler: () => undefined,
   checkEntitlement: () => true,
   resolveBrandingProfile: () => ({ name: 'Acme' }),
+  // The REAL fee resolver (AGL-2315). A stub returning a constant would let
+  // this suite pass against a fee the plan ladder never priced. Required from
+  // the source module rather than through `requireActual` on the whole
+  // `/server` barrel, which drags in the realm server and the API adapter —
+  // the `apply-publish-schedule.spec.ts` pattern.
+  resolveTransactionFeePct: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).resolveTransactionFeePct,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -88,7 +96,28 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       6: [{ start: 0, end: 1440 }],
     },
   }
-  const state = { service: serviceDoc, bookings }
+  // The OWNER'S CONNECTED-ACCOUNT PROFILE (AGL-2315). A paid booking is a
+  // destination charge, so the handler reads `profiles/{ownerUid}` for the
+  // merchant's Stripe account before it will open a session. The double models
+  // it because the double must model real semantics: without it every paid
+  // test 409s on "Payments are not set up yet" and the suite reads as a red
+  // that has nothing to do with what it asserts.
+  const ownerProfile: Record<string, unknown> = {
+    stripeAccountId: 'acct_merchant_1',
+    stripeChargesEnabled: true,
+  }
+  const state = {
+    service: serviceDoc,
+    bookings,
+    ownerProfile,
+    /** The org doc `getOrgForHost` answers with — the fee's own input. */
+    org: { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' } as Record<
+      string,
+      unknown
+    >,
+    /** Writes to every collection other than bookings/events/notifications. */
+    written: {} as Record<string, Array<Record<string, unknown>>>,
+  }
   const bookingsCollection = {
     doc: (id?: string) => {
       const key = id ?? `booking-${++autoId}`
@@ -108,7 +137,16 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       name === 'bookings' || name === 'events' || name === 'notifications'
         ? bookingsCollection
         : {
-            add: async () => ({ id: 'x' }),
+            // Every OTHER collection's writes, recorded by name (AGL-2303).
+            // `leads` came through here and the double dropped it on the
+            // floor, so nothing could see that the handler wrote a lead with
+            // no name on it — the field `campaign-send` reads for merge tags.
+            // A double that discards a write cannot fail on a wrong one.
+            add: async (data: Record<string, unknown>) => {
+              const written = state.written[name] ?? (state.written[name] = [])
+              written.push(data)
+              return { id: `${name}-${++autoId}` }
+            },
             doc: () => ({
               get: async () => ({
                 exists: true,
@@ -119,12 +157,28 @@ jest.mock('@aglyn/tenant-data-admin', () => {
             }),
           },
   }
+  // Top-level collections are resolved BY NAME (AGL-2315). The old double
+  // answered `hostRef` for every collection whatever it was called, so
+  // `profiles` and `hosts` were the same object — a fake in which the owner's
+  // Stripe account could not be told apart from the site document, and in
+  // which a handler reading the WRONG collection would still pass.
+  const profilesCollection = {
+    doc: (uid: string) => ({
+      id: uid,
+      get: async () => ({
+        exists: uid === state.org['ownerUid'],
+        get: (field: string) =>
+          uid === state.org['ownerUid'] ? state.ownerProfile[field] : undefined,
+      }),
+    }),
+  }
   return {
     __state: state,
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
-          collection: () => ({ doc: () => hostRef }),
+          collection: (name: string) =>
+            name === 'profiles' ? profilesCollection : { doc: () => hostRef },
           runTransaction: async (fn: any) =>
             fn({
               get: async () => ({ docs: [] }),
@@ -136,7 +190,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       }),
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
-    getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
+    getOrgForHost: async () => ({ orgId: 'org-1', org: state.org }),
     resolveOrgIdForHost: async () => 'org-1',
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,
@@ -147,6 +201,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { bookHandler } from './server'
+
+/**
+ * The mocked admin module's own state, so a write can be asserted rather than
+ * merely not throwing (AGL-2303).
+ */
+const mockAdmin = jest.requireMock('@aglyn/tenant-data-admin') as {
+  __state: { written: Record<string, Array<Record<string, unknown>>> }
+}
 import { computeOpenSlots } from './model'
 
 const service = (
@@ -238,6 +300,11 @@ afterAll(() => {
 
 beforeEach(() => {
   stripePosts.length = 0
+  // Per test, or an assertion about "the lead this booking wrote" would be an
+  // assertion about every lead the suite has written so far.
+  for (const key of Object.keys(mockAdmin.__state.written)) {
+    delete mockAdmin.__state.written[key]
+  }
 })
 
 describe('a paid booking states its tax decision (AGL-2000)', () => {
@@ -320,4 +387,65 @@ describe('a paid booking is created idempotently (AGL-2147)', () => {
     expect(key).toBe(`booking-${res.body.bookingId}`)
   })
 
+})
+
+/**
+ * THE LEAD CARRIES THE NAME THE BOOKER JUST TYPED (AGL-2303).
+ *
+ * `campaign-send` reads `leads.name` to personalize campaign mail. No lead
+ * writer wrote one — here, with the name sitting in `req.body.name` and
+ * already going onto the booking — so the leads audience was addressed by
+ * nobody's name, and `{{name}}` resolved to an empty string in mail that
+ * shipped.
+ *
+ * Asserted against the VALUE from the request, not against presence: a writer
+ * that stored a constant, or the email, passes any "is there a name" check.
+ */
+describe('a booking records a usable lead (AGL-2303)', () => {
+  /**
+   * A booker of its own — `makeReq` pins one email and one IP, and the
+   * handler's per-booker rate limit answers 429 to the second request from
+   * either. A shared fixture here would make these assertions about a booking
+   * that was refused.
+   */
+  const leadReq = (name: string, who: string) =>
+    ({
+      method: 'POST',
+      body: {
+        hostId: 'host-1',
+        serviceId: 'service-1',
+        startsAtMs: nextBookableStart(),
+        name,
+        email: `${who}@example.com`,
+      },
+      headers: { host: 'shop.example.com', 'x-forwarded-for': `198.51.100.${who.length}` },
+      socket: { remoteAddress: `198.51.100.${who.length}` },
+      query: {},
+      cookies: {},
+    }) as any
+
+  it('writes the booker’s own name onto the lead', async () => {
+    const res = makeRes()
+    await bookHandler(leadReq('Rae Kowalski', 'rae'), res)
+    expect(res.statusCode).toBe(200)
+    const leads = mockAdmin.__state.written['leads'] ?? []
+    expect(leads).toHaveLength(1)
+    // The VALUE off the request. A writer storing a constant — or the email,
+    // which is right there — passes any "is there a name" check.
+    expect(leads[0]).toMatchObject({
+      email: 'rae@example.com',
+      name: 'Rae Kowalski',
+      source: 'booking',
+    })
+  })
+
+  it('NEGATIVE CONTROL: a nameless booking never reaches the lead at all', async () => {
+    // The handler REQUIRES a name, so the defensive `...(name ? …)` spread at
+    // the write is unreachable here — stated rather than left as an untested
+    // branch someone later "simplifies" into an empty-string write.
+    const res = makeRes()
+    await bookHandler(leadReq('', 'anon'), res)
+    expect(res.statusCode).toBe(400)
+    expect(mockAdmin.__state.written['leads'] ?? []).toHaveLength(0)
+  })
 })

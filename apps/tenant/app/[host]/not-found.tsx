@@ -15,19 +15,27 @@
  * limitations under the License.
  */
 
-import SiteStatusScreen from '../../components/site-status-screen.component'
+import SiteNotFound from '../../components/site-not-found.component'
 
 /**
  * The tenant's branded 404 (AGL-2074).
  *
- * ## When this renders, and when it must NOT
+ * ## When this renders
  *
- * `page.tsx` calls `notFound()` when `load-page-data` resolves no screen,
- * no collection entry and no designated not-found screen. A host that HAS
- * designated one (`host.errorScreens.notFound`, AGL-131) never reaches here
- * at all — the loader returns that screen's composed nodes with a 200 and the
- * visitor gets the real designed page, nav and all. This is the floor beneath
- * that, not a replacement for it.
+ * On EVERY unmatched path (AGL-2342). `page.tsx` calls `notFound()` whenever
+ * `load-page-data` resolves no screen and no collection entry, and there is no
+ * longer a second exit that bypasses this boundary.
+ *
+ * There used to be: a host with `errorScreens.notFound` bound got its designed
+ * screen back from the loader as ordinary props — a `200 OK` carrying
+ * `noindex`. Two things were wrong with that. The status was a lie, and it was
+ * a lie nobody was collecting on: measured on production 2026-08-19,
+ * `errorScreens` was unset on all six hosts, so the branch had never once
+ * fired and every 404 on the platform was the fallback below.
+ *
+ * The designed screen now arrives THROUGH this boundary instead, so it and the
+ * real `404` status ship together. `SiteNotFound` holds the whole mechanism
+ * and the two measured framework facts that force it.
  *
  * ## Why it lives at `[host]/` and not at the app root
  *
@@ -40,18 +48,30 @@ import SiteStatusScreen from '../../components/site-status-screen.component'
  * exists for requests that never resolve a host; it is deliberately the
  * plainer one.
  *
+ * AGL-2187 leaned on that placement again: the site's public top-level pages
+ * ride the same context down from the layout, so the FALLBACK renders a real
+ * header, nav and footer instead of a single button. `SiteStatusScreen` has
+ * the whole rule, including why the site's AUTHORED nav cannot appear on it
+ * and what is offered in its place. AGL-2342 leans on it a third time: the
+ * host key the designed screen is fetched by rides down the same context.
+ *
  * ## Status code
  *
  * Next emits a real 404 for this boundary, which is what `x-matched-path:
  * /[host]/[[...slug]]` returning `HTTP/2 404` on `https://aglyn.com/edit-access`
- * already showed — the status was never the defect. The BODY was: with no
- * boundary registered, that 404 carried Next's own unstyled page. Note this
- * differs from the DESIGNATED-screen path, which serves 200 + `noindex`
- * because ISR cannot emit a 404 status for dynamically composed content.
+ * already showed — the status was never the defect. The BODY was, and still
+ * partly is: Next 16 serves `notFound()` as an empty `__next_error__` document
+ * and lets the client render this boundary from the flight payload. That is
+ * measured, not assumed, and it is why nothing here can be server-rendered —
+ * see `SiteNotFound`.
+ *
+ * What must NOT be "fixed" by rendering this content from `page.tsx` instead:
+ * that trades the 404 for a 200, and a soft-404 tells every crawler a mistyped
+ * URL is a real page.
  */
 export default function HostNotFound() {
   return (
-    <SiteStatusScreen
+    <SiteNotFound
       code="404"
       title={'We can’t find that page'}
       message={

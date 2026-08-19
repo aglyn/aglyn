@@ -210,8 +210,27 @@ function main() {
   // prepared but never promoted still sits in it — and re-running would
   // re-document every commit the earlier run already wrote up, under a second
   // version number. Refuse, and say which commit to look at.
-  const priorRelease = summary.commits.filter((c) =>
-    /^chore\(release\):/.test(c.subject),
+  //
+  // Detect that by what the commit DID, not by how its subject was worded.
+  // Only a commit that actually moved `version` in package.json documented
+  // this range under a version number. A `chore(release):` FOLLOW-UP to an
+  // already-promoted version leaves `version` untouched — f44f0c6b1
+  // regenerated the lockfile for 1.0.0-beta.2 after v1.0.0-beta.2 was already
+  // tagged on production — and matching the prefix alone made that commit
+  // block every later release until someone passed --base to route around
+  // the guard, which is exactly the thing the guard exists to prevent
+  // (AGL-2388).
+  const versionAt = (ref) => {
+    try {
+      return JSON.parse(git('show', `${ref}:package.json`)).version ?? null
+    } catch {
+      return null
+    }
+  }
+  const priorRelease = summary.commits.filter(
+    (c) =>
+      /^chore\(release\):/.test(c.subject) &&
+      versionAt(c.sha) !== versionAt(`${c.sha}^`),
   )
   if (priorRelease.length > 0 && !options.baseRef) {
     out.push('  ' + '-'.repeat(60))
@@ -244,13 +263,29 @@ function main() {
     return
   }
 
+  // The compare link has to name something GITHUB can resolve, and
+  // `origin/production` is a purely local remote-tracking ref — no such ref
+  // exists on the remote, so the link 404s. It shipped that way in the
+  // v1.0.0-beta.2 entry. Prefer a release tag that actually points at the
+  // base commit (readable AND resolvable); otherwise fall back to the base's
+  // SHA, which GitHub always resolves. Note this only affects the rendered
+  // URL — the RANGE stays anchored on origin/production, deliberately, for
+  // the reason documented on resolveBase (AGL-2389).
+  const baseSha = git('rev-parse', base.ref)
+  const baseTag =
+    git('tag', '--points-at', baseSha)
+      .split('\n')
+      .map((t) => t.trim())
+      .find((t) => t && versionForTag(t) !== null) ?? null
+  const compareFrom = baseTag ?? baseSha.slice(0, 9)
+
   const rendered = renderRelease({
     version,
     date: new Date().toISOString().slice(0, 10),
     summary,
     compareUrl: base.firstRelease
       ? null
-      : `https://github.com/aglyn/aglyn/compare/${base.ref}...${tagForVersion(version)}`,
+      : `https://github.com/aglyn/aglyn/compare/${compareFrom}...${tagForVersion(version)}`,
   })
 
   if (!options.write) {
@@ -274,6 +309,34 @@ function main() {
   pkg.version = version
   write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
 
+  // THE LOCKFILE CARRIES THE VERSION TOO (AGL-2108). Writing package.json and
+  // stopping there is how the repo carried `1.0.0-alpha.0` in
+  // package-lock.json for the whole of the first real release: `npm ci`
+  // validates that a lockfile satisfies the DEPENDENCY SET, never that its
+  // root `version` matches, so Vercel and the promotion gate stayed green over
+  // a drift nothing read. Anything that treats the lockfile as the authority
+  // on what version an install is — an SBOM, a self-host image tag — got the
+  // wrong answer silently.
+  //
+  // `--package-lock-only` touches no node_modules and runs offline: it
+  // rewrites the two `version` fields and nothing else on a version-only bump.
+  let lockfileWritten = true
+  try {
+    execFileSync('npm', ['install', '--package-lock-only', '--silent'], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+  } catch (error) {
+    // Not fatal — the version bump itself is correct and committable. Say so
+    // loudly instead, because a silent skip here is the original bug.
+    lockfileWritten = false
+    out.push('')
+    out.push('  !! npm install --package-lock-only FAILED — package-lock.json')
+    out.push('     still carries the OLD version. Run it by hand before')
+    out.push('     committing, or `npm run check:manifest-versions` will fail.')
+    out.push(`     ${String(error?.message ?? error).split('\n')[0]}`)
+  }
+
   const existing = exists(changelogPath)
     ? read(changelogPath, 'utf8')
     : CHANGELOG_HEADER
@@ -288,6 +351,7 @@ function main() {
 
   out.push('  ' + '-'.repeat(60))
   out.push('  WROTE  package.json  (version → ' + version + ')')
+  if (lockfileWritten) out.push('  WROTE  package-lock.json  (AGL-2108)')
   out.push('  WROTE  CHANGELOG.md')
   out.push('')
   out.push(
@@ -301,7 +365,11 @@ function main() {
   if (!changelogTracked) {
     out.push('    git add CHANGELOG.md   # new file — --only cannot stage it')
   }
-  out.push('    git commit --only package.json CHANGELOG.md \\')
+  out.push(
+    lockfileWritten
+      ? '    git commit --only package.json package-lock.json CHANGELOG.md \\'
+      : '    git commit --only package.json CHANGELOG.md \\',
+  )
   out.push(`      -m 'chore(release): ${tagForVersion(version)} (AGL-2089)'`)
   out.push('')
   out.push('  Then push to main and open the main→production PR as usual.')

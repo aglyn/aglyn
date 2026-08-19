@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
+  pluginDocsHelp,
   submissionMonthKey,
 } from '@aglyn/aglyn'
 import { CampaignsCard as HostCampaignsCard } from '@aglyn/plugins-email'
@@ -35,6 +36,8 @@ import {
 import {
   Alert,
   AlertTitle,
+  Avatar,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -48,6 +51,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -58,6 +62,12 @@ import {
   query,
   updateDoc,
 } from 'firebase/firestore'
+import {
+  relativeTime,
+  routingChips,
+  senderHue,
+  submissionSender,
+} from '../model/submission-presenter'
 import { useCallback, useState } from 'react'
 
 /**
@@ -246,6 +256,12 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                 content: (
                   <CardDisplay
                     header={'Form Submissions'}
+                    help={pluginDocsHelp('forms', {
+                      anchor: '#the-inbox',
+                      excerpt:
+                        'Messages your forms collected, newest first, showing who sent ' +
+                        'each one and where it was routed.',
+                    })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -259,7 +275,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>{'Form'}</TableCell>
+                  <TableCell>{'From'}</TableCell>
                   <TableCell>{'Message'}</TableCell>
                   <TableCell>{'Received'}</TableCell>
                   <TableCell align="right">{'Actions'}</TableCell>
@@ -279,16 +295,61 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                     }}
                   >
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center' }}
-                      >
-                        <span>{submission.formName ?? 'Form'}</span>
-                        {!submission.read ? (
-                          <Chip label="New" color="primary" size="small" />
-                        ) : null}
-                      </Stack>
+                      {/*
+                        The mockup's list is people, not forms (AGL-2168):
+                        an initials avatar, the sender, and the form name
+                        beneath it. The unread DOT replaces the `New` chip
+                        — the row is already bold, and a chip that says
+                        "New" beside bold text is the same fact twice.
+                       */}
+                      {(() => {
+                        const sender = submissionSender(submission.fields)
+                        const hue = senderHue(sender.label)
+                        return (
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center' }}
+                          >
+                            {!submission.read ? (
+                              <Box
+                                aria-label="Unread"
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  bgcolor: 'primary.main',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 8, flexShrink: 0 }} />
+                            )}
+                            <Avatar
+                              sx={{
+                                width: 28,
+                                height: 28,
+                                fontSize: 13,
+                                bgcolor: `hsl(${hue} 55% 45%)`,
+                              }}
+                            >
+                              {sender.initials}
+                            </Avatar>
+                            <Stack sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" noWrap>
+                                {sender.label}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                noWrap
+                              >
+                                {submission.formName ?? 'Form'}
+                              </Typography>
+                            </Stack>
+                          </Stack>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Typography
@@ -307,8 +368,25 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {submission.createdAt?.toDate?.().toLocaleString() ??
-                        '--'}
+                      {/*
+                        Relative, as the mockup shows it — an inbox is
+                        scanned for recency and a locale timestamp makes
+                        the reader do the subtraction. The absolute time
+                        stays on the detail dialog, where it is the fact
+                        you actually want.
+                       */}
+                      <Tooltip
+                        title={
+                          submission.createdAt?.toDate?.().toLocaleString() ??
+                          ''
+                        }
+                      >
+                        <span>
+                          {relativeTime(
+                            submission.createdAt?.toDate?.().getTime(),
+                          )}
+                        </span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell
                       align="right"
@@ -341,6 +419,9 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                   <Stack spacing={3}>
                     <CardDisplay
                       header={'Site Members & Leads'}
+                      help={pluginDocsHelp('membersOnly', {
+                        anchor: '#manage-your-members',
+                      })}
                       contentGutterX
                       contentGutterY
                       contentBordered="all"
@@ -403,9 +484,47 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       )
                       .map((lead) => (
                         <TableRow key={lead.$id} hover>
-                          <TableCell>{lead.email}</TableCell>
                           <TableCell>
-                            <Chip label="Lead" size="small" variant="outlined" />
+                            {lead.email}
+                            {/*
+                              The name the lead writer now stores (AGL-2303),
+                              same treatment as a member's `displayName` above
+                              — a list of bare addresses is a list nobody
+                              recognises anyone in.
+                            */}
+                            {lead.name ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ ml: 1 }}
+                                component="span"
+                              >
+                                {lead.name}
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            {/*
+                              WHERE THE LEAD CAME FROM (AGL-2338).
+                              `source` has been written by both lead writers —
+                              `'signup'` and `'booking'` — since AGL-109, and
+                              nothing read it: every row rendered the same flat
+                              "Lead" chip, so a site owner could not tell a
+                              membership sign-up from a booking, and the
+                              campaign audience selector treated them alike.
+                              Attribution collected and invisible.
+
+                              Falls back to the bare label rather than printing
+                              an empty suffix for a row written before the
+                              field, or by a future writer that omits it.
+                            */}
+                            <Chip
+                              label={
+                                lead.source ? `Lead · ${lead.source}` : 'Lead'
+                              }
+                              size="small"
+                              variant="outlined"
+                            />
                           </TableCell>
                           <TableCell>
                             {lead.createdAt?.toDate?.().toLocaleString() ??
@@ -455,6 +574,31 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                   {String(value)}
                 </Typography>
               </Stack>
+            ))}
+          </Stack>
+          {/*
+            What happened to this submission (AGL-2168). The mockup puts
+            these under the fields: `Saved to Inbox` and `Added to "Leads"
+            dataset`. The second is stamped by the submit route only when a
+            record was really appended — a form bound to a deleted dataset,
+            or one whose record quota is full, shows no chip rather than a
+            chip for a row that does not exist. Both are failures the route
+            already swallows silently, and a chip that lied about them
+            would be worse than the silence.
+           */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}
+          >
+            {routingChips(reader?.routing).map((chip) => (
+              <Chip
+                key={chip.label}
+                size="small"
+                label={chip.label}
+                color={chip.color}
+                variant="outlined"
+              />
             ))}
           </Stack>
         </DialogContent>

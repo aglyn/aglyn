@@ -539,4 +539,78 @@ describe('cart checkout shipping options (AGL-1707)', () => {
       },
     ])
   })
+  /**
+   * AGL-2230, at the door rather than in the model.
+   *
+   * The cart is 2 x 400 g = 800 g. Against a table whose only tier stops at
+   * 500 g nothing resolves, for any of the six collectable countries — and the
+   * "did this merchant configure shipping at all?" probe used the SAME cart, so
+   * it came back empty too and the handler took the branch reserved for a store
+   * that never set shipping up: a live session, no `shipping_options`, freight
+   * charged at nothing.
+   */
+  describe('a cart past every tier (AGL-2230)', () => {
+    const stopsAt500g = {
+      shipping: {
+        zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+        rates: [
+          {
+            id: 'wt',
+            zoneId: 'world',
+            name: 'By weight',
+            kind: 'weight_tiers',
+            tiers: [{ upTo: 500, amountCents: 599 }],
+          },
+        ],
+      },
+    }
+
+    it('refuses the checkout instead of opening a free-freight session', async () => {
+      const { result, body } = await runCheckout(stopsAt500g)
+      expect(result.status).toBe(409)
+      expect(String(result.body.error)).toContain('cannot price shipping')
+      // The refusal is COMPLETE: no session was minted at all, so there is no
+      // live Stripe page a shopper could still pay on.
+      expect(body).toBeNull()
+      // And it does not send the shopper to the country picker, which cannot
+      // fix a parcel no tier covers.
+      expect(result.body.needsShippingCountry).toBeUndefined()
+    })
+
+    it('refuses a declared destination for the same reason', async () => {
+      const { result } = await runCheckout(stopsAt500g, {
+        shippingCountry: 'US',
+      })
+      expect(result.status).toBe(409)
+      expect(String(result.body.error)).toContain('cannot price shipping')
+    })
+
+    /**
+     * POSITIVE CONTROL. The same store with a tier that reaches the cart still
+     * sells — so the refusal above is about the gap, not about weight tiers.
+     */
+    it('POSITIVE CONTROL: a tier that covers 800g still prices and sells', async () => {
+      const { result, body } = await runCheckout({
+        shipping: {
+          zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+          rates: [
+            {
+              id: 'wt',
+              zoneId: 'world',
+              name: 'By weight',
+              kind: 'weight_tiers',
+              tiers: [
+                { upTo: 500, amountCents: 599 },
+                { upTo: 2000, amountCents: 1299 },
+              ],
+            },
+          ],
+        },
+      })
+      expect(result.status).toBe(200)
+      expect(shippingOptions(body).map((option) => option.amount)).toEqual([
+        '1299',
+      ])
+    })
+  })
 })

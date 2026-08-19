@@ -115,7 +115,9 @@ Steps:
 
 Seats are metered and enforced per plan, and both kinds are available as
 [add-ons](/workspace-and-billing/billing-and-plans/add-ons) if you outgrow the
-included count. Invited people don't consume a seat until they accept.
+included count. A **pending invite holds a seat** — the count is checked when
+you send it and again when it is accepted — so plan headcount against invites
+sent, not invites accepted, or you will hit a refusal mid-onboarding.
 
 Full detail: [Teams, roles & membership](/workspace-and-billing/teams-and-roles/overview).
 
@@ -174,8 +176,9 @@ routine things. The [REST API](/api/) reads across your organization with one ke
 
 - **[Sites](/api/resources/sites)** — enumerate every site and its domain, which is
   the basis of any status dashboard you build.
-- **[Form submissions](/api/resources/sites#list-form-submissions)** — pull every
-  client's leads into one place, or into their CRM.
+- **[Form submissions](/api/resources/form-submissions)** — pull every client's leads
+  into one place, or into their CRM, and **mark each one read** as you go so the next
+  run doesn't send it twice.
 - **[Orders](/api/resources/orders)** and
   [Products](/api/resources/products) — for clients who sell.
 - **[Media](/api/resources/media)** — audit alt text across every site, or find what's

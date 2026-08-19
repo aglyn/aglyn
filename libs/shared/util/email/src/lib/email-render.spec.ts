@@ -224,3 +224,86 @@ describe('renderEmailHtml', () => {
     expect(html).toContain('inside')
   })
 })
+
+/**
+ * The white-label email logo (AGL-2139).
+ *
+ * `emailLogoUrl` was resolvable, storable, editable — and rendered by nothing.
+ * These assert the rendering half in both directions, because a test that only
+ * exercises the with-a-logo case passes on a renderer that emits an `<img>`
+ * unconditionally, which is the failure that matters: a broken-image box at
+ * the top of every transactional email a non-white-label org sends.
+ */
+describe('brand logo header (AGL-2139)', () => {
+  const BODY = {
+    root: { componentId: 'div', nodes: ['t'] },
+    t: { componentId: 'emailText', props: { children: 'hello' } },
+  } as any
+
+  it('renders an absolute logo above the body when the org has one', () => {
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: 'https://cdn.example.com/acme.png',
+      merge: { 'brand.productName': 'Acme' },
+    })
+    expect(html).toContain('https://cdn.example.com/acme.png')
+    // Alt text carries the brand, so a client with images off still reads it.
+    expect(html).toContain('alt="Acme"')
+    // Above the body, not appended after it.
+    expect(html.indexOf('acme.png')).toBeLessThan(html.indexOf('hello'))
+  })
+
+  it('emits NO img at all when the org has no logo', () => {
+    const { html } = renderEmailHtml({ nodes: BODY })
+    expect(html).not.toContain('<img')
+    expect(html).toContain('hello')
+  })
+
+  it('resolves a media: reference against the media origin', () => {
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: 'media:h1/med9',
+      mediaOrigin: 'https://console.example.com',
+      mediaHostId: 'h1',
+    })
+    // The whole point is the ABSOLUTE form, so assert the exact src rather
+    // than a substring: `toContain('/api/media/cdn/')` alone would also pass
+    // on a renderer that emitted the site-relative path, which is the very
+    // bug AGL-1224 fixed for every other image.
+    expect(html).toContain(
+      'src="https://console.example.com/api/media/cdn/h1/med9"',
+    )
+    // And the stored reference must not survive into the markup. Without
+    // this, a renderer that emitted BOTH — or that passed the ref through in
+    // some other attribute — would still read as green (AGL-2230).
+    expect(html).not.toContain('media:h1/med9')
+  })
+
+  it('resolves a cdnPath logo, which is what "Browse" actually stores', () => {
+    // `MediaUrlField.onPick` writes `media.cdnPath`, a SITE-RELATIVE path —
+    // so this generation reaches the renderer just as often as a `media:`
+    // ref, and is equally unfetchable from an inbox (AGL-2230).
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: '/api/media/cdn/h1/med9',
+      mediaOrigin: 'https://console.example.com',
+    })
+    expect(html).toContain(
+      'src="https://console.example.com/api/media/cdn/h1/med9"',
+    )
+    expect(html).not.toContain('src="/api/media/cdn/')
+  })
+
+  it('DROPS a relative logo rather than emitting a broken src', () => {
+    // Same rule as every other image (AGL-1224): an inbox has no page to
+    // resolve `/api/media/cdn/…` against, so a gap beats a broken-image box.
+    const { html } = renderEmailHtml({ nodes: BODY, brandLogoUrl: 'media:h1/med9' })
+    expect(html).not.toContain('<img')
+    // Belt and braces: the ref must not leak anywhere in the document, not
+    // merely out of an `<img>` tag.
+    expect(html).not.toContain('media:h1/med9')
+    // The rest of the email still renders — a dropped logo is a gap, not a
+    // failed render.
+    expect(html).toContain('hello')
+  })
+})

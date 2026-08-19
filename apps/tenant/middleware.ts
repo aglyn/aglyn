@@ -112,15 +112,27 @@ const TENANT_HOST_PARAM = 'tenantHost'
 const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
 
 /**
- * The `x-powered-by` value (AGL-2088). A LITERAL, not an import.
+ * The `x-powered-by` value (AGL-2088). A local READ, not an import.
  *
  * The canonical definition is `PLATFORM_GENERATOR_NAME` in
- * `libs/aglyn/.../plan-entitlements.ts`, and the `<meta name="generator">` tag
+ * `libs/aglyn/.../platform-brand.ts`, and the `<meta name="generator">` tag
  * reads it from there. This file cannot: middleware runs in the edge runtime,
  * and every other middleware in the repo — console included — imports only
  * app-local `constants/` or the root `security-origins`, precisely so a
  * server-only graph (firebase-admin, the entitlement resolvers) never gets
  * dragged into an edge bundle.
+ *
+ * It was a bare `'Aglyn'` literal, which was fine while the canonical value
+ * was also a literal. AGL-2153 made the brand configurable, and at that moment
+ * a hand-copied literal stopped being a duplicate and became a DIVERGENCE: a
+ * self-hoster who renamed the product would have served
+ * `<meta name="generator">` with their name and `x-powered-by` with ours, on
+ * the same response. So the copy reads the same env var under the same name —
+ * one value, one name (AGL-733) — rather than restating the answer.
+ *
+ * Dot notation is required, not stylistic: Next substitutes `NEXT_PUBLIC_*`
+ * textually in the dot form only, and the bracket form reads `undefined` in an
+ * edge bundle exactly as it does in the browser (AGL-2037).
  *
  * The copy is kept honest by assertion rather than by hope:
  * `platform-fingerprint-headers.spec.ts` imports the lib constant and asserts
@@ -128,7 +140,8 @@ const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
  * place fails a test instead of quietly shipping two different names to
  * detectors that key on the string.
  */
-const PLATFORM_GENERATOR_NAME = 'Aglyn'
+const PLATFORM_GENERATOR_NAME =
+  process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME?.trim() || 'Aglyn'
 
 /**
  * Lockdown verdict at the REQUEST level (AGL-1501). The edge runtime cannot
@@ -150,7 +163,7 @@ const PLATFORM_GENERATOR_NAME = 'Aglyn'
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
 const lockdownVerdicts = new Map<
   string,
-  { at: number; blocked: boolean; attribution: boolean }
+  { at: number; blocked: boolean; attribution: boolean; overQuota: boolean }
 >()
 
 /**
@@ -170,10 +183,14 @@ const lockdownVerdicts = new Map<
 async function hostVerdict(
   origin: string,
   tenantHost: string,
-): Promise<{ blocked: boolean; attribution: boolean }> {
+): Promise<{ blocked: boolean; attribution: boolean; overQuota: boolean }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
-    return { blocked: cached.blocked, attribution: cached.attribution }
+    return {
+      blocked: cached.blocked,
+      attribution: cached.attribution,
+      overQuota: cached.overQuota,
+    }
   }
   let blocked = false
   // Platform attribution (AGL-2088) rides on the SAME verdict — the route
@@ -188,6 +205,20 @@ async function hostVerdict(
   // older deployment that has no `attribution` field at all must never be read
   // as "this site is not white-labelled". Only an explicit `true` emits.
   let attribution = false
+  // THE FREE PLAN'S BANDWIDTH CAP (AGL-1967/2070/2155), and it starts FALSE
+  // with `blocked` rather than with `attribution`, because it fails in the
+  // same direction: an unreachable verdict, a non-200, unparseable JSON, or a
+  // response from an older deployment that has no `overQuota` field at all
+  // must all keep the site serving. A cap is a cost control; an outage that
+  // reads as a cap would take every free site on the platform down at once,
+  // which is a far worse day than the egress bill it was protecting.
+  //
+  // ⚠️ ENFORCING HERE IS THE POINT, exactly as it is for the lock. Only the
+  // middleware runs before the ISR cache, and a capped site's remaining
+  // egress is served from that cache — a gate in the loader alone would let a
+  // viral free site keep serving its hot pages indefinitely while the cap
+  // "engaged" against pages nobody was requesting.
+  let overQuota = false
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -198,15 +229,22 @@ async function hostVerdict(
         locked?: boolean
         mode?: string
         attribution?: boolean
+        overQuota?: boolean
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
+      overQuota = data?.overQuota === true
     }
   } catch {
-    // Fail open on the lock, closed on the attribution.
+    // Fail open on the lock and the cap, closed on the attribution.
   }
-  lockdownVerdicts.set(tenantHost, { at: Date.now(), blocked, attribution })
-  return { blocked, attribution }
+  lockdownVerdicts.set(tenantHost, {
+    at: Date.now(),
+    blocked,
+    attribution,
+    overQuota,
+  })
+  return { blocked, attribution, overQuota }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -215,6 +253,25 @@ export const middleware: NextMiddleware = async (req, event) => {
   const AGLYN_TENANT_DEMO = process.env.AGLYN_TENANT_DEMO
   const VERCEL_ENV = process.env.VERCEL_ENV as EnvVercelEnv
   const IS_VERCEL = process.env.VERCEL
+  /**
+   * A real deployment, as opposed to localhost dev (AGL-2177).
+   *
+   * `IS_VERCEL` was doing two jobs and only one of them was Vercel's. Every
+   * host-resolution branch below was gated on it, including the branch built
+   * for an operator's own apex — so on a self-host container, where
+   * `docker/tenant.Dockerfile` sets `AGLYN_STANDALONE=1` and never sets
+   * `VERCEL`, NOTHING matched, control fell to the `default:` fallback, and
+   * every visitor to every published site was 307'd to `app.aglyn.com`. The
+   * serving half of a self-host install was inert, and its traffic went to us.
+   *
+   * So the two questions are separated. This one is "is this a deployment",
+   * and it gates the branches that are true of ANY deployment: the operator's
+   * configured apex, and the custom-domain fallback. `IS_VERCEL` stays exactly
+   * where the branch is about AGLYN's own infrastructure — `.aglyn.app` and
+   * `.vercel.app` — because those are our hostnames and must not start
+   * matching on somebody else's box.
+   */
+  const IS_DEPLOYED = Boolean(IS_VERCEL) || process.env.AGLYN_STANDALONE === '1'
   const NODE_ENV = process.env.NODE_ENV
   const PROD_NODE_ENV = NODE_ENV === 'production'
   const PROD_VERCEL_ENV = VERCEL_ENV === 'production'
@@ -238,10 +295,63 @@ export const middleware: NextMiddleware = async (req, event) => {
   // (in the case of "test.vercel.app", "vercel.app" is the root URL)
   let tenantHost: string
 
+  /**
+   * The apex an operator's own site subdomains hang off (AGL-2217).
+   *
+   * WITHOUT this branch a self-host install serves ONE site. With
+   * `AGLYN_TENANT_HOST_CNAME=sites.example.com`, `acme.sites.example.com`
+   * matched the `.${AGLYN_TENANT_HOST_CNAME}` case below — which assigns the
+   * APEX rather than stripping it — so every subdomain resolved to the same
+   * tenant host. Measured through the real middleware:
+   * `acme.sites.example.com` and `bravo.sites.example.com` both rewrote to
+   * `/sites.example.com/`.
+   *
+   * `selfhost-host-resolution.spec.ts` was green throughout, because it
+   * asserted only that a container does not 307 the visitor away. Serving the
+   * wrong site is not a redirect.
+   *
+   * Read from `NEXT_PUBLIC_TENANT_DOMAIN`, and matched ONLY when it is set:
+   * unset — which is how Aglyn's own deployment runs — this case is `false &&
+   * …` and can never fire, so our routing is untouched. Set to `aglyn.app` it
+   * strips exactly what the `IS_VERCEL` branch below already strips, so it is
+   * unchanged in that shape too.
+   *
+   * The port is dropped before the comparison; the branches below compare the
+   * raw `Host`, which quietly excludes an operator terminating TLS on a
+   * non-standard port behind their proxy.
+   */
+  const TENANT_SUBDOMAIN_APEX = process.env.NEXT_PUBLIC_TENANT_DOMAIN?.trim()
+  const reqHostname = reqHost.split(':')[0].toLowerCase()
+
   switch (true) {
+    // An operator's own `{site}.{apex}` (AGL-2217), ahead of the apex case
+    // below because both match and only this one recovers the subdomain.
+    case Boolean(TENANT_SUBDOMAIN_APEX) &&
+      reqHostname.endsWith(`.${TENANT_SUBDOMAIN_APEX}`): {
+      const label = reqHostname.slice(
+        0,
+        -(String(TENANT_SUBDOMAIN_APEX).length + 1),
+      )
+      console.debug(
+        'Tenant Host Switch=',
+        'operator-apex',
+        'TENANT_SUBDOMAIN_APEX=',
+        TENANT_SUBDOMAIN_APEX,
+        'label=',
+        label,
+      )
+      // A multi-label prefix (`a.b.sites.example.com`) is not a site name;
+      // fall through to the custom-domain path rather than inventing one.
+      if (label && !label.includes('.')) {
+        tenantHost = label
+        break
+      }
+      tenantHost = `cname--${reqHostname}`
+      break
+    }
     // Deployment
-    case IS_VERCEL && reqHost === AGLYN_TENANT_HOST_CNAME:
-    case IS_VERCEL && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
+    case IS_DEPLOYED && reqHost === AGLYN_TENANT_HOST_CNAME:
+    case IS_DEPLOYED && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
       console.debug(
         'Tenant Host Switch',
         'assign',
@@ -307,20 +417,25 @@ export const middleware: NextMiddleware = async (req, event) => {
       // resolves it via host.cname (unknown domains 404 there). Only
       // host-shaped names proceed; garbage still bounces to the console.
       const hostname = reqHost.split(':')[0].toLowerCase()
-      if (IS_VERCEL && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
+      if (IS_DEPLOYED && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
         console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
         tenantHost = `cname--${hostname}`
         break
       }
+      // The CONFIGURED console, not ours (AGL-2176). A visitor who reached a
+      // self-hoster's tenant runtime on a name it cannot resolve was sent to
+      // Aglyn's sign-in page — their user, our domain, mid-session.
+      const consoleOrigin =
+        process.env.NEXT_PUBLIC_CONSOLE_URL?.trim() || 'https://app.aglyn.com'
       console.debug(
         'Tenant Host Switch=',
         'Redirecting',
         'req.nextUrl.pathname=',
         req.nextUrl.pathname,
         'Destination=',
-        'https://app.aglyn.com',
+        consoleOrigin,
       )
-      return NextResponse.redirect('https://app.aglyn.com')
+      return NextResponse.redirect(consoleOrigin)
     }
   }
 
@@ -345,7 +460,11 @@ export const middleware: NextMiddleware = async (req, event) => {
   // cached HTML can answer. Checked ahead of the SEO rewrites on purpose so
   // a taken-down site stops advertising its content too.
   const verdict = await hostVerdict(req.nextUrl.origin, tenantHost)
-  if (verdict.blocked) {
+  // The bandwidth cap (AGL-2155) rewrites to the SAME notice route, which
+  // re-derives which of the two it is and words itself accordingly. A lock
+  // OUTRANKS a cap by falling first: both serve a 503, but a staff takedown
+  // must not be described to a visitor as a traffic limit.
+  if (verdict.blocked || verdict.overQuota) {
     const lockedUrl = req.nextUrl.clone()
     lockedUrl.pathname = '/api/locked'
     lockedUrl.search = ''

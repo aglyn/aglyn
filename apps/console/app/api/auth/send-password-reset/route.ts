@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { consumeRateLimit, meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { generateAuthActionLink } from '../../_lib/auth-action-link'
@@ -94,15 +94,15 @@ async function handler(request: Request): Promise<Response> {
     )
 
     const fallbackText =
-      'Someone asked to reset the password for your Aglyn account. ' +
-      'Choose a new one here:\n\n' +
+      `Someone asked to reset the password for your ${PLATFORM_BRAND_NAME} ` +
+      'account. Choose a new one here:\n\n' +
       `${resetUrl}\n\n` +
       'The link expires shortly. If this was not you, you can ignore this ' +
       'email — your password stays as it is.'
     const designed = await renderSystemEmail('password-reset', { resetUrl })
     await sendEmail({
       to: email,
-      subject: designed?.subject ?? 'Reset your Aglyn password',
+      subject: designed?.subject ?? `Reset your ${PLATFORM_BRAND_NAME} password`,
       text: designed?.text || fallbackText,
       ...(designed?.html ? { html: designed.html } : {}),
       context: 'password-reset',

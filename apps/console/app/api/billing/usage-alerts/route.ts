@@ -15,21 +15,32 @@
  * limitations under the License.
  */
 
-import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  PLATFORM_BRAND_NAME,
+  pluginRequestFromWeb,
+  Route,
+} from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import {
+  bandwidthCapMonthKey,
+  bandwidthCapShouldEngage,
+  type OrgBandwidthCap,
   planMetersInfraOverage,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn/server'
-import { bandwidthGbFromPageViews } from '../../../../utils/usage-metering'
+import {
+  bandwidthGbFromPageViews,
+  pageViewsFromBandwidthGb,
+} from '../../../../utils/usage-metering'
 import {
   usageAlertApproachPct,
   usageAlertThreshold,
 } from '../../../../utils/storage-overage'
 import {
   measureScreenCaps,
-  screenCapMaxBillable,
+  screenCapReading,
 } from '../../../../utils/screen-cap-reconciliation'
 import {
   ORG_BILLING_DOC_ID,
@@ -55,10 +66,31 @@ import {
   orgMonthlySpend,
   resolveUsageBudget,
 } from '../../../../utils/usage-budget'
-import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
+import {
+  consoleOrigin,
+  emailFailureReason,
+  emailOrgAdmins,
+  emailStaffAlert,
+} from '../../_lib/usage-alert-email'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
 // the billing auto-lock sweep; gating the locker on the lock is circular.
+
+/**
+ * Orgs per invocation (AGL-2220).
+ *
+ * Deliberately well under the 500 this route used to attempt in one shot: an
+ * org costs one host query plus six counter reads and an analytics range per
+ * host, and the sweep has `maxDuration = 60`. A chunk that times out never
+ * advances its cursor, so the safe size is the one that finishes, not the one
+ * that finishes fastest. 100 is a fifth of the old attempt per invocation and
+ * — against the workflow's 50-page loop guard — ten times the platform reach.
+ *
+ * `report-usage` uses 10 (`CRON_CHUNK_SIZE`) because it prices every meter per
+ * org; this route only reads counters, so it is not the same unit of work and
+ * does not share the constant.
+ */
+export const USAGE_ALERT_ORG_CHUNK = 100
 
 /**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
@@ -81,7 +113,7 @@ import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
  * check itself.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -96,9 +128,71 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const month = new Date().toISOString().slice(0, 7)
-    const orgs = await firestore.collection('orgs').limit(500).get()
+    // ONE month boundary for the whole sweep, and the SAME function the
+    // bandwidth cap is stamped and read with (AGL-2155). Frozen here rather
+    // than recomputed per org so a run straddling midnight UTC on the 1st
+    // cannot engage a cap for one month while deduping its alert guards
+    // against another — the same discipline `approachPct` below is read once
+    // for.
+    const month = bandwidthCapMonthKey()
+
+    /*==========================================
+     * A RESUMABLE SWEEP (AGL-2220).
+     *
+     * This was `collection('orgs').limit(500).get()` — no order, no cursor,
+     * no truncation flag. Every org past the first 500 got **no quota alert,
+     * no budget alert, no Assist margin alert, no free-plan bandwidth cap and
+     * no billing auto-lock**, and the response reported `alerted: N` exactly
+     * as if the platform had been swept. A ceiling is tolerable; a SILENT one
+     * on the platform's only pre-invoice warning is not, and public signups
+     * can reach 500 orgs.
+     *
+     * `report-usage` was chunked for this reason (AGL-1141) and the workflow
+     * already loops on `done:false` + `nextCursor`, so this is the same
+     * protocol rather than a second one.
+     *
+     * ORDERED BY DOCUMENT ID, which is what makes "everything after the
+     * cursor" mean the same thing across invocations even as orgs are created
+     * and deleted mid-sweep — Firestore's default iteration order is not a
+     * promise (the same argument `selectCronChunk` makes for sorting ids).
+     *
+     * `limit + 1` rather than a count query: one extra document answers "is
+     * there more" exactly, for one read, and a count would be a second query
+     * whose answer could disagree with the page it describes.
+     *=========================================*/
+    const requestedLimit = Number((body as any)?.limit)
+    const pageSize =
+      Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? Math.min(Math.floor(requestedLimit), USAGE_ALERT_ORG_CHUNK)
+        : USAGE_ALERT_ORG_CHUNK
+    const rawCursor = (body as any)?.cursor
+    // `.doc('')` throws SYNCHRONOUSLY, at construction, outside any `.catch()`
+    // on the promise — and a slash would build a ref to a deeper path rather
+    // than refusing. Neither may reach the collection, so the cursor is
+    // validated as an org ID before it becomes one.
+    const cursor =
+      typeof rawCursor === 'string' &&
+      rawCursor.length > 0 &&
+      !rawCursor.includes('/')
+        ? rawCursor
+        : null
+    let orgQuery = firestore
+      .collection('orgs')
+      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+      .limit(pageSize + 1)
+    if (cursor) {
+      // A DocumentReference, not the bare id string: with `__name__` ordering
+      // the cursor value is a document PATH, and handing the SDK a reference
+      // removes any question about what it is resolved against.
+      orgQuery = orgQuery.startAfter(firestore.collection('orgs').doc(cursor))
+    }
+    const page = await orgQuery.get()
+    const hasMore = page.docs.length > pageSize
+    const orgDocs = hasMore ? page.docs.slice(0, pageSize) : page.docs
+    const orgs = { docs: orgDocs }
     const alerted: Array<Record<string, unknown>> = []
+    /** Orgs whose free-plan bandwidth cap engaged on THIS run (AGL-2155). */
+    const capped: Array<Record<string, unknown>> = []
 
     for (const org of orgs.docs) {
       const orgData = org.data()
@@ -234,25 +328,54 @@ async function handler(request: Request): Promise<Response> {
       // Same staleness this cron already accepts for data storage, and the
       // helper falls back to measuring when there is no usable figure, so an
       // org the rollup has not reached is measured rather than reported as 0.
-      const maxBillableScreens = await screenCapMaxBillable(
+      //
+      // AND WHICH SITES (AGL-2321). `report-usage` has written
+      // `screensOverCapHostIds` beside `maxBillableScreens` since AGL-1390 —
+      // written precisely because three separate ways past the create-time
+      // gate were found in one night — and nothing ever read it. So this
+      // alert told an owner a site was past its screen cap and could not say
+      // which one, with the list sitting on the document it had already
+      // fetched for the number it did use. On an org with a hundred sites
+      // that is an alert nobody can act on.
+      const screenCap = await screenCapReading(
         rollup
           ? {
               maxBillableScreens: rollup.get('maxBillableScreens'),
               computedAt: rollup.get('computedAt'),
+              screensOverCapHostIds: rollup.get('screensOverCapHostIds'),
             }
           : null,
         Date.now(),
         async () =>
-          (
-            await measureScreenCaps(
-              hosts.docs.map((host) => ({
-                id: host.id,
-                ref: host.ref,
-                routingMap: host.get('screens'),
-              })),
-              orgData,
-            )
-          ).maxBillable,
+          measureScreenCaps(
+            hosts.docs.map((host) => ({
+              id: host.id,
+              ref: host.ref,
+              routingMap: host.get('screens'),
+            })),
+            orgData,
+          ),
+      )
+      const maxBillableScreens = screenCap.maxBillable
+      /**
+       * The over-cap sites by the name their owner knows them by.
+       *
+       * `hosts` is already in hand, so this costs nothing. An id that is not
+       * in that snapshot still appears — as its id — rather than being
+       * dropped: a site deleted or moved since the rollup ran is exactly the
+       * kind of thing the reader needs to see, and silently shortening the
+       * list would make the sentence disagree with the count above it.
+       */
+      const hostLabels = new Map<string, string>(
+        hosts.docs.map((host) => [
+          host.id,
+          String(
+            host.get('subdomain') ?? host.get('displayName') ?? host.id,
+          ),
+        ]),
+      )
+      const overCapSites = screenCap.overCapHostIds.map(
+        (hostId) => hostLabels.get(hostId) ?? hostId,
       )
 
       // Does THIS org's plan bill storage past the band, rather than refusing
@@ -273,6 +396,14 @@ async function handler(request: Request): Promise<Response> {
          * when the product will keep working and bill.
          */
         billsOverage?: boolean
+        /**
+         * One extra sentence appended to the alert body, for a check whose
+         * number alone is not actionable (AGL-2321). Appended to BOTH channels
+         * from the same string, for the AGL-2052 reason: an email that says
+         * something the console does not is how a customer ends up arguing
+         * with support about which one meant it.
+         */
+        detail?: string
       }> = [
         {
           // AGL-484: a downgrade can leave an org over its site/storage
@@ -291,6 +422,12 @@ async function handler(request: Request): Promise<Response> {
           label: 'screens on a site',
           used: maxBillableScreens,
           limit: entitlements.screensPerHost,
+          // Named only when there is something to name. An empty list is a
+          // real answer — the recorded measurement found nothing over — and
+          // "Over the cap: ." would be worse than the silence it replaced.
+          detail: overCapSites.length
+            ? `Over the cap: ${overCapSites.join(', ')}.`
+            : undefined,
         },
         {
           key: 'mediaStorage',
@@ -372,10 +509,26 @@ async function handler(request: Request): Promise<Response> {
         },
         {
           // AGL-1106: bandwidth was displayed but never alerted/enforced.
+          //
+          // ⚠️ THIS FIELD WAS MISSING UNTIL AGL-2070, and its absence was a
+          // lie in both directions. A falsy `billsOverage` selects the "the
+          // product stops at the band" copy below — so a free customer was
+          // told they had been cut off while their site kept serving every
+          // page, and a PAID customer, whose bandwidth overage does bill, was
+          // told to "upgrade to raise the limit" as though they were stuck.
+          //
+          // Both halves are now true, and the second half is why the copy
+          // could not simply be softened: the cap added in this same commit
+          // (AGL-2155) makes free genuinely stop at the band, so the wall
+          // wording is the correct wording for the plan that gets it.
+          // `metersInfra` is the same predicate the cap keys off, which is
+          // what keeps the sentence and the behaviour from drifting apart
+          // again.
           key: 'bandwidth',
           label: 'monthly bandwidth',
           used: bandwidthGb,
           limit: entitlements.bandwidthGb,
+          billsOverage: metersInfra,
         },
         // No `siteSize` check (AGL-1370). It was added in AGL-1107 and could
         // never fire: `measure-node-map.ts` refuses any node map over 900 KB
@@ -442,13 +595,15 @@ async function handler(request: Request): Promise<Response> {
               ? `You're past your included ${check.label} — extra usage is now billed`
               : `You've reached your ${check.label} limit`
             : `You're above ${approachPct}% of your ${check.label} quota`
-        const alertBody = check.billsOverage
-          ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
-            `${check.limit}, extra ${check.label} is billed on your ` +
-            'monthly invoice — upgrade in Billing for a bigger allowance, ' +
-            'or set a monthly cap there if you would rather it stopped.'
-          : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
-            'in Billing to raise the limit.'
+        const alertBody =
+          (check.billsOverage
+            ? `${Math.round(check.used)} of ${check.limit} used. Past ` +
+              `${check.limit}, extra ${check.label} is billed on your ` +
+              'monthly invoice — upgrade in Billing for a bigger allowance, ' +
+              'or set a monthly cap there if you would rather it stopped.'
+            : `${Math.round(check.used)} of ${check.limit} used — upgrade ` +
+              'in Billing to raise the limit.') +
+          (check.detail ? ` ${check.detail}` : '')
         await notifyOrgAdmins(org.id, {
           type: 'billing.usage',
           title: alertTitle,
@@ -507,18 +662,37 @@ async function handler(request: Request): Promise<Response> {
        * failure mode AGL-1529 rejected on arrival was a spend ceiling that
        * takes a site down to save $2.
        *=========================================*/
-      const assistUsageDoc = await org.ref
-        .collection('assistUsage')
-        .doc(month)
-        .get()
+      // BY DOCUMENT ID, not the `rollup` read above (AGL-2219).
+      //
+      // `rollup` is the latest usage document by `computedAt`, which is the
+      // right thing for `dataStorageMb` and `maxBillableScreens` — those
+      // deliberately accept a stale figure rather than pay to re-measure. It
+      // is the wrong thing for money. Two sweeps now write into this
+      // collection (the closed month at 02:00, the month in progress at
+      // 07:00), so "latest by `computedAt`" answers "whichever cron ran most
+      // recently", and a budget that fires or stays silent depending on the
+      // ORDER of two schedules is not a control, it is a coincidence. An id
+      // is a property.
+      //
+      // `orgMonthlySpend` still compares `month` against itself, so this is
+      // belt and braces on purpose: a document fetched by id cannot carry a
+      // different month, and if one ever does the mismatch must win.
+      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
+        org.ref.collection('usage').doc(month).get(),
+        org.ref.collection('assistUsage').doc(month).get(),
+      ])
       const spend = orgMonthlySpend({
         month,
-        rollupBilledCents: rollup?.get('billedCents'),
-        // COMPARED, not trusted. `rollup` is the LATEST usage document by
-        // `computedAt`, which on the first days of a month is still LAST
-        // month's — evaluating August's budget against July's spend would
-        // fire every budget on the platform on the 1st.
-        rollupMonth: rollup?.get('month'),
+        rollupBilledCents: thisMonthRollup.get('billedCents'),
+        // COMPARED, not trusted. A missing document reads as `meteredFresh:
+        // false` rather than as $0 — the difference between a budget that has
+        // nothing to say yet and one that is broken, and the distinction
+        // AGL-2219 turned out to hinge on: for months NOTHING wrote this
+        // document during the month it names, so this guard was correctly
+        // refusing an input that never arrived.
+        rollupMonth: thisMonthRollup.exists
+          ? (thisMonthRollup.get('month') ?? month)
+          : null,
         assistEstCostUsd: assistUsageDoc.get('estCostUsd'),
         assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
       })
@@ -558,7 +732,7 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           link: billingLink,
         })
-        await emailOrgAdmins({
+        const budgetEmail = await emailOrgAdmins({
           firestore,
           orgId: org.id,
           subject: title,
@@ -569,6 +743,15 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           quota: BUDGET_GUARD_KEY,
           threshold: budgetThreshold,
+          // RECORDED, like the quota alerts above (AGL-2234). The result was
+          // awaited and thrown away, so an org whose budget alert reached
+          // zero addresses was indistinguishable from one it reached — and
+          // the guard is written either way, so the silence is permanent for
+          // that threshold and that month.
+          emailed: budgetEmail.sent,
+          ...(budgetEmail.sent
+            ? {}
+            : { emailReason: emailFailureReason(budgetEmail) }),
         })
       }
 
@@ -602,30 +785,112 @@ async function handler(request: Request): Promise<Response> {
           assistCogsThreshold,
         )
         guardUpdates['assistCogs'] = { month, threshold: multiple }
+        // ONE set of words for both channels, as with the quota alerts —
+        // hoisted rather than written twice so a staff inbox and the staff
+        // bell can never say different things about the same number.
+        const marginTitle =
+          `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
+        const marginBody =
+          `${org.get('slug') ?? org.id} has run about ` +
+          `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
+          `tokens in ` +
+          `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
+          'threshold. Assist is a plan entitlement with no per-token ' +
+          'price, so this is margin, not revenue.'
         await notifyStaff({
           type: 'billing.usage',
-          title: `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`,
-          body:
-            `${org.get('slug') ?? org.id} has run about ` +
-            `$${spend.assistUsd.toFixed(2)} of Aglyn Assist tokens in ` +
-            `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
-            'threshold. Assist is a plan entitlement with no per-token ' +
-            'price, so this is margin, not revenue.',
+          title: marginTitle,
+          body: marginBody,
           orgId: org.id,
           link: '/admin/orgs',
+        })
+        // AND BY EMAIL (AGL-2234). `notifyStaff` writes
+        // `users/{uid}/notifications` and nothing turns that into mail — the
+        // identical defect AGL-2052 removed one audience over. This is the
+        // only dollar figure guarding a meter whose other ceiling is a
+        // MESSAGE count, so it is precisely the alert nobody will be sitting
+        // in the console waiting for. Sequenced after the console write and
+        // independently: a mail outage must degrade to what this did before,
+        // not to nothing.
+        const marginEmail = await emailStaffAlert({
+          subject: marginTitle,
+          text: `${marginBody}\n\nOrg: ${consoleOrigin()}/admin/orgs`,
+          context: 'assist-margin',
         })
         alerted.push({
           orgId: org.id,
           quota: 'assistCogs',
           threshold: multiple,
+          emailed: marginEmail.sent,
+          ...(marginEmail.sent
+            ? {}
+            : { emailReason: emailFailureReason(marginEmail) }),
         })
       }
 
+      /*==========================================
+       * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155).
+       *
+       * ZACH, 2026-08-19, choosing to enforce now rather than at launch:
+       * "before public signups arrive, so the cap is proven under real
+       * traffic while the cohort is small and a mistake is cheap."
+       *
+       * THE DECISION IS MADE HERE because the numbers are already here. This
+       * sweep has just summed the org's page views for the current month and
+       * converted them to `bandwidthGb` against `entitlements.bandwidthGb` —
+       * the identical comparison the `bandwidth` alert above thresholds on.
+       * The serving path then reads the VERDICT off the org doc it already
+       * loads, so the cap costs no read on any render. Re-deriving the figure
+       * anywhere else would be the AGL-1371 mistake: a cap that engages on a
+       * number the customer's own alert does not show.
+       *
+       * ONE WRITE, not two. This rides the `usageAlerts` set below rather than
+       * issuing its own, so engaging a cap costs nothing beyond what the sweep
+       * already spends on this org.
+       *
+       * NOTHING IS EVER CLEARED. The marker names its month; next month it
+       * stops matching. An org that UPGRADES is released faster still and
+       * without any write at all, because `bandwidthCapEngaged` re-reads the
+       * plan — see that function for why the asymmetry is deliberate.
+       *=========================================*/
+      const existingCap = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
+      const orgUpdates: Record<string, unknown> = {}
+      if (
+        bandwidthCapShouldEngage({
+          org: orgData as never,
+          usedBandwidthGb: bandwidthGb,
+          includedBandwidthGb: entitlements.bandwidthGb,
+        }) &&
+        existingCap?.month !== month
+      ) {
+        // Guarded on the month so a cap engages once and the following 30
+        // days of sweeps write nothing. The diagnostics are recorded at
+        // ENGAGE time on purpose: they answer "what tripped this" for a
+        // customer asking, and re-stamping them daily would replace the
+        // moment the site was paused with the moment it was last swept.
+        orgUpdates['bandwidthCap'] = {
+          month,
+          engagedAt: Date.now(),
+          pageViews: Math.round(pageViews),
+          includedPageViews: Math.round(
+            pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+          ),
+        } satisfies OrgBandwidthCap
+        capped.push({ orgId: org.id, month })
+      }
+
       if (Object.keys(guardUpdates).length) {
-        await org.ref.set(
-          { usageAlerts: { ...guards, ...guardUpdates } },
-          { merge: true },
-        )
+        orgUpdates['usageAlerts'] = { ...guards, ...guardUpdates }
+      }
+      if (Object.keys(orgUpdates).length) {
+        // NO CACHE FAN-OUT (deliberate). The tenant's org doc is cached for 60
+        // seconds and the middleware's verdict memo for 30, so the cap engages
+        // within about a minute of this write on its own. Busting
+        // `tenant-data:{hostId}` from here would mean one revalidate call per
+        // host of every capped org, from a cron that sweeps the whole
+        // platform — cost, and a fan-out that can fail, bought against a
+        // latency already dwarfed by this sweep's own daily period.
+        await org.ref.set(orgUpdates, { merge: true })
       }
 
       /*==========================================
@@ -688,7 +953,27 @@ async function handler(request: Request): Promise<Response> {
         }
       }
     }
-    return Response.json({ alerted: alerted.length, details: alerted }, { status: 200 })
+    return Response.json(
+      {
+        alerted: alerted.length,
+        details: alerted,
+        // Reported separately from `alerted` (AGL-2155): engaging a cap takes
+        // a customer's site off the air, which is a different event from
+        // warning them, and a run that capped somebody must say so in its own
+        // field rather than inside a count of notifications.
+        capped: capped.length,
+        cappedDetails: capped,
+        // The sweep's own extent (AGL-2220). `alerted: 0` is the answer we
+        // want most days, and it used to be indistinguishable from a sweep
+        // that stopped at 500 orgs and never said so. `swept` is how many
+        // this invocation actually looked at, and `done` is the only thing
+        // that means the platform was covered.
+        swept: orgDocs.length,
+        nextCursor: hasMore ? (orgDocs[orgDocs.length - 1]?.id ?? null) : null,
+        done: !hasMore,
+      },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Usage alert run failed' }, { status: 500 })

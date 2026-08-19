@@ -61,6 +61,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -118,6 +119,9 @@ export function OrgMembersCard() {
   // `members.length` read "8 of 5 manager seats used" to an org with three
   // managers and five collaborators.
   const { org, ready: orgReady } = useCurrentOrg()
+  // Org-scoped chrome reads the org's RESOLVED product name, never a
+  // literal (AGL-2319): a white-label org's admins see their own brand.
+  const { branding } = useBranding()
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
@@ -170,16 +174,40 @@ export function OrgMembersCard() {
 
   const refresh = useCallback(async () => {
     if (!orgId || !user) return
-    const [membersPayload, invitesPayload, rolesPayload] = await Promise.all([
+    // Roles are PAGED (AGL-2334). The route used to answer a bare
+    // `.limit(50)` with no cursor and no count, so an org's 51st custom role
+    // was invisible rather than on a second page — and this card is where
+    // roles are assigned, so invisible meant unusable. Following the cursor
+    // is what makes the cap gone rather than merely larger; a caller that
+    // ignored it would reintroduce the same silent truncation at 100.
+    const loadRoles = async () => {
+      const all: any[] = []
+      let cursor: string | null = null
+      // A ceiling on ROUND TRIPS, not on roles — it exists so a server that
+      // kept handing back a cursor cannot spin the console forever.
+      for (let page = 0; page < 20; page += 1) {
+        const payload: any = await request(
+          `/api/orgs/roles?orgId=${orgId}` +
+            (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
+          'GET',
+        )
+        if (!payload?.roles) break
+        all.push(...payload.roles)
+        cursor = payload.nextCursor ?? null
+        if (!cursor) break
+      }
+      return all
+    }
+    const [membersPayload, invitesPayload, allRoles] = await Promise.all([
       request(`/api/orgs/members?orgId=${orgId}`, 'GET'),
       canManage
         ? request(`/api/orgs/invites?orgId=${orgId}`, 'GET')
         : Promise.resolve({ invites: [] }),
-      request(`/api/orgs/roles?orgId=${orgId}`, 'GET'),
+      loadRoles(),
     ])
     if (membersPayload?.members) setMembers(membersPayload.members)
     if (invitesPayload?.invites) setInvites(invitesPayload.invites)
-    if (rolesPayload?.roles) setRoles(rolesPayload.roles)
+    setRoles(allRoles)
   }, [orgId, user, canManage, request])
 
   useEffect(() => {
@@ -350,8 +378,9 @@ export function OrgMembersCard() {
               </Button>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              {'Already on Aglyn? They join right away. New to Aglyn? We email ' +
-                'them an invite they accept when they first sign in.'}
+              {`Already on ${branding.productName}? They join right away. ` +
+                `New to ${branding.productName}? We email them an invite they ` +
+                'accept when they first sign in.'}
             </Typography>
           </Stack>
         ) : null}
@@ -372,7 +401,19 @@ export function OrgMembersCard() {
                   INTO Access, which is what decides it — and which is what
                   decides the seat it consumes. */}
               <TableCell>
-                <Tooltip title="A custom role adds permissions on top of the base role — it does not replace it.">
+                {/* AGL-2334: this said a custom role "adds permissions on top
+                    of the base role — it does not replace it", and that is
+                    not what the code does. `resolveOrgPermissions` merges
+                    key-by-key and honours an explicit `false` at both the
+                    custom-role and member-override layers, so a custom role
+                    can take a permission AWAY as readily as grant one.
+
+                    The sentence was not merely inaccurate, it discouraged the
+                    exact use `run-an-agency-workspace.md` recommends —
+                    "custom roles if you want something narrower than the
+                    built-ins". Anyone who believed the tooltip would conclude
+                    narrowing was impossible and stop looking. */}
+                <Tooltip title="A custom role LAYERS on the base role, key by key — it can grant a permission the role lacks, or take one away.">
                   <span>{'Role'}</span>
                 </Tooltip>
               </TableCell>

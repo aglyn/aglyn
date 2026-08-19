@@ -29,6 +29,8 @@
  * answered, and the churn breakdown quietly loses the answers it did get.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockEnqueueSnackbar = jest.fn()
@@ -481,5 +483,114 @@ describe('the funnel reports every step to GA4 (AGL-1865)', () => {
     expect(eventParams('churn_survey_submitted')).toMatchObject({
       surface: 'account_delete',
     })
+  })
+})
+
+/**
+ * The funnel downsell must warn what the customer will be over (AGL-2154).
+ *
+ * A downgrade from the plan GRID builds a deliberate confirm carrying the
+ * AGL-483 over-limit summary — the sites, seats and datasets the org will
+ * exceed on the target tier. A downgrade from the FUNNEL fired
+ * `action: 'switch'` immediately on a single "Switch to {plan}" button, with
+ * no confirm and no summary. The identical plan change warned from one surface
+ * and said nothing on the other, on the path where the customer is least
+ * attached and most likely to be surprised later.
+ *
+ * It is stated on the downsell STEP rather than in a confirm stacked on top of
+ * an open dialog — the step is where the decision is made.
+ */
+describe('the downsell says what the smaller plan will not fit (AGL-2154)', () => {
+  it('warns for the plan the SERVER named, not the one being left', async () => {
+    const downsellImpact = jest.fn(async () => [
+      '4 sites (starter includes 1)',
+      '6 team members (starter includes 2)',
+    ])
+    renderFunnel({ downsellImpact })
+    await answerSurvey()
+    await screen.findByText(/Would a smaller plan work better\?/)
+    // The summary is computed for the downsell target, which the funnel does
+    // not know until the survey response names it.
+    expect(downsellImpact).toHaveBeenCalledWith('starter')
+    expect(
+      await screen.findByText(/4 sites \(starter includes 1\)/),
+    ).toBeTruthy()
+    expect(screen.getByText(/6 team members/)).toBeTruthy()
+    // ...and it says nothing is deleted, because nothing is.
+    expect(screen.getByText(/Nothing is deleted and these keep working/)).toBeTruthy()
+  })
+
+  it('the warning is on screen BEFORE the switch button is pressed', async () => {
+    const order: string[] = []
+    const downsellImpact = jest.fn(async () => {
+      order.push('warned')
+      return ['4 sites (starter includes 1)']
+    })
+    // `renderFunnel` returns the handler IT created, so an override has to be
+    // held here or the assertion watches a spy nothing called.
+    const onDownsell = jest.fn(async () => {
+      order.push('switched')
+      return true
+    })
+    renderFunnel({ downsellImpact, onDownsell })
+    await answerSurvey()
+    await screen.findByText(/4 sites \(starter includes 1\)/)
+    fireEvent.click(screen.getByRole('button', { name: /Switch to/ }))
+    await waitFor(() => expect(onDownsell).toHaveBeenCalled())
+    expect(order).toEqual(['warned', 'switched'])
+  })
+
+  it('NEGATIVE CONTROL: nothing over the limit invents no warning', async () => {
+    renderFunnel({ downsellImpact: jest.fn(async () => []) })
+    await answerSurvey()
+    await screen.findByText(/Would a smaller plan work better\?/)
+    expect(screen.queryByText(/You'll be over the/)).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: a failing summary never blocks the exit', async () => {
+    // A funnel is not a trap: a count that cannot be read must not stop
+    // somebody who is trying to leave.
+    const { onDownsell } = renderFunnel({
+      downsellImpact: jest.fn(async () => {
+        throw new Error('denied')
+      }),
+    })
+    await answerSurvey()
+    await screen.findByText(/Would a smaller plan work better\?/)
+    fireEvent.click(screen.getByRole('button', { name: /Switch to/ }))
+    await waitFor(() => expect(onDownsell).toHaveBeenCalledWith('starter'))
+  })
+
+  it('NEGATIVE CONTROL: a caller that passes no summary still reaches the step', async () => {
+    renderFunnel()
+    await answerSurvey()
+    expect(
+      await screen.findByText(/Would a smaller plan work better\?/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/You'll be over the/)).toBeNull()
+  })
+})
+
+/**
+ * ...and BOTH leave paths have to hand it over (AGL-2154).
+ *
+ * The dialog is only as honest as its caller. `handleFunnelDownsell` on the
+ * Billing page and `handleDeleteDownsell` in org Settings had the identical
+ * gap — the deletion path is the same departure (AGL-1863), so a warning on
+ * one and silence on the other is the original defect with a smaller
+ * blast radius. No render test can see a prop a page forgot to pass, so this
+ * reads the call sites.
+ */
+describe('both funnel call sites pass the summary (AGL-2154)', () => {
+  const APP = join(__dirname, '..', '..', 'app', '(app)', '[orgSlug]')
+
+  it.each([
+    ['billing', join(APP, 'billing', 'page.tsx')],
+    ['settings', join(APP, 'settings', 'page.tsx')],
+  ])('the %s page tells the funnel what the target will not fit', (_name, path) => {
+    const source = readFileSync(path, 'utf8')
+    const element = source.slice(source.indexOf('<RetentionFunnelDialog'))
+    expect(element).toContain('<RetentionFunnelDialog')
+    expect(element.slice(0, element.indexOf('/>'))).toMatch(/downsellImpact=/)
   })
 })

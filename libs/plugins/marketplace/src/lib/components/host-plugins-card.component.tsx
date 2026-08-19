@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { buildRoute, PLUGIN_COMPONENT_ID, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  PLUGIN_COMPONENT_ID,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import {
   AppLink,
   CardDisplay,
@@ -36,7 +41,9 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import {
   compareArtifactVersions,
+  isPluginRevoked,
   lockdownRefusalText,
+  offeredPluginVersion,
   parseLockdownRefusal,
 } from '@aglyn/aglyn'
 import {
@@ -130,18 +137,6 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     [firestore, listingIds.join(',')],
     { idField: '$id' },
   )
-  // The newest APPROVED version, not the newest published one (AGL-1016).
-  // Offering `latestVersion` here put an Upgrade button in front of every
-  // workspace the moment a publisher uploaded, and the install route then
-  // refused the click — AGL-966 only ever hands out reviewed bytes.
-  const latestByListing = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const listing of (listingDocs as any[]) ?? []) {
-      map[listing.$id] = String(listing.latestApprovedVersion ?? '')
-    }
-    return map
-  }, [listingDocs])
-
   // Kill switches (public revocations read) for the installed listings.
   const { data: revocationDocs } = useFirestoreCollection<any>(
     () =>
@@ -159,13 +154,72 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         (doc) => doc.$id === install.$id,
       )
       if (!revocation) continue
-      map[install.$id] =
-        revocation.versions === 'all' ||
-        (Array.isArray(revocation.versions) &&
-          revocation.versions.includes(install.version))
+      // THE SHARED PREDICATE, not a fourth copy of it (AGL-2305). This card
+      // carried a byte-for-byte duplicate of `isPluginRevoked`'s body, which
+      // is precisely what AGL-1085 collapsed three inline copies into one to
+      // stop: a reader that disagrees with the writer about this document's
+      // shape is how a kill switch silently stops killing. It happened to be
+      // correct; being correct today is not the property that matters.
+      map[install.$id] = isPluginRevoked(revocation, install.version)
     }
     return map
   }, [installs, revocationDocs])
+
+  /*==========================================
+   * WHY IT WAS DISABLED (AGL-2328).
+   *
+   * Staff are REQUIRED to type a reason to revoke a plugin version — the
+   * route refuses without one — and until now the customer whose site the
+   * plugin stopped working on was shown a bare "disabled" chip and a generic
+   * paragraph. The reason was stored, in the same document this card already
+   * reads, one field away from the flag it renders. Every consumer of
+   * `revocations` reads `versions` and nothing else; the type's own comment
+   * calls `versions` "the ONLY field any reader consults", which was true and
+   * is the defect.
+   *
+   * Only the REASON and the DATE are surfaced. `revokedBy` is a staff uid and
+   * belongs in the audit log, not on a customer's screen.
+   *=========================================*/
+  const revocationDetailByListing = useMemo(() => {
+    const map: Record<string, { reason: string | null; atMs: number | null }> =
+      {}
+    for (const doc of ((revocationDocs as any[]) ?? [])) {
+      const at = doc.revokedAt
+      map[doc.$id] = {
+        reason:
+          typeof doc.reason === 'string' && doc.reason.trim()
+            ? doc.reason.trim()
+            : null,
+        atMs:
+          at?.toMillis?.() ?? (typeof at?.seconds === 'number' ? at.seconds * 1000 : null),
+      }
+    }
+    return map
+  }, [revocationDocs])
+
+  // The newest INSTALLABLE version, not merely the newest approved one
+  // (AGL-1016, corrected by AGL-2368).
+  //
+  // Offering `latestVersion` here put an Upgrade button in front of every
+  // workspace the moment a publisher uploaded, and the install route then
+  // refused the click — AGL-966 only ever hands out reviewed bytes. The
+  // mirror fixed that and then reproduced it one state over: nothing cleared
+  // it when a version was revoked, so the Upgrade button pointed at bytes the
+  // kill switch had stopped. Every writer of the mirror now derives it from
+  // `newestInstallableVersion`, and this card holds the revocation document
+  // ALREADY — it is right there, feeding the disabled chip below — so it
+  // cross-checks rather than trusting a cache written by a separate,
+  // non-transactional write it can observe mid-flight.
+  const latestByListing = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const listing of (listingDocs as any[]) ?? []) {
+      const revocation = ((revocationDocs as any[]) ?? []).find(
+        (doc) => doc.$id === listing.$id,
+      )
+      map[listing.$id] = offeredPluginVersion(listing, revocation) ?? ''
+    }
+    return map
+  }, [listingDocs, revocationDocs])
 
   const handleUpgrade = useCallback(
     (install: any) => async () => {
@@ -347,7 +401,12 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   )
 
   return (
-    <CardDisplay header="Marketplace installs" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Marketplace installs"
+      help={pluginDocsHelp('plugins', { anchor: '#install--upgrade' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         {/* First-party plugins used to be re-listed here for context; that
             moved out (AGL-802) now that the switchboard sits directly above
@@ -458,6 +517,26 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                     {'The platform disabled this plugin version. It renders ' +
                       'a placeholder on your site until you upgrade or ' +
                       'uninstall it.'}
+                    {/*
+                      The reason staff were required to type, shown to the
+                      person it happened to (AGL-2328). Rendered only when one
+                      was recorded — a revocation written before the reason
+                      was required says so, rather than showing an empty
+                      quotation that reads as "no reason given".
+                    */}
+                    {revocationDetailByListing[install.$id]?.reason ? (
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        {`Reason: ${revocationDetailByListing[install.$id]?.reason}`}
+                      </Typography>
+                    ) : null}
+                    {revocationDetailByListing[install.$id]?.atMs ? (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                        {`Disabled ${new Date(
+                          revocationDetailByListing[install.$id]
+                            ?.atMs as number,
+                        ).toLocaleDateString()}`}
+                      </Typography>
+                    ) : null}
                   </Alert>
                 ) : null}
               </Stack>

@@ -58,9 +58,15 @@ name: Index drift
 # silent-drift failure mode this workflow exists to prevent, and the checker
 # itself exits 2 (cannot-check) rather than 0 for the same reason.
 #
-# ⚠️ Do NOT move these steps into nx-ci.yml. That workflow is
-# `disabled_manually` and runs on no runner at all; gates added to it since it
-# was switched off have never executed once.
+# ⚠️ Do NOT move these steps into nx-ci.yml. The reason recorded here used
+# to be that nx-ci.yml was `disabled_manually` and ran on no runner. That was
+# false (AGL-2381): it is ACTIVE. The real reason is stronger and, unlike an
+# enabled/disabled state, is visible in a diff — nx-ci.yml is a SINGLE
+# sequential job whose first two steps are `npm run typecheck` and
+# `nx run docs:typecheck`, so any type error anywhere in the workspace
+# withdraws every step after them at once. Measured 2026-08-19: its guard
+# steps ran in 26 of 72 runs; the other 46 skipped them entirely. A drift
+# check has to answer on every push whether or not the tree type-checks.
 
 on:
   push:
@@ -81,9 +87,18 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest comparison matters; a delayed run must not pile up.
-  group: index-drift
-  cancel-in-progress: true
+  # AGL-2378. "Only the newest comparison matters" is true of the daily
+  # schedule and FALSE of a push: a cancelled push run leaves that commit with
+  # no verdict, and the newest run is comparing a different tree. A push is
+  # therefore grouped by its own COMMIT and never cancelled; schedule and
+  # workflow_dispatch keep the ref-scoped group and still supersede.
+  #
+  # Low volume here because of the path filter above, but the failure mode is
+  # the same one that discarded 47 of 82 tools-guards runs on 2026-08-19 — and
+  # two pushes touching the indexes inside one run's duration is exactly the
+  # case this file exists to judge.
+  group: index-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
@@ -147,8 +162,10 @@ jobs:
 
       # The RULES checker's self-test, for the same reason in the other
       # direction (AGL-1816). AGL-1778 gave it a second home in nx-ci.yml —
-      # which is `disabled_manually` and runs on no runner, so that redundancy
-      # existed only as text. rules-drift.yml and this workflow now each run
+      # which DOES run it (the `disabled_manually` claim recorded here was
+      # false — AGL-2381). It is a WEAK second home rather than an absent one:
+      # nx-ci.yml runs it behind `typecheck` and `docs:typecheck` in a single
+      # sequential job, so the step executed in 26 of 72 runs on 2026-08-19. rules-drift.yml and this workflow now each run
       # both self-tests, and both of them actually execute.
       - run: npm run test:rules-drift
 

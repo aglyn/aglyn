@@ -15,6 +15,37 @@
  * limitations under the License.
  */
 
+/**
+ * Origins used as merge-token SAMPLE values in the staff email designer
+ * (AGL-2202).
+ *
+ * These are never sent — they render in the template preview so an author can
+ * see what `{{console.url}}` will become. That still made them wrong on a
+ * self-host install: the preview showed Aglyn's console as the example for a
+ * link that will resolve to the operator's, which is exactly the sort of
+ * quiet mis-teaching that ends up copied into a hand-written template.
+ *
+ * Read from the environment rather than through `@aglyn/aglyn`'s
+ * `platform-brand` / `constants`: `shared-util-email` is tagged `scope:shared`
+ * and `@nx/enforce-module-boundaries` refuses the edge. Same defaults, so a
+ * deployment that configures nothing sees exactly what it saw before.
+ */
+const SAMPLE_CONSOLE_ORIGIN: string =
+  (process.env.NEXT_PUBLIC_CONSOLE_URL || '').trim().replace(/\/+$/, '') ||
+  'https://app.aglyn.com'
+
+/**
+ * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
+ * the operator identity sufficient on its own: a configured support URL, else
+ * the operator's support mailbox as a `mailto:`, else ours.
+ */
+const SAMPLE_SUPPORT_URL: string =
+  (process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL || '').trim() ||
+  ((process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()
+    ? `mailto:${(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()}`
+    : 'https://aglyn.com/support')
+
+import { BRAND } from '@aglyn/shared-data-enums'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 
 /**
@@ -107,7 +138,52 @@ export interface SystemEmailTemplateDefinition {
  * The staff page renders from this registry, not from Firestore, so an email
  * with no template designed yet still appears (as "Using default").
  */
-export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
+/**
+ * Brand tokens EVERY system email resolves (AGL-2139).
+ *
+ * White-label used to invert precisely when staff published a template: the
+ * designed template wins over each sender's branded fallback, and the copy
+ * here hard-coded "Aglyn". Nor was there anything to design against — the
+ * merge maps carried `org.name`, `invite.role`, `signInUrl` and friends and
+ * nothing about the brand, while `blankUnresolvedTokens` DELETES any token
+ * the caller did not supply, so a designer who typed `{{brand.productName}}`
+ * would have shipped an email with a hole in the sentence.
+ *
+ * Declared once and appended to every template's own list rather than copied
+ * into each: 13 hand-maintained copies is how the token list falls behind the
+ * copy, and the editor renders this list as the palette a designer picks
+ * from — a token missing here is a token nobody knows exists.
+ *
+ * The samples are the DEPLOYMENT's own values (`BRAND.ORG_NAME`, AGL-2319),
+ * because that is what an unbranded org genuinely renders — on a self-host
+ * install a hardcoded "Aglyn" would preview a brand that appears nowhere in
+ * the mail the designer is editing.
+ */
+export const BRAND_MERGE_TOKENS: readonly SystemEmailMergeToken[] = [
+  {
+    name: 'brand.productName',
+    description: "The sender's product name — the org's own on white-label",
+    sample: BRAND.ORG_NAME,
+  },
+  {
+    name: 'brand.fromName',
+    description: 'Sender display name the mail is delivered under',
+    sample: BRAND.ORG_NAME,
+  },
+  {
+    name: 'brand.supportUrl',
+    description: 'Where the recipient should go for help',
+    sample: SAMPLE_SUPPORT_URL,
+  },
+]
+
+// NOT declared: a `brand.logoUrl` token. The logo is STRUCTURAL — the
+// renderer emits it as a header row above the designed body, or emits
+// nothing — so a designer never places it, and a palette entry for it would
+// need a sample URL that a staff test-send would render as a broken image.
+// The three tokens above are the ones that belong in copy.
+
+const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
   [
     {
       key: 'org-invite',
@@ -116,7 +192,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent when an admin invites someone to an organization from the ' +
         'Team page.',
       deliveredBy: 'resend',
-      defaultSubject: "You've been invited to {{org.name}} on Aglyn",
+      defaultSubject: "You've been invited to {{org.name}} on {{brand.productName}}",
       mergeTokens: [
         {
           name: 'org.name',
@@ -131,7 +207,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'signInUrl',
           description: 'Console URL to sign in and accept',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in invites/route.ts.
@@ -159,7 +235,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Monthly per-organization usage and metered-cost summary, sent by ' +
         'the scheduled job.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your Aglyn usage summary for {{month}}',
+      defaultSubject: 'Your {{brand.productName}} usage summary for {{month}}',
       mergeTokens: [
         {
           name: 'month',
@@ -182,7 +258,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
         {
           block: 'text',
-          text: 'Here is your Aglyn usage summary for {{month}}.',
+          text: 'Here is your {{brand.productName}} usage summary for {{month}}.',
           variant: 'body',
         },
         { block: 'text', text: '{{usage.summary}}', variant: 'body' },
@@ -229,7 +305,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent to a new owner the first time they create an organization ' +
         '(not on every organization they later create).',
       deliveredBy: 'resend',
-      defaultSubject: 'Welcome to Aglyn',
+      defaultSubject: 'Welcome to {{brand.productName}}',
       mergeTokens: [
         {
           name: 'name',
@@ -244,12 +320,12 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'consoleUrl',
           description: 'Console dashboard URL',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in orgs/create/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Welcome to Aglyn', variant: 'heading' },
+        { block: 'text', text: 'Welcome to {{brand.productName}}', variant: 'heading' },
         {
           block: 'text',
           text:
@@ -272,8 +348,8 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       key: 'member-added',
       name: 'Added to an organization',
       description:
-        'Sent when an existing Aglyn account is added directly to an ' +
-        'organization. People who do not have an account yet get the ' +
+        `Sent when an existing ${BRAND.ORG_NAME} account is added directly ` +
+        'to an organization. People who do not have an account yet get the ' +
         'organization invite email instead.',
       deliveredBy: 'resend',
       defaultSubject: "You've been added to {{org.name}}",
@@ -291,7 +367,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'signInUrl',
           description: 'Console URL to open the organization',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in orgs/members/route.ts.
@@ -306,7 +382,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           text: 'Sign in to switch to it from your dashboard.',
           variant: 'body',
         },
-        { block: 'button', label: 'Open Aglyn', href: '{{signInUrl}}' },
+        { block: 'button', label: 'Open {{brand.productName}}', href: '{{signInUrl}}' },
       ],
       source: 'apps/console/app/api/orgs/members/route.ts',
     },
@@ -317,7 +393,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent to an organization owner once its data has been permanently ' +
         'erased under a GDPR request.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your Aglyn data has been erased',
+      defaultSubject: 'Your {{brand.productName}} data has been erased',
       mergeTokens: [
         {
           name: 'org.name',
@@ -332,7 +408,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           block: 'text',
           text:
             '{{org.name}} and all of its data have been permanently erased ' +
-            'from Aglyn, as requested.',
+            'from {{brand.productName}}, as requested.',
           variant: 'body',
         },
         {
@@ -365,7 +441,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           block: 'text',
           text:
             'We have recorded a request to erase {{org.name}} and all of ' +
-            'its data from Aglyn.',
+            'its data from {{brand.productName}}.',
           variant: 'body',
         },
         {
@@ -390,17 +466,17 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'console — by staff from a user\'s detail page, or by an ' +
         'organization admin from a team member\'s page.',
       deliveredBy: 'resend',
-      defaultSubject: 'Reset your Aglyn password',
+      defaultSubject: 'Reset your {{brand.productName}} password',
       mergeTokens: [
         {
           name: 'resetUrl',
           description: 'One-time link that opens the reset form',
-          sample: 'https://app.aglyn.com/reset-password?oobCode=…',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/reset-password?oobCode=…`,
         },
         {
           name: 'actor.name',
           description: 'Who asked for the reset',
-          sample: 'Aglyn support',
+          sample: '{{brand.productName}} support',
         },
       ],
       // Mirrors the fallbackText in _lib/password-admin.ts.
@@ -409,7 +485,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            '{{actor.name}} started a password reset for your Aglyn ' +
+            '{{actor.name}} started a password reset for your {{brand.productName}} ' +
             'account. Choose a new password here:',
           variant: 'body',
         },
@@ -432,17 +508,17 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'password directly. Always sent — it is how someone finds out an ' +
         'administrator changed their credentials.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your Aglyn password was changed',
+      defaultSubject: 'Your {{brand.productName}} password was changed',
       mergeTokens: [
         {
           name: 'actor.name',
           description: 'Who changed the password',
-          sample: 'Aglyn support',
+          sample: '{{brand.productName}} support',
         },
         {
           name: 'signInUrl',
           description: 'Where to sign in with the new password',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in _lib/password-admin.ts.
@@ -478,7 +554,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Security alert sent when an account signs in from a device it has ' +
         'not used before. Not sent on routine sign-ins from known devices.',
       deliveredBy: 'resend',
-      defaultSubject: 'New sign-in to your Aglyn account',
+      defaultSubject: 'New sign-in to your {{brand.productName}} account',
       mergeTokens: [
         {
           name: 'device.name',
@@ -503,7 +579,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'accountSecurityUrl',
           description: 'Manage-account page where the password can be changed',
-          sample: 'https://app.aglyn.com/manage/user',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
@@ -512,7 +588,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            'Your Aglyn account was just signed in to from a device it has ' +
+            'Your {{brand.productName}} account was just signed in to from a device it has ' +
             'not used before.',
           variant: 'body',
         },
@@ -543,7 +619,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'The trigger ships with passkey support (AGL-662); until then no ' +
         'call site sends this.',
       deliveredBy: 'resend',
-      defaultSubject: 'A passkey was added to your Aglyn account',
+      defaultSubject: 'A passkey was added to your {{brand.productName}} account',
       mergeTokens: [
         {
           name: 'passkey.label',
@@ -558,7 +634,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'accountSecurityUrl',
           description: 'Manage-account page where credentials are reviewed',
-          sample: 'https://app.aglyn.com/manage/user',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
@@ -567,7 +643,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            'A passkey ("{{passkey.label}}") was just added to your Aglyn ' +
+            'A passkey ("{{passkey.label}}") was just added to your {{brand.productName}} ' +
             'account. It can be used to sign in without your password.',
           variant: 'body',
         },
@@ -604,12 +680,12 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Password reset link, sent when someone asks for one from Account ' +
         'recovery.',
       deliveredBy: 'resend',
-      defaultSubject: 'Reset your Aglyn password',
+      defaultSubject: 'Reset your {{brand.productName}} password',
       mergeTokens: [
         {
           name: 'resetUrl',
           description: 'One-time link that opens the choose-a-new-password page',
-          sample: 'https://app.aglyn.com/reset-password?oobCode=\u2026',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/reset-password?oobCode=\u2026`,
         },
       ],
       // Mirrors the fallbackText in the route, so the designed and undesigned
@@ -619,7 +695,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            'Someone asked to reset the password for your Aglyn account. ' +
+            'Someone asked to reset the password for your {{brand.productName}} account. ' +
             'Choose a new one here:',
           variant: 'body',
         },
@@ -646,7 +722,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'verifyUrl',
           description: 'One-time link that confirms the address',
-          sample: 'https://app.aglyn.com/verify-email?oobCode=\u2026',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/verify-email?oobCode=\u2026`,
         },
       ],
       defaultBody: [
@@ -654,14 +730,14 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           block: 'text',
           text:
-            'Confirm this address to finish setting up your Aglyn account:',
+            'Confirm this address to finish setting up your {{brand.productName}} account:',
           variant: 'body',
         },
         { block: 'button', label: 'Confirm my email', href: '{{verifyUrl}}' },
         {
           block: 'text',
           text:
-            'If you did not create an Aglyn account, you can ignore this ' +
+            'If you did not create an {{brand.productName}} account, you can ignore this ' +
             'email.',
           variant: 'caption',
         },
@@ -680,7 +756,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Receipt for a successful subscription or invoice payment. Sent by ' +
         'Stripe if "Successful payments" is enabled under Customer emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your receipt from Aglyn',
+      defaultSubject: `Your receipt from ${BRAND.ORG_NAME}`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
@@ -692,7 +768,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'it. Sent by Stripe if failed-payment emails are enabled under ' +
         'Subscriptions and emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn payment could not be processed',
+      defaultSubject: `Your ${BRAND.ORG_NAME} payment could not be processed`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Subscriptions and emails',
     },
@@ -703,7 +779,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Confirms a refund back to the customer. Sent by Stripe if ' +
         '"Refunds" is enabled under Customer emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn refund',
+      defaultSubject: `Your ${BRAND.ORG_NAME} refund`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
@@ -726,11 +802,25 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'A finalized invoice emailed to the organization. Sent by Stripe ' +
         'when invoice emails are enabled for the billing configuration.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn invoice',
+      defaultSubject: `Your ${BRAND.ORG_NAME} invoice`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
   ]
+
+/**
+ * Every system email Aglyn sends, each with the universal brand tokens
+ * appended to its own (AGL-2139).
+ *
+ * The template's own tokens come FIRST so the editor's palette still leads
+ * with what is specific to that email; the brand block reads as the shared
+ * footer it is.
+ */
+export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
+  BASE_SYSTEM_EMAIL_TEMPLATES.map((entry) => ({
+    ...entry,
+    mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],
+  }))
 
 /** Firestore collection holding the designed templates. */
 export const SYSTEM_EMAIL_COLLECTION = 'systemEmailTemplates'

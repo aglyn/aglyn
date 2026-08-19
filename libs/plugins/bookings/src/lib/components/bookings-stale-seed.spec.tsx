@@ -68,6 +68,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: listener.fromCache,
   }),
   useHostResourceApi: () => mockCreateResource,
+  // Present because the page reads it for the refund route's bearer token
+  // (AGL-2315). A wholesale mock is a CLOSED WORLD: any export the component
+  // tree reaches must be here or the render throws.
+  useUser: () => ({ data: null }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the page passed it, which is the one thing this spec disproves.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')

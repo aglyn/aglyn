@@ -18,6 +18,9 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
+  checkSeatQuota,
+  countManagerSeats,
+  isOrgWideMember,
   resolveIdpDisplayName,
   resolveIdpPhone,
   resolveIdpPhotoUrl,
@@ -196,12 +199,55 @@ async function handler(request: Request): Promise<Response> {
       ? (invite.get('role') as OrgRole)
       : (defaultRole as OrgRole)
 
+    const allHosts = invite ? invite.get('allHosts') === true : true
+    const hostAccess = invite ? (invite.get('hostAccess') ?? {}) : {}
+    /*
+     * THE MANAGER SEAT QUOTA, which this route did not have (AGL-2259).
+     *
+     * `/api/orgs/members` and `/api/orgs/invites` both check `managersPerOrg`
+     * before writing an org member doc; JIT provisioning writes the same
+     * document and checked nothing. So the seat cap held for every path a
+     * human clicks and not for the one that runs automatically, on every
+     * first SSO sign-in — which is the path that can add a hundred members
+     * in an afternoon without anyone in the org doing anything.
+     *
+     * Same rule as the members route, not a looser one: only a MANAGER
+     * consumes a seat (`isOrgWideMember`); a site-scoped collaborator is
+     * metered per host against `membersPerHost` instead, and gating it here
+     * would bill and block it twice. Only reachable on a FIRST join — the
+     * already-a-member branch above returns before this — so a resync never
+     * re-spends a seat.
+     *
+     * A refused sign-in is the right answer and not a harsh one: the
+     * alternative is provisioning a member the org is over its cap for and
+     * discovering it on the invoice. The message names the ceiling so an
+     * admin can act on it.
+     */
+    if (isOrgWideMember({ role, allHosts, hostAccess })) {
+      const members = await orgDoc.ref.collection('members').get()
+      const seats = checkSeatQuota(
+        orgData as any,
+        'managers',
+        countManagerSeats(members.docs.map((doc) => doc.data() as never)),
+      )
+      if (!seats.allowed) {
+        return Response.json(
+          {
+            error:
+              `This workspace has used all ${seats.limit} of its team seats. ` +
+              'An administrator can add seats or upgrade the plan in Billing.',
+          },
+          { status: 403 },
+        )
+      }
+    }
+
     await upsertOrgMember({
       orgId,
       uid: decoded.uid,
       role,
-      allHosts: invite ? invite.get('allHosts') === true : true,
-      hostAccess: invite ? (invite.get('hostAccess') ?? {}) : {},
+      allHosts,
+      hostAccess,
       email,
       // Absent, not null, when the assertion carries nothing (AGL-1961) —
       // `upsertOrgMember` reads `null` as "clear the stored value". Latent

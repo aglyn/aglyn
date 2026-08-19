@@ -195,6 +195,105 @@ describe('Collection entries search (AGL-1516)', () => {
     // A paginated block holds one page window; claiming a global miss would
     // turn "not on this page" into "this post does not exist".
     render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={9}
+        perPage={2}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” on this page — other pages are not searched.',
+      ),
+    ).toBeTruthy()
+  })
+
+  // ── The scope test keys off TRUNCATION, not off `perPage` (AGL-1516) ──
+  //
+  // `perPage` was the wrong proxy in both directions, and each direction is
+  // its own lie. The three cases below are deliberately arranged so that a
+  // fix which only stamps `searchTotal` — or only reads it in the paginated
+  // branch — still fails: one has no `perPage` at all, one has a `perPage`
+  // that does not truncate, and one is the pre-existing paginated case above
+  // which must keep its wording.
+
+  it('admits a limited block is truncated even with NO perPage set', () => {
+    // The bug this reopened on. A block set to "latest 6 posts" is sliced by
+    // `entriesLimit`, never sees `perPage`, and used to answer a miss with a
+    // flat "No matches" — the false "this post does not exist" the honest
+    // empty state exists to prevent.
+    render(
+      <CollectionEntries search searchIndex={index} searchTotal={40}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(
+      screen.getByText(
+        'No matches for “zzzz” in the 2 entries shown here — the rest of ' +
+          'the collection is not searched.',
+      ),
+    ).toBeTruthy()
+    // And it must NOT claim pages it does not have.
+    expect(screen.queryByText(/other pages are not searched/)).toBeNull()
+  })
+
+  it('admits truncation by the 100-entry cap, which has no prop at all', () => {
+    // COLLECTION_ENTRIES_MAX slices a block that set neither `perPage` nor
+    // `entriesLimit`. Nothing on the props can see it; only the stamped
+    // total can.
+    render(
+      <CollectionEntries search searchIndex={index} searchTotal={100 + 1}>
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(screen.queryByText('No matches for “zzzz”.')).toBeNull()
+    expect(
+      screen.getByText(/the rest of the collection is not searched\./),
+    ).toBeTruthy()
+  })
+
+  it('does NOT blame other pages when perPage exceeds the entry count', () => {
+    // The opposite lie, and the reason `truncated` is not simply OR'd onto
+    // the old test: one complete page of 2 posts under `perPage={20}` has no
+    // other pages, and telling the reader to go looking through them is as
+    // wrong as hiding the truncation was.
+    render(
+      <CollectionEntries
+        search
+        searchIndex={index}
+        searchTotal={2}
+        perPage={20}
+        page={1}
+      >
+        {cards}
+      </CollectionEntries>,
+    )
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'zzzz' },
+    })
+    expect(screen.getByText('No matches for “zzzz”.')).toBeTruthy()
+    expect(screen.queryByText(/are not searched/)).toBeNull()
+  })
+
+  it('falls back to the perPage reading when no total was stamped', () => {
+    // A page cached before `searchTotal` shipped carries `searchIndex` and
+    // nothing else. Behaviour there must be exactly what it was, not a
+    // silent upgrade to "complete" — understating a search's scope is the
+    // safe direction to be wrong in.
+    render(
       <CollectionEntries search searchIndex={index} perPage={2} page={1}>
         {cards}
       </CollectionEntries>,
@@ -211,12 +310,22 @@ describe('Collection entries search (AGL-1516)', () => {
 
   it('keeps the search props off the DOM', () => {
     const { container } = render(
-      <CollectionEntries search searchPlaceholder="Hint" searchIndex={index}>
+      <CollectionEntries
+        search
+        searchPlaceholder="Hint"
+        searchIndex={index}
+        searchTotal={2}
+      >
         {cards}
       </CollectionEntries>,
     )
     const root = container.firstElementChild as HTMLElement
-    for (const attribute of ['search', 'searchPlaceholder', 'searchIndex'])
+    for (const attribute of [
+      'search',
+      'searchPlaceholder',
+      'searchIndex',
+      'searchTotal',
+    ])
       expect(root.getAttribute(attribute)).toBeNull()
   })
 
@@ -253,8 +362,9 @@ describe('Collection entries search (AGL-1516)', () => {
       when: 'search',
       is: true,
     })
-    // `searchIndex` is server-stamped, never authored.
+    // `searchIndex` and `searchTotal` are server-stamped, never authored.
     expect(attribute('searchIndex')).toBeUndefined()
+    expect(attribute('searchTotal')).toBeUndefined()
   })
 })
 
@@ -270,6 +380,23 @@ describe('Entry body block (AGL-551)', () => {
     const anchor = container.querySelector('a')
     expect(anchor?.getAttribute('href')).toBe('https://example.com')
     expect(container.querySelectorAll('li')).toHaveLength(2)
+  })
+
+  it('stamps heading ANCHORS, so an article can carry a contents aside (AGL-1162)', () => {
+    // The anchor work reached the Markdown element and stopped there, which
+    // made "On this page" beside a blog post impossible: the aside emits
+    // `#slug` links and the post had nothing for them to land on.
+    const { container } = render(
+      <CollectionEntryBody
+        markdown={'## The **fine** print\n\nbody\n\n### Notice\n\n### Notice'}
+      />,
+    )
+    expect(container.querySelector('h2')?.id).toBe('the-fine-print')
+    // Derived through the shared numbering, so two identical headings do NOT
+    // collide — a hand-rolled slugify per renderer is how they would.
+    expect(
+      [...container.querySelectorAll('h3')].map((node) => node.id),
+    ).toEqual(['notice', 'notice-2'])
   })
 
   it('renders a `> ` line as a styled blockquote, not literal text (AGL-1315)', () => {

@@ -416,6 +416,43 @@ describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () 
     expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 1 })
   })
 
+  it('THE PAID TIER IS NOT CAPPED DAILY: entitled reserves past the free cap', async () => {
+    // The negative control for the whole free-tier story (AGL-2245). "Free
+    // workspaces get ten messages a day" is satisfied just as well by a
+    // build that gives EVERY workspace ten a day, and every other assertion
+    // in this block is written against a free org — so the regression that
+    // breaks the tier customers pay for would not turn a single test red.
+    //
+    // Seeded well past the free cap, at a count no free org could reach —
+    // and the month seeded separately, so `used` says WHICH counter was
+    // consulted. Without that the test survives a build that gates every
+    // tier on the daily counter and merely raises the number, which is the
+    // same defect with the arithmetic hidden.
+    mockDocs.set(dailyPath, { '2026-08-17': 40 })
+    mockDocs.set(monthPath, { messages: 5 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({
+      allowed: true,
+      period: 'month',
+      limit: assistEntitledMonthlyLimit(),
+      used: 6,
+    })
+    // The daily counter still MOVES — it is the audit trail and the thing
+    // that stops a plan change mid-day minting a fresh free allowance — it
+    // simply is not the gate for this tier.
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 41 })
+  })
+
+  it('and the same fixture DOES refuse the free org, so the cap is real', async () => {
+    // The paired positive. Without it the test above is satisfied by a build
+    // that caps nobody, which is the opposite failure and the expensive one:
+    // the free tier is the surface with no invoice behind it.
+    mockDocs.set(dailyPath, { '2026-08-17': 40 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({ allowed: false, period: 'day' })
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 40 })
+  })
+
   it('honours the env override, so the cap can be tightened without a deploy', async () => {
     process.env.ASSIST_FREE_DAILY_LIMIT = '1'
     const store = firestore()
@@ -525,7 +562,71 @@ describe('recordAssistExchange', () => {
       outputTokens: 300,
     })
     expect(month?.messages).toBeUndefined()
-    expect(Number(month?.estCostUsd)).toBeGreaterThan(0)
+
+    // AGL-2245: the recorded cost is the ARITHMETIC, not merely a positive
+    // number. `toBeGreaterThan(0)` alone is satisfied by a constant, by a
+    // function that ignores the usage, and by one that prices every model
+    // the same — the last being exactly what the per-model table was added
+    // to prevent. Cost telemetry nobody has tied to tokens can drift from
+    // the truth with nothing going red, and tuning price against measured
+    // margin is this meter's entire reason to exist.
+    const rate = assistRatesForModel('claude-sonnet-5')
+    const expected =
+      1200 * rate.inputPerToken +
+      300 * rate.outputPerToken +
+      800 * rate.cacheReadPerToken +
+      100 * rate.cacheWritePerToken
+    expect(Number(month?.estCostUsd)).toBeCloseTo(expected, 9)
+    // Every term is load-bearing: a formula that dropped the cache columns
+    // would still be proportional to the tokens and still positive.
+    expect(Number(month?.estCostUsd)).not.toBeCloseTo(
+      1200 * rate.inputPerToken + 300 * rate.outputPerToken,
+      9,
+    )
+    expect(Number(signal?.estCostUsd)).toBeCloseTo(expected, 9)
+  })
+
+  it('the cost FOLLOWS the tokens — double the usage, double the money', async () => {
+    // Proportionality, asserted without naming a rate: this one stays true
+    // through a price change and goes red the moment the estimate stops
+    // reading the usage it was handed.
+    const single = estimateAssistCostUsd(record.usage, record.model)
+    const double = estimateAssistCostUsd(
+      {
+        inputTokens: 2400,
+        outputTokens: 600,
+        cacheReadTokens: 1600,
+        cacheWriteTokens: 200,
+      },
+      record.model,
+    )
+    expect(double).toBeCloseTo(single * 2, 9)
+    expect(estimateAssistCostUsd(
+      { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      record.model,
+    )).toBe(0)
+  })
+
+  it('the cost FOLLOWS the model — an Opus turn is not billed as Sonnet', async () => {
+    // `ASSIST_MODEL` is an env override for incident response. A one-line
+    // swap to a dearer model that kept reporting Sonnet money would make
+    // per-org cost read roughly right while margin quietly inverted, which
+    // is the specific failure this table exists for.
+    const store = firestore()
+    await recordAssistExchange(store, ORG, { ...record, model: 'claude-opus-5' }, NOW)
+    const opus = Number(
+      mockDocs.get(`orgs/${ORG}/assistUsage/2026-08`)?.estCostUsd,
+    )
+    expect(opus).toBeCloseTo(
+      estimateAssistCostUsd(record.usage, 'claude-opus-5'),
+      9,
+    )
+    expect(opus).toBeGreaterThan(estimateAssistCostUsd(record.usage, 'claude-sonnet-5'))
+    // And an id the table has never heard of prices at the DEAREST tier, not
+    // the cheapest: a cost estimate that errs low is worse than one that
+    // errs high, because only one of the two gets noticed.
+    expect(estimateAssistCostUsd(record.usage, 'some-model-shipped-next-year'))
+      .toBeGreaterThan(estimateAssistCostUsd(record.usage, 'claude-opus-5'))
   })
 
   it('a second exchange ACCUMULATES rather than replacing', async () => {

@@ -33,8 +33,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -55,6 +57,8 @@ import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
  */
 const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
@@ -162,6 +166,16 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
    */
   const listingIdsKey = installations.map((install) => install.$id).sort().join('|')
   const [listings, setListings] = useState<Record<string, any>>({})
+  /**
+   * The kill switches for the same listings (AGL-2368).
+   *
+   * Fetched here rather than left to the mirror because a revoked version
+   * stays `approved` — revocation does not clear a review verdict — so the
+   * chip offered an update `install-plugin` answers 409 to. Same public
+   * collection, same chunking, and a failure leaves the map empty, which
+   * degrades to the mirror alone rather than to a false "up to date".
+   */
+  const [revocations, setRevocations] = useState<Record<string, any>>({})
   useEffect(() => {
     const ids = listingIdsKey ? listingIdsKey.split('|') : []
     if (!ids.length) return
@@ -170,25 +184,30 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     for (let index = 0; index < ids.length; index += 30) {
       chunks.push(ids.slice(index, index + 30))
     }
-    void Promise.all(
-      chunks.map((chunk) =>
-        getDocs(
-          query(
-            collection(firestore, 'marketplaceListings'),
-            where(documentId(), 'in', chunk),
+    const fetchChunks = (path: string) =>
+      Promise.all(
+        chunks.map((chunk) =>
+          getDocs(
+            query(collection(firestore, path), where(documentId(), 'in', chunk)),
           ),
         ),
-      ),
-    )
-      .then((results) => {
-        if (!active) return
-        setListings(
-          Object.fromEntries(
-            results.flatMap((snapshot) =>
-              snapshot.docs.map((entry) => [entry.id, entry.data()]),
-            ),
+      ).then((results) =>
+        Object.fromEntries(
+          results.flatMap((snapshot) =>
+            snapshot.docs.map((entry) => [entry.id, entry.data()]),
           ),
-        )
+        ),
+      )
+    void fetchChunks('marketplaceListings')
+      .then((map) => {
+        if (!active) return
+        setListings(map)
+      })
+      .catch(() => undefined)
+    void fetchChunks('revocations')
+      .then((map) => {
+        if (!active) return
+        setRevocations(map)
       })
       .catch(() => undefined)
     return () => {
@@ -326,19 +345,25 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
         <Stack spacing={3}>
           <CardDisplay
             header={'Installed from the marketplace'}
+            // Card-level help, not just the page's (AGL-2129). This is the
+            // card people arrive at looking for a switch, having read in
+            // Marketplace that installing is done there — so it points at the
+            // step of the walkthrough that explains the split.
+            help={docsHelp('installYourFirstPlugin', { anchor: '#step-7-off' })}
             contentGutterX
             contentGutterY
           >
             {installations.length ? (
               <Stack>
                 {installations.map((install) => {
-                  // The update signal (AGL-1016), from the one shared
-                  // comparison — for plugins that is the newest APPROVED
+                  // The update signal (AGL-1016/2368), from the one shared
+                  // comparison — for plugins that is the newest INSTALLABLE
                   // version, so this can never offer what install refuses.
                   const status = resolveUpdateState(
                     install as never,
                     listings[install.$id] ?? null,
                     'plugin',
+                    revocations[install.$id] ?? null,
                   )
                   return row(
                     install.$id,
@@ -375,6 +400,10 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
 
           <CardDisplay
             header={'Built in'}
+            help={docsHelp('plugins', {
+              excerpt:
+                `${branding.productName}’s own plugins. Switching one off removes it from every site in this organization — its navigation, the editor, published pages and the API.`,
+            })}
             contentGutterX
             contentGutterY
           >
@@ -383,9 +412,9 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
               color="text.secondary"
               sx={{ display: 'block', mb: 1 }}
             >
-              {'The plugins that ship with Aglyn. Turning one off removes ' +
-                'it from navigation, the editor, published sites and the ' +
-                'API for every site in this organization.'}
+              {`The plugins that ship with ${branding.productName}. Turning ` +
+                'one off removes it from navigation, the editor, published ' +
+                'sites and the API for every site in this organization.'}
             </Typography>
             <Stack>
               {FIRST_PARTY_PLUGINS.map((plugin) =>

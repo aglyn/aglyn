@@ -36,6 +36,7 @@ import { useCallback, useEffect, useState } from 'react'
 import SupportChannelLink from '../../../../../components/support/support-channel-link.component'
 import SupportMessages from '../../../../../components/support/support-messages.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import useBranding from '../../../../../hooks/use-branding'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -57,11 +58,25 @@ import useSupportApi from '../../../../../hooks/use-support-api'
  */
 const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Support copy names the brand the org's members know (AGL-2319); on a
+  // non-white-label org this resolves to the deployment brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { request, canLoad, ready, commitment, responseWindow, canOpenTickets } =
     useSupportApi()
 
   const [tickets, setTickets] = useState<any[]>([])
+  /**
+   * The org's actual named manager (AGL-2332) — `null` when the tier does
+   * not promise one OR when nobody has been appointed. The two are told
+   * apart below, because the sentence this replaces asserted a mechanism
+   * that did not exist: `namedManager` was a bare boolean on the tier table
+   * with no field naming anyone and nothing reading it at ticket creation.
+   */
+  const [successManager, setSuccessManager] = useState<{
+    name: string
+    email: string
+  } | null>(null)
   const [thread, setThread] = useState<any | null>(null)
   const [composing, setComposing] = useState<{
     subject: string
@@ -76,6 +91,7 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
     if (!canLoad) return
     const payload = await request('/api/support/tickets', 'GET')
     if (payload?.tickets) setTickets(payload.tickets)
+    setSuccessManager(payload?.successManager ?? null)
   }, [canLoad, request])
   useEffect(() => {
     void refresh()
@@ -114,7 +130,10 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
         // whichever channel the tier makes primary, so this is the only way
         // to the other one.
         headerRight={<SupportChannelLink to="forum" orgSlug={orgSlug} />}
-        help="supportAndCommunity"
+        help={{
+          topic: 'supportAndCommunity',
+          anchor: '#support-tickets',
+        }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <CardDisplay
@@ -122,14 +141,15 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
             help={docsHelp('supportAndCommunity', {
               anchor: '#support-tickets',
               excerpt:
-                'Private ticket threads with the Aglyn team — from Pro upward.',
+                `Private ticket threads with the ${branding.productName} team ` +
+                '— from Pro upward.',
             })}
             contentGutterX
             contentGutterY
           >
             <Stack spacing={1.5}>
               <Typography variant="body2" color="text.secondary">
-                {'Direct line to the Aglyn team.'}
+                {`Direct line to the ${branding.productName} team.`}
               </Typography>
 
               {/*
@@ -142,8 +162,26 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
                 <Typography variant="body2">
                   <strong>{`${commitment.label} support`}</strong>
                   {` — first response within ${responseWindow}.`}
-                  {commitment.namedManager
-                    ? ' Your success manager is copied on every ticket.'
+                  {/*
+                    AGL-2332. This used to read "Your success manager is
+                    copied on every ticket" off `commitment.namedManager`
+                    alone — a bare boolean on the tier table with no field
+                    naming anyone and nothing reading it when a ticket was
+                    opened. It is now the manager themselves, by name,
+                    because there is one and they are genuinely copied.
+
+                    An Enterprise org with nobody appointed yet is told that,
+                    plainly. Repeating the promise while the assignment is
+                    outstanding is what made the sentence a claim rather than
+                    a fact, and a vaguer version of it would be no better.
+                  */}
+                  {commitment.namedManager && successManager
+                    ? ` ${successManager.name}, your success manager, is ` +
+                      'copied on every ticket.'
+                    : ''}
+                  {commitment.namedManager && !successManager
+                    ? ' Your success manager is being assigned — until then ' +
+                      'tickets go to the team.'
                     : ''}
                 </Typography>
               ) : null}
@@ -159,7 +197,8 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
                   <Typography variant="body2">
                     {'Ticket support starts on Pro. Your plan’s support ' +
                       'channel is the community forum, which is open to every ' +
-                      'plan — ask there and the Aglyn team reads it too.'}
+                      `plan — ask there and the ${branding.productName} team ` +
+                      'reads it too.'}
                   </Typography>
                   <SupportChannelLink to="forum" orgSlug={orgSlug} />
                 </Stack>

@@ -35,17 +35,13 @@ import {
   canActAsPublisher,
   resolvePublisherProfile,
 } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 import {
   attestationLabels,
   missingAttestations,
   missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
 } from '@aglyn/aglyn/app-utils/publisher-attestation'
-import {
-  PUBLISHER_AGREEMENT_VERSION,
-  publisherAgreementRefusal,
-  publisherAgreementState,
-} from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { createHash } from 'crypto'
 import {
   MARKETPLACE_MAX_PRICE_USD,
@@ -295,39 +291,13 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     }
 
     const publisher = await resolvePublisherProfile(firestore, orgForUser.orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error: 'Set up payouts first — Marketplace → Payouts — to sell.',
-      })
-    }
-
-    // The publisher agreement (AGL-1077). A precondition on the ORG, checked
-    // here beside the profile and payout preconditions it belongs with —
-    // deliberately NOT the 428 the attestation uses. "You did not confirm
-    // the checklist for this bundle" and "your organization has never agreed
-    // to our terms" are different problems, fixed in different places, and a
-    // shared status code would send a publisher back to the checklist to
-    // tick something that is already ticked.
-    //
-    // An acceptance of an older version does not count: whoever publishes
-    // next reads the changed agreement and accepts it, or does not publish.
-    const agreementState = publisherAgreementState(publisher.agreement)
-    if (agreementState !== 'current') {
-      return res.status(412).json({
-        error: publisherAgreementRefusal(agreementState),
-        agreement: {
-          required: PUBLISHER_AGREEMENT_VERSION,
-          accepted: publisher.agreement?.version ?? null,
-          state: agreementState,
-        },
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2282) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'plugins',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     const bundle = Buffer.from(bundleBase64, 'base64')
     if (!bundle.length || bundle.length > MAX_BUNDLE_BYTES) {

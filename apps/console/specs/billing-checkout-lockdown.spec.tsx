@@ -104,13 +104,46 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
 }))
 
+// The billing page is an org-scoped route, so the tree reaches `usePathname`
+// through `useBranding` → `useUrlNamesOrg` (AGL-2009). A `next/navigation`
+// mock that stops at `useSearchParams` is a closed world missing an export the
+// tree calls, and every test in the file died on it rather than on the
+// lockdown behaviour they assert.
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/acme/billing',
 }))
 
-jest.mock('../hooks/use-org-scope', () => ({
-  useOrgSlug: () => 'acme',
-}))
+jest.mock('../hooks/use-org-scope', () => {
+  // `useUrlNamesOrg` destructures `orgSlug` off `useOrgScope()`, so the double
+  // has to be the whole context value, not just the one hook the page used to
+  // reach. Held as ONE object rather than rebuilt per call: a fresh object per
+  // call is what manufactured the AGL-2105 render loop.
+  //
+  // `orgSlug` is the SUBDOMAIN slug and is null on a path-scoped route like
+  // this one; `pathOrgSlug` carries `acme`. That is the real shape for
+  // `/acme/billing`, and `urlNamesOrg` reads true off the path segment.
+  const scope = {
+    orgs: [],
+    currentOrg: null,
+    selectOrg: () => undefined,
+    orgSlug: null,
+    pathOrgSlug: 'acme',
+    loading: false,
+    confirmed: true,
+    slugExists: true,
+    error: false,
+    retry: () => undefined,
+    hasMoreOrgs: false,
+    loadMoreOrgs: () => undefined,
+  }
+  return {
+    __esModule: true,
+    useOrgSlug: () => 'acme',
+    useOrgScope: () => scope,
+    default: () => scope,
+  }
+})
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({ org: ORG, orgId: ORG.$id, ready: true }),

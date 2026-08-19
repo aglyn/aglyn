@@ -63,8 +63,28 @@ batch, so read registries lazily rather than snapshotting.
 ## Billing — `billing-webhook-hooks` (`/server`)
 
 `registerBillingWebhookHandler(eventTypePrefix, handler)` — receives the
-platform Stripe events. **Handler errors propagate to a 500 so Stripe
-redelivers**; make handlers idempotent.
+platform Stripe events. **Handler errors propagate to a 500**; make handlers
+idempotent. Handlers run sequentially with no error isolation, deliberately:
+isolating them would trade a duplicated side effect for a dropped one, which
+is the worse trade on a money path.
+
+:::caution A 500 does not always mean a redelivery
+A throw that reaches the route **after any dispatch has begun** makes the
+platform **hold** its Stripe-event idempotency claim instead of releasing it,
+so the redelivery short-circuits as a duplicate and your handler is not run
+again — the failure is recorded on the claim and escalated to staff to
+reconcile by hand. Releasing the claim would let a redelivery re-apply
+whatever the failed dispatch had already committed (an inventory decrement, a
+gift-card balance, a coupon redemption), and those cannot be un-applied.
+
+A throw raised **before** any dispatch began still releases the claim and is
+redelivered normally.
+
+So "make handlers idempotent" is not advice — it is the condition under which
+a failed event can be retried at all. A handler whose effects are idempotent
+**per effect** (guarded by a stamp on the row it mutates, not by the event
+claim) is one this route can safely re-run.
+:::
 
 ## Enablement, flags, config, fields, permissions, jobs
 

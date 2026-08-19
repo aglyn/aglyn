@@ -97,9 +97,27 @@ describe('commerce cron collection-group scans (AGL-1793)', () => {
     )
   })
 
+  // `reconcile-stock.ts`:
+  //   collectionGroup('orders').orderBy('createdAtMs','desc').limit(300)
+  //
+  // An ORDERING, not a `where` — and it needs the same override for the same
+  // reason, plus one the two above did not: direction is not free at
+  // collection-group scope either. A `COLLECTION_GROUP_ASC` index does not
+  // serve a descending order-by, so the DESC entry is the one this scan
+  // actually runs on and the ASC entry is what keeps a future ascending
+  // reader from re-learning AGL-1793.
+  it('declares both COLLECTION_GROUP directions on orders.createdAtMs', () => {
+    const declared = scopes(override('orders', 'createdAtMs'))
+    expect(declared).toContain('COLLECTION_GROUP:DESCENDING')
+    expect(declared).toContain('COLLECTION_GROUP:ASCENDING')
+  })
+
   it.each([
     ['checkouts', 'status'],
     ['restockAlerts', 'notifiedAtMs'],
+    // `createdAtMs` is read per-host all over the console's order lists, so
+    // this one would be the most expensive automatic index to lose.
+    ['orders', 'createdAtMs'],
   ])(
     'keeps the COLLECTION-scope indexes a fieldOverride would otherwise drop: %s.%s',
     (collectionGroup, fieldPath) => {

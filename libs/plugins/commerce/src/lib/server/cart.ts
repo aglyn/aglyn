@@ -95,7 +95,18 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       const line: CommerceModel.CartLine = {
         productId: String(body.productId ?? ''),
         ...(body.variantId ? { variantId: String(body.variantId) } : {}),
-        quantity: Math.round(Number(body.quantity ?? 1)),
+        // Clamped at the door as well as in the model (AGL-2285): the route
+        // used `Math.round(Number(...))` alone, which yields `NaN` for
+        // `{"quantity":"x"}` and slipped past `upsertCartLine`'s `<= 0` guard.
+        quantity: Math.min(
+          CommerceModel.CART_MAX_QUANTITY,
+          Math.max(
+            -CommerceModel.CART_MAX_QUANTITY,
+            Number.isFinite(Number(body.quantity ?? 1))
+              ? Math.round(Number(body.quantity ?? 1))
+              : 0,
+          ),
+        ),
       }
       if (action === 'clear') {
         cart.lines = []

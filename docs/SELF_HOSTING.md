@@ -56,7 +56,44 @@ since the setup scripts in step 3 read them. Three rules matter:
 - `NEXT_PUBLIC_TENANT_DOMAIN` is the apex your sites' subdomains hang off.
   It defaults to `aglyn.app` — **Aglyn's cloud** — so leaving it unset makes
   your console display and link every one of your sites at an address you do
-  not control.
+  not control, and makes every published site advertise that address as its
+  canonical origin to Google, feed readers and inboxes (AGL-2121).
+- `AGLYN_TENANT_HOST_CNAME` and `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` are
+  **two variables**, and `.env.selfhost.example` ships only the second. The
+  prefixed one is what the console displays and verifies in the custom-domain
+  wizard (`apps/console/utils/tenant-dns.ts`, default `sites.aglyn.app`); the
+  unprefixed one is what the tenant middleware matches the incoming `Host`
+  against, mapped through the `env` block of `apps/tenant/next.config.js` and
+  therefore fixed at image-build time. **Set both, to the same value**, before
+  `docker compose build` — the host-resolution branch AGL-2177 restored has
+  nothing to match against otherwise.
+
+### Building `apps/docs` as your own documentation (AGL-2124)
+
+Optional — skip the whole section if you do not publish the docs site. Every
+one of these is **off when unset, and never falls back to Aglyn's**:
+
+| Variable | Unset means |
+| --- | --- |
+| `DOCS_GA_TRACKING_ID` | no analytics tag is loaded at all |
+| `DOCS_ERROR_BEACON_ENDPOINT` | the browser error beacon installs no handlers |
+| `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
+| `DOCS_URL` | canonical origin defaults to `https://docs.aglyn.com` — set it |
+| `DOCS_ORGANIZATION_NAME` | the footer copyright reads `Aglyn LLC` — set it |
+
+`DOCS_STATUS_TARGETS` is a comma-separated list of
+`name|label|origin|description`, for example:
+
+```
+DOCS_STATUS_TARGETS='console|Console|https://app.example.com|Sign-in and editing'
+```
+
+If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's
+`/api/errors`, set `NEXT_PUBLIC_DOCS_ORIGIN` on that console to your docs
+origin — the collector's CORS allowlist reads it, and defaults to Aglyn's.
+(The older `NEXT_PUBLIC_AGLYN_DOCS_URL` is still honoured for a deployment
+already configured under it, but `NEXT_PUBLIC_DOCS_ORIGIN` is the one name to
+use now — AGL-2186.)
 
 ## 3. Set your Firebase project up
 
@@ -236,6 +273,7 @@ Every key here is optional and independent. A missing key disables its feature
 | Transactional & campaign email | `RESEND_API_KEY`, `USAGE_EMAIL_FROM` |
 | Aglyn Assist + "Rewrite with AI" | `ANTHROPIC_API_KEY` (your own key; the console panel is additionally behind the `release_assist` flag, off by default) |
 | Scheduled jobs (audit archival, erasure, retention sweeps) | `CRON_SECRET` — the job routes stay dormant without it |
+| Customer issue reports → your tracker | `LINEAR_API_KEY`, `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required; unset, the console's "Report an issue" dialog answers 501 and files nowhere |
 
 ## Honest limits
 
@@ -246,15 +284,23 @@ Every key here is optional and independent. A missing key disables its feature
 | Stripe | Optional. Without `STRIPE_SECRET_KEY`, commerce checkout and paid platform plans are unavailable; the rest of the platform runs. |
 | Resend | Optional. Without `RESEND_API_KEY`, app email (invites, receipts, campaigns) is an inert no-op. |
 | AI assist | Degrades gracefully without an Anthropic key. |
+| Issue reporting | Optional, and **off by default**. The console's "Report an issue" dialog needs a tracker of your own: set `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` to *your* Linear workspace and a team dedicated to inbound reports. Nothing about Aglyn's workspace is compiled in — unset, the route answers 501 and says so, and your customers' reports are never sent to Aglyn (AGL-2185). Both are **server-only**; never prefix either with `NEXT_PUBLIC_`, which would inline a key that can read and write your whole workspace into the browser bundle. Scope the key when you create it — Linear can restrict a personal API key to **Create issues** and to **specific teams**; do both, so the separation is enforced by the credential rather than only by the variable, and a leaked key cannot read your backlog. |
 | Texas sales-tax report | Optional, and blank by default. The staff `/admin/tax-return` report is built around a single US-TX registration. Set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to *your own* Comptroller identifiers to have them appear on the page and in the exported working papers; leave them unset and both surfaces say "not configured" rather than printing anything. They are **server-only** — never prefix either with `NEXT_PUBLIC_`, which would inline them into a client bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
 | Operator identity | **Set it.** `NEXT_PUBLIC_OPERATOR_NAME` / `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` name you on the public abuse and §512 counter-notice intakes, the lockdown 503, the quarantine notice and the sanctions 451. No fallback to Aglyn's addresses exists; unset renders an explicit "not configured" state. Baked in at image **build** time. |
 | DMCA designated agent | Not configured, and not inherited. Aglyn's Copyright Office registration does not cover your deployment; §512(c)(2) makes your own filing a precondition of the safe harbour. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true` is the only thing that makes the product state one, and nothing infers it. |
 | Legal documents / clickwrap | **Still Aglyn's.** Signup clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots committed in this repository, and writes the acceptance into your Firestore. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your legal origin for the surfaces that need one but does **not** yet retarget the acceptance flow — the document hashes pin Aglyn's bytes. Tracked as AGL-2017. |
-| Documentation citations | AI-assist citations deep-link to `https://docs.aglyn.com` unless `NEXT_PUBLIC_DOCS_ORIGIN` points at your own build of `apps/docs`. |
+| Documentation links | `NEXT_PUBLIC_DOCS_ORIGIN` retargets **every** docs link — Assist citations, console help, besigner help, and the `documentation` URL your own REST API returns — at your build of `apps/docs`. Unset, they point at `https://docs.aglyn.com`. It previously governed the citations alone while console and besigner read a separate undocumented name, so following this runbook retargeted a third of them (AGL-2186). |
+| Scheduled jobs | `AGLYN_JOB_RUNNER_URL` has **no default** and the Cloud Functions beat refuses to fire without it, logging what to set (AGL-2176). It used to default to a specific Aglyn customer's published site, so a deployment that missed it POSTed to a stranger every minute carrying your `PLUGIN_JOBS_SECRET`, while none of your own scheduled publishing or booking-hold expiry ran. Set it to a tenant origin on **your** deployment, e.g. `https://sites.example.com/api/plugins/run-jobs`. |
+| Bucket CORS | `cloud/storage-cors.json` is **Aglyn's own** live bucket policy — it names `https://app.aglyn.com`, and `apps/console/specs/storage-cors.spec.ts` asserts that, because it must stay byte-identical to what our bucket serves. It is applied by `gcloud --cors-file`, which cannot read environment variables, so this one genuinely cannot be made configurable in place. **Copy it, replace the origin with your console's, and apply your copy** — see `docs/STORAGE_MANUAL_CONFIG.md`. Without it, every upload over 3 MB dies at the CORS preflight as a generic "try again". |
+| Renaming the product | `NEXT_PUBLIC_PLATFORM_BRAND_NAME` is the one value that renames the product everywhere it is shown: browser-tab titles, the installable PWA, the WebAuthn relying-party name the OS shows when a user saves a passkey, transactional email, and the `<meta name="generator">` / `x-powered-by` fingerprint on every published site (AGL-2153). It works because `resolveBrandingProfile` — the single resolver every branded surface already routes through — takes its platform default from it. Brand **images** stay files: replace them in your Docker build context. |
+| Your own docs build | `apps/docs` is a standalone Docusaurus package you may publish as your own documentation. Its analytics, error beacon and status probes are all **off unless configured** — see the `DOCS_*` block in `.env.selfhost.example`. They previously defaulted to Aglyn's GA4 property, Aglyn's error collector and Aglyn's production health endpoints, so a published build reported your readers to us and told them our uptime was yours (AGL-2124). Set `DOCS_GA_TRACKING_ID`, `DOCS_ERROR_BEACON_ENDPOINT`, `DOCS_STATUS_TARGETS`, `DOCS_URL` and `DOCS_ORGANIZATION_NAME` before `docusaurus build`, not after — Docusaurus bakes them into the static output. |
 | Updates | `git pull && docker compose up --build`. The release notes are [`CHANGELOG.md`](../CHANGELOG.md), where each release is a `v<semver>` git tag on the commit that shipped; a rules change appears there as a `fix(rules)`/`feat(rules)` entry. Re-run the deploy scripts when they change. Check what you are running with `git describe --tags --match 'v*'`. |
 | Marketplace | Visible by default and backed by Aglyn's Stripe Connect platform, which you do not have. Browsing works; Buy and payout-onboarding explain themselves only after being clicked. Turn `release_marketplace` off in Remote Config if you do not want it. |
 | Staff / admin surfaces | Built for Aglyn's own operations — the tax-return page in particular carries Aglyn LLC's Texas registration identifiers and is meaningless elsewhere. |
-| Docs site (`apps/docs`) | Not part of `docker compose`. If you build and publish it yourself, note it currently compiles Aglyn's GA4 measurement id with no override. (AGL-2018) |
+| Docs site (`apps/docs`) | Not part of `docker compose` — build and publish it separately if you want it. Its configuration is the "Your own docs build" row above. |
+| Deployment shape | **Set `AGLYN_STANDALONE=1` in `.env.selfhost`.** `isDeployedRuntime()` — and the tenant middleware's local copy of it — is what tells the software this is a real deployment rather than a laptop, and it gates the whole host-resolution switch plus the canonical custom-domain redirect. `docker/tenant.Dockerfile` and `docker/console.Dockerfile` set it in their **build** stage; that does not carry into the `runner` stage, and neither `.env.selfhost.example` nor `docker-compose.yml` supplies it at runtime. Without it a stock container reads itself as a developer's machine, matches no host, and 307s every visitor to the configured console (AGL-2177). |
+| Custom-domain verification | `/api/domains/verify` has a DEV soft pass that accepts any CNAME, because a laptop has no DNS pointing at a tenant edge. It used to key on `!process.env.VERCEL` — never set on a container — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified: the AGL-733 defect, reinstated. It now keys on `isDevelopmentRuntime()` / `NODE_ENV`, which both Dockerfiles set to `production` in the runner stage (AGL-2180). A relaxation must key on the variable that means "not production", never on the absence of a vendor's. **Upgrade if you run an image built before this.** |
+| Edit-hint bounce | `apps/tenant/app/api/edit-hint/set/route.ts` validates the `return` origin against an allowlist. Aglyn's two console origins are seeded **only when `NEXT_PUBLIC_CONSOLE_URL` is unset**; they used to be unconditional with yours merely added, so an operator could not narrow the list and their tenant runtime kept an open redirect target at a console they do not run (AGL-2176). Name your console and it is the only permitted target. The same variable is the tenant middleware's fallback redirect, so leaving it unset also sends a visitor who lands on an unresolvable host to `app.aglyn.com`. |
 
 ## Local development without Docker
 

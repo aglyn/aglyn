@@ -153,6 +153,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // THE REAL PREDICATE (AGL-2250). A stub would make "is this plan metered"
+  // a claim about the fixture rather than about the plan table the cron and
+  // the invoice read — and this card's whole job is saying true things about
+  // whether the customer can be charged.
+  planMetersInfraOverage: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).planMetersInfraOverage,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -238,6 +245,58 @@ describe('get', () => {
     expect(payload.thresholdPcts).toEqual([25, 100])
     expect(payload.spend.meteredUsd).toBeCloseTo(12.5, 5)
     expect(payload.spend.meteredFresh).toBe(true)
+  })
+
+  it('says whether the plan has metered usage at all', async () => {
+    // A Free org's `billedCents` is 0 every month (AGL-2135), so a budget it
+    // sets can never fire. The same predicate the cron and the invoice use —
+    // a second opinion computed here would be a wrong statement about whether
+    // the customer can be charged.
+    org.data.plan = 'free'
+    const free = await call({ action: 'get' })
+    expect(free.payload.metered).toBe(false)
+
+    org.data.plan = 'pro'
+    const pro = await call({ action: 'get' })
+    expect(pro.payload.metered).toBe(true)
+  })
+
+  it('reports which rule last fired this month', async () => {
+    // `usage-alerts` records `usageAlerts.budget` as its dedupe guard, and the
+    // card had no way to read it back — so the ladder said what we intend and
+    // nothing said what we did. It also matters when no email arrived: the
+    // guard is written either way, so that rule is then silent for the rest
+    // of the month.
+    org.data.usageBudget = { amountUsd: 50 }
+    org.data.usageAlerts = { budget: { month: MONTH, threshold: 90 } }
+    const { payload } = await call({ action: 'get' })
+    expect(payload.lastAlert).toEqual({ month: MONTH, threshold: 90 })
+  })
+
+  it('reports NO alert when none has fired this month', async () => {
+    org.data.usageBudget = { amountUsd: 50 }
+    const { payload } = await call({ action: 'get' })
+    expect(payload.lastAlert).toBeNull()
+  })
+
+  it('REFUSES a guard from a previous month', async () => {
+    // The same mistake this route already refuses one field over: last
+    // month's figure under this month's heading. A customer told "we alerted
+    // you at 100%" about a period that has closed would reasonably stop
+    // watching the one that has not.
+    org.data.usageBudget = { amountUsd: 50 }
+    org.data.usageAlerts = { budget: { month: '2001-01', threshold: 100 } }
+    const { payload } = await call({ action: 'get' })
+    expect(payload.lastAlert).toBeNull()
+  })
+
+  it('ignores a guard with no usable threshold', async () => {
+    // A guard shaped like `{month}` with no number is not an event, and
+    // rendering "we alerted you at 0%" would be worse than saying nothing.
+    org.data.usageBudget = { amountUsd: 50 }
+    org.data.usageAlerts = { budget: { month: MONTH } }
+    const { payload } = await call({ action: 'get' })
+    expect(payload.lastAlert).toBeNull()
   })
 
   it('says the month is NOT totalled rather than reporting $0', async () => {

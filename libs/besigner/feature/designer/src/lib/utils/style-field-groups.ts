@@ -17,7 +17,10 @@
 
 import { FieldComponentType } from '@aglyn/aglyn'
 import { SX_SCHEME_DARK_KEY, type SxScheme } from '@aglyn/aglyn-node-renderer'
-import { describeCssColorProblem } from '@aglyn/shared-data-enums'
+import {
+  describeCssColorProblem,
+  expandSxAliases,
+} from '@aglyn/shared-data-enums'
 import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 
@@ -767,7 +770,20 @@ export function applyStylePartialToSx(
   breakpoint: SxBreakpoint | null,
   scheme: SxScheme | null,
 ): Record<string, any> {
-  let next: Record<string, any> = { ...(sx ?? {}) }
+  // Alias keys the edit collides with are rewritten to the longhands this
+  // panel owns, FIRST and in place (AGL-2207). Without it, writing a field
+  // whose value is stored under an alias appends a second declaration and
+  // CLEARING that field deletes the longhand while the alias underneath
+  // keeps painting — the value comes straight back and no click in the
+  // product removes it. Scoped to the keys being edited, and to the same
+  // scheme slice, so an unrelated edit never rewrites a key the author did
+  // not touch.
+  let next: Record<string, any> = {
+    ...expandSxAliases((sx ?? {}) as Record<string, any>, {
+      only: Object.keys(partial),
+      deep: true,
+    }),
+  }
   for (const [key, value] of Object.entries(partial)) {
     const normalized = value === '' ? undefined : value
     const fieldScheme = fieldSxScheme(key, scheme)
@@ -790,7 +806,15 @@ export function computeEffectiveStyleValues(
   breakpoint: SxBreakpoint | null,
   scheme: SxScheme | null,
 ): Record<string, any> {
-  const source = (sx ?? {}) as Record<string, any>
+  // MUI's system-prop aliases resolve to the longhands this panel's fields
+  // are named for (AGL-2207) — a preset's `py: 4` or `bgcolor` renders, and
+  // without this reaches no control at all: the Padding box and the
+  // Background Color field simply read empty on a node that demonstrably
+  // has the value. The expansion keeps key ORDER, which is what makes it a
+  // renaming of what already renders rather than a restyle.
+  const source = expandSxAliases((sx ?? {}) as Record<string, any>, {
+    deep: true,
+  })
   const keys = new Set(Object.keys(source))
   keys.delete(SX_SCHEME_DARK_KEY)
   if (scheme === 'dark') {

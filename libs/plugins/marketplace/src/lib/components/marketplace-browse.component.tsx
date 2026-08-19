@@ -23,13 +23,20 @@ import {
   Tooltip,
   Grid,
   MenuItem,
+  Rating,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildRoute, type OrgPermissions, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  type OrgPermissions,
+  PLATFORM_BRAND_NAME,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -422,7 +429,12 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   }, [listings, search, category, sort, publisherId, user?.uid])
 
   return (
-    <CardDisplay header={'Marketplace components'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Marketplace components'}
+      help={pluginDocsHelp('plugins', { anchor: '#install--upgrade' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack
         direction="row"
         spacing={1}
@@ -554,11 +566,20 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                         on the listing and deliberately survives a version
                         bump — so a publisher verified on v1.0.0 could ship
                         v1.9.0 containing anything and still be badged as
-                        though the code had been read. */}
+                        though the code had been read.
+
+                        Both tooltips name `PLATFORM_BRAND_NAME` rather than
+                        the viewing org's `productName` (AGL-2351). They say
+                        who did the verifying and the reading — the
+                        deployment's own review queue, one catalog shared by
+                        every org — and a white-label agency's brand here would
+                        claim the agency vetted a publisher it has never heard
+                        of. */}
                     {listing.reviewStatus === 'verified' ? (
                       <Tooltip
                         title={
-                          'A human at Aglyn confirmed who this publisher is, ' +
+                          `A human at ${PLATFORM_BRAND_NAME} confirmed who ` +
+                          'this publisher is, ' +
                           'and that the listing describes what the code does. ' +
                           'It is a claim about the publisher, not about this ' +
                           'release — it survives a version bump.'
@@ -591,7 +612,8 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                     {listing.latestVersionReviewState === 'approved' ? (
                       <Tooltip
                         title={
-                          'A human at Aglyn read these exact bytes — the ' +
+                          `A human at ${PLATFORM_BRAND_NAME} read these exact ` +
+                          'bytes — the ' +
                           'version on offer — against a required checklist. ' +
                           'Re-earned per version, so a new release starts ' +
                           'without it. Not a security guarantee: every plugin ' +
@@ -601,13 +623,20 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                         <Chip size="small" color="success" label="Reviewed" />
                       </Tooltip>
                     ) : null}
-                    {priceUsd > 0 ? (
-                      <Chip
-                        size="small"
-                        color="primary"
-                        label={`$${priceUsd}`}
-                      />
-                    ) : null}
+                    {/*
+                      Price on EVERY card, `Free` included (AGL-2173). The
+                      chip only rendered above zero, so the four free
+                      listings the marketplace mockup shows carried no
+                      price at all — and "no chip" is the one reading a
+                      shopper cannot distinguish from "we forgot", on the
+                      row where the paid listing beside it says $29.
+                     */}
+                    <Chip
+                      size="small"
+                      color={priceUsd > 0 ? 'primary' : 'success'}
+                      variant={priceUsd > 0 ? 'filled' : 'outlined'}
+                      label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
+                    />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {`v${listing.latestVersion}`}
@@ -630,14 +659,38 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                           listing.installCount === 1 ? '' : 's'
                         }`
                       : ''}
-                    {/* Count alongside the average: "5.0" from one rating
-                        and from forty are not the same claim (AGL-655). */}
-                    {listing.ratingCount
-                      ? ` · ★ ${listing.ratingAverage ?? 0} (${
-                          listing.ratingCount
-                        })`
-                      : ''}
                   </Typography>
+                  {/*
+                    Stars, as the mockup draws them (AGL-2173). The count
+                    stays alongside the average: "5.0" from one rating and
+                    from forty are not the same claim (AGL-655). An unrated
+                    listing says so rather than rendering nothing — silence
+                    read as "no stars", which is the opposite of "not yet
+                    rated".
+                   */}
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    {listing.ratingCount ? (
+                      <>
+                        <Rating
+                          size="small"
+                          readOnly
+                          precision={0.1}
+                          value={Number(listing.ratingAverage ?? 0)}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {`${listing.ratingAverage ?? 0} (${listing.ratingCount})`}
+                        </Typography>
+                      </>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">
+                        {'Not yet rated'}
+                      </Typography>
+                    )}
+                  </Stack>
                   {listing.description ? (
                     <Typography
                       variant="body2"

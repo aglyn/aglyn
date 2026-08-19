@@ -171,6 +171,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
+  // The REAL quota functions (AGL-2163) — `authenticateApiV1` enforces
+  // `checkApiRequestQuota(...).allowed` at the chokepoint every request here
+  // passes through, and a wholesale mock that omits them turns each one into
+  // a 500. Real rather than stubbed: the org this suite serves resolves to
+  // `'never-blocks'`, so the quota is transparent here as it is in production.
+  apiRequestEnforcementShape: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).apiRequestEnforcementShape,
+  checkApiRequestQuota: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkApiRequestQuota,
   checkEntitlement: (_org: unknown, entitlement: string) =>
     mockEntitlements[entitlement] ?? false,
   effectiveDatasetModel: () => ({ fields: [] }),

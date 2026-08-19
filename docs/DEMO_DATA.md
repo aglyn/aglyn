@@ -125,6 +125,35 @@ node tools/scripts/seed-demo-host.mjs --host <sub> --reset
 node tools/scripts/seed-demo-org.mjs --org <orgId|slug> --reset
 ```
 
+## The guard
+
+```bash
+npm run test:demo-brands     # tools/scripts/lib/demo-brands.test.mjs
+```
+
+Runs on every push in `tools-guards.yml`. It asserts **distinctness**, not
+that the seeder ran — the original defect was not a crash, it was a seeder
+that worked perfectly and produced four copies of one bakery.
+
+Two altitudes, because there are two independent ways back to that:
+
+- **The packs stop being different businesses** — a fifth pack copied from
+  the fourth, or the table flattened. Compared pack-to-pack: name,
+  subdomain, palette, home-section layout, module surface, and prose.
+- **The engine stops honouring the packs** — the table stays rich while
+  `seedBrand` ignores half of it. Reading `BRANDS` cannot see this, so the
+  engine is actually run against a recording Firestore and the resulting
+  documents are compared: different theme, different home canvas, a
+  different set of collections populated, and no shared copy.
+
+It also pins the properties a second live-demo run depends on — a re-seed
+under a new brand leaves no trace of the old one, a hand-built document
+beside the fixtures survives, and the org's shared collections stay
+namespaced per site.
+
+Adding a pack normally needs no edit here; the expectations are derived from
+`BRANDS` itself rather than restated.
+
 ## Notes
 
 - Org-scoped collections resolve the owning org from the host doc's `orgId`

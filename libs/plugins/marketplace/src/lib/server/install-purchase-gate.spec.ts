@@ -62,6 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const state = {
     purchases: [] as Array<Record<string, unknown>>,
     componentWrites: [] as Array<Record<string, unknown>>,
+    listing: {} as Record<string, unknown>,
   }
   const componentsCollection = {
     where: () => ({
@@ -86,11 +87,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
   const listingRef = {
     get: async () => ({
+      // Overridable so the takedown/visibility cases (AGL-2290) can change
+      // the listing without a second copy of this whole double.
       data: () => ({
         priceUsd: 100,
         profileId: 'seller-org',
         latestVersion: 1,
         displayName: 'Fancy hero',
+        ...state.listing,
       }),
     }),
     collection: () => ({ doc: () => versionDoc }),
@@ -153,6 +157,7 @@ const state = (
     __state: {
       purchases: Array<Record<string, unknown>>
       componentWrites: Array<Record<string, unknown>>
+      listing: Record<string, unknown>
     }
   }
 ).__state
@@ -183,7 +188,12 @@ const makeReq = () =>
 beforeEach(() => {
   state.purchases.length = 0
   state.componentWrites.length = 0
+  for (const key of Object.keys(state.listing)) delete state.listing[key]
 })
+
+/** A live purchase, so these cases turn on the listing and nothing else. */
+const paid = () =>
+  state.purchases.push({ buyerUid: 'buyer-1', listingId: 'listing-1' })
 
 describe('paid install gate (AGL-46/1546)', () => {
   it('402s with no purchase record at all', async () => {
@@ -214,5 +224,60 @@ describe('paid install gate (AGL-46/1546)', () => {
     await installHandler(makeReq(), res)
     expect(res.statusCode).toBe(200)
     expect(state.componentWrites).toHaveLength(1)
+  })
+})
+
+/**
+ * What the install door refuses about the LISTING, not the buyer (AGL-2290).
+ *
+ * `install-plugin.ts` has gated on `hiddenAt` since AGL-948 and on
+ * `isPrivateListing` since AGL-968. The other six install routes — components
+ * (this one), themes, site templates, layouts, email templates and dataset
+ * schemas — had neither, so a taken-down artifact stayed installable by anyone
+ * holding its listing id, and a private one by anyone at all. AGL-658
+ * deliberately extended takedown to every artifact type; it reached
+ * `isListingBrowsable`, which only the BROWSE UI calls.
+ *
+ * Every case asserts no component was written, not merely the status: a
+ * refusal that has already handed over the content is not a refusal.
+ */
+describe('the install door and the listing itself (AGL-2290)', () => {
+  it('installs the healthy baseline — the control', async () => {
+    paid()
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(state.componentWrites).toHaveLength(1)
+  })
+
+  it('404s a TAKEN-DOWN listing even for a buyer who paid', async () => {
+    paid()
+    state.listing.hiddenAt = 'NOW'
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(state.componentWrites).toHaveLength(0)
+  })
+
+  it('404s a PRIVATE listing for someone outside the publishing org', async () => {
+    // `canActAsPublisher` is mocked false at the top of this file, so the
+    // caller here is exactly the non-owner the exemption must not cover.
+    paid()
+    state.listing.visibility = 'private'
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(state.componentWrites).toHaveLength(0)
+  })
+
+  it('still refuses a taken-down listing that is FREE', async () => {
+    // The purchase gate is not what is doing the work here — a free listing
+    // never consults it — so a takedown has to hold on its own.
+    state.listing.hiddenAt = 'NOW'
+    state.listing.priceUsd = 0
+    const res = makeRes()
+    await installHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(state.componentWrites).toHaveLength(0)
   })
 })

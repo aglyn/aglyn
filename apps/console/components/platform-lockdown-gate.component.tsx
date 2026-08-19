@@ -16,6 +16,11 @@
  */
 'use client'
 
+// Deep import, not the `@aglyn/aglyn` barrel (AGL-2170): the barrel pulls
+// shared-data-enums -> firebase-auth into every consumer's module graph, which
+// breaks specs that mock firebase wholesale (AuthErrorCodes reads undefined).
+// One brand string is not worth that edge.
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
@@ -91,7 +96,7 @@ export function PlatformLockdownGate({
         </Typography>
         <Typography variant="body1" color="text.secondary">
           {notice.message ??
-            'Aglyn is temporarily unavailable. Please check back shortly.'}
+            `${PLATFORM_BRAND_NAME} is temporarily unavailable. Please check back shortly.`}
         </Typography>
         {notice.untilMs ? (
           <Typography variant="body2" color="text.secondary">

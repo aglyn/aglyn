@@ -204,13 +204,41 @@ export interface PluginInstall {
 /** `revocations/{listingId}` — platform kill switch checked at load. */
 export interface PluginRevocation {
   /**
-   * Specific versions revoked, or `'all'` to kill the whole listing. This is
-   * the ONLY field any reader consults — everything else on the doc records
-   * who owns the entry so the two writers can coexist.
+   * Specific versions revoked, or `'all'` to kill the whole listing. The
+   * field every INSTALLABILITY reader consults, via `isPluginRevoked`.
+   *
+   * It used to say this was the only field any reader consulted, and that
+   * was the defect rather than a description of one: staff are required to
+   * type a reason, it was written here, and nothing rendered it — so the
+   * customer whose site broke and the publisher whose version was pulled
+   * both got a bare chip (AGL-2328). `reason` and the timestamp are now
+   * read by `host-plugins-card` and by the publisher branch of
+   * `listing-versions`. Do not restore the old claim.
    */
   versions: string[] | 'all'
+  /** Typed by staff, REQUIRED to revoke. Rendered to both audiences. */
   reason?: string
+  /**
+   * ⚠️ DECLARED HERE AND WRITTEN BY NOTHING. Every writer in
+   * `apps/console/app/api/admin/plugin-reviews/route.ts` stores
+   * `revokedAt` instead. A reader that trusts this field alone shows no
+   * date for every revocation that actually exists — read both, the way
+   * `revocationTimeMs` in `listing-versions.ts` does.
+   */
   atMs?: number
+  /**
+   * What the writers actually store — a Firestore server timestamp, so its
+   * shape depends on which SDK read it back (`toMillis()` on admin, a
+   * `seconds` field through a client). Deliberately `unknown` rather than a
+   * lie about which one a given reader will see.
+   */
+  revokedAt?: unknown
+  /**
+   * The staff uid that pulled it. Recorded, and deliberately NEVER returned
+   * to a customer or a publisher: who acted belongs in the audit log, not
+   * on the screen of the person it was done to (AGL-2328).
+   */
+  revokedBy?: string
   /**
    * `'takedown'` when the listing-level hide wrote it (AGL-948). Un-hiding
    * clears a takedown-owned entry, so it must not be the only record.
@@ -584,10 +612,101 @@ export function isPluginRevoked(
   version: string,
 ): boolean {
   if (!revocation) return false
-  if (revocation.versions === 'all') return true
+  if (isListingWideRevocation(revocation)) return true
   return (
     Array.isArray(revocation.versions) && revocation.versions.includes(version)
   )
+}
+
+/**
+ * True when the kill switch is thrown on the WHOLE listing, not one build.
+ *
+ * Split out for the one caller that has no version to ask about: marketplace
+ * checkout (AGL-2288) must refuse to SELL a listing the platform has switched
+ * off, and it decides that before any version is chosen. Written here rather
+ * than as `revocation?.versions === 'all'` at that call site for the reason
+ * the doc comment on `nextRevocationState` gives — what `'all'` means is a
+ * property of this document's shape, and a second reader that spelled it out
+ * itself is how a kill switch silently stops killing.
+ *
+ * A per-version revocation is deliberately NOT listing-wide: it stops one
+ * build while the rest stay installable.
+ */
+export function isListingWideRevocation(
+  revocation: PluginRevocation | null | undefined,
+): boolean {
+  return revocation?.versions === 'all'
+}
+
+/**
+ * What a listing OFFERS a client right now (AGL-2368).
+ *
+ * `newestInstallableVersion` is the derivation, and it needs the version set —
+ * which is server-only (`pluginVersions`). A client has the listing's
+ * `latestApprovedVersion` mirror instead, and since AGL-2306 every writer of
+ * that mirror computes it with `newestInstallableVersion`. So on a client the
+ * mirror IS the answer, with one gap: the revocation document and the listing
+ * document are two non-transactional writes, and a live listener sees them
+ * land at different times. In that window the mirror names a version the kill
+ * switch has already stopped, which is the whole shape of this bug.
+ *
+ * So a client that holds the revocation checks it against the mirror and, when
+ * they disagree, offers NOTHING rather than the next-best guess. It cannot
+ * compute the next-best guess — it has no version list — and "no update to
+ * offer" is the safe reading of a mirror it has caught mid-repair. The repair
+ * lands moments later and the real answer appears.
+ *
+ * A client with no revocation in hand passes `undefined` and gets the mirror,
+ * which is what it had before. That is a real fallback, not a silent one: the
+ * gap it leaves is bounded by the repair, and the install route derives live
+ * and refuses regardless.
+ */
+export function offeredPluginVersion(
+  listing: { latestApprovedVersion?: unknown } | null | undefined,
+  revocation: PluginRevocation | null | undefined,
+): string | null {
+  const offered = String(listing?.latestApprovedVersion ?? '')
+  if (!offered) return null
+  return isPluginRevoked(revocation, offered) ? null : offered
+}
+
+/**
+ * The newest version a buyer could actually install right now (AGL-2306).
+ *
+ * Two things have to be true of an offer, and the listing's
+ * `latestApprovedVersion` mirror only ever tracked one of them: the version
+ * must be APPROVED (AGL-966 — review lives on the version) and it must not be
+ * REVOKED (AGL-1085 — `install-plugin` answers 409 to a revoked pin).
+ *
+ * Written here rather than in the console route that repairs the mirror, and
+ * rather than reusing `newestApprovedVersion` in the marketplace plugin's
+ * model, because the console is `scope:app` and may not depend on
+ * `aglyn:addons`. Both may import core, and "what is on offer" is one
+ * question that must have one answer.
+ *
+ * `compare` is injected rather than imported so this module stays free of the
+ * artifact-version comparator's own dependencies; every caller already has it.
+ * A `null` comparison (an unparseable version string) sorts as "not newer",
+ * which keeps a malformed version out of an offer rather than into one.
+ *
+ * Returns `null` when nothing qualifies — an ABSENT mirror reads as "no update
+ * to offer", while a stale string reads as an update that does not exist.
+ */
+export function newestInstallableVersion(
+  versions: readonly { version: string; reviewState?: unknown }[],
+  revocation: PluginRevocation | null | undefined,
+  compare: (a: string, b: string) => number | null,
+): string | null {
+  let newest: string | null = null
+  for (const entry of versions) {
+    if (!entry?.version) continue
+    if (entry.reviewState !== 'approved') continue
+    if (isPluginRevoked(revocation, entry.version)) continue
+    if (newest == null || (compare(newest, entry.version) ?? 0) < 0) {
+      newest = entry.version
+    }
+  }
+  return newest
 }
 
 /**
@@ -620,8 +739,22 @@ export function nextRevocationState(
     | { type: 'takedown' }
     | { type: 'restore' },
 ): PluginRevocation | null {
-  const reviewVersions = [...(current?.reviewVersions ?? [])]
   const takenDown = current?.source === 'takedown'
+  // A document written before AGL-1085 — or by hand, which the rules permit
+  // any staff client to do — has `versions` and NO `reviewVersions`
+  // (AGL-2305). `withReview` REPLACES `versions` wholesale from this seed, so
+  // reading it as an empty list silently rebuilt the document: revoking a
+  // second version un-revoked the first, and un-revoking any version returned
+  // `null`, which the caller turns into a DELETE of the whole kill switch.
+  //
+  // A legacy `versions` array is adopted as the review-owned half, which is
+  // what it actually was: before AGL-1085 the only writer that produced an
+  // array here was a reviewer, and `'all'` (the takedown form) is excluded
+  // because that half is owned by `source` and restored by `restore`.
+  const reviewVersions = [
+    ...(current?.reviewVersions ??
+      (Array.isArray(current?.versions) ? current.versions : [])),
+  ]
   const withReview = (versions: string[], stillTakenDown: boolean) => {
     if (stillTakenDown) {
       return { ...current, versions: 'all' as const, reviewVersions: versions }

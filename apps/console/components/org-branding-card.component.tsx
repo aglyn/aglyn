@@ -143,13 +143,12 @@ export function OrgBrandingCard() {
   return (
     <CardDisplay
       header={'White-label brand'}
-      help={docsHelp('billing', {
-        anchor: '#tiers--entitlements',
-        title: 'White-label',
+      help={docsHelp('whiteLabel', {
+        anchor: '#fields',
         excerpt:
-          'Replace the Aglyn brand — product name, logo, colors, support ' +
-          'URL, and email from-name — across the console, your published ' +
-          'sites, and transactional email. Included on the Agency plan.',
+          'Replace the platform brand — product name, logo, colors, support ' +
+          'URL, email from-name and email logo — across the console, your ' +
+          'published sites, and transactional email.',
       })}
       contentGutterX
       contentGutterY
@@ -174,9 +173,9 @@ export function OrgBrandingCard() {
       ) : (
         <Stack spacing={2} sx={{ maxWidth: 520 }}>
           <Typography variant="body2" color="text.secondary">
-            {'These replace the Aglyn brand everywhere your organization and ' +
-              'its sites are shown. Leave a field blank to keep the Aglyn ' +
-              'default for it.'}
+            {`These replace the ${defaults.productName} brand everywhere your ` +
+              'organization and its sites are shown. Leave a field blank to ' +
+              `keep the ${defaults.productName} default for it.`}
           </Typography>
 
           <TextField

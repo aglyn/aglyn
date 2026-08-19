@@ -59,6 +59,7 @@ export {
 } from './definitions/org-billing.types'
 export type {
   AglynOrgBilling,
+  OrgBandwidthCap,
   OrgBrandingProfile,
   OrgDiscount,
   OrgEntitlements,

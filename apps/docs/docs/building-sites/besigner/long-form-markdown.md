@@ -91,7 +91,7 @@ element, that's the whole setup — it finds it and lists its headings.
 
 | Attribute | What it does |
 | --- | --- |
-| **Markdown element** | Which Markdown element to read. Leave it empty unless the screen has more than one. |
+| **Markdown element** | Which document to read. Leave it empty unless the screen has more than one. |
 | **Heading** | The label above the list. Defaults to *On this page*; clear it for no label. |
 | **Levels** | List `##` and `###` headings, or `##` only. |
 
@@ -104,18 +104,29 @@ matching heading.
 By walking the screen, in reading order — not by looking for anything in the page's HTML.
 That's what makes it work everywhere: on the canvas, in Preview and on the published site.
 
-- **Left empty**, it takes the **first** Markdown element on the screen.
+- **Left empty**, it takes the **first** document on the screen.
 - **Set** to a specific element, it takes that one.
 - Set to an element that's **since been deleted**, it falls back to the first one. Deleting
   and re-adding a Markdown element is exactly what re-pasting a document looks like, and a
   published page with an empty aside is the worse outcome.
+
+Two elements count as a document: the **Markdown** element, and the **Collection entry body**
+on a blog article template. So an article template can carry an "On this page" aside beside
+the post, with no extra wiring — drop the Table of contents element on the screen and it
+reads the entry body.
+
+While you're authoring, the entry body still shows its `{{entry.body}}` token rather than a
+real post, so the contents list skips it and reads the next document on the screen instead.
+It fills in on Preview and on the published page, where the post is actually there.
 
 Put the contents list wherever you like — most often in an aside column beside the document,
 or above it on narrow screens. It doesn't have to be near the Markdown element, or after it.
 
 ## Heading links
 
-Every `##` and `###` heading gets an anchor id built from its own words:
+Every `##` and `###` heading gets an anchor id built from its own words — in the Markdown
+element, in a collection entry body, and in the console's own markdown preview, all from the
+same rule:
 
 - lower-cased, with accents folded to plain letters (`Résumé` → `resume`)
 - anything that isn't a letter or a digit becomes a hyphen, and runs of hyphens collapse
@@ -133,8 +144,8 @@ document order — and the numbering skips anything already taken, so a document
 `## Notice` twice *and* `## Notice 2` still ends up with three distinct links.
 
 :::note
-Anchors come from the document's own words, so two Markdown elements on one screen with the
-same headings will produce the same ids twice. On a page like that, give the second document
+Anchors come from the document's own words, so two documents on one screen with the same
+headings will produce the same ids twice. On a page like that, give the second document
 distinct headings — or split it onto its own screen, which is usually what it wanted anyway.
 :::
 

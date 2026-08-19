@@ -2,6 +2,25 @@
 
 Status: decided and **half implemented**. Filed out of AGL-1367's quota sweep.
 
+> **SUPERSEDED FOR THE FREE PLAN (2026-08-19, AGL-1967/2070/2155).** The
+> verdict below — "Neither answer is 'add a wall'. Recommended change is
+> copy-only" — held for as long as bandwidth was purely a metered band. It no
+> longer holds for **free**, which has no subscription to meter onto, so its
+> band was a published number nothing could enforce. Zach, asked to choose
+> between enforcing now, enforcing with a raised ceiling, and leaving it off
+> through launch, chose to enforce now: *"before public signups arrive, so the
+> cap is proven under real traffic while the cohort is small and a mistake is
+> cheap."* A free org past its band now has its pages refused — see
+> `libs/aglyn/src/lib/app-utils/bandwidth-cap.ts`.
+>
+> **Nothing about the paid plans changed**, and the analysis below is still
+> the reason why. `bandwidthGb` remains the included band of the page-view
+> meter on Starter through Agency, the overage is still itemized rather than
+> refused, and the `/pricing` sentence quoted below — which scopes "You are
+> not cut off" to *"Starter through Agency plans"* — is still accurate as
+> written. The cap keys off `planMetersInfraOverage`, the same predicate that
+> sentence describes, so the two cannot drift apart.
+
 The code half of the execution list below is landed: the plan card's `· {n}
 site` clause (step 1), the console usage meter's site-size row (step 2), and
 the dead `siteSize` check in the usage-alerts cron (step 4) are gone; the
@@ -270,3 +289,38 @@ they change the execution notes above.
   unreachable cap — and dropping it is still the right call.
 - `host-usage` no longer returns `siteSizeBytes`; its live per-site sweep had
   exactly one reader and that reader now uses the rollup.
+
+---
+
+## Addendum (AGL-2155): the FREE half of the verdict above was wrong
+
+"`bandwidthGb` is already metered … going past it already costs money" is true
+on every plan that carries `meteredInfraPassThrough` — and free does not. On
+free the same sentence inverts: going past the band costs **us** money and the
+customer nothing, because free's `perPageView` rate is `null` by design (see
+`apps/console/specs/free-tier-never-billed.spec.ts`). A metered band is not an
+enforcement mechanism for a plan with no meter, so on free `bandwidthGb` was
+exactly the decoration this document acquitted it of being.
+
+That left bandwidth as the one free dimension with no runtime brace at all
+while every other one had one — media storage (`mediaStorageGate`), form
+submissions (`checkFormSubmissionQuota`), dataset storage and API (zero bands),
+contacts (a hard band). A free site that went viral served a million page views
+— about **$100 of real COGS** — against a $0 invoice, with nothing anywhere
+refusing a view.
+
+AGL-2155 adds `checkBandwidthAbuseCeiling`, built on
+`checkFormSubmissionAbuseCeiling`'s precedent: a containment ceiling an order
+of magnitude above the included band (floor 100,000 page views/month), not a
+plan gate. It is evaluated in `/api/analytics/collect` — where the counter is
+already written, after the render — and stamps `hosts/{id}.bandwidthCeiling`,
+which the tenant loader reads off a host document it already loads. The render
+path therefore pays **no extra Firestore read**, which is the objection that
+kept this open.
+
+Crossing it flags the host and escalates to staff on every plan. It changes
+what visitors see only where the overage is **uncompensated** — i.e. free —
+because taking a paying customer's site off the air would trade a bill they
+agreed to for an outage they did not. Whether a paying host past its own
+ceiling should also be degraded is left open: it is the single
+`bandwidthCeilingDegradesRender` predicate.

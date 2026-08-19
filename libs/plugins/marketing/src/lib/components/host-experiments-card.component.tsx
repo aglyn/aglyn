@@ -16,7 +16,14 @@
  */
 'use client'
 
-import { type AglynOrgBilling, checkEntitlement, createResourceUid, HOST_EVENT_TYPES, SITE_EVENT_TYPES } from '@aglyn/aglyn'
+import {
+  type AglynOrgBilling,
+  checkEntitlement,
+  createResourceUid,
+  HOST_EVENT_TYPES,
+  pluginDocsHelp,
+  SITE_EVENT_TYPES,
+} from '@aglyn/aglyn'
 import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -337,6 +344,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   return (
     <CardDisplay
       header="Experiments"
+      help={pluginDocsHelp('emailCampaigns', { anchor: '#experiments' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

@@ -39,8 +39,17 @@ interface SeededOrg {
   id: string
   plan: string
   usageBudget?: { amountUsd?: unknown; thresholdPcts?: unknown }
-  /** The latest `orgs/{id}/usage/*` document, or none. */
+  /** The latest `orgs/{id}/usage/*` document by `computedAt`, or none. */
   rollup?: { month: string; billedCents: number } | null
+  /**
+   * `orgs/{id}/usage/{month}` read BY ID, when it differs from the latest
+   * (AGL-2219). Two sweeps write into this collection now — the closed month
+   * at 02:00, the month in progress at 07:00 — so the newest document by
+   * `computedAt` is whichever cron ran last, and that is not a property a
+   * budget may depend on. Seeding the two apart is the only way to tell the
+   * two reads apart at all.
+   */
+  monthRollup?: { month: string; billedCents: number } | null
   /** `orgs/{id}/assistUsage/{month}.estCostUsd`. */
   assistEstCostUsd?: number
   /** `orgs/{id}/counters/media.bytes` — the org library. */
@@ -53,7 +62,14 @@ interface SeededOrg {
 let mockOrgs: SeededOrg[]
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 let mockStaffNotifications: Array<{ title: string; body: string }>
-let mockEmails: Array<{ to: string[]; subject: string; text: string; context: string }>
+let mockEmails: Array<{
+  to: string[] | string
+  subject: string
+  text: string
+  context: string
+}>
+/** `uid -> address` for the auth pools, when a member row has none. */
+let mockPooledEmails: Record<string, string>
 /** Every `usageAlerts` map written back, in order. */
 let mockGuardWrites: Array<Record<string, { month: string; threshold: number }>>
 
@@ -93,6 +109,22 @@ function orgSubcollection(org: SeededOrg, name: string): any {
     const api: any = {
       orderBy: () => api,
       limit: () => api,
+      // BY DOCUMENT ID (AGL-2219). The cron now reads `usage/{month}`
+      // directly for the budget's spend figure: two sweeps write into this
+      // collection (the closed month, and the month in progress), so "latest
+      // by `computedAt`" answers "whichever cron ran most recently".
+      //
+      // Modelled faithfully — an id that is not the seeded rollup's month
+      // reads as a MISSING document, exactly as Firestore would. A double
+      // that returned the rollup for any id would make the wrong-month case
+      // below pass for the wrong reason.
+      doc: (id: string) => {
+        const byId = org.monthRollup ?? org.rollup
+        return {
+          get: async () =>
+            snapshotOf(byId && byId.month === id ? { ...byId } : null),
+        }
+      },
       get: async () => ({
         docs: org.rollup
           ? [
@@ -174,24 +206,53 @@ function fakeOrgDoc(org: SeededOrg) {
 const fakeFirestore = {
   collection: (name: string) => {
     if (name === 'orgs') {
-      const api: any = {
-        limit: () => api,
-        get: async () => ({
-          docs: mockOrgs.map(fakeOrgDoc),
-          size: mockOrgs.length,
-        }),
-        // The EMAIL fan-out addresses an org by id (AGL-2052) rather than
-        // walking the sweep's snapshot, so the double has to serve both.
-        doc: (orgId: string) => {
-          const org = mockOrgs.find((entry) => entry.id === orgId)
-          return {
-            id: orgId,
-            collection: (sub: string) =>
-              org ? orgSubcollection(org, sub) : emptyCollection(),
-          }
-        },
+      /**
+       * ORDER, LIMIT and START-AFTER are all modelled (AGL-2220).
+       *
+       * The sweep is chunked now, and `limit: () => api` — a stub that
+       * accepts the call and ignores it — would hand back every seeded org on
+       * every page. The cursor could then be wrong in any direction and this
+       * suite would never notice: a page that skipped orgs, a cursor that
+       * never advanced, an infinite loop. The whole point of the change is
+       * that the sweep is bounded and resumable, so the double has to be able
+       * to express a boundary.
+       */
+      const build = (
+        limit: number | null,
+        startAfter: string | null,
+      ): any => {
+        const api: any = {
+          orderBy: () => api,
+          limit: (size: number) => build(size, startAfter),
+          startAfter: (ref: any) =>
+            build(limit, typeof ref === 'string' ? ref : ref?.id),
+          get: async () => {
+            const ordered = [...mockOrgs].sort((a, b) =>
+              a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+            )
+            // Strictly greater than: the cursor names an org already
+            // finished, so including it would redo one org per resume.
+            const remaining = startAfter
+              ? ordered.filter((org) => org.id > startAfter)
+              : ordered
+            const page =
+              limit == null ? remaining : remaining.slice(0, limit)
+            return { docs: page.map(fakeOrgDoc), size: page.length }
+          },
+          // The EMAIL fan-out addresses an org by id (AGL-2052) rather than
+          // walking the sweep's snapshot, so the double has to serve both.
+          doc: (orgId: string) => {
+            const org = mockOrgs.find((entry) => entry.id === orgId)
+            return {
+              id: orgId,
+              collection: (sub: string) =>
+                org ? orgSubcollection(org, sub) : emptyCollection(),
+            }
+          },
+        }
+        return api
       }
-      return api
+      return build(null, null)
     }
     if (name === 'hosts') {
       const api: any = {
@@ -214,6 +275,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyOrgAdmins: (...args: unknown[]) => (mockNotifyOrgAdmins as any)(...args),
   notifyStaff: (...args: unknown[]) => (mockNotifyStaff as any)(...args),
   meterPlatformEmail: async () => undefined,
+  // The auth-pool fallback for an owner/admin whose member document carries no
+  // denormalized email (AGL-2234). A wholesale `jest.mock` is a CLOSED WORLD:
+  // omitting this would fail as "not a function" inside the fan-out, which
+  // reads as a broken suite rather than as a missing recipient.
+  findUserByUidAcrossPools: async (uid: string) =>
+    mockPooledEmails[uid] ? { record: { email: mockPooledEmails[uid] } } : null,
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -234,14 +301,25 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL entitlements — a stubbed plan would make every threshold below
   // unfalsifiable.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The route stamps and reads the free-plan bandwidth cap through the same
+  // barrel (AGL-2155); a stubbed export here would fail as "not a function"
+  // rather than as anything to do with this suite's subject.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
   buildRoute: () => '/acme/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   ORG_BILLING_SUBCOLLECTION: 'billing',
   ORG_BILLING_DOC_ID: 'billing',
+  // The BODY IS REAL (AGL-2220). It used to be a hardcoded `{}`, which was
+  // harmless while the route ignored it and became a lie the moment the sweep
+  // grew a `cursor` and a `limit`: every pagination assertion would have run
+  // against the first page forever, and passed.
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
-    body: {},
+    body: await request
+      .clone()
+      .json()
+      .catch(() => ({})),
     headers: {
       'x-cron-secret': request.headers.get('x-cron-secret') ?? undefined,
     },
@@ -251,7 +329,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 jest.mock('../utils/screen-cap-reconciliation', () => ({
   __esModule: true,
   measureScreenCaps: async () => ({ maxBillable: 0, overCapHostIds: [] }),
-  screenCapMaxBillable: async () => 0,
+  screenCapReading: async () => ({ maxBillable: 0, overCapHostIds: [] }),
 }))
 
 import { POST } from '../app/api/billing/usage-alerts/route'
@@ -267,22 +345,43 @@ const LAST_MONTH = new Date(
   .toISOString()
   .slice(0, 7)
 
-async function run() {
+async function run(body?: Record<string, unknown>) {
   mockNotifications = []
   mockStaffNotifications = []
   mockEmails = []
   mockGuardWrites = []
+  return runChunk(body)
+}
+
+/** One invocation, WITHOUT clearing what earlier chunks recorded. */
+async function runChunk(body?: Record<string, unknown>) {
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
-      headers: { 'x-cron-secret': CRON_SECRET },
+      headers: {
+        'x-cron-secret': CRON_SECRET,
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
     }),
   )
   expect(response.status).toBe(200)
+  return response.json() as Promise<Record<string, any>>
 }
 
 const budgetAlerts = () =>
   mockNotifications.filter((entry) => entry.title.includes('usage budget'))
+
+/**
+ * A captured send's recipients as a list.
+ *
+ * `sendEmail` takes one address or many, and since AGL-2234 both shapes are
+ * really used — the org fan-out passes an array, the staff alert a single
+ * `STAFF_ALERT_EMAIL`. Normalizing here keeps the union honest in the fixture
+ * instead of pretending every send is a fan-out.
+ */
+const recipientsOf = (entry: { to: string[] | string }): string[] =>
+  Array.isArray(entry.to) ? [...entry.to] : [entry.to]
 
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
@@ -290,8 +389,10 @@ beforeEach(() => {
   delete process.env.BILL_ASSIST_TOKENS_FROM
   delete process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD
   delete process.env.AUTO_LOCK_BILLING_FROM
+  delete process.env.STAFF_ALERT_EMAIL
   jest.clearAllMocks()
   mockOrgs = []
+  mockPooledEmails = {}
 })
 
 /** An org on a metered plan with a $50 budget and one admin who can be mailed. */
@@ -372,6 +473,32 @@ describe('usage budgets fire from the invoice’s own figure (AGL-1528)', () => 
     ]
     await run()
     expect(budgetAlerts()).toHaveLength(0)
+  })
+
+  it('reads THIS month by id, not whichever sweep wrote last', async () => {
+    // The latest document by `computedAt` is LAST month's — the state the
+    // 02:00 closed-month sweep leaves behind whenever it runs after the
+    // 07:00 in-progress one (a manual backfill, a retried chunk, a schedule
+    // reorder). The current month's rollup exists and says $25.00.
+    //
+    // Under the old `orderBy('computedAt').limit(1)` read this org went
+    // SILENT, because the month comparison correctly refused July's figure
+    // for an August budget. Reading by id makes the answer a property of the
+    // document's name instead of a property of two crons' running order.
+    //
+    // Forced red by reverting the route to `rollup?.get(...)`: no alert.
+    mockOrgs = [
+      seededOrg({
+        rollup: { month: LAST_MONTH, billedCents: 999_00 },
+        monthRollup: { month: MONTH, billedCents: 2_500 },
+        usageBudget: { amountUsd: 50 },
+      }),
+    ]
+    await run()
+    expect(budgetAlerts()).toHaveLength(1)
+    expect(budgetAlerts()[0].body).toContain('$25.00')
+    // …and NOT the $999.00 the stale latest document carries.
+    expect(budgetAlerts()[0].body).not.toContain('999')
   })
 
   it('is silent for an org with no rollup at all', async () => {
@@ -458,7 +585,10 @@ describe('delivery is console AND email (AGL-2052)', () => {
     await run()
     const mail = mockEmails.filter((entry) => entry.context === 'usage-budget')
     expect(mail).toHaveLength(1)
-    expect(mail[0].to.sort()).toEqual(['admin@acme.test', 'owner@acme.test'])
+    expect(recipientsOf(mail[0]).sort()).toEqual([
+      'admin@acme.test',
+      'owner@acme.test',
+    ])
     expect(mail[0].subject).toBe(budgetAlerts()[0].title)
     // An email has no console context, so its link must be ABSOLUTE or it is
     // a dead link.
@@ -494,6 +624,204 @@ describe('delivery is console AND email (AGL-2052)', () => {
       expect(mail?.context).toBe('usage-alert')
       expect(mail?.to).toEqual(['owner@acme.test'])
       expect(mail?.text).toContain(notification.body)
+    }
+  })
+})
+
+describe('an alert that reaches nobody says so (AGL-2234)', () => {
+  /** One org over its $50 budget, with whatever member roster is given. */
+  function overBudget(members: SeededOrg['members']) {
+    return [
+      seededOrg({
+        monthRollup: { month: MONTH, billedCents: 5_000 },
+        usageBudget: { amountUsd: 50 },
+        members,
+      }),
+    ]
+  }
+
+  const budgetRow = (payload: Record<string, any>) =>
+    (payload['details'] as Array<Record<string, any>>).find(
+      (entry) => entry['quota'] === 'budget',
+    )
+
+  it('records that the budget alert was emailed', async () => {
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner', email: 'owner@acme.test' }])
+    const payload = await run()
+    expect(budgetRow(payload)).toMatchObject({ emailed: true })
+  })
+
+  it('records when it reached NOBODY, and why', async () => {
+    // THE NEGATIVE CONTROL, and the reason the field exists. The alert fires,
+    // the dedupe guard is written, and that threshold is now silent for the
+    // rest of the month — so a fan-out that resolved to zero addresses has to
+    // be legible in the run's own output or it is invisible forever.
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner' }])
+    const payload = await run()
+    expect(budgetAlerts()).toHaveLength(1) // it DID fire
+    expect(budgetRow(payload)).toMatchObject({
+      emailed: false,
+      emailReason: 'no-recipient',
+    })
+    expect(mockEmails).toHaveLength(0)
+  })
+
+  it('reaches an owner whose member row carries no email, through the pools', async () => {
+    // `createOrganization` writes `email: ownerEmail ?? null`, so an owner
+    // from an identity that carried no address leaves the org with no billing
+    // mail at all. Same fixture as the case above, one pooled record added.
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner' }])
+    mockPooledEmails = { u1: 'Owner@Acme.test' }
+    const payload = await run()
+    expect(budgetRow(payload)).toMatchObject({ emailed: true })
+    expect(recipientsOf(mockEmails[0])).toEqual(['owner@acme.test'])
+  })
+
+  it('does NOT chase a member who is neither owner nor admin', async () => {
+    // The fallback must not become a lookup per member: that is the unbounded
+    // read the original comment was right to refuse.
+    mockOrgs = overBudget([
+      { id: 'u1', role: 'owner', email: 'owner@acme.test' },
+      { id: 'u2', role: 'editor' },
+    ])
+    mockPooledEmails = { u2: 'editor@acme.test' }
+    await run()
+    expect(recipientsOf(mockEmails[0])).toEqual(['owner@acme.test'])
+  })
+})
+
+describe('the Assist margin alert reaches staff by EMAIL too (AGL-2234)', () => {
+  function bigAssistSpend() {
+    return [
+      seededOrg({
+        assistEstCostUsd: 40,
+        monthRollup: { month: MONTH, billedCents: 0 },
+      }),
+    ]
+  }
+
+  const marginRow = (payload: Record<string, any>) =>
+    (payload['details'] as Array<Record<string, any>>).find(
+      (entry) => entry['quota'] === 'assistCogs',
+    )
+
+  it('emails STAFF_ALERT_EMAIL with the same words as the bell', async () => {
+    // `notifyStaff` writes `users/{uid}/notifications` and nothing turns that
+    // into mail — the identical defect AGL-2052 removed one audience over.
+    process.env.STAFF_ALERT_EMAIL = 'staff@aglyn.com'
+    mockOrgs = bigAssistSpend()
+    const payload = await run()
+
+    expect(mockStaffNotifications).toHaveLength(1)
+    const staffMail = mockEmails.filter(
+      (entry) => entry.context === 'assist-margin',
+    )
+    expect(staffMail).toHaveLength(1)
+    expect(staffMail[0].to).toBe('staff@aglyn.com')
+    // ONE set of words for both channels: an inbox and a bell disagreeing
+    // about the same number is how somebody ends up arguing with the alert.
+    expect(staffMail[0].subject).toBe(mockStaffNotifications[0].title)
+    expect(staffMail[0].text).toContain(mockStaffNotifications[0].body)
+    expect(marginRow(payload)).toMatchObject({ emailed: true })
+  })
+
+  it('does not mail the CUSTOMER about our margin', async () => {
+    // The org is not being charged for Assist and has done nothing wrong.
+    process.env.STAFF_ALERT_EMAIL = 'staff@aglyn.com'
+    mockOrgs = bigAssistSpend()
+    await run()
+    for (const entry of mockEmails) {
+      expect(recipientsOf(entry)).not.toContain('owner@acme.test')
+    }
+  })
+
+  it('reports unconfigured rather than pretending, with no address set', async () => {
+    // The ordinary answer in local and preview environments. It must not read
+    // as a delivered alert, and it must not throw.
+    mockOrgs = bigAssistSpend()
+    const payload = await run()
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(
+      mockEmails.filter((entry) => entry.context === 'assist-margin'),
+    ).toHaveLength(0)
+    expect(marginRow(payload)).toMatchObject({
+      emailed: false,
+      emailReason: 'unconfigured',
+    })
+  })
+})
+
+describe('the sweep is bounded, resumable and honest about it (AGL-2220)', () => {
+  /** Five orgs, each over its own $50 budget, ids ordered so pages are legible. */
+  function fiveOverBudgetOrgs() {
+    return ['org-a', 'org-b', 'org-c', 'org-d', 'org-e'].map((id) =>
+      seededOrg({
+        id,
+        monthRollup: { month: MONTH, billedCents: 5_000 },
+        usageBudget: { amountUsd: 50 },
+      }),
+    )
+  }
+
+  it('reports how far it got, and does NOT claim to be done', async () => {
+    // THE DEFECT. The old sweep took `limit(500)` with no cursor and returned
+    // `alerted: N` whether it had covered the platform or stopped at 500 —
+    // and `alerted: 0` is the answer we want most days, so a truncated sweep
+    // was indistinguishable from a quiet one. Now it says which.
+    mockOrgs = fiveOverBudgetOrgs()
+    const first = await run({ limit: 2 })
+    expect(first['swept']).toBe(2)
+    expect(first['done']).toBe(false)
+    expect(first['nextCursor']).toBe('org-b')
+    expect(budgetAlerts()).toHaveLength(2)
+  })
+
+  it('the caller\u2019s loop reaches EVERY org, exactly once', async () => {
+    // The property the ceiling removed: an org past the page boundary got no
+    // quota alert, no budget alert, no margin alert, no bandwidth cap and no
+    // auto-lock. Driven the way `scheduled-crons.yml` drives it — re-POST
+    // with the cursor until `done`.
+    mockOrgs = fiveOverBudgetOrgs()
+    await run({ limit: 2 })
+    let payload = { done: false, nextCursor: 'org-b' } as Record<string, any>
+    let pages = 1
+    while (!payload['done']) {
+      payload = await runChunk({ limit: 2, cursor: payload['nextCursor'] })
+      pages += 1
+      expect(pages).toBeLessThanOrEqual(10)
+    }
+    expect(payload['done']).toBe(true)
+    expect(payload['nextCursor']).toBeNull()
+
+    const alerted = budgetAlerts().map((entry) => entry.orgId).sort()
+    expect(alerted).toEqual(['org-a', 'org-b', 'org-c', 'org-d', 'org-e'])
+    // Exactly once each: a cursor that included the org it names would redo
+    // one org per resume, and the dedupe guard is written at the END of an
+    // org's pass, so a double visit inside one sweep would double-mail.
+    expect(new Set(alerted).size).toBe(alerted.length)
+  })
+
+  it('finishes in ONE page when the platform fits', async () => {
+    // The ordinary case, and the one that must not have grown a second
+    // invocation: a small platform is still one call.
+    mockOrgs = fiveOverBudgetOrgs()
+    const payload = await run()
+    expect(payload['swept']).toBe(5)
+    expect(payload['done']).toBe(true)
+    expect(payload['nextCursor']).toBeNull()
+    expect(budgetAlerts()).toHaveLength(5)
+  })
+
+  it('ignores a cursor that is not an org id, rather than throwing', async () => {
+    // `.doc('')` throws SYNCHRONOUSLY, at construction, outside any `.catch()`
+    // on the promise, and a slash builds a ref to a deeper path instead of
+    // refusing. Either would take down the whole sweep — including the
+    // billing auto-lock it hosts — on a malformed resume.
+    mockOrgs = fiveOverBudgetOrgs()
+    for (const bad of ['', 'orgs/org-a', 42, null]) {
+      const payload = await run({ cursor: bad })
+      expect(payload['swept']).toBe(5)
+      expect(payload['done']).toBe(true)
     }
   })
 })

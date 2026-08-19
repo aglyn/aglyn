@@ -13,32 +13,23 @@
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/besigner/core",
         "main": "libs/besigner/core/src/index.ts",
         "tsConfig": "libs/besigner/core/tsconfig.lib.json",
-        "assets": [
-          "libs/besigner/core/*.md"
-        ]
+        "assets": ["libs/besigner/core/*.md"]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/besigner/core"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/libs/besigner/core"],
       "options": {
-        "jestConfig": "libs/besigner/core/jest.config.ts",
-        "passWithNoTests": true
+        "jestConfig": "libs/besigner/core/jest.config.ts"
       }
     }
   }

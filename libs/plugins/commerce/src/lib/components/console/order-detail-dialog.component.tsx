@@ -17,6 +17,7 @@
 'use client'
 
 import * as CommerceModel from '../../model'
+import { escapeHtml } from '../../utils/escape-html'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -549,19 +550,31 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order) return
     const win = window.open('', '_blank', 'width=600,height=800')
     if (!win) return
+    // ESCAPED (AGL-2283). This is `document.write` into an `about:blank`
+    // popup, which INHERITS the console's origin — and `order.shippingAddress`
+    // is copied verbatim from Stripe's `shipping_details`, i.e. typed by the
+    // SHOPPER. A name of `<img src=x onerror=…>` ran script against the
+    // merchant's own authenticated session. React guards nothing here because
+    // none of this is React. Line names and SKUs are merchant-authored and
+    // lower severity, but they are the same construction and get the same
+    // treatment rather than a case-by-case argument.
     const rows = (order.lineItems ?? [])
       .map(
         (line) =>
-          `<tr><td>${line.quantity}×</td><td>${line.name}${
-            line.variantLabel ? ` — ${line.variantLabel}` : ''
-          }</td><td>${line.sku ?? ''}</td></tr>`,
+          `<tr><td>${escapeHtml(line.quantity)}×</td><td>${escapeHtml(
+            line.name,
+          )}${
+            line.variantLabel ? ` — ${escapeHtml(line.variantLabel)}` : ''
+          }</td><td>${escapeHtml(line.sku ?? '')}</td></tr>`,
       )
       .join('')
     const address = order.shippingAddress
     win.document.write(
-      `<h2>Packing slip ${CommerceModel.formatOrderNumber(order, orderId)}</h2>` +
+      `<h2>Packing slip ${escapeHtml(
+        CommerceModel.formatOrderNumber(order, orderId),
+      )}</h2>` +
         (address
-          ? `<p>${[address.name, address.line1, address.line2, `${address.city ?? ''} ${address.state ?? ''} ${address.postalCode ?? ''}`, address.country].filter(Boolean).join('<br/>')}</p>`
+          ? `<p>${[address.name, address.line1, address.line2, `${address.city ?? ''} ${address.state ?? ''} ${address.postalCode ?? ''}`, address.country].filter(Boolean).map((part) => escapeHtml(part)).join('<br/>')}</p>`
           : '') +
         `<table border="0" cellpadding="6">${rows}</table>`,
     )

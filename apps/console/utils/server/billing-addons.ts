@@ -145,19 +145,36 @@ export function planPriceId(
 }
 
 /**
+ * Which plan a subscription item's price sells AND on which interval; null for
+ * an add-on price, the metered price, an ad-hoc enterprise price, and anything
+ * unknown.
+ *
+ * The interval half exists because a schedule phase read back from Stripe
+ * carries price IDS and nothing else (AGL-2150): rebuilding that phase's item
+ * list needs to know which interval it is priced on, and guessing it from the
+ * live subscription is wrong exactly when the pending change is also an
+ * interval change.
+ */
+export function planAndIntervalFromPriceId(
+  priceId: string | null | undefined,
+): { plan: OrgPlan; interval: BillingInterval } | null {
+  if (!priceId) return null
+  for (const plan of PAID_PLANS) {
+    for (const interval of ['month', 'year'] as const) {
+      if (planPriceId(plan, interval) === priceId) return { plan, interval }
+    }
+  }
+  return null
+}
+
+/**
  * Which plan a subscription item's price sells; null for an add-on price,
  * the metered price, an ad-hoc enterprise price, and anything unknown.
  */
 export function planFromPriceId(
   priceId: string | null | undefined,
 ): OrgPlan | null {
-  if (!priceId) return null
-  for (const plan of PAID_PLANS) {
-    for (const interval of ['month', 'year'] as const) {
-      if (planPriceId(plan, interval) === priceId) return plan
-    }
-  }
-  return null
+  return planAndIntervalFromPriceId(priceId)?.plan ?? null
 }
 
 /**

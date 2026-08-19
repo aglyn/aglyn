@@ -50,6 +50,29 @@ export const RETENTION_SURFACES = [
 export type RetentionSurface = (typeof RETENTION_SURFACES)[number]
 
 /**
+ * The `kind` discriminator on every document in `orgs/{orgId}/retention`.
+ *
+ * Constants rather than inline strings because the report that READS this
+ * collection (AGL-2248) has to bucket on exactly the strings the three write
+ * sites emit, and there is no schema to catch a mismatch — a reader keyed on
+ * a value nobody writes silently reports ZERO, which is indistinguishable
+ * from "nobody cancelled" and is the most flattering possible way to be
+ * wrong. Naming them here makes a rename a compile error instead.
+ */
+export const RETENTION_KINDS = {
+  /** One answered why-are-you-leaving survey. */
+  survey: 'churn_survey',
+  /** A subscription cancel reached the end. */
+  cancel: 'cancel_completed',
+  /** An account deletion was requested. */
+  deleteRequested: 'delete_requested',
+  /** The one-per-org winback slot, taken. */
+  winbackReserved: 'winback_reserved',
+  /** …and the coupon actually applied to the subscription. */
+  winbackApplied: 'winback_applied',
+} as const
+
+/**
  * Closed reason set for the why-are-you-leaving survey. Closed for the same
  * reason the GA taxonomy is: a free-text-only answer cannot be broken down,
  * and a breakdown is the entire point of asking. `other` + the bounded

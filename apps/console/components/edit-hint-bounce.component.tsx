@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useEffect, useRef } from 'react'
 import { editorHintCookieDomain } from './editor-hint-cookie.component'
@@ -61,8 +62,15 @@ import { editorHintCookieDomain } from './editor-hint-cookie.component'
 /** The reserved tenant-app host the bounce lands on. `console` is in
  * `RESERVED_SUBDOMAINS` (host-naming.ts), so no customer can ever own it;
  * `/api/*` is outside the tenant middleware's matcher, so the endpoint
- * serves there no matter how tenant resolution treats the hostname. */
-export const EDIT_HINT_BOUNCE_ORIGIN = 'https://console.aglyn.app'
+ * serves there no matter how tenant resolution treats the hostname.
+ *
+ * Derived from the configured tenant apex (AGL-2176). It was the literal
+ * `https://console.aglyn.app`, and this is a deliberate TOP-LEVEL navigation
+ * once a day per browser — so on a self-host install it took the operator's
+ * editor to Aglyn's domain, to plant a cookie on an apex the operator does not
+ * control and the browser would refuse anyway. Both halves wrong: it cannot
+ * work, and it leaves. */
+export const EDIT_HINT_BOUNCE_ORIGIN = `https://console.${TENANT_APEX}`
 
 export const EDIT_HINT_BOUNCE_STAMP_KEY = 'aglyn-edit-hint-bounce-at'
 

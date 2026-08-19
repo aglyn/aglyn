@@ -54,6 +54,13 @@ jest.mock('@aglyn/aglyn/server', () => {
     // cached bundle must still be able to buy.
     claimAttempt: jest.requireActual('@aglyn/aglyn/app-utils/api-idempotency')
       .claimAttempt,
+    // The REAL kill-switch predicate (AGL-2288), for the same reason the fee
+    // logic above is real: checkout must agree with what `install-plugin` and
+    // the loaders mean by a listing-wide revocation, and a stub here would be
+    // this file agreeing with itself.
+    isListingWideRevocation: jest.requireActual(
+      '@aglyn/aglyn/app-utils/plugin-manifest',
+    ).isListingWideRevocation,
   }
 })
 
@@ -284,6 +291,32 @@ describe('marketplace checkout take rate + sale-time gates (AGL-1543)', () => {
     expect(params.get('metadata[feeCents]')).toBe('2000')
   })
 
+  it('stamps the marketplace marker on the PAYMENT INTENT, not only the session (AGL-2148)', async () => {
+    seed()
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    const { params } = stripeCalls[0]
+    // `charge.refunded` never sees a session — its object is the charge — and
+    // the platform endpoint receives refunds for storefront orders and
+    // subscription charges too. Stripe copies a PaymentIntent's metadata onto
+    // its charge, so this is the ONLY thing that lets the refund door tell a
+    // marketplace refund apart without a Firestore join, which is precisely
+    // the join that comes up empty while the purchase document is still being
+    // written. Drop it and the orphan store parks nothing (or, worse, parks
+    // one for every commerce refund on the platform).
+    expect(params.get('payment_intent_data[metadata][type]')).toBe(
+      'marketplace-purchase',
+    )
+    expect(params.get('payment_intent_data[metadata][listingId]')).toBe(
+      'listing-1',
+    )
+    expect(params.get('payment_intent_data[metadata][buyerUid]')).toBe(
+      'buyer-1',
+    )
+    // The session marker stays where `checkout.session.completed` reads it.
+    expect(params.get('metadata[type]')).toBe('marketplace-purchase')
+  })
+
   it('409s when the publisher has not finished Stripe onboarding', async () => {
     seed()
     publisherMock.__publisher = {
@@ -347,5 +380,81 @@ describe('GA attribution rides the checkout session (AGL-1638)', () => {
     expect(res.statusCode).toBe(200)
     expect(stripeCalls[0].params.get('metadata[ga_client_id]')).toBeNull()
     expect(stripeCalls[0].params.get('metadata[listingId]')).toBe('listing-1')
+  })
+})
+
+/**
+ * The sell side of the takedown and the kill switch (AGL-2288).
+ *
+ * This route validated `deletedAt` and a hand-rolled subset of the review
+ * status, and stopped there. `isListingBrowsable`'s first two lines — the ones
+ * it did not copy — are `hiddenAt` and `isPrivateListing`, and a staff
+ * takedown does NOT write a blocking review status: `plugin-reviews` demotes a
+ * verified listing to `VERIFIED_STRIPPED_STATUS`, which is the literal string
+ * `'listed'`. So after a takedown the listing read `reviewStatus: 'listed'`
+ * here and sold in full, while `install-plugin.ts` refused the same listing at
+ * `hiddenAt`. Money changed hands for an artifact nobody could install.
+ *
+ * Every case below asserts that NO Stripe call was made, not merely that the
+ * response was a 404: a refusal that has already opened a Checkout session is
+ * not a refusal.
+ */
+describe('a listing the platform has switched off is not for sale (AGL-2288)', () => {
+  const buy = async (listing: Record<string, unknown> = {}) => {
+    seed({ listing })
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    return res
+  }
+
+  it('sells the healthy baseline — the control', async () => {
+    const res = await buy()
+    expect(res.statusCode).toBe(200)
+    expect(stripeCalls).toHaveLength(1)
+  })
+
+  it('refuses a TAKEN-DOWN listing whose review status still reads listed', async () => {
+    // The exact shape a takedown leaves behind: hidden, and 'listed'.
+    const res = await buy({ hiddenAt: 'NOW', reviewStatus: 'listed' })
+    expect(res.statusCode).toBe(404)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('refuses a PRIVATE listing', async () => {
+    const res = await buy({ visibility: 'private' })
+    expect(res.statusCode).toBe(404)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('refuses when the kill switch is thrown on the whole listing', async () => {
+    seed()
+    store()['revocations/listing-1'] = { versions: 'all', source: 'takedown' }
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(404)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('STILL SELLS when only one version is revoked', async () => {
+    // The negative control that stops the fix from over-reaching. A
+    // per-version revocation (AGL-1085) exists precisely so a reviewer can
+    // stop one build without de-listing the artifact; refusing the sale for
+    // it would turn a targeted control into a takedown, which is the thing
+    // AGL-1085 was filed to avoid.
+    seed()
+    store()['revocations/listing-1'] = {
+      versions: ['1.0.0'],
+      reviewVersions: ['1.0.0'],
+    }
+    const res = makeRes()
+    await checkoutHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    expect(stripeCalls).toHaveLength(1)
+  })
+
+  it('still refuses a rejected listing — the pre-existing gate is unchanged', async () => {
+    const res = await buy({ reviewStatus: 'rejected' })
+    expect(res.statusCode).toBe(404)
+    expect(stripeCalls).toHaveLength(0)
   })
 })

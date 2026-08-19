@@ -1095,6 +1095,127 @@ describe('refund and the shelf (AGL-1797)', () => {
  * fixtures keep it and why open-ness is `orderHasOpenDispute`, never a
  * deadline test.
  */
+/**
+ * THE MONEY'S WAY OUT OF A CANCELLATION (AGL-2149).
+ *
+ * `cancel-order.ts` accepts a **paid** order and moves NO money: it flips the
+ * status, puts the stock back and returns. This handler gates on
+ * `canTransitionOrder(order.status, 'refunded')`, and `cancelled` used to list
+ * no successor at all — so an admin who reached for Cancel instead of Refund,
+ * two buttons that sit beside each other in the order dialog, had permanently
+ * locked the shopper's money out of every refund route the product has. The
+ * shopper's only recourse was a chargeback, which costs the merchant the goods,
+ * the money AND the dispute fee.
+ *
+ * These drive the WHOLE handler rather than `canTransitionOrder` alone (which
+ * `commerce-orders.spec.ts` pins directly), because the transition edge is only
+ * the first of several gates the money has to pass: the claim, the dispute
+ * check, the cap read inside the transaction, the Stripe call and the contact
+ * write all sit behind it, and an edge that opened without the rest following
+ * would be a fix that reports success and moves nothing.
+ */
+describe('refunding a cancelled order (AGL-2149)', () => {
+  function cancelOrderInPlace() {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...storedOrder(),
+      status: 'cancelled',
+      timeline: [
+        { atMs: 1, event: 'paid' },
+        { atMs: 2, event: 'cancelled', detail: '1 unit returned to stock' },
+      ],
+    })
+  }
+
+  it('refunds a paid order an admin cancelled', async () => {
+    cancelOrderInPlace()
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      refundedCents: 5000,
+      fullyRefunded: true,
+    })
+    // The money really left, through the same Stripe call every other refund
+    // uses — not a status flip that only looks like one.
+    expect(refundCalls).toHaveLength(1)
+    expect(refundCalls[0].amount).toBe('5000')
+    expect(refundCalls[0].paymentIntent).toBe('pi_live_1')
+    expect(storedOrder().refundedCents).toBe(5000)
+    expect(storedOrder().status).toBe('refunded')
+  })
+
+  /** A partial works too, and leaves the order where the merchant put it. */
+  it('takes a partial refund off a cancelled order without closing it', async () => {
+    cancelOrderInPlace()
+
+    const result = await post(
+      { amountCents: 1500 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      refundedCents: 1500,
+      fullyRefunded: false,
+    })
+    expect(storedOrder().status).toBe('cancelled')
+    expect(storedOrder().refundedCents).toBe(1500)
+  })
+
+  /**
+   * And the cancellation's OWN restock is not re-asked. `cancel-order.ts` has
+   * already put these units back and written the `cancellation` ledger rows, so
+   * a fresh "1 unit may need restocking" prompt would invite the merchant to
+   * restock the same unit a second time — the double-count `flagOrderRestock`
+   * exists to avoid. Unreachable before this change, because the refund itself
+   * was refused.
+   */
+  it('does not ask the merchant to restock what the cancellation already returned', async () => {
+    cancelOrderInPlace()
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().restockCheck).toBeUndefined()
+    expect(
+      consoleError.mock.calls.filter(
+        (call) => call[0] === 'flagOrderRestock failed',
+      ),
+    ).toHaveLength(0)
+    // The count is untouched, and no second ledger row was written.
+    expect(
+      docs.get('hosts/host-1/products/product-1').variants[0].inventory,
+    ).toBe(9)
+    expect(
+      [...docs.keys()].filter((path) =>
+        path.startsWith('hosts/host-1/inventoryAdjustments'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  /**
+   * The negative control for the edge: `refunded` is still terminal, so the
+   * widened table did not simply stop refusing. Without this, a fix that
+   * emptied `ORDER_TRANSITIONS` entirely would pass the three tests above.
+   */
+  it('still refuses an order that is already refunded', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...storedOrder(),
+      status: 'refunded',
+      refundedCents: 5000,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-b' })
+
+    expect(result.status).toBe(409)
+    expect(result.body).toEqual({
+      error: 'Orders in "refunded" cannot refund',
+    })
+    expect(refundCalls).toHaveLength(0)
+  })
+})
+
 describe('refund and an open dispute (AGL-1809)', () => {
   const openDispute = {
     id: 'dp_1TESTblock',

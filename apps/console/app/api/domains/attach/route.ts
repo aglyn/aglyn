@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, pluginRequestFromWeb, TENANT_APEX } from '@aglyn/aglyn/server'
+import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -24,6 +24,9 @@ import {
   lockdownRefusal,
   projectDomainStatus,
 } from '@aglyn/tenant-data-admin'
+// Shared with the AGL-2010 completer cron so there is exactly one
+// implementation of the edge redirect. Moved out of this file unchanged.
+import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
 /**
  * Attaches a verified custom domain to the tenant Vercel project so SSL
@@ -32,75 +35,6 @@ import {
  * that as "DNS connected, platform attachment pending". Auth: Firebase ID
  * token; the caller must be an admin of the host.
  */
-
-/**
- * Registers `{subdomain}.aglyn.app` on the tenant project as a Vercel
- * per-domain REDIRECT to the custom domain (AGL-1273). The app-level
- * canonical redirect in `loadPageData` is baked into an ISR entry keyed on
- * pathname, so it structurally cannot carry the query string — a campaign
- * that pointed at the platform subdomain lost its `utm_*` on the hop. The
- * edge redirect preserves path AND query at zero runtime cost, and the
- * app-level redirect stays as the fallback for self-hosted deployments
- * where no Vercel API exists.
- *
- * Best-effort BY DESIGN: the custom domain is already attached by the time
- * this runs, and a redirect-registration failure must not unwind that. A
- * failure sets `subdomainRedirectPending` so the gap is visible and the
- * backfill script (`tools/scripts/backfill-subdomain-redirects.mjs`) can
- * close it.
- */
-async function upsertSubdomainRedirect(options: {
-  token: string
-  projectId: string
-  teamId?: string
-  subdomain: string
-  target: string
-}): Promise<boolean> {
-  const { token, projectId, teamId, subdomain, target } = options
-  const name = `${subdomain}.${TENANT_APEX}`
-  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  }
-  // Vercel's `redirect` is a BARE HOSTNAME, not a URL (`aglyn.com`, never
-  // `https://aglyn.com`). A scheme-prefixed value is rejected with
-  // `bad_request: Unable to redirect to "https://…", because that domain is
-  // not added to the project` — a message that blames the target's absence
-  // rather than the format, which is why this shipped looking correct and
-  // never once succeeded (AGL-1365).
-  const body = JSON.stringify({
-    redirect: target,
-    // Mirrors the app-level redirect's 307: revocable, method-preserving.
-    redirectStatusCode: 307,
-  })
-  // The subdomain may or may not already exist as an explicit project
-  // domain (a wildcard serving it does not count) — PATCH the existing
-  // entry, and on 404 create it with the redirect in one call.
-  const patch = await fetch(
-    `https://api.vercel.com/v9/projects/${projectId}/domains/${encodeURIComponent(name)}${query}`,
-    { method: 'PATCH', headers, body },
-  )
-  if (patch.ok) return true
-  if (patch.status !== 404) {
-    console.error(await patch.json().catch(() => undefined))
-    return false
-  }
-  const post = await fetch(
-    `https://api.vercel.com/v10/projects/${projectId}/domains${query}`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name,
-        redirect: target,
-        redirectStatusCode: 307,
-      }),
-    },
-  )
-  if (!post.ok) console.error(await post.json().catch(() => undefined))
-  return post.ok
-}
 
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -241,10 +175,25 @@ async function handler(request: Request): Promise<Response> {
     // `unknown`/`skipped` fall through to the previous behaviour: a status API
     // that could not answer must not block an otherwise-successful attach.
     const status = await projectDomainStatus(domain, { projectId })
+    // `certificate-pending` is NOT serving (AGL-1996). It used to count as
+    // serving, which contradicted the comment on the redirect below in the
+    // one case that comment describes: a domain Vercel has accepted and
+    // routed but for which no certificate exists yet. Treating it as live
+    // deleted `cnameAttachmentPending` and registered the edge redirect, so
+    // the subdomain stopped serving (it now redirects) and the destination
+    // answered with a TLS error — the site lost BOTH addresses, which is
+    // exactly the outcome the redirect guard was written to prevent.
+    //
+    // A cert normally issues in seconds, so the honest state is "not yet",
+    // not "no". `admin/finish-domain-attachments` re-probes and completes it
+    // without a human (AGL-2010) — the two changes only make sense together,
+    // because without the sweeper this would strand every new domain on the
+    // manual Re-attach button.
     const serves =
       status.state !== 'not-attached' &&
       status.state !== 'ownership-pending' &&
-      status.state !== 'dns-misconfigured'
+      status.state !== 'dns-misconfigured' &&
+      status.state !== 'certificate-pending'
     if (status.state === 'not-attached') {
       await hostSnapshot.ref
         .set({ cnameAttachmentPending: true }, { merge: true })

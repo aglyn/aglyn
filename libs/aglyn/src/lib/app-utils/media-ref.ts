@@ -71,6 +71,8 @@
  * next to the handler because the handler lives in a server-only lib that a
  * plugin component cannot import.
  */
+import { TENANT_APEX } from './host-naming'
+
 export const MEDIA_CDN_ROUTE = '/api/media/cdn'
 
 /**
@@ -135,6 +137,41 @@ export function parseMediaRef(value: unknown): MediaRef | null {
   const mediaId = rest.slice(slash + 1)
   if (!isMediaCdnScope(scope) || !SEGMENT.test(mediaId)) return null
   return { scope, mediaId }
+}
+
+/**
+ * Whether a value is a media-library CDN **path** — exactly what the media
+ * picker writes (AGL-2286).
+ *
+ * `MediaUrlField`'s `onPick` hands back `media.cdnPath`, which is
+ * `/api/media/cdn/{scope}/{mediaId}` and is never absolute. Several save
+ * routes validated their URL field with a bare `^https://` test and so
+ * refused every asset their own Browse button could produce. AGL-2247 fixed
+ * that for the white-label branding profile with a private regex inside
+ * `apps/console/app/api/_lib/branding-url.ts`; this is that predicate
+ * promoted to the module that already owns the grammar, because the org
+ * profile logo and the member avatar had the same defect and live in a lib
+ * `apps/console` cannot be imported from.
+ *
+ * Deliberately NOT {@link isMediaCdnUrl}, which asks a different question
+ * with `includes()` and would answer yes to `https://evil.example/x/api/media/cdn/a/b`.
+ * A validator needs the strict form, so this mirrors {@link parseMediaRef}
+ * exactly — same first-slash boundary, same `isMediaCdnScope` and `SEGMENT`
+ * checks — rather than re-deriving a regex that could drift from the route
+ * the path is about to be served by.
+ */
+export function isMediaCdnPath(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const prefix = `${MEDIA_CDN_ROUTE}/`
+  if (!value.startsWith(prefix)) return false
+  const rest = value.slice(prefix.length)
+  // The scope segment may contain `:` but never `/`, so the FIRST slash is
+  // the boundary and the media id is everything after it.
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return false
+  const scope = rest.slice(0, slash)
+  const mediaId = rest.slice(slash + 1)
+  return isMediaCdnScope(scope) && SEGMENT.test(mediaId)
 }
 
 /**
@@ -283,7 +320,40 @@ const FIRST_PARTY_APEXES = [
   'aglyn.io',
   'aglyn.dev',
   'localhost',
+  // The operator's own names on a self-host install (AGL-2172). Pinned to our
+  // five, this said a self-hoster's OWN media and CDN hostnames were
+  // third-party — so their authors got off-site warnings about their own
+  // assets, and the Styles panel's url() hint fired on every image they
+  // uploaded. Derived from the same variables the rest of the runtime reads,
+  // never a sixth list: `TENANT_APEX` is imported rather than restated, and a
+  // console URL arrives as an origin so it is reduced to a hostname here.
+  ...operatorFirstPartyApexes(),
 ]
+
+/**
+ * The apexes this DEPLOYMENT serves, beyond Aglyn's own.
+ *
+ * Empty on Aglyn's cloud, where the five above are the whole answer. A
+ * function rather than a spread of constants so an unset or malformed value
+ * contributes nothing instead of an empty string — `''` in this list would
+ * make `endsWith('.')` true for every hostname on earth.
+ */
+function operatorFirstPartyApexes(): string[] {
+  const consoleHost = (() => {
+    const raw = process.env.NEXT_PUBLIC_CONSOLE_URL?.trim()
+    if (!raw) return undefined
+    try {
+      return new URL(raw).hostname.toLowerCase()
+    } catch {
+      return undefined
+    }
+  })()
+  return [
+    TENANT_APEX,
+    consoleHost,
+    process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN?.trim().toLowerCase(),
+  ].filter((name): name is string => Boolean(name && name.includes('.')))
+}
 
 // The parameter is `hostname`, not `host`, on purpose (AGL-1718/AGL-1719). In
 // this repo `host` names the `hosts/{hostId}` SITE DOCUMENT, and the AGL-1361

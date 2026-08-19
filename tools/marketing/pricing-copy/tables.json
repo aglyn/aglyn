@@ -1,7 +1,13 @@
 {
   "source": "libs/aglyn/src/lib/app-utils/plan-entitlements.ts",
   "generatedBy": "tools/marketing/build-pricing-tables.mts",
-  "notes": "Every value here is READ FROM CODE, never transcribed from Figma. The frame supplies the shape (which rows, in which groups); the code supplies the values. Regenerate rather than hand-edit.",
+  "notes": "Every value here is READ FROM CODE, never transcribed from Figma, except the rows named in `literals` below. The frame supplies the shape (which rows, in which groups); the code supplies the values. Regenerate rather than hand-edit: `npm run check:pricing-tables` fails when this file and the code disagree.",
+  "literals": [
+    {
+      "label": "Member accounts",
+      "why": "no `memberAccounts` entitlement exists — end users are not metered on any plan"
+    }
+  ],
   "compare": {
     "highlightPlan": "pro",
     "columns": [
@@ -105,20 +111,6 @@
               "scale": "75 GB",
               "advanced": "100 GB",
               "agency": "200 GB",
-              "enterprise": "Talk to us"
-            }
-          },
-          {
-            "label": "Total site size",
-            "duplicateOf": null,
-            "values": {
-              "free": "100 MB",
-              "starter": "1 GB",
-              "pro": "5 GB",
-              "business": "25 GB",
-              "scale": "37.5 GB",
-              "advanced": "50 GB",
-              "agency": "100 GB",
               "enterprise": "Talk to us"
             }
           },

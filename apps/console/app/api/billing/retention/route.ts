@@ -37,6 +37,7 @@ import {
   churnSurveyDetailExpiry,
   downsellTargetPlan,
   RETENTION_COLLECTION,
+  RETENTION_KINDS,
   RETENTION_SURFACES,
   WINBACK_DURATION_MONTHS,
   WINBACK_PERCENT_OFF,
@@ -159,7 +160,7 @@ async function handler(request: Request): Promise<Response> {
       const plan = (orgSnapshot.get('plan') as string | undefined) ?? null
       const surveyRef = retention.doc()
       await surveyRef.create({
-        kind: 'churn_survey',
+        kind: RETENTION_KINDS.survey,
         surface,
         reason,
         plan,
@@ -335,7 +336,7 @@ async function handler(request: Request): Promise<Response> {
     const winbackRef = retention.doc('winback')
     try {
       await winbackRef.create({
-        kind: 'winback_reserved',
+        kind: RETENTION_KINDS.winbackReserved,
         uid: decoded.uid,
         ...(funnelId ? { funnelId } : {}),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
@@ -382,7 +383,7 @@ async function handler(request: Request): Promise<Response> {
       )
       await winbackRef.set(
         {
-          kind: 'winback_applied',
+          kind: RETENTION_KINDS.winbackApplied,
           couponId: String(coupon.id),
           percentOff: WINBACK_PERCENT_OFF,
           durationMonths: WINBACK_DURATION_MONTHS,

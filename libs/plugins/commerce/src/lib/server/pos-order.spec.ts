@@ -219,15 +219,27 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   // "we called twice but Stripe absorbed it" — only the first is a real fix,
   // but both leave one session, and the assertion below checks the CALLS.
   if (idempotencyKey && stripeSessionsByKey.has(idempotencyKey)) {
+    const replayed = stripeSessionsByKey.get(idempotencyKey) as string
     return {
       ok: true,
-      json: async () => ({ url: stripeSessionsByKey.get(idempotencyKey) }),
+      json: async () => ({ url: replayed, id: sessionIdFor(replayed) }),
     }
   }
   const sessionUrl = `https://checkout.stripe.com/pay/session-${++stripeSessionCounter}`
   if (idempotencyKey) stripeSessionsByKey.set(idempotencyKey, sessionUrl)
-  return { ok: true, json: async () => ({ url: sessionUrl }) }
+  // Real Stripe always answers with an `id` beside the `url`, and AGL-2244
+  // stores it so a cancelled QR sale can have its live page expired. A fake
+  // that omitted it would report the store as working with nothing in it.
+  return {
+    ok: true,
+    json: async () => ({ url: sessionUrl, id: sessionIdFor(sessionUrl) }),
+  }
 })
+
+/** The session id Stripe would have minted alongside this url. */
+function sessionIdFor(sessionUrl: string): string {
+  return `cs_test_${sessionUrl.split('-').pop()}`
+}
 
 // ---------------------------------------------------------------------------
 // Request / response plumbing
@@ -309,7 +321,9 @@ beforeEach(() => {
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
-  docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'manager' } })
+  // `editor`, not `manager` (AGL-2262): the projection has no such role,
+  // and the register admitted it only because the gate was a denylist.
+  docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' } })
   docs.set('hosts/host-1/registers/register-1', {
     name: 'Front counter',
     createdAt: { toMillis: () => 1000 },
@@ -474,6 +488,62 @@ describe('the register refuses a sale it cannot tax (AGL-2145)', () => {
     const result = await post({ payment: 'cash', cashReceivedCents: 400 })
     expect(result.status).toBe(200)
     expect(orderDocs()[0]?.totals?.taxCents).toBe(0)
+  })
+})
+
+/**
+ * AGL-2229. The cashier's discount arrived as `Math.min(100, Math.max(0,
+ * Number(body.discountPct ?? 0)))`, which looks like a clamp and is not one:
+ * both `Math.min` and `Math.max` PROPAGATE `NaN`. A register that posted a
+ * non-numeric percentage therefore produced `discountCents: NaN`, and from
+ * there every figure on the sale — the platform fee, the origin tax and
+ * `totals.totalCents` — was `NaN` too.
+ *
+ * The money consequence is not the wrong number, it is the DEFEATED
+ * COMPARISON: `cashReceivedCents < NaN` is `false`, so the "cash received is
+ * short" guard let the sale through with nothing in the drawer, and the order
+ * was written `paid`.
+ */
+describe('POS discount percent that is not a number (AGL-2229)', () => {
+  it('refuses the sale rather than taking no cash for it', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 0,
+      discountPct: 'half',
+    })
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toContain('Cash received is short')
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('stores a finite total when the cash does cover it', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      discountPct: 'half',
+    })
+    expect(result.status).toBe(200)
+    // The unusable percentage reads as NO discount — never as a discount of
+    // an unknown size, and never as a total nothing can compare against.
+    const totals = orderDocs()[0]?.totals as any
+    expect(totals.discountCents).toBe(0)
+    expect(totals.totalCents).toBe(400)
+    expect(Number.isFinite(totals.totalCents)).toBe(true)
+  })
+
+  /**
+   * POSITIVE CONTROL: a real percentage still discounts, so the two
+   * assertions above are not satisfied by a register that ignores the field.
+   */
+  it('POSITIVE CONTROL: a numeric 25% still comes off the basket', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      discountPct: 25,
+    })
+    expect(result.status).toBe(200)
+    expect((orderDocs()[0]?.totals as any).discountCents).toBe(100)
+    expect((orderDocs()[0]?.totals as any).totalCents).toBe(300)
   })
 })
 
@@ -1690,5 +1760,333 @@ describe('an undecided store cannot ring a sale (AGL-1999)', () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
     expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+  })
+})
+
+
+/**
+ * AGL-2244. A POS card sale opens a live Checkout Session the customer scans,
+ * and the order carried no handle on it — `draft-order.ts` has stored
+ * `checkoutSessionId` since it shipped, the register never did. So cancelling
+ * a QR sale left the page on the customer's phone payable, and paying it
+ * captured money the completing webhook then discarded as a redelivery.
+ */
+describe('a POS card sale records its Stripe session (AGL-2244)', () => {
+  it('stores the session id the cancel path expires', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.checkoutSessionId).toBe('cs_test_1')
+  })
+
+  it('leaves a CASH sale without one — it never opened a session', async () => {
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.checkoutSessionId).toBeUndefined()
+  })
+})
+
+/**
+ * AGL-2256, the register's half. POS rounds TWICE — once per line, then again
+ * when the cashier's discount scales the sum — and floored neither, so a small
+ * basket on a low rate produced 0 and the emission guard read that as "this
+ * plan charges no fee". Every other door floors at `Math.max(1, …)` when the
+ * rate is above zero.
+ */
+describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
+  const realPlan = mockOrg.org.plan
+
+  afterEach(() => {
+    mockOrg.org.plan = realPlan
+  })
+
+  beforeEach(() => {
+    // Scale: 1% digital. One $0.30 sticker pack is 0.3c of fee.
+    mockOrg.org.plan = 'scale'
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Sticker pack',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 0.3, inventory: null }],
+    })
+  })
+
+  it('still takes a cent rather than dropping the fee entirely', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1')
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('1')
+  })
+
+  it('survives the SECOND rounding, the cashier discount', async () => {
+    // 1% of 50c is 0.5c, which rounds UP to 1 — so the per-line round is not
+    // the one under test here. A 70% discount then scales that 1c by 15/50,
+    // i.e. 0.3c, which rounds to 0.
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Recipe PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 0.5, inventory: null }],
+    })
+    const result = await post({ payment: 'link', discountPct: 70 })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1')
+  })
+
+  /**
+   * THE OTHER BRANCH. A plan whose rate is a real zero must still send
+   * nothing — Stripe rejects a zero application fee, and inventing a cent on
+   * an advertised 0% tier would be a pricing lie.
+   */
+  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+    mockOrg.org.plan = 'advanced'
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+    expect(stripeCalls[0].body.get('metadata[feeCents]')).toBe('0')
+  })
+
+  it('sends NOTHING when the cashier discounts the basket to zero', async () => {
+    const result = await post({ payment: 'link', discountPct: 100 })
+    expect(result.status).toBe(200)
+    expect(
+      stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+  })
+})
+
+/**
+ * AGL-2262. Both money routes that the console reaches with a manager's id
+ * token gated on `!role || role === 'viewer'` — a DENYLIST of one value, on
+ * the routes that take cash, mint a card QR, decrement real inventory and
+ * (for drafts) create a live Stripe payment link.
+ *
+ * `cancel-order.ts`, `fulfill-order.ts` and `refund.ts` all use an allowlist,
+ * and the Firestore rules' own host-write predicate is
+ * `hostMemberRole(hostId) in ['admin','editor']`. So the denylist form was
+ * strictly WIDER than the rules it claimed to mirror: any role string that was
+ * not literally `viewer` transacted.
+ */
+describe('who may ring a sale (AGL-2262)', () => {
+  async function postAs(role: unknown) {
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': role } })
+    return post({ payment: 'cash', cashReceivedCents: 500 })
+  }
+
+  it('refuses a role the projection could never have written', async () => {
+    // `HostAccessRole` is exactly admin | editor | viewer. Anything else is a
+    // legacy value, a typo, or a role someone adds later — and none of them
+    // is a decision to let that person take money.
+    for (const role of ['manager', 'contributor', 'billing', 'member', '']) {
+      const result = await postAs(role)
+      expect(result.status).toBe(403)
+    }
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('still refuses a viewer and a stranger', async () => {
+    expect((await postAs('viewer')).status).toBe(403)
+    expect((await postAs(undefined)).status).toBe(403)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: admin and editor still ring the sale', async () => {
+    expect((await postAs('admin')).status).toBe(200)
+    expect((await postAs('editor')).status).toBe(200)
+  })
+})
+
+
+/**
+ * The register WARNS about a shortfall, and never refuses (AGL-2357).
+ *
+ * `pos-order.ts` had no `canPurchase` call at all — every storefront door
+ * gates on it and the register did not — so a merchant who chose
+ * `oversellPolicy: 'deny'` in the product editor silently got `backorder` at
+ * the counter. That silence is the defect.
+ *
+ * Zach's decision: warn, never block. A till is the wrong place for a stale
+ * number to stop a real sale, because the cashier is holding the goods. So
+ * EVERY case here asserts both halves — the warning is reported AND the sale
+ * completes with an order document and a 200. A test that asserted only the
+ * warning would pass just as happily against a register that refused.
+ */
+describe('the register warns about a shortfall and sells anyway (AGL-2357)', () => {
+  /** A tracked variant with `deny`, which is the product editor's default. */
+  function denyProduct(inventory: number) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [{ id: 'default', priceUsd: 4, inventory }],
+    })
+  }
+
+  it('reports the shortfall on a cash sale — and rings it through', async () => {
+    denyProduct(1)
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 3 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.error).toBeUndefined()
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-1',
+        name: 'Flat white',
+        requested: 3,
+        available: 1,
+      },
+    ])
+    // THE SALE HAPPENED. Not a refusal dressed as a warning.
+    expect(orderDocs()).toHaveLength(1)
+    expect((orderDocs()[0] as any).status).toBe('paid')
+    expect((orderDocs()[0] as any).totals.itemsCents).toBe(1200)
+  })
+
+  it('reports it on a card sale too, and still mints the QR', async () => {
+    denyProduct(0)
+
+    const result = await post({
+      payment: 'link',
+      lines: [{ productId: 'product-1', quantity: 2 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.url).toContain('https://')
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-1',
+        name: 'Flat white',
+        requested: 2,
+        available: 0,
+      },
+    ])
+  })
+
+  /**
+   * POSITIVE CONTROL — the quiet branch, asserted separately. A warning that
+   * fired on every sale would satisfy the cases above and be useless at the
+   * counter.
+   */
+  it('says nothing when the shelf covers the basket', async () => {
+    denyProduct(5)
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 3 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  /**
+   * A `backorder` merchant CHOSE to sell past zero. Warning them would be
+   * noise about a setting they set on purpose, and it is the deny promise —
+   * not the count — that the register was breaking.
+   */
+  it('says nothing on a backorder product, however short', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Flat white',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'backorder',
+      variants: [{ id: 'default', priceUsd: 4, inventory: 0 }],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 2000,
+      lines: [{ productId: 'product-1', quantity: 4 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  it('says nothing about an untracked variant, which has no count to be short against', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 9900,
+      lines: [{ productId: 'product-1', quantity: 20 }],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+  })
+
+  /** One entry per short line, and only for the short ones. */
+  it('reports each short line and leaves the covered one out', async () => {
+    denyProduct(1)
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Croissant',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [
+        { id: 'large', priceUsd: 3, inventory: 9, options: { size: 'Large' } },
+      ],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [
+        { productId: 'product-1', quantity: 2 },
+        { productId: 'product-2', variantId: 'large', quantity: 2 },
+      ],
+    })
+
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toHaveLength(1)
+    expect(result.body.stockWarnings[0].productId).toBe('product-1')
+    expect(orderDocs()).toHaveLength(1)
+  })
+
+  /**
+   * The variant label rides along, because a cashier holding one of three
+   * sizes needs to know WHICH one the count is short on.
+   */
+  it('names the variant when the short line has one', async () => {
+    docs.set('hosts/host-1/products/product-2', {
+      name: 'Croissant',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [
+        { id: 'large', priceUsd: 3, inventory: 1, options: { size: 'Large' } },
+      ],
+    })
+
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 5000,
+      lines: [{ productId: 'product-2', variantId: 'large', quantity: 4 }],
+    })
+
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-2',
+        variantId: 'large',
+        name: 'Croissant',
+        variantLabel: 'Large',
+        requested: 4,
+        available: 1,
+      },
+    ])
+    expect(orderDocs()).toHaveLength(1)
   })
 })

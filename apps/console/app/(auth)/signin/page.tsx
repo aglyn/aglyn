@@ -17,16 +17,18 @@
 
 'use client'
 
+// Deep import, not the `@aglyn/aglyn` barrel (AGL-2170): the barrel pulls
+// shared-data-enums -> firebase-auth into every consumer's module graph, which
+// breaks specs that mock firebase wholesale (AuthErrorCodes reads undefined).
+// One brand string is not worth that edge.
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
   FIELD_SCHEMA_PASSWORD,
 } from '@aglyn/shared-data-forms'
-import {
-  AppLink,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import {
@@ -34,11 +36,16 @@ import {
   mdiGoogle,
   mdiShieldKeyOutline,
 } from '@aglyn/shared-data-mdi'
-import {
-  MdiIcon,
-} from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
-import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
+import {
+  Button,
+  CircularProgress,
+  Divider,
+  Link,
+  Stack,
+  Typography,
+} from '@mui/material'
 import {
   browserLocalPersistence,
   GoogleAuthProvider,
@@ -50,10 +57,7 @@ import {
   type UserCredential,
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
-import {
-  useAuth,
-  useSigninCheck,
-} from '@aglyn/tenant-feature-instance'
+import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
@@ -187,13 +191,7 @@ function SignIn() {
           dequeueLoading()
         })
     },
-    [
-      error,
-      firebaseAuth,
-      loading,
-      queueLoading,
-      rejectUnconsentedNewAccount,
-    ],
+    [error, firebaseAuth, loading, queueLoading, rejectUnconsentedNewAccount],
   )
 
   const handleFormSubmit = useCallback(
@@ -279,14 +277,18 @@ function SignIn() {
   return (
     <AuthFormComponent
       paperTop={
-        <Typography component="div" variant="body2" sx={{
-          alignSelf: "flex-end"
-        }}>
+        <Typography
+          component="div"
+          variant="body2"
+          sx={{
+            alignSelf: 'flex-end',
+          }}
+        >
           <AppLink href="/signup">{'Create account'}</AppLink>
         </Typography>
       }
       headingTop={'Sign in'}
-      headingBottom={'Use your Aglyn account'}
+      headingBottom={`Use your ${PLATFORM_BRAND_NAME} account`}
       paperAfter={
         <Typography component="div" variant="body2">
           {'Having trouble logging in? '}
@@ -310,10 +312,11 @@ function SignIn() {
         direction="column"
         spacing={1}
         sx={{
-          justifyContent: "center",
-          alignItems: "stretch",
-          paddingBottom: 2
-        }}>
+          justifyContent: 'center',
+          alignItems: 'stretch',
+          paddingBottom: 2,
+        }}
+      >
         <Button
           variant="outlined"
           startIcon={<MdiIcon path={mdiGoogle.path} />}
@@ -341,7 +344,7 @@ function SignIn() {
       </Stack>
       <AuthLegalNotice />
     </AuthFormComponent>
-  );
+  )
 }
 SignIn.displayName = 'Page:SignIn'
 

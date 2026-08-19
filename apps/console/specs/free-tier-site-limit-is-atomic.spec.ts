@@ -194,6 +194,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ensureOrgForUser: async () => ({ orgId: 'org-1', member: { role: 'owner' } }),
   lockdownRefusal: async () => null,
   registerOrgHost: async () => undefined,
+  // The AGL-1968 rate limiter. Always allows here: this spec is about the
+  // AGL-2063 quota transaction, and a limiter that could refuse would make
+  // the concurrency assertions below depend on which racer burnt the last
+  // token. The limiter's own refusal arms are driven in
+  // `host-create-rate-limit.spec.ts`.
+  consumeRateLimit: async () => ({
+    allowed: true,
+    limit: 20,
+    remaining: 19,
+    resetMs: Date.now() + 60 * 60 * 1000,
+    degraded: false,
+  }),
 }))
 
 const { POST } = require('../app/api/hosts/create/route') as {

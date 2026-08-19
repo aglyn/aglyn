@@ -145,6 +145,21 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+/**
+ * `after()` from `next/server` is how the billing webhook schedules its
+ * post-response work (AGL-2346), and outside a real request scope Next's own
+ * `after` throws — so a suite that drives the exported handler directly needs
+ * a double. Without one the throw lands in the handler's catch, which reports
+ * a half-applied dispatch and calls `notifyStaff`, a name this closed-world
+ * mock does not carry: the suite went red on a `TypeError` raised in the
+ * failure path rather than on anything it asserts (AGL-2365). Running the
+ * callback inline — the same double the eight dedicated webhook suites use —
+ * leaves every existing assertion, all of which observe the effect, unchanged.
+ */
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => work(),
+}))
+
 jest.mock('../utils/server-plugin-loader', () => ({
   __esModule: true,
   serverPluginLoader: { ensureAll: async () => undefined },

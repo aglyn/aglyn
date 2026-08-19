@@ -185,7 +185,36 @@ export async function claimAttempt(
 ): Promise<AttemptClaimResult> {
   // No key: transact as before. These are public API routes and an older
   // cached client bundle must keep working rather than start failing.
+  //
+  // ⚠️ THIS IS A NO-OP CLAIM, AND IT IS A REAL HOLE — deliberately left open,
+  // now made LOUD (AGL-2163). `stripeKey: null` propagates through
+  // `deriveStripeObjectKey` to the Stripe call (see
+  // `marketplace/checkout.ts`), so a caller that sends no Idempotency-Key
+  // header gets neither our claim nor Stripe's own 24-hour window: the
+  // concurrent-double-charge race this module exists to close is fully back
+  // for that request.
+  //
+  // THE POLICY IS NOT CHANGED HERE, ON PURPOSE. The obvious "fix" — synthesise
+  // a key from the request body — would redefine what "the same attempt"
+  // means: a cashier ringing the same coffee twice and a buyer re-purchasing
+  // the same listing after a refund would both read as replays and be
+  // silently swallowed, which is a worse bug than the one it closes (see the
+  // paragraph above on why the key is client-minted). Requiring the header
+  // instead would break every older cached client bundle mid-checkout.
+  // Choosing between those two is a product call, not a bug fix.
+  //
+  // What IS wrong is that it was SILENT. An unprotected money call left no
+  // trace anywhere, so nobody could tell whether this path was taken once a
+  // year or on a third of all checkouts — which is exactly the number the
+  // policy decision needs. `console.warn` rather than a counter because it
+  // rides the platform's existing log pipeline and this path is low-volume by
+  // construction (one line per money attempt, not per request).
   if (!scope.key) {
+    console.warn(
+      'api-idempotency: UNPROTECTED money call — no Idempotency-Key header, ' +
+        'so neither the attempt claim nor Stripe idempotency applies',
+      { kind: scope.kind, scopeId: scope.scopeId, orgId: scope.orgId ?? null },
+    )
     return {
       claim: {
         stripeKey: null,

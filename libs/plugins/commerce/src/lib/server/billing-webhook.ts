@@ -37,6 +37,7 @@ import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
+import { decrementVariantStock } from './reserve-stock'
 import { flagOrderRestock } from './restock-flag'
 import { recordStorefrontTax } from './storefront-tax-record'
 
@@ -44,8 +45,40 @@ import { recordStorefrontTax } from './storefront-tax-record'
  * Assigns unassigned license keys for a digital product (AGL-308):
  * stamps order/email on the key docs, returns the key strings, and
  * nudges managers when the pool runs low.
+ *
+ * EACH KEY IS CLAIMED IN ITS OWN TRANSACTION (AGL-2149). The original shape was
+ * a query for `assignedAtMs == null` followed by a bare `set(…, { merge: true })`
+ * per document, with nothing between the read and the write. Two orders for the
+ * same product landing together — the ordinary case for a digital product that
+ * is selling — both read the same head of the pool and both stamped it, so the
+ * second write simply overwrote the first order's `orderId` and BOTH buyers
+ * were mailed the same key. That is a redeemable secret handed out twice, and
+ * it is invisible afterwards: the key doc records only the later order.
+ *
+ * The claim is a transaction rather than the `create()` primitive `refund.ts`
+ * uses for idempotency, because the document being claimed ALREADY EXISTS — the
+ * merchant uploaded the pool — so there is no create to lose. What a
+ * transaction gives is the same guarantee from the other side: Firestore aborts
+ * and retries the transaction if `assignedAtMs` changed between this
+ * transaction's read of the key and its commit, so exactly one of two racing
+ * orders can turn a `null` into a timestamp. The in-transaction re-read of
+ * `assignedAtMs` is the test that makes the abort observable to us rather than
+ * merely survived: a key another order took while we were queuing is skipped,
+ * not double-stamped.
+ *
+ * THE POOL QUERY OVER-FETCHES for the same reason. Asking for exactly
+ * `quantity` candidates and then losing three of them to a concurrent order
+ * would silently short the buyer, so the query takes headroom and the loop
+ * stops at `quantity` claims. A buyer can still be short-changed when the pool
+ * genuinely runs dry — that is the merchant's stock problem, and the low-pool
+ * nudge below is what tells them.
+ *
+ * The failure mode is still "fewer keys than paid for", never "someone else's
+ * key": swallowing stays, because the money has moved and a thrown assignment
+ * would take the receipt and the fulfilment down with it.
  */
 async function assignLicenseKeys(
+  firestore: FirebaseFirestore.Firestore,
   hostRef: FirebaseFirestore.DocumentReference,
   hostId: string,
   productId: string,
@@ -54,19 +87,36 @@ async function assignLicenseKeys(
   quantity: number,
 ): Promise<string[]> {
   try {
+    const wanted = Math.max(1, quantity)
     const pool = await hostRef
       .collection('licenseKeys')
       .where('productId', '==', productId)
       .where('assignedAtMs', '==', null)
-      .limit(Math.max(1, quantity))
+      // Headroom for keys a concurrent order claims out from under this one.
+      .limit(wanted * 3)
       .get()
     const keys: string[] = []
     for (const docSnapshot of pool.docs) {
-      await docSnapshot.ref.set(
-        { orderId, email, assignedAtMs: Date.now() },
-        { merge: true },
-      )
-      keys.push(String(docSnapshot.get('key')))
+      if (keys.length >= wanted) break
+      const claimed = await firestore
+        .runTransaction(async (transaction) => {
+          const fresh = await transaction.get(docSnapshot.ref)
+          if (!fresh.exists) return null
+          // Re-asked INSIDE the transaction that writes it. This is the whole
+          // guard: the query's answer is a snapshot from before we queued.
+          if (fresh.get('assignedAtMs') != null) return null
+          transaction.update(docSnapshot.ref, {
+            orderId,
+            email,
+            assignedAtMs: Date.now(),
+          })
+          return String(fresh.get('key'))
+        })
+        .catch((error) => {
+          console.error('license key claim failed', error)
+          return null
+        })
+      if (claimed) keys.push(claimed)
     }
     if (keys.length) {
       const remaining = await hostRef
@@ -590,6 +640,306 @@ async function stripeGet(
   })
   const body = await response.json().catch(() => null)
   return { ok: response.ok, status: response.status, body }
+}
+
+/**
+ * Re-price a storefront subscription's platform fee to the merchant's CURRENT
+ * plan (AGL-2289).
+ *
+ * `checkout.ts` sets `subscription_data[application_fee_percent]` ONCE, at the
+ * sale, and nothing has ever revisited it. `application_fee_percent` lives on
+ * the Stripe subscription and applies to every invoice it ever raises, so the
+ * rate a merchant was on the day a shopper subscribed is the rate they pay
+ * forever — in both directions, and both are wrong:
+ *
+ *  - Sold on Starter (5% digital) then upgraded to Advanced (0%): Aglyn keeps
+ *    taking 5% of every cycle from a merchant whose plan says it takes none.
+ *    That is an over-charge to find and refund.
+ *  - Sold on Advanced (the param omitted entirely) then downgraded to Starter:
+ *    Aglyn keeps taking nothing, on a DESTINATION charge whose processing fee
+ *    it pays out of its own balance. Every cycle is a loss.
+ *
+ * The renewal is the only place this can be corrected, because a renewal is
+ * the only event a subscription raises — there is no door for the merchant to
+ * walk through. It runs beside the AGL-2071 lapse stop for that reason.
+ *
+ * IDEMPOTENT BY A STORED VALUE, not by a Stripe read. `appliedFeePct` on our
+ * own `subscriptions/{id}` document records what was last SENT, so an ordinary
+ * renewal compares two numbers and makes no network call at all. A
+ * subscription from before this shipped carries no such field, which reads as
+ * "unknown" and re-prices once — the self-healing pass, and the reason this
+ * does not need a backfill.
+ *
+ * The value is written only AFTER Stripe accepts, so a failure re-tries on the
+ * next cycle rather than recording a rate that was never applied. A transient
+ * refusal throws so Stripe redelivers (the ledger write is keyed on the
+ * invoice id, so a redelivery re-runs this and nothing else); a definitive one
+ * is logged and let go, because no redelivery fixes it and a throw would have
+ * Stripe retry the whole invoice forever — the AGL-1743 lesson.
+ *
+ * A rate of 0 UNSETS the parameter rather than sending `0`: Stripe rejects a
+ * zero `application_fee_percent`, and an empty value is how its API clears an
+ * optional field. That is also what `checkout.ts` does by omitting the key.
+ */
+async function repriceStorefrontSubscriptionFee(
+  subscriptionRef: FirebaseFirestore.DocumentReference,
+  subscriptionId: string,
+  desiredFeePct: number,
+): Promise<void> {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey || !subscriptionId) return
+  const snapshot = await subscriptionRef.get().catch(() => null)
+  if (!snapshot?.exists) return
+  const stored = snapshot.get('appliedFeePct')
+  // `Number.isFinite` and not `!= null`: a malformed stored value must read as
+  // unknown and re-price, never as agreement with whatever it happens to be.
+  if (Number.isFinite(stored) && Number(stored) === desiredFeePct) return
+  const response = await fetch(
+    `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(
+      subscriptionId,
+    )}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        // Keyed on the RATE as well as the subscription, so a later change
+        // back is a new request rather than a replay of the old one.
+        'Idempotency-Key': `fee-reprice-${subscriptionId}-${desiredFeePct}`,
+      },
+      body: new URLSearchParams({
+        application_fee_percent:
+          desiredFeePct > 0 ? String(desiredFeePct) : '',
+      }).toString(),
+    },
+  ).catch(() => null)
+  if (!response || !response.ok) {
+    if (!response || isTransientStripeStatus(response.status)) {
+      throw new Error(
+        `Stripe refused to re-price subscription ${subscriptionId} ` +
+          `(${response ? response.status : 'network'})`,
+      )
+    }
+    console.error(
+      `Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`,
+      await response.json().catch(() => null),
+    )
+    return
+  }
+  await subscriptionRef
+    .set({ appliedFeePct: desiredFeePct }, { merge: true })
+    .catch(() => undefined)
+}
+
+/**
+ * The charge a paid invoice settled against, on whichever spelling this
+ * endpoint's API version uses (AGL-2317).
+ *
+ * `invoice.charge` was removed in favour of `invoice.payments[]` on newer
+ * versions, and the version an endpoint speaks is dashboard configuration this
+ * repo cannot see — the same three-spelling problem `subscriptionMeta` and the
+ * tax fields already solve by reading every form. `payment_intent` is the third
+ * (the renewal order write at :1667 reads it), and it needs one more hop.
+ */
+async function resolveInvoiceChargeId(
+  invoice: any,
+  stripeKey: string,
+): Promise<string> {
+  const direct = invoice?.charge
+  if (typeof direct === 'string' && direct) return direct
+  for (const payment of invoice?.payments?.data ?? []) {
+    const charge = payment?.payment?.charge
+    if (typeof charge === 'string' && charge) return charge
+    const nested = payment?.payment?.payment_intent
+    if (typeof nested === 'string' && nested) {
+      const intent = await stripeGet(
+        `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(nested)}`,
+        stripeKey,
+      )
+      const latest = intent.ok ? intent.body?.latest_charge : ''
+      if (typeof latest === 'string' && latest) return latest
+    }
+  }
+  const paymentIntentId = invoice?.payment_intent
+  if (typeof paymentIntentId === 'string' && paymentIntentId) {
+    const intent = await stripeGet(
+      `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(
+        paymentIntentId,
+      )}`,
+      stripeKey,
+    )
+    const latest = intent.ok ? intent.body?.latest_charge : ''
+    if (typeof latest === 'string' && latest) return latest
+  }
+  return ''
+}
+
+/**
+ * Take the platform's cut of a subscription cycle on ITEMS ONLY (AGL-2317).
+ *
+ * ## What was wrong
+ *
+ * `checkout.ts` sends `subscription_data[application_fee_percent]`, and Stripe
+ * applies that percentage to the WHOLE invoice — sales tax and shipping
+ * included. Every one-time door in this product computes an
+ * `application_fee_amount` in cents on post-discount items instead, and
+ * AGL-2315 deliberately did the same for bookings. So the recurring door was
+ * taking a percentage of money that belongs to a state revenue office, and the
+ * same merchant selling the same $30 good was charged 60¢ through one button
+ * and 65¢ through the other.
+ *
+ * This is a BASE correction, not a pricing change: the advertised commerce fee
+ * is a cut of sales, the one-time path already implements exactly that, and the
+ * subscription path was charging merchants MORE than the locked basis. No rate,
+ * tier boundary or metered price is touched — see
+ * `subscriptionInvoiceItemsOnlyFeeCents`, which derives the target by scaling
+ * the fee Stripe actually took and never names a rate at all.
+ *
+ * ## Why this runs on the PAID invoice and not on the draft
+ *
+ * Stripe offers no items-only base for `application_fee_percent` — it is a
+ * percentage of the invoice total, full stop — and a Subscription has no
+ * `application_fee_amount` field to set instead. The obvious repair is to
+ * subscribe `invoice.created` and write an exact cents amount onto each draft
+ * before it finalises. That covers RENEWALS and cannot cover the opening cycle:
+ * a subscription bought through Checkout has its first invoice created,
+ * finalised and paid inside the session, so the `invoice.created` delivery
+ * arrives against an already-paid invoice that Stripe will not let us modify.
+ * Dropping the percent and relying on the draft patch would therefore leave
+ * cycle 1 of every subscription — the whole first year of an annual one —
+ * collecting no fee at all.
+ *
+ * Nor can the opening fee be pre-computed as an equivalent percentage:
+ * `application_fee_percent` carries limited decimal places, and on a Stripe Tax
+ * merchant the tax is not even known when the session is created.
+ *
+ * So the correction is applied where the composition is finally knowable and no
+ * event is racing: the paid invoice. Stripe's own instrument for handing a
+ * platform fee back to the connected account is an application-fee refund, and
+ * the excess — the part taken on tax and shipping — is refunded to the
+ * merchant. Three properties made this the shape worth shipping inside the
+ * freeze:
+ *
+ *  - **It rides an event we already receive.** `invoice.paid` is in
+ *    `WEBHOOK_EVENTS` and is live. `invoice.created` is not, and adding it is a
+ *    dashboard reconciliation someone has to run — a correctness fix that only
+ *    works after an ops step is a fix that can silently not ship.
+ *  - **It reaches the BACK-BOOK with no migration.** Existing subscriptions
+ *    carry `application_fee_percent` on the Stripe object and will keep applying
+ *    it; every cycle they raise is corrected here, from the first delivery
+ *    onward, without touching a single Stripe subscription.
+ *  - **It is a no-op with ZERO network calls on an untaxed invoice**, which is
+ *    every subscription in a store that collects no tax and ships nothing.
+ *
+ * ## Idempotency
+ *
+ * Two ways, because the `invoice.paid` / `invoice.payment_succeeded` pair means
+ * the same payment arrives twice. The `Idempotency-Key` is the invoice id, and
+ * — independently of Stripe honouring it — the refundable amount is computed
+ * from the fee's own `amount_refunded`, so a second delivery finds nothing left
+ * to refund and makes no write. A redelivery after the ledger row exists
+ * re-runs this and only this, exactly like the AGL-2071 stop beside it.
+ *
+ * Returns the fee actually in force after the correction, so the recorded
+ * `totals.feeCents` is what Aglyn kept rather than what Stripe first debited.
+ * That closes AGL-2317's second-order half too: cycle 1 was recorded from
+ * `metadata[feeCents]` (items only) while Stripe had charged percent-of-total,
+ * so the same subscription's first and second cycles reported fees computed on
+ * different bases.
+ */
+async function chargeSubscriptionFeeOnItemsOnly(
+  invoice: any,
+  hostId: string,
+  invoiceId: string,
+): Promise<number> {
+  const chargedCents = Math.max(
+    0,
+    Math.round(Number(invoice?.application_fee_amount ?? 0)),
+  )
+  const desiredCents =
+    CommerceModel.subscriptionInvoiceItemsOnlyFeeCents(invoice)
+  // No fee, or nothing but items on the invoice. The overwhelming majority of
+  // cycles land here and this function costs them nothing.
+  if (!Number.isFinite(chargedCents) || chargedCents <= desiredCents) {
+    return Number.isFinite(chargedCents) ? chargedCents : 0
+  }
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    console.error(
+      'Subscription fee not corrected to the items-only base: STRIPE_SECRET_KEY is not set (AGL-2317)',
+      { hostId, invoiceId },
+    )
+    return chargedCents
+  }
+  const chargeId = await resolveInvoiceChargeId(invoice, stripeKey)
+  if (!chargeId) {
+    console.error(
+      'Subscription fee not corrected to the items-only base: the invoice names no charge (AGL-2317)',
+      { hostId, invoiceId },
+    )
+    return chargedCents
+  }
+  const fees = await stripeGet(
+    `https://api.stripe.com/v1/application_fees?limit=1&charge=${encodeURIComponent(
+      chargeId,
+    )}`,
+    stripeKey,
+  )
+  const fee = fees.ok ? fees.body?.data?.[0] : null
+  if (!fee?.id) {
+    if (!fees.ok && isTransientStripeStatus(fees.status)) {
+      throw new Error(
+        `Stripe would not list the application fee for invoice ${invoiceId} ` +
+          `(${fees.status})`,
+      )
+    }
+    console.error(
+      'Subscription fee not corrected to the items-only base: no application fee on the charge (AGL-2317)',
+      { hostId, invoiceId, chargeId, status: fees.status },
+    )
+    return chargedCents
+  }
+  const feeAmount = Math.max(0, Math.round(Number(fee.amount ?? 0)))
+  const alreadyRefunded = Math.max(
+    0,
+    Math.round(Number(fee.amount_refunded ?? 0)),
+  )
+  // What is still standing against the items-only target. A previous delivery
+  // that already corrected this invoice leaves nothing here.
+  const refundCents = feeAmount - alreadyRefunded - desiredCents
+  if (refundCents <= 0) return desiredCents
+  const response = await fetch(
+    `https://api.stripe.com/v1/application_fees/${encodeURIComponent(
+      String(fee.id),
+    )}/refunds`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `fee-basis-${invoiceId}`,
+      },
+      body: new URLSearchParams({ amount: String(refundCents) }).toString(),
+    },
+  ).catch(() => null)
+  if (!response || !response.ok) {
+    if (!response || isTransientStripeStatus(response.status)) {
+      // Let Stripe redeliver — the ledger write is keyed on the invoice id, so
+      // a retry re-runs this and nothing else (the AGL-1743 discipline).
+      throw new Error(
+        `Stripe refused the items-only fee correction for invoice ${invoiceId} ` +
+          `(${response ? response.status : 'network'})`,
+      )
+    }
+    // Definitive: no redelivery fixes it, and throwing would have Stripe retry
+    // the whole invoice forever. Record what was actually taken.
+    console.error(
+      `Stripe refused the items-only fee correction for ${invoiceId} (AGL-2317)`,
+      await response.json().catch(() => null),
+    )
+    return chargedCents
+  }
+  return desiredCents
 }
 
 /**
@@ -1211,8 +1561,32 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // `storefrontSubscriptions` (Business+) is what makes a recurring
         // product sellable at all. A Business org that drops to Pro still has
         // a storefront and must still stop billing subscribers.
+        //
+        // A FAILED READ IS NOT AN ANSWER (AGL-2258). The `.catch(() => null)`
+        // here made a transient Firestore failure indistinguishable from a
+        // lapsed org: `checkEntitlement(null, …)` resolves through
+        // `resolveOrgEntitlements(null)` to the FREE plan, so a moment of
+        // unavailability cancelled a healthy merchant's subscriber at period
+        // end and notified them their plan no longer covers subscriptions.
+        //
+        // Failing closed against a MISSING org is right and is kept — an
+        // unindexed host has no storefront, and that is an answer. Failing
+        // closed against an unreadable one is not: the two failure directions
+        // are wildly asymmetric. Skipping the stop costs Aglyn one cycle at
+        // the wrong take rate and the next cycle re-asks; taking it costs a
+        // paying merchant a subscriber, irreversibly, on a question we never
+        // actually asked.
+        let renewalOrgUnreadable = false
         const renewalOrg = (
-          await getOrgForHost(invoiceHostId).catch(() => null)
+          await getOrgForHost(invoiceHostId).catch((error) => {
+            renewalOrgUnreadable = true
+            console.error(
+              'Renewal plan check could not read the org; the lapse stop is skipped for this cycle (AGL-2258)',
+              { hostId: invoiceHostId, subscriptionId },
+              error,
+            )
+            return null
+          })
         )?.org
         const renewalEntitled =
           Aglyn.checkEntitlement(renewalOrg as any, 'commerce') &&
@@ -1292,8 +1666,25 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : {}),
           }
         }
-        const { lineItems: invoiceLineItems, totals: invoiceTotals } =
+        // ITEMS ONLY (AGL-2317), before anything is recorded. Stripe applied
+        // `application_fee_percent` to the whole invoice; the part of that fee
+        // taken on sales tax and shipping goes back to the merchant, and what
+        // is left is the figure the ledger stores. A transient Stripe failure
+        // throws here rather than filing a fee we did not end up charging —
+        // the redelivery re-runs it behind the invoice-id guard below.
+        const feeCentsInForce = await chargeSubscriptionFeeOnItemsOnly(
+          object,
+          invoiceHostId,
+          invoiceId,
+        )
+        const { lineItems: invoiceLineItems, totals: computedInvoiceTotals } =
           CommerceModel.computeSubscriptionInvoiceOrder(object, snapshot)
+        // `computeSubscriptionInvoiceOrder` reads `application_fee_amount`
+        // verbatim, which is what Stripe DEBITED, not what Aglyn kept.
+        const invoiceTotals: CommerceModel.OrderTotals = {
+          ...computedInvoiceTotals,
+          feeCents: feeCentsInForce,
+        }
         const paidCents = Math.max(0, Math.round(Number(object?.amount_paid ?? 0)))
         const billingReason = String(object?.billing_reason ?? '')
         // The subscription's FIRST invoice is also a paid invoice, and
@@ -1539,11 +1930,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // still needs stopping, and gating the stop on `recorded` would mean a
         // Stripe redelivery — or a stop that failed once — never tries again.
         // Its own claim marker is what makes it once-only.
-        if (!renewalEntitled) {
+        // `renewalOrgUnreadable` and not `!renewalOrg` (AGL-2258): a null org
+        // we successfully read still stops, which is AGL-2071's decision.
+        if (!renewalEntitled && !renewalOrgUnreadable) {
           await stopLapsedStorefrontSubscription(
             invoiceHostId,
             subscriptionId,
             subscriptionRef,
+          )
+        } else if (renewalEntitled) {
+          // RE-PRICE THE PLATFORM FEE (AGL-2289). `application_fee_percent` was
+          // set once at the sale and never revisited, and it lives on the
+          // Stripe subscription — so the rate the merchant was on the day a
+          // shopper subscribed was the rate they paid forever. A renewal is
+          // the only event a subscription raises, so it is the only place this
+          // can be corrected. Skipped entirely for a lapsed org (the stop
+          // above is the answer there) and for an unreadable one, which knows
+          // nothing about the plan to re-price against.
+          //
+          // `snapshot.productType` is the sale's own recorded type, never a
+          // default — the same field `shipsPhysically` refuses to guess.
+          await repriceStorefrontSubscriptionFee(
+            subscriptionRef,
+            subscriptionId,
+            Aglyn.resolveTransactionFeePct(
+              renewalOrg as any,
+              (snapshot.productType ?? 'physical') as
+                | 'physical'
+                | 'digital'
+                | 'service',
+            ),
           )
         }
         if (!recorded) return
@@ -1573,35 +1989,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
             if (stockVariantId && tracked) {
               const cycleQuantity = cycleLine?.quantity ?? 1
-              const variants = CommerceModel.adjustVariantInventory(
-                stocked,
-                stockVariantId,
-                -cycleQuantity,
-              )
-              const updated = { ...stocked, variants }
-              await hostRef
-                .collection('products')
-                .doc(productId)
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId,
-                  variantId: stockVariantId,
-                  delta: -cycleQuantity,
-                  reason: 'sale',
-                  orderId: invoiceId,
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
-              alertLowStockCrossing(invoiceHostId, stocked, updated)
+              // Atomic since AGL-2320, like every other decrement: a renewal
+              // batch bills many subscribers at once, so two cycles of the same
+              // physical box are exactly the concurrent pair that lost a
+              // decrement here. The `stockSnapshot` read above still resolves
+              // the variant; the transaction re-reads before it writes.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: invoiceHostId,
+                productId,
+                variantId: stockVariantId,
+                quantity: cycleQuantity,
+              })
+              if (moved.before && moved.after) {
+                await hostRef
+                  .collection('inventoryAdjustments')
+                  .add({
+                    productId,
+                    variantId: stockVariantId,
+                    delta: -cycleQuantity,
+                    ...(moved.applied !== -cycleQuantity
+                      ? { appliedDelta: moved.applied }
+                      : {}),
+                    reason: 'sale',
+                    orderId: invoiceId,
+                    atMs: Date.now(),
+                  } satisfies CommerceModel.InventoryAdjustment)
+                  .catch(() => undefined)
+                alertLowStockCrossing(invoiceHostId, moved.before, moved.after)
+              }
             }
           }
         }
@@ -1825,6 +2242,30 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : null,
           ]),
         )
+        // A cart line whose product was deleted between the shopper opening
+        // the Stripe session and this webhook landing (AGL-2149). The line is
+        // dropped from `lineItems` below and skipped by the inventory loop,
+        // and until now that was SILENT: the order was written with fewer lines
+        // than the shopper paid for while `amountCents` stayed the full
+        // `amount_total`, so `itemsCents` and the charge disagreed and nothing
+        // said why. A merchant reconciling that order sees a short order and no
+        // explanation; a shopper sees goods they paid for missing.
+        //
+        // The upstream fix — snapshotting each line into `checkouts/{sessionId}`
+        // at session creation so the webhook can price a deleted product from
+        // the snapshot instead of the product doc — is a schema addition to the
+        // recovery document that the abandoned-cart path also reads, and is NOT
+        // done here. What is done is to make the loss LOUD: the unresolvable
+        // lines are recorded on the order itself, stamped on the timeline the
+        // console dialog renders, and pushed to the managers. A silent
+        // discrepancy on a paid order is the worse outcome of the two.
+        const unresolvedLines = cart.lines
+          .filter((line) => !productsById.get(line.productId))
+          .map((line) => ({
+            productId: line.productId,
+            ...(line.variantId ? { variantId: line.variantId } : {}),
+            quantity: line.quantity,
+          }))
         const lineItems: CommerceModel.OrderLineItem[] = cart.lines
           .map((line) => {
             const product = productsById.get(line.productId)
@@ -1878,7 +2319,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
-            timeline: [{ atMs: Date.now(), event: 'paid' }],
+            timeline: [
+              { atMs: Date.now(), event: 'paid' },
+              ...(unresolvedLines.length
+                ? [
+                    {
+                      atMs: Date.now(),
+                      event: 'line-unresolved',
+                      detail:
+                        `${unresolvedLines.length} paid ${
+                          unresolvedLines.length === 1 ? 'line' : 'lines'
+                        } could not be recorded because the product was ` +
+                        'deleted during checkout, so this order is short of ' +
+                        'what the shopper was charged. Refund the difference ' +
+                        'or fulfil it by hand.',
+                    },
+                  ]
+                : []),
+            ],
+            // The structured half, for the console badge and for anything
+            // reconciling `totals.itemsCents` against `amountCents`.
+            ...(unresolvedLines.length ? { unresolvedLines } : {}),
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
             customerName: object?.customer_details?.name ?? null,
@@ -1909,6 +2370,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the non-idempotent effects below (inventory / coupon / gift-card
         // decrements) that would otherwise double-apply.
         if (!created) return
+        // AGL-2149: loud, not silent. Logged for the platform and pushed to the
+        // merchant, once, behind the same `created` guard as every other
+        // non-idempotent effect so a redelivery does not re-nag.
+        if (unresolvedLines.length) {
+          console.error('commerce cart order lost a paid line', {
+            hostId: String(hostId),
+            orderId: String(object.id),
+            unresolvedLines,
+          })
+          void notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: 'A paid order is missing items',
+            body:
+              `Order ${object.id} was charged in full but ` +
+              `${unresolvedLines.length} ${
+                unresolvedLines.length === 1 ? 'line' : 'lines'
+              } could not be recorded — the product was deleted during ` +
+              'checkout. Refund the difference or fulfil it by hand.',
+            link: `/${hostId}/products`,
+          })
+        }
         await cartRef.delete().catch(() => undefined)
         // Recoverable checkout closes (AGL-296) so recovery emails stop;
         // the doc also carries the marketing opt-in (AGL-301).
@@ -1928,6 +2410,42 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           status: 'completed',
           completedAtMs: Date.now(),
         }).catch(() => undefined)
+        // License keys (AGL-308) per digital line — OUTSIDE the receipt gate
+        // (AGL-2149). These used to be assigned inside `if (isEmailConfigured()
+        // && buyerEmailForReceipt)`, so a store with no SMTP configured, or a
+        // buyer whose email Stripe did not hand back, produced a paid digital
+        // order that never had a key assigned to it at all — not "the email did
+        // not arrive", but "the key was never claimed", and nothing later
+        // retries it because the `created` guard above turns a redelivery away.
+        // The key is the GOODS on a digital order; the receipt is how they are
+        // announced. Assignment is the part that must not be optional.
+        //
+        // Ordering is deliberate and is what the move had to preserve: the
+        // receipt body below reads `licenseKeysByProduct`, so the assignment
+        // still has to run BEFORE the mail is composed. Hoisting it (rather
+        // than duplicating it into an else-branch) keeps that single ordering.
+        // The buyer's email is stamped on each key when Stripe gave us one and
+        // is `null` otherwise — the key doc's `orderId` is the join that
+        // matters, and the order carries the buyer identity anyway.
+        const licenseKeysByProduct: Record<string, string[]> = {}
+        for (const line of lineItems) {
+          if (line.productType !== 'digital') continue
+          const keys = await assignLicenseKeys(
+            firestore,
+            hostRef,
+            String(hostId),
+            line.productId,
+            String(object.id),
+            object?.customer_details?.email ?? null,
+            line.quantity,
+          )
+          if (keys.length) licenseKeysByProduct[line.productId] = keys
+        }
+        if (Object.keys(licenseKeysByProduct).length) {
+          await orderRef
+            .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
+            .catch(() => undefined)
+        }
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
         if (isEmailConfigured() && buyerEmailForReceipt) {
@@ -1947,25 +2465,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 } — $${((line.unitAmountCents * line.quantity) / 100).toFixed(2)}`,
             )
             .join('\n')
-          // License keys (AGL-308) per digital line.
-          const licenseKeysByProduct: Record<string, string[]> = {}
-          for (const line of lineItems) {
-            if (line.productType !== 'digital') continue
-            const keys = await assignLicenseKeys(
-              hostRef,
-              String(hostId),
-              line.productId,
-              String(object.id),
-              object?.customer_details?.email ?? null,
-              line.quantity,
-            )
-            if (keys.length) licenseKeysByProduct[line.productId] = keys
-          }
-          if (Object.keys(licenseKeysByProduct).length) {
-            await orderRef
-              .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
-              .catch(() => undefined)
-          }
+          // The keys assigned above the gate (AGL-2149); the receipt only
+          // reports them.
           const licenseText = Object.entries(licenseKeysByProduct)
             .flatMap(([keyProductId, keys]) => {
               const line = lineItems.find(
@@ -2036,37 +2537,37 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               variant.id === variantId && variant.inventory != null,
           )
           if (!variantId || !tracked) continue
-          const variants = CommerceModel.adjustVariantInventory(
-            product,
-            variantId,
-            -line.quantity,
-          )
           // Two lines of one product must COMPOUND (AGL-1830): a cart holds
           // two VARIANTS of one product as two lines (`lineKey` merges on
           // product+variant), and recomputing each from the product as first
           // read would erase this decrement when the sibling line's merge-set
-          // landed, while the ledger below recorded both. Same carry-forward
-          // as the POS loops (AGL-1825/AGL-1828); the gift-card pass below
-          // reads only the `giftCard` flag, which the swap preserves.
-          const updated = { ...product, variants }
-          productsById.set(line.productId, updated)
-          await hostRef
-            .collection('products')
-            .doc(line.productId)
-            .set(
-              {
-                variants,
-                inventory: CommerceModel.productInventory({ variants }),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          // landed, while the ledger below recorded both.
+          //
+          // Since AGL-2320 the compounding is a PROPERTY of the transaction,
+          // not of the carry-forward: each line re-reads the product inside its
+          // own transaction, so it starts from the sibling line's committed
+          // write — and from a CONCURRENT request's committed write too, which
+          // the in-memory carry-forward could never see. `productsById` is
+          // still refreshed, because the gift-card pass below reads it.
+          const moved = await decrementVariantStock({
+            firestore,
+            hostRef,
+            hostId: String(hostId),
+            productId: line.productId,
+            variantId,
+            quantity: line.quantity,
+          })
+          if (!moved.before || !moved.after) continue
+          productsById.set(line.productId, moved.after)
           await hostRef
             .collection('inventoryAdjustments')
             .add({
               productId: line.productId,
               variantId,
               delta: -line.quantity,
+              ...(moved.applied !== -line.quantity
+                ? { appliedDelta: moved.applied }
+                : {}),
               reason: 'sale',
               orderId: String(object.id),
               atMs: Date.now(),
@@ -2078,7 +2579,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // compounded pair; the `created` guard above bounds it on
           // redelivery. Fires per crossing line, which for a multi-product
           // basket is one nudge per product that breached.
-          alertLowStockCrossing(String(hostId), product, updated)
+          alertLowStockCrossing(String(hostId), moved.before, moved.after)
         }
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
@@ -2279,13 +2780,58 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // Stripe populates this exactly when the session asked for an address,
         // which is exactly when a parcel was priced.
         const shipTo = object?.shipping_details
+        // A payment that arrived for an order NOT in `pending` — see the
+        // transaction below. Carried out so the money can be reported after
+        // the transaction commits.
+        let paidAfterCancel = false
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
           const lifted = CommerceModel.liftLegacyOrder(
             (snapshot.data() as any) ?? {},
           )
-          if (lifted.status !== 'pending') return false
+          if (lifted.status !== 'pending') {
+            // NOT ALL NON-`pending` ORDERS ARE REDELIVERIES (AGL-2244), and
+            // returning false for both is how a real capture went unrecorded.
+            // A `cancelled` order whose payment link was paid anyway is money
+            // that LANDED in the merchant's Stripe account with nothing in the
+            // product to show for it: no order, no stock move, no contact, no
+            // notification, not even a timeline line, so the merchant's books
+            // and Stripe's disagree and nobody is told which is right.
+            //
+            // `cancel-order.ts` now expires the session, which stops the
+            // ordinary case; this is the backstop for the window between the
+            // cancel and the expiry, and for an expiry Stripe refused. Stamped
+            // once, keyed on the same status the transaction reads and writes:
+            // a redelivery finds `cancelled` too, so the guard is the timeline
+            // entry itself, appended only when one is not already there.
+            const alreadyNoted = (lifted.timeline ?? []).some(
+              (entry) => entry?.event === 'paid-after-cancel',
+            )
+            if (lifted.status === 'cancelled' && !alreadyNoted) {
+              paidAfterCancel = true
+              // `set(..., { merge: true })`, the same call the paying branch
+              // below makes on this document. Nothing here is a nested map, so
+              // merge and replace agree, and the read above has just proven
+              // the document exists — the only thing `update()` would add.
+              transaction.set(
+                orderRef,
+                {
+                  paidAfterCancel: true,
+                  timeline: CommerceModel.appendOrderEvent(
+                    lifted,
+                    'paid-after-cancel',
+                    'This cancelled order was paid anyway — the payment link ' +
+                      'was still live. The money is in Stripe and this order ' +
+                      'records no sale; refund it in Stripe, or reconcile it ' +
+                      'by hand.',
+                  ),
+                },
+                { merge: true },
+              )
+            }
+            return false
+          }
           paidOrder = lifted
           transaction.set(
             orderRef,
@@ -2335,6 +2881,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           )
           return true
         })
+        // Told to a human, because nothing else will be (AGL-2244). The
+        // timeline line above is only findable by someone already looking at
+        // the order they have no reason to open; this is money sitting in
+        // Stripe against a sale the product does not have.
+        if (paidAfterCancel && hostId) {
+          await notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: 'A cancelled order was paid',
+            body:
+              `Order ${orderId} was cancelled, but its payment link was still ` +
+              'live and has been paid. The money is in Stripe and no sale was ' +
+              'recorded — refund it in Stripe or reconcile it by hand.',
+            link: `/${hostId}/orders`,
+          })
+        }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
           void notifyHostManagers(String(hostId), {
@@ -2387,53 +2948,48 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               String(object.metadata?.variantId ?? '') ||
               lifted.variants[0]?.id
             const quantity = order.lineItems?.[0]?.quantity ?? 1
-            if (
-              soldVariantId &&
-              lifted.variants.some(
-                (variant) =>
-                  variant.id === soldVariantId && variant.inventory != null,
-              )
-            ) {
-              const variants = CommerceModel.adjustVariantInventory(
-                lifted,
-                soldVariantId,
-                -quantity,
-              )
-              await productRef
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
-              // Adjustment ledger (AGL-1807): this was the one stock writer of
-              // four that moved the count and logged nothing, so a draft-link
-              // sale read as stock vanishing in the products hub's history —
-              // and the reason AGL-1797 could not derive its restock flag from
-              // this collection. Same shape and same swallowed failure as the
-              // cart and buy-now siblings; `orderId` is the ORDER doc id from
-              // the metadata, not `object.id` — unlike the siblings, this
-              // branch's session id names no order document.
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: String(productId),
-                  variantId: soldVariantId,
-                  delta: -quantity,
-                  reason: 'sale',
-                  orderId: String(orderId),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
-              // Low-stock crossing alert (AGL-1826): a merchant-sent payment
-              // link used to sell a product down to its threshold in
-              // silence. The `pending` -> `paid` flip bounds redelivery.
-              alertLowStockCrossing(String(hostId), lifted, {
-                ...lifted,
-                variants,
+            if (soldVariantId) {
+              // Atomic since AGL-2320.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: String(hostId),
+                productId: String(productId),
+                variantId: soldVariantId,
+                quantity,
               })
+              // `before`/`after` absent means nothing was written — a missing
+              // product, an untracked variant, or a failed commit — and a
+              // ledger row would then claim a movement the count never made.
+              if (moved.before && moved.after) {
+                // Adjustment ledger (AGL-1807): this was the one stock writer
+                // of four that moved the count and logged nothing, so a
+                // draft-link sale read as stock vanishing in the products hub's
+                // history — and the reason AGL-1797 could not derive its
+                // restock flag from this collection. Same shape and same
+                // swallowed failure as the cart and buy-now siblings;
+                // `orderId` is the ORDER doc id from the metadata, not
+                // `object.id` — unlike the siblings, this branch's session id
+                // names no order document.
+                await hostRef
+                  .collection('inventoryAdjustments')
+                  .add({
+                    productId: String(productId),
+                    variantId: soldVariantId,
+                    delta: -quantity,
+                    ...(moved.applied !== -quantity
+                      ? { appliedDelta: moved.applied }
+                      : {}),
+                    reason: 'sale',
+                    orderId: String(orderId),
+                    atMs: Date.now(),
+                  } satisfies CommerceModel.InventoryAdjustment)
+                  .catch(() => undefined)
+                // Low-stock crossing alert (AGL-1826): a merchant-sent payment
+                // link used to sell a product down to its threshold in
+                // silence. The `pending` -> `paid` flip bounds redelivery.
+                alertLowStockCrossing(String(hostId), moved.before, moved.after)
+              }
             }
           } else {
             // POS card sale (AGL-1825). This branch's other tenant: the
@@ -2490,29 +3046,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ) {
                 continue
               }
-              const variants = CommerceModel.adjustVariantInventory(
-                lineProduct,
-                soldVariantId,
-                -soldQty,
-                order.locationId || undefined,
-              )
               // Two lines of one product must COMPOUND: the next line starts
               // from these variants, not from the product as first read —
               // recomputing from the original would erase this decrement
-              // when the sibling line's write landed.
-              const updated = { ...lineProduct, variants }
-              paidProducts.set(lineProductId, updated)
-              await hostRef
-                .collection('products')
-                .doc(lineProductId)
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
+              // when the sibling line's write landed. Since AGL-2320 the
+              // transaction's own re-read is what compounds them, and it also
+              // sees a concurrent request's write, which this map never could.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: String(hostId),
+                productId: lineProductId,
+                variantId: soldVariantId,
+                quantity: soldQty,
+                locationId: order.locationId || undefined,
+              })
+              if (!moved.before || !moved.after) continue
+              paidProducts.set(lineProductId, moved.after)
               // The AGL-1807 ledger row, from this decrement's first day —
               // joined to the ORDER doc (the session id names no order) and
               // carrying the location the units left, which is what lets
@@ -2524,6 +3074,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   productId: lineProductId,
                   variantId: soldVariantId,
                   delta: -soldQty,
+                  ...(moved.applied !== -soldQty
+                    ? { appliedDelta: moved.applied }
+                    : {}),
                   reason: 'sale',
                   orderId: String(orderId),
                   ...(order.locationId
@@ -2538,7 +3091,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // pair means two lines of one product cross exactly once, on
               // the line that breaches; the `pending` -> `paid` flip bounds
               // redelivery.
-              alertLowStockCrossing(String(hostId), lineProduct, updated)
+              alertLowStockCrossing(String(hostId), moved.before, moved.after)
             }
           }
         }
@@ -2755,6 +3308,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // log; the checkout guard makes negative stock a race-window edge,
         // and the helper floors at zero. Legacy flat `inventory` stays
         // denormalized for the Product block.
+        //
+        // ATOMIC since AGL-2320. The read that decided the new count used to be
+        // this branch's own `productSnapshot`, taken before the order write,
+        // the licence keys and the receipt email — a wide window in which a
+        // second sale's write was simply overwritten. `decrementVariantStock`
+        // re-reads and writes inside one transaction, so concurrent sales
+        // serialize; the snapshot above is still read, for the product NAME on
+        // the receipt below, and no longer decides any count.
         {
           const lifted = CommerceModel.liftLegacyProduct(
             (productSnapshot.data() as any) ?? { name: 'Product' },
@@ -2762,49 +3323,41 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const soldVariantId =
             String(object.metadata?.variantId ?? '') ||
             lifted.variants[0]?.id
-          if (
-            soldVariantId &&
-            lifted.variants.some(
-              (variant) =>
-                variant.id === soldVariantId && variant.inventory != null,
-            )
-          ) {
+          if (soldVariantId) {
             // AGL-1711: `-1` regardless of how many units were bought, so a
             // 3-unit buy-now sale decremented stock by one and the difference
             // was silently oversellable. `canPurchase` already gated the full
             // quantity at checkout, so this is the only place it was dropped.
-            const variants = CommerceModel.adjustVariantInventory(
-              lifted,
-              soldVariantId,
-              -soldQuantity,
-            )
-            const updated = { ...lifted, variants }
-            await productRef
-              .set(
-                {
-                  variants,
-                  inventory: CommerceModel.productInventory(updated),
-                },
-                { merge: true },
-              )
-              .catch(() => undefined)
-            await hostRef
-              .collection('inventoryAdjustments')
-              .add({
-                productId: String(productId),
-                variantId: soldVariantId,
-                delta: -soldQuantity,
-                reason: 'sale',
-                orderId: String(object.id),
-                atMs: Date.now(),
-              } satisfies CommerceModel.InventoryAdjustment)
-              .catch(() => undefined)
-            // Low-stock alert (AGL-281): fires on the crossing sale only,
-            // so managers get one nudge per threshold breach, not one per
-            // order after it. The check lived inline here — the one branch
-            // of four that had it — until AGL-1826 extracted it to sit
-            // beside every decrement; semantics unchanged.
-            alertLowStockCrossing(String(hostId), lifted, updated)
+            const moved = await decrementVariantStock({
+              firestore,
+              hostRef,
+              hostId: String(hostId),
+              productId: String(productId),
+              variantId: soldVariantId,
+              quantity: soldQuantity,
+            })
+            if (moved.before && moved.after) {
+              await hostRef
+                .collection('inventoryAdjustments')
+                .add({
+                  productId: String(productId),
+                  variantId: soldVariantId,
+                  delta: -soldQuantity,
+                  ...(moved.applied !== -soldQuantity
+                    ? { appliedDelta: moved.applied }
+                    : {}),
+                  reason: 'sale',
+                  orderId: String(object.id),
+                  atMs: Date.now(),
+                } satisfies CommerceModel.InventoryAdjustment)
+                .catch(() => undefined)
+              // Low-stock alert (AGL-281): fires on the crossing sale only,
+              // so managers get one nudge per threshold breach, not one per
+              // order after it. The check lived inline here — the one branch
+              // of four that had it — until AGL-1826 extracted it to sit
+              // beside every decrement; semantics unchanged.
+              alertLowStockCrossing(String(hostId), moved.before, moved.after)
+            }
           }
         }
         if (couponCode) {

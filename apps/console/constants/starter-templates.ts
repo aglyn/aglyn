@@ -243,18 +243,24 @@ type SectionWidth = 'md' | 'lg' | 'xl'
  *   `Prose Container` preset exists for.
  *
  * Horizontal padding is the Container's own gutters, so bands no longer carry
- * `px`. Only `py` rides here, which is rhythm rather than width.
+ * horizontal padding at all. Only the vertical rhythm rides here, which is
+ * rhythm rather than width.
+ *
+ * Written as the two longhands rather than MUI's `py` (AGL-2207/2208): the
+ * Styles panel's Padding control is named for the four sides, so a band
+ * seeded with `py` handed the customer a document whose padding the panel
+ * showed as empty and no click could clear.
  */
 const section = (
   id: string,
   maxWidth: SectionWidth,
-  py: number,
+  verticalPadding: number,
   children: NodeSpec[],
 ): NodeSpec => ({
   id,
   componentId: 'muiContainer',
   props: { maxWidth },
-  sx: { py },
+  sx: { paddingTop: verticalPadding, paddingBottom: verticalPadding },
   children,
 })
 
@@ -290,7 +296,13 @@ const featureColumn = (id: string, title: string, body: string): NodeSpec => ({
   props: { spacing: 1 },
   // `flex: 1` is a column's share of its row, not a width cap — it survives
   // the sweep deliberately. Only `maxWidth` in raw pixels was the violation.
-  sx: { flex: 1, p: 2 },
+  sx: {
+    flex: 1,
+    paddingTop: 2,
+    paddingRight: 2,
+    paddingBottom: 2,
+    paddingLeft: 2,
+  },
   children: [text(`${id}T`, 'h5', title), text(`${id}B`, 'body1', body)],
 })
 

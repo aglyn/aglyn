@@ -31,6 +31,7 @@ import {
 import {
   DataTableComponent,
 } from '@aglyn/shared-ui-jsx/components/data-table.component'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   mdiDownloadOutline,
@@ -673,8 +674,36 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     },
   ]
 
+  /**
+   * `templatesPerHost` is enforced by `/api/hosts/resources` (AGL-473) and,
+   * until AGL-2246, appeared NOWHERE in the console — not on this card, not
+   * in the billing meters, not even as a row on the plan-comparison grid. It
+   * was the one quota key of 31 with no customer-facing surface at all, so a
+   * merchant on Starter learned their 50-template cap by being refused a save.
+   *
+   * The count is the listener's, not a `getCountFromServer`, and that is safe
+   * here in a way it would not be generally: the listener is capped at 200 and
+   * the largest FINITE plan cap is 50, so a host that could be truncated is
+   * necessarily on an UNLIMITED plan, where the readout says `N/∞` and an
+   * under-count changes no decision. On every plan whose cap can actually
+   * refuse a save, 200 cannot truncate. (Contrast AGL-1716, where a
+   * `limit()`-ed head-count fed a real gate.)
+   */
+  const templateQuota = checkOrgQuota(
+    org,
+    'templatesPerHost',
+    (templateDocs ?? []).length,
+  )
+
   return (
     <CardDisplay>
+      <QuotaReadoutComponent
+        ready={orgReady}
+        used={(templateDocs ?? []).length}
+        limit={templateQuota.limit}
+        noun="template"
+        sx={{ px: 2, pt: 1 }}
+      />
       <DataTableComponent
         rowHeight={TABLE_ROW_HEIGHT}
         getRowId={(row) => row.key}

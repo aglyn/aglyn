@@ -1,6 +1,7 @@
 # Screenshot plan
 
-Capture specs for the docs updates of 2026-08-08. Each entry maps a docs page +
+Capture specs for the docs updates of 2026-08-08, and for the 2026-08-19 additions
+at the bottom of this file. Each entry maps a docs page +
 section anchor to an exact capture. Placeholders in the pages are HTML comments of the
 form `<!-- screenshot: {filename} per SCREENSHOT_PLAN.md -->` at the exact insertion
 spot — replace each comment with a standard image reference using the alt text below.
@@ -606,3 +607,88 @@ hand and redact.)*
   },
 }
 ```
+
+---
+
+# Additions of 2026-08-19 (AGL-2129, AGL-2126, AGL-2127)
+
+Five captures for the new Marketplace walkthrough, and one re-shoot the
+Marketplace/Plugins IA correction (AGL-2123) makes necessary. The API reference
+pages need **no** screenshots — they are request/response, and a picture of a
+terminal is worse than the code block it would replace.
+
+## Marketplace walkthrough
+
+### M1. `static/img/marketplace/org-nav-marketplace-and-plugins.png`
+
+- **Docs page:** `guides/install-your-first-plugin.md` → `#step-1-open`
+- **Capture:** console → any org, organization-level navigation panel expanded.
+- **Frame:** the org nav panel ONLY, cropped so **Marketplace** and **Plugins**
+  are both visible as separate entries. That adjacency is the whole point of the
+  shot — AGL-2123 exists because the docs claimed one had absorbed the other.
+- **Alt text:** The organization navigation with Marketplace and Plugins listed as
+  two separate sections.
+- **Guard note:** must be captured with NO ⚑ badges visible. See CONTRIBUTING.md
+  on the staff capture account — the harness hides staff-only chrome and fails a
+  shot where any is still on screen.
+
+### M2. `static/img/marketplace/listing-detail-header.png`
+
+- **Docs page:** `guides/install-your-first-plugin.md` → `#step-2-browse`
+- **Capture:** console → **Marketplace → Browse All** → open any free, listed
+  plugin's detail page.
+- **Frame:** the listing header — name, artifact-type label, version, badges, and
+  the star rating. Not the whole page.
+- **Alt text:** A marketplace listing's header showing its type, version, publisher
+  badges and rating.
+- **Note:** pick a listing with a **Verified publisher** badge and no **Reviewed**
+  badge if the seed allows — the two-badge distinction is what the paragraph beside
+  it explains.
+
+### M3. `static/img/marketplace/install-to-selected-sites.png`
+
+- **Docs page:** `guides/install-your-first-plugin.md` → `#step-4-targeting`
+- **Capture:** the same detail page on an org with **at least three sites** and the
+  listing **not yet installed** (the targeting control is only rendered before an
+  install — re-asking once it is settled would lie, AGL-773). Set **Install to** to
+  **Selected sites** so the **Sites** checklist is open with one or two ticked.
+- **Frame:** the Install card — the **Install to** field, its helper text, the
+  checkbox list, and the **Install** button.
+- **Alt text:** The Install to dropdown set to Selected sites, with a checklist of
+  the organization's sites and two of them ticked.
+- **Note:** the helper text is state-dependent and IS the content here. A one-site
+  org renders no "Selected sites" option at all, so a single-site capture shows the
+  wrong control.
+
+### M4. `static/img/marketplace/install-confirm-dialog.png`
+
+- **Docs page:** `guides/install-your-first-plugin.md` → `#step-5-install`
+- **Capture:** press **Install** on the same listing and stop at the dialog. Do not
+  confirm.
+- **Frame:** the dialog only. The bolded install target ("This will be installed to
+  **all sites**") must be legible — the page tells the reader that phrase is their
+  last chance to catch a mis-set target.
+- **Alt text:** The install confirmation dialog naming the listing, its type and
+  version, and in bold where it will be installed.
+
+### M5. `static/img/plugins/plugins-switchboard-cards.png`
+
+- **Docs page:** `guides/install-your-first-plugin.md` → `#step-7-off`
+- **Capture:** console → organization → **Plugins**.
+- **Frame:** both cards — **Installed from the marketplace** above **Built in** —
+  with at least one switch visible in each. If the seeded org has no marketplace
+  install, the empty state of the first card is still correct to show, because the
+  second card is the one the caption is about.
+- **Alt text:** The organization Plugins page with an Installed from the marketplace
+  card above a Built in card, each row carrying an on/off switch.
+
+## Re-shoot
+
+### M6. `static/img/guides/marketplace-browse.png` (existing — re-capture)
+
+- **Docs page:** `developers/plugins/overview.md`, top of **Install & upgrade**
+- **Why:** the existing caption describes a Navigation panel listing "Installed and
+  the publisher sections". AGL-2123 corrected the surrounding prose to the shipped
+  IA; the image should be confirmed against it rather than assumed. Re-capture only
+  if the panel no longer matches the caption — an unchanged image needs no churn.
+- **Frame:** unchanged from the original.

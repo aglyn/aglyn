@@ -131,6 +131,14 @@ const ALLOWED = new Map<string, string>([
       'against, which is the drift the table exists to prevent.',
   ],
   [
+    'apps/docs/docs/workspace-and-billing/report-an-issue.md',
+    'Points at the forum page (AGL-2185). Both occurrences are the LINK to ' +
+      'support-and-community.md — its filename in the link target and its ' +
+      'title as the link text — drawing the line between a defect report and ' +
+      'a support ticket. Forum meaning, and unfixable in place: the target ' +
+      'is that page’s own exempted filename.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/teams-and-roles/invite-teammates.md',
     'Points at the forum for help.',
   ],

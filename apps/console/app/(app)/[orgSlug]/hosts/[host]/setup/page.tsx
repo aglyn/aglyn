@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/marketplace-overrides'
 import * as Aglyn from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
 import {
@@ -117,8 +118,8 @@ const basicSchema: FormSchema = {
       help: docsHelp('gettingStarted', {
         anchor: '#create-your-first-site',
         excerpt:
-          "Your site's address on aglyn.app — you can also connect your " +
-          'own domain from the Custom Domain tab.',
+          `Your site's address on ${TENANT_APEX} — you can also connect ` +
+          'your own domain from the Custom Domain tab.',
       }),
       isRequired: true,
       validate: [

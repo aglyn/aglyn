@@ -18,7 +18,11 @@
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-import { resolveTrackedRestockLines } from './restock-flag'
+import {
+  capRestockLines,
+  resolveTrackedRestockLines,
+  saleReleaseCaps,
+} from './restock-flag'
 
 /**
  * Cancelling an order RELEASES its stock (AGL-1808) — the opposite of what the
@@ -177,22 +181,46 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       //
       // One equality filter, so the automatic single-field index answers it;
       // the reason test runs here, over the handful of rows one order has.
+      //
+      // THE SAME READ NOW ALSO BOUNDS HOW MUCH COMES BACK (AGL-2149), so it is
+      // no longer scoped to card orders. `adjustVariantInventory` floors at
+      // zero, and that floor silently absorbs the overshoot on a BACKORDER
+      // product: stock 0, `canPurchase` admits the sale because the policy says
+      // to, three units sell, `Math.max(0, 0 + -3)` leaves the count at 0 —
+      // and a `+3` here would hand the merchant three units nobody has and a
+      // stock badge offering them. The sale rows carry `appliedDelta` for
+      // exactly this: `delta` stays the units sold (the merchant's history),
+      // `appliedDelta` says how many the count could actually give up.
+      //
+      // Only lines the ledger DESCRIBES are capped. A pair the ledger says
+      // nothing about restores as before, which is what keeps the pre-AGL-1807
+      // draft links — decremented with no row at all — from having their stock
+      // stranded, and what keeps a single swallowed ledger write from turning
+      // into a lost restock on an unrelated line of the same order.
       let saleDecremented = true
-      if (
-        order.status === 'paid' &&
-        order.channel === 'pos' &&
-        (order.timeline ?? []).some(
-          (event) => event.event === 'pos-card-pending',
-        )
-      ) {
+      // The cap rule itself lives beside the restock flag, which now bounds
+      // the question it ASKS by the same ledger this bounds the stock it
+      // RETURNS (AGL-2325). One implementation, so a prompt naming more units
+      // than a cancellation would put back is not expressible.
+      let releaseCap: ReadonlyMap<string, number> = new Map<string, number>()
+      if (order.status === 'paid') {
         const orderAdjustments = await transaction.get(
           hostRef
             .collection('inventoryAdjustments')
             .where('orderId', '==', orderId),
         )
-        saleDecremented = orderAdjustments.docs.some(
+        const saleRows = orderAdjustments.docs.filter(
           (row) => row.get('reason') === 'sale',
         )
+        if (
+          order.channel === 'pos' &&
+          (order.timeline ?? []).some(
+            (event) => event.event === 'pos-card-pending',
+          )
+        ) {
+          saleDecremented = saleRows.length > 0
+        }
+        releaseCap = saleReleaseCaps(saleRows)
       }
 
       // `paid` is the only status reachable here whose sale decremented; see
@@ -213,7 +241,8 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       // them separately would compute both from the same read and land only
       // the last, silently dropping units.
       const byProduct = new Map<string, CommerceModel.OrderRestockLine[]>()
-      for (const line of lines) {
+      // Never more than the sale actually took off the shelf (AGL-2149).
+      for (const line of capRestockLines(lines, releaseCap)) {
         byProduct.set(line.productId, [
           ...(byProduct.get(line.productId) ?? []),
           line,
@@ -256,7 +285,10 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
         }
       }
 
-      const units = lines.reduce((sum, line) => sum + line.quantity, 0)
+      // From the CAPPED lines, not the order's, so the timeline reports what
+      // was actually put back (AGL-2149).
+      const releasedLines = [...byProduct.values()].flat()
+      const units = releasedLines.reduce((sum, line) => sum + line.quantity, 0)
       const patch: Record<string, unknown> = {
         status: 'cancelled',
         timeline: CommerceModel.appendOrderEvent(
@@ -284,9 +316,52 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       transaction.update(orderRef, patch)
       return {
         status: 200,
-        body: { ok: true, released: lines.length, units },
+        body: { ok: true, released: releasedLines.length, units },
+        // The live Stripe page this cancellation orphans, if any (AGL-2244).
+        // Read inside the transaction that flips the status so the expiry
+        // below cannot act on an order some other writer paid meanwhile.
+        expireSessionId:
+          order.status === 'pending' ? (order.checkoutSessionId ?? '') : '',
       }
     })
+    // EXPIRE THE PAYMENT LINK (AGL-2244). Cancelling a `pending` draft order or
+    // POS card sale left its Checkout Session live: the URL is on the
+    // customer's phone or in the email the merchant sent, and Stripe keeps it
+    // payable for 24 hours. Paying it captured real money on the merchant's
+    // account and the completing webhook then discarded the event — its
+    // `status !== 'pending'` guard cannot tell a redelivery from a cancelled
+    // order — so the sale existed in Stripe and nowhere in the product: no
+    // order, no stock move, no contact, no notification, not even a timeline
+    // line. The webhook now says so when it happens; this is the half that
+    // stops it happening.
+    //
+    // OUTSIDE the transaction, because it is a network call, and best-effort
+    // by design: the cancellation itself already landed and is what the
+    // merchant asked for. A failure here leaves the pre-existing behaviour
+    // (a payable link) plus the webhook's new record of it, which is strictly
+    // better than failing a cancel that has already released stock. Stripe
+    // answers 400 for a session that is already expired or already paid, and
+    // both are states this has nothing to add to.
+    const expireSessionId = (outcome as { expireSessionId?: string })
+      .expireSessionId
+    if (expireSessionId && process.env.STRIPE_SECRET_KEY) {
+      const expiry = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${expireSessionId}/expire`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
+      ).catch(() => null)
+      if (!expiry?.ok) {
+        console.error(
+          'Cancelled order: Stripe session not expired, the payment link may still be payable',
+          { hostId, orderId, sessionId: expireSessionId },
+        )
+      }
+    }
     return res.status(outcome.status).json(outcome.body)
   } catch (error) {
     // Nothing landed — the transaction is all-or-nothing — so the order is

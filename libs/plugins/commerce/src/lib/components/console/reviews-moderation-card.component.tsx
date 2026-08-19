@@ -38,6 +38,7 @@ import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ReviewsModerationCardProps {
   hostId: string
@@ -52,6 +53,14 @@ export interface ReviewsModerationCardProps {
  * it, and this card rendered identically on Free — an operator could work a
  * moderation queue whose approvals the renderer would never honour.
  */
+
+const reviewsHelp = pluginDocsHelp('catalog', {
+  anchor: '#products-options-and-variants',
+  excerpt:
+    'Customer reviews left on your products, waiting for you to ' +
+    'publish or reject them.',
+})
+
 export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -81,6 +90,7 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
 
   return (
     <EntitlementGatedCard
+      help={reviewsHelp}
       hostId={hostId}
       feature="productReviews"
       header={'Review moderation'}
@@ -90,7 +100,12 @@ export function ReviewsModerationCard(props: ReviewsModerationCardProps) {
         'results.'
       }
     >
-    <CardDisplay header={'Review moderation'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Review moderation'}
+      help={reviewsHelp}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <TextField
           label="Show"

@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  isMediaCdnPath,
+  PLATFORM_BRAND_NAME,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   authForPool,
   consumePasswordResetSend,
@@ -170,8 +174,20 @@ async function handler(request: Request): Promise<Response> {
       const displayName = String(body?.displayName ?? '').trim().slice(0, 120)
       const photoUrl = String(body?.photoUrl ?? '').trim().slice(0, 500)
       const email = String(body?.email ?? '').trim().toLowerCase()
-      if (photoUrl && !/^https:\/\//i.test(photoUrl)) {
-        return Response.json({ error: 'Photo URLs must be https://' }, { status: 400 })
+      // Kept in step with `normalizeMemberPhotoUrl`, which the docblock there
+      // says these two surfaces must not diverge on (AGL-2286). The staff
+      // identity editor writes the same column the member's own Profile image
+      // field does, so a value one accepts and the other refuses is a column
+      // whose legality depends on who last touched it.
+      const photoIsHttps = /^https:\/\//i.test(photoUrl)
+      if (photoUrl && !photoIsHttps && !isMediaCdnPath(photoUrl)) {
+        return Response.json(
+          {
+            error:
+              'Photo URL must be an https:// URL or an image from a media library',
+          },
+          { status: 400 },
+        )
       }
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return Response.json({ error: 'Enter a valid email' }, { status: 400 })
@@ -226,7 +242,7 @@ async function handler(request: Request): Promise<Response> {
         }, { status: 400 })
       }
       const origin = originFromHeaders(headers)
-      const actorName = 'Aglyn support'
+      const actorName = `${PLATFORM_BRAND_NAME} support`
 
       if (action === 'sendPasswordReset') {
         // Throttled per recipient and per actor (AGL-920). Staff are trusted,

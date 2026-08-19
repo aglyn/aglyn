@@ -43,6 +43,13 @@ export interface PublisherVersion {
   changelog: string
   rejectionReason: string
   /**
+   * The platform kill switch, per version (AGL-2328). Independent of
+   * `reviewState` and NOT a substitute for it: a version is normally
+   * approved first and revoked afterwards, so both are true at once and the
+   * card has to say both.
+   */
+  revoked?: boolean
+  /**
    * Reconciled against the listing totals server-side (AGL-1418), so this
    * card and the listing's own Version history print the same number for the
    * same version instead of two answers to one question.
@@ -56,6 +63,9 @@ interface PublisherVersionsPayload {
   versions: PublisherVersion[]
   latestApprovedVersion: string
   latestVersion: string
+  /** Listing-scoped — one reason covers every revoked version (AGL-2328). */
+  revocationReason?: string
+  revokedAtMs?: number | null
 }
 
 /**
@@ -179,8 +189,26 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
   if (!payload) return null
 
   const { versions, latestApprovedVersion, latestVersion } = payload
+  const revocationReason = String(payload.revocationReason ?? '').trim()
+  const revokedAtMs = payload.revokedAtMs ?? null
   const inReview = versions.filter(
     (entry) => entry.reviewState === 'pending' && !entry.grandfathered,
+  )
+  /**
+   * The version the card names as installing today, revoked (AGL-2328).
+   *
+   * `latestApprovedVersion` is a REVIEW verdict and the kill switch is not
+   * — nothing about revoking a version clears it — so the headline below
+   * went on saying "is approved and is what installs today" about a version
+   * the installer refuses with a 409. That is the sentence a publisher
+   * reads before opening a support ticket about installs that stopped
+   * working, so it is checked before any of the review arms.
+   */
+  const installsTodayRevoked = Boolean(
+    latestApprovedVersion &&
+      versions.some(
+        (entry) => entry.version === latestApprovedVersion && entry.revoked,
+      ),
   )
   const behind =
     latestApprovedVersion &&
@@ -202,7 +230,15 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
       <Stack spacing={2}>
         {/* The AGL-966 guarantee, in a sentence. It has been true since the
             day it shipped and nobody has ever read it. */}
-        {behind && inReview.length ? (
+        {installsTodayRevoked ? (
+          <Alert severity="error">
+            {`v${latestApprovedVersion} was disabled by the platform. It is ` +
+              'still your latest approved version, but nobody can install ' +
+              'it and sites already running it render a placeholder. ' +
+              'Publishing a new version is what clears this — these bytes ' +
+              'cannot be re-enabled by editing them.'}
+          </Alert>
+        ) : behind && inReview.length ? (
           <Alert severity="info">
             {`v${latestVersion} is in review. New installs get ` +
               `v${latestApprovedVersion} until it is approved, and anyone ` +
@@ -257,7 +293,15 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
                 >
                   <Typography variant="subtitle2">{`v${entry.version}`}</Typography>
                   <Chip size="small" color={state.color} label={state.label} />
-                  {entry.version === latestApprovedVersion ? (
+                  {/* Beside the review chip, never instead of it: a version
+                      is normally approved and THEN revoked, and collapsing
+                      the two would erase the verdict the publisher earned. */}
+                  {entry.revoked ? (
+                    <Chip size="small" color="error" label="Disabled" />
+                  ) : null}
+                  {/* Not on a revoked row — it does not install today, and
+                      the whole defect here was a card that said it did. */}
+                  {entry.version === latestApprovedVersion && !entry.revoked ? (
                     <Chip
                       size="small"
                       variant="outlined"
@@ -319,6 +363,36 @@ export function ListingReviewStatus(props: ListingReviewStatusProps) {
                 {entry.rejectionReason ? (
                   <Alert severity="error" sx={{ mt: 0.5 }}>
                     {entry.rejectionReason}
+                  </Alert>
+                ) : null}
+                {/* The kill switch, said to the publisher it happened to
+                    (AGL-2328). The consumer whose site broke was told the
+                    reason first; the publisher who caused it was told
+                    nothing at all, on the one page that exists to tell them
+                    what state their versions are in. */}
+                {entry.revoked ? (
+                  <Alert severity="error" sx={{ mt: 0.5 }}>
+                    {'The platform disabled this version. Nobody can install ' +
+                      'it, and sites already running it render a placeholder.'}
+                    {/* Only when one was recorded. A revocation written
+                        before the reason was required says so, rather than
+                        showing an empty quotation that reads as "no reason
+                        given". */}
+                    {revocationReason ? (
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        {`Reason: ${revocationReason}`}
+                      </Typography>
+                    ) : null}
+                    {revokedAtMs ? (
+                      <Typography
+                        variant="caption"
+                        sx={{ display: 'block', mt: 0.5 }}
+                      >
+                        {`Disabled ${new Date(
+                          revokedAtMs,
+                        ).toLocaleDateString()}`}
+                      </Typography>
+                    ) : null}
                   </Alert>
                 ) : null}
                 {entry.changelog ? (

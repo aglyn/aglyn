@@ -25,13 +25,24 @@
  * shape via `liftLegacyProduct`, so existing docs keep working.
  */
 
-/**
- * Platform fee on tenant-site product sales (Commerce Starter, AGL-90) —
- * the tenant sells to their own visitors through their connected account,
- * so the platform takes a processing/management share only. (Relocated
- * from app-utils/marketplace.ts, where it was misfiled — AGL-411.)
+/*
+ * THERE IS NO STOREFRONT FEE CONSTANT, and that absence is load-bearing
+ * (AGL-2295).
+ *
+ * `COMMERCE_PLATFORM_FEE_PERCENT = 2` lived here with ZERO call sites. It
+ * asserted a flat 2% that agrees with the plan table for exactly one cell
+ * (Starter, physical) and disagrees with the other fifteen — Starter digital
+ * is 5%, Pro digital 3%, Business 2%, Scale 1%, and every physical rate above
+ * Starter is 0%. Nothing was wrong while nothing read it; the cost was that
+ * the next reader wiring it up would silently re-price every plan, and a
+ * constant sitting in the model beside the types reads like the answer.
+ *
+ * The single source is `resolveTransactionFeePct(org, productType)` in
+ * `plan-entitlements.ts`, resolved PER REQUEST from the org — because it
+ * depends on the plan, on per-org staff overrides, and on whether the
+ * subscription is still alive. A constant cannot express any of that.
+ * `commerce-fee-single-source.spec.ts` fails the build if one comes back.
  */
-export const COMMERCE_PLATFORM_FEE_PERCENT = 2
 /** Product price ceiling (whole USD). */
 export const COMMERCE_MAX_PRICE_USD = 10000
 
@@ -339,6 +350,21 @@ export interface InventoryAdjustment {
   variantId: string
   /** Positive = stock added, negative = removed. */
   delta: number
+  /**
+   * What the count ACTUALLY moved by, when the floor in
+   * `adjustVariantInventory` absorbed part of `delta` (AGL-2149). Written only
+   * when the two differ, which for a sale means a backorder product that sold
+   * past zero: `delta` stays the units sold — that is the merchant's stock
+   * history and it must keep saying "3 went out the door" — while this says how
+   * many of them the count could give up.
+   *
+   * A REVERSAL MUST READ THIS, NOT `delta`. Restoring `delta` on a backorder
+   * sale that the floor swallowed invents inventory that never existed: 0 sells
+   * 3, the count stays 0, and a `+3` on cancellation leaves 3 units nobody has.
+   * Absent on every row written before AGL-2149 and on every row where nothing
+   * was clamped, so `appliedDelta ?? delta` is the reader.
+   */
+  appliedDelta?: number
   reason: InventoryAdjustmentReason
   /** Order id for sale/refund adjustments. */
   orderId?: string
@@ -363,6 +389,63 @@ export function canPurchase(
   if (variant.inventory == null) return true
   if (product.oversellPolicy === 'backorder') return true
   return Number(variant.inventory) >= quantity
+}
+
+/**
+ * What the register has to SAY about a line it is about to sell (AGL-2357).
+ *
+ * ## The defect
+ *
+ * `pos-order.ts` contains no `canPurchase` call. Every storefront door gates on
+ * it; the register does not, so a merchant who set `oversellPolicy: 'deny'` in
+ * the product editor silently got `backorder` at the counter — the count floors
+ * at zero underneath and nothing anywhere says so.
+ *
+ * ## The decision, and why it is a shortfall and not a refusal
+ *
+ * Warn, never block. A till is the wrong place for a stale number to stop a
+ * real sale: the cashier is holding the goods, the physical shelf is the truth,
+ * and refusing loses a sale over data that is behind. But "deny" must at least
+ * SAY something. So this reports the shortfall and the caller sells anyway.
+ * Honouring the policy with a manager-level override is the post-launch shape
+ * (AGL-2372) and wants an audit trail this deliberately does not build.
+ *
+ * ## Why the test is `canPurchase`
+ *
+ * Exactly the gate the register was missing, and no wider. An untracked variant
+ * has no number to be short against, and a `backorder` product's merchant chose
+ * to sell past zero — warning them would be noise about a setting they set on
+ * purpose. So a shortfall is reported only where a purchase would have been
+ * refused anywhere else in the product.
+ */
+export interface StockShortfall {
+  productId: string
+  variantId?: string
+  /** Product name at the time of sale, for a message the cashier can read. */
+  name: string
+  variantLabel?: string
+  /** Units the cashier is ringing up. */
+  requested: number
+  /** Units the count says are on the shelf; never negative. */
+  available: number
+}
+
+export function stockShortfall(
+  product: Pick<HostProduct, 'variants' | 'oversellPolicy'>,
+  variantId: string | undefined,
+  quantity = 1,
+): { available: number } | null {
+  if (canPurchase(product, variantId, quantity)) return null
+  const variant = variantId
+    ? product.variants?.find((item) => item.id === variantId)
+    : product.variants?.[0]
+  // `canPurchase` answers false for a variant that does not exist at all. That
+  // is not a stock shortfall and must not be reported as "0 in stock" — the
+  // register's own line builder falls back to `variants[0]`, so the case is
+  // unreachable from the counter, and inventing a count for it would be the
+  // one failure mode this feature must not have.
+  if (!variant || variant.inventory == null) return null
+  return { available: Math.max(0, Math.round(Number(variant.inventory) || 0)) }
 }
 
 /**
@@ -468,6 +551,44 @@ export function adjustVariantInventory(
       inventory: Math.max(0, Number(variant.inventory) + delta),
     }
   })
+}
+
+/**
+ * What `adjustVariantInventory` will ACTUALLY move the count by (AGL-2149).
+ *
+ * The floor in that helper is not a rounding detail, it is a silent absorber. A
+ * backorder product (`oversellPolicy: 'backorder'`, which `canPurchase` admits
+ * at any stock level) sitting at 0 sells 3: `Math.max(0, 0 + -3)` is 0, so the
+ * count does not move — correctly, since inventory is a shelf count and shelves
+ * do not go negative — but the ledger row said `-3` and every reversal read it
+ * as three units to put back. Cancelling that order handed the merchant 3 units
+ * that never existed and a stock badge that offers them for sale.
+ *
+ * Removing the floor is not the alternative: every reader of `inventory` — the
+ * badges, `canPurchase`, `productInventory`, `isLowStock` — assumes it cannot
+ * go negative, and a negative count would be a far wider change than the bug.
+ * So the clamp stays and the amount it absorbed is recorded instead.
+ *
+ * Deliberately mirrors `adjustVariantInventory`'s own arithmetic, including
+ * which field the clamp applies to in the location-tracked case, so the two
+ * cannot disagree about what happened.
+ */
+export function appliedVariantInventoryDelta(
+  product: Pick<HostProduct, 'variants'>,
+  variantId: string,
+  delta: number,
+  locationId?: string,
+): number {
+  const variant = (product.variants ?? []).find(
+    (item) => item.id === variantId,
+  )
+  if (!variant || variant.inventory == null) return 0
+  if (locationId && variant.inventoryByLocation) {
+    const before = Number(variant.inventoryByLocation[locationId] ?? 0)
+    return Math.max(0, before + delta) - before
+  }
+  const before = Number(variant.inventory)
+  return Math.max(0, before + delta) - before
 }
 
 /**

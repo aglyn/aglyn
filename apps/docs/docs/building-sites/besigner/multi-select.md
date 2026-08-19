@@ -24,6 +24,18 @@ Once several nodes are selected, **dragging moves the entire selection** at once
 their arrangement. This is the fast way to reposition a group without grouping them
 permanently.
 
+## What the inspector shows {#what-the-inspector-shows}
+
+The inspector's header names **one** element, and with several selected that element is
+the **last one you added to the selection** — not the first, and not "several". So a
+header reading `Hero · Section` while four things are highlighted is telling you about
+the fourth click, and the panel's **Attributes** and **Styles** tabs act on that
+element.
+
+Pick the element you actually want to edit **last**, or drop back to a single selection
+before reaching for the inspector. Dragging, by contrast, still moves everything
+selected. See [the inspector](overview.md#the-inspector).
+
 ## Tips
 
 - Selection overlays render inside the viewport's stacking context, so they highlight the
@@ -35,3 +47,4 @@ permanently.
 
 - [Drag-and-drop hierarchy](drag-drop-hierarchy.md)
 - [The Besigner](overview.md)
+- [The inspector](overview.md#the-inspector)

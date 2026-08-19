@@ -33,6 +33,7 @@ import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/fires
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { PLATFORM_BRAND_NAME, pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostCouponsCardProps {
   hostId: string
@@ -101,7 +102,17 @@ export function HostCouponsCard(props: HostCouponsCardProps) {
   )
 
   return (
-    <CardDisplay header={'Coupons'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Coupons'}
+      help={pluginDocsHelp('commerceEndToEnd', {
+        anchor: '#4-what-checkout-does',
+        excerpt:
+          'Coupons redeemable at your storefront checkout, separate from ' +
+          `any coupon ${PLATFORM_BRAND_NAME} applies to your own subscription.`,
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {coupons.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

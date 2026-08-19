@@ -26,6 +26,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -129,7 +130,14 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   }, [user, hostId, chargesEnabled, enqueueSnackbar])
 
   return (
-    <CardDisplay header={'Payments'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Payments'}
+      help={pluginDocsHelp('commerceEndToEnd', {
+        anchor: '#1-connect-payments',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" sx={{ flex: 1 }}>
@@ -196,12 +204,30 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
                 {'Selling requires a paid plan — upgrade on the billing page.'}
               </Alert>
             ) : null}
+            {/*
+                THE LEGAL NAME, not the org's resolved `productName`
+                (AGL-2351). This sentence says who takes money off the
+                merchant's own Stripe account, and the application fee lands in
+                the platform Stripe account — held by the operating entity, not
+                by a white-label agency reselling the console. Naming the
+                agency here would assert a fee relationship that does not
+                exist. `PLATFORM_BRAND_LEGAL_NAME` still configures cleanly for
+                a self-host operator, who really is the entity collecting it.
+            */}
             <Typography variant="body2" color="text.secondary">
-              {'Buyers pay on your own Stripe account; Aglyn collects a ' +
-                'platform fee per sale based on your plan:'}
+              {'Buyers pay on your own Stripe account; ' +
+                `${Aglyn.PLATFORM_BRAND_LEGAL_NAME} collects a platform fee ` +
+                'per sale based on your plan:'}
             </Typography>
+            {/* The DIGITAL rate is not products-only (AGL-2315). A paid
+                booking is a service sale and resolves through the same
+                `'service'`/digital axis, so a bookings-only merchant pays this
+                exact number — and this card was the one place they could read
+                their own rate while naming only "products". Stated here rather
+                than adding a third figure: it is one rate, not two. */}
             <Typography variant="body2">
-              {`Physical products: ${physicalPct}% · Digital products: ${digitalPct}%`}
+              {`Physical products: ${physicalPct}% · Digital products, ` +
+                `services & bookings: ${digitalPct}%`}
               {physicalPct > 0 || digitalPct > 0 ? (
                 <Typography
                   component="span"

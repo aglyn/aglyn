@@ -64,7 +64,32 @@
  *   stack; those are dropped since they cannot be acted on.
  */
 
-const ENDPOINT = 'https://app.aglyn.com/api/errors'
+import siteConfig from '@generated/docusaurus.config'
+
+/**
+ * Where reports go — CONFIGURATION, and absent by default (AGL-2124).
+ *
+ * This was a bare production-console URL. `apps/docs` ships in the
+ * open-source distribution, so an operator's page URLs, stack traces and user
+ * agents were POSTed to Aglyn's console, where the collector files them under
+ * service `docs-web` keyed on the `Origin` header — as if they were ours.
+ * Neither party consented and neither benefits: they get no error reporting,
+ * our Error Reporting fills with stacks from somebody else's deployment.
+ *
+ * Unset means OFF, never ours. `@generated/docusaurus.config` is the one
+ * channel from build config to a client module — `useDocusaurusContext` is a
+ * hook and this file is not a component.
+ */
+const ENDPOINT = ((): string => {
+  try {
+    const configured = (siteConfig?.customFields as Record<string, unknown>)?.[
+      'errorBeaconEndpoint'
+    ]
+    return typeof configured === 'string' ? configured.trim() : ''
+  } catch {
+    return ''
+  }
+})()
 const MAX_MESSAGE = 1_024
 const MAX_STACK = 8_192
 const MAX_PER_PAGE = 10
@@ -189,6 +214,15 @@ function installErrorBeacon(): void {
 
 // Client modules can still be evaluated during the static build; the beacon
 // is browser-only, and dev servers stay disarmed (mirrors the gtag gate).
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+//
+// A THIRD arming gate (AGL-2124): with no configured endpoint the beacon
+// installs NO handlers at all. Not a fallback to ours — an unconfigured
+// self-host build reports nowhere, which is the only honest default when the
+// alternative is reporting a stranger's errors to us.
+if (
+  typeof window !== 'undefined' &&
+  process.env.NODE_ENV === 'production' &&
+  ENDPOINT
+) {
   installErrorBeacon()
 }

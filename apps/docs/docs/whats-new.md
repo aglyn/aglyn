@@ -10,7 +10,46 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## August 2026 — editing together (newest)
+## August 2026 — knowing what happened (newest)
+
+- **[Bandwidth, and what happens past it](workspace-and-billing/billing-and-plans/bandwidth.md)** —
+  every plan's monthly traffic allowance is now enforceable. On a paid plan the extra is
+  metered and billed and your sites keep serving; on Free the site is **paused until the
+  start of next month**, clears itself when the month turns, and comes straight back if
+  you upgrade. Nothing is ever deleted.
+- **[Run history that says what happened](marketing-and-automation/workflows-and-actions/actions-builder.md#run-history)** —
+  the **Runs** dialog is a real log: when it ran, what triggered it, whether it
+  succeeded, and what each step did. A run stopped by an unmet condition is recorded as
+  **Skipped**, naming the field — the answer to "why didn't my automation fire?".
+- **[An Inbox of people, not forms](content-and-data/forms/overview.md#the-inbox)** — a
+  submission shows who sent it, how long ago, and **where it went**: chips under the
+  fields say whether it also became a dataset record.
+- **[Count your recipients before you send](marketing-and-automation/email-campaigns/overview.md#recipient-count)** —
+  the campaign composer counts the audience while you are still writing, with
+  duplicates, unsubscribes and your monthly cap already taken off.
+- **[Popups that cap once per session](marketing-and-automation/marketing-overlays/overview.md#frequency)** —
+  show a popup at most once per visit, or hide it for a number of days after it is
+  dismissed. Scheduled campaigns now actually send, every fifteen minutes.
+- **[Average time on a screen](marketing-and-automation/analytics/overview.md#dwell-time)** —
+  beside a screen's views, how long visitors stayed. The **Traffic** card was rebuilt too,
+  and its growth figure now follows the range you picked.
+- **[Download any asset](content-and-data/media/overview.md#download-file)** — from the
+  detail drawer or the card menu, for public and private files alike, and the drawer
+  says which CDN variants that file actually has.
+- **[The Orders screen you were promised](commerce-and-bookings/commerce/overview.md#orders-screen)** —
+  a real table with a Channel column, coloured status pills, and revenue, order-count and
+  average-order-value tiles against the previous 30 days.
+- **[Free listings say Free](developers/plugins/overview.md#whats-included)** — the
+  marketplace shows a price on every card, stars where a listing has been rated, and a
+  **What's included** box on the listing page.
+- **[Make the platform yours](workspace-and-billing/white-label.md)** — white-label now
+  reaches transactional email: your logo in the header, your product name and support
+  URL in the copy. Self-hosters can rename the product itself and serve every site from
+  their own apex.
+- **[Report an issue](workspace-and-billing/report-an-issue.md)** — a bug report from any
+  console page, on every plan, with the page, workspace and version attached for you.
+
+## August 2026 — editing together
 
 - **[A visual editor for long documents](building-sites/besigner/long-form-markdown.md#the-markdown-element)** —
   the Markdown element's **Content** attribute is a WYSIWYG editor, not a text box:
@@ -72,11 +111,14 @@ for the how-to.
   install, manage and publish marketplace items from a single **Marketplace** destination in
   the organization navigation (**Browse**, **Installed**, and **Publish** tabs), instead of a
   per-site Marketplace tab. Old per-site links redirect here.
-- **One section for everything pluggable and sellable** — the separate **Plugins** and
-  **Marketplace** org tabs were folded into the Marketplace. The **Installed** tab now holds the
-  first-party plugin switchboard and per-plugin settings alongside marketplace installs, and
-  the seller area is its own set of tabs — **Publish**, **Profile**, **Listings**, **Payouts**,
-  and **Sales**. The old `/plugins` and `/marketplace` links redirect into the matching tab.
+- **Marketplace is the market; Plugins is the switchboard** — the two live side by side in
+  the organization navigation and do different jobs. **Marketplace** is where you browse,
+  install and publish. **Plugins** is where you turn things on and off: an **Installed from
+  the marketplace** card and a **Built in** card, each row with a switch and its per-plugin
+  settings. Look for a plugin's on/off switch under **Plugins**, not under Marketplace.
+  The seller area is its own set of marketplace sections — **Publish**, **Publisher
+  Profile**, **Listings**, **Payouts** and **Sales**. Old per-site links redirect into the
+  matching organization section.
 - **Install targeting** — when you install, choose **All sites** (organization-wide, and any
   sites you add later) or **Selected sites**. Site-scoped artifacts (components, templates,
   layouts) install onto every current site and note that new sites aren't added automatically.

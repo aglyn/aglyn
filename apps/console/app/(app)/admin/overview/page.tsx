@@ -38,6 +38,8 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffChurnReportCard from '../../../../components/staff-churn-report-card.component'
+import StaffReversalRecoveryCard from '../../../../components/staff-reversal-recovery-card.component'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -341,6 +343,15 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
               {
                 size: { xs: 12 },
                 children: (
+                  <StaffReversalRecoveryCard
+                    rows={data?.reversalRecovery}
+                    owedCents={metrics?.reversalOwedCents}
+                  />
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
                   <CardDisplay
                     header={`Top usage (${metrics?.rollupMonth ?? 'last month'})`}
                     help={docsHelp('architectureMultiTenancy', {
@@ -505,6 +516,14 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                     </Stack>
                   </CardDisplay>
                 ),
+              },
+              {
+                // Why people leave (AGL-2248). The funnel has stored every
+                // survey answer since AGL-1863 and nothing anywhere read them
+                // — a capability is not a feature until the console exposes
+                // it. Reads its own endpoint, so it cannot delay this page.
+                size: { xs: 12, md: 6 },
+                children: <StaffChurnReportCard />,
               },
             ]}
           />

@@ -56,6 +56,20 @@ describe('MarkdownLiteView (markdown-lite parity)', () => {
  * into the reference is what resolves. The console serves `/api/media/cdn/…`
  * itself, so the relative URL is fetchable from this origin.
  */
+describe('MarkdownLiteView heading anchors (AGL-1162)', () => {
+  it('stamps the same ids the published page will, on real heading tags', () => {
+    // The preview's job is to be what ships. It rendered headings as bare
+    // Typography, so an author could not see a duplicate-heading collision
+    // until the document was live and the contents links jumped to the wrong
+    // section.
+    const { container } = render(
+      <MarkdownLiteView source={'## Notice\n\nbody\n\n### Notice'} />,
+    )
+    expect(container.querySelector('h2')?.id).toBe('notice')
+    expect(container.querySelector('h3')?.id).toBe('notice-2')
+  })
+})
+
 describe('MarkdownLiteView images (AGL-1686)', () => {
   it('resolves a media reference to the CDN url', () => {
     const { container } = render(

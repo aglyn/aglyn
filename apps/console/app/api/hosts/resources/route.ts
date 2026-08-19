@@ -405,97 +405,9 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const collectionRef = hostRef.collection(resource.collection)
-    // ONE scan of the screens collection, two answers (AGL-1440): the plan's
-    // allowance below and the flat non-page cap after it read the same rows.
-    const screenRows =
-      resourceKey === 'screen' ? await readScreenSources(hostRef) : []
     // The routing map decides which screens count (AGL-1383), and the host
     // snapshot above already holds it — no second read.
     const routingMap = hostSnapshot.get('screens')
-    if (resource.quotaKey) {
-      // Platform-seeded starters (AGL-687) are excluded from the template
-      // count: they are content WE put in the library, and charging a free
-      // plan's ten-template allowance for them would leave no room for the
-      // user's own work. Every other template carries source.type
-      // 'authored' or 'marketplace', both of which still count.
-      const used =
-        resourceKey === 'template'
-          ? (
-              await collectionRef
-                .where('source.type', '!=', 'starter')
-                .count()
-                .get()
-            ).data().count
-          : resourceKey === 'screen'
-            ? billableScreenIds(screenRows, routingMap).size
-            : (await collectionRef.count().get()).data().count
-      // Registers are the one quota whose cap is not the org-level value
-      // (AGL-1775). `seatAddons.posRegisters` is an org POOL and
-      // `org.registerAllocations` says which site holds each seat, so a
-      // `checkQuota(org, 'posRegisters', …)` here would read the plan cap with
-      // no pool in it and refuse a site the seats it is invoiced for. This is
-      // the enforcement point the decision moved onto the allocation; it did
-      // not move anywhere else.
-      const quota =
-        resourceKey === 'register'
-          ? checkHostRegisterQuota(org, hostId, used)
-          : checkQuota(org, resource.quotaKey as any, used)
-      if (!quota.allowed) {
-        return Response.json({
-          error:
-            resourceKey === 'register'
-              ? `This site can run ${quota.limit} ${resource.label} — ` +
-                'assign another register seat to it in Billing, or buy one'
-              : `Your plan includes ${quota.limit} ${resource.label} — ` +
-                'upgrade in Billing for more',
-        }, { status: 403 })
-      }
-    }
-    // Flat platform cap (AGL-1360), counted from a server read for the same
-    // reason the quotas above are: the number the client believed is not a
-    // fact about the collection. `softDeletes` collections count LIVE docs
-    // only, so deleting one frees its slot.
-    if (resource.maxPerHost != null) {
-      const existing = resource.softDeletes
-        ? (await collectionRef.select('deletedAt').get()).docs.filter(
-            (entry) => entry.get('deletedAt') == null,
-          ).length
-        : (await collectionRef.count().get()).data().count
-      if (existing >= resource.maxPerHost) {
-        return Response.json({
-          error:
-            `${resource.label} are capped at ${resource.maxPerHost} per site`,
-        }, { status: 403 })
-      }
-    }
-    // The same flat shape for the screens that no plan cap counts (AGL-1399,
-    // AGL-1439). `kind: 'email'` is on the allow-list above because the email
-    // composer must send it, and `countBillableScreens` subtracts it — so this
-    // create was a document nothing bounded, repeatable in a loop on a free
-    // plan. Unbounded Firestore documents rather than a bypass of anything we
-    // sell, so the answer is a platform cap and NOT a plan dimension: no
-    // `OrgEntitlements` key, no variation by plan, nothing re-priced.
-    //
-    // Keyed off the PREDICATE (`screenClaimsToBeAPage`), never off the two kind
-    // values: AGL-1439 is AGL-1399 one value over, and enumerating them would
-    // leave the next non-page kind unbounded again. `kind: 'template'` cannot be
-    // created here at all (refused above), but it fills the same bucket by
-    // demotion and by import, so it is counted here.
-    if (
-      resourceKey === 'screen' &&
-      !screenClaimsToBeAPage({ kind: requestedKind as string })
-    ) {
-      const existing = nonPageScreenIds(screenRows, routingMap).size
-      if (existing >= NON_PAGE_SCREEN_MAX_PER_HOST) {
-        return Response.json({
-          error:
-            'This site is at its limit of ' +
-            `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
-            'delete some to make room',
-        }, { status: 403 })
-      }
-    }
-
     const id = typeof body?.id === 'string' && body.id
       ? String(body.id).slice(0, 64)
       : createResourceUid()
@@ -520,17 +432,139 @@ async function handler(request: Request): Promise<Response> {
       resourceKey === 'screen' && typeof doc['displayName'] === 'string'
         ? { nameLower: nameSearchKey(doc['displayName'] as string) }
         : {}
-    await collectionRef.doc(id).create({
-      ...doc,
-      ...nameLower,
-      ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
-      // Unconditional now that no allow-list carries them: the client cannot
-      // supply either, so there is no client value left to preserve. The
-      // callers already relied on this — a Timestamp does not survive the
-      // JSON hop, so what they used to be able to send was junk anyway.
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
+
+    /*
+     * COUNT AND CREATE IN ONE TRANSACTION (AGL-2231).
+     *
+     * Every cap below used to be a read, then a decision, then a `create()`
+     * outside any transaction — so N concurrent POSTs each read the same
+     * pre-count, each found room, and each landed. A free plan's five screens
+     * became fifty by sending fifty requests at once, and nothing re-counts
+     * afterwards, so the extra slots were permanent. That is the
+     * create-time-quota shape AGL-1383/1387/1390 chased through the COUNTING
+     * RULE; this is the same defect in WHEN the rule is applied, and the
+     * counting rule cannot fix it. `/api/hosts/create` already had the answer
+     * for `hostLimit` (AGL-1738) and `assertCollaboratorSeats` for seats — this
+     * is that treatment for the other eleven keys.
+     *
+     * Firestore's `Transaction.get(AggregateQuery)` takes a pessimistic lock on
+     * every document the underlying query matches, so the count really is
+     * serialized against a concurrent create into the same collection: the
+     * loser retries, re-reads the higher count and is refused. Every read here
+     * is one this route already paid for — the transaction adds contention on a
+     * per-site collection, not reads.
+     *
+     * ALL READS BEFORE THE WRITE, which Firestore requires and which is also
+     * why the document is assembled above: the transaction body must not do
+     * anything between the last count and `tx.create`.
+     *
+     * A refusal is returned as data and rendered outside. Building a `Response`
+     * inside a body that can run several times would allocate one per attempt,
+     * and — worse — reads as if the transaction were a place effects happen.
+     */
+    const refusal = await firestore.runTransaction(async (tx) => {
+      // ONE scan of the screens collection, two answers (AGL-1440): the plan's
+      // allowance below and the flat non-page cap after it read the same rows.
+      const screenRows =
+        resourceKey === 'screen'
+          ? await readScreenSources(hostRef, (query) => tx.get(query as any))
+          : []
+      if (resource.quotaKey) {
+        // Platform-seeded starters (AGL-687) are excluded from the template
+        // count: they are content WE put in the library, and charging a free
+        // plan's ten-template allowance for them would leave no room for the
+        // user's own work. Every other template carries source.type
+        // 'authored' or 'marketplace', both of which still count.
+        const used =
+          resourceKey === 'template'
+            ? (
+                await tx.get(
+                  collectionRef.where('source.type', '!=', 'starter').count(),
+                )
+              ).data().count
+            : resourceKey === 'screen'
+              ? billableScreenIds(screenRows, routingMap).size
+              : (await tx.get(collectionRef.count())).data().count
+        // Registers are the one quota whose cap is not the org-level value
+        // (AGL-1775). `seatAddons.posRegisters` is an org POOL and
+        // `org.registerAllocations` says which site holds each seat, so a
+        // `checkQuota(org, 'posRegisters', …)` here would read the plan cap with
+        // no pool in it and refuse a site the seats it is invoiced for. This is
+        // the enforcement point the decision moved onto the allocation; it did
+        // not move anywhere else.
+        const quota =
+          resourceKey === 'register'
+            ? checkHostRegisterQuota(org, hostId, used)
+            : checkQuota(org, resource.quotaKey as any, used)
+        if (!quota.allowed) {
+          return {
+            error:
+              resourceKey === 'register'
+                ? `This site can run ${quota.limit} ${resource.label} — ` +
+                  'assign another register seat to it in Billing, or buy one'
+                : `Your plan includes ${quota.limit} ${resource.label} — ` +
+                  'upgrade in Billing for more',
+          }
+        }
+      }
+      // Flat platform cap (AGL-1360), counted from a server read for the same
+      // reason the quotas above are: the number the client believed is not a
+      // fact about the collection. `softDeletes` collections count LIVE docs
+      // only, so deleting one frees its slot.
+      if (resource.maxPerHost != null) {
+        const existing = resource.softDeletes
+          ? (await tx.get(collectionRef.select('deletedAt'))).docs.filter(
+              (entry) => entry.get('deletedAt') == null,
+            ).length
+          : (await tx.get(collectionRef.count())).data().count
+        if (existing >= resource.maxPerHost) {
+          return {
+            error:
+              `${resource.label} are capped at ${resource.maxPerHost} per site`,
+          }
+        }
+      }
+      // The same flat shape for the screens that no plan cap counts (AGL-1399,
+      // AGL-1439). `kind: 'email'` is on the allow-list above because the email
+      // composer must send it, and `countBillableScreens` subtracts it — so this
+      // create was a document nothing bounded, repeatable in a loop on a free
+      // plan. Unbounded Firestore documents rather than a bypass of anything we
+      // sell, so the answer is a platform cap and NOT a plan dimension: no
+      // `OrgEntitlements` key, no variation by plan, nothing re-priced.
+      //
+      // Keyed off the PREDICATE (`screenClaimsToBeAPage`), never off the two kind
+      // values: AGL-1439 is AGL-1399 one value over, and enumerating them would
+      // leave the next non-page kind unbounded again. `kind: 'template'` cannot be
+      // created here at all (refused above), but it fills the same bucket by
+      // demotion and by import, so it is counted here.
+      if (
+        resourceKey === 'screen' &&
+        !screenClaimsToBeAPage({ kind: requestedKind as string })
+      ) {
+        const existing = nonPageScreenIds(screenRows, routingMap).size
+        if (existing >= NON_PAGE_SCREEN_MAX_PER_HOST) {
+          return {
+            error:
+              'This site is at its limit of ' +
+              `${NON_PAGE_SCREEN_MAX_PER_HOST} email and template screens — ` +
+              'delete some to make room',
+          }
+        }
+      }
+      tx.create(collectionRef.doc(id), {
+        ...doc,
+        ...nameLower,
+        ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
+        // Unconditional now that no allow-list carries them: the client cannot
+        // supply either, so there is no client value left to preserve. The
+        // callers already relied on this — a Timestamp does not survive the
+        // JSON hop, so what they used to be able to send was junk anyway.
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+      return null
     })
+    if (refusal) return Response.json(refusal, { status: 403 })
     return Response.json({ ok: true, id }, { status: 200 })
   } catch (error: any) {
     if (error?.code === 6 /* ALREADY_EXISTS */) {

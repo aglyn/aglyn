@@ -30,6 +30,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
+import { decrementVariantStock } from './reserve-stock'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -68,7 +69,17 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
   const locationId = String(body.locationId ?? '')
-  const discountPct = Math.min(100, Math.max(0, Number(body.discountPct ?? 0)))
+  // Clamped through a FINITENESS test, not by `Math.min`/`Math.max` alone
+  // (AGL-2224): both propagate `NaN`, so `discountPct: 'half'` from a register
+  // used to survive the clamp and turn every figure below it — the discount,
+  // the platform fee, the tax and `totals.totalCents` — into `NaN`. `NaN`
+  // defeats comparison rather than failing it, so the "cash received is short"
+  // guard below (`cashReceivedCents < totals.totalCents`) read false and rang
+  // up a sale that had taken no money.
+  const rawDiscountPct = Number(body.discountPct ?? 0)
+  const discountPct = Number.isFinite(rawDiscountPct)
+    ? Math.min(100, Math.max(0, rawDiscountPct))
+    : 0
   const rawLines = Array.isArray(body.lines) ? body.lines : []
   // One settlement attempt, minted by the register (AGL-1691). Node lowercases
   // incoming headers, but read both spellings — the plugin API request type
@@ -86,8 +97,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
+    // AN ALLOWLIST (AGL-2262), matching `cancel-order.ts`, `fulfill-order.ts`
+    // and the Firestore rules' own `hostMemberRole(hostId) in
+    // ['admin','editor']`. The old `!role || role === 'viewer'` denylist
+    // admitted every string that was not literally `viewer` on the route that
+    // takes cash, mints a card QR and decrements real inventory.
+    // `HostAccessRole` is exactly `admin | editor | viewer`, so this refuses
+    // nothing a real projection can produce.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole || memberRole === 'viewer') {
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const ownerOrg = await getOrgForHost(hostId)
@@ -174,6 +192,43 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     if (lineItems.length === 0) {
       return res.status(400).json({ error: 'No valid lines' })
     }
+    // WHAT THE COUNT SAYS, said out loud (AGL-2357). This handler had no
+    // `canPurchase` call at all — every storefront door gates on it and the
+    // register did not — so a merchant who chose `oversellPolicy: 'deny'` in
+    // the product editor was silently getting `backorder` at the till.
+    //
+    // The decision (AGL-2357, Zach): WARN, NEVER BLOCK. A till is the wrong
+    // place for a stale number to stop a real sale — the cashier is holding
+    // the goods — but a merchant who set "deny" is entitled to have the
+    // register say something before it sells past zero. So the shortfall is
+    // reported and the sale proceeds: there is no refusal anywhere below this
+    // line, and adding one is a separate decision (AGL-2358, the
+    // manager-override variant).
+    //
+    // Computed from the SERVER's product documents, not the register's cached
+    // grid, and returned on both tenders. The client shows its own warning as
+    // the basket is built (`pos-page.component.tsx`), which is the surface the
+    // cashier reads; this is the authoritative one, taken at the moment of
+    // sale and available to any other register client.
+    const stockWarnings: CommerceModel.StockShortfall[] = []
+    for (const line of lineItems) {
+      const product = productsById.get(line.productId)
+      if (!product) continue
+      const shortfall = CommerceModel.stockShortfall(
+        product,
+        line.variantId ?? product.variants[0]?.id,
+        line.quantity,
+      )
+      if (!shortfall) continue
+      stockWarnings.push({
+        productId: line.productId,
+        ...(line.variantId ? { variantId: line.variantId } : {}),
+        name: line.name,
+        ...(line.variantLabel ? { variantLabel: line.variantLabel } : {}),
+        requested: line.quantity,
+        available: shortfall.available,
+      })
+    }
     const itemsCents = lineItems.reduce(
       (sum, line) => sum + line.unitAmountCents * line.quantity,
       0,
@@ -199,27 +254,36 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     //
     // Scaled by the cashier's discount, again like the cart: the fee is a cut
     // of what the shopper actually paid, not of the list basket.
-    const grossFeeCents = lineItems.reduce(
-      (sum, line) =>
+    // WHETHER a rate applies is a separate fact from what it rounds to
+    // (AGL-2256). This path rounds TWICE — once per line, then again when the
+    // cashier's discount scales the sum — and floored neither, so a small
+    // basket on a low rate produced 0 and the emission guard below read that as
+    // "this plan charges no fee" and sent none at all. Every other door floors
+    // at `Math.max(1, …)` when the rate is above zero.
+    let feeApplies = false
+    const grossFeeCents = lineItems.reduce((sum, line) => {
+      const linePct = Aglyn.resolveTransactionFeePct(
+        ownerOrg?.org as any,
+        (line.productType ?? 'physical') as 'physical' | 'digital' | 'service',
+      )
+      if (linePct > 0) feeApplies = true
+      return (
         sum +
-        Math.round(
-          (line.unitAmountCents *
-            line.quantity *
-            Aglyn.resolveTransactionFeePct(
-              ownerOrg?.org as any,
-              (line.productType ?? 'physical') as
-                | 'physical'
-                | 'digital'
-                | 'service',
-            )) /
-            100,
-        ),
-      0,
-    )
-    const feeCents =
+        Math.round((line.unitAmountCents * line.quantity * linePct) / 100)
+      )
+    }, 0)
+    const chargedItemsCents = Math.max(0, itemsCents - discountCents)
+    const scaledFeeCents =
       itemsCents > 0
-        ? Math.round((grossFeeCents * (itemsCents - discountCents)) / itemsCents)
+        ? Math.round((grossFeeCents * chargedItemsCents) / itemsCents)
         : 0
+    // Gated on what the shopper actually pays for goods, so a 100% cashier
+    // discount still takes nothing — the fee is a cut of the goods, and there
+    // are none left to cut.
+    const feeCents =
+      feeApplies && chargedItemsCents > 0
+        ? Math.max(1, scaledFeeCents)
+        : scaledFeeCents
     // Origin tax (AGL-285) — in-person sales are origin-based by nature.
     const storeSettings = await hostRef.collection('settings').doc('store').get()
     const taxSettings = (storeSettings.get('tax') ?? {}) as CommerceModel.TaxSettings
@@ -453,7 +517,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           body: params.toString(),
         },
       )
-      const session = (await response.json()) as { url?: string; error?: any }
+      const session = (await response.json()) as {
+        url?: string
+        id?: string
+        error?: any
+      }
       if (!response.ok || !session.url) {
         await orderRef.delete().catch(() => undefined)
         // The sale did not happen — let the same key be tried again rather
@@ -461,10 +529,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
+      // The session id, stored the way `draft-order.ts` has always stored it
+      // (AGL-2244). Without it a cancelled QR sale has no handle on the Stripe
+      // page still sitting on the customer's phone, so `cancel-order.ts` had
+      // nothing to expire and the register could take the money twice.
+      await orderRef
+        .set({ checkoutSessionId: session.id ?? null }, { merge: true })
+        .catch(() => undefined)
       const cardPayload = {
         orderId: orderRef.id,
         url: session.url,
         totals: cardTotals,
+        // AGL-2357. Present on both tenders and on the recorded replay, so a
+        // cashier who re-submits the same key still sees what they were told
+        // the first time.
+        ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
       }
       await claim.record(200, cardPayload)
       return res.status(200).json(cardPayload)
@@ -579,33 +658,45 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         (variant) => variant.id === variantId && variant.inventory != null,
       )
       if (!variantId || !tracked) continue
-      const variants = CommerceModel.adjustVariantInventory(
-        product,
-        variantId,
-        -line.quantity,
-        locationId || undefined,
-      )
       // Two lines of one product must COMPOUND (AGL-1828): the next line
       // starts from these variants, not from the product as first read —
       // recomputing from the original would erase this decrement when the
       // sibling line's merge-set landed, while the ledger below recorded
       // both. Same carry-forward as the webhook's POS card loop (AGL-1825).
-      const updated = { ...product, variants }
-      productsById.set(line.productId, updated)
-      await hostRef
-        .collection('products')
-        .doc(line.productId)
-        .set(
-          { variants, inventory: CommerceModel.productInventory({ variants }) },
-          { merge: true },
-        )
-        .catch(() => undefined)
+      //
+      // ATOMIC since AGL-2320, and the register is the channel that needed it
+      // most: `productsById` was read at the top of this handler, before the
+      // register quota check, the pricing pass, the settlement claim, the order
+      // transaction and the folio append. A shopper's webhook landing anywhere
+      // in that window had its decrement overwritten by this merge-set — two
+      // sales, one unit off the shelf, both in the ledger. The transaction's
+      // re-read is what compounds the lines now, and it sees the other
+      // channel's committed write too.
+      //
+      // The register still SELLS whatever is rung up. Refusing goods a cashier
+      // is physically holding is a product decision, not this fix's (AGL-2320);
+      // what the merchant gets instead is the oversold notification the helper
+      // fires when the shelf could not cover the sale.
+      const moved = await decrementVariantStock({
+        firestore,
+        hostRef,
+        hostId,
+        productId: line.productId,
+        variantId,
+        quantity: line.quantity,
+        locationId: locationId || undefined,
+      })
+      if (!moved.before || !moved.after) continue
+      productsById.set(line.productId, moved.after)
       await hostRef
         .collection('inventoryAdjustments')
         .add({
           productId: line.productId,
           variantId,
           delta: -line.quantity,
+          ...(moved.applied !== -line.quantity
+            ? { appliedDelta: moved.applied }
+            : {}),
           reason: 'sale',
           orderId: orderRef.id,
           ...(locationId ? { locationId } : {}),
@@ -618,7 +709,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // button alerted. The compounded pair above means two lines of one
       // product cross exactly once, on the line that breaches; the
       // `claimAttempt` bounds a replayed settlement.
-      alertLowStockCrossing(hostId, product, updated)
+      alertLowStockCrossing(hostId, moved.before, moved.after)
     }
     // AGL-1757: the register's email box is optional, and a room charge is
     // exactly the sale nobody stops to re-ask an email for — so a stay's
@@ -680,6 +771,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       totals,
       changeCents:
         payment === 'cash' ? cashReceivedCents - totals.totalCents : 0,
+      ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
     }
     await claim.record(200, cashPayload)
     return res.status(200).json(cashPayload)

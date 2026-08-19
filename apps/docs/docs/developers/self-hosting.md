@@ -124,6 +124,130 @@ product claims nothing, and `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED` must
 be exactly `true` before anything states a registration. Naming an agent never
 implies one.
 
+## Which addresses this install calls its own {#addresses}
+
+The operator identity above says who you are. This section is about where your
+deployment *lives*, and it is the group most often left at its default — with
+the default being one of Aglyn's own hostnames.
+
+### `NEXT_PUBLIC_TENANT_DOMAIN` — set this one first {#tenant-domain}
+
+The apex your sites' assigned subdomains hang off. A site whose subdomain is
+`acme` is served at `acme.<this value>`.
+
+**Unset, it is `aglyn.app` — Aglyn's cloud.** This is the single most
+consequential value on the page, because the damage is not confined to your
+own console. The same constant is what every published site uses to describe
+itself to the outside world:
+
+- `<link rel="canonical">` on every page
+- `/api/sitemap` and `/api/robots`
+- item links in `/api/collections-rss`
+- `/api/manifest`
+- `og:image`
+- the origin an inbox-bound `<img src>` in email resolves against
+
+Left at the default, your customers' sites tell Google, every feed reader and
+every inbox that they live at an address you do not control and Aglyn does not
+serve for you.
+
+### `AGLYN_TENANT_HOST_CNAME` — and its near-twin {#tenant-host-cname}
+
+This is what the **tenant runtime** matches an incoming `Host` header against.
+A request for that name, or for anything under `*.<that name>`, resolves to one
+of your published sites; anything else falls through to the custom-domain path.
+It has no default.
+
+There is a second, similarly-named variable, and they are not the same one:
+
+| Variable | Read by | If unset |
+| --- | --- | --- |
+| `AGLYN_TENANT_HOST_CNAME` | The tenant runtime, to resolve incoming hosts | No apex matches, and every visitor falls through |
+| `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` | The console, as the CNAME target it displays and verifies in the custom-domain wizard | Defaults to `sites.aglyn.app` |
+
+`.env.selfhost.example` ships only the second. **Set both, to the same value.**
+The first is consumed at image-build time, so it has to be in the env file
+before `docker compose build`.
+
+### `NEXT_PUBLIC_CONSOLE_URL` {#console-url}
+
+Your console's public origin. Unset, it falls back to `https://app.aglyn.com`,
+and three things follow from that:
+
+- A visitor who reaches your tenant runtime on a hostname it cannot resolve is
+  redirected to **Aglyn's** console — your user, mid-session, on our domain.
+- The besigner's "edit this page" bounce keeps Aglyn's two console origins in
+  its return allowlist. Naming your own console replaces them with yours
+  alone, so your tenant runtime stops carrying a redirect target at a console
+  you do not run.
+- The admin bar and the links inside transactional email point at us.
+
+### `AGLYN_STANDALONE` {#aglyn-standalone}
+
+The variable that tells the software it is a real deployment rather than a
+developer's laptop, and it must be exactly `1`. Two things key on it: the
+tenant runtime's host resolution, and the canonical custom-domain redirect.
+
+Both Dockerfiles set it while **building** the image. That value does not
+survive into the running container — a Docker build stage's environment does
+not carry across to the runner stage — and neither `.env.selfhost.example` nor
+`docker-compose.yml` supplies it at runtime.
+
+**Add `AGLYN_STANDALONE=1` to your `.env.selfhost`.** Compose passes that file
+to both containers as runtime environment, which is where the host-resolution
+branch reads it.
+
+### Reverse proxy: one wildcard is enough {#reverse-proxy}
+
+The tenant runtime resolves the `Host` header itself, so you need two rules,
+not one per site:
+
+```caddy
+console.example.com {
+  reverse_proxy localhost:4200
+}
+*.sites.example.com {
+  reverse_proxy localhost:4500
+}
+```
+
+A customer's own custom domain works the same way — point it at your proxy and
+route it to the tenant container. The runtime treats any hostname it does not
+recognise as a candidate custom domain and looks it up.
+
+## Renaming the product {#platform-brand}
+
+`NEXT_PUBLIC_PLATFORM_BRAND_NAME` renames the product everywhere it names
+itself: browser-tab titles, the installable PWA, the relying-party name the
+operating system shows when someone saves a passkey, transactional email, and
+the `<meta name="generator">` / `x-powered-by` fingerprint on every site you
+publish. Unset, it is `Aglyn`.
+
+| Variable | Unset means |
+| --- | --- |
+| `NEXT_PUBLIC_PLATFORM_BRAND_NAME` | `Aglyn` |
+| `NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME` | `<brand> LLC` — a US company form, so set it if you are not one |
+| `NEXT_PUBLIC_PLATFORM_SUPPORT_URL` | Falls back to `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` as a `mailto:` before it ever falls back to Aglyn's support page |
+
+Brand **images** are not environment variables and are not meant to be: the
+favicon, app icons and social card are files under
+`apps/console/public/_static/images/brand` and the matching tenant path.
+Replace them in your Docker build context.
+
+:::caution `NEXT_PUBLIC_*` is baked in at build time
+Every variable on this page whose name starts with `NEXT_PUBLIC_` is compiled
+into the client bundles when the image is built. Changing one needs
+`docker compose build`, not a restart. A restart will appear to do nothing,
+which is the failure mode worth recognising.
+:::
+
+This is the **deployment-level** rename, and it is orthogonal to the per-organization
+[white-label](../workspace-and-billing/white-label.md) feature. The platform
+brand is what every organization on your install falls back to; white-label is
+a paid entitlement that lets one organization override it for itself. The two
+compose: on your deployment, a non-white-label organization renders *your*
+brand, not Aglyn's.
+
 ## Optional keys
 
 The example env file carries the required Firebase blocks plus a handful of
@@ -135,21 +259,118 @@ disables its feature rather than breaking the stack:
 | Billing & commerce checkout | `STRIPE_SECRET_KEY`, plus `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, and the `STRIPE_PRICE_*` price ids if you want working plan checkout — the secret key alone is not enough |
 | Transactional & campaign email | `RESEND_API_KEY`, `USAGE_EMAIL_FROM` |
 | AI assist | `ANTHROPIC_API_KEY` |
-| Scheduled jobs (audit archival, erasure runs) | `CRON_SECRET` — the job routes stay dormant without it |
+| Scheduled jobs | `CRON_SECRET` — the job routes stay dormant without it. See [below](#scheduled-jobs) for what that silently switches off |
+| Customer issue reports | `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required. See [below](#issue-reports) |
+| The every-minute job beat | `AGLYN_JOB_RUNNER_URL`, only if you deploy `cloud/functions`. See [below](#scheduled-jobs) |
+
+### Scheduled jobs {#scheduled-jobs}
+
+Two separate mechanisms, and missing either is quiet rather than loud.
+
+**`CRON_SECRET`** is the shared secret every scheduled route checks. Without
+it those routes answer `501` and do nothing — including audit archival,
+erasure runs, retention sweeps, booking reminders, abandoned-cart and restock
+mail, and, least obviously, **scheduled campaign sends**. A self-hoster who
+skips this can schedule a campaign in the console, see it accepted, and watch
+its send time pass with nothing delivered and no error anywhere. Generate one
+with `openssl rand -hex 32` and point a scheduler at the routes.
+
+**`AGLYN_JOB_RUNNER_URL`** only matters if you deploy `cloud/functions`. It is
+the tenant origin its every-minute beat POSTs to, and it drives scheduled
+publishing and booking-hold expiry. It has **no default**, deliberately: it
+used to fall back to a specific Aglyn customer's published site, so a
+deployment that missed the variable POSTed to a stranger every minute carrying
+its own `PLUGIN_JOBS_SECRET` while none of its own jobs ran. Unset, the beat
+now refuses to fire and logs the variable name once per tick. Set it to a
+tenant origin on *your* deployment, for example
+`https://sites.example.com/api/plugins/run-jobs`.
+
+### Customer issue reports {#issue-reports}
+
+The console's **Report an issue** dialog files into Linear, and it files into
+*your* Linear workspace or nowhere. Both `LINEAR_API_KEY` and
+`LINEAR_CUSTOMER_REPORTS_TEAM_ID` are required; with either missing the route
+answers `501` and names them, and no report is ever sent to Aglyn.
+
+Scope the key when you create it. Linear can restrict a personal API key to
+**Create issues** and to **specific teams** — do both, so a leaked key cannot
+read your backlog. Use a team of its own rather than your delivery team: an
+unbounded inbound stream in the team you plan releases from destroys the open
+count you steer by.
+
+Both are **server-only**. Never prefix either with `NEXT_PUBLIC_`, which would
+inline a workspace-wide credential into the browser bundle.
+
+### Bucket CORS is not a file you can use as-is {#bucket-cors}
+
+`cloud/storage-cors.json` in the repository is **Aglyn's own live bucket
+policy** — it names `https://app.aglyn.com`, and a test asserts that it stays
+byte-identical to what our bucket serves. It is applied with
+`gcloud --cors-file`, which cannot read environment variables, so this one
+cannot be made configurable in place.
+
+Copy the file, replace the origin with your console's, and apply your copy.
+Without it, every upload over 3 MB dies at the CORS preflight as a generic
+"try again".
+
+## Publishing your own documentation {#docs-build}
+
+`apps/docs` is a standalone Docusaurus package. It is not part of
+`docker compose`; you build and publish it separately if you want your own
+documentation site. Skip this whole section if you do not.
+
+Every value below is read at **build** time by `docusaurus build`, from that
+build's environment. They are not container runtime environment, and they are
+not `NEXT_PUBLIC_*` — Docusaurus is not Next. Set them before the build, not
+after; the values are baked into the static output.
+
+| Variable | Unset means |
+| --- | --- |
+| `DOCS_GA_TRACKING_ID` | No analytics tag is loaded at all |
+| `DOCS_ERROR_BEACON_ENDPOINT` | The browser error beacon installs no handlers |
+| `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
+| `DOCS_URL` | The canonical origin is `https://docs.aglyn.com` |
+| `DOCS_ORGANIZATION_NAME` | The footer copyright reads `Aglyn LLC` |
+
+The rule to hold on to for the first three: **unset means off, never ours.**
+They previously defaulted to Aglyn's GA4 property, Aglyn's error collector and
+Aglyn's production health endpoints — so a published build reported your
+readers to us and told them our uptime was yours, which is a false all-clear
+during your own outage.
+
+`DOCS_STATUS_TARGETS` is a comma-separated list of
+`name|label|origin|description` entries. A name and an origin are required;
+the description may be omitted and an empty label falls back to the name, so
+`console||https://console.example.com` is a valid entry:
+
+```
+DOCS_STATUS_TARGETS='console|Console|https://console.example.com,sites|Published sites|https://sites.example.com'
+```
+
+If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's `/api/errors`,
+set `NEXT_PUBLIC_DOCS_ORIGIN` on that **console** to your docs origin as well —
+the collector's CORS allowlist reads it.
 
 ## Honest limits
 
 | Area | Self-hosted behavior |
 | --- | --- |
 | Firebase | Required — Auth, Firestore, Storage, RTDB, and Remote Config run in your project. |
-| Custom-domain self-service | The in-console attach flow is Vercel-specific; self-hosters attach domains at their reverse proxy instead. |
+| Custom-domain self-service | The in-console attach flow is Vercel-specific and answers `501` without Vercel credentials; self-hosters attach domains at their reverse proxy instead. DNS **verification** works everywhere — see the row below. |
+| Custom-domain verification | The verify step requires an exact CNAME match, or an apex address match when the name carries no CNAME at all. There is a soft pass that accepts *any* CNAME, for local development where no DNS points at a tenant edge. It used to be enabled by the absence of a hosting vendor's environment variable — which a container never sets — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified. A user of your platform could claim a domain they do not control. It now keys on `NODE_ENV`, which both Dockerfiles set to `production` in the image that actually runs. **If you run an image built before this fix, upgrade.** |
 | Legal pages & clickwrap | The signup checkbox links **Aglyn LLC's** Terms and Privacy and records acceptance against Aglyn's document hashes. Nothing breaks, but the agreement is ours, not yours, and is not yet configurable. Replace it before running this for anyone but yourself. |
-| Abuse & support contact | The public abuse-report form and several error screens print `support@aglyn.com`, not yet configurable — so abuse and DMCA notices about *your* deployment would be directed to Aglyn. |
 | Marketplace | Visible by default, but backed by Aglyn's Stripe Connect platform. Browsing works; purchase and payout onboarding explain themselves only after a click. Turn `release_marketplace` off in Remote Config if you don't want it. |
-| Wildcard published-site domains | Host resolution for arbitrary public hostnames currently assumes the hosted platform — plan on per-site proxy rules rather than a single wildcard, and expect this area to improve. |
+| Wildcard published-site domains | Supported. The tenant runtime resolves the `Host` header itself, so a single `*.sites.example.com` rule at your proxy serves every site — see [Reverse proxy](#reverse-proxy). It needs `AGLYN_TENANT_HOST_CNAME` set and `AGLYN_STANDALONE=1` present **at runtime**; without the latter the runtime reads itself as a developer's machine, matches nothing, and redirects every visitor to the configured console. |
 | Stripe / Resend / AI assist | Optional keys (see above); the related features degrade gracefully when absent. |
-| Operator identity | Set `NEXT_PUBLIC_OPERATOR_NAME` and `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — the public abuse and §512 intakes name them, there is no Aglyn fallback, and unset renders "not configured". Baked in at image build time. |
+| Operator identity | Set `NEXT_PUBLIC_OPERATOR_NAME` and `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — the public abuse and §512 intakes, the lockdown 503, the quarantine notice and the sanctions 451 all name them, there is no Aglyn fallback, and unset renders "not configured". Baked in at image build time. |
 | DMCA designated agent | Not inherited from Aglyn. Register your own with the U.S. Copyright Office; the product asserts a registration only when you set `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true`. |
 | Legal documents | Signup still clickwraps your users to Aglyn LLC's Terms, hash-pinned to snapshots in the repository. `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` records your own legal origin but does not yet retarget the acceptance flow. |
-| Documentation citations | AI-assist citations deep-link to `docs.aglyn.com` unless `NEXT_PUBLIC_DOCS_ORIGIN` names your own build. |
+| Documentation links | `NEXT_PUBLIC_DOCS_ORIGIN` retargets **every** docs link — Assist citations, console help, besigner help, and the `documentation` URL your own REST API returns. Unset, they all point at `https://docs.aglyn.com`. It previously governed the citations alone while the console and besigner read a separate, undocumented variable, so following the runbook exactly retargeted about a third of the links and left the rest citing ours inside your product. |
+| Staff / admin surfaces | Built for Aglyn's own operations. The `/admin/tax-return` report in particular is built around a single US-TX registration; set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to your own identifiers or leave both unset for an explicit "not configured". |
 | Updates | `git pull && docker compose up --build`, re-running the rules deploy when `CHANGELOG.md` records a rules change. Releases are `v<semver>` git tags; `git describe --tags --match 'v*'` tells you which one you are on. |
+
+## Related
+
+- [White-label](../workspace-and-billing/white-label.md)
+- [Report an issue](../workspace-and-billing/report-an-issue.md)
+- [Billing & plans](../workspace-and-billing/billing-and-plans/overview.md)

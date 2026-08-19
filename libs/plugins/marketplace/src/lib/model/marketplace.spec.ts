@@ -1061,6 +1061,60 @@ describe('installsUnreviewedFallback (AGL-1083)', () => {
     ).toBe(false)
     expect(installsUnreviewedFallback(null, OWNER_ORG)).toBe(false)
   })
+
+  /**
+   * The suppressing version has to be INSTALLABLE, not merely approved
+   * (AGL-2368).
+   *
+   * The route's own resolution is `newestInstallableVersion ?? fallback`
+   * since AGL-2368, so a revoked version stopped being a candidate — and
+   * stopped suppressing the fallback with it. Reading approval alone left
+   * this predicate one state behind the route it exists to describe: the
+   * owner would be handed unreviewed bytes and told nothing, because a
+   * stopped version still counted as approved.
+   */
+  describe('and the kill switch (AGL-2368)', () => {
+    const owned = {
+      profileId: OWNER_ORG,
+      latestVersion: '2.0.0',
+      latestApprovedVersion: '1.0.0',
+    }
+
+    it('CONTROL: an unrevoked approved version still suppresses it', () => {
+      expect(installsUnreviewedFallback(owned, OWNER_ORG, null)).toBe(false)
+      expect(
+        installsUnreviewedFallback(owned, OWNER_ORG, { versions: ['9.9.9'] }),
+      ).toBe(false)
+    })
+
+    it('is TRUE once the approved version it named is revoked', () => {
+      // Nothing installable remains, so the route falls back to
+      // `latestVersion` — unreviewed bytes — and the page has to say so.
+      expect(
+        installsUnreviewedFallback(owned, OWNER_ORG, { versions: ['1.0.0'] }),
+      ).toBe(true)
+    })
+
+    it('is true under a listing-wide takedown', () => {
+      expect(
+        installsUnreviewedFallback(owned, OWNER_ORG, { versions: 'all' }),
+      ).toBe(true)
+    })
+
+    it('still refuses a non-owner regardless of the kill switch', () => {
+      // Revocation widens what the OWNER is warned about; it must never widen
+      // who gets the fallback at all.
+      expect(
+        installsUnreviewedFallback(owned, 'org-2', { versions: ['1.0.0'] }),
+      ).toBe(false)
+    })
+
+    it('omitting the revocation keeps the pre-AGL-2368 answer', () => {
+      // Most callers hold no revocation document. The parameter is optional
+      // and its absence must not flip an answer.
+      expect(installsUnreviewedFallback(owned, OWNER_ORG)).toBe(false)
+    })
+  })
 })
 
 describe('verificationRequestBlock (AGL-1217)', () => {

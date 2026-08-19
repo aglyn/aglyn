@@ -20,6 +20,7 @@ import {
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_TYPE_LABELS,
   type NotificationCategory,
+  PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -127,7 +128,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
       // force: the tab is focused by definition when you click Test, and
       // desktop alerts are otherwise hidden-tab-only.
       showDesktopNotification({
-        title: 'Aglyn notifications are on',
+        title: `${PLATFORM_BRAND_NAME} notifications are on`,
         body: 'This is what a notification looks like.',
         tag: 'aglyn-test',
         force: true,
@@ -309,10 +310,8 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.MANAGE_NOTIFICATIONS),
         },
       ]}
-      header={{
-        children: 'Notifications',
-        icon: { path: mdiBellOutline.path },
-      }}
+      header={{ children: 'Notifications', icon: { path: mdiBellOutline.path } }}
+      help={{ topic: 'consoleTour', anchor: '#alerts-on-this-device' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay
@@ -393,9 +392,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                   <Switch
                     size="small"
                     checked={alertPrefs.sound}
-                    onChange={() =>
-                      setAlertPrefs({ sound: !alertPrefs.sound })
-                    }
+                    onChange={() => setAlertPrefs({ sound: !alertPrefs.sound })}
                   />
                 }
                 label="Sound"
@@ -469,10 +466,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                           {notification.title}
                         </Typography>
                         {notification.body ? (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                          >
+                          <Typography variant="caption" color="text.secondary">
                             {notification.body}
                           </Typography>
                         ) : null}
@@ -488,9 +482,8 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        {notification.createdAt
-                          ?.toDate?.()
-                          .toLocaleString() ?? ''}
+                        {notification.createdAt?.toDate?.().toLocaleString() ??
+                          ''}
                       </TableCell>
                       <TableCell align="right">
                         {notification.readAt ? null : (

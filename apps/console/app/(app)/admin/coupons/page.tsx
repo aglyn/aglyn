@@ -214,7 +214,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Coupons', href: buildRoute(Route.ADMIN_COUPONS) },
       ]}
-      help="billing"
+      help={{ topic: 'staffConsole', anchor: '#coupons' }}
       header={{
         children: 'Coupons',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

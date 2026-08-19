@@ -74,6 +74,12 @@ export interface PopupData {
   trigger: string
   triggerValue: number
   frequencyDays: number
+  /**
+   * Cap the popup to one showing per browser session (AGL-2174). When
+   * set, `frequencyDays` is not consulted — the two are alternative
+   * answers to the same question.
+   */
+  oncePerSession?: boolean
   collectEmail?: boolean
   startAtMs?: number
   endAtMs?: number

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { ShadowDom } from '@aglyn/shared-ui-jsx'
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AccordionElement, {
@@ -141,6 +142,31 @@ describe('Accordion summary with a linked header (AGL-1232)', () => {
     const link = screen.getByRole('link', { name: 'Product' })
     expect(link.tagName).toBe('A')
     expect(link.getAttribute('href')).toBe('/product')
+  })
+
+  it('names the chevron from the label the RENDERER emits, not a bare string (AGL-2349)', () => {
+    // The fixture above hands the component `{'Product'}` — a raw string, which
+    // is not what production produces. `Leaf` lifts an authored
+    // FIELD_TEXT_CONTENT value out as `textContent` and renders
+    // `<Component>{children}<ShadowDom.AglynText>{textContent}</…></Component>`,
+    // so `children` is an ARRAY holding an element and `typeof children ===
+    // 'string'` is false on every published page.
+    //
+    // So this builds the fixture the way the renderer does, with the real
+    // `ShadowDom.AglynText`. Against the old `typeof` test the chevron came out
+    // named "Toggle section" and this fails; the four assertions that use the
+    // bare-string fixture passed either way.
+    renderSite(
+      <AccordionElement>
+        <AccordionSummaryElement screenId="scr_product">
+          {undefined}
+          <ShadowDom.AglynText>{'Product'}</ShadowDom.AglynText>
+        </AccordionSummaryElement>
+        <AccordionDetailsElement>{'Hidden details'}</AccordionDetailsElement>
+      </AccordionElement>,
+    )
+    expect(screen.getByRole('button', { name: 'Toggle Product' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Toggle section' })).toBeNull()
   })
 
   it('never nests the anchor inside the toggle button', () => {

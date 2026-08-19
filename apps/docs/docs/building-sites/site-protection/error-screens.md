@@ -31,8 +31,22 @@ screens** for each status.
    matching picker.
 
 Step 2 is the one that's easy to miss: designing a screen does **not** make it an error
-page on its own. Until it's picked in the **Error pages** card, the status still renders
-Aglyn's **Built-in default**, which is what every picker is set to until you change it.
+page on its own. Until it's picked in the **Error pages** card, the status renders the
+**Built-in fallback page**, which is what every picker is set to until you change it.
+
+## What the built-in fallback gives you
+
+The fallback is not a blank error page. It renders under your site's theme and carries
+your logo, links to your site's public top-level pages, a search box (on the 404) and a
+footer — so a visitor who lands on a missing address can always get somewhere.
+
+What it *cannot* do is show the header, navigation and footer **you designed**: those
+live in the screen you built them on, and on a 404 that screen is precisely the one that
+wasn't found. Its page links come from your published pages, and only the public ones —
+an unlisted, password-protected or members-only page never appears there.
+
+Assigning a designed screen is still the better answer for any site that cares how this
+moment looks. The fallback is the floor beneath it.
 
 Assigned error screens are automatically kept out of search results, so a 404 page can't
 itself turn up in a search.

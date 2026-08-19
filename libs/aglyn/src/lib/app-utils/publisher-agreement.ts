@@ -33,7 +33,7 @@
  * forever or never re-asks at all.
  */
 
-import { isPublishedLegalUrl } from './published-legal-pages'
+import { LEGAL_ORIGIN, isPublishedLegalUrl } from './published-legal-pages'
 
 /**
  * The version of the agreement currently in force.
@@ -111,9 +111,18 @@ export const PUBLISHER_AGREEMENT_SHA256 =
 /** Byte length of the same snapshot — a cheap second check on the content. */
 export const PUBLISHER_AGREEMENT_BYTES = 12073
 
-/** Canonical document, on the marketing domain beside the other terms. */
-export const PUBLISHER_AGREEMENT_URL =
-  'https://aglyn.com/legal/marketplace-publisher-agreement'
+/**
+ * Canonical document, on the operator's legal origin beside the other terms.
+ *
+ * Built from `LEGAL_ORIGIN` (AGL-2196), which this module already depends on:
+ * `publisherAgreementIsPublished` below calls `isPublishedLegalUrl`, and that
+ * accepts ONLY `LEGAL_ORIGIN`. So the gate was operator-aware while the link
+ * it gates was a bare `aglyn.com` literal — meaning on a self-host install
+ * with `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` set, the gate rejected the very URL
+ * this file handed it, and every publisher was blocked from accepting. One
+ * origin for both closes that, and leaves Aglyn's own URL byte-identical.
+ */
+export const PUBLISHER_AGREEMENT_URL = `${LEGAL_ORIGIN}/legal/marketplace-publisher-agreement`
 
 /**
  * Whether that document can actually be read (AGL-1660).

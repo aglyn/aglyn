@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AuthAppErrorCodes, type AuthAppCode } from '@aglyn/shared-data-enums'
 import {
   browserSupportsWebAuthn,
@@ -123,14 +124,39 @@ export function describePasskeySignInFailure(
  * blanket "Passkey sign-in failed." these were indistinguishable, so a
  * rate-limited user and a user with a flagged credential got identical,
  * equally unactionable text.
+ *
+ * ⚠️ Only the first three are REACHABLE on the sign-in path, and the table
+ * overstated its own coverage until AGL-1417's smoke pass. `signin/verify`
+ * catches every classified `PasskeyError` and answers a uniform
+ * `{ error: 'passkey-signin-failed' }` 401
+ * (`app/api/auth/passkeys/signin/verify/route.ts:71-75`) — deliberately, so
+ * the response cannot be used to probe which of "unknown credential / bad
+ * signature / replayed challenge" occurred. That posture is correct and is
+ * NOT being changed here.
+ *
+ * The consequence is that `passkey-signin-failed` is the reason a real user
+ * actually receives, and it was the one key absent from this table — so the
+ * commonest server refusal fell through to the bare fallback string with no
+ * way forward in it. That is now the entry that matters.
  */
 const SERVER_REFUSALS: Record<string, string> = {
+  // Reachable: thrown before the ceremony is classified.
   'rate-limited':
     'Too many passkey attempts from this network. Wait a few minutes and ' +
     'try again.',
   'bad-origin': 'Passkey sign-in is not available on this address.',
+  // Reachable, and the one nearly every failed ceremony lands on. Says what
+  // to do without disclosing which check failed.
+  'passkey-signin-failed':
+    'That passkey could not be used to sign in. Try another sign-in method, ' +
+    'then re-add the passkey from Manage account → Security.',
+  // ⚠️ UNREACHABLE on the sign-in path — flattened by signin/verify above.
+  // Kept because they are the reasons the server logs, so they stay the
+  // shared vocabulary, and because the options leg forwards its own reason.
+  // Do not cite any of these as evidence that a case is covered.
   'credential-unknown':
-    'That passkey is not registered to an Aglyn account. It may have been ' +
+    `That passkey is not registered to an ${PLATFORM_BRAND_NAME} account. ` +
+    'It may have been ' +
     'removed.',
   'credential-cloned':
     'That passkey was refused for security reasons. Sign in another way and ' +

@@ -28,6 +28,10 @@
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
+import {
+  offeredPluginVersion,
+  type PluginRevocation,
+} from '@aglyn/aglyn/app-utils/plugin-manifest'
 // Visibility lives in core (AGL-876), for the same reason the artifact-type
 // union and the verification policy do: the console's listing route asks the
 // question and `scope:app` may not depend on `aglyn:addons`. Imported AND
@@ -600,6 +604,12 @@ export function isVersionApproved(
  * describe exactly what the route will do. Two independent readings of
  * "would this be unreviewed?" is how the affordance ends up warning about
  * the wrong installs, or staying silent on the right ones.
+ *
+ * The route's `newest` is `newestInstallableVersion` since AGL-2368 — a
+ * revoked version is no longer a candidate, so it no longer suppresses the
+ * fallback either. `revocation` is optional because most callers have none;
+ * without it this asks the pre-AGL-2368 question, which is the same answer
+ * whenever the mirror is current.
  */
 export function installsUnreviewedFallback(
   listing:
@@ -611,13 +621,17 @@ export function installsUnreviewedFallback(
     | null
     | undefined,
   viewerOrgId: string | null | undefined,
+  revocation?: PluginRevocation | null,
 ): boolean {
   if (!listing?.profileId || !viewerOrgId) return false
   // Only the publishing org gets the fallback; everyone else is refused.
   if (listing.profileId !== viewerOrgId) return false
-  // An approved version exists → the route serves THAT, however much newer
-  // the pending one is. Not an unreviewed install.
-  if (String(listing.latestApprovedVersion ?? '')) return false
+  // An INSTALLABLE version exists → the route serves THAT, however much newer
+  // the pending one is. Not an unreviewed install. Reading approval alone got
+  // this backwards for a revoked listing: the route would fall back to
+  // `latestVersion` for the owner and hand over unreviewed bytes, while the
+  // page said nothing, because a stopped version still counted as approved.
+  if (offeredPluginVersion(listing, revocation)) return false
   return Boolean(String(listing.latestVersion ?? ''))
 }
 
@@ -1478,4 +1492,137 @@ export function resolveInstalledDatasetSchema(
     degradedFieldIds.push(id)
   }
   return { schema: { fields, order: schema.order }, degradedFieldIds }
+}
+
+/** One row of the listing detail's `What's included` checklist. */
+export interface ListingInclusion {
+  label: string
+  /** Whether the row is a positive inclusion or a stated limit. */
+  tone: 'included' | 'note'
+}
+
+/** What each artifact type drops into the org when it installs. */
+const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
+  plugin: 'A plugin, sandboxed on its own origin with a per-plugin CSP',
+  component: 'An editable component you can place on any screen',
+  template: 'Editable screens you can rework in Besigner',
+  layout: 'An editable layout you can apply to any screen',
+  datasetSchema: 'A new empty dataset with its fields already defined',
+  emailTemplate: 'An editable email design you can send campaigns from',
+  theme: 'A theme applied to the site you choose',
+}
+
+/**
+ * The `WHAT'S INCLUDED` checklist the marketplace listing mockup shows
+ * (AGL-2173), derived entirely from facts the listing already carries.
+ *
+ * The mockup's own bullets — `12 responsive screens`, `Blog & work
+ * layouts` — are publisher-authored prose, and nothing collects them:
+ * there is no content manifest on a listing or a version, so counting
+ * screens would mean inventing a number. What IS knowable is what the
+ * install physically does, where it lands, whether it has been reviewed,
+ * and under what licence — which is the question a shopper is asking when
+ * they read that box.
+ *
+ * Ordered decision-first: what you get, then where it goes, then the two
+ * facts that most often stop an install.
+ */
+export function listingInclusions(
+  listing: {
+    artifactType?: string
+    type?: string
+    kind?: string
+    license?: string
+    priceUsd?: number
+    reviewStatus?: string
+  },
+  options: { reviewedVersion?: boolean } = {},
+): ListingInclusion[] {
+  const type = listingArtifactType(listing)
+  const rows: ListingInclusion[] = [
+    { label: ARTIFACT_INSTALL_RESULT[type] ?? 'An installable artifact', tone: 'included' },
+  ]
+  const targets = installTargetsFor(listing)
+  rows.push({
+    label: targets.includes('org')
+      ? 'Installs org-wide, covering sites you add later'
+      : 'Installs per site — new sites are not covered automatically',
+    // The host-only case is a real limit and the picker already has to say
+    // so; softening it here would put the caveat only where nobody reads.
+    tone: targets.includes('org') ? 'included' : 'note',
+  })
+  if (options.reviewedVersion) {
+    rows.push({
+      label: 'This version passed marketplace review',
+      tone: 'included',
+    })
+  }
+  if (listing.license) {
+    rows.push({ label: `Licensed ${listing.license}`, tone: 'included' })
+  }
+  rows.push({
+    label: Number(listing.priceUsd ?? 0) > 0
+      ? 'A one-time purchase — updates to this listing are included'
+      : 'Free, including every future update',
+    tone: 'included',
+  })
+  return rows
+}
+
+/**
+ * WHO STILL OWNS WHAT THEY BOUGHT — the one predicate (AGL-2158).
+ *
+ * `hasLivePurchase` (server/purchase-entitlement.ts) is the gate on all eight
+ * ways into paid content, and it reads exactly one field: a purchase with
+ * `refundedAt` — stamped by the `charge.refunded` and lost-`charge.dispute`
+ * doors of the marketplace billing webhook — no longer entitles.
+ *
+ * The listing page carried its OWN copy of that question,
+ * `some(p => p.listingId === listingId)`, with no refund test at all. The two
+ * then disagreed on the one buyer they must not disagree on: the refunded
+ * one. The page showed "Purchased", hid the buy button, and the install
+ * routes answered 402 — a buyer who could neither install nor re-purchase.
+ *
+ * It lives HERE, in the model, rather than in the server module, because the
+ * server module is the wrong side of the client/server boundary for a React
+ * component and copying four characters of predicate is precisely how the two
+ * came apart. This module is context-free by construction (see the header) —
+ * importable from a client component, an API route and another plugin alike.
+ */
+export interface PurchaseLiveness {
+  /** Stamped when a full refund or a lost dispute un-buys the listing. */
+  refundedAt?: unknown
+  listingId?: unknown
+}
+
+/**
+ * True when this purchase document still entitles.
+ *
+ * Deliberately a truthiness test and not `!= null`: `refundedAt` is a
+ * Firestore Timestamp on the server, a client Timestamp in the browser and a
+ * sentinel in the webhook's own tests, and every one of those is truthy while
+ * a missing field (every purchase written before AGL-1546) is not.
+ */
+export function isLivePurchase(
+  purchase: PurchaseLiveness | null | undefined,
+): boolean {
+  return Boolean(purchase) && !purchase?.refundedAt
+}
+
+/**
+ * True when this buyer's purchase documents include a live one for `listingId`.
+ *
+ * Both callers pass everything they read — the server's query is already
+ * narrowed to the listing, the client's is narrowed only to the buyer — so the
+ * listing filter belongs inside the shared predicate too, not beside it.
+ */
+export function hasLivePurchaseOf(
+  purchases: readonly (PurchaseLiveness | null | undefined)[] | null | undefined,
+  listingId: string,
+): boolean {
+  if (!listingId) return false
+  return (purchases ?? []).some(
+    (purchase) =>
+      purchase?.listingId === listingId && isLivePurchase(purchase),
+  )
 }

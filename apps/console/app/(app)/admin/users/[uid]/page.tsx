@@ -103,6 +103,44 @@ interface UserDetail {
     note: string | null
     at: string | null
   }>
+  /**
+   * Clickwrap acceptance history and the ToS §18.5 verdicts (AGL-2316).
+   *
+   * Every verdict is nullable and `lookupFailed` is separate, because the
+   * three states here are "accepted", "no record", and "we could not read" —
+   * and a dispute is the last place to let the third quietly render as the
+   * second.
+   */
+  legal?: {
+    lookupFailed: boolean
+    currentVersion: string
+    accepted: boolean | null
+    acceptedVersions: string[]
+    latestAcceptedVersion: string | null
+    currentVersionAcceptedAt: string | null
+    reacceptanceRequired: boolean | null
+    reacceptanceReason: 'none' | 'never-accepted' | 'version-superseded' | null
+    arbitration: {
+      firstAcceptedAt: string | null
+      deadline: string | null
+      open: boolean | null
+      daysRemaining: number | null
+    } | null
+    acceptances: Array<{
+      version: string
+      acceptedAt: string | null
+      context: string | null
+      method: string | null
+      ipAddress: string | null
+      userAgent: string | null
+      documents: Array<{
+        key: string
+        url: string
+        sha256?: string
+        bytes?: number
+      }>
+    }>
+  }
 }
 
 /**
@@ -246,6 +284,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: detail?.user.email ?? 'User',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{ topic: 'staffConsole', anchor: '#password-help' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* The detail fetch is staff-gated server-side, so a non-staff
@@ -602,6 +641,155 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       await callManage({ action: 'erase', reason })
                     }}
                   />
+                ),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  /*
+                   * Legal acceptances (AGL-2316). These records were written
+                   * from the first day sign-up captured them and read by
+                   * nothing, which made both promises they were written for
+                   * undeliverable: nobody could answer "which version did
+                   * this person accept" in a dispute, and nothing could tell
+                   * that the published Terms had moved past what they agreed
+                   * to. This card is where a ToS §18.5 opt-out claim is
+                   * answered from, so it shows the CONTENT HASHES too — the
+                   * URL alone says what the page reads today, not what this
+                   * person was shown.
+                   *
+                   * Read-only, deliberately. An acceptance is evidence about
+                   * the account holder; the Firestore rules make the
+                   * collection `write: if false` for exactly that reason, and
+                   * a staff button that could add or amend one would hand the
+                   * other side of a dispute its best argument.
+                   */
+                  <CardDisplay
+                    header="Legal acceptances"
+                    help={docsHelp('staffConsole', {
+                      anchor: '#whats-there',
+                      excerpt:
+                        'Which version of the Terms and Privacy Policy this account accepted, when, and whether the 30-day arbitration opt-out window is still open.',
+                    })}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    {!detail.legal || detail.legal.lookupFailed ? (
+                      <Alert severity="warning">
+                        {
+                          'The acceptance records could not be read. This is NOT the same as "no acceptance on file" — do not answer a dispute from this screen until it loads.'
+                        }
+                      </Alert>
+                    ) : (
+                      <Stack spacing={1.5}>
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                        >
+                          {detail.legal.accepted ? (
+                            <Chip
+                              size="small"
+                              color="success"
+                              label={`Accepted the current version (${detail.legal.currentVersion})`}
+                            />
+                          ) : detail.legal.reacceptanceReason ===
+                            'never-accepted' ? (
+                            <Chip
+                              size="small"
+                              color="error"
+                              label="No acceptance on file"
+                            />
+                          ) : (
+                            <Chip
+                              size="small"
+                              color="warning"
+                              label={`Accepted ${
+                                detail.legal.latestAcceptedVersion ?? '—'
+                              } — current is ${detail.legal.currentVersion}`}
+                            />
+                          )}
+                          {detail.legal.reacceptanceRequired ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              color="warning"
+                              label="Re-acceptance prompted in the console"
+                            />
+                          ) : null}
+                        </Stack>
+                        {/* ToS §18.5: 30 days from FIRST accepting, which is
+                            why the clock is not restarted by the re-acceptance
+                            above it. */}
+                        <Typography variant="caption" color="text.secondary">
+                          {detail.legal.arbitration?.firstAcceptedAt
+                            ? `Arbitration opt-out (ToS §18.5): first accepted ${new Date(
+                                detail.legal.arbitration.firstAcceptedAt,
+                              ).toLocaleString()} · window ${
+                                detail.legal.arbitration.open
+                                  ? `OPEN, closes ${new Date(
+                                      detail.legal.arbitration.deadline ?? '',
+                                    ).toLocaleString()} (${
+                                      detail.legal.arbitration.daysRemaining
+                                    } day(s) left)`
+                                  : `CLOSED since ${new Date(
+                                      detail.legal.arbitration.deadline ?? '',
+                                    ).toLocaleString()}`
+                              }`
+                            : 'Arbitration opt-out (ToS §18.5): no acceptance on file, so there is no window to measure — not a closed one.'}
+                        </Typography>
+                        {detail.legal.acceptances.length === 0 ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {
+                              'Nothing recorded. Accounts created before clickwrap capture, and accounts created through SSO, can legitimately have no record.'
+                            }
+                          </Typography>
+                        ) : (
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>{'Version'}</TableCell>
+                                <TableCell>{'Accepted'}</TableCell>
+                                <TableCell>{'Door'}</TableCell>
+                                <TableCell>{'Documents (sha256)'}</TableCell>
+                                <TableCell>{'IP'}</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {detail.legal.acceptances.map((record) => (
+                                <TableRow key={record.version}>
+                                  <TableCell>{record.version}</TableCell>
+                                  <TableCell>
+                                    {record.acceptedAt
+                                      ? new Date(
+                                          record.acceptedAt,
+                                        ).toLocaleString()
+                                      : '—'}
+                                  </TableCell>
+                                  <TableCell>{record.context ?? '—'}</TableCell>
+                                  <TableCell>
+                                    {record.documents.length === 0
+                                      ? '—'
+                                      : record.documents
+                                          .map(
+                                            (doc) =>
+                                              `${doc.key}:${(
+                                                doc.sha256 ?? ''
+                                              ).slice(0, 12)}`,
+                                          )
+                                          .join(' · ')}
+                                  </TableCell>
+                                  <TableCell>
+                                    {record.ipAddress ?? '—'}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </Stack>
+                    )}
+                  </CardDisplay>
                 ),
               },
               {

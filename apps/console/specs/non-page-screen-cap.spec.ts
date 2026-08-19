@@ -90,6 +90,40 @@ const screensCollection = () => ({
   doc: () => ({ create: (...args: unknown[]) => mockCreate(...args) }),
 })
 
+/**
+ * A faithful-enough `runTransaction` (AGL-2231). The route now counts and
+ * creates inside one transaction, so a double that lacked this would fail for
+ * the wrong reason — and one that ran the body without modelling Firestore's
+ * rules would hide a regression that reorders the reads after the write.
+ *
+ * Two real semantics are modelled on purpose:
+ *  - **reads must precede writes.** A `get` after a `create` throws, exactly as
+ *    the server does.
+ *  - **the write is deferred to a successful commit.** A body that returns a
+ *    refusal (or throws) after buffering a create must persist nothing.
+ *
+ * Retries are NOT modelled here — a single-threaded route test has nothing to
+ * contend with. The contention case has its own suite,
+ * `host-resource-cap-is-atomic.spec.ts`, whose double does model them.
+ */
+const runTransaction = async (body: (tx: any) => Promise<any>) => {
+  const buffered: Array<() => unknown> = []
+  const tx = {
+    get: (query: any) => {
+      if (buffered.length) {
+        throw new Error('Firestore transactions cannot read after a write')
+      }
+      return query.get()
+    },
+    create: (ref: any, data: unknown) => {
+      buffered.push(() => ref.create(data))
+    },
+  }
+  const result = await body(tx)
+  for (const write of buffered) write()
+  return result
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
@@ -98,6 +132,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
       }),
       firestore: () => ({
+        runTransaction: (body: (tx: any) => Promise<any>) =>
+          runTransaction(body),
         collection: () => ({
           doc: () => ({
             get: async () => ({

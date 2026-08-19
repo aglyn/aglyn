@@ -39,6 +39,7 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ShippingSettingsCardProps {
   hostId: string
@@ -215,7 +216,12 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
     raw.trim() === '' ? undefined : Math.round(Number(raw) * 100)
 
   return (
-    <CardDisplay header={'Shipping'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Shipping'}
+      help={pluginDocsHelp('commerce', { anchor: '#shipping--taxes' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="subtitle2">{'Zones'}</Typography>
         {(current.zones ?? []).map((zone, index) => (
@@ -448,18 +454,35 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
           {'Add rate'}
         </Button>
 
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={Boolean(current.localPickup)}
-              onChange={(event) =>
-                update({ localPickup: event.target.checked })
-              }
-            />
-          }
-          label="Offer free local pickup"
-        />
+        <Stack spacing={0}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={Boolean(current.localPickup)}
+                onChange={(event) =>
+                  update({ localPickup: event.target.checked })
+                }
+              />
+            }
+            label="Offer free local pickup"
+          />
+          {/*
+            What the toggle does NOT do, said on the toggle (AGL-2325). It
+            used to silently switch off every "we don't ship there" refusal,
+            because pickup resolved for every destination and checkout read a
+            non-empty list as coverage. It no longer does — but a merchant
+            reading one line of label still has to be told that turning
+            collection on is not the same as adding a destination.
+          */}
+          <Typography variant="caption" color="text.secondary">
+            {
+              'A free collection choice at checkout. It does not widen where ' +
+              'you ship — a destination none of your rates reaches is still ' +
+              'turned away.'
+            }
+          </Typography>
+        </Stack>
 
         <Divider />
         <Typography variant="subtitle2">{'Coverage'}</Typography>
@@ -482,6 +505,9 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
               {`Checkout turns away ${coverage.unserved.length} of the ${CommerceModel.CHECKOUT_SHIPPING_COUNTRIES.length} destinations it collects addresses for`}
             </AlertTitle>
             {`No rate reaches ${countryNames(coverage.unserved)}, so an order shipping there is refused rather than posted for free. `}
+            {coverage.offersLocalPickup
+              ? 'Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. '
+              : ''}
             {coverage.hasRestOfWorldZone
               ? 'A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them.'
               : 'Give them a zone with a rate, or add a rest-of-world zone and price one on it.'}
@@ -489,7 +515,9 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         ) : (
           <Typography variant="caption" color="text.secondary">
             {coverage.shipsNowhere
-              ? 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
+              ? coverage.offersLocalPickup
+                ? 'No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged.'
+                : 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
               : `Checkout can price shipping to every destination it collects an address for: ${countryNames(coverage.served)}.`}
           </Typography>
         )}

@@ -24,6 +24,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
 import {
   collection,
@@ -36,6 +37,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
 import { orgBandwidthGb } from '../../utils/usage-metering'
+import { docsHelp } from '../../constants/docs-links'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -80,8 +82,16 @@ export function UsageMeter(props: {
   used: number | null
   limit: number
   unit?: string
+  /**
+   * Optional help affordance beside the label (AGL-2201).
+   *
+   * A meter is a number against a limit and says nothing about what happens
+   * when the two meet — which for bandwidth is the whole question, and is
+   * different on Free (the site pauses) than on a paid plan (the extra bills).
+   */
+  help?: HelpTipContent
 }) {
-  const { label, used, limit, unit } = props
+  const { label, used, limit, unit, help } = props
   const unlimited = limit === UNLIMITED
   const unmetered = used == null
   const pct =
@@ -92,7 +102,18 @@ export function UsageMeter(props: {
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="body2">{label}</Typography>
+        {/*
+          The tip renders INSIDE the label, not beside it in a wrapper.
+          `usage-org-wide-denominator` and `contacts-overage-caption-release-gate`
+          both find a meter by `getByText(label).parentElement` and read the
+          row's text from it; a wrapper makes that parent the wrapper, whose
+          text is the label alone. The icon contributes no text, so the label
+          still matches and the row is still the parent.
+        */}
+        <Typography variant="body2">
+          {label}
+          {help ? <HelpTip {...help} sx={{ ml: 0.5, fontSize: '0.8em' }} /> : null}
+        </Typography>
         <Typography variant="body2" color="text.secondary">
           {unmetered
             ? `not yet metered · limit ${formatLimit(limit, unit)}`
@@ -272,6 +293,15 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const { data: user } = useUser()
   const orgId = (org as any)?.$id as string | undefined
   const [teamSeats, setTeamSeats] = useState<number | null>(null)
+  /**
+   * How many of `teamSeats` are invites sent but not yet accepted (AGL-2304).
+   *
+   * Kept separate purely to LABEL the meter. The total already includes them —
+   * it has to, because the invite gate counts them — but a number silently
+   * larger than the visible team list is its own kind of confusing, and the
+   * question an admin asks at that moment is "why does it say 5 when I see 3".
+   */
+  const [pendingSeats, setPendingSeats] = useState(0)
   // Org-level data meters (AGL-239/240): datasets and their storage are
   // org-scoped, so they meter once here instead of per host.
   const [orgDatasets, setOrgDatasets] = useState<number | null>(null)
@@ -299,7 +329,10 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     void fetchSeatCounts(user, orgId).then((counts) => {
       // `null` means unanswerable, and the meter keeps its "not yet metered"
       // state — deliberately not 0, which reads as "no seats used".
-      if (active && counts) setTeamSeats(counts.managerSeats)
+      if (active && counts) {
+        setTeamSeats(counts.managerSeats)
+        setPendingSeats(counts.pendingManagerSeats)
+      }
     })
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'contacts'))
       .then((snapshot) => {
@@ -448,7 +481,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.hostLimit}
       />
       <UsageMeter
-        label="Team seats (incl. you)"
+        label={
+          pendingSeats > 0
+            ? `Team seats (incl. you + ${pendingSeats} invited)`
+            : 'Team seats (incl. you)'
+        }
         used={teamSeats}
         limit={teamSeatLimit}
       />
@@ -516,6 +553,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         used={bandwidthGb}
         limit={entitlements.bandwidthGb}
         unit="GB"
+        help={docsHelp('bandwidth', { anchor: '#where-to-see-it' })}
       />
       {hosts.map((host) => (
         <HostUsageMeters

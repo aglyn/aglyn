@@ -47,6 +47,7 @@ import {
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ReservationsCardProps {
   hostId: string
@@ -273,7 +274,12 @@ export function ReservationsCard(props: ReservationsCardProps) {
   }, [walkIn, resourceDocs, reservations, firestore, hostId, enqueueSnackbar])
 
   return (
-    <CardDisplay header={'Reservations'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Reservations'}
+      help={pluginDocsHelp('pos', { anchor: '#reservations' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <Typography variant="subtitle2">{'Resources'}</Typography>
         {(resourceDocs ?? []).map((resource: any) => (

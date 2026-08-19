@@ -94,6 +94,11 @@ import {
 // green after somebody renames one — it would be asserting its own literals,
 // not the configuration the checkout actually resolves.
 import { meteredPriceId } from '../../../../utils/server/billing-addons'
+import {
+  LIVE_EVENT_COLLECTION,
+  TEST_EVENT_COLLECTION,
+  deploymentLivemode,
+} from '../../../../utils/server/stripe-livemode'
 
 // lockdown-423: exempt — infrastructure monitoring probe; no org-scoped action.
 
@@ -155,8 +160,25 @@ async function processedInWindow(cutoffMs: number): Promise<number | null> {
   try {
     void firebaseAdmin
     const db = getFirestore(getApp())
+    /*==========================================
+     * THIS DEPLOYMENT'S CLAIM COLLECTION (AGL-2308).
+     *
+     * Hardcoded `'stripeEvents'` before, and only a LIVE deployment claims
+     * there — `livemodeDecision` sends a test-mode deployment's events to
+     * `stripeEventsTest`. So on every preview and test deployment this probe
+     * counted a collection it never writes and reported `processedInWindow: 0`
+     * beside a non-zero Stripe count, forever.
+     *
+     * That is the worst shape a health check can have: a permanent, plausible
+     * red on the one deployment shape used to rehearse the webhook. Derived
+     * from the same helper the webhook itself derives its claim from, so the
+     * two cannot disagree.
+     *=========================================*/
+    const claimCollection = deploymentLivemode(process.env)
+      ? LIVE_EVENT_COLLECTION
+      : TEST_EVENT_COLLECTION
     const snapshot = await db
-      .collection('stripeEvents')
+      .collection(claimCollection)
       .where('receivedAt', '>=', Timestamp.fromMillis(cutoffMs))
       .count()
       .get()

@@ -66,9 +66,12 @@ The bump is a **deliberate step in the promotion**, not a per-commit
 automation. `main` moves constantly under many agents; a bump per commit would
 collide on every push and would version things that never shipped.
 
-Nothing below runs in CI. Nx CI is `disabled_manually` (AGL-1776) and no
-workflow builds PRs (AGL-1777) — a release scheme that depended on CI here
-would silently never fire.
+Nothing below runs in CI — but not for the reason once recorded here. That
+read "Nx CI is `disabled_manually` (AGL-1776) and no workflow builds PRs
+(AGL-1777)", and both halves are false (AGL-2381): `nx-ci.yml` is **active**
+and triggers on `pull_request`, so PRs are built. The release steps below
+simply have no workflow that invokes them, and that is deliberate — the bump
+is a step in the promotion, run by hand when Zach calls the batch.
 
 ### 1 — On `main`, when Zach calls the batch
 

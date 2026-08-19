@@ -21,6 +21,8 @@ import {
   listingArtifactType,
   installsUnreviewedFallback,
   listingArtifactLabel,
+  listingInclusions,
+  hasLivePurchaseOf,
   installTargetsFor,
   isPrivateListing,
   resolveInstallPlan,
@@ -35,19 +37,24 @@ import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import { ListingImage } from './listing-image.component'
 import {
   buildRoute,
+  type MarkdownBlock,
+  type MarkdownInline,
   parseMarkdownLite,
+  PLATFORM_BRAND_NAME,
+  offeredPluginVersion,
   PLUGIN_HOST_ABI_VERSION,
+  pluginDocsHelp,
   resolveMediaSrc,
   resolveUpdateState,
   Route,
   updateStateLabel,
-  type MarkdownBlock,
-  type MarkdownInline,
 } from '@aglyn/aglyn'
 import {
   mdiCheckCircle,
+  mdiCheckCircleOutline,
   mdiEmailOutline,
   mdiGithub,
+  mdiInformationOutline,
   mdiLifebuoy,
   mdiLinkedin,
   mdiStorefrontOutline,
@@ -82,6 +89,7 @@ import {
   FormLabel,
   IconButton,
   Link as MuiLink,
+  Rating,
   Stack,
   Tooltip,
   Typography,
@@ -131,6 +139,15 @@ interface ListingInstallTotals {
   activeInstalls: number
   /** Installs no version claims, so the per-version split is incomplete. */
   untrackedActiveInstalls: number
+  /**
+   * The same shortfall all-time (AGL-2339). Served by both branches of
+   * `listing-versions.ts` since AGL-1418 and typed by nothing until now,
+   * which is why only its `activeInstalls` sibling ever reached the page.
+   *
+   * Always the LARGER of the two: an uninstall deletes its pin and leaves the
+   * all-time accumulator alone.
+   */
+  untrackedInstallCount: number
 }
 
 const renderInlines = (inlines: MarkdownInline[]) =>
@@ -195,7 +212,14 @@ function ListingChangelog({
   // implying they withheld one.
   if (!entries.length) return null
   return (
-    <CardDisplay header={'Changelog'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Changelog'}
+      help={pluginDocsHelp('publisherHandbook', {
+        anchor: '#versioning--updates',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2.5}>
         {entries.map((entry, index) => (
           <Stack key={entry.version} spacing={1}>
@@ -664,17 +688,38 @@ export function MarketplaceListingContent({
   }, [artifactType, datasetInstalls, emailInstalls, themeHostDoc, listingId])
 
   /**
-   * The version this listing actually offers (AGL-1016).
+   * The kill switch, on the page with the Install button (AGL-2368).
    *
-   * For a plugin that is the newest APPROVED version, not `latestVersion`.
-   * This page used to compare against `latestVersion`, so publishing v1.1.0
-   * lit up "Update to v1.1.0" for every workspace the moment it was uploaded —
-   * and the install route then refused it, because AGL-966 only ever hands out
-   * reviewed bytes. The badge was advertising what the marketplace would not
-   * give you.
+   * One document read for the whole page — the switch is listing-scoped —
+   * and public, which is what lets the marketplace loaders and the
+   * host-plugins card read it already.
+   */
+  const { data: revocation } = useFirestoreDoc<any>(
+    () =>
+      isPlugin && listingId
+        ? doc(firestore, 'revocations', listingId)
+        : null,
+    [firestore, isPlugin, listingId],
+  )
+
+  /**
+   * The version this listing actually offers (AGL-1016, AGL-2368).
+   *
+   * For a plugin that is the newest INSTALLABLE version, not `latestVersion`
+   * and not merely the newest approved one. This page used to compare against
+   * `latestVersion`, so publishing v1.1.0 lit up "Update to v1.1.0" for every
+   * workspace the moment it was uploaded — and the install route then refused
+   * it, because AGL-966 only ever hands out reviewed bytes. The badge was
+   * advertising what the marketplace would not give you.
+   *
+   * `latestApprovedVersion` fixed that and left the same defect one state
+   * over: approval is a review verdict and revocation does not clear it, so a
+   * killed version stayed the offer. This is the page with the Install and
+   * Buy buttons on it, so it cross-checks the mirror against the switch
+   * rather than trusting a cache two writes behind.
    */
   const offeredVersion = isPlugin
-    ? listing?.latestApprovedVersion
+    ? offeredPluginVersion(listing, revocation)
     : listing?.latestVersion
 
   /**
@@ -692,7 +737,7 @@ export function MarketplaceListingContent({
    * unreviewed install however new the pending one is.
    */
   const unreviewedInstall =
-    isPlugin && installsUnreviewedFallback(listing, viewerOrgId)
+    isPlugin && installsUnreviewedFallback(listing, viewerOrgId, revocation)
   /** What would actually land — the route's fallback, named. */
   const installingVersion = unreviewedInstall
     ? listing?.latestVersion
@@ -734,6 +779,13 @@ export function MarketplaceListingContent({
                 untrackedActiveInstalls: Number(
                   payload.untrackedActiveInstalls ?? 0,
                 ),
+                // THIS PROJECTION is where the field died (AGL-2339). The
+                // route served it from both branches; the client copied its
+                // sibling and not it, so the page could never render what the
+                // server had already computed.
+                untrackedInstallCount: Number(
+                  payload.untrackedInstallCount ?? 0,
+                ),
               }
             : null,
         )
@@ -766,7 +818,11 @@ export function MarketplaceListingContent({
     return {
       installCount: Number(listing?.installCount ?? 0),
       activeInstalls: stored,
+      // Zero on the fallback, because the listing document holds no split at
+      // all — claiming a shortfall it cannot know would be the contradiction
+      // this fallback exists to avoid.
       untrackedActiveInstalls: 0,
+      untrackedInstallCount: 0,
     }
   }, [totals, listing?.activeInstalls, listing?.installCount])
   const latestEntry = versions[0]
@@ -787,11 +843,15 @@ export function MarketplaceListingContent({
       ),
     [installedDocs, listingId],
   )
+  // The SERVER's predicate, imported rather than restated (AGL-2158). This
+  // used to be `some(p => p.listingId === listingId)` with no refund test,
+  // while `hasLivePurchase` — the gate on all eight ways into paid content —
+  // treats a purchase carrying `refundedAt` as absent. The one buyer the two
+  // must agree about is the refunded one, and they disagreed: the page said
+  // "Purchased" and hid the buy button, the install routes answered 402, and
+  // the buyer could neither install nor buy it again.
   const purchased = useMemo(
-    () =>
-      (purchaseDocs ?? []).some(
-        (purchase: any) => purchase.listingId === listingId,
-      ),
+    () => hasLivePurchaseOf(purchaseDocs ?? [], listingId),
     [purchaseDocs, listingId],
   )
 
@@ -847,6 +907,9 @@ export function MarketplaceListingContent({
             } as never),
         listing ?? null,
         artifactType,
+        // The kill switch (AGL-2368) — this line said "Update to vX" for a
+        // version the install route refuses, because approval survives it.
+        revocation,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -858,6 +921,7 @@ export function MarketplaceListingContent({
       listingId,
       listing,
       artifactType,
+      revocation,
     ],
   )
   const priceUsd = Number(listing?.priceUsd ?? 0)
@@ -1161,11 +1225,20 @@ export function MarketplaceListingContent({
                             )
                           ) : null}
                           {/* Two claims, shown separately (AGL-1121): who
-                              wrote it, and whether these bytes were read. */}
+                              wrote it, and whether these bytes were read.
+
+                              Both name `PLATFORM_BRAND_NAME`, not the viewing
+                              org's `productName` (AGL-2351): they say who did
+                              the verifying and the reading, and that is the
+                              deployment's own review queue — one catalog
+                              shared by every org. A white-label agency's brand
+                              here would claim the agency vetted a publisher it
+                              has never heard of. */}
                           {listing?.reviewStatus === 'verified' ? (
                             <Tooltip
                               title={
-                                'A human at Aglyn confirmed who this ' +
+                                `A human at ${PLATFORM_BRAND_NAME} confirmed ` +
+                                'who this ' +
                                 'publisher is, and that the listing describes ' +
                                 'what the code does. A claim about the ' +
                                 'publisher, not this release — it survives a ' +
@@ -1182,7 +1255,8 @@ export function MarketplaceListingContent({
                           {listing?.latestVersionReviewState === 'approved' ? (
                             <Tooltip
                               title={
-                                'A human at Aglyn read these exact bytes — ' +
+                                `A human at ${PLATFORM_BRAND_NAME} read these ` +
+                                'exact bytes — ' +
                                 'the version on offer — against a required ' +
                                 'checklist. Re-earned per version. Not a ' +
                                 'security guarantee: every plugin runs in the ' +
@@ -1209,6 +1283,34 @@ export function MarketplaceListingContent({
                             color={priceUsd > 0 ? 'primary' : 'default'}
                             label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
                           />
+                          {/*
+                            The rating in the HEADER (AGL-2173), which is
+                            where the mockup puts it and where a shopper
+                            decides. The `Rating` widget existed only
+                            inside the `Ratings & comments` card at the
+                            bottom of a long page, below the README — past
+                            the point the install decision is made.
+                           */}
+                          {listing?.ratingCount ? (
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              sx={{ alignItems: 'center' }}
+                            >
+                              <Rating
+                                size="small"
+                                readOnly
+                                precision={0.1}
+                                value={Number(listing.ratingAverage ?? 0)}
+                              />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${listing.ratingAverage ?? 0} (${listing.ratingCount})`}
+                              </Typography>
+                            </Stack>
+                          ) : null}
                           {/* Two numbers that are NOT the same question
                               (AGL-1418). They used to read `7 installs · 2
                               active` — "installs" first and unqualified, so
@@ -1337,6 +1439,9 @@ export function MarketplaceListingContent({
                           Here it leads the sidebar. */}
                       <CardDisplay
                         header={'Install'}
+                        help={pluginDocsHelp('installYourFirstPlugin', {
+                          anchor: '#step-4-targeting',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -1355,6 +1460,58 @@ export function MarketplaceListingContent({
                               {`v${listing?.latestVersion ?? '…'}`}
                             </Typography>
                           </Stack>
+                          {/*
+                            `WHAT'S INCLUDED` (AGL-2173), which the mockup
+                            puts under the description and this page did
+                            not have at all.
+
+                            Every row is derived from a fact the listing
+                            already carries — what the install physically
+                            produces, where it lands, review, licence,
+                            price. The mockup's own bullets (`12 responsive
+                            screens`) are publisher prose we do not
+                            collect, and counting screens would mean
+                            inventing a number.
+                           */}
+                          <Divider />
+                          <Stack spacing={0.75}>
+                            <Typography
+                              variant="overline"
+                              color="text.secondary"
+                            >
+                              {"What's included"}
+                            </Typography>
+                            {listingInclusions(listing ?? {}, {
+                              reviewedVersion:
+                                listing?.latestVersionReviewState ===
+                                'approved',
+                            }).map((row) => (
+                              <Stack
+                                key={row.label}
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'flex-start' }}
+                              >
+                                <MdiIcon
+                                  path={
+                                    row.tone === 'included'
+                                      ? mdiCheckCircleOutline
+                                      : mdiInformationOutline
+                                  }
+                                  size={0.8}
+                                  color={
+                                    row.tone === 'included'
+                                      ? 'success'
+                                      : 'disabled'
+                                  }
+                                />
+                                <Typography variant="body2">
+                                  {row.label}
+                                </Typography>
+                              </Stack>
+                            ))}
+                          </Stack>
+                          <Divider />
                         {/* Where it actually runs (AGL-997). At org scope an
                             install is a SET of sites; this page used to
                             resolve the single acting host and announce
@@ -1689,6 +1846,9 @@ export function MarketplaceListingContent({
                       </CardDisplay>
                       <CardDisplay
                         header={'Publisher'}
+                        help={pluginDocsHelp('publisherHandbook', {
+                          anchor: '#before-your-first-publish',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -1851,6 +2011,9 @@ export function MarketplaceListingContent({
                       {listing?.homepageUrl || listing?.repositoryUrl ? (
                         <CardDisplay
                           header={'Links'}
+                          help={pluginDocsHelp('publisherHandbook', {
+                            anchor: '#authoring-your-listing',
+                          })}
                           contentGutterX
                           contentGutterY
                         >
@@ -1888,6 +2051,9 @@ export function MarketplaceListingContent({
                           shaped cards for the same idea read as unfinished. */}
                       <CardDisplay
                         header={'Version history'}
+                        help={pluginDocsHelp('publisherHandbook', {
+                          anchor: '#shipping-a-new-version',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -1964,25 +2130,31 @@ export function MarketplaceListingContent({
                                 the breakdown disagree with the header. Saying
                                 the split is short is honest; inventing a
                                 version to hang them on is not. */}
-                            {installTotals?.untrackedActiveInstalls ? (
+                            {installTotals?.untrackedActiveInstalls ||
+                            installTotals?.untrackedInstallCount ? (
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
                               >
-                                {`${installTotals.untrackedActiveInstalls} ` +
-                                  `active install${
-                                    installTotals.untrackedActiveInstalls === 1
+                                {/* Both halves of the shortfall (AGL-2339).
+                                    `untrackedActiveInstalls` was rendered and
+                                    its sibling `untrackedInstallCount` was
+                                    served and read by nothing — an asymmetry,
+                                    not a decision. All-time is the LARGER
+                                    number (an uninstall deletes its pin and
+                                    leaves the accumulator alone), so showing
+                                    only the active half made the all-time
+                                    header look wrong by a margin the page
+                                    could not explain. */}
+                                {`${installTotals.untrackedInstallCount} ` +
+                                  `install${
+                                    installTotals.untrackedInstallCount === 1
                                       ? ''
                                       : 's'
-                                  } predate${
-                                    installTotals.untrackedActiveInstalls === 1
-                                      ? 's'
-                                      : ''
-                                  } per-version tracking and ${
-                                    installTotals.untrackedActiveInstalls === 1
-                                      ? 'is'
-                                      : 'are'
-                                  } not counted above.`}
+                                  } all-time and ${
+                                    installTotals.untrackedActiveInstalls
+                                  } still active predate per-version ` +
+                                  'tracking, and are not counted above.'}
                               </Typography>
                             ) : null}
                           </Stack>

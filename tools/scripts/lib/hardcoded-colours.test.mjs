@@ -40,9 +40,9 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
+  blankNonCode,
   compareToBaseline,
   findHardcodedColours,
-  stripComments,
 } from './hardcoded-colours.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -193,10 +193,83 @@ test('a `//` inside a string does NOT blank the rest of the line (the AGL-2004 s
   assert.equal(found[0].hex, '#2196f3')
 
   // And the offsets survive, so line numbers stay honest.
-  assert.equal(stripComments(source).length, source.length)
+  assert.equal(blankNonCode(source).length, source.length)
   const multi = `a\n// comment\nb`
-  assert.equal(stripComments(multi).length, multi.length)
-  assert.equal(stripComments(multi).split('\n').length, 3)
+  assert.equal(blankNonCode(multi).length, multi.length)
+  assert.equal(blankNonCode(multi).split('\n').length, 3)
+})
+
+test('a REGEX LITERAL cannot open a phantom comment (AGL-2354)', () => {
+  // The defect class the parser rewrite ends. The hand-rolled stripper this
+  // replaced had no idea what a regex was, so `/\/*$/` — strip trailing
+  // slashes, an ordinary line to write — read as `/*` and blanked everything
+  // up to the next `*` `/` ANYWHERE in the file. Measured against the old
+  // scanner: the two colours below were invisible and only the one after the
+  // real comment was reported. That is a false GREEN, the direction nobody
+  // checks.
+  const source = [
+    String.raw`const trailing = /\/*$/`,
+    `const a = { color: '#123456' }`,
+    `const b = { backgroundColor: '#abcdef' }`,
+    `/* an ordinary comment, which is where the phantom used to end */`,
+    `const c = { color: '#fedcba' }`,
+  ].join('\n')
+  assert.deepEqual(
+    findHardcodedColours(source, 'case.ts').map((one) => [one.line, one.hex]),
+    [
+      [2, '#123456'],
+      [3, '#abcdef'],
+      [5, '#fedcba'],
+    ],
+  )
+
+  // The same class one line wide: `\/` followed by the closing `/` read as
+  // `//` and blanked the rest of the line, hiding the second colour.
+  const inline = String.raw`const a = { color: '#123456' }; const s = /a\/\//; const b = { color: '#654321' }`
+  assert.deepEqual(
+    findHardcodedColours(inline, 'case.ts').map((one) => one.hex),
+    ['#123456', '#654321'],
+  )
+})
+
+test('a hex INSIDE a regex literal is a matcher, not a style — it PASSES', () => {
+  // The other half of knowing what a regex is. A detector or a validator that
+  // has to name the shape it matches is not pinning a colour.
+  assert.deepEqual(
+    findHardcodedColours(String.raw`const RE = /color:\s*#123456/g`, 'case.ts'),
+    [],
+  )
+})
+
+test('a doc comment naming a hex still PASSES once the parser holds it', () => {
+  // JSDoc is parsed into NODES and hangs off `getChildren()`, so a token walk
+  // that does not skip it keeps doc-comment prose. Three real files were
+  // reported this way while the oracle was being built —
+  // `css-gradient.tsx`'s paragraph about the marketing CTA's mid stop among
+  // them — which is why the skip exists and why it is pinned here.
+  const source = [
+    `/**`,
+    ` * The CTA's mid stop \`#7a5cf0\` has no token at all, and the token stop`,
+    ` * persists as \`var(--mui-palette-primary-main, #00b0ff)\`.`,
+    ` */`,
+    `export const stops = [{ color: 'primary.main' }]`,
+  ].join('\n')
+  assert.deepEqual(findHardcodedColours(source, 'case.ts'), [])
+})
+
+test('`.ts` is not parsed as `.tsx` — the dialects disagree about `<T>value`', () => {
+  // The trap the brand ratchet documented: a wrong ScriptKind does not throw,
+  // the parser recovers and quietly reshapes the tree. `<Theme>x` is a type
+  // assertion in a `.ts` and an unclosed JSX element in a `.tsx`, which in the
+  // TSX reading swallows the rest of the file as JSX text.
+  const source = [
+    `const t = <Theme>base`,
+    `const a = { color: '#123456' }`,
+  ].join('\n')
+  assert.deepEqual(
+    findHardcodedColours(source, 'case.ts').map((one) => one.hex),
+    ['#123456'],
+  )
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

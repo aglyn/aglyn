@@ -119,6 +119,69 @@ function sendPageviewBeacon(hostId: string | undefined, screenId?: string) {
 }
 
 /**
+ * Screens this page load has already armed a dwell timer for. Module
+ * scope, for the same reason as `beaconed`: a page remounts on its own,
+ * and two timers for one screen would report the visit twice.
+ */
+const dwelling = new Set<string>()
+
+/**
+ * Report how long the visitor stayed on this screen (AGL-2182).
+ *
+ * `/product/analytics`'s per-screen mockup shows `Avg. time 2m 04s / on
+ * this screen`, and nothing in the pipeline recorded duration of any kind.
+ *
+ * ## Why `pagehide` and not `beforeunload` or `visibilitychange`
+ *
+ * `beforeunload` disqualifies the page from the bfcache in every modern
+ * browser and does not fire at all on mobile Safari — the platform where
+ * most reading happens. `visibilitychange` fires on every tab switch, so
+ * it would report a dozen fragments per visit and count each as a sample.
+ * `pagehide` fires on both a real unload and a bfcache freeze, once.
+ *
+ * ## Why this is fire-and-forget, and why it degrades to nothing
+ *
+ * `sendBeacon` is queued by the browser and outlives the document; there
+ * is no response to read and none is wanted. If it never fires — a killed
+ * tab, a blocked beacon — the screen simply has fewer samples, and the
+ * console renders no average rather than a wrong one. The failure mode is
+ * silence, not a false number.
+ *
+ * Installed during render like the pageview beacon, and for the same
+ * reason (AGL-1550): an effect only runs if React commits, and a page that
+ * renders but never commits is the exact failure this file exists to
+ * survive.
+ */
+function armDwellBeacon(hostId: string | undefined, screenId?: string) {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return
+  if (!hostId || !screenId) return
+  const key = `${hostId}\x00${screenId}`
+  if (dwelling.has(key)) return
+  dwelling.add(key)
+  const startedAt = Date.now()
+  let reported = false
+  const report = () => {
+    if (reported) return
+    reported = true
+    try {
+      navigator.sendBeacon(
+        '/api/analytics/collect',
+        JSON.stringify({
+          hostId,
+          screenId,
+          // The collector clamps and floors this; the client's clock is
+          // the visitor's, so nothing here is trusted as measured.
+          dwellMs: Date.now() - startedAt,
+        }),
+      )
+    } catch {
+      // Analytics never breaks the page.
+    }
+  }
+  window.addEventListener('pagehide', report)
+}
+
+/**
  * Every measurement and consent surface a published tenant page owns: the
  * first-party pageview beacon (AGL-82/138/151), the Google Analytics gtag
  * mounts (AGL-138/661) and the visitor-consent machinery that gates them
@@ -209,6 +272,7 @@ export default function SiteAnalytics({
   // decides the gate below, started early so `/api/consent/region` goes out
   // even on a wedged page.
   sendPageviewBeacon(hostId, screenId)
+  armDwellBeacon(hostId, screenId)
   primeVisitorConsent(hostId, host, consentRequired)
   // CTA and outbound link clicks (AGL-1562). Installed here, during render,
   // for the same reason as the two calls above — and installed at all here

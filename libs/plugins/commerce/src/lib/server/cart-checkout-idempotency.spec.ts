@@ -502,3 +502,151 @@ describe('a coupon and a gift card both reach the session (AGL-2112)', () => {
     expect(sessionCalls()[0].params.has('discounts[0][coupon]')).toBe(false)
   })
 })
+
+/**
+ * AGL-2251. `resolveTransactionFeePct` keys on `productType === 'physical'`
+ * and routes EVERYTHING else — `undefined` included — to the digital rate.
+ * `liftLegacyProduct` only defaults `type` on docs it synthesises variants
+ * for, so a part-migrated product doc reaches these handlers without one.
+ *
+ * The cart passed the raw `product.type`, four lines under a comment promising
+ * "a missing `type` reads as physical, exactly as the fee ladder below reads
+ * it". It did not: the same product was billed at Business's 2% digital rate
+ * through the cart and at its 0% physical rate through buy-now, so the fee a
+ * merchant paid depended on which button the shopper pressed.
+ */
+describe('a product doc with no type (AGL-2251)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      // No `type` at all — the part-migrated shape.
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+  })
+
+  it('is priced as PHYSICAL, the same as buy-now prices it', async () => {
+    await post()
+    // Business physical is 0%, so no application fee is sent at all. Read as
+    // the digital 2% it used to take, this would be '160'.
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBeNull()
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('0')
+  })
+
+  /**
+   * POSITIVE CONTROL: a doc that DOES say digital still pays the digital rate,
+   * so the assertion above is about the default and not about the ladder
+   * having stopped working.
+   */
+  it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+    await post()
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBe('160')
+  })
+})
+
+/**
+ * AGL-2256. The cart summed `Math.round(unitCents * quantity * pct / 100)` per
+ * line and floored nothing. `checkout.ts`, `draft-order.ts` and `reserve.ts`
+ * all take `Math.max(1, …)` when the rate is above zero; the cart's
+ * `Math.max(1, feeCents)` sat INSIDE `if (feeCents > 0)`, so it could never
+ * rescue a total that had already rounded to zero — and the guard then read
+ * that zero as "this plan charges no fee" and sent none at all.
+ *
+ * Scale is the plan that shows it: 1% digital, on lines cheap enough that 1%
+ * of each rounds down. The fixture org is Business (2% digital) so the plan is
+ * overridden per case.
+ */
+describe('a platform fee that rounds to zero (AGL-2256)', () => {
+  const realPlan = mockOrg.org.plan
+
+  afterEach(() => {
+    mockOrg.org.plan = realPlan
+  })
+
+  beforeEach(() => {
+    mockOrg.org.plan = 'scale'
+    // TWO lines, because the rounding is PER LINE and a single line big
+    // enough to matter rounds up. 1% of 49c is 0.49c, which rounds to 0 —
+    // twice — while the basket itself is 98c and well over Stripe's own 50c
+    // minimum, so this is a sale that really happens.
+    docs.set(`hosts/host-1/carts/${CART_ID}`, {
+      lines: [
+        { productId: 'product-1', quantity: 1 },
+        { productId: 'product-2', quantity: 1 },
+      ],
+    })
+    for (const id of ['product-1', 'product-2']) {
+      docs.set(`hosts/host-1/products/${id}`, {
+        name: 'Sticker pack',
+        type: 'digital',
+        status: 'active',
+        variants: [{ id: 'default', priceUsd: 0.49, inventory: null }],
+      })
+    }
+  })
+
+  it('still takes a cent rather than dropping the fee entirely', async () => {
+    await post()
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBe('1')
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('1')
+  })
+
+  /**
+   * THE OTHER BRANCH, and the one an "assert the fee is 1" test alone would
+   * leave unproven: a plan whose rate is genuinely 0 must still send nothing.
+   * Stripe rejects a zero application fee, and inventing a cent on an
+   * advertised 0% tier would be a pricing lie.
+   */
+  it('sends NOTHING on a plan whose rate is a real zero', async () => {
+    mockOrg.org.plan = 'advanced'
+    await post()
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBeNull()
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('0')
+  })
+
+  /**
+   * And the floor is a floor, not a replacement: a basket whose fee rounds to
+   * a real number keeps it.
+   */
+  it('POSITIVE CONTROL: a fee that does not round away is unchanged', async () => {
+    docs.set(`hosts/host-1/carts/${CART_ID}`, {
+      lines: [{ productId: 'product-1', quantity: 2 }],
+    })
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+    await post()
+    // Scale digital is 1% of 8000 = 80.
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBe('80')
+  })
+})
+

@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  PLATFORM_BRAND_NAME,
+  resolveBrandingProfile,
+} from '@aglyn/aglyn/server'
 import {
   checkRateLimit,
   emailUnverifiedResponse,
@@ -80,13 +84,14 @@ import {
  * ceiling. `effort: low` is the documented posture for a scoped chat
  * workload; both are asserted in the spec so a silent default change fails.
  *
- * Prompt caching: the system array is ordered stable → volatile across FOUR
+ * Prompt caching: the system array is ordered stable → volatile across FIVE
  * blocks, with breakpoints after the first two.
  *
  *   1. static prompt        [breakpoint]  identical everywhere
  *   2. screen description   [breakpoint]  identical per ROUTE, any tenant
- *   3. request facts                      workspace, plan, host, path
- *   4. docs retrieval                     follows the question
+ *   3. product brand                      the org's name for the product
+ *   4. request facts                      workspace, plan, host, path
+ *   5. docs retrieval                     follows the question
  *
  * Caching is a prefix match, so breakpoint 2 covers blocks 1+2 together. The
  * split between 2 and 3 is the whole design and it is easy to get wrong:
@@ -95,10 +100,18 @@ import {
  * its own copy and the entry is usually cold when it matters. Derived purely
  * from the route, block 2 serves every workspace on that screen.
  *
+ * Block 3 is the same argument applied to the BRAND (AGL-2352). Block 1 no
+ * longer names the product at all — it says a later block will — so a
+ * white-label org's assistant calls itself by that org's name without any
+ * org's bytes reaching a cached prefix. See `assistBrandBlock`.
+ *
  * Two breakpoints rather than one because a request with no screen block
  * (free tier, unrecognised route) would otherwise get no cache at all.
  *
- * Measured: block 1 is ~933 tokens and blocks 1+2 come to ~1,030–1,190
+ * Measured before AGL-2352, which lengthened block 1 by ~130 characters
+ * (the brand interpolations became longer generic nouns, and one sentence
+ * was added) — so the headroom below moved the safe way, not the wrong one:
+ * block 1 was ~933 tokens and blocks 1+2 came to ~1,030–1,190
  * depending on the screen, against Sonnet 5's 1,024-token minimum. So it
  * caches, with little headroom — and on a shorter screen description it may
  * not. `usage.cacheReadTokens` on the exchange doc is the only thing that
@@ -143,13 +156,13 @@ const MAX_STORED_ANSWER_CHARS = 20000
  * model's minimum cacheable length: it is billed at cache-read rates on
  * every turn after the first.
  */
-const STATIC_SYSTEM = `You are Aglyn Assist, the in-console helper for Aglyn — a multi-tenant website-building and commerce platform. You are embedded in the customer console and answer questions about using Aglyn: building sites in the Besigner, publishing, domains, commerce, bookings, workflows, datasets, members and roles, billing and plans, and the marketplace.
+const STATIC_SYSTEM = `You are the in-console helper for a multi-tenant website-building and commerce platform. A later block tells you the name of the product — use THAT name for the product and for yourself, and never any other name for either. You are embedded in the customer console and answer questions about using the product: building sites in the Besigner, publishing, domains, commerce, bookings, workflows, datasets, members and roles, billing and plans, and the marketplace.
 
 Rules:
 - Ground answers in the provided documentation sections when they are relevant, and cite them by linking their URLs with markdown links. Never invent a docs URL — only link URLs given to you.
 - When the user should go somewhere in the console, link the console path as a markdown link with a root-relative path (for example [Billing](/acme/billing)) only when you are certain of the path from the context provided; otherwise describe the navigation in words.
 - Be concise and task-focused: answer the question, give the steps, link the source. Skip preamble.
-- If the question is not about Aglyn, say so briefly and point the user back to Aglyn topics.
+- If the question is not about the product, say so briefly and point the user back to product topics.
 - If you do not know, say so and suggest contacting support from the Support page rather than guessing.
 
 Guiding from the current screen:
@@ -158,7 +171,7 @@ Guiding from the current screen:
 - Name the next thing to do in the order the user will do it. Prefer one concrete next step over a list of everything possible.
 
 Two depths, one answer:
-- Aglyn's users run from first-time business owners to working developers, and they get the same message. Lead with the plain answer: what to click, in ordinary words, with no jargon and nothing assumed about what they already know.
+- The product's users run from first-time business owners to working developers, and they get the same message. Lead with the plain answer: what to click, in ordinary words, with no jargon and nothing assumed about what they already know.
 - Then, when there is genuinely something technical to add — the route path, the identifier in the URL, the field or API behind the screen — add ONE final paragraph that begins exactly "Under the hood:" and carries it. The console collapses that paragraph, so a beginner never has to read it and a developer never has to ask for it.
 - Do not write an "Under the hood:" paragraph when it would only restate the plain answer in longer words. Nothing technical to add is a normal outcome.
 - Never talk down. No "don't worry", no "it's easy", no praise for the question.
@@ -170,6 +183,46 @@ Proposing an action:
 - Propose at most one action per message, and only ids listed for the screen the user is on. Supply only the params that id declares. Anything else is discarded.
 - Write the message as if the card may not appear, because it may not. Say what the user should do; never say you have done it, opened it, or filled anything in.
 - If the screen lists no actions, or nothing needs doing, write no block at all. Most answers have none.`
+
+/**
+ * What the assistant calls the product, and itself — the ONE per-org value
+ * in its instructions (AGL-2352).
+ *
+ * Deliberately its own block, placed AFTER the last cache breakpoint, and
+ * that placement is the whole answer to the trade AGL-2352 recorded.
+ *
+ * Interpolating the brand back into `STATIC_SYSTEM` is the edit that reads
+ * natural: the name never changes for a given org, so it looks static. But
+ * the cache is a PREFIX match, so one per-org byte inside block 1 gives
+ * every distinct brand its own copy of the ~950-token prefix. The prefix
+ * count multiplies by the number of white-label brands, and each copy has
+ * to be WRITTEN (~1.25x) off that brand's own traffic before it is ever
+ * read — on a brand with a handful of daily questions the entry expires
+ * between them, so it is written every time and read never, which costs
+ * strictly more than not caching at all. Same argument, for the same
+ * reason, as the block 2 / block 3 split above.
+ *
+ * After both breakpoints it costs a few dozen uncached input tokens per
+ * request and nothing else: neither breakpoint carries a per-org byte, so
+ * every org on the deployment — white-label or not — still shares exactly
+ * ONE cached prefix, the same one they shared when the prompt asserted our
+ * brand at them.
+ *
+ * `resolveBrandingProfile` rather than `PLATFORM_BRAND_NAME` because it is
+ * the single resolver every branded surface routes through, and it already
+ * falls back to the deployment brand for orgs without the `whiteLabel`
+ * entitlement. No extra read: the org billing doc is the one `getOrgForUser`
+ * already returned for the membership check.
+ */
+function assistBrandBlock(org: Parameters<typeof resolveBrandingProfile>[0]): string {
+  const { productName } = resolveBrandingProfile(org)
+  return [
+    `The product you are the assistant for is called ${productName}.`,
+    `Refer to it as ${productName}, and to yourself as ${productName} Assist.`,
+    'Never use any other name for the product or for yourself, including in links, examples and apologies.',
+  ].join('\n')
+}
+
 
 interface AssistHistoryTurn {
   role: 'user' | 'assistant'
@@ -332,8 +385,15 @@ async function handler(request: Request): Promise<Response> {
   }
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
+    // THE DEPLOYMENT BRAND IS RIGHT HERE, and stays (AGL-2352). This refusal
+    // is emitted before the Authorization header below is even read, so
+    // there is no org to resolve a brand from — and it names an env var the
+    // deployment's operator sets, which is a fact about the deployment
+    // rather than about the workspace that happened to ask.
     return Response.json(
-      { error: 'Aglyn Assist is not configured (ANTHROPIC_API_KEY).' },
+      {
+        error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
+      },
       { status: 501 },
     )
   }
@@ -512,6 +572,10 @@ async function handler(request: Request): Promise<Response> {
                 },
               ]
             : []),
+          // Per-org, and therefore AFTER every breakpoint — see
+          // `assistBrandBlock`. Unconditional: a free workspace assembles no
+          // view block, and it must still be told what the product is called.
+          { type: 'text', text: assistBrandBlock(org as never) },
           ...(guide ? [{ type: 'text', text: guide.facts }] : []),
           ...(docsBlock ? [{ type: 'text', text: docsBlock }] : []),
         ],
@@ -638,7 +702,11 @@ async function handler(request: Request): Promise<Response> {
               type: 'error',
               error: answer
                 ? 'The assistant stopped part-way through that answer. Try rephrasing the question.'
-                : 'The assistant could not answer that one. Try rephrasing, or ask about a different part of Aglyn.',
+                : 'The assistant could not answer that one. Try rephrasing, ' +
+                  // The org's brand, not the deployment's (AGL-2352): this
+                  // renders in the panel of a member who may never have
+                  // heard of us.
+                  `or ask about a different part of ${resolveBrandingProfile(org as never).productName}.`,
             })
           } else if (stopReason === 'max_tokens') {
             emit({
@@ -675,7 +743,16 @@ async function handler(request: Request): Promise<Response> {
             // confirm, and confirming navigates — see the write boundary in
             // `assist-view-context.ts`.
             proposal,
-            quota: { ...quota, used: quota.used + 1, remaining: Math.max(0, quota.remaining - 1) },
+            // The reservation VERBATIM (AGL-2238). It already describes the
+            // standing after the message, because it is what moved the
+            // counter — `reserveAssistMessage` returns `used + 1` and
+            // `limit - (used + 1)`. Adjusting again here is a leftover from
+            // `checkAssistQuota`, which reported the standing BEFORE the
+            // message and so had to be advanced by one. Under the
+            // reservation that same `+1` counts the message twice, and the
+            // panel renders the result: a free workspace's first question
+            // came back "8 of 10 free messages left today".
+            quota,
           })
         } catch (error) {
           console.error('assist stream failed', error)

@@ -19,7 +19,10 @@ import {
   attachPluginInstalls,
   isPluginNetworkAllowed,
   isPluginRevoked,
+  isListingWideRevocation,
+  newestInstallableVersion,
   nextRevocationState,
+  offeredPluginVersion,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
   type PluginRevocation,
@@ -168,6 +171,218 @@ describe('isPluginRevoked', () => {
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.0.0')).toBe(true)
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.1.0')).toBe(false)
     expect(isPluginRevoked(null, '1.0.0')).toBe(false)
+  })
+})
+
+/**
+ * What the listing may advertise as an update (AGL-2306).
+ *
+ * `latestApprovedVersion` was written on approval and never moved back, so a
+ * version rejected on re-review or killed with the per-version switch stayed
+ * on offer — an "Update to vX" that `install-plugin` answers 409 to. Two
+ * properties, not one: approved AND not revoked.
+ */
+describe('newestInstallableVersion (AGL-2306)', () => {
+  const compare = (a: string, b: string) =>
+    Number(a.split('.')[0]) - Number(b.split('.')[0])
+
+  const v = (version: string, reviewState?: string) => ({ version, reviewState })
+
+  it('picks the newest approved version', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('3.0.0', 'approved'), v('2.0.0', 'approved')],
+        null,
+        compare,
+      ),
+    ).toBe('3.0.0')
+  })
+
+  it('skips a version that is not approved — pending, rejected or absent', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'rejected'), v('3.0.0', 'pending'), v('4.0.0')],
+        null,
+        compare,
+      ),
+    ).toBe('1.0.0')
+  })
+
+  it('skips a REVOKED version even though it is approved', () => {
+    // The half that a mirror tracking only `reviewState` would get wrong: a
+    // revoked version keeps its approval, and `install-plugin` still 409s.
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'approved')],
+        { versions: ['2.0.0'] },
+        compare,
+      ),
+    ).toBe('1.0.0')
+  })
+
+  it('answers null under a listing-wide kill', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'approved')],
+        { versions: 'all' },
+        compare,
+      ),
+    ).toBeNull()
+  })
+
+  it('answers null when nothing qualifies — an absent mirror, not a stale one', () => {
+    expect(newestInstallableVersion([v('1.0.0', 'rejected')], null, compare)).toBeNull()
+    expect(newestInstallableVersion([], null, compare)).toBeNull()
+  })
+
+  it('keeps an uncomparable version out of the offer rather than into it', () => {
+    // A null comparison sorts as "not newer": a malformed version string must
+    // not become what everyone is told to upgrade to.
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('nonsense', 'approved')],
+        null,
+        () => null,
+      ),
+    ).toBe('1.0.0')
+  })
+})
+
+describe('offeredPluginVersion (AGL-2368)', () => {
+  const listing = (latestApprovedVersion?: string) => ({ latestApprovedVersion })
+
+  it('CONTROL: hands back the mirror when nothing is revoked', () => {
+    expect(offeredPluginVersion(listing('2.0.0'), null)).toBe('2.0.0')
+    expect(offeredPluginVersion(listing('2.0.0'), undefined)).toBe('2.0.0')
+    // A revocation that does not name this version is not a revocation of it.
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: ['1.0.0'] })).toBe(
+      '2.0.0',
+    )
+  })
+
+  it('offers NOTHING when the mirror names a revoked version', () => {
+    // The whole point. `latestApprovedVersion` is a review verdict and the
+    // kill switch does not clear it, so the two are simultaneously true and a
+    // client reading only the first advertises stopped bytes.
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: ['2.0.0'] })).toBeNull()
+  })
+
+  it('offers nothing under a listing-wide takedown', () => {
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: 'all' })).toBeNull()
+  })
+
+  it('does not guess a next-best version', () => {
+    // A client has no version list — it holds one mirror and one revocation
+    // document. Answering "nothing to offer" is the honest reading of a
+    // mirror caught between two non-transactional writes; inventing 1.0.0
+    // here would be inventing a fact.
+    expect(
+      offeredPluginVersion(
+        { latestApprovedVersion: '2.0.0', latestVersion: '3.0.0' } as never,
+        { versions: ['2.0.0'] },
+      ),
+    ).toBeNull()
+  })
+
+  it('treats an absent or empty mirror as nothing on offer', () => {
+    expect(offeredPluginVersion(listing(undefined), null)).toBeNull()
+    expect(offeredPluginVersion(listing(''), null)).toBeNull()
+    expect(offeredPluginVersion(null, null)).toBeNull()
+    expect(offeredPluginVersion(undefined, { versions: 'all' })).toBeNull()
+  })
+
+  it('reads a NUMERIC mirror, which is what legacy listings carry', () => {
+    // `latestApprovedVersion` is typed `string | number` on the listing.
+    expect(offeredPluginVersion({ latestApprovedVersion: 3 }, null)).toBe('3')
+    expect(
+      offeredPluginVersion({ latestApprovedVersion: 3 }, { versions: ['3'] }),
+    ).toBeNull()
+  })
+})
+
+describe('isListingWideRevocation (AGL-2288)', () => {
+  it('is true only for the listing-wide kill', () => {
+    expect(isListingWideRevocation({ versions: 'all' })).toBe(true)
+    expect(isListingWideRevocation({ versions: ['1.0.0'] })).toBe(false)
+    expect(isListingWideRevocation(null)).toBe(false)
+    expect(isListingWideRevocation(undefined)).toBe(false)
+  })
+
+  it('is the same fact `isPluginRevoked` reads', () => {
+    // The point of splitting it out: marketplace checkout has no version to
+    // ask about, and a second spelling of `versions === 'all'` at that call
+    // site is how the two would come apart.
+    expect(isPluginRevoked({ versions: 'all' }, 'anything')).toBe(true)
+  })
+})
+
+/**
+ * A legacy or hand-written revocations document is ADOPTED, not rebuilt
+ * (AGL-2305).
+ *
+ * `withReview` replaces `versions` wholesale from the `reviewVersions` seed,
+ * and documents written before AGL-1085 have no `reviewVersions` at all —
+ * `revocations` is `allow write: if isStaff()`, so a staff client can produce
+ * that shape by hand today. Seeding from an empty list made the next review
+ * action silently discard every version already revoked, and an un-revoke
+ * return `null`, which the caller turns into a DELETE of the whole kill
+ * switch.
+ */
+describe('nextRevocationState on a pre-AGL-1085 document (AGL-2305)', () => {
+  const legacy = { versions: ['1.0.0'] } as const
+
+  it('keeps the legacy version when a second one is revoked', () => {
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'revoke-version',
+        version: '2.0.0',
+      }),
+    ).toMatchObject({
+      versions: ['1.0.0', '2.0.0'],
+      reviewVersions: ['1.0.0', '2.0.0'],
+    })
+  })
+
+  it('does not DELETE the document when an unrelated version is un-revoked', () => {
+    // The sharp end: `null` here means "delete the kill switch", and 1.0.0 was
+    // never un-revoked by anybody.
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'unrevoke-version',
+        version: '2.0.0',
+      }),
+    ).toMatchObject({ versions: ['1.0.0'] })
+  })
+
+  it('still deletes once the last legacy version is un-revoked', () => {
+    // Adoption must not make a revocation un-clearable — that would be the
+    // opposite failure.
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'unrevoke-version',
+        version: '1.0.0',
+      }),
+    ).toBeNull()
+  })
+
+  it('does not adopt the takedown form as review-owned', () => {
+    // `versions: 'all'` is the takedown's own half, restored by `restore`.
+    // Adopting it would turn an un-hide into a permanent per-version
+    // revocation of a version string that does not exist.
+    expect(
+      nextRevocationState({ versions: 'all', source: 'takedown' } as never, {
+        type: 'restore',
+      }),
+    ).toBeNull()
+  })
+
+  it('leaves an AGL-1085-shaped document alone', () => {
+    expect(
+      nextRevocationState(
+        { versions: ['1.0.0'], reviewVersions: ['1.0.0'] } as never,
+        { type: 'unrevoke-version', version: '1.0.0' },
+      ),
+    ).toBeNull()
   })
 })
 

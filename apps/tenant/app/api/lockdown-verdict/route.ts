@@ -57,6 +57,7 @@
  */
 
 import {
+  bandwidthCapEngaged,
   lockdownMode,
   lockdownNotice,
   lockdownRetryAfterSeconds,
@@ -83,12 +84,24 @@ export async function GET(request: Request): Promise<Response> {
       // Unknown host: not locked — the normal 404 flow owns this case. No org,
       // so no attribution either; there is nothing here to fingerprint.
       return Response.json(
-        { locked: false, attribution: false },
+        { locked: false, attribution: false, overQuota: false },
         { status: 200 },
       )
     }
     const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
     const attribution = showsPlatformAttribution(orgRes.org)
+    // The free plan's bandwidth cap (AGL-1967/2070/2155) — a THIRD answer on
+    // the same verdict, for the same reason `attribution` rides here: this
+    // route already holds the org doc the answer needs, so the middleware pays
+    // nothing for it, and a cap evaluated only in the loader would be a cap
+    // that CACHED pages sail straight past. The egress the cap exists to stop
+    // is served by the cache, not by the renderer.
+    //
+    // Same disclosure posture as the other two: a boolean about a public
+    // website, derived from a plan. No usage figure, no plan name, no band —
+    // nothing here that is not already implied by the notice the visitor is
+    // about to read.
+    const overQuota = bandwidthCapEngaged(orgRes.org)
     const state = resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -98,7 +111,10 @@ export async function GET(request: Request): Promise<Response> {
       Date.now(),
     )
     if (!state) {
-      return Response.json({ locked: false, attribution }, { status: 200 })
+      return Response.json(
+        { locked: false, attribution, overQuota },
+        { status: 200 },
+      )
     }
     // READ-ONLY (AGL-1511): the site keeps serving. The verdict still says
     // `locked: true` — it is describing the LOCK, not the middleware's
@@ -113,6 +129,7 @@ export async function GET(request: Request): Promise<Response> {
       {
         locked: true,
         attribution,
+        overQuota,
         mode: lockdownMode(state),
         reason: state.reason,
         title: notice.title,
@@ -135,8 +152,13 @@ export async function GET(request: Request): Promise<Response> {
     // Fail CLOSED on the attribution, in the same breath and for the opposite
     // reason: serving a site we could not price is recoverable, stamping the
     // platform's name on a site that paid to hide it is not.
+    // …and fail open on the CAP too, in the same breath. An unreachable org
+    // doc is an outage; taking a free customer's website down over one would
+    // be the cap doing exactly the damage it exists to prevent, to the wrong
+    // party. A month of missed enforcement costs Aglyn egress; an hour of
+    // wrongly enforced cap costs a customer their site.
     return Response.json(
-      { locked: false, attribution: false },
+      { locked: false, attribution: false, overQuota: false },
       { status: 200 },
     )
   }

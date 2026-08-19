@@ -152,7 +152,10 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
           </Stack>
         ) : undefined
       }
-      help="plugins"
+      help={{
+        topic: 'plugins',
+        anchor: '#what-the-badges-on-a-listing-mean',
+      }}
     >
       {editing && isOwner && currentOrg?.$id && listing ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>

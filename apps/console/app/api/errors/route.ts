@@ -51,8 +51,30 @@ export const dynamic = 'force-dynamic'
 
 const MAX_BODY_BYTES = 65_536
 
-/** The one cross-origin caller this collector accepts reports from. */
-const DOCS_ORIGIN = 'https://docs.aglyn.com'
+/**
+ * The one cross-origin caller this collector accepts reports from —
+ * CONFIGURATION, not a literal (AGL-2124).
+ *
+ * Pinned to `https://docs.aglyn.com`, an operator running BOTH halves of the
+ * open-source distribution still could not have their own docs talk to their
+ * own console: the docs beacon posted to us (fixed on the sending side), and
+ * this end refused theirs. Reads the same docs-origin configuration the rest
+ * of the console already uses (`constants/docs-links.ts`,
+ * `api/_lib/assist-retrieval.ts`), reduced to a bare origin because an ACAO
+ * header carrying a path never matches.
+ */
+const DOCS_ORIGIN = (() => {
+  const configured = (
+    process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
+    process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
+    'https://docs.aglyn.com'
+  ).trim()
+  try {
+    return new URL(configured).origin
+  } catch {
+    return 'https://docs.aglyn.com'
+  }
+})()
 
 // Fixed allowed origin (same-origin console callers never read the response,
 // so a docs-only ACAO costs them nothing); Vary keeps caches honest.

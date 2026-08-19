@@ -298,7 +298,7 @@ export const presets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       props: { component: 'p' },
       // Node-level sx (AGL-1346) — the record the Styles panel edits.
-      sx: { m: 0 },
+      sx: { marginTop: 0, marginRight: 0, marginBottom: 0, marginLeft: 0 },
       nodes: [
         {
           $id: null,

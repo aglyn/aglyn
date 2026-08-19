@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Conventions
 description: Pagination, ordering, error envelopes, and idempotency — shared behavior across every endpoint.
 ---
@@ -97,11 +97,11 @@ errors add a `code` with the specific detail.
 | --- | --- | --- |
 | `400` | `bad_request` | Failed validation (`code: "validation_failed"`). |
 | `401` | `unauthorized` | Missing, malformed, revoked, or expired key. |
-| `403` | `plan_required` | The organization's plan doesn't include API access — or, on a commerce resource, doesn't include commerce (`code: "commerce"`). |
+| `403` | `plan_required` | The organization's plan doesn't include what the call needs. `code` says which thing — see [below](#plan-required). |
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
-| `409` | `conflict` | An earlier request with the same [`Idempotency-Key`](#idempotency) is still running (`code: "idempotency_in_progress"`). |
+| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 
@@ -128,16 +128,24 @@ bisect a payload:
 
 ### Two different `plan_required` failures {#plan-required}
 
-`plan_required` answers two distinct questions, and `code` is what tells them apart:
+`plan_required` answers several distinct questions, and `code` is what tells them
+apart:
 
 | `code` | Means | What fixes it |
 | --- | --- | --- |
 | *absent* | The organization's plan doesn't include **API access** at all. Every endpoint answers this. | Move to a plan with the API. |
 | `"commerce"` | The API works, but the plan no longer includes **commerce**, so [orders](resources/orders.md) and [products](resources/products.md) are closed. Every other resource keeps working. | Restore a plan with commerce. |
+| `"data_store"` | The API works, but the plan doesn't include **datasets**, so [creating one](resources/datasets.md#create-a-dataset) is closed. | Move to a plan with the data store. |
+| `"dataset_quota"` | Datasets are included and **every included slot is used**. The message names the limit, and the add-on price when extra datasets are purchasable on this plan. | Buy extra datasets, or upgrade. |
+| `"record_quota"` | The dataset holds every record the plan includes. The message names the limit. | Upgrade. |
+| `"data_storage_quota"` | Dataset storage is exhausted, or the plan includes none. The message names the included size. | Upgrade. |
+| `"contact_quota"` | The **audience band** is full on a plan that doesn't meter contact overage. See [contacts](resources/contacts.md#plan-gates) — on plans that do meter it, this never happens and the extra contacts bill instead. | Upgrade. |
 
 Branch on `code`, not on the message. An integration that retries a plan failure
-forever is the failure mode here — neither is transient, so back off and alert
-a human instead.
+forever is the failure mode here — none of them is transient, so back off and alert
+a human instead. The quota codes are the ones a human can clear in minutes, which is
+why they are the ones that do **not** consume an
+[`Idempotency-Key`](#idempotency).
 
 We answer `plan_required` rather than `404` for the commerce case on purpose. Hiding a
 store that plainly exists behind a "no such thing" sends an integrator hunting a wrong
@@ -145,9 +153,27 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-`POST` and `DELETE` on `/v1/datasets/{datasetId}/records` accept an
-**`Idempotency-Key`** header. Send the same key to retry safely — if the original
-succeeded, the same response comes back instead of a duplicate or a `404`:
+Seven operations accept an **`Idempotency-Key`** header:
+
+| Operation | Key scoped to |
+| --- | --- |
+| `POST /v1/datasets` | the organization |
+| `DELETE /v1/datasets/{datasetId}` | that dataset |
+| `POST /v1/datasets/{datasetId}/records` | that dataset |
+| `DELETE /v1/datasets/{datasetId}/records/{recordId}` | that dataset |
+| `DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` | that site |
+| `POST /v1/contacts` | the organization |
+| `DELETE /v1/contacts/{contactId}` | the organization |
+
+Three rows are organization-scoped. `POST /v1/datasets` is because it is the only
+dataset operation with no object to scope to yet. Both contact operations are because
+**contacts are organization-wide**: one list is shared by every site, so there is no
+narrower object to scope a key to. Every other row is scoped to the object named in
+its own path — including `DELETE /v1/datasets/{datasetId}`, where the dataset being
+removed is still the scope.
+
+Send the same key to retry safely — if the original succeeded, the same response
+comes back instead of a duplicate or a `404`:
 
 ```bash
 curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
@@ -159,11 +185,13 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 
 - A fresh create returns **`201`**; a replay of a key we've already seen returns
   **`200`** with the original record. Use the status to tell them apart.
-- Keys are scoped to the **dataset you post to** and to the **operation**, and are
-  remembered for **30 days**. Use a UUID per logical operation, and don't reuse one
-  key across datasets: the second dataset treats it as a separate operation and
+- Keys are scoped to the **object in the table above** and to the **operation**, and
+  are remembered for **30 days**. Use a UUID per logical operation, and don't reuse
+  one key across datasets: the second dataset treats it as a separate operation and
   creates its own record. Reusing one key for a create *and* a delete is likewise two
-  separate operations, so a delete never replays a create's record.
+  separate operations, so a delete never replays a create's record — and that holds
+  for the dataset operations too, so one key used to create and then delete a dataset
+  does both, rather than replaying the create's body as a delete receipt.
 - After 30 days a key is forgotten, and re-sending it is a **new** operation that
   creates a new record. This window is far longer than any retry — Stripe's
   equivalent is 24 hours — and it exists because a stored replay holds a copy of the
@@ -179,7 +207,19 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
   refusal is deliberate: letting it through is exactly the duplicate the key exists
   to prevent. Retry once the first request has answered.
 - A request that **fails** releases its key, so you can fix the cause and retry with
-  the same one. A `400` never consumes a key at all.
+  the same one. A `400` never consumes a key at all, and neither does a refusal that
+  a customer can clear: a `403 plan_required` on
+  [`POST /v1/datasets`](resources/datasets.md#plan-gates) or
+  [`POST /v1/contacts`](resources/contacts.md#plan-gates) goes away when someone
+  upgrades, a `409 dataset_not_empty` goes away when the records are deleted, and a
+  `409 contact_exists` goes away when the duplicate is removed. A key burned on any of
+  them would mean the retry that should finally succeed replays the refusal forever.
+- The mirror of that rule matters just as much: a create that **succeeds** is
+  remembered, so a retry replays it *even when that create consumed the last slot in a
+  plan's band*. This holds on every create that takes a key — datasets, records, and
+  contacts — and it is what makes a bulk import safe to resume. Without it, the retry
+  after a lost response would be refused by the quota it had itself just filled, and
+  you would have no way to tell whether the object exists.
 
 ### Deletes
 
@@ -205,6 +245,16 @@ curl -X DELETE https://app.aglyn.com/api/v1/datasets/ds_1/records/k3f9a1c7be \
   That's deliberate: a `204`-for-everything would hand you a success for a typo'd id
   and take away the only signal that you're asking about the wrong record.
 - A `404` **releases** the key, so you can correct the id and retry with the same one.
+
+`DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` behaves the same way,
+scoped to the site rather than to a dataset. It is the delete most likely to run on
+a timer — a purge after a nightly export — which is exactly the case where a lost
+response has to be distinguishable from a wrong id.
+
+`DELETE /v1/contacts/{contactId}` behaves the same way, scoped to the organization.
+Send a key on it as a matter of course: contact deletions are usually erasure requests
+running from a script, and "already erased" and "wrong id" prescribe very different
+next steps.
 
 `PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
 over the stored ones, so the same body twice lands the same state *and* returns the

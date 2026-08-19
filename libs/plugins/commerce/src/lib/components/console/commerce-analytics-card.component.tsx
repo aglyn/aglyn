@@ -17,7 +17,7 @@
 'use client'
 
 import * as CommerceModel from '../../model'
-import { checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Box, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
@@ -141,6 +141,13 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     return (
       <CardDisplay
         header={'Commerce analytics (30 days)'}
+        help={pluginDocsHelp('commerce', {
+          anchor: '#orders',
+          excerpt:
+            'Revenue, orders and average order value over the last 30 days, ' +
+            'each against the 30 days before it. Pending and cancelled orders ' +
+            'are left out — neither is money.',
+        })}
         contentGutterX
         contentGutterY
       >
@@ -155,6 +162,13 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
     return (
       <CardDisplay
         header={'Commerce analytics (30 days)'}
+        help={pluginDocsHelp('commerce', {
+          anchor: '#orders',
+          excerpt:
+            'Revenue, orders and average order value over the last 30 days, ' +
+            'each against the 30 days before it. Pending and cancelled orders ' +
+            'are left out — neither is money.',
+        })}
         contentGutterX
         contentGutterY
       >
@@ -183,7 +197,18 @@ export function CommerceAnalyticsCard(props: CommerceAnalyticsCardProps) {
   }
 
   return (
-    <CardDisplay header={'Commerce analytics (30 days)'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Commerce analytics (30 days)'}
+      help={pluginDocsHelp('commerce', {
+        anchor: '#orders',
+        excerpt:
+          'Revenue, orders and average order value over the last 30 days, ' +
+          'each against the 30 days before it. Pending and cancelled orders ' +
+          'are left out — neither is money.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Stack direction="row" spacing={3}>
           {[

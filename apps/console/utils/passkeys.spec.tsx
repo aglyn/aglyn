@@ -65,9 +65,12 @@ describe('passkey sign-in failures are never silent (AGL-1417)', () => {
     const { describePasskeySignInFailure, PasskeyRequestError } = passkeys()
 
     const cases: unknown[] = [
-      Object.assign(new Error('The operation either timed out or was not allowed.'), {
-        name: 'NotAllowedError',
-      }),
+      Object.assign(
+        new Error('The operation either timed out or was not allowed.'),
+        {
+          name: 'NotAllowedError',
+        },
+      ),
       Object.assign(new Error('aborted'), { name: 'AbortError' }),
       new PasskeyRequestError('rate-limited', 429),
       new PasskeyRequestError('credential-unknown', 400),
@@ -110,6 +113,22 @@ describe('passkey sign-in failures are never silent (AGL-1417)', () => {
     expect(limited.code).toBe(AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED)
     expect(limited.message).toMatch(/too many/i)
 
+    // The reason a real ceremony actually returns. `signin/verify` catches
+    // every classified PasskeyError and answers a uniform
+    // `passkey-signin-failed` 401 on purpose, so this — not
+    // `credential-cloned` — is what a clone-flagged user receives. Asserting
+    // against the flattened key is the only version of this test that can
+    // fail for a production reason (AGL-1417).
+    const refused = describePasskeySignInFailure(
+      new PasskeyRequestError('passkey-signin-failed', 401),
+    )
+    expect(refused.code).toBe(AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED)
+    // Must say what to do next, not just that it failed.
+    expect(refused.message).toMatch(/another sign-in method/i)
+    expect(refused.message).not.toBe('Passkey sign-in failed.')
+
+    // The server's own vocabulary still maps, for the legs that forward a
+    // reason verbatim. Fabricated input — it proves the table, not the wire.
     const cloned = describePasskeySignInFailure(
       new PasskeyRequestError('credential-cloned', 400),
     )

@@ -39,7 +39,7 @@ import {
   Typography,
 } from '@mui/material'
 import { usePathname, useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type UIEvent } from 'react'
 import { ENTERPRISE_PLAN_LABEL, isEnterpriseOrg } from '@aglyn/aglyn'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -50,6 +50,19 @@ import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
+
+/**
+ * How many rows' tier badges are read at a time (AGL-2336).
+ *
+ * The menu list is 280px tall and a row is ~48px, so about six rows are on
+ * screen; this reveals a comfortable screenful and a bit, then grows as the
+ * user scrolls. The number that matters is that it is a CONSTANT — the old
+ * code read a plan doc for every membership the moment the menu opened, so a
+ * 50-workspace agency paid 50 reads per open and the only thing holding the
+ * bill down was the 50-membership cap itself. Bounding the fan-out here is
+ * what lets `useOrgScope` page past 50 at all.
+ */
+export const PLAN_BADGE_PAGE = 12
 
 const titleCase = (value?: string) =>
   value ? value.charAt(0).toUpperCase() + value.slice(1) : ''
@@ -64,7 +77,7 @@ const titleCase = (value?: string) =>
  * other org's subdomain (the session cookie signs it in silently).
  */
 export function OrgSwitcherNav() {
-  const { orgs, currentOrg, orgSlug } = useOrgScope()
+  const { orgs, currentOrg, orgSlug, hasMoreOrgs, loadMoreOrgs } = useOrgScope()
   const pathname = usePathname()
   // The full current-org doc carries the logo (AGL-363) and plan for the badge.
   const { org, ready: orgReady } = useCurrentOrg()
@@ -74,12 +87,9 @@ export function OrgSwitcherNav() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
-  // Each org's billing tier for the row badges — read only while the menu is
-  // open (AGL-631). The current org's plan comes straight from useCurrentOrg.
-  const plans = useOrgPlans(
-    orgs.map((item) => item.$id),
-    Boolean(anchor),
-  )
+  // How far down the list the user has actually looked (AGL-2336). Reads for
+  // the tier badges follow the eye, not the membership count.
+  const [revealed, setRevealed] = useState(PLAN_BADGE_PAGE)
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -91,9 +101,32 @@ export function OrgSwitcherNav() {
     )
   }, [orgs, query])
 
+  // Each org's billing tier for the row badges — read only while the menu is
+  // open (AGL-631), and only for the rows revealed so far (AGL-2336). The
+  // current org's plan comes straight from useCurrentOrg. Passing the whole
+  // membership list here is what made the 50 cap load-bearing.
+  const revealedIds = useMemo(
+    () => filtered.slice(0, revealed).map((item) => item.$id),
+    [filtered, revealed],
+  )
+  const plans = useOrgPlans(revealedIds, Boolean(anchor))
+
+  // Scrolling to the end of the list reveals the next page of badges, and —
+  // when the membership window itself is truncated — pulls the next page of
+  // memberships in behind it.
+  const onListScroll = (event: UIEvent<HTMLDivElement>) => {
+    const el = event.currentTarget
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 24) return
+    setRevealed((count) =>
+      count < filtered.length ? count + PLAN_BADGE_PAGE : count,
+    )
+    if (revealed >= filtered.length && hasMoreOrgs) loadMoreOrgs()
+  }
+
   const close = () => {
     setAnchor(null)
     setQuery('')
+    setRevealed(PLAN_BADGE_PAGE)
   }
 
   const switchTo = (item: (typeof orgs)[number]) => {
@@ -280,7 +313,10 @@ export function OrgSwitcherNav() {
           placeholder="Find organization…"
         />
         <Divider />
-        <Box sx={{ maxHeight: 280, overflowY: 'auto', py: 0.5 }}>
+        <Box
+          onScroll={onListScroll}
+          sx={{ maxHeight: 280, overflowY: 'auto', py: 0.5 }}
+        >
           {filtered.length === 0 ? (
             <Typography
               variant="body2"
@@ -343,6 +379,24 @@ export function OrgSwitcherNav() {
               )
             })
           )}
+          {/* AGL-2336: the list is a WINDOW, and it used to end without
+              saying so — an agency in more than 50 workspaces saw 50 and no
+              hint that the rest existed, and the search box above filters
+              only what is loaded. Say both, and offer the next page. */}
+          {hasMoreOrgs ? (
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', mb: 0.5 }}
+              >
+                {`Showing ${orgs.length} workspaces — search covers these.`}
+              </Typography>
+              <Button size="small" onClick={loadMoreOrgs} sx={{ px: 0 }}>
+                {'Load more workspaces'}
+              </Button>
+            </Box>
+          ) : null}
         </Box>
         <Divider />
         <MenuItem

@@ -730,6 +730,29 @@ describe('the staff gate and the rules’ role split (AGL-206/1635)', () => {
     expect(mockOrgWrites).toEqual([])
   })
 
+  it('403s a staff token with NO staffRole claim at all (AGL-2131)', async () => {
+    // This route read `decoded['staffRole'] ?? 'super'` while every other
+    // /api/admin/* route read `?? 'support'`, so one claim-less token was
+    // super HERE and support everywhere else. The delete is the whole case:
+    // an absent claim, not an explicit role.
+    delete mockDecodedToken['staffRole']
+    const response = await post(validBody())
+    expect(response.status).toBe(403)
+    expect(String((await response.json()).error)).toMatch(/billing or super/i)
+    // The refusal is BEFORE any read or write — a fail-open that then failed
+    // at Firestore would still have leaked the org's stored state.
+    expect(mockOrgWrites).toEqual([])
+    expect(mockAuditRows).toEqual([])
+  })
+
+  it('still ADMITS an explicit super role — the negative control', async () => {
+    // Without this the case above is satisfied by a route that refuses
+    // everyone, which is not the fix.
+    mockDecodedToken['staffRole'] = 'super'
+    const response = await post(validBody())
+    expect(response.status).toBe(200)
+  })
+
   it('lets BILLING staff override plan and quotas, as the rules do', async () => {
     // The Admin SDK bypasses the rules entirely, so their split has to be
     // restated here — including the half that GRANTS. Denying billing staff
@@ -769,14 +792,68 @@ describe('the staff gate and the rules’ role split (AGL-206/1635)', () => {
     expect(response.status).toBe(200)
   })
 
-  it('treats a MISSING staffRole as super, exactly as the rules do', async () => {
-    // `token.get('staffRole', 'super')` is AGL-206's migration path. Failing
-    // closed here instead would lock pre-RBAC staff accounts out of a
-    // surface they use — a different bug, introduced by the fix.
+  it('refuses a MISSING staffRole its super-only act too (AGL-2131)', async () => {
+    // This case used to assert the OPPOSITE — that a claim-less token was
+    // super here "exactly as the rules do", on AGL-206's migration-path
+    // reasoning. Both halves of that premise were stale: AGL-495 had already
+    // made every other /api/admin/* route resolve a missing claim to
+    // `support`, so those accounts had been refused everywhere else for
+    // ages, and the rules' own `get('staffRole', 'super')` is fixed
+    // alongside this. What the migration path actually needs is
+    // tools/scripts/audit-staff-claims.mjs plus an explicit role, not a
+    // default that disagrees with the rest of the system.
     delete mockDecodedToken['staffRole']
     const response = await post(
       validBody({ releaseFlags: { [RELEASE_KEYS[0]]: true } }),
     )
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(403)
+    expect(mockOrgWrites).toEqual([])
   })
 })
+
+/**
+ * AGL-2293. `quotas` validated `Number.isFinite(n) && n >= 0` and nothing more,
+ * so a percentage had no ceiling — and three of these keys are money.
+ *
+ * `transactionFeePhysicalPct` / `transactionFeeDigitalPct` become Stripe's
+ * `application_fee_amount` at checkout. A typed `200` produces a fee larger
+ * than the charge, Stripe refuses the session, and EVERY sale on that
+ * storefront dies — with nobody able to connect a 400 at a shopper's checkout
+ * to a number typed into the staff dialog weeks earlier.
+ *
+ * `resolveMarketplaceFeePct` has clamped its own READ at `<= 100` since
+ * AGL-1543. This is the same rule at the WRITE, where it can still be reported
+ * to the person making the mistake.
+ */
+describe('a percentage quota has a ceiling (AGL-2293)', () => {
+  it('refuses a fee percentage above 100, and writes nothing', async () => {
+    for (const key of [
+      'transactionFeePhysicalPct',
+      'transactionFeeDigitalPct',
+      'marketplaceFeePct',
+    ]) {
+      const response = await post(validBody({ quotas: { [key]: 200 } }))
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ written: false })
+    }
+    expect(mockOrgWrites).toEqual([])
+  })
+
+  /**
+   * POSITIVE CONTROL, and the branch a ceiling test alone leaves unproven:
+   * 100 is a legal rate, 0 is a legal rate, and a NON-percentage quota is not
+   * bounded by 100 at all — `hostLimit: 250` must still write.
+   */
+  it('POSITIVE CONTROL: 0, 100 and a non-percentage quota still write', async () => {
+    for (const quotas of [
+      { transactionFeeDigitalPct: 0 },
+      { transactionFeePhysicalPct: 100 },
+      { hostLimit: 250 },
+    ]) {
+      const response = await post(validBody({ quotas }))
+      expect(response.status).toBe(200)
+    }
+    expect(mockOrgWrites.length).toBe(3)
+  })
+})
+

@@ -30,8 +30,14 @@ and **Agency** unlock progressively more, and **Enterprise** sits above them all
 | Agency | $649/mo | $799/mo | 100 sites under one organization, white-label |
 | Enterprise | Custom | Custom | Unlimited everything, SSO, white-label, 0% fees |
 
-Transaction fees are Aglyn platform fees on storefront sales, separate from
+Transaction fees are Aglyn platform fees on the sales you take through your site —
+storefront orders, paid memberships and paid bookings alike — separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
+
+Every plan also includes an amount of monthly **traffic** — 5 GB on Free, rising to
+unlimited on Enterprise. Passing it is metered and billed on a paid plan, and pauses the
+site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
+for what a paused site shows a visitor.
 
 ### Enterprise
 
@@ -86,9 +92,11 @@ Nothing here guarantees that a price or feature set will remain the same.
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, and more — with redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
-- Org admins also get an in-app **notification** when email sends, dataset count, or data
-  storage crosses 80% or 100% — once per threshold per month, so nobody has to be watching
-  the console to find out.
+- Org admins also get an in-app **notification** when email sends, dataset count, data
+  storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
+  so nobody has to be watching the console to find out. The bandwidth message differs by
+  plan, because what happens next differs by plan: paid organizations are told the extra is
+  billed, Free organizations are told the site will be paused.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
   counted toward your usage but is never blocked by the cap, at any plan. Going over shows
@@ -254,10 +262,10 @@ thing, configured by you — see
 
 ### Platform fees
 
-Storefront sales carry a **declining platform fee** on top of Stripe's processing fee —
-higher tiers reduce it to 0%, which is the upgrade motion for sellers:
+Sales you take through your site carry a **declining platform fee** on top of Stripe's
+processing fee — higher tiers reduce it to 0%, which is the upgrade motion for sellers:
 
-| Plan | Physical goods | Digital goods & paid memberships |
+| Plan | Physical goods | Digital goods, memberships & bookings |
 |---|---|---|
 | Starter | 2% | 5% |
 | Pro | 0% | 3% |
@@ -267,9 +275,12 @@ higher tiers reduce it to 0%, which is the upgrade motion for sellers:
 | Agency | 0% | 0% |
 | Enterprise | 0% | 0% |
 
-Paid **memberships and gated content** bill at the digital rate — the fee is applied at
-checkout as the Stripe Connect application fee, on one-time sales and recurring
-member subscriptions alike. Selling requires a paid plan with commerce.
+Paid **memberships, gated content and bookings** bill at the digital rate — the fee is
+applied at checkout as the Stripe Connect application fee, on one-time sales and
+recurring member subscriptions alike. A paid booking is a service sale and sits on
+that same digital line rather than carrying a rate of its own; see
+[Bookings](../../commerce-and-bookings/bookings/overview.md#payments-and-fees).
+Selling requires a paid plan with commerce.
 
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
   headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).

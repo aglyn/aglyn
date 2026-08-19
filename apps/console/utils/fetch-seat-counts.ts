@@ -17,8 +17,19 @@
 
 /** What the org roster totals to, counted server-side. */
 export interface SeatCounts {
-  /** Manager seats — owners, admins and any org-wide member (AGL-1113). */
+  /**
+   * Manager seats HELD — owners, admins and any org-wide member (AGL-1113),
+   * **plus manager invites that have been sent and not yet accepted**
+   * (AGL-2304).
+   *
+   * Pending invites are included because the invite gate has always counted
+   * them, so a total that left them out was smaller than the number the server
+   * would refuse against: an org with 3 managers and 2 invites out on a 5-seat
+   * plan read `3 / 5` and was refused on the next invite.
+   */
   managerSeats: number
+  /** How many of `managerSeats` are un-accepted invites rather than roster rows. */
+  pendingManagerSeats: number
   /** Every roster row, managers and site-scoped collaborators alike. */
   memberCount: number
 }
@@ -61,6 +72,7 @@ export async function fetchSeatCounts(
     if (!response.ok) return null
     const payload = (await response.json().catch(() => null)) as {
       managerSeats?: unknown
+      pendingManagerSeats?: unknown
       memberCount?: unknown
     } | null
     const managerSeats = Number(payload?.managerSeats)
@@ -68,7 +80,18 @@ export async function fetchSeatCounts(
     if (!Number.isFinite(managerSeats) || !Number.isFinite(memberCount)) {
       return null
     }
-    return { managerSeats, memberCount }
+    // Only the breakdown, never the total. A server too old to send it still
+    // gives a correct `managerSeats`, and defaulting the split to 0 costs a
+    // caption rather than corrupting a limit comparison — the one number every
+    // caller here feeds to a quota check.
+    const pendingManagerSeats = Number(payload?.pendingManagerSeats)
+    return {
+      managerSeats,
+      pendingManagerSeats: Number.isFinite(pendingManagerSeats)
+        ? pendingManagerSeats
+        : 0,
+      memberCount,
+    }
   } catch {
     return null
   }

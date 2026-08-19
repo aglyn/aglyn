@@ -1,13 +1,31 @@
 name: Tools guards
 
-# Runs the seven pure-node `tools/` guard suites whose only other home is
-# nx-ci.yml — which is `disabled_manually` and runs on no runner, so every
-# gate added to it since it was switched off has never executed once
-# (AGL-1776/AGL-1816/AGL-1822). These suites are secretless, dependency-light
-# and seconds each; this workflow is their one cheap ACTIVE home.
+# Runs the pure-node `tools/` guard suites whose only other home is nx-ci.yml.
+#
+# AGL-2381: the reason recorded here used to be that nx-ci.yml was
+# `disabled_manually` and ran on no runner, so every gate added to it since it
+# was switched off had never executed once. That is FALSE — the Actions API
+# reports nx-ci.yml as `active`, and it runs on every push to main and on every
+# pull request.
+#
+# The duplication is kept anyway, for a reason that does not depend on a
+# workflow's enabled/disabled state — a state no diff can show, and which drifts
+# silently, which is how this comment came to be wrong in the first place.
+# nx-ci.yml is a SINGLE sequential job, and `npm run typecheck` and
+# `npx nx run docs:typecheck` sit ahead of every guard step in it. Any type
+# error anywhere in the workspace therefore withdraws ALL of these guards at
+# once. Measured on 2026-08-19: across 72 completed nx-ci runs the guard steps
+# executed in 26 and were skipped in 46 — a 36% answer rate, while `npm ci` and
+# `typecheck` ran in 72 of 72.
+#
+# So nx-ci.yml is a real home but a conditional one, and it is conditional on
+# something entirely unrelated to what these guards measure. This workflow is
+# the unconditional home: secretless, dependency-light, seconds each, and it
+# answers whether or not the tree type-checks
+# (AGL-1776/AGL-1816/AGL-1822/AGL-2381).
 #
 # What each guards:
-#  - test:eslint-rules        the seven local ESLint guard rules' RuleTester
+#  - test:eslint-rules        the eight local ESLint guard rules' RuleTester
 #                             suites (the RULES run at every `nx lint`; their
 #                             self-tests otherwise run nowhere)
 #  - test:plugin-loader       the sandbox CSP the plugin origin serves (AGL-1092)
@@ -22,6 +40,31 @@ name: Tools guards
 #  - test:release-version     the semver/bump/changelog rules a release
 #                             depends on (AGL-2089) — a wrong bump does not
 #                             throw, it just mints a wrong number forever
+#  - test:manifest-versions   / check:manifest-versions  the package.json vs
+#                             package-lock.json version agreement (AGL-2108) —
+#                             a drift `npm ci` does not read and the promotion
+#                             gate stayed green over for a whole release
+#  - test:monaco-dompurify    / check:monaco-dompurify  the four DISMISSED
+#                             DOMPurify alerts (AGL-2300). monaco inlines
+#                             DOMPurify 3.4.8 into the bundle we serve from our
+#                             own origin and there is nowhere to upgrade to;
+#                             the dismissals rest on monaco never passing the
+#                             config options those advisories need. This is the
+#                             only thing re-measuring that.
+#  - test:marketing-width-doctrine / check:marketing-width-doctrine  the
+#                             marketing authoring docs must state the stock
+#                             `maxWidth: "xl"` container invariant and never
+#                             prescribe a pixel column (AGL-1298). The
+#                             container specs already refuse a 1328 cap in
+#                             CODE; the docs went on recommending one — and
+#                             justified it with a 1280 column that appears in
+#                             no measurement of any frame — which points the
+#                             next agent at relaxing the test and narrowing a
+#                             site that is already exactly on-design
+#  - test:docs-self-host      / check:docs-self-host  apps/docs must not
+#                             compile in our GA id, our error collector or our
+#                             production origins (AGL-2124) — it ships in the
+#                             open-source distribution
 #  - check:standalone-installs  asserts every nested package with its own
 #                             lockfile has an install step in nx-ci.yml. That
 #                             file is currently disabled; the check still
@@ -104,9 +147,24 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest verdict matters; a delayed run must not pile up.
-  group: tools-guards
-  cancel-in-progress: true
+  # A push is grouped by its own COMMIT, so two pushes never contend and no
+  # push can evict another: every commit on main gets its own verdict. Only
+  # non-push events (pull_request, schedule, workflow_dispatch) share a
+  # ref-scoped group and supersede each other, which is where superseding is
+  # actually what you want — on a PR the newest tree is the only one anyone
+  # will read, and a delayed scheduled run must not pile up.
+  #
+  # AGL-2378: the group key is the fix, NOT `cancel-in-progress`. A constant
+  # group with cancel-in-progress:true discarded 47 of 82 push runs on main
+  # here on 2026-08-19 — each killed mid-job by the next push, which is a
+  # DIFFERENT tree. Setting cancel-in-progress:false would not have saved
+  # them either: a concurrency group holds one running run plus at most ONE
+  # pending run, so a third arrival cancels the pending one before it starts
+  # a single job. emulator-guards.yml proved that separately — 39 cancelled
+  # runs on main, every one of them with zero jobs, under a guard that
+  # already declined to cancel in progress.
+  group: tools-guards-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
@@ -166,6 +224,15 @@ jobs:
 
       - run: npm run test:erase-cli
 
+      # AGL-1734. The demo org has to be several visibly different businesses:
+      # the founding demo spends its largest block switching between sites in
+      # one org, and a switcher showing one bakery three times argues the
+      # opposite of the pitch. The guard runs the seed engine over every brand
+      # pack and compares the documents, so it fails both when the packs
+      # collapse toward one shape and when the engine stops honouring them.
+      # Pure node, no emulator, under a second.
+      - run: npm run test:demo-brands
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs
@@ -176,6 +243,100 @@ jobs:
       # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
       # rest, so deleting this step turns both drift workflows red.
       - run: npm run test:release-version
+
+      # AGL-2108. Two steps in the AGL-2021 order: the unit test proves the
+      # comparator can FAIL (a half-repaired lockfile, both fields stale), and
+      # only then is the repo-wide scan's green worth anything. The drift it
+      # reads — package.json vs package-lock.json `version` — is one NOTHING
+      # else reads: `npm ci` validates the dependency set, not the root
+      # version, so the repo carried `1.0.0-alpha.0` through an entire release
+      # with every check green.
+      - run: npm run test:manifest-versions
+
+      - run: npm run check:manifest-versions
+
+      # AGL-1278. Same two-step order. `/pricing`'s compare table is ~400
+      # cells generated from `plan-entitlements.ts`; the generator shipped with
+      # NO consumer — not an nx target, not a CI path, not a package script —
+      # so when AGL-2133 retired the `totalSiteSizeMb` entitlement and removed
+      # the row, the committed `pricing-copy/tables.json` went on publishing a
+      # storage cap for an entitlement that no longer exists, and nothing in
+      # the repo could fail on it. The generator also wrote its output BEFORE
+      # reconciling and never exited non-zero, so its "the disagreement is
+      # printed" invariant could not gate anything. The unit test proves the
+      # reconciler now fails on each shape (a wrong cell, a dropped row, an
+      # undeclared extra row, a malformed record, a dead exemption, a stale
+      # output), and only then is the check's green worth anything.
+      #
+      # The `libs/**` path filter above is load-bearing here, not incidental:
+      # this reads `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, so an
+      # entitlement edit must trigger the guard that catches the stale output
+      # it produces. That is exactly the commit that went unnoticed.
+      - run: npm run test:pricing-tables
+
+      - run: npm run check:pricing-tables
+
+      # AGL-1296. The detector half only — the corpus it audits is authored
+      # node data in Firestore, so `npm run audit:marketing-containers` needs
+      # ADC on `aglyn-main` and cannot run on a PR. What CAN run here is proof
+      # that the detector fails on the shapes AGL-1298 banned: a bespoke `sx`
+      # pixel cap (the 1328px the deleted one-shot script wrote) and a
+      # `props.maxWidth` that is not one of MUI's six prebuilt values.
+      #
+      # Worth stating plainly rather than implying more coverage than exists:
+      # this does NOT measure the live site. It replaces a COMMENT — the
+      # "/pricing audit measured 8/8 sections on maxWidthXl" line in
+      # container.spec.tsx — with a detector whose failure path is exercised,
+      # so the census a human runs is worth reading.
+      - run: npm run test:marketing-containers
+
+      # AGL-1298 / AGL-2360. The sibling guard above holds the ban in DATA;
+      # this holds it in the DOCS, and the docs were the half that rotted.
+      # `product-page-skeleton.md` went on prescribing `sx {maxWidth: '1328px'}`
+      # as an invariant — with "not `'xl'` (1536)" spelled out — for ten days
+      # after the sweep that removed all 144 of them.
+      #
+      # And the column it justified that with, 1280, appears in NO recorded
+      # measurement of any frame: the extracts measure 1392 at 1440, 1488 at
+      # 1920, 688 at 768. Stock `xl` caps at min(viewport, 1536) less its own
+      # gutters, so it renders 1392 and 1488 — the design exactly, at both
+      # desktop widths. An agent reading the old doc concludes the LIVE SITE is
+      # too wide and that the red container spec is what to relax, and narrows
+      # a site that had nothing wrong with it.
+      #
+      # The invariant guarded is "stock `xl`", NOT a pixel figure — 1536
+      # included; `xl` never renders 1536 of content at any breakpoint.
+      #
+      # Two-step order as everywhere else here: the unit test proves the
+      # detector goes red on the exact wording that stood (including the
+      # control that its blockquote and fenced-code exemptions are not holes),
+      # and only then is the real scan's green worth reading. The scan is
+      # markdown only — it does not measure the site, the node corpus, or
+      # Figma.
+      - run: npm run test:marketing-width-doctrine
+
+      - run: npm run check:marketing-width-doctrine
+
+      # AGL-2124. Same two-step order: the unit test proves the scanner can
+      # FAIL on the exact three literals (its first version reported green over
+      # one of them — a `//.*$` comment strip eats everything after the `//` in
+      # `https://`), and only then is the repo scan's green worth anything.
+      # apps/docs ships in the open-source distribution, so a literal here
+      # makes an operator's readers, stack traces and uptime report to US.
+      - run: npm run test:docs-self-host
+
+      - run: npm run check:docs-self-host
+
+      # AGL-2300. Same two-step order. Four DOMPurify Dependabot alerts are
+      # DISMISSED on the claim that monaco never turns on the config surfaces
+      # those advisories need — not on the vendored copy being unused, which it
+      # is not. Nothing checked that claim: it was a one-time grep, and monaco
+      # already changed behaviour under us once this week. The unit test proves
+      # the detector can tell the library READING an option from monaco PASSING
+      # one, and only then is the scan of the real bundle worth anything.
+      - run: npm run test:monaco-dompurify
+
+      - run: npm run check:monaco-dompurify
 
       # AGL-2021. Two steps, and the order matters: the self-test proves the
       # comparator can still FAIL (it reconstructs the forbidden Webfile number
@@ -197,3 +358,82 @@ jobs:
       - run: npm run test:hardcoded-colours
 
       - run: npm run check:hardcoded-colours
+
+      # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
+      # roots as the colour one above. AGL-2153 made the platform brand
+      # configuration so a self-host operator can rename the product without
+      # editing source; this is what stops the next hardcoded "Aglyn" from
+      # being written into user-visible copy by someone with no reason to know
+      # that. Its detector is unit-tested separately, because a ratchet whose
+      # detector is wrong is a number nobody can act on.
+      - run: npm run test:brand-literals
+      - run: npm run check:brand-literals
+
+      # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
+      # dot form, so a bracket read in a client-reachable module is `undefined`
+      # in the browser and the value silently falls back to Aglyn's default —
+      # which is how a self-hoster's custom-domain wizard came to print OUR
+      # CNAME target and Vercel's IPs to their customer. Deliberately NOT a
+      # jest guard: in Node both access forms are the same property read, so a
+      # spec cannot see this class at all, and one written to try would be
+      # green for an unrelated reason.
+      - run: npm run check:next-public-access
+
+      # AGL-2376 / AGL-2377. The guard that catches the thing this whole
+      # workflow is an answer to, from the OTHER end: a test file with no
+      # runner, and a `test` target with no tests.
+      #
+      # It found six orphans on its first real run — five Firestore rules specs
+      # sitting directly in `cloud/` with 31 live assertions about who may read
+      # a billing document, plus the backfill `applyPlan` suite — none of them
+      # executed by anything, one edited the day before. And five nx `test`
+      # targets over source trees with no spec file at all, which exit 1 with
+      # "No tests found" whenever they are affected.
+      #
+      # Two-step order as everywhere else here. The self-test matters more than
+      # usual: this guard's entire subject is checks that cannot fail, and its
+      # own first version could not — it globbed `cloud/**/*.spec.mjs`, which
+      # git does not match against a file sitting directly in `cloud/`, so it
+      # reported green over all five of the orphans it was written for. The
+      # suite now pins both glob depths.
+      #
+      # ⚠️ The remedy for an empty target is a spec, or removing the target and
+      # declaring it in UNTESTED_PROJECTS. It is NOT `passWithNoTests` — that
+      # flag turns "asserts nothing" into a green indistinguishable from real
+      # coverage, so the guard refuses it outright.
+      - run: npm run test:test-wiring
+
+      - run: npm run check:test-wiring
+
+      # AGL-2376. `applyPlan`'s refusals — update() on a missing doc FAILS,
+      # create() on an existing doc FAILS, an unknown op is refused outright.
+      # These are the guards that stop a backfill conjuring a record or
+      # overwriting a live one, and every other tools/scripts/lib/*.test.mjs
+      # (21 of them) already had an npm script. This one alone did not, so 17
+      # passing tests about destructive writes ran nowhere.
+      - run: npm run test:backfill-core
+
+      # AGL-2379. The pure-node self-test for the legal-drift comparator. The
+      # comparator itself needs the live site AND Drive credentials, so it runs
+      # on a schedule in legal-drift.yml rather than here — but its 40-test
+      # self-test needs nothing, and a comparator that has stopped comparing
+      # reports "no drift", which is indistinguishable from convergence.
+      - run: npm run test:legal-drift
+
+      # AGL-2379 / AGL-2240. A SECURITY control that ran in no workflow: it
+      # walks the Next app-router module graph and proves no model-provider key
+      # (ANTHROPIC_API_KEY) is reachable from the client closure, and that none
+      # is read under a `NEXT_PUBLIC_` prefix — which publishes the VALUE by
+      # definition, with no import needed.
+      #
+      # It is NOT the subprocessor gate. That spec enumerates every file that
+      # NAMES the key, and cannot see this: an allowlisted reader that gains a
+      # `'use client'` directive leaves the file set unchanged while the key
+      # compiles into JavaScript served to every visitor. The question there is
+      # which files; here it is which graph.
+      #
+      # Belongs here rather than beside its sibling `check:app-router-graph` in
+      # nx-ci.yml: this is the workflow whose steps the AGL-1822 wiring block
+      # in rules-drift.test.mjs actually asserts, so deleting this step turns
+      # three other active workflows red.
+      - run: npm run check:provider-key-exposure

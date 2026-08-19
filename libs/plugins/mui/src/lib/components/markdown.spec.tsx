@@ -191,10 +191,42 @@ describe('resolveMarkdownSource (AGL-1162)', () => {
     )
   })
 
-  it('is empty when the screen has no Markdown element', () => {
+  it('is empty when the screen has no markdown element of either kind', () => {
     fillCanvas([{ $id: 'aside', componentId: TABLE_OF_CONTENTS_ID }])
     expect(resolveMarkdownSource(Aglyn.canvas.rootNode)).toBe('')
     expect(resolveMarkdownSource(undefined)).toBe('')
+  })
+
+  it('reads a Collection Entry Body too — the blog-article case (AGL-1162)', () => {
+    // The aside was only ever able to see `markdown` elements, so an article
+    // template — whose body IS a Collection Entry Body, under a differently
+    // named prop — rendered its authoring affordance on every published post.
+    fillCanvas([
+      { $id: 'aside', componentId: TABLE_OF_CONTENTS_ID, props: {} },
+      {
+        $id: 'body',
+        componentId: Aglyn.COLLECTION_ENTRY_BODY_COMPONENT_ID,
+        props: { markdown: '## Ingredients\n\nflour' },
+      },
+    ])
+    expect(resolveMarkdownSource(Aglyn.canvas.rootNode)).toBe(
+      '## Ingredients\n\nflour',
+    )
+  })
+
+  it('ignores an entry body still holding its unresolved token', () => {
+    // On the canvas the body renders as the literal `{{entry.body}}`. Treating
+    // that as a document would let it win over a real Markdown element below
+    // it and leave the author looking at an empty aside while authoring.
+    fillCanvas([
+      {
+        $id: 'body',
+        componentId: Aglyn.COLLECTION_ENTRY_BODY_COMPONENT_ID,
+        props: { markdown: '{{entry.body}}' },
+      },
+      { $id: 'doc1', props: { content: '## Real' } },
+    ])
+    expect(resolveMarkdownSource(Aglyn.canvas.rootNode)).toBe('## Real')
   })
 })
 

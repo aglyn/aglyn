@@ -125,8 +125,20 @@ export function isConnectEndpoint(endpoint) {
   )
 }
 
-/** The production destination this repo deploys against. */
-export const PLATFORM_WEBHOOK_URL = 'https://app.aglyn.com/api/billing/webhook'
+/**
+ * The production destination this repo deploys against (AGL-2202).
+ *
+ * Reads `STRIPE_WEBHOOK_URL` — the SAME variable
+ * `apps/console/app/api/billing/webhook`'s health route already honours, with
+ * the same default. This copy ignored it, so an operator whose console
+ * reported its webhook healthy got an ops script auditing OUR endpoint
+ * against THEIR Stripe account, where it cannot exist: the audit's verdict
+ * was "the platform webhook is missing", permanently, and the fix it names is
+ * one they must not apply.
+ */
+export const PLATFORM_WEBHOOK_URL =
+  String(process.env.STRIPE_WEBHOOK_URL ?? '').trim() ||
+  'https://app.aglyn.com/api/billing/webhook'
 
 /**
  * How far back `GET /v1/events` can see. Stripe keeps 30 days; older events

@@ -32,9 +32,60 @@ to match.
 ## Invariants that are already correct in the skeleton — do not re-derive
 
 - **Container:** `section` (full-bleed background + vertical padding, no
-  horizontal padding) → `muiContainer` props `{maxWidth: false}` sx
-  `{maxWidth: '1328px'}` → content. 1328 − 48 gutters = the 1280 content
-  column Figma uses at both 1440 and 1920. Not `'lg'` (1200), not `'xl'` (1536).
+  horizontal padding) → `muiContainer` props `{maxWidth: 'xl'}` → content.
+  **The invariant is the stock breakpoint `'xl'` — never an `sx` cap, never a
+  pixel literal.** AGL-1298 banned bespoke `Container.maxWidth` values
+  outright and swept the 144 containers that carried a hand-rolled `sx` pixel
+  cap onto stock MUI widths. Prose bands — legal, docs, blog and changelog
+  bodies — are the one deliberate exception and use `'md'`; see the "Prose
+  Container" preset.
+
+  **The column is viewport-derived, not a number you set.** Container caps at
+  `min(viewport, breakpoint)` and then subtracts its own gutters (24px either
+  side from `sm` up, 16px at `xs`). At the two desktop widths the frames are
+  drawn to, stock `xl` lands on the design **exactly**:
+
+  | canvas | `xl` renders | design column | source |
+  | -- | -- | -- | -- |
+  | 1440 | `min(1440,1536) − 48` = **1392** | **1392** | `pricing-copy/copy-desktop.json`, 9 sections |
+  | 1920 | `min(1920,1536) − 48` = **1488** | **1488** | `pricing-copy/copy-widescreen.json`, 9 sections |
+  | 768 | `768 − 48` = 720 | 688 | `pricing-copy/copy-tablet.json`, 11 sections |
+  | 375 | `375 − 32` = 343 | 335 | `pricing-copy/copy-mobile.json`, 10 sections |
+
+  Desktop and widescreen match to the pixel — **there is nothing to fix
+  there.** Tablet is 32 narrower than stock and mobile 8; AGL-2362 measured
+  both and closed **no change**. The reason is in the git history rather than
+  in the pixels: the AGL-1282 re-extract (`241f6fc00` → `aa3234865`,
+  2026-08-08) moved desktop from a 1280 column to 1392 and widescreen to 1488,
+  and **left tablet and mobile untouched**. Their 40px and 20px margins are the
+  same vintage as the 1280 AGL-2360 proved fictional — an unfinished re-cut,
+  not a brand decision. Re-cut those two frames if you want them consistent;
+  do **not** move the theme's gutters, and never reach for a pixel cap.
+
+  **Read the group width, not the section band.** Every section's own `widthPx`
+  is the frame width at *every* variant — 1440 at desktop as much as 375 at
+  mobile — because a section band is full-bleed by construction. Reading the
+  band as the column is what produced the claim that mobile is full-bleed and
+  32 out. It is not: four of its six sections measure 335, "Usage pricing"
+  measures 343 (already exactly stock), and only "Compare features" measures
+  375 — a horizontally-scrolling table that bleeds on purpose, which is a
+  per-section `maxWidth={false}` choice and not a gutter at all.
+
+  `npm run check:marketing-width-doctrine` reconciles all four frames against
+  this arithmetic and pins each delta, with desktop and widescreen held at 0 as
+  the control: a theme-level `MuiContainer` gutter override moves every
+  breakpoint at once, so it cannot buy tablet without breaking them.
+
+  > ⚠️ **This bullet asserted the opposite until 2026-08-19, and its wording
+  > is the trap.** It read *"`{maxWidth: false}` sx `{maxWidth: '1328px'}` →
+  > content. 1328 − 48 gutters = the 1280 content column Figma uses at both
+  > 1440 and 1920. Not `'lg'` (1200), not `'xl'` (1536)"* — a bespoke cap of
+  > exactly the shape AGL-1298 bans, justified by a column the design does not
+  > use. **1280 was never the design column**: it appears in no recorded
+  > measurement anywhere under `tools/marketing/`, and 1328 is simply 1280 +
+  > 48. That last clause is the sentence most likely to make a future agent
+  > narrow the live site by 112px to close a diff that does not exist. It is
+  > backwards. Do not restore it.
 - **The hero is the deliberate exception**: its mockup overflows the container
   to the right. Container gets `overflow: visible`, the section
   `overflow: hidden`.

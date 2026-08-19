@@ -20,11 +20,14 @@ import {
   buildRoute,
   checkEntitlement,
   claimAttempt,
+  isListingWideRevocation,
   resolveMarketplaceFeePct,
   Route,
   type AttemptClaim,
   type PluginApiHandler,
+  type PluginRevocation,
 } from '@aglyn/aglyn/server'
+import { isListingBrowsable, isPrivateListing } from '../model/marketplace'
 import {
   canActAsPublisher,
   resolvePublisherProfile,
@@ -89,6 +92,32 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (reviewStatus && reviewStatus !== 'listed' && reviewStatus !== 'verified') {
       return res.status(404).json({ error: 'Unknown listing' })
     }
+    // A TAKEN-DOWN or PRIVATE listing is not on sale (AGL-2288).
+    //
+    // The check above is a hand-rolled subset of `isListingBrowsable`, and
+    // the two lines it dropped are the two that matter here: `hiddenAt` and
+    // `isPrivateListing`. A staff takedown does NOT set a blocking
+    // `reviewStatus` — `plugin-reviews` demotes a verified listing to
+    // `VERIFIED_STRIPPED_STATUS`, which is literally `'listed'` — so after a
+    // takedown this route read `reviewStatus: 'listed'` and sold the listing
+    // in full, while `install-plugin` refused the very same listing at
+    // `hiddenAt` with a 404. The buyer was charged for something the platform
+    // had already decided nobody may install, and the only way out was a
+    // refund — which is Aglyn's Stripe fee, Aglyn's support time, and (until
+    // the partial-refund fix) a real hole in the split.
+    //
+    // Both tests are kept rather than replaced by the shared predicate: for a
+    // NON-plugin artifact `isListingBrowsable` returns true whatever the
+    // review status says, because pre-publication review is plugin-only. This
+    // route has always been stricter than that, and a sale is the wrong place
+    // to loosen a gate.
+    //
+    // No owner exemption, unlike the install routes: `canActAsPublisher`
+    // below already refuses a publisher buying their own listing, so the
+    // buyer here is never the owner.
+    if (!isListingBrowsable(listing) || isPrivateListing(listing)) {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     const priceUsd = Number(listing.priceUsd ?? 0)
     if (!(priceUsd > 0)) {
       return res.status(400).json({ error: 'Listing is free' })
@@ -123,6 +152,31 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         error: 'You already own this listing — install it from your library.',
         code: 'already_purchased',
       })
+    }
+    // The kill switch, on the SELL side too (AGL-2288).
+    //
+    // `revocations/{listingId}` with `versions: 'all'` is the listing-wide
+    // kill: `install-plugin` 409s on it through this same predicate, and the
+    // tenant runtime renders the disabled placeholder for anything already
+    // pinned. Selling into that state takes money for an artifact the
+    // platform has switched off.
+    //
+    // Only `'all'` is consulted, deliberately. A per-version revocation
+    // (AGL-1085) stops one build while other approved versions stay
+    // installable, and refusing the sale for it would turn a targeted control
+    // into a de-listing. Whether the newest approved version happens to be
+    // the revoked one is a question `install-plugin` answers with live data;
+    // duplicating that resolution here would be a second copy of it.
+    //
+    // One extra read on a path that already makes several Firestore and
+    // Stripe round trips, and it is the cheap half of the takedown check
+    // above: a hand-written revocation doc — which the rules permit any staff
+    // client to write — is caught here even when `hiddenAt` was never set.
+    const revocation = (
+      await firestore.collection('revocations').doc(listingId).get()
+    ).data() as PluginRevocation | undefined
+    if (isListingWideRevocation(revocation)) {
+      return res.status(404).json({ error: 'Unknown listing' })
     }
     const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
     const accountId = publisher?.stripeAccountId
@@ -192,6 +246,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       billing_address_collection: 'required',
       'payment_intent_data[transfer_data][destination]': String(accountId),
       'payment_intent_data[transfer_data][amount]': String(transferCents),
+      // THE DISCRIMINATOR THE REFUND DOOR HAS NO OTHER WAY TO GET (AGL-2148).
+      //
+      // `metadata[type]` below rides on the SESSION, and `charge.refunded`
+      // never sees a session — its object is the charge. The platform
+      // endpoint receives `charge.refunded` for storefront orders and
+      // subscription charges too, so the webhook cannot tell a marketplace
+      // refund from any other one except by joining on the payment intent,
+      // which is exactly the join that comes up empty during the window this
+      // metadata exists to close (the purchase document is written by
+      // `checkout.session.completed`, and that delivery retries).
+      //
+      // Stripe copies a PaymentIntent's metadata onto the charge it creates,
+      // so stamping it here makes `charge.metadata.type` readable straight
+      // off the refund event — no Firestore join, no Stripe round trip, and
+      // no orphan record written for the commerce and subscription refunds
+      // that share this endpoint.
+      //
+      // `listingId`/`buyerUid` ride along for forensics only: an orphan that
+      // never drains is a support case, and the payment intent alone does not
+      // say whose purchase of what it was.
+      'payment_intent_data[metadata][type]': 'marketplace-purchase',
+      'payment_intent_data[metadata][listingId]': listingId,
+      'payment_intent_data[metadata][buyerUid]': decoded.uid,
       success_url: `${origin}${returnPath}?purchase=success`,
       cancel_url: `${origin}${returnPath}?purchase=canceled`,
       client_reference_id: decoded.uid,

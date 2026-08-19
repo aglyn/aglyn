@@ -53,6 +53,22 @@ POS sales create normal orders tagged `pos`, decrement the same inventory
 as your online store (per location if you use locations), and appear in
 the orders list under the channel filter.
 
+### Selling past the count
+
+If a line is for more units than the count says are on the shelf, the
+register says so under that line — **"Only 1 in stock — selling 2"** — and
+**still lets you take the sale**. The shelf is the truth at a counter: if
+the item is in your hand it exists, whatever the number says. Your managers
+are notified of the shortfall so the count can be corrected afterwards with
+a stock adjustment.
+
+Products set to **allow backorders** never show this, because selling past
+zero is what that setting asks for. Products with stock tracking switched
+off have no count to be short against.
+
+Online checkout is different: there, a product set to **deny** out-of-stock
+purchases really does refuse.
+
 ### When something disconnects
 
 - If the QR payment page fails to load, cancel and retake the payment —

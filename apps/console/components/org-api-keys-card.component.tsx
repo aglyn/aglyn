@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { buildDocsUrl } from '../constants/docs-links'
 import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -37,16 +38,29 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
 
-/** Scopes offered in the UI — the subset the v1 API currently serves. */
+/**
+ * Scopes offered in the UI. This list must hold EVERY entry of `API_SCOPES`
+ * — a scope the server enforces but this picker omits is a scope nobody can
+ * grant, so the endpoint behind it ships closed to every customer.
+ *
+ * It is a hand-maintained copy rather than a `map` over `API_SCOPES` because
+ * that constant lives in `@aglyn/tenant-data-admin`, whose module graph pulls
+ * `firebase-admin` — not something to drag into a client bundle for eight
+ * strings. `apps/console/specs/api-scope-picker-coverage.spec.ts` reads both
+ * files and fails when they disagree (AGL-2127).
+ */
 const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }> = [
   { scope: 'datasets:read', label: 'Datasets — read', description: 'List datasets and read their records.' },
   { scope: 'datasets:write', label: 'Datasets — write', description: 'Create, update, and delete records.' },
   { scope: 'contacts:read', label: 'Contacts — read', description: 'List and read contacts.' },
+  { scope: 'contacts:write', label: 'Contacts — write', description: 'Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from.' },
   { scope: 'sites:read', label: 'Sites — read', description: 'List sites and their details.' },
   { scope: 'forms:read', label: 'Form submissions — read', description: 'Read a site’s form submissions.' },
+  { scope: 'forms:write', label: 'Form submissions — write', description: 'Mark a site’s form submissions read or unread, and delete them. Never edits what a visitor typed.' },
   { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },
   { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
   { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },
@@ -79,6 +93,9 @@ export function OrgApiKeysCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
+  // Org-scoped chrome reads the org's RESOLVED product name, never a
+  // literal (AGL-2319): a white-label org's admins see their own brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
@@ -246,8 +263,8 @@ export function OrgApiKeysCard() {
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
             {'Create keys to call the '}
-            <Link href="https://docs.aglyn.com/api" target="_blank" rel="noopener noreferrer">
-              {'Aglyn REST API'}
+            <Link href={buildDocsUrl('/api')} target="_blank" rel="noopener noreferrer">
+              {`${branding.productName} REST API`}
             </Link>
             {'. A key is shown once at creation — store it somewhere safe. Each key is scoped to exactly what it needs.'}
           </Typography>

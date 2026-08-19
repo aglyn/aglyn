@@ -50,8 +50,18 @@
  * this whole file exists to prevent. Verify first, then add.
  */
 
-/** The origin the canonical legal documents are served from. */
-export const LEGAL_ORIGIN = 'https://aglyn.com'
+/**
+ * The origin the canonical legal documents are served from.
+ *
+ * Configurable (AGL-2017): `isPublishedLegalUrl` gates the marketplace
+ * publisher agreement, and pinned to our origin it answered `true` for AGLYN's
+ * URLs on an operator's deployment regardless of what they had published — a
+ * gate blind to the deployment it is gating. Same variable the clickwrap links
+ * read, so the two cannot disagree about whose documents this install serves.
+ */
+export const LEGAL_ORIGIN = (
+  process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'
+).replace(/\/+$/, '')
 
 /** Paths under {@link LEGAL_ORIGIN} that have a published page. */
 export const PUBLISHED_LEGAL_PATHS: readonly string[] = [

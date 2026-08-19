@@ -23,7 +23,11 @@
  * (verifyConsoleIdToken / email-verify) — API keys, not Firebase sessions.
  */
 import type { AglynOrganization } from '@aglyn/aglyn'
-import { checkEntitlement } from '@aglyn/aglyn/server'
+import {
+  apiRequestEnforcementShape,
+  checkApiRequestQuota,
+  checkEntitlement,
+} from '@aglyn/aglyn/server'
 import {
   ApiErrors,
   type ApiScope,
@@ -86,6 +90,56 @@ function recordApiRequest(
       { merge: true },
     )
     .catch(() => undefined)
+}
+
+/**
+ * Enforce `checkApiRequestQuota(...).allowed` — the field nobody read
+ * (AGL-2163).
+ *
+ * COSTS A PAYING CUSTOMER NOTHING, AND CANNOT REFUSE ONE. Business, Advanced
+ * and Agency carry an `extraApiRequestsUsdPer1k` rate and Enterprise carries
+ * an unlimited band, so every plan that has the API at all resolves to
+ * `'never-blocks'`: this returns `null` immediately, with no extra read and
+ * no possible refusal, and the overage keeps metering onto the invoice
+ * exactly as `checkApiRequestQuota`'s docblock promises. Cutting a paying
+ * integration off mid-month is the failure this must not introduce, and the
+ * shape check is what guarantees it cannot.
+ *
+ * The other shapes are reachable only through a staff
+ * `entitlementOverrides` that grants `apiAccess` without a matching band, and
+ * only they pay the one extra read — of the SAME `apiUsage/{month}` document
+ * this file already writes on every request, so the count enforced is exactly
+ * the count billed.
+ */
+async function refuseIfApiQuotaExhausted(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  org: Partial<AglynOrganization>,
+  headers: Record<string, string>,
+): Promise<Response | null> {
+  const shape = apiRequestEnforcementShape(org as never)
+  if (shape === 'never-blocks') return null
+  if (shape === 'always-blocks') {
+    return ApiErrors.planRequired({ headers })
+  }
+  const usage = await firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection('apiUsage')
+    .doc(apiUsageMonth())
+    .get()
+  const quota = checkApiRequestQuota(org as never, Number(usage.get('count') ?? 0))
+  if (quota.allowed) return null
+  // 429, not 403: the budget is exhausted for the MONTH, not the plan, and
+  // `Retry-After` is the only honest thing to say to an integration — the
+  // same posture the per-minute limiter above takes. Seconds to the UTC month
+  // boundary, matching the counter's own key.
+  const now = new Date()
+  const nextMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+  return ApiErrors.rateLimited(
+    Math.max(1, Math.ceil((nextMonth - now.getTime()) / 1000)),
+    headers,
+  )
 }
 
 /**
@@ -168,6 +222,30 @@ export async function authenticateApiV1(
   }
 
   const firestore = firebaseAdmin.app().firestore()
+  // Monthly request quota (AGL-2163). `checkApiRequestQuota(...).allowed`
+  // existed, was documented as "plans without API access have `included: 0`
+  // and always block", was listed in `free-tier-never-billed.spec.ts` as one
+  // of free's runtime braces — and had NO READER anywhere in the platform.
+  // The only call site was `/api/billing/report-usage`, which takes
+  // `overageMonthlyUsd` and ignores `allowed`. So nothing refused.
+  //
+  // The `apiAccess` gate above hid it: on every shipping plan, having API
+  // access and having a non-zero `apiRequestsPerMonth` are the same fact. A
+  // per-org `features.apiAccess` override separates them, and then a key on a
+  // plan with a zero band ran unbounded, uncapped and unbilled.
+  //
+  // This is the same chokepoint the lockdown verdict and the entitlement use,
+  // for the same reason: every /v1 request comes through here exactly once.
+  // Placed AFTER `apiAccess` so an unentitled key still gets the
+  // `plan_required` it always got, and BEFORE `recordApiRequest` so a refused
+  // request is not metered — matching that function's own contract.
+  const quotaRefusal = await refuseIfApiQuotaExhausted(
+    firestore,
+    verified.orgId,
+    org,
+    headers,
+  )
+  if (quotaRefusal) return quotaRefusal
   // Meter the request for the monthly usage rollup (AGL-635). Fire-and-forget:
   // billing is a background reconcile, so a lost increment never blocks the
   // caller. Counted only after auth + rate-limit pass, so refused requests

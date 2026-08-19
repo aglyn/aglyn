@@ -61,10 +61,26 @@ const buildNav = () => (item, i) => {
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
 
+  /**
+   * An icon-only button with no accessible name is announced as "button"
+   * and nothing else (AGL-2128). Everything here is icon-only by
+   * construction, and the name arrives — if it arrives — through `...rest`
+   * from whatever page supplied the action, so nothing in this file could
+   * guarantee one. Derive a last resort from the item's own identity rather
+   * than shipping an anonymous control: an explicit `aria-label`, `title` or
+   * `aria-labelledby` from the caller still wins, because `...rest` spreads
+   * after this.
+   */
+  const fallbackLabel =
+    rest['aria-label'] || rest.title || rest['aria-labelledby']
+      ? undefined
+      : String(item?.label ?? id ?? key ?? '') || undefined
+
   const rendered = (
     <IconButton
       key={itemKey}
       color="inherit"
+      {...(fallbackLabel ? { 'aria-label': fallbackLabel } : {})}
       // AGL-752: an `href` or a custom `component` resolves this to an <a>.
       {...(rest.href || rest.component ? { nativeButton: false } : {})}
       {...rest}

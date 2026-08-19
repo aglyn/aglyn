@@ -39,9 +39,17 @@ import {
   addonQuantitiesFromItems,
   addonUnitUsd,
   findPlanItem,
+  meteredPriceId,
+  planAndIntervalFromPriceId,
+  planPriceId,
   type AddonKind,
   type BillingInterval,
 } from '../../../../utils/server/billing-addons'
+import {
+  buildTargetItems,
+  restateExistingPhase,
+  subscriptionItemsAsPhaseItems,
+} from '../../../../utils/server/billing-schedule'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
 // sessions alive PRECISELY so members can reach billing and pay; a 423
@@ -100,6 +108,97 @@ async function activeSubscription(
     (subscriptions?.data ?? []).find((subscription: any) =>
       isLiveSubscriptionStatus(subscription?.status),
     ) ?? null
+  )
+}
+
+/**
+ * Re-derives a pending downgrade schedule's TARGET phase from the
+ * subscription's items as they are RIGHT NOW (AGL-2150).
+ *
+ * A subscription schedule's phases are ABSOLUTE item lists, snapshotted when
+ * the downgrade was requested. This route changes the subscription's items and
+ * knew nothing about `subscription.schedule`, so the sequence "schedule a
+ * downgrade, then buy five more seats" charged for the seats, prorated them,
+ * and then deleted them at the period end when phase 1 applied its stale list.
+ * Recurring revenue, gone on a timer, with nothing on any screen saying so.
+ *
+ * Refreshing from the subscription's CURRENT items is correct whatever Stripe
+ * does with a schedule mid-phase, which is the point: it makes the snapshot
+ * match reality at the one moment reality changed, rather than depending on an
+ * answer only a live account could give. Phase 0 is restated from the live
+ * subscription for the same reason — if Stripe already amended it the write is
+ * a no-op, and if it did not, the schedule stops disagreeing with the
+ * subscription the customer is actually being billed for.
+ *
+ * The target phase's PLAN comes from its own `metadata[plan]` (written by the
+ * downgrade path, and what the webhook mirror reads at the flip), falling back
+ * to whichever plan its base price sells. An unclassifiable phase is left
+ * strictly alone: a schedule this route does not understand is safer stale
+ * than rewritten wrong.
+ */
+async function refreshScheduleTargetPhase(options: {
+  secretKey: string
+  scheduleId: string
+  /** The subscription's items AFTER the add-on change. */
+  items: any[]
+}): Promise<void> {
+  const { secretKey, scheduleId, items } = options
+  const schedule = await stripeRequest(
+    secretKey,
+    'GET',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+  )
+  const phases: any[] = Array.isArray(schedule?.phases) ? schedule.phases : []
+  // Nothing pending: a released/canceled schedule, or one with no future
+  // phase, has no snapshot to go stale.
+  if (phases.length < 2) return
+  if (schedule?.status !== 'active' && schedule?.status !== 'not_started') return
+  const targetIndex = phases.length - 1
+  const targetPhase = phases[targetIndex]
+  const basePrice = (targetPhase?.items ?? [])
+    .map((item: any) =>
+      typeof item?.price === 'string' ? item.price : item?.price?.id,
+    )
+    .map((priceId: string) => planAndIntervalFromPriceId(priceId))
+    .find((match: unknown) => match) as
+    | ReturnType<typeof planAndIntervalFromPriceId>
+    | undefined
+  const targetPlan = (targetPhase?.metadata?.plan ?? basePrice?.plan) as
+    | Parameters<typeof planPriceId>[0]
+    | undefined
+  const targetInterval: BillingInterval = basePrice?.interval ?? 'month'
+  if (!targetPlan) return
+  const targetPlanPrice = planPriceId(targetPlan, targetInterval)
+  if (!targetPlanPrice) return
+  const rebuilt = buildTargetItems(items, {
+    targetPlan,
+    targetInterval,
+    targetPlanPrice,
+    meteredPrice: meteredPriceId(targetInterval),
+  })
+  const params = new URLSearchParams({
+    end_behavior: String(schedule?.end_behavior ?? 'release'),
+    // The items already match the live subscription, so there is nothing to
+    // prorate — and a downgrade schedule never prorates by design (AGL-1862).
+    proration_behavior: 'none',
+  })
+  phases.forEach((phase, index) => {
+    restateExistingPhase(
+      params,
+      index,
+      phase,
+      index === targetIndex
+        ? rebuilt.items
+        : index === 0
+          ? subscriptionItemsAsPhaseItems(items)
+          : undefined,
+    )
+  })
+  await stripeRequest(
+    secretKey,
+    'POST',
+    `subscription_schedules/${encodeURIComponent(scheduleId)}`,
+    params,
   )
 }
 
@@ -364,11 +463,41 @@ async function handler(request: Request): Promise<Response> {
       `subscriptions/${subscription.id}`,
       params,
     )
+    // A pending downgrade holds an item list snapshotted when it was
+    // requested (AGL-2150) — refresh it, or the seats just bought and
+    // prorated disappear at the period end.
+    const scheduleId =
+      typeof subscription?.schedule === 'string'
+        ? subscription.schedule
+        : subscription?.schedule?.id
+    let scheduleRefreshFailed = false
+    if (scheduleId) {
+      try {
+        await refreshScheduleTargetPhase({
+          secretKey,
+          scheduleId: String(scheduleId),
+          items: updated?.items?.data ?? [],
+        })
+      } catch (error) {
+        // The purchase itself already succeeded and the card was charged.
+        // Failing the request now would tell the customer nothing happened
+        // while their invoice says otherwise, so this reports rather than
+        // throws — loudly, because the consequence is silent and deferred.
+        scheduleRefreshFailed = true
+        console.error(
+          '[billing/addons] pending plan change NOT refreshed — its item list is stale and will drop this purchase at the period end',
+          { orgId, subscriptionId: subscription.id, scheduleId, kind, quantity, error },
+        )
+      }
+    }
     // Mirror the full quantity map (explicit zeros) so removals converge;
     // the webhook re-derives the same map on the subscription event.
     const quantities = addonQuantitiesFromItems(updated?.items?.data ?? [])
     await orgSnapshot.ref.set({ seatAddons: quantities }, { merge: true })
-    return Response.json({ ok: true, quantities }, { status: 200 })
+    return Response.json(
+      { ok: true, quantities, ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}) },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Add-on operation failed' }, { status: 502 })

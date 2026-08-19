@@ -16,8 +16,26 @@
  */
 'use client'
 
-import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
-import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
+import {
+  type AglynOrgBilling,
+  applyDatasetQuery,
+  checkDatasetQuota,
+  checkEntitlement,
+  checkQuota,
+  coerceDocumentValues,
+  datasetValueToInput,
+  effectiveDatasetModel,
+  formatDatasetValue,
+  getCustomFieldType,
+  modelFromFieldEntries,
+  parseDatasetFieldEntries,
+  parseDatasetFilter,
+  parseDatasetSort,
+  pluginDocsHelp,
+  sortDatasetRecords,
+  validateDocument,
+} from '@aglyn/aglyn'
+import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -798,7 +816,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [selected, datasets, firestore, dataScope, enqueueSnackbar],
   )
 
-  // CSV/JSON round-tripping (AGL-182) over the loaded window.
+  // CSV/JSON round-tripping (AGL-182).
   const download = useCallback((name: string, mime: string, text: string) => {
     const url = URL.createObjectURL(new Blob([text], { type: mime }))
     const anchor = document.createElement('a')
@@ -807,41 +825,78 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     anchor.click()
     URL.revokeObjectURL(url)
   }, [])
+  const [exporting, setExporting] = useState<'csv' | 'json' | null>(null)
+  /**
+   * The export is a SERVER stream now (AGL-2335).
+   *
+   * It used to serialize `records` — the card's live listener window, which
+   * is `limit(500)` with no `orderBy`. Firestore answers an unordered limit
+   * in document-id order over auto-ids, so a 2,000-row dataset did not
+   * export "the first 500": it exported 500 unpredictable rows, and running
+   * it twice could produce different ones. `sortDatasetRecords` then sorted
+   * that sample, so the file looked ordered and was arbitrary. The button
+   * said `CSV`, and the agency guide calls the result a *full handover*.
+   *
+   * Fetching the whole collection here instead was not an option — the
+   * agency plan's `recordsPerDataset` is UNLIMITED, so an unbounded
+   * client-side read is a browser hang and a large read bill behind a button
+   * labelled `CSV`. `/api/orgs/datasets/export` pages and streams it.
+   *
+   * The response is CHECKED, not trusted: the route reports a `count()`
+   * aggregate in `X-Aglyn-Export-Rows`, and a body with fewer rows than that
+   * is refused rather than saved. A stream that dies halfway produces a
+   * perfectly well-formed shorter file — nothing about the bytes says they
+   * are short, which is precisely how the old truncation stayed invisible.
+   */
   const handleExport = useCallback(
-    (format: 'csv' | 'json') => () => {
-      if (!selected) return
-      const rows = records.map((record: any) => record.values ?? {})
-      const base = String(selected.displayName ?? 'collection')
-        .replace(/[^A-Za-z0-9_-]+/g, '-')
-        .toLowerCase()
-      if (format === 'csv') {
-        download(
-          `${base}.csv`,
-          'text/csv',
-          datasetRecordsToCsv(model, rows),
+    (format: 'csv' | 'json') => async () => {
+      if (!selected?.$id || !orgId || exporting) return
+      setExporting(format)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          `/api/orgs/datasets/export?orgId=${encodeURIComponent(orgId)}` +
+            `&datasetId=${encodeURIComponent(selected.$id)}` +
+            `&format=${format}`,
+          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
-      } else {
-        download(
-          `${base}.json`,
-          'application/json',
-          JSON.stringify(
-            rows.map((row) =>
-              Object.fromEntries(
-                model.order.map((fieldId) => [
-                  fieldId,
-                  model.fields[fieldId]
-                    ? serializeDatasetValue(model.fields[fieldId], row[fieldId])
-                    : '',
-                ]),
-              ),
-            ),
-            null,
-            2,
-          ),
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}))
+          throw new Error(failure?.error ?? 'Export failed')
+        }
+        const text = await response.text()
+        const { promised, received, short } = exportShortfall(
+          response.headers.get('X-Aglyn-Export-Rows'),
+          text,
+          format,
         )
+        if (short) {
+          enqueueSnackbar(
+            `Export incomplete — ${received} of ${promised} documents ` +
+              'arrived. Nothing was saved; try again.',
+            { variant: 'error' },
+          )
+          return
+        }
+        const base =
+          String(selected.displayName ?? 'collection')
+            .replace(/[^A-Za-z0-9_-]+/g, '-')
+            .toLowerCase() || 'collection'
+        download(
+          `${base}.${format}`,
+          format === 'csv' ? 'text/csv' : 'application/json',
+          text,
+        )
+      } catch (error) {
+        enqueueSnackbar(
+          error instanceof Error ? error.message : 'Export failed',
+          { variant: 'error' },
+        )
+      } finally {
+        setExporting(null)
       }
     },
-    [selected, records, model, download],
+    [selected, orgId, user, exporting, download, enqueueSnackbar],
   )
 
   // keyField (wave v6): optional unique key — matching rows update the
@@ -1001,6 +1056,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   return (
     <CardDisplay
       header={'Data'}
+      help={pluginDocsHelp('datasets', { anchor: '#model-builder' })}
       contentGutterX
       contentGutterY
       contentBordered="all"
@@ -1052,13 +1108,24 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             >
               {'Import'}
             </Button>
-            {records.length ? (
+            {/* The real dataset size, not the loaded window (AGL-2335) —
+                the export is a server stream now, so a dataset whose first
+                page has not landed yet is still exportable. */}
+            {recordCount || records.length ? (
               <>
-                <Button size="small" onClick={handleExport('csv')}>
-                  {'CSV'}
+                <Button
+                  size="small"
+                  disabled={Boolean(exporting)}
+                  onClick={handleExport('csv')}
+                >
+                  {exporting === 'csv' ? 'Exporting…' : 'CSV'}
                 </Button>
-                <Button size="small" onClick={handleExport('json')}>
-                  {'JSON'}
+                <Button
+                  size="small"
+                  disabled={Boolean(exporting)}
+                  onClick={handleExport('json')}
+                >
+                  {exporting === 'json' ? 'Exporting…' : 'JSON'}
                 </Button>
               </>
             ) : null}

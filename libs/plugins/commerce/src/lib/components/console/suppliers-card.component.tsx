@@ -45,6 +45,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface SuppliersCardProps {
   hostId: string
@@ -61,6 +62,9 @@ export interface SuppliersCardProps {
  * products, and watch every paid order silently fail to route — a supplier
  * that looks configured and never hears about an order.
  */
+
+const suppliersHelp = pluginDocsHelp('commerce', { anchor: '#dropshipping' })
+
 export function SuppliersCard(props: SuppliersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -169,16 +173,22 @@ export function SuppliersCard(props: SuppliersCardProps) {
 
   return (
     <EntitlementGatedCard
+      help={suppliersHelp}
       hostId={hostId}
       feature="dropshipRouting"
       header={'Dropship suppliers'}
       upsell={
         'Dropship routing forwards each paid order to the right supplier ' +
         'by email or signed webhook, and takes tracking numbers back ' +
-        'without the supplier needing an Aglyn account.'
+        `without the supplier needing an ${Aglyn.PLATFORM_BRAND_NAME} account.`
       }
     >
-    <CardDisplay header={'Dropship suppliers'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Dropship suppliers'}
+      help={suppliersHelp}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {(supplierDocs ?? []).length === 0 ? (
           <Typography variant="body2" color="text.secondary">

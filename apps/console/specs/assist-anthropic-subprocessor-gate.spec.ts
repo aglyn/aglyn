@@ -129,6 +129,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     'The credential-rotation checklist (AGL-1915) lists the key among the secrets to rotate after an incident. Naming a secret in a runbook is the opposite of a data flow — but the suite is right to have stopped on it, because "a new file mentions ANTHROPIC_API_KEY" is exactly the event it exists to make someone look at.',
   ],
   [
+    '.github/workflows/tools-guards.yml',
+    'The workflow step that RUNS `check:provider-key-exposure` — the guard proving no model-provider key is reachable from the client closure (AGL-2379). It names the key only in the comment explaining what that guard proves. A workflow that runs a check ABOUT the key is the opposite of a data flow, but the suite is right to have stopped on it: "a new file mentions ANTHROPIC_API_KEY" is exactly the event it exists to make someone look at.',
+  ],
+  [
     'cloud/firebase-remoteconfig.template.json',
     'The DEPLOYED flag seed and its staff-facing description — the one that actually decides the flag in production.',
   ],
@@ -165,6 +169,14 @@ const MENTIONS_ONLY = new Map<string, string>([
   [
     'apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts',
     'This suite.',
+  ],
+  [
+    'tools/scripts/check-provider-key-exposure.mjs',
+    'The AGL-2240 exposure checker. Names the key only inside a regex of provider-credential NAMES it refuses to find in the browser bundle; it never reads `process.env` for one and sends nothing anywhere. The complement of this suite: that one asks which MODULE GRAPH a reader is in, this one asks which FILES read it at all — and a reader can be correctly listed here while shipping to every visitor, which is the hole it closes.',
+  ],
+  [
+    'apps/console/specs/provider-key-exposure.spec.ts',
+    'The spec driving that checker. Names the key in its expected-reader assertions and in the list of env names the pattern must match. A guard, not a flow.',
   ],
 ])
 

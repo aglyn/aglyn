@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
-import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { brandMergeTokens, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
@@ -101,9 +101,11 @@ async function handler(request: Request): Promise<Response> {
       `from ${branding.productName}. Deletion is permanent and happens after ` +
       'a 7-day hold. If this was not intended, contact support before then ' +
       'to cancel.'
-    const designed = await renderSystemEmail('erasure-requested', {
-      'org.name': String(orgName),
-    })
+    const designed = await renderSystemEmail(
+      'erasure-requested',
+      { ...brandMergeTokens(branding), 'org.name': String(orgName) },
+      { brandLogoUrl: branding.emailLogoUrl },
+    )
     const result = await sendEmail({
       to: ownerEmail,
       subject: designed?.subject ?? 'We received your erasure request',

@@ -110,6 +110,9 @@ describe('the static header config (AGL-2088)', () => {
  * issue exists to fix, rebuilt under a new name.
  */
 
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
 import { PLATFORM_GENERATOR_NAME } from '@aglyn/aglyn/server'
 import { NextRequest } from 'next/server'
 
@@ -237,3 +240,43 @@ describe('the gated `x-powered-by` header (AGL-2088)', () => {
     expect(headers.get('x-aglyn-process-version')).toBeNull()
   })
 })
+
+/**
+ * The edge copy and the canonical constant read the SAME configuration
+ * (AGL-2153).
+ *
+ * The suite above asserts the emitted header equals the lib constant — which
+ * it did before this issue too, because both were the literal `'Aglyn'`. That
+ * agreement proved nothing about configuration: the moment the brand became
+ * an env var, a hand-copied literal in the edge bundle would have served
+ * `<meta name="generator">` with the operator's name and `x-powered-by` with
+ * ours, on the same response, and every assertion above would still pass.
+ *
+ * A runtime test cannot reach it either — both constants are captured at
+ * module scope in two different bundles — so this is a source-level check on
+ * the one thing that makes divergence impossible: one env name, read by both.
+ */
+describe('the edge x-powered-by copy is configured, not restated (AGL-2153)', () => {
+  const BRAND_ENV = 'NEXT_PUBLIC_PLATFORM_BRAND_NAME'
+
+  it('the tenant middleware reads the brand env var rather than a literal', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../middleware.ts'),
+      'utf8',
+    )
+    expect(source).toContain(`process.env.${BRAND_ENV}`)
+    // Bracket notation is never substituted into an edge bundle (AGL-2037),
+    // so it would read undefined and silently pin the default.
+    expect(source).not.toContain(`process.env['${BRAND_ENV}']`)
+    expect(source).not.toMatch(/const PLATFORM_GENERATOR_NAME = 'Aglyn'/)
+  })
+
+  it('the canonical constant reads the same env var, under the same name', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../../../libs/aglyn/src/lib/app-utils/platform-brand.ts'),
+      'utf8',
+    )
+    expect(source).toContain(`process.env.${BRAND_ENV}`)
+  })
+})
+

@@ -155,8 +155,32 @@ function mockMakeFirestore() {
       return undefined
     },
   })
+  /**
+   * Every document directly under `prefix`, in insertion order — enough for
+   * the mirror repair (AGL-2306/2368), which reads `pluginVersions` ordered
+   * by `publishedAt` and derives the offer from the whole set. `orderBy` is
+   * a no-op on ordering because the derivation is order-independent by
+   * construction (`newestInstallableVersion` compares versions itself); what
+   * matters is that every seeded version is returned and nothing else is.
+   */
+  const childDocs = (prefix: string) =>
+    [...docs.entries()]
+      .filter(
+        ([path]) =>
+          path.startsWith(`${prefix}/`) &&
+          !path.slice(prefix.length + 1).includes('/'),
+      )
+      .map(([path, data]) => ({
+        id: path.split('/').pop() as string,
+        data: () => data,
+        get: (field: string) => data[field],
+      }))
   const makeCollection = (prefix: string) => ({
     doc: (id: string) => makeDoc(`${prefix}/${id}`),
+    orderBy: () => ({
+      limit: () => ({ get: async () => ({ docs: childDocs(prefix) }) }),
+      get: async () => ({ docs: childDocs(prefix) }),
+    }),
     add: async (data: Record<string, unknown>) => {
       if (prefix === 'adminAudit') audit.push({ ...data })
       const id = `auto-${docs.size}`
@@ -177,6 +201,9 @@ const mockUpdateExisting = jest.requireActual(
 ).updateExisting
 const mockUpdateState = jest.requireActual(
   '../../../../../../libs/aglyn/src/lib/app-utils/marketplace-update-state',
+)
+const mockPluginManifest = jest.requireActual(
+  '../../../../../../libs/aglyn/src/lib/app-utils/plugin-manifest',
 )
 const mockChecklist = jest.requireActual(
   '../../../../constants/plugin-review-checklist',
@@ -218,9 +245,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   compareArtifactVersions: mockUpdateState.compareArtifactVersions,
   checkPluginBundle: () => ({ ok: true, findings: [] }),
-  isPluginRevoked: () => false,
+  // The REAL kill-switch trio (AGL-2368). `isPluginRevoked: () => false` and
+  // `nextRevocationState: () => null` are not simplifications — they are a
+  // kill switch that never kills and a revocation state machine that always
+  // says "delete the document", which is precisely the shape of defect the
+  // route is being tested for. Reached by module path so the barrel, and
+  // firebase-admin behind it, stays out of this suite (AGL-1715).
+  isPluginRevoked: mockPluginManifest.isPluginRevoked,
+  newestInstallableVersion: mockPluginManifest.newestInstallableVersion,
+  nextRevocationState: mockPluginManifest.nextRevocationState,
   isStoredVerdictCurrent: () => true,
-  nextRevocationState: () => null,
   PLUGIN_HOST_ABI_VERSION: 1,
   PLUGIN_VERIFIER_VERSION: 5,
   pluginArtifactPath: () => 'artifacts/x',
@@ -496,5 +530,115 @@ describe('a version verdict refuses an orphaned listing (AGL-1766)', () => {
     )
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toEqual({ error: 'Unknown version' })
+  })
+})
+
+/**
+ * A LISTING TAKEDOWN moves the offer too (AGL-2368).
+ *
+ * AGL-2306 taught the per-version revoke, the un-revoke and the reject path to
+ * re-derive `latestApprovedVersion` from the versions. The takedown path was
+ * left out — and a takedown is the one that flattens `versions` to `'all'`,
+ * revoking every build at once, while the mirror went on naming one of them.
+ *
+ * `hiddenAt` hides the listing from browse and 404s the install route, so
+ * nothing was installable through the stale mirror. What made it worth fixing
+ * anyway is the other direction: a restore clears `hiddenAt` FIRST, and
+ * `nextRevocationState` can hand back a document that still carries a
+ * reviewer's own per-version revocations (AGL-1085) — so "restored" and
+ * "everything installs again" are not the same statement, and only a
+ * re-derivation can tell them apart.
+ *
+ * Every case asserts the stored document, and each is paired with its
+ * opposite: a guard that only ever checks the field was cleared passes
+ * against a route that clears it unconditionally.
+ */
+describe('a takedown and a restore re-derive the offer (AGL-2368)', () => {
+  const OTHER = '1.1.0'
+
+  /** Two approved versions under the listing, and a mirror naming the newer. */
+  function seedTwoApprovedVersions(): void {
+    docs.set(`marketplaceListings/${LISTING}/pluginVersions/${OTHER}`, {
+      version: OTHER,
+      reviewState: 'approved',
+    })
+    docs.set(`marketplaceListings/${LISTING}/pluginVersions/${VERSION}`, {
+      version: VERSION,
+      reviewState: 'approved',
+    })
+    seedListing({ latestApprovedVersion: VERSION, reviewStatus: 'listed' })
+  }
+
+  const mirror = () =>
+    docs.get(`marketplaceListings/${LISTING}`)?.['latestApprovedVersion']
+
+  const hide = (reason = 'Exfiltrates form submissions.') =>
+    POST(post({ listingId: LISTING, action: 'hide', reason }))
+
+  it('CONTROL: the listing offers its newest approved version to begin with', async () => {
+    seedTwoApprovedVersions()
+    expect(mirror()).toBe(VERSION)
+  })
+
+  it('clears the offer when the listing is taken down', async () => {
+    seedTwoApprovedVersions()
+    const response = await hide()
+    expect(response.status).toBe(200)
+    // `'all'` revokes every version, so nothing is installable and the mirror
+    // must be ABSENT — not '' , which is a value a reader has to interpret.
+    expect(
+      docs.get(`revocations/${LISTING}`)?.['versions'],
+    ).toBe('all')
+    expect(mirror()).toBeUndefined()
+  })
+
+  it('restores the offer when the listing is restored', async () => {
+    seedTwoApprovedVersions()
+    await hide()
+    expect(mirror()).toBeUndefined()
+
+    const response = await POST(
+      post({ listingId: LISTING, action: 'unhide' }),
+    )
+    expect(response.status).toBe(200)
+    // Both halves. A repair that only ever cleared would leave every restored
+    // listing advertising nothing forever, which is the same defect pointing
+    // the other way.
+    expect(mirror()).toBe(VERSION)
+  })
+
+  it('a restore does NOT re-offer a version a REVIEWER separately stopped', async () => {
+    // The case that makes this worth a re-derivation rather than a stashed
+    // value. `nextRevocationState` keeps `reviewVersions` across the takedown
+    // round trip (AGL-1085/2305), so restoring the listing leaves v1.2.0
+    // revoked — and the offer has to land on v1.1.0, not back on v1.2.0.
+    seedTwoApprovedVersions()
+    docs.set(`revocations/${LISTING}`, {
+      versions: [VERSION],
+      reviewVersions: [VERSION],
+    })
+
+    await hide()
+    const response = await POST(post({ listingId: LISTING, action: 'unhide' }))
+    expect(response.status).toBe(200)
+    expect(docs.get(`revocations/${LISTING}`)?.['versions']).toEqual([VERSION])
+    expect(mirror()).toBe(OTHER)
+  })
+
+  it('leaves a NON-PLUGIN listing alone — it has no kill switch', async () => {
+    // `reviewState` and the approved-version guarantee are plugin concepts.
+    // Deriving a mirror for a component would delete a field that means
+    // something else, from a document a takedown has no business rewriting.
+    docs.set(`marketplaceListings/${LISTING}`, {
+      artifactType: 'component',
+      displayName: 'A component',
+      reviewStatus: 'listed',
+      latestVersion: VERSION,
+      latestApprovedVersion: VERSION,
+    })
+    const response = await hide()
+    expect(response.status).toBe(200)
+    expect(docs.has(`revocations/${LISTING}`)).toBe(false)
+    expect(mirror()).toBe(VERSION)
   })
 })

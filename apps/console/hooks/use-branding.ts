@@ -17,7 +17,7 @@
 'use client'
 
 import {
-  AGLYN_BRANDING_PROFILE,
+  PLATFORM_BRANDING_PROFILE,
   checkEntitlement,
   hasBrandingProfile,
   resolveBrandingProfile,
@@ -62,10 +62,10 @@ export function useBranding(): {
   // change the outcome.
   const namesOrg = useUrlNamesOrg()
   if (!namesOrg) {
-    return { branding: AGLYN_BRANDING_PROFILE, whiteLabel: false, ready: true }
+    return { branding: PLATFORM_BRANDING_PROFILE, whiteLabel: false, ready: true }
   }
   if (!ready) {
-    return { branding: AGLYN_BRANDING_PROFILE, whiteLabel: false, ready }
+    return { branding: PLATFORM_BRANDING_PROFILE, whiteLabel: false, ready }
   }
   return {
     branding: resolveBrandingProfile(org),

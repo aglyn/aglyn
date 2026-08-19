@@ -42,18 +42,20 @@ import {
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
+import {
+  currentMonth,
+  monthIsClosed,
+  previousMonth,
+} from '../../../../utils/billing-month'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; metering must
 // keep running under a lock so billing stays truthful.
 
-/** Previous calendar month as YYYY-MM (the default rollup target). */
-
-function previousMonth(): string {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString()
-    .slice(0, 7)
-}
+// `previousMonth` / `currentMonth` / `monthIsClosed` moved to
+// `utils/billing-month.ts` (AGL-2219). `previousMonth` had three byte-identical
+// private copies across this route, `billing/usage-email` and `admin/overview`,
+// and `monthIsClosed` is a rule about which months may be invoiced — neither
+// belongs inline in the route that sends the meter event.
 
 /**
  * Approximate aggregate dataset bytes for an org (AGL-240): per dataset,
@@ -341,7 +343,12 @@ async function hostUsage(
  * month before enabling live billing.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const {
+    method,
+    body,
+    query,
+    headers: rawHeaders,
+  } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -353,9 +360,44 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
-  const month = /^\d{4}-\d{2}$/.test(String(body?.month ?? ''))
-    ? String(body.month)
-    : previousMonth()
+  /*==========================================
+   * WHICH MONTH THIS SWEEP IS ABOUT (AGL-2219).
+   *
+   * The default is still `previousMonth()` — the CLOSED month, the one an
+   * invoice is about, and the only shape this route had until now.
+   *
+   * `?month=current` is the second, in-progress sweep, and it exists because
+   * the entire usage-budget feature (AGL-1528) was structurally silent
+   * without it. `report-usage` is the ONLY writer of `orgs/{id}/usage/{month}`
+   * and it only ever wrote the closed month, so during August the document
+   * for August did not exist. Every consumer that asks "what has this org
+   * spent THIS month" — the budget cron, the Billing card — got a missing
+   * document, read it as `meteredFresh: false`, and correctly declined to
+   * say anything. A guard doing its job over an input nobody supplied.
+   *
+   * ## Why the QUERY STRING and not the body
+   *
+   * The chunked-sweep protocol (AGL-1141) has the caller re-POST with
+   * `{"cursor": "..."}` and NOTHING ELSE — see the loop in
+   * `scheduled-crons.yml`. A month passed in the body would therefore apply
+   * to the first chunk and silently revert to `previousMonth()` for every
+   * chunk after it, so a resumed sweep would write half one month and half
+   * another. The URL survives the loop; the body does not.
+   *
+   * Both spellings are accepted for a literal `YYYY-MM` because the body form
+   * predates this and manual backfills use it.
+   *=========================================*/
+  const monthParam = String(query?.['month'] ?? body?.month ?? '')
+  const month =
+    monthParam === 'current'
+      ? currentMonth()
+      : /^\d{4}-\d{2}$/.test(monthParam)
+        ? monthParam
+        : previousMonth()
+  // Computed ONCE for the sweep, not per org: a run straddling midnight UTC
+  // on the 1st must not decide that August is open for one org and closed for
+  // the next, which would report half the platform and freeze the other half.
+  const closed = monthIsClosed(month)
   const stripeKey = process.env.STRIPE_SECRET_KEY
   const meterEventName =
     process.env.STRIPE_METER_EVENT_NAME ?? 'aglyn_metered_usage'
@@ -427,6 +469,7 @@ async function handler(request: Request): Promise<Response> {
         apiUsageSnap,
         contactsSnap,
         counterTotals,
+        assistUsageSnap,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -455,6 +498,13 @@ async function handler(request: Request): Promise<Response> {
         // to a sum taken over hosts alone. Since AGL-1473 it also carries the
         // org LIBRARY's stored bytes, which had the identical defect.
         orgCounterTotals(firestore, hostRefs, month, orgRef),
+        // Aglyn Assist provider spend for the month (AGL-2280). `estCostUsd`
+        // was written by the assist route from day one, expressly so the paid
+        // gate could be tuned against Zach's "must not eat margins"
+        // constraint — and it lived in a collection the rollup never touched,
+        // so the one cost line big enough to matter was absent from the
+        // document every cost reader on the platform reads.
+        orgRef.collection('assistUsage').doc(month).get(),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -635,6 +685,22 @@ async function handler(request: Request): Promise<Response> {
         counterTotals.emailSends,
         resolveOrgEntitlements(orgData).emailSendsPerMonth,
       )
+      /*==========================================
+       * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
+       *
+       * Deliberately absent from `billedCents` below — Assist is entitled by
+       * plan, not metered on the invoice, and putting it there would start
+       * charging for it. It IS priced by `orgMonthlyCogsUsd`, because it is a
+       * real dollar cost we pay a provider, and the discount guardrail's
+       * entire job is to compare revenue against what an org costs us.
+       *
+       * Already dollars: `estCostUsd` is computed at the provider's list
+       * rates where the tokens were counted. Re-deriving it from tokens here
+       * would be a second cost model to drift from the first.
+       *=========================================*/
+      const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
+      const assistCostUsd =
+        Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
       const billedCents =
         billedEstimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
@@ -648,7 +714,11 @@ async function handler(request: Request): Promise<Response> {
       }
 
       let reported = false
-      if (stripeKey && billedCents > 0) {
+      // `closed` FIRST, and it is the whole point of AGL-2219's guard: an
+      // in-progress sweep computes and stores the running figure the budget
+      // card and the budget alert read, and it must not — cannot — put that
+      // partial figure on an invoice. See `monthIsClosed`.
+      if (closed && stripeKey && billedCents > 0) {
         // AGL-1028: reads the manager-gated billing doc, org doc as fallback.
         const customerId = (await readOrgBilling(orgId)).stripeCustomerId
         if (customerId) {
@@ -757,6 +827,9 @@ async function handler(request: Request): Promise<Response> {
           contactsOverageWithheldUsd: contactsOverageBilled
             ? 0
             : contactQuota.overageMonthlyUsd,
+          // AGL-2280 — see where it is computed. Priced into COGS, never into
+          // `billedCents`.
+          assistCostUsd,
           // Email sends and workflow/action runs (AGL-1134), summed across
           // the org's hosts. COUNTS for this month — see `orgCounterTotals`
           // for the unit and the double-count argument.
@@ -815,6 +888,11 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         month,
+        // Which of the two daily sweeps this was (AGL-2219). Without it the
+        // two runs are indistinguishable in a workflow log, and "the meter
+        // events stopped" and "the in-progress sweep ran twice" look the
+        // same. `false` means nothing here reached Stripe, by construction.
+        closed,
         orgs: orgResults,
         ...(failed.length ? { failures } : {}),
         processed: chunk.items.length,

@@ -101,3 +101,61 @@ describe('POST /api/errors service labelling', () => {
     expect(reportCalls).toEqual([{ events: [event], service: 'console-web' }])
   })
 })
+
+/**
+ * The collector origin is configuration (AGL-2124).
+ *
+ * Note the shape of the suite above: `DOCS_ORIGIN` is a literal in the SPEC
+ * too, so every assertion passed against a route that ignored configuration
+ * entirely — the same both-directions failure `operator-identity.spec.ts`
+ * documents, and the reason that module's guard is written the way it is.
+ *
+ * An operator running both halves of the open-source stack could not have
+ * their own docs report to their own console: the browser blocked every POST
+ * on CORS. Their beacon was inert; ours was the only origin the collector
+ * would talk to.
+ *
+ * `DOCS_ORIGIN` is captured at module scope, so each shape needs a fresh
+ * module registry — asserting against the already-imported handler would only
+ * re-test the default.
+ */
+describe('the docs collector origin is configuration (AGL-2124)', () => {
+  const ORIGINAL = process.env.NEXT_PUBLIC_DOCS_ORIGIN
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_DOCS_ORIGIN
+    else process.env.NEXT_PUBLIC_DOCS_ORIGIN = ORIGINAL
+    jest.resetModules()
+  })
+
+  function loadWith(value: string | undefined) {
+    if (value === undefined) delete process.env.NEXT_PUBLIC_DOCS_ORIGIN
+    else process.env.NEXT_PUBLIC_DOCS_ORIGIN = value
+    jest.resetModules()
+    return require('../app/api/errors/route') as typeof import('../app/api/errors/route')
+  }
+
+  it('SELF-HOST shape: the operator\'s own docs origin is the one granted', () => {
+    const route = loadWith('https://docs.example.com')
+    const headers = route.OPTIONS().headers
+    expect(headers.get('access-control-allow-origin')).toBe(
+      'https://docs.example.com',
+    )
+    // The whole point: ours must not survive an operator's configuration.
+    expect(headers.get('access-control-allow-origin')).not.toContain('aglyn')
+  })
+
+  it('tolerates a trailing slash, which a copied URL carries', () => {
+    expect(
+      loadWith('https://docs.example.com/').OPTIONS().headers.get(
+        'access-control-allow-origin',
+      ),
+    ).toBe('https://docs.example.com')
+  })
+
+  it('AGLYN-OPERATED shape: unset still grants our docs site unchanged', () => {
+    expect(
+      loadWith(undefined).OPTIONS().headers.get('access-control-allow-origin'),
+    ).toBe('https://docs.aglyn.com')
+  })
+})

@@ -45,6 +45,7 @@ const BESIGNER_OUT = join(
   ROOT,
   'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
 )
+const PLUGIN_OUT = join(ROOT, 'libs/aglyn/src/lib/app-utils/docs-help.generated.ts')
 
 // Docs pages that are not feature topics (chrome / internal-only routes).
 const EXCLUDE = [/^operations\//, /^intro$/, /^whats-new$/]
@@ -69,16 +70,59 @@ const CONSOLE_ALIASES = {
 
 // The besigner designer lib can't import console constants, so it gets its own
 // generated subset. Keys are the besignerDocsUrl() page ids.
+//
+// EVERY key here must have a real call site (AGL-2130). This list held nine
+// topics and the besigner referenced exactly one of them —
+// `responsiveStyling` — so eight of the nine were a generated, type-checked
+// promise of a help link that no surface in the product could follow. That is
+// the `API_SCOPES` failure in another costume: a declaration nobody enforces
+// reads as a feature, and the only symptom is its absence.
+//
+// So the rule is the one that file states: a topic lands here in the same
+// change that ships the surface linking to it, never ahead of it.
+// `apps/console/specs/besigner-docs-topics.spec.ts` fails when the two drift.
+//
+// Removed here, and each named with its destination in AGL-2167: besigner,
+// dragDropHierarchy, textEditing, reusableComponents, interactions, bindings,
+// screens, seo. Re-add one line at a time, beside its call site.
 const BESIGNER_TOPICS = {
-  besigner: '/building-sites/besigner/overview',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
-  dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
-  textEditing: '/building-sites/besigner/text-editing',
-  reusableComponents: '/building-sites/besigner/reusable-components',
-  interactions: '/building-sites/besigner/interactions-and-custom-html',
+}
+
+// The first-party plugin consoles — Products, POS, Bookings, Emails, Data,
+// Contacts, Inbox, Logic, Marketing, Redirects, Workflows, Events, Marketplace
+// — live in `libs/plugins/*`, which cannot import the console's constants
+// either. Every one of their 55 headered cards shipped with no help affordance
+// at all, and the console's own coverage guard could not see a single one of
+// them because it walks `apps/console` (AGL-2213).
+//
+// Same rule as BESIGNER_TOPICS: a topic lands here in the same change that
+// ships the surface linking to it, never ahead of it.
+// `libs/aglyn/src/lib/app-utils/plugin-card-help.spec.ts` fails when the two
+// drift in either direction.
+const PLUGIN_TOPICS = {
+  actionsBuilder: '/marketing-and-automation/workflows-and-actions/actions-builder',
   bindings: '/building-sites/bindings/overview',
-  screens: '/building-sites/screens-and-layouts/overview',
-  seo: '/building-sites/seo/overview',
+  bookings: '/commerce-and-bookings/bookings/overview',
+  buildAWorkflow: '/marketing-and-automation/workflows-and-actions/build-a-workflow',
+  catalog: '/commerce-and-bookings/commerce/catalog',
+  commerce: '/commerce-and-bookings/commerce/overview',
+  commerceEndToEnd: '/guides/commerce-end-to-end',
+  consoleTour: '/getting-started/console-tour',
+  contacts: '/content-and-data/contacts/overview',
+  datasets: '/content-and-data/datasets/overview',
+  designedEmails: '/marketing-and-automation/email-campaigns/designed-emails',
+  emailCampaigns: '/marketing-and-automation/email-campaigns/overview',
+  events: '/content-and-data/events/overview',
+  forms: '/content-and-data/forms/overview',
+  installYourFirstPlugin: '/guides/install-your-first-plugin',
+  marketingOverlays: '/marketing-and-automation/marketing-overlays/overview',
+  membersOnly: '/workspace-and-billing/teams-and-roles/members-only',
+  plugins: '/developers/plugins/overview',
+  pos: '/commerce-and-bookings/commerce/pos-and-reservations',
+  publisherHandbook: '/developers/plugins/publishing/publisher-handbook',
+  redirects: '/building-sites/redirects/overview',
+  webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
 }
 
 // ── Docs parsing ──────────────────────────────────────────────────────────
@@ -315,6 +359,67 @@ export type BesignerDocsAnchor<K extends BesignerDocsKey> =
 `
 }
 
+function emitPlugins(pages) {
+  const entries = Object.entries(PLUGIN_TOPICS).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )
+  for (const [key, path] of entries) {
+    if (!pages.has(path)) {
+      throw new Error(
+        `PLUGIN_TOPICS.${key} points at ${path}, which no longer exists under apps/docs/docs. Update tools/scripts/generate-docs-help.mjs.`,
+      )
+    }
+  }
+
+  const topics = entries
+    .map(([key, path]) => {
+      const page = pages.get(path)
+      return `  ${key}: {\n    path: ${tsString(path)},\n    title: ${tsString(page.title)},\n    excerpt: ${tsString(page.excerpt)},\n  },`
+    })
+    .join('\n')
+
+  const anchors = entries
+    .filter(([, path]) => pages.get(path).anchors.length > 0)
+    .map(
+      ([key, path]) =>
+        `  ${key}: [${pages.get(path).anchors.map(tsString).join(', ')}],`,
+    )
+    .join('\n')
+
+  return `${LICENSE}
+${GENERATED_NOTE}
+
+// The first-party plugin consoles live in \`libs/plugins/*\` and cannot import
+// the console's constants, so they carry their own generated subset of the
+// docs help registry — the topics their cards actually link to, and no others.
+
+export interface PluginDocsTopic {
+  /** Docs-site path, e.g. \`/commerce-and-bookings/commerce/overview\`. */
+  path: string
+  /** Docs page title. */
+  title: string
+  /** Verbatim docs frontmatter description — the tooltip excerpt. */
+  excerpt: string
+}
+
+export const PLUGIN_DOCS = {
+${topics}
+} as const satisfies Record<string, PluginDocsTopic>
+
+export type PluginDocsKey = keyof typeof PLUGIN_DOCS
+
+export const PLUGIN_DOCS_ANCHORS = {
+${anchors}
+} as const satisfies Partial<Record<PluginDocsKey, readonly \`#\${string}\`[]>>
+
+type PluginAnchorMap = typeof PLUGIN_DOCS_ANCHORS
+
+/** Valid heading anchors for a plugin docs page (\`never\` when none). */
+export type PluginDocsAnchor<K extends PluginDocsKey> =
+  K extends keyof PluginAnchorMap ? PluginAnchorMap[K][number] : never
+`
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 
 const pages = collectDocs()
@@ -322,6 +427,7 @@ const pathToKey = assignKeys(pages)
 const outputs = [
   [CONSOLE_OUT, emitConsole(pages, pathToKey)],
   [BESIGNER_OUT, emitBesigner(pages)],
+  [PLUGIN_OUT, emitPlugins(pages)],
 ]
 
 const check = process.argv.includes('--check')

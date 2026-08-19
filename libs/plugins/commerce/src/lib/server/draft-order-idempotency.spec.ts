@@ -265,7 +265,10 @@ beforeEach(() => {
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
-  docs.set('hosts/host-1', { memberRoles: { 'manager-1': 'manager' } })
+  // `editor`, not `manager` (AGL-2262): `projectHostMemberRoles` can only
+  // ever write `admin | editor | viewer`, and a fixture naming a fourth role
+  // was testing a shape the product cannot produce.
+  docs.set('hosts/host-1', { memberRoles: { 'manager-1': 'editor' } })
   docs.set('hosts/host-1/products/product-1', {
     name: 'Walnut desk',
     type: 'physical',
@@ -434,3 +437,72 @@ describe('the commerce entitlement gates the draft door (AGL-1873)', () => {
     expect(orderDocs()).toHaveLength(1)
   })
 })
+
+/**
+ * AGL-2251, the draft-order half. Same defect as the cart's: the raw
+ * `product.type` went to `resolveTransactionFeePct`, which sends everything
+ * that is not literally `'physical'` — `undefined` included — to the digital
+ * rate. A merchant's payment link therefore took a different cut of the same
+ * product than their own storefront did.
+ */
+describe('a product doc with no type (AGL-2251)', () => {
+  it('is priced as PHYSICAL on the payment link too', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 900, inventory: null }],
+    })
+
+    const result = await post({}, { 'idempotency-key': 'no-type' })
+
+    expect(result.status).toBe(200)
+    // Business physical is 0%, so nothing is sent. The digital rate this used
+    // to take would be 2% of $900 = '1800'.
+    expect(
+      stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+  })
+
+  it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 900, inventory: null }],
+    })
+
+    await post({}, { 'idempotency-key': 'digital' })
+
+    expect(
+      stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1800')
+  })
+})
+
+/**
+ * AGL-2262, the draft-order half. Same denylist, on the route that mints a
+ * LIVE Stripe payment link — a URL that takes real money from whoever opens
+ * it. See the POS spec for the full argument.
+ */
+describe('who may mint a payment link (AGL-2262)', () => {
+  async function postAs(role: unknown) {
+    docs.set('hosts/host-1', { memberRoles: { 'manager-1': role } })
+    return post({}, { 'idempotency-key': `role-${String(role)}` })
+  }
+
+  it('refuses a role the projection could never have written', async () => {
+    for (const role of ['manager', 'contributor', 'billing', '']) {
+      const result = await postAs(role)
+      expect(result.status).toBe(403)
+    }
+    // No link was minted for any of them.
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: admin and editor still mint one', async () => {
+    expect((await postAs('admin')).status).toBe(200)
+    expect((await postAs('editor')).status).toBe(200)
+    expect(stripeCalls).toHaveLength(2)
+  })
+})
+

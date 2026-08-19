@@ -77,6 +77,14 @@ export function adminNavTabItems() {
       label: 'Abuse reports',
       href: buildRoute(Route.ADMIN_ABUSE_REPORTS),
     },
+    // Beside the abuse queue, because it is the same job on a different
+    // surface: someone outside the company saying something is wrong
+    // (AGL-2310).
+    {
+      id: 'nav-tab-admin-marketplace-reports',
+      label: 'Marketplace reports',
+      href: buildRoute(Route.ADMIN_MARKETPLACE_REPORTS),
+    },
     {
       id: 'nav-tab-admin-lockdown',
       label: 'Lockdown',
@@ -91,6 +99,11 @@ export function adminNavTabItems() {
       id: 'nav-tab-admin-health',
       label: 'Health',
       href: buildRoute(Route.ADMIN_HEALTH),
+    },
+    {
+      id: 'nav-tab-admin-assist-signals',
+      label: 'Assist signal',
+      href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
     },
     {
       id: 'nav-tab-admin-tax-return',

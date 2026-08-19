@@ -36,6 +36,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import useBranding from '../hooks/use-branding'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import PasswordAdminControls from './password-admin-controls.component'
@@ -98,6 +99,8 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const logActivity = useHostActivityLogger(hostId)
   const [busy, setBusy] = useState(false)
 
@@ -287,7 +290,7 @@ export function SiteMemberDrawer(props: SiteMemberDrawerProps) {
             description={
               'For a member locked out of their account on this site. This ' +
               'is their site sign-in only — it has nothing to do with any ' +
-              'Aglyn console account they may also have.'
+              `${branding.productName} console account they may also have.`
             }
             onSendReset={async () => {
               await passwordRequest({ action: 'sendPasswordReset' })

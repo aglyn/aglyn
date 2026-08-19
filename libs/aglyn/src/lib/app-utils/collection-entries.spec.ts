@@ -19,6 +19,7 @@ import type { CollectionEntriesSource } from './collection-entries'
 import {
   COLLECTION_ALL_PILL_DEFAULT,
   COLLECTION_ALL_PILL_NONE,
+  COLLECTION_ENTRIES_MAX,
   COLLECTION_ENTRY_DATE_FORMAT_DEFAULT,
   COLLECTION_ENTRY_DATE_FORMAT_OPTIONS,
   buildCollectionCategoryLinks,
@@ -949,6 +950,111 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
     expect(expanded['list'].props).toBe(nodes['list'].props)
     expect('searchIndex' in expanded['list'].props).toBe(false)
+    expect('searchTotal' in expanded['list'].props).toBe(false)
+  })
+
+  // ── searchTotal: the size of the set the window came FROM (AGL-1516) ──
+  //
+  // The component cannot tell a truncated block from a complete one on its
+  // own. It used to guess from `perPage`, which is wrong under both of the
+  // other two truncations below — and wrong in the other direction when
+  // `perPage` exceeds the entry count. Each case here pins one of those, so
+  // stamping the total for only one truncation path stays red.
+
+  it('stamps the PRE-window total, not the count it rendered', () => {
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: 5 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.perPage = 2
+    nodes['list'].props.page = 2
+    const expanded = expandCollectionEntries(nodes, { blog: many }, 'blog')
+    expect(expanded['list'].props.searchIndex).toHaveLength(2)
+    expect(expanded['list'].props.searchTotal).toBe(5)
+  })
+
+  it('stamps a total larger than the index under entriesLimit ALONE', () => {
+    // No `perPage` anywhere — the exact block ("latest 6 posts") whose miss
+    // used to read as a flat "No matches", because `perPage` was the only
+    // truncation the component could see.
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: 40 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.entriesLimit = 6
+    const expanded = expandCollectionEntries(nodes, { blog: many }, 'blog')
+    expect(expanded['list'].props.perPage).toBeUndefined()
+    expect(expanded['list'].props.searchIndex).toHaveLength(6)
+    expect(expanded['list'].props.searchTotal).toBe(40)
+  })
+
+  it('stamps a total larger than the index under the 100-entry CAP', () => {
+    // Neither `perPage` nor `entriesLimit` is set: COLLECTION_ENTRIES_MAX is
+    // the only thing doing the cutting, and nothing on the props records it.
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: COLLECTION_ENTRIES_MAX + 12 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    const expanded = expandCollectionEntries(nodes, { blog: many }, 'blog')
+    expect(expanded['list'].props.searchIndex).toHaveLength(
+      COLLECTION_ENTRIES_MAX,
+    )
+    expect(expanded['list'].props.searchTotal).toBe(COLLECTION_ENTRIES_MAX + 12)
+  })
+
+  it('stamps an EQUAL total when the block holds everything', () => {
+    // A `perPage` bigger than the collection is one complete page. If this
+    // stamped the window size unconditionally the component could never tell
+    // complete from truncated, and every miss would blame pages that do not
+    // exist.
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.perPage = 20
+    const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
+    // Widened locally: `props` is an index signature, so `searchIndex` reads
+    // as `unknown` and `.length` does not typecheck on it. Every other
+    // assertion in this file reaches the array through a matcher, which
+    // accepts `unknown`; this one compares two numbers and cannot.
+    const searchIndex = expanded['list'].props.searchIndex as unknown[]
+    expect(expanded['list'].props.searchTotal).toBe(searchIndex.length)
+  })
+
+  it('counts the FILTERED set, not the whole collection', () => {
+    // "The rest of the collection is not searched" means the rest of what
+    // this block would otherwise show. A category-filtered block that holds
+    // every post in its category is complete, however large the collection.
+    const tagged = {
+      slug: 'blog',
+      entries: [
+        { title: 'A', slug: 'a', category: 'News' },
+        { title: 'B', slug: 'b', category: 'Guides' },
+        { title: 'C', slug: 'c', category: 'News' },
+      ],
+    }
+    const nodes = baseNodes()
+    nodes['list'].props.search = true
+    nodes['list'].props.filterCategory = 'guides'
+    const expanded = expandCollectionEntries(nodes, { blog: tagged }, 'blog')
+    expect(expanded['list'].props.searchIndex).toHaveLength(1)
+    expect(expanded['list'].props.searchTotal).toBe(1)
   })
 
   it('stamps a searchIndex aligned with the rendered entries', () => {

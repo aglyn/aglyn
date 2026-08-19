@@ -23,5 +23,6 @@ export * from './dnd-manager'
 export * from './focus-manager'
 export * from './node-move'
 export * from './pick-manager'
+export * from './text-entry'
 
 export const dnd = new DndManager()

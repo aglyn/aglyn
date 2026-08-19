@@ -36,6 +36,7 @@ import {
   useHostResourceApi,
   useOrgPlan,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface RegistersCardProps {
   hostId: string
@@ -212,7 +213,12 @@ export function RegistersCard(props: RegistersCardProps) {
     locations.find((location: any) => location.$id === id)?.name
 
   return (
-    <CardDisplay header={'POS registers'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'POS registers'}
+      help={pluginDocsHelp('pos', { anchor: '#registers' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {registers.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

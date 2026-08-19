@@ -672,3 +672,156 @@ describe('per-side borders (AGL-1199)', () => {
     expect(isSchemeScopedStyleField('borderColor')).toBe(true)
   })
 })
+
+/**
+ * The panel's alias seam (AGL-2207).
+ *
+ * A stored `bgcolor`/`py`/`p` renders — MUI resolves its system-prop
+ * aliases — but the panel's fields are named for the CSS longhands, so
+ * before this the value reached no control at all: the Background Color
+ * field and the Padding box read EMPTY on a node that demonstrably has
+ * the value, and clearing the field deleted a key that was never the one
+ * painting, so the value came straight back.
+ *
+ * These drive the same two functions the panel drives — the read seam
+ * that feeds every control, and the write seam every control applies
+ * through — with the exact sx the stock presets ship.
+ */
+describe('stored alias spellings reach the panel (AGL-2207)', () => {
+  /** The Box preset, verbatim (`libs/plugins/mui/.../box.tsx`, pre-fix). */
+  const BOX_PRESET_SX = {
+    p: 2,
+    border: '1px solid',
+    borderColor: 'divider',
+    borderRadius: 1,
+  }
+  /** The Announcement Bar block, verbatim (`.../blocks.tsx`, pre-fix). */
+  const ANNOUNCEMENT_SX = {
+    py: 1,
+    px: 2,
+    alignItems: 'center',
+    bgcolor: 'primary.main',
+    color: 'primary.contrastText',
+  }
+
+  describe('read seam — computeEffectiveStyleValues', () => {
+    it("shows a preset's p as the four padding sides BoxStyler reads", () => {
+      const values = computeEffectiveStyleValues(BOX_PRESET_SX, null, null)
+      expect(values['paddingTop']).toBe(2)
+      expect(values['paddingRight']).toBe(2)
+      expect(values['paddingBottom']).toBe(2)
+      expect(values['paddingLeft']).toBe(2)
+      // Untouched keys still read as themselves.
+      expect(values['borderColor']).toBe('divider')
+    })
+
+    it('shows bgcolor in the Background Color field', () => {
+      const values = computeEffectiveStyleValues(ANNOUNCEMENT_SX, null, null)
+      expect(values['backgroundColor']).toBe('primary.main')
+      expect(values['paddingTop']).toBe(1)
+      expect(values['paddingLeft']).toBe(2)
+    })
+
+    it('resolves an alias stored per breakpoint', () => {
+      const sx = { py: { xs: 2, md: 6 } }
+      expect(computeEffectiveStyleValues(sx, 'md', null)['paddingTop']).toBe(6)
+      expect(computeEffectiveStyleValues(sx, null, null)['paddingBottom']).toBe(
+        2,
+      )
+    })
+
+    it('resolves an alias stored in the dark scheme slice', () => {
+      const sx = {
+        backgroundColor: '#fff',
+        [SX_SCHEME_DARK_KEY]: { bgcolor: '#101828' },
+      }
+      expect(
+        computeEffectiveStyleValues(sx, null, 'dark')['backgroundColor'],
+      ).toBe('#101828')
+      expect(
+        computeEffectiveStyleValues(sx, null, null)['backgroundColor'],
+      ).toBe('#fff')
+    })
+  })
+
+  describe('write seam — applyStylePartialToSx', () => {
+    it('CLEARS a colour the document stored as bgcolor', () => {
+      // The half that was impossible: deleting `backgroundColor` left
+      // `bgcolor` painting, so no click in the product removed a preset's
+      // accent band.
+      const next = applyStylePartialToSx(
+        ANNOUNCEMENT_SX,
+        { backgroundColor: '' },
+        null,
+        null,
+      )
+      expect(next['bgcolor']).toBeUndefined()
+      expect(next['backgroundColor']).toBeUndefined()
+      // Everything the author did not touch survives, alias included.
+      expect(next['py']).toBe(1)
+      expect(next['color']).toBe('primary.contrastText')
+    })
+
+    it('CLEARS one padding side stored under py, keeping the other', () => {
+      const next = applyStylePartialToSx(
+        ANNOUNCEMENT_SX,
+        { paddingTop: '' },
+        null,
+        null,
+      )
+      expect(next['py']).toBeUndefined()
+      expect(next['paddingTop']).toBeUndefined()
+      // The bottom edge `py` also painted is pinned, not lost.
+      expect(next['paddingBottom']).toBe(1)
+      // `px` was not part of this edit and is left exactly as stored.
+      expect(next['px']).toBe(2)
+    })
+
+    it('does not rewrite an alias the edit never collides with', () => {
+      const next = applyStylePartialToSx(
+        ANNOUNCEMENT_SX,
+        { color: 'text.primary' },
+        null,
+        null,
+      )
+      expect(next['py']).toBe(1)
+      expect(next['px']).toBe(2)
+      expect(next['bgcolor']).toBe('primary.main')
+    })
+
+    it('replaces rather than stacks when a value is set', () => {
+      const next = applyStylePartialToSx(
+        ANNOUNCEMENT_SX,
+        { backgroundColor: '#0b4a6f' },
+        null,
+        null,
+      )
+      expect(next['bgcolor']).toBeUndefined()
+      expect(next['backgroundColor']).toBe('#0b4a6f')
+    })
+
+    it('clears an alias stored in the dark slice while previewing dark', () => {
+      const sx = { [SX_SCHEME_DARK_KEY]: { bgcolor: '#101828' } }
+      const next = applyStylePartialToSx(
+        sx,
+        { backgroundColor: '' },
+        null,
+        'dark',
+      )
+      expect(next[SX_SCHEME_DARK_KEY]).toBeUndefined()
+    })
+
+    it('leaves a multi-side shorthand VALUE alone', () => {
+      // `p: '10px 20px'` has no per-side longhand. Refusing it keeps a
+      // value that renders rather than writing one CSS drops.
+      const next = applyStylePartialToSx(
+        { p: '10px 20px' },
+        { paddingTop: '4px' },
+        null,
+        null,
+      )
+      expect(next['p']).toBe('10px 20px')
+      expect(next['paddingTop']).toBe('4px')
+    })
+  })
+})

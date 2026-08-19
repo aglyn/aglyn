@@ -123,6 +123,29 @@ export async function resolveMarketplacePluginVersion(
   if (listing.get('hiddenAt')) return null
   const data = snapshot.data()
   if (!data?.sha256) return null
+  // THE KILL SWITCH BELONGS AT THE CHOKEPOINT (AGL-2307).
+  //
+  // It used to live one level up, in `resolveRealmPluginInstalls` — which is
+  // the path the tenant render and the console gate take, and NOT the path
+  // remote SERVER bundles take. `loadRemoteServerBundles` resolves through
+  // this function and nothing else, so a per-version revocation left a realm
+  // server handler running: `hiddenAt` caught a full takedown, but a targeted
+  // revocation deliberately does not hide the listing, which is the whole
+  // difference between the two controls.
+  //
+  // Placed here rather than added as a second copy at the server loader, for
+  // the reason this file's own comment gives about `hiddenAt`: this is the
+  // one function every realm consumer funnels through, and a control that has
+  // to be remembered per consumer is one that will be missed by the next one.
+  const revocation = (
+    await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('revocations')
+      .doc(listingId)
+      .get()
+  ).data() as PluginRevocation | undefined
+  if (isPluginRevoked(revocation, version)) return null
   const hostAbi = Number(data.manifest?.hostAbi)
   return {
     sha256: String(data.sha256),
@@ -217,16 +240,11 @@ async function resolveRealmPluginInstalls(options: {
         pin.listingId,
         pin.version,
       )
+      // The revocation check moved INTO `resolveMarketplacePluginVersion`
+      // (AGL-2307) so the remote-server loader — which resolves through that
+      // function and never reaches this join — gets it too. A `null` here
+      // therefore already means "taken down, unknown, or killed".
       if (!pinned || pinned.trust !== 'realm' || !pinned.signature) return null
-      const revocation = (
-        await firestore.collection('revocations').doc(pin.listingId).get()
-      ).data() as PluginRevocation | undefined
-      // Through the shared predicate (AGL-1085) rather than a fourth inline
-      // copy: a reader that disagreed with the others about this doc's shape
-      // is how a kill switch stops killing in exactly one place.
-      if (isPluginRevoked(revocation, pin.version)) {
-        return null
-      }
       return {
         listingId: pin.listingId,
         version: pin.version,

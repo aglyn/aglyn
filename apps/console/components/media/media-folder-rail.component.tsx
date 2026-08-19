@@ -31,6 +31,7 @@ import {
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { type MouseEvent, useCallback, useState } from 'react'
@@ -107,15 +108,25 @@ function FolderRow(props: {
         {count || ''}
       </Typography>
       {readOnly ? null : (
-        <IconButton
-          size="small"
-          onClick={(event) => {
-            event.stopPropagation()
-            onMenu(event, folder)
-          }}
-        >
-          <MoreVertIcon fontSize="inherit" />
-        </IconButton>
+        // Named as well as tipped (AGL-2128). This was the console's one
+        // icon-only button with NO accessible name at all — no tooltip, no
+        // `aria-label`, no visually-hidden text — so in a rail of several
+        // folders a screen reader announced a row of identical "button"s
+        // with nothing to tell them apart. The folder name is in the label
+        // for that reason, and stays out of the tooltip, where the row
+        // already shows it.
+        <Tooltip title="Folder actions">
+          <IconButton
+            size="small"
+            aria-label={`Actions for ${folder.name}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onMenu(event, folder)
+            }}
+          >
+            <MoreVertIcon fontSize="inherit" />
+          </IconButton>
+        </Tooltip>
       )}
     </Stack>
   )

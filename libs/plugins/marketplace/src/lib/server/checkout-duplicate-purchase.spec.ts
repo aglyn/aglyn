@@ -150,6 +150,13 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkEntitlement: entitlements.checkEntitlement,
     resolveMarketplaceFeePct: entitlements.resolveMarketplaceFeePct,
     claimAttempt: idempotency.claimAttempt,
+    // The REAL kill-switch predicate (AGL-2288), for the same reason the fee
+    // logic above is real: checkout must agree with what `install-plugin` and
+    // the loaders mean by a listing-wide revocation, and a stub here would be
+    // this file agreeing with itself.
+    isListingWideRevocation: jest.requireActual(
+      '@aglyn/aglyn/app-utils/plugin-manifest',
+    ).isListingWideRevocation,
   }
 })
 

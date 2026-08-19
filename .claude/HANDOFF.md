@@ -1,99 +1,144 @@
-# HANDOFF — 2026-08-18 late evening. **PROMOTED, DEPLOYED, TAGGED. CI GREEN.**
+# HANDOFF — 2026-08-19. **`main` is 289 ahead of production and NOT yet promoted.**
 
 ## State
 
-- `production` = **`aed088401`**, tagged **`v1.0.0-beta.1`** (the repo's first release tag).
-- 96 commits promoted, 67 Linear issues. All three Vercel projects **Ready**.
-- Firestore rules **deployed from the promoted tree and verified** — `check:rules-drift` clean on
-  all three surfaces, `check:index-drift` clean (44 composites, 23 field overrides).
-- **CI green on `main`**: Tools guards ✅, Emulator guards ✅.
-- Branches: only `main` and `production`. **All 12 `rescue/*` branches merged and deleted.**
-- Worktrees: only the shared checkout and `/private/tmp/aglyn-gate/wt`. 27 stale ones removed.
+- `production` = **`4773992d6`**, tag `v1.0.0-beta.2`. Unchanged today.
+- `main` = **289 commits ahead**, ~200 Linear issues. Nothing promoted this session.
+- Feature freeze **Aug 25**, launch **Sept 1**.
 
-## The lesson this promotion paid for — READ BEFORE THE NEXT GATE
+## The promotion blocker is CLEARED — and it was an absence, not a red
 
-**The nx gate is NOT the whole verification surface.** `nx run-many -t build/test/lint --all` was
-green while CI was red, both honestly:
+`console:test` **could not produce a verdict** for weeks. One spec hung forever
+(`site-member-reversal-label.spec.tsx`): a `jest.mock` returning
+`useFirestore: () => ({})` — a **new object per call** — against a hook whose
+effect deps include it. Render → effect → setState → new `{}` → forever. An
+infinite **microtask** loop, so jest's real-timer `testTimeout` can never fire
+(150s elapsed against a 30s timeout). The AGL-2105 shape, second occurrence.
 
-- `cloud/rules-tests/` has **no `project.json`**, so it is not an nx project and no jest `rootDir`
-  covers it. Its only runner is `npm run test:rules` (emulators + JVM).
-- `tools/` guard scripts run from `tools-guards.yml`, not from nx.
+Fixed (`947100c2c`). **Two independent agents then measured the same number** at
+`96fe2d2a6`, clean pinned worktree, quiet machine:
 
-**Any future gate must also run `npm run test:rules` and the `tools-guards.yml` scripts, or state
-plainly that it did not.** Two real defects reached production-adjacent `main` this way (AGL-2116,
-AGL-2138).
+```
+Test Suites: 3 skipped, 437 passed, 437 of 440
+Tests:       10 skipped, 4809 passed, 4819 total   JEST_EXIT=0
+```
 
-Also: **a clean git merge is not a correct one.** AGL-2038's new test referenced a constant AGL-2002
-had replaced. The two edits did not overlap, so git merged them silently and the file was broken.
+That spec's commit is **already on `production`**, so the gate that cut
+`v1.0.0-beta.2` did not read `console:test` either.
 
-## Merging the parked rescue branches — what it cost, and why it was right
+## ⚑ The gate had FOUR blind spots. All were "a check exists and nobody reads it"
 
-Zach: *"why do we even have rescue branches with unmerged work, why is it not merged already."*
-Correct. 16 commits were cherry-picked; 4 needed manual conflict resolution. It then broke **8
-things** — 6 caught by the nx gate (AGL-2106), 2 only by CI (AGL-2116, AGL-2138).
+1. **`console:test` never finished** (above).
+2. **`console:lint` was red at 441 errors across 364 files** — invisible because nx's
+   summary is truncated and prints no error text. Always count from
+   `npx eslint --format json`. Cause: one `require('@aglyn/…')` inside a
+   `jest.mock` factory marks the library lazy-loaded and reddens every static
+   import of it. **4th occurrence** — now guarded by `aglyn/no-dynamic-first-party-import`.
+3. **`npm run typecheck` was never run** by the gate that cut the tag — a typecheck
+   error is red at `origin/production` itself.
+4. **`apps/docs` runs its OWN `tsc`** and is not covered by `npm run typecheck`. Its
+   config was invalid since 2026-07-24 (an nx migration wrote
+   `ignoreDeprecations: "6.0"` into an app pinned to TS 5.6.3), so it type-checked
+   **nothing for four weeks** — and hid a real error (AGL-2363).
 
-Every one was the same shape: **a branch authored in an isolated worktree against a `main` that had
-moved.** The sharpest was AGL-1993's `staff-claim-pool.spec.ts`, which **asserted the bug as a
-passing test** — it deliberately pinned "project pool wins, so an emailless shadow takes the staff
-grant" so a change in ordering would surface, and AGL-2005 then fixed that ordering. Both branches
-were individually right and jointly contradictory.
+⛔ **A cleared nx graph cache is a FALSE GREEN**: `@nx/enforce-module-boundaries`
+prints *"No cached ProjectGraph is available. The rule will be skipped"* as a
+**warning** and reports zero errors. Regenerate the graph and assert that warning
+is ABSENT.
 
-⚠️ **Do not let work sit on a side branch again.** Two chains were reachable from **no ref at all**
-and were one `/private/tmp` cleanup from being lost.
+**Checks that exist and NOTHING runs** (AGL-2379/2376/2377): `check:legal-drift`
+(**currently RED — 9 of 11 legal documents differ from their masters**),
+`check:provider-key-exposure` (a security control), 17 backfill tests, and **five
+`cloud/*.spec.mjs` rules specs with zero references repo-wide — one edited the day
+before**. Five libs are **red by construction** (`test` target, no test files,
+`passWithNoTests` set nowhere).
 
-## Verification lore added today
+**CI answers ~1 commit in 8** (AGL-2378): 26 cancelled / 4 success for Tools guards
+in one hour. `nx-ci.yml` had **no `timeout-minutes`** — the only workflow without
+one — so the hang burned GitHub's 6-hour default and later pushes queued behind it.
+**A green CI history is not evidence `main` was ever green.**
 
-- **A hung suite is worse than a red one.** AGL-2105: a spec looped through passive effects and
-  microtasks, which **starves jest's real-timer `testTimeout`**, so it never failed — it produced no
-  verdict, and "no result" read as "not red". `console:test` could not COMPLETE, so every console
-  guard in the batch was unverified. Consider a jest-level guard that treats a missing summary as a
-  failure.
-- **A wholesale `jest.mock` is a CLOSED WORLD.** Any export the component/route tree reaches must be
-  present. Four instances today: a `TypeError` (AGL-2103), a bogus 403 and a 500 (AGL-2106), and an
-  infinite render loop (AGL-2105). A mock returning `() => ({})` — a NEW object per call — where the
-  real hook returns a stable singleton manufactures a render loop the product cannot have.
-- **Enumerate from `git ls-files`, never a filesystem walk.** AGL-2116: the colour ratchet swept
-  untracked build output, so 21 files "gained" a colour for anyone who had built the docs and zero
-  for anyone who had not, off the same commit. It measured machine state, not the repo.
-- **`git branch --contains <sha>` answers "is this object reachable", NOT "did this work land".**
-  After a cherry-pick those diverge. I wrongly declared AGL-1886 and AGL-2002 stranded on that basis;
-  both were already on `main` under different SHAs. Check with `--grep` against
-  `origin/production..origin/main`, and compare with `git patch-id --stable`.
-- **Confirm every Linear id with `get_issue` BEFORE citing it.** Commit `3ff15f168` cites AGL-2109,
-  which by then belonged to an unrelated marketplace-refund defect an agent had just filed. Correct
-  record: AGL-2116. Ids move fast when agents run in parallel — predict nothing.
+## ⚑ FIVE shared-checkout hazards, all found today
 
-## Zach's standing directives added today
+The checkout is shared by ~10 concurrent agents. Every one of these caused real damage:
 
-- **A PR body must enumerate the FULL contents of the batch** — generate the manifest from
-  `git log`, group by conventional-commit type, keep every `(AGL-xxxx)`, state commit AND issue
-  counts. Highlights never replace the full list. (Memory: `feedback_pr_body_must_list_full_contents`.)
-- **Keep the pipeline fed** — spawn agents continuously as others finish; file AND fix together.
+1. **`git commit --only` does NOT exclude paths staged as ADDITIONS**, and this
+   environment **auto-stages new files**. A commit naming 5 paths committed 7.
+2. **`git commit --amend` takes the shared index** — an amend run only to fix a
+   commit message dropped its own files and swept in five other agents', two as
+   deletions.
+3. **`git stash` is PER-REPOSITORY, not per-worktree** — a stash from a worktree
+   landed on a stack holding five other sessions' entries.
+4. **Blanket find-and-replace** rewrote other agents' committed `AGL-` citations to
+   unrelated issues — invisible to tests, lint and typecheck, permanent once committed.
+5. **`git checkout --`** on a file the agent had not authored reverted another
+   agent's work out from under them.
 
-## Blocked on Zach
+**The recipe:**
+```bash
+GIT_INDEX_FILE=$(mktemp) sh -c 'git read-tree HEAD; git add -- <paths>; git commit -m "..."'
+git diff --quiet HEAD -- <paths> && git add -- <paths>   # else they show as staged reverts
+```
 
-- **GA4 reports.** The Claude-in-Chrome bridge will not connect: `list_connected_browsers` returns
-  `[]` across 7 attempts and two relinks, which means **no extension instance is signed into the same
-  Anthropic account as the Claude Code session** — an account mismatch, not an install problem.
-  The full click-level build spec is on **AGL-1637** and is ready to execute in one pass.
-  ⚠️ Do NOT set the internal-traffic filter Active until both directions are verified via
-  `Test data filter name` — an Active filter permanently discards matching data.
-  ⚠️ Do NOT pick a Reports-snapshot template; a snapshot already exists behind that chooser.
-- **4 open DOMPurify Dependabot alerts.** Deliberately unpatched — no released `monaco-editor`
-  vendors a newer DOMPurify, and the vendored copy is never imported (call-site evidence on
-  AGL-2051). Decision owed: leave open as a standing prompt, or dismiss as `not_used`.
+## ⚑ Measure in a PINNED WORKTREE, never the shared checkout
 
-## Open agent branches — merge after re-gating
+The tree carries ~30 other agents' uncommitted files, so any number from it is a
+**superset**. I read `134/138` typecheck locally and `origin/main` was **clean** —
+the break was an agent's work-in-progress.
 
-`agl/dependabot` (AGL-2107 brace-expansion, AGL-2108 lockfile drift), `agl/capability-surface`
-(AGL-2113/2115/2119), plus money-path, retention, parity, docs-api, selfhost and stripe-staff
-branches as they land. **All were branched off an older `main` — re-gate before promoting**, and
-expect the same authored-against-a-moved-main breakages.
+**Load discipline:** four **orphaned** jest workers (ppid 1, ~3.5 GB each, one at
+107% CPU for 1h39m) drove the box to **load 190** and manufactured SIGTERM
+"failures". Three agents retracted failure counts over this. Killing them dropped
+load to 21. Check `ps -eo pid,ppid,args | grep jest | awk '$2==1'` before and after
+any run, and check `uptime` before calling anything a flake.
 
-## Still open
+## The root cause behind most of today's backlog
 
-- **AGL-2085** — capability sweep recorded 123 routes; a re-derivation counted **130** and could not
-  account for 7. A count that does not reconcile means the next sweep re-derives rather than trusts.
-- **AGL-2131** — `staffRole` **fails open to `super`** in two places while failing closed everywhere
-  else. Decide what `support` means before building the UI.
-- AGL-2013, AGL-2033 bookkeeping; `awaiting-decision` queue is Zach's.
+> **Three separate correct changes were each verified against a scope their author
+> chose, and each pushed `main` red.**
+
+AGL-2319 ran 16 console suites of 287 and broke 6 it did not run. AGL-2346 added its
+`after()` double to 8 webhook suites and missed 2 driving the same handler. AGL-2357
+ran all of commerce and typecheck — but not `console:test`. None was a bad change.
+
+## What a promotion will NOT ship — these deploy separately
+
+- **Firestore rules** (AGL-2380) — includes the **`staffRole` fail-open → fail-closed
+  fix**, committed and NOT live, plus order-field write denial (AGL-2237/2269).
+  Until deployed, every order's `refundedCents` stays client-writable — and that is
+  the cap the refund path reads.
+- **Firestore indexes** — AGL-2367, AGL-2159.
+- **Docker images** (AGL-2221), the **plugin-loader service** (AGL-2196), **edge
+  middleware + CSP** (AGL-2217/2198).
+
+## Decisions Zach delegated, and what was decided
+
+- Bookings fee → **mirror the storefront ladder** (built via the existing `'service'`
+  product type, no new rate constant).
+- Subscription fee basis → **items-only** (built as an application-fee refund on
+  `invoice.paid`; names no rate, so it structurally cannot become a pricing change).
+- POS stock → **warn, never block**.
+- Legal version → **already existed** as `LEGAL_DOCUMENT_VERSION` (`v6`); nothing invented.
+- Marketing column width → **keep the product as-is**. `xl` renders 1392 at a 1440
+  canvas and 1488 at 1920 — the design frames **to the pixel**. The "1280 content
+  column" in `tools/marketing/*` was a **fiction**; corrected.
+
+## Still owed by Zach
+
+Rules + index deploys · `gh auth refresh -h github.com -s security_events` (the four
+DOMPurify dismissals carry a **false** stated reason) · GA4 env vars
+(`GA4_MEASUREMENT_ID` unset, four server events post into the void) · AGL-2333
+(agency templates) · AGL-2373 (retro fee refund) · AGL-2331 (marketplace purchase
+entitles a **person**, not the org — needs a §8.1 legal call).
+
+## Money-path findings worth remembering
+
+- **A partial refund reversed nothing** — a $50 concession on a $100 marketplace sale
+  left Aglyn $30 down and the publisher untouched (AGL-2299).
+- **Paid bookings never paid the merchant** — no Connect wiring at all (AGL-2315).
+  Audited live: **$0 owed, zero rows** — but only because no booking has ever been
+  taken. The pre-fix path is still what production serves.
+- **Six of seven marketplace publish routes never asked for the publisher agreement.**
+- **Screens cap:** the 8-of-5 alert Zach received is a **plan downgrade**, not a bug —
+  and truthful. But two real laundering paths were found and fixed (AGL-2231, AGL-2369),
+  and **both are unpromoted**, so production still has them open.

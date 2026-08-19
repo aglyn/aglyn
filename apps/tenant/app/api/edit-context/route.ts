@@ -19,11 +19,13 @@ import {
   buildRoute,
   checkEntitlement,
   findScreenIdByRoutePath,
+  hostCollectionKind,
   parseCollectionRoute,
   resolveHostEnabledPlugins,
   resolveMediaSrc,
   Route,
   SCREEN_ROOT_PATH,
+  TENANT_APEX,
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
@@ -109,7 +111,11 @@ export async function POST(request: Request): Promise<Response> {
       .toLowerCase()
     const isProductionAlias =
       hostname === hostDoc.cname ||
-      (hostDoc.subdomain && hostname === `${hostDoc.subdomain}.aglyn.app`)
+      // AGL-2121: the configured apex, not our literal. On a self-host
+      // install NODE_ENV is 'production' so the carve-out below is false, and
+      // a pinned `aglyn.app` made this 403 'Wrong site' for every in-place
+      // edit on every operator's deployment.
+      (hostDoc.subdomain && hostname === `${hostDoc.subdomain}.${TENANT_APEX}`)
     const isDevOrPreview =
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||
@@ -137,6 +143,15 @@ export async function POST(request: Request): Promise<Response> {
     // editor-only), then the same template-screen fields the compose
     // pipeline picks (`compose-collection-page.ts`). Best-effort — a
     // failure here just leaves the honest miss the bar showed before.
+    //
+    // "The same way the loader does" is load-bearing and was not true:
+    // a bare `limit(1)` here is the AGL-954 bug `findContentCollection`
+    // (`get-collection-content.ts`) exists to prevent. Commerce catalog
+    // collections share `hosts/{hostId}/collections` and a slug is only
+    // unique WITHIN a kind, so a catalog doc could be returned for a blog
+    // URL and the bar would name the wrong collection and deep-link "Edit
+    // this page" at the wrong template screen. Same window, same
+    // content-kind filter as the loader (AGL-1845).
     let collectionName: string | undefined
     let collectionEntry = false
     if (!screenId && normalized !== SCREEN_ROOT_PATH) {
@@ -148,15 +163,16 @@ export async function POST(request: Request): Promise<Response> {
             .doc(claims.hostId)
             .collection('collections')
             .where('slug', '==', collectionRoute.collectionSlug)
-            .limit(1)
+            .limit(5)
             .get()
-          const collectionDoc = collectionQuery.docs[0]
+          const collectionDoc = collectionQuery.docs.find(
+            (docSnapshot) =>
+              hostCollectionKind(docSnapshot.data()) === 'content',
+          )
           if (collectionDoc) {
             const templateScreenId = collectionRoute.entrySlug
               ? ((collectionDoc.get('entryScreenId') ||
-                  collectionDoc.get('templateScreenId')) as
-                  | string
-                  | undefined)
+                  collectionDoc.get('templateScreenId')) as string | undefined)
               : // A list template is published AT the collection root
                 // (AGL-1387), so prefer the routed screen there; the
                 // stored pointer is the fallback.
@@ -400,6 +416,9 @@ export async function POST(request: Request): Promise<Response> {
     )
   } catch (error) {
     console.error(error)
-    return Response.json({ error: 'Could not resolve context' }, { status: 500 })
+    return Response.json(
+      { error: 'Could not resolve context' },
+      { status: 500 },
+    )
   }
 }

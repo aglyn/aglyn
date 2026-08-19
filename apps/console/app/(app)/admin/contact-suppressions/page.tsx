@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { operatorContactLine } from '@aglyn/aglyn/app-utils/operator-identity'
 import { mdiPhoneOff } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -37,6 +38,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { docsHelp } from '../../../../constants/docs-links'
 
 interface SuppressionRecord {
   $id: string
@@ -195,7 +197,10 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
           href: buildRoute(Route.ADMIN_CONTACT_SUPPRESSIONS),
         },
       ]}
-      help="staffConsole"
+      help={{
+        topic: 'staffConsole',
+        anchor: '#contact-suppressions',
+      }}
       header={{
         children: 'Do not contact',
         icon: { path: mdiPhoneOff.path },
@@ -212,13 +217,19 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
 
             <CardDisplay
               header="Record a request"
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Record an opt-out we received outside the product, so nothing we ' +
+                  'send reaches that number again.',
+              })}
               contentGutterX
               contentGutterY
             >
               <Stack spacing={1.5}>
                 <Typography variant="body2" color="text.secondary">
                   {
-                    'For an opt-out that arrived by email to privacy@aglyn.com or during a call. Replying STOP to a text is handled automatically once texting exists.'
+                    `For an opt-out that arrived by email to ${operatorContactLine('legal').text} or during a call. Replying STOP to a text is handled automatically once texting exists.`
                   }
                 </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
@@ -309,6 +320,12 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
                   ? `Suppressed numbers · ${active.length}`
                   : 'Suppressed numbers'
               }
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Numbers currently suppressed. A suppression outlives the contact ' +
+                  'record it came from, on purpose.',
+              })}
               contentGutterX
               contentGutterY
             >

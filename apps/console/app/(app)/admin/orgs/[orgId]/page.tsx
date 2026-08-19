@@ -381,6 +381,76 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
    */
   const cogsReady = usageReady && usageMonths !== null
 
+  /**
+   * The org's named success manager (AGL-2332).
+   *
+   * `support-tiers.md` promises Enterprise a named success manager, and the
+   * customer's own ticket page says they are copied on every ticket. Behind
+   * that was `namedManager: true` and nothing else — no field naming anyone,
+   * no way for staff to name them, nothing reading it when a ticket opened.
+   * The mechanism is real now, and this is where a human is appointed. A
+   * capability with no console surface would leave the sentence exactly as
+   * unbacked as it was, with a schema implying otherwise.
+   */
+  const [manager, setManager] = useState<{
+    name: string
+    email: string
+  } | null>(null)
+  /** Whether this org's TIER owes it a manager — distinct from having one. */
+  const [managerPromised, setManagerPromised] = useState(false)
+  const [managerDraft, setManagerDraft] = useState({ name: '', email: '' })
+  const [managerBusy, setManagerBusy] = useState(false)
+  const [managerError, setManagerError] = useState<string | null>(null)
+  const loadManager = useCallback(async () => {
+    const idToken = await (user as any)?.getIdToken?.()
+    const response = await fetch(
+      `/api/admin/org-success-manager?orgId=${encodeURIComponent(orgId)}`,
+      { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+    )
+    if (!response.ok) return
+    const payload = await response.json().catch(() => ({}))
+    setManager(payload.manager ?? null)
+    setManagerPromised(Boolean(payload.promised))
+    setManagerDraft({
+      name: payload.manager?.name ?? '',
+      email: payload.manager?.email ?? '',
+    })
+  }, [user, orgId])
+  useEffect(() => {
+    if (isStaff && orgId && user) void loadManager().catch(() => undefined)
+  }, [isStaff, orgId, user, loadManager])
+  const handleSaveManager = async () => {
+    if (managerBusy) return
+    setManagerBusy(true)
+    setManagerError(null)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/admin/org-success-manager', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId,
+          name: managerDraft.name.trim(),
+          email: managerDraft.email.trim(),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setManagerError(payload?.error ?? 'Could not save')
+        return
+      }
+      await loadManager()
+    } catch (error) {
+      console.error(error)
+      setManagerError('Could not save')
+    } finally {
+      setManagerBusy(false)
+    }
+  }
+
   // Staff notes (wave v5): support context that never reaches workspaces.
   const [notes, setNotes] = useState<
     Array<{
@@ -882,6 +952,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Organization Detail',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
@@ -1926,6 +1997,95 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                             )
                           })
                         )}
+                      </Stack>
+                    </CardDisplay>
+                  ),
+                },
+                {
+                  size: { xs: 12, md: 6 },
+                  children: (
+                    <CardDisplay
+                      header={'Success manager'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'The named human an Enterprise org is promised. Set here by staff; the customer sees their name and they are copied by email on every ticket.',
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <Stack spacing={1.5}>
+                        {/*
+                          AGL-2332. The customer's ticket page names this
+                          person and says they are copied on every ticket, so
+                          the two states have to be told apart here: a tier
+                          that owes a manager with nobody appointed is an
+                          outstanding promise, and staff are the only people
+                          who can close it.
+                        */}
+                        <Typography variant="body2" color="text.secondary">
+                          {managerPromised
+                            ? 'This plan includes a named success manager, ' +
+                              'copied by email on every ticket and reply. ' +
+                              'The customer sees their name.'
+                            : 'This plan does not include a named success ' +
+                              'manager. Setting one still works and still ' +
+                              'copies them, but the customer is not told.'}
+                        </Typography>
+                        {managerPromised && !manager ? (
+                          <Alert severity="warning">
+                            {'Owed a named manager and none is assigned — ' +
+                              'the customer is being told one is on the way.'}
+                          </Alert>
+                        ) : null}
+                        <TextField
+                          size="small"
+                          label="Name"
+                          value={managerDraft.name}
+                          onChange={(event) =>
+                            setManagerDraft((draft) => ({
+                              ...draft,
+                              name: event.target.value,
+                            }))
+                          }
+                        />
+                        <TextField
+                          size="small"
+                          label="Email"
+                          value={managerDraft.email}
+                          helperText={
+                            'Clearing the email un-assigns the manager and ' +
+                            'takes the claim back down.'
+                          }
+                          onChange={(event) =>
+                            setManagerDraft((draft) => ({
+                              ...draft,
+                              email: event.target.value,
+                            }))
+                          }
+                        />
+                        {managerError ? (
+                          <Alert severity="error">{managerError}</Alert>
+                        ) : null}
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center' }}
+                        >
+                          <Button
+                            variant="contained"
+                            size="small"
+                            disabled={managerBusy}
+                            onClick={() => void handleSaveManager()}
+                          >
+                            {'Save'}
+                          </Button>
+                          <Typography variant="caption" color="text.secondary">
+                            {manager
+                              ? `Assigned: ${manager.name} (${manager.email})`
+                              : 'Nobody assigned.'}
+                          </Typography>
+                        </Stack>
                       </Stack>
                     </CardDisplay>
                   ),

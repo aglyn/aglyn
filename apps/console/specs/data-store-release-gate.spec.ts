@@ -70,7 +70,30 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           staff: mockIsStaff,
         }),
       }),
-      firestore: () => ({ collection: () => ({ doc: () => orgRef }) }),
+      firestore: () => ({
+    /**
+     * The route's quota gates now COUNT AND WRITE inside one transaction
+     * (AGL-2371), so a double without this is a closed world and every case here
+     * 500s. Writes are buffered and applied on commit, not on the call: a fake
+     * that wrote immediately would let a refused transaction leave the row
+     * behind, and "the refusal wrote nothing" is exactly what these suites
+     * assert. Serialization is not modelled — that is
+     * `dataset-cap-is-atomic.spec.ts`'s job; this one drives one request at a
+     * time.
+     */
+    runTransaction: async (body: (tx: any) => Promise<any>) => {
+      const buffered: Array<() => Promise<unknown>> = []
+      const result = await body({
+        get: async (target: any) => target.get(),
+        create: (ref: any, payload: unknown) => {
+          buffered.push(() => ref.create(payload))
+        },
+      })
+      for (const write of buffered) await write()
+      return result
+    },
+        collection: () => ({ doc: () => orgRef }),
+      }),
     }),
   },
   emailUnverifiedResponse: () =>

@@ -30,7 +30,6 @@ import EditHintBounce from '../components/edit-hint-bounce.component'
 import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
-import OsfaTooltip from '../components/osfa-tooltip'
 // Dynamic plugin activation (AGL-417): the gate loads + registers the org's
 // enabled plugins (ConsoleExtension registry) before the shell renders —
 // replacing the static register-console-plugins composition root.
@@ -66,7 +65,6 @@ const ThemeStack = withThemeCssVarProvider(
               <ConsolePluginsGate>{children}</ConsolePluginsGate>
             </HostIdProvider>
           </SnackbarProvider>
-          <OsfaTooltip />
         </ConfirmationProviderComponent>
       </LoadingLayoutAppComponent>
     </FirebaseAppLayout>

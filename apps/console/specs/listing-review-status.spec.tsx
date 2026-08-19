@@ -215,6 +215,101 @@ describe('ListingReviewStatus (AGL-1079)', () => {
     expect(screen.queryByText(/no reviewer has approved/)).toBeNull()
   })
 
+  /**
+   * The kill switch, said to the publisher it happened to (AGL-2328).
+   *
+   * Staff cannot revoke a version without typing a reason. The consumer
+   * whose site broke was told it; the publisher who caused it was told
+   * nothing, on the one page that exists to say what state their versions
+   * are in — where a revoked version still read "Approved", because
+   * approval is what `reviewState` records and revocation is not.
+   */
+  describe('a revoked version (AGL-2328)', () => {
+    const REVOKED = {
+      latestVersion: '1.0.2',
+      latestApprovedVersion: '1.0.2',
+      revocationReason: 'Exfiltrates form submissions to an undisclosed endpoint.',
+      revokedAtMs: 1_770_000_000_000,
+      versions: [
+        {
+          ...VERSION,
+          version: '1.0.2',
+          reviewState: 'approved',
+          revoked: true,
+        },
+      ],
+    }
+
+    it('shows the reason staff were required to type', async () => {
+      respondWith(REVOKED)
+      open()
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            /Reason: Exfiltrates form submissions to an undisclosed endpoint\./,
+          ),
+        ).toBeTruthy(),
+      )
+      expect(screen.getByText('Disabled')).toBeTruthy()
+    })
+
+    it('keeps the review verdict beside it, not instead of it', async () => {
+      // A version is approved and THEN revoked. Collapsing the two would
+      // erase a verdict the publisher earned, and would also hide that the
+      // bytes passed review — which is the fact that tells them the problem
+      // is not their submission process.
+      respondWith(REVOKED)
+      open()
+      await waitFor(() => expect(screen.getByText('Disabled')).toBeTruthy())
+      expect(screen.getByText('Approved')).toBeTruthy()
+    })
+
+    it('stops calling it what installs today', async () => {
+      // The headline sentence and the row chip both claimed it. The
+      // installer answers a 409, so this is the sentence a publisher reads
+      // just before opening a ticket about installs that stopped working.
+      respondWith(REVOKED)
+      open()
+      await waitFor(() =>
+        expect(
+          screen.getByText(/v1\.0\.2 was disabled by the platform/),
+        ).toBeTruthy(),
+      )
+      expect(screen.queryByText('Installs today')).toBeNull()
+      expect(
+        screen.queryByText(/v1\.0\.2 is approved and is what installs today/),
+      ).toBeNull()
+    })
+
+    it('does not print an empty quotation when no reason was recorded', async () => {
+      // Revocations written before the reason was required carry none. An
+      // empty "Reason:" reads as "no reason given", which is a different
+      // and worse claim than saying nothing.
+      respondWith({ ...REVOKED, revocationReason: '', revokedAtMs: null })
+      open()
+      await waitFor(() => expect(screen.getByText('Disabled')).toBeTruthy())
+      expect(screen.queryByText(/Reason:/)).toBeNull()
+      expect(screen.queryByText(/Disabled 1[/-]/)).toBeNull()
+      // The fact itself still reaches them — it is the reason that is absent.
+      expect(
+        screen.getByText(/The platform disabled this version/),
+      ).toBeTruthy()
+    })
+
+    it('says nothing about revocation on a healthy listing', async () => {
+      respondWith({
+        latestVersion: '1.0.2',
+        latestApprovedVersion: '1.0.2',
+        versions: [{ ...VERSION, version: '1.0.2', reviewState: 'approved' }],
+      })
+      open()
+      await waitFor(() => expect(screen.getByText('Approved')).toBeTruthy())
+      expect(screen.queryByText('Disabled')).toBeNull()
+      expect(screen.queryByText(/Reason:/)).toBeNull()
+      expect(screen.getByText('Installs today')).toBeTruthy()
+    })
+  })
+
   it('renders nothing for a non-plugin listing', () => {
     respondWith({ versions: [], latestVersion: '', latestApprovedVersion: '' })
     const { container } = render(

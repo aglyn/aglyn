@@ -26,7 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -52,13 +52,44 @@ export interface OrgActivityCardProps {
  * Org-level counterpart to `HostActivityCard` (AGL-118): newest-first feed
  * from `orgs/{orgId}/activity`, populated by the org settings/members/
  * invites API routes.
+ *
+ * ## The window has to be ORDERED, not merely capped (AGL-2292)
+ *
+ * This docblock said "newest-first" while the query was `limit(200)` with no
+ * `orderBy`. Firestore then returns documents in DOCUMENT-ID order, and
+ * `logOrgActivity` creates entries with `.add()`, so the ids are effectively
+ * random — meaning the 200 rows fetched were a pseudo-random SAMPLE of the
+ * collection, not its newest page. The client sort below then dutifully
+ * ordered that sample by `createdAt` and sliced 20 off the top, which made the
+ * result look right and be wrong: past 200 entries, a change made a minute ago
+ * could simply never appear.
+ *
+ * It degrades exactly as an org grows into needing it, and this card is the
+ * ONLY audit surface a customer admin has — it is also what the member-detail
+ * page filters by `actorId` to answer "what has this person done", a question
+ * a random sample cannot answer at all.
+ *
+ * The sibling `HostActivityTable` has always ordered its query; this is the
+ * same one line. `createdAt` alone needs no composite index — Firestore
+ * maintains single-field indexes in both directions automatically — so this
+ * does not move `firestore.indexes.json`.
+ *
+ * The client-side sort is KEPT rather than replaced. It is no longer what
+ * makes the feed newest-first, but the window can still contain a just-written
+ * entry whose `serverTimestamp()` has not resolved locally, and sorting a
+ * 200-item array costs nothing.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, max = 20, header = 'Recent Activity', actorId, targetId } = props
   const { orgSlug } = useParams<{ orgSlug: string }>()
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'orgs', orgId, 'activity'), limit(200)),
+    () =>
+      query(
+        collection(firestore, 'orgs', orgId, 'activity'),
+        orderBy('createdAt', 'desc'),
+        limit(200),
+      ),
     [firestore, orgId],
     { idField: '$id' },
   )

@@ -60,23 +60,32 @@ function cleanPayload(): TaxReturnPayload {
       taxableSalesCents: 16000,
       taxCollectedCents: 1320,
       byJurisdiction: {
+        // The working-paper fields joined `TaxReturnJurisdiction` with
+        // AGL-2329. Empty here: this file is about the Webfile MAPPING, and
+        // the papers' own arithmetic is proved in `tx-return.spec.ts`.
         'US-TX': {
           transactionCount: 1,
           totalSalesCents: 10000,
           taxableSalesCents: 8000,
           taxCollectedCents: 660,
+          taxabilityReasons: {},
+          rates: [],
         },
         'US-CA': {
           transactionCount: 1,
           totalSalesCents: 10000,
           taxableSalesCents: 8000,
           taxCollectedCents: 660,
+          taxabilityReasons: {},
+          rates: [],
         },
       },
       refunds: {
         rowsRefundedInPeriod: 0,
         refundedGrossCents: 0,
         estimatedRefundedTaxCents: 0,
+        chargedBackCents: 0,
+        rowsChargedBack: 0,
       },
       attention: {
         untaxedRows: 0,
@@ -84,6 +93,7 @@ function cleanPayload(): TaxReturnPayload {
         rowsMissingAddress: 0,
         nonUsdRows: 0,
         rowsMissingPaidAt: 0,
+        rowsWithNetMismatch: 0,
       },
     },
     rows: [
@@ -200,6 +210,59 @@ describe('taxReturnAttention', () => {
     expect(verdict.review).toBe(4)
   })
 
+  /*==========================================
+   * THE TWO FIELDS THAT HAD NO SURFACE (AGL-2329).
+   *
+   * `netCents` was stored and its only consumer explicitly refused it;
+   * `chargedBackCents` was maintained by the billing webhook and read only
+   * by the webhook. Both now reach the preparer's attention list, and both
+   * are `review` rather than `blocking` on purpose — the totals here are
+   * recomputed and therefore still right; what is in question is a row and a
+   * treatment.
+   *=========================================*/
+  it('raises a stored net that contradicts the arithmetic', () => {
+    const payload = cleanPayload()
+    payload.summary.attention.rowsWithNetMismatch = 3
+    const verdict = taxReturnAttention(payload)
+    const item = verdict.items.find(
+      (entry) => entry.id === 'rowsWithNetMismatch',
+    )
+    expect(item?.count).toBe(3)
+    // The COUNT it was given, not a presence flag: a mapper hardcoding 1
+    // would satisfy "the item appears" and fail here.
+    expect(item?.severity).toBe('review')
+    expect(verdict.blocking).toBe(0)
+    expect(verdict.review).toBe(3)
+    expect(verdict.clean).toBe(false)
+    // And it stays silent when the rows agree — an always-on alarm is one
+    // nobody reads.
+    expect(
+      taxReturnAttention(cleanPayload()).items.find(
+        (entry) => entry.id === 'rowsWithNetMismatch',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('states the bank-reversed cents as their own finding', () => {
+    const payload = cleanPayload()
+    payload.summary.refunds.refundedGrossCents = 9000
+    payload.summary.refunds.chargedBackCents = 2500
+    const item = taxReturnAttention(payload).items.find(
+      (entry) => entry.id === 'chargedBackCents',
+    )
+    // The chargeback figure, NOT the refund figure beside it — a mapper
+    // reading the wrong key off the same object is the likeliest mistake
+    // here, and the two numbers differ so it cannot pass.
+    expect(item?.count).toBe(2500)
+    expect(item?.count).not.toBe(9000)
+    expect(item?.detail).toContain('SUBSET')
+    expect(
+      taxReturnAttention(cleanPayload()).items.find(
+        (entry) => entry.id === 'chargedBackCents',
+      ),
+    ).toBeUndefined()
+  })
+
   it('does NOT call "no data loaded" clean', () => {
     // Nothing read is not the same as nothing wrong.
     const verdict = taxReturnAttention(null)
@@ -241,6 +304,223 @@ describe('taxReturnWebfileLines', () => {
   })
 })
 
+describe('the working papers reach the rows the page renders (AGL-2329)', () => {
+  const withPapers = () => {
+    const payload = cleanPayload()
+    payload.summary.byJurisdiction['US-TX'].taxabilityReasons = {
+      taxable_basis_reduced: {
+        lines: 2,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 660,
+      },
+      // ZERO tax, and the reason it is zero. This is the entry a total can
+      // never carry and the one an examiner asks about first.
+      not_collecting: {
+        lines: 1,
+        taxableAmountCents: 5000,
+        taxCollectedCents: 0,
+      },
+    }
+    payload.summary.byJurisdiction['US-TX'].rates = [
+      {
+        taxRateId: 'txr_tx_state',
+        percentage: 6.25,
+        rateState: 'TX',
+        jurisdiction: 'Texas',
+        lines: 2,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 660,
+      },
+      {
+        taxRateId: 'txr_austin_local',
+        percentage: 2,
+        rateState: 'TX',
+        jurisdiction: 'Austin',
+        lines: 1,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 200,
+      },
+    ]
+    return payload
+  }
+
+  it('words each reason and carries its own money', () => {
+    const texas = taxReturnJurisdictionRows(withPapers()).find(
+      (row) => row.jurisdiction === 'US-TX',
+    )!
+    // Dearest first, and each with its OWN figures — a mapper reusing the
+    // first entry's money is wrong for the second and dies here.
+    expect(texas.taxabilityReasons.map((paper) => paper.label)).toEqual([
+      'Taxable basis reduced',
+      'Not collecting — no registration',
+    ])
+    expect(
+      texas.taxabilityReasons.map((paper) => paper.taxCollectedDollars),
+      // $6.60 of tax on an $80 base, and $0.00 on $50 because we do not
+      // collect there. Dollars, from cents — the mapper's job.
+    ).toEqual(['6.60', '0.00'])
+    expect(
+      texas.taxabilityReasons.map((paper) => paper.taxableSalesDollars),
+    ).toEqual(['80.00', '50.00'])
+  })
+
+  it('keeps an unrecognised reason\'s raw code rather than renaming it', () => {
+    const payload = cleanPayload()
+    payload.summary.byJurisdiction['US-TX'].taxabilityReasons = {
+      some_future_stripe_reason: {
+        lines: 1,
+        taxableAmountCents: 100,
+        taxCollectedCents: 10,
+      },
+    }
+    const texas = taxReturnJurisdictionRows(payload).find(
+      (row) => row.jurisdiction === 'US-TX',
+    )!
+    // On a filing record, "we do not have a name for this" beats a plausible
+    // wrong one — and beats dropping the row, which would stop the papers
+    // reconciling with the total above them.
+    expect(texas.taxabilityReasons[0].label).toBe('some_future_stripe_reason')
+  })
+
+  it('labels a rate with its jurisdiction, percentage and id', () => {
+    const texas = taxReturnJurisdictionRows(withPapers()).find(
+      (row) => row.jurisdiction === 'US-TX',
+    )!
+    expect(texas.rates.map((rate) => rate.label)).toEqual([
+      'Texas · 6.25% · txr_tx_state',
+      'Austin · 2% · txr_austin_local',
+    ])
+    expect(texas.rates.map((rate) => rate.taxCollectedDollars)).toEqual([
+      '6.60',
+      '2.00',
+    ])
+  })
+
+  it('says a rate was not stated instead of printing an empty label', () => {
+    const payload = cleanPayload()
+    payload.summary.byJurisdiction['US-TX'].rates = [
+      {
+        taxRateId: 'unknown',
+        percentage: null,
+        rateState: null,
+        jurisdiction: null,
+        lines: 1,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 660,
+      },
+    ]
+    const texas = taxReturnJurisdictionRows(payload).find(
+      (row) => row.jurisdiction === 'US-TX',
+    )!
+    // A blank label renders as a stray dash on the page and reads as a bug.
+    expect(texas.rates[0].label).toBe('rate not stated')
+  })
+
+  it('gives a jurisdiction with no lines EMPTY papers, not the neighbour\'s', () => {
+    const rows = taxReturnJurisdictionRows(withPapers())
+    const california = rows.find((row) => row.jurisdiction === 'US-CA')!
+    expect(california.taxabilityReasons).toEqual([])
+    expect(california.rates).toEqual([])
+  })
+})
+
+describe('the CSV carries the working papers it is named after (AGL-2329)', () => {
+  const withPapers = () => {
+    const payload = cleanPayload()
+    payload.summary.byJurisdiction['US-TX'].taxabilityReasons = {
+      taxable_basis_reduced: {
+        lines: 2,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 660,
+      },
+      not_collecting: {
+        lines: 1,
+        taxableAmountCents: 5000,
+        taxCollectedCents: 0,
+      },
+    }
+    payload.summary.byJurisdiction['US-TX'].rates = [
+      {
+        taxRateId: 'txr_tx_state',
+        percentage: 6.25,
+        rateState: 'TX',
+        jurisdiction: 'Texas',
+        lines: 2,
+        taxableAmountCents: 8000,
+        taxCollectedCents: 660,
+      },
+    ]
+    payload.summary.refunds.refundedGrossCents = 9000
+    payload.summary.refunds.chargedBackCents = 2500
+    payload.summary.refunds.rowsChargedBack = 1
+    return payload
+  }
+
+  /**
+   * The CSV as rows of cells, so a cell is asserted rather than a substring
+   * — a check for the words being "in there somewhere" passes on a file with
+   * the figures under the wrong headings.
+   *
+   * A deliberately naive splitter: it does not understand quoted cells, so
+   * every cell asserted below is one with no comma in it. That is a
+   * constraint on the ASSERTIONS, not on the CSV.
+   */
+  const rows = (csv: string) => csv.split('\n').map((line) => line.split(','))
+
+  it('writes a reason row per jurisdiction, with that reason\'s own money', () => {
+    const table = rows(taxReturnCsv(withPapers()))
+    const reduced = table.find(
+      (row) => row[0] === 'US-TX' && row[1] === 'Taxable basis reduced',
+    )
+    const notCollecting = table.find(
+      (row) => row[0] === 'US-TX' && row[1] === 'Not collecting — no registration',
+    )
+    // Read as CELLS. A substring check would pass on a CSV that had the
+    // words somewhere and the figures in the wrong columns.
+    expect(reduced?.slice(2)).toEqual(['2', '80.00', '6.60'])
+    // The ZERO-tax reason is present and says why — the row a total can
+    // never carry and the first thing an examiner asks about.
+    expect(notCollecting?.slice(2)).toEqual(['1', '50.00', '0.00'])
+  })
+
+  it('names a jurisdiction with no tax lines rather than omitting it', () => {
+    const table = rows(taxReturnCsv(withPapers()))
+    // US-CA has no papers in this fixture. Omitting it would let a reader
+    // conclude the jurisdiction was not in the period at all, when the
+    // table above it says otherwise.
+    expect(
+      table.find(
+        (row) => row[0] === 'US-CA' && row[1] === 'No tax lines recorded',
+      ),
+    ).toBeDefined()
+  })
+
+  it('writes the rate rows with their labels and money', () => {
+    const table = rows(taxReturnCsv(withPapers()))
+    const rate = table.find(
+      (row) => row[0] === 'US-TX' && row[1]?.includes('txr_tx_state'),
+    )
+    expect(rate?.[1]).toBe('Texas · 6.25% · txr_tx_state')
+    expect(rate?.slice(2)).toEqual(['2', '80.00', '6.60'])
+  })
+
+  it('states bank-reversed money as a subset, on its own row', () => {
+    const table = rows(taxReturnCsv(withPapers()))
+    const chargeback = table.find((row) =>
+      row[0]?.startsWith('Of which reversed by a bank'),
+    )
+    // $25.00 of the $90.00 refunded. Different figures, so a row copying the
+    // refund total is visibly wrong.
+    expect(chargeback?.[1]).toBe('25.00')
+    expect(
+      table.find((row) => row[0] === 'Refunded gross (USD)')?.[1],
+    ).toBe('90.00')
+    expect(
+      table.find((row) => row[0] === 'Rows with a chargeback')?.[1],
+    ).toBe('1')
+  })
+})
+
 describe('taxReturnJurisdictionRows', () => {
   it('puts Texas first, then the rest by receipts', () => {
     const payload = cleanPayload()
@@ -249,6 +529,8 @@ describe('taxReturnJurisdictionRows', () => {
       totalSalesCents: 90000,
       taxableSalesCents: 0,
       taxCollectedCents: 0,
+      taxabilityReasons: {},
+      rates: [],
     }
     const rows = taxReturnJurisdictionRows(payload)
     expect(rows.map((row) => row.jurisdiction)).toEqual([

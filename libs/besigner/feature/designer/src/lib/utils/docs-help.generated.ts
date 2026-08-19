@@ -22,29 +22,13 @@
 // its own generated subset of the docs help registry.
 
 export const BESIGNER_DOCS = {
-  besigner: '/building-sites/besigner/overview',
-  bindings: '/building-sites/bindings/overview',
-  dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
-  interactions: '/building-sites/besigner/interactions-and-custom-html',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
-  reusableComponents: '/building-sites/besigner/reusable-components',
-  screens: '/building-sites/screens-and-layouts/overview',
-  seo: '/building-sites/seo/overview',
-  textEditing: '/building-sites/besigner/text-editing',
 } as const satisfies Record<string, string>
 
 export type BesignerDocsKey = keyof typeof BESIGNER_DOCS
 
 export const BESIGNER_DOCS_ANCHORS = {
-  besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
-  bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
-  dragDropHierarchy: ['#where-you-can-drag', '#what-a-drag-does', '#drop-zones-edges-vs-center', '#containers-vs-leaf-elements', '#containers-accept-children', '#leaf-elements-dont--dropping-on-one-makes-a-sibling', '#adding-a-new-element', '#when-a-drop-is-rejected', '#moving-an-element-without-dragging', '#multi-drag', '#tips', '#related'],
-  interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
-  reusableComponents: ['#promote', '#insert-instances', '#properties', '#declare-them', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#copy--paste-vs-reusable-components', '#tips', '#related'],
-  screens: ['#what-counts-against-your-screen-allowance', '#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
-  seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#site-wide-defaults', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
-  textEditing: ['#edit-inline', '#rich-text', '#the-text-attribute', '#bindings-in-text', '#related'],
 } as const satisfies Partial<Record<BesignerDocsKey, readonly `#${string}`[]>>
 
 type BesignerAnchorMap = typeof BESIGNER_DOCS_ANCHORS

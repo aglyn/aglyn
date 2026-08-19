@@ -35,6 +35,7 @@ import {
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 /**
  * Ratings and comments on a listing (AGL-655).
@@ -162,7 +163,14 @@ export function ListingReviews({
   const ratingCount = Number(listing?.ratingCount ?? 0)
 
   return (
-    <CardDisplay header={'Ratings & comments'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Ratings & comments'}
+      help={pluginDocsHelp('installYourFirstPlugin', {
+        anchor: '#step-3-reviews',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           {ratingCount ? (

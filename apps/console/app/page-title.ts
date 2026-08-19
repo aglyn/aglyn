@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import type { Metadata } from 'next'
 
 /**
@@ -24,7 +25,7 @@ import type { Metadata } from 'next'
  *
  * Kept in step with the `title.template` on the root layout's metadata.
  */
-export const TITLE_TEMPLATE = '%s · Aglyn'
+export const TITLE_TEMPLATE = `%s · ${PLATFORM_BRAND_NAME}`
 
 /**
  * The title for a layout that other titled routes nest inside.

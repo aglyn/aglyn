@@ -26,6 +26,7 @@ import {
   verificationRequestBlock,
   type VerifiableListing,
 } from '@aglyn/aglyn/app-utils/marketplace-verification'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { docsHelp } from '../../constants/docs-links'
 
 export interface ListingVerificationRequestProps {
@@ -39,11 +40,22 @@ export interface ListingVerificationRequestProps {
 }
 
 /** What the badge actually claims, said once, in the place someone asks for
- * it — so the request is informed rather than a guess at what it buys. */
+ * it — so the request is informed rather than a guess at what it buys.
+ *
+ * `PLATFORM_BRAND_NAME` and NOT the org's resolved `productName` (AGL-2351).
+ * The sentence names WHO DID THE VERIFYING, and that is whoever operates this
+ * deployment's marketplace — the reviewers who read the listing. Substituting
+ * the viewing org's brand would make a white-label agency's console assert
+ * that the agency vetted this publisher, which nobody at the agency did. The
+ * marketplace is a platform-relationship surface: one catalog, one review
+ * queue, shared by every org on the deployment. On a self-host install the
+ * operator's own staff really are the humans in this sentence, and the env var
+ * renames them with the rest of the product.
+ */
 const WHAT_VERIFIED_CLAIMS =
-  'Verified says a human at Aglyn confirmed who you are, and that this ' +
-  'listing describes what the code does. It is a claim about you as a ' +
-  'publisher, so it survives a version bump. It is not a security ' +
+  `Verified says a human at ${PLATFORM_BRAND_NAME} confirmed who you are, ` +
+  'and that this listing describes what the code does. It is a claim about ' +
+  'you as a publisher, so it survives a version bump. It is not a security ' +
   'guarantee, and it does not review the bytes of any particular release — ' +
   'that is what Reviewed means, and it is earned per version.'
 

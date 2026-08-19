@@ -54,6 +54,7 @@
  */
 
 import { readFileSync, readdirSync } from 'fs'
+import type { Dirent } from 'fs'
 import { join, resolve } from 'path'
 
 import { parseHostSubcollectionRules } from './write-deny-coverage.util'
@@ -352,8 +353,10 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'Catalog taxonomy, reordered and renamed in the catalog organization card.',
   suppliers: 'Supplier records, edited in the product editor dialog.',
   inventoryAdjustments:
-    'Stock adjustment ledger rows, written when a merchant edits inventory ' +
-    'in the products hub.',
+    'Stock adjustment ledger rows, APPEND-ONLY (AGL-2269): the products hub ' +
+    'creates one client-side beside every manual stock edit, but update and ' +
+    'delete are excluded because `cancel-order.ts` reads these rows to bound ' +
+    'how much inventory a cancellation releases.',
   locations: 'Physical locations, authored in the locations card.',
   reservations: 'POS/booking holds, created and released from the POS page.',
   resources: 'Bookable resources, authored in the reservations card.',
@@ -396,6 +399,15 @@ const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
   carts: 'Written only by libs/plugins/commerce server routes. AGL-2042.',
   checkouts:
     'Checkout sessions, written only by cart-checkout.ts server-side. AGL-2042.',
+  inventoryReconciliation:
+    'A per-order idempotency marker written only by ' +
+    'libs/plugins/commerce/src/lib/server/reconcile-stock.ts through the ' +
+    'Admin SDK (AGL-2358). Two greps agree there is no client-SDK writer: no ' +
+    "`'hosts', hostId, 'inventoryReconciliation'` path anywhere in `apps` or " +
+    '`libs`, and no addDoc/setDoc/updateDoc/deleteDoc against one. Parked ' +
+    'rather than waved through, and it is not cosmetic — the marker is what ' +
+    'stops a stock decrement being applied twice, so an editor who can write ' +
+    'it can make a lost decrement permanent. AGL-2042.',
   giftCards:
     'Stored value, issued and redeemed by the commerce billing webhook ' +
     'server-side. The one on this list with money in it. AGL-2042.',
@@ -413,7 +425,14 @@ const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
 const hostSubcollectionsInRepo = (() => {
   const files: string[] = []
   const walk = (directory: string): void => {
-    let entries: ReturnType<typeof readdirSync>
+    // `Dirent[]`, NOT `ReturnType<typeof readdirSync>` (AGL-2243).
+    // `readdirSync` is overloaded eight ways and `ReturnType` resolves the
+    // LAST overload, which is the Buffer-encoded one — so the annotation said
+    // `Dirent<NonSharedBuffer>[]` while the `withFileTypes: true` call returns
+    // `Dirent<string>[]`, and every `entry.name` downstream was typed as a
+    // Buffer. That is a type error in the annotation itself, not in the code
+    // it describes: the walk has always been correct at runtime.
+    let entries: Dirent[]
     try {
       entries = readdirSync(directory, { withFileTypes: true })
     } catch {

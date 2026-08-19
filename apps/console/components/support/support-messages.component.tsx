@@ -17,6 +17,7 @@
 'use client'
 
 import { Stack, Typography } from '@mui/material'
+import useBranding from '../../hooks/use-branding'
 
 /**
  * One thread's posts, for BOTH Support channels (AGL-1158).
@@ -70,28 +71,38 @@ export function formatWhen(ms: unknown): string {
     : ''
 }
 
-/** The byline: who wrote it, whether they are staff, and when. */
+/**
+ * The byline: who wrote it, whether they are staff, and when.
+ *
+ * `brand` is passed in rather than named here (AGL-2319). This renders on
+ * every message of every ticket and forum thread inside `[orgSlug]`, so a
+ * white-label org's members would otherwise read the platform's name on each
+ * staff reply. Callers pass `useBranding().branding.productName`, which is the
+ * deployment brand for every org that has not white-labeled.
+ */
 export function postByline(
   post: SupportPost,
   anonymizeSelf: boolean | undefined,
+  brand: string,
 ): string {
   const who = anonymizeSelf
     ? post.staff
-      ? 'Aglyn staff'
+      ? `${brand} staff`
       : 'You'
-    : `${post.authorName ?? 'member'}${post.staff ? ' · Aglyn staff' : ''}`
+    : `${post.authorName ?? 'member'}${post.staff ? ` · ${brand} staff` : ''}`
   const when = formatWhen(post.createdAt)
   return when ? `${who} · ${when}` : who
 }
 
 export function SupportMessages(props: SupportMessagesProps) {
   const { posts, anonymizeSelf } = props
+  const { branding } = useBranding()
   return (
     <>
       {posts.map((post, index) => (
         <Stack key={post.$id ?? index} spacing={0.25}>
           <Typography variant="caption" color="text.secondary">
-            {postByline(post, anonymizeSelf)}
+            {postByline(post, anonymizeSelf, branding.productName)}
           </Typography>
           {/* `pre-wrap` because the body is plain text typed into a textarea —
               paragraph breaks are the only formatting it has. */}

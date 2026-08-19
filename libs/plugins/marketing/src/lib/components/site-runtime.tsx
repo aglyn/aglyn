@@ -681,8 +681,17 @@ function PopupOverlay(props: {
     if (popup.startAtMs && now < popup.startAtMs) return
     if (popup.endAtMs && now > popup.endAtMs) return
     try {
-      const stamp = Number(window.localStorage.getItem(storageKey) ?? 0)
-      if (stamp && now - stamp < popup.frequencyDays * 86400000) return
+      // The decision itself is a pure function in the model (AGL-2174) —
+      // which store to read is the whole feature, and it has to agree with
+      // what `close` writes.
+      const suppressed = MarketingModel.popupSuppressed(
+        popup,
+        MarketingModel.popupCapStore(popup) === 'session'
+          ? { sessionFlag: window.sessionStorage.getItem(storageKey) }
+          : { lastShownMs: Number(window.localStorage.getItem(storageKey) ?? 0) },
+        now,
+      )
+      if (suppressed) return
     } catch {
       // Storage unavailable: show at most per-pageview.
     }
@@ -716,7 +725,14 @@ function PopupOverlay(props: {
 
   const close = (kind: 'popupDismiss' | 'popupClick' = 'popupDismiss') => {
     try {
-      window.localStorage.setItem(storageKey, String(Date.now()))
+      // Written to whichever store the cap READS (AGL-2174). Stamping
+      // `localStorage` for a session-capped popup would leave a timestamp
+      // nothing reads, outliving the cap it was meant to record.
+      if (MarketingModel.popupCapStore(popup) === 'session') {
+        window.sessionStorage.setItem(storageKey, '1')
+      } else {
+        window.localStorage.setItem(storageKey, String(Date.now()))
+      }
     } catch {
       // Private mode etc. — closing still works for this pageview.
     }

@@ -73,8 +73,16 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
+    // AN ALLOWLIST (AGL-2262), matching `cancel-order.ts`, `fulfill-order.ts`
+    // and the Firestore rules, whose host-write predicate is
+    // `hostMemberRole(hostId) in ['admin','editor']`. The old
+    // `!role || role === 'viewer'` denylist caught the stranger but admitted
+    // every OTHER string — a legacy value, a typo, any role added later — on
+    // the one route that mints a live Stripe payment link. `HostAccessRole` is
+    // exactly `admin | editor | viewer`, so this refuses nothing a real
+    // projection can produce.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole || memberRole === 'viewer') {
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const productSnapshot = await hostRef
@@ -143,9 +151,13 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         unitAmountCents,
       },
     ]
+    // `?? 'physical'` (AGL-2251), matching `checkout.ts` and the cart. Without
+    // it a product doc carrying no `type` fell to `resolveTransactionFeePct`'s
+    // digital branch, so a merchant's payment link took a different cut of the
+    // same product than their storefront did.
     const feePct = Aglyn.resolveTransactionFeePct(
       ownerOrg?.org as any,
-      product.type,
+      product.type ?? 'physical',
     )
     const itemsCents = unitAmountCents * quantity
     const feeCents =
@@ -273,6 +285,14 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         needsShippingCountry: true,
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
+    }
+    // No rate of the merchant's reaches this order (AGL-2230). Above the
+    // order write and the payment link, like every other refusal here, so a
+    // manager who fixes the tier table and presses Send again strands nothing.
+    if (shippingPlan.refusal === 'cart-unpriceable') {
+      return res
+        .status(409)
+        .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
     }
 
     // Point of no return (AGL-1697): everything past here writes an order and

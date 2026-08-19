@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  planMetersInfraOverage,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -25,6 +28,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  BUDGET_GUARD_KEY,
   BUDGET_MAX_THRESHOLDS,
   BUDGET_MAX_USD,
   BUDGET_MIN_USD,
@@ -141,11 +145,51 @@ async function handler(request: Request): Promise<Response> {
         assistEstCostUsd: assist.get('estCostUsd'),
         assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
       })
+      /*==========================================
+       * WHETHER THE BUDGET HAS ALERTED YET (AGL-2239).
+       *
+       * `usage-alerts` writes `orgs/{id}.usageAlerts.budget = {month,
+       * threshold}` as its dedupe guard, and until now nothing read it back
+       * to the customer. A budget that shows its ladder but never its events
+       * documents an intention rather than reporting one — a customer at 91%
+       * of a 90% rule cannot tell whether we told them.
+       *
+       * SCOPED TO THIS MONTH. A guard from a previous period is not an event
+       * about this one, and rendering it would be exactly the mistake this
+       * route already refuses one field over: last month's figure under this
+       * month's heading.
+       *=========================================*/
+      const guard = (org?.usageAlerts ?? {})[BUDGET_GUARD_KEY] as
+        | { month?: string; threshold?: number }
+        | undefined
+      const guardThreshold = Number(guard?.threshold)
+      const lastAlert =
+        guard?.month === month && Number.isFinite(guardThreshold) && guardThreshold > 0
+          ? { month, threshold: guardThreshold }
+          : null
+
       return Response.json(
         {
           ...current,
           month,
           spend,
+          lastAlert,
+          /*
+            WHETHER THIS PLAN HAS METERED USAGE AT ALL (AGL-2250).
+
+            AGL-2135 made the free tier a hard cap that never bills, so a Free
+            org's `billedCents` is 0 every month and a budget it sets can
+            never fire. The card said none of that.
+
+            `planMetersInfraOverage` is the predicate the cron and the invoice
+            already use — a second opinion computed here is the AGL-1371
+            mistake, and this one would be worse than a wrong figure: it would
+            be a wrong statement about whether the customer can be charged.
+          */
+          // The ORG, not `org.plan`: `resolvePlan` also weighs the
+          // subscription, so a plan string alone would answer a narrower
+          // question than the invoice asks.
+          metered: planMetersInfraOverage(org),
           defaultThresholdPcts: [...DEFAULT_BUDGET_THRESHOLD_PCTS],
           minAmountUsd: BUDGET_MIN_USD,
           maxAmountUsd: BUDGET_MAX_USD,

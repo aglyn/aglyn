@@ -38,6 +38,7 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { docsHelp } from '../../../../constants/docs-links'
 
 interface StaffTicket {
   $id: string
@@ -196,6 +197,11 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                   ? `Support tickets · ${openCount} open`
                   : 'Support tickets'
               }
+              help={docsHelp('supportQueue', {
+                excerpt:
+                  'Every customer support ticket, oldest open first, with the reply ' +
+                  'that closes it.',
+              })}
               contentGutterX
               contentGutterY
             >

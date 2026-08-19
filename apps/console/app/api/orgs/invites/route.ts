@@ -30,6 +30,7 @@ import {
   type HostAccessRole,
   isOrgRole,
   isOrgWideMember,
+  brandMergeTokens,
   resolveBrandingProfile,
   Route,
 } from '@aglyn/aglyn/server'
@@ -271,11 +272,20 @@ async function handler(request: Request): Promise<Response> {
         'the invite from your dashboard.'
       // Staff-designed template when one is published (AGL-750); null
       // whenever it is missing or unusable, so this copy still goes out.
-      const designed = await renderSystemEmail('org-invite', {
-        'org.name': String(orgName),
-        'invite.role': role,
-        signInUrl: origin,
-      })
+      const designed = await renderSystemEmail(
+        'org-invite',
+        {
+          // AGL-2139: the brand as merge tokens, so a staff-designed template
+          // renders THIS org's brand rather than a hard-coded "Aglyn". The
+          // designed template wins over the fallback below — which is exactly
+          // the moment white-label used to invert.
+          ...brandMergeTokens(branding),
+          'org.name': String(orgName),
+          'invite.role': role,
+          signInUrl: origin,
+        },
+        { brandLogoUrl: branding.emailLogoUrl },
+      )
       const result = await sendEmail({
         to: email,
         subject:

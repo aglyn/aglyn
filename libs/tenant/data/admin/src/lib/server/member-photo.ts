@@ -67,6 +67,7 @@
  * boundary.
  */
 
+import { isMediaCdnPath } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 
@@ -113,11 +114,23 @@ export function normalizeMemberPhotoUrl(raw: unknown): MemberPhotoValue {
   const value = typeof raw === 'string' ? raw.trim() : ''
   if (!value) return { ok: true, photoURL: '', clearing: true }
   if (value.length > MEMBER_PHOTO_MAX_LENGTH) return { ok: false, reason: 'too-long' }
-  // `https://` and nothing else. Not a general URL parse: the point is to
-  // refuse the schemes that turn an avatar into script execution, and an
-  // allowlist of one is the only form of that check that cannot be widened by
-  // a clever input.
-  if (!/^https:\/\//i.test(value)) return { ok: false, reason: 'not-https' }
+  // `https://`, or a media-library CDN path (AGL-2286). Still an ALLOWLIST of
+  // exactly two shapes rather than a general URL parse: the point is to refuse
+  // the schemes that turn an avatar into script execution, and neither shape
+  // can be widened by a clever input — `isMediaCdnPath` is anchored on the
+  // literal `/api/media/cdn/` prefix and validates both remaining segments
+  // against the CDN's own grammar, so `javascript:`, `data:`, a
+  // protocol-relative `//evil.example`, a traversal, and a query string are
+  // all still refused.
+  //
+  // The second shape is here because the Manage Account → Profile image field
+  // is a `MediaUrlField` offering "Browse the org media library", and Browse
+  // writes `media.cdnPath`, which is never absolute. Every user's avatar
+  // Browse button was therefore a dead control — refused twice, once by the
+  // client courtesy check and again here at the boundary.
+  if (!/^https:\/\//i.test(value) && !isMediaCdnPath(value)) {
+    return { ok: false, reason: 'not-https' }
+  }
   return { ok: true, photoURL: value, clearing: false }
 }
 

@@ -59,6 +59,11 @@ export interface MarkdownLiteViewProps {
 
 export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
   const blocks = useMemo(() => Aglyn.parseMarkdownLite(source), [source])
+  // The preview stamps the same heading anchors the published page does
+  // (AGL-1162), so what an author checks here is what a `#slug` link will
+  // find — and so a document whose headings collide is visible before it
+  // ships, not after.
+  const slugs = useMemo(() => Aglyn.markdownHeadingSlugs(blocks), [blocks])
   return (
     <Stack spacing={1.5}>
       {blocks.map((block, index) => {
@@ -67,7 +72,12 @@ export function MarkdownLiteView({ source }: MarkdownLiteViewProps) {
             return (
               <Typography
                 key={index}
+                id={slugs[index]}
                 variant={block.level === 2 ? 'h6' : 'subtitle1'}
+                component={block.level === 2 ? 'h2' : 'h3'}
+                sx={{
+                  scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+                }}
               >
                 {renderInlines(block.inlines)}
               </Typography>

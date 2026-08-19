@@ -47,7 +47,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
 import OrgBrandingCard from '../../../../components/org-branding-card.component'
@@ -59,6 +59,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
+import { overLimitSummary } from '../../../../utils/over-limit-summary'
 
 const WORKSPACE_DOMAIN =
   process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
@@ -72,6 +73,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
   const { data: user } = useUser()
+  const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [name, setName] = useState('')
@@ -421,6 +423,10 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Organization Settings',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
       }}
+      help={{
+        topic: 'consoleTour',
+        anchor: '#workspace-settings--notifications',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {!loading && !currentOrg ? (
@@ -691,6 +697,11 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
               confirmation, which is what the per-resource flow prevents. */}
           <CardDisplay
             header={'Default sharing for new data and media'}
+            help={docsHelp('datasets', {
+              excerpt:
+                'Sets what a NEW dataset or upload is shared with. Existing ' +
+                'ones keep the sharing they already have.',
+            })}
             contentGutterX
             contentGutterY
             sx={{ mt: 3 }}
@@ -739,6 +750,12 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       content: (
                         <CardDisplay
                           header={'Plugins'}
+                          help={docsHelp('installYourFirstPlugin', {
+                            anchor: '#step-7-off',
+                            excerpt:
+                              'Turning plugins on and off moved to its own ' +
+                              'Plugins section. This card points you there.',
+                          })}
                           contentGutterX
                           contentGutterY
                         >
@@ -944,6 +961,18 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             isLiveSubscriptionStatus((org as any)?.subscription?.status)
           }
           currentPlan={org?.plan as OrgPlan | undefined}
+          // The deletion downsell is the same plan change the Billing grid
+          // warns about (AGL-2154), and it said nothing here. No host list is
+          // loaded on this page, so the shared helper counts the sites itself
+          // rather than this page mounting a live host listener to warn once.
+          downsellImpact={(targetPlan) =>
+            overLimitSummary({
+              firestore,
+              user: user as never,
+              orgId: currentOrg?.$id,
+              targetPlan,
+            })
+          }
           onClose={() => setDeleteFunnelOpen(false)}
           onDownsell={handleDeleteDownsell}
           onLeave={handleDeleteLeave}

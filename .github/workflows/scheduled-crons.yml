@@ -21,12 +21,49 @@ name: Scheduled console crons
 # Every `schedule` entry triggers this one workflow; `github.event.schedule`
 # carries the cron string that fired, which the job maps to a route. Note
 # GitHub only runs scheduled workflows from the default branch.
+#
+# DEPLOY ORDERING (AGL-2359). This file runs from `main`; the routes it POSTs
+# run from `production`. Those are different trees, and this file's changes
+# take effect the moment they land while the route they call only exists after
+# a promotion. AGL-1996/AGL-2010 landed `finish-domain-attachments` and its
+# schedule together — correct for the repo — and the cron then 404ed ~72 times
+# a day against a production deploy 236 commits behind. So the job asks, from
+# the repo rather than from the wire, whether the route's source file exists at
+# refs/heads/production, and SKIPS the POST when it provably does not.
+#
+# ⚠️ That skip is deliberately NOT "a 404 is fine". This workflow exists to
+# notice broken crons; see the 207 handling at the bottom of the file. The
+# skip never reads the cron's response, and tools/scripts/cron-deploy-state.sh
+# answers `unknown` — which POSTs anyway, and goes red on a 404 exactly as
+# before — for every case it cannot settle, including a missing production
+# branch and a route->file mapping that has rotted.
 
 on:
   schedule:
     - cron: '0 2 * * *' # report-usage   — daily 02:00 UTC
     - cron: '0 3 * * *' # audit-archive  — daily 03:00 UTC
     - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
+    # The IN-PROGRESS month (AGL-2219), an hour ahead of usage-alerts so the
+    # budget evaluation reads a figure computed today rather than yesterday.
+    #
+    # This is a SECOND report-usage sweep, and it is not a duplicate of the
+    # 02:00 one. That one rolls up the CLOSED month — the invoice — and is the
+    # only run that ever reaches Stripe. This one writes
+    # `orgs/{id}/usage/{thisMonth}` so that "what has this org spent so far
+    # this month" has an answer at all: `report-usage` is the sole writer of
+    # that document and only ever wrote the closed month, which left every
+    # usage budget on the platform structurally unable to fire and the Billing
+    # card permanently saying "we haven't totalled this month yet".
+    #
+    # `?month=current` in the URL and NOT in the body: the resumable-sweep
+    # loop below re-POSTs `{"cursor": ...}` and nothing else, so a month
+    # carried in the body would apply to the first chunk and silently revert
+    # to the previous month for every chunk after it.
+    #
+    # The route refuses to meter or stamp `reportedAt` for a month that has
+    # not ended, so this schedule cannot bill anybody early however it is
+    # invoked — see `monthIsClosed`.
+    - cron: '0 7 * * *' # report-usage (current month, no metering) — daily 07:00 UTC
     - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
     - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
     # Weekly Firestore GCS export (AGL-1843) — the independent copy that
@@ -65,6 +102,44 @@ on:
     # A non-zero plan returns 207, which fails this workflow below. That is
     # the alert (a staff notification is the other half).
     - cron: '30 6 * * 1' # backfill-scope (detect only) — Mondays 06:30 UTC
+    # Scheduled email campaigns (AGL-2134). `/product/marketing` sells
+    # "Schedule campaigns and overlays ahead of time", and the campaign
+    # composer really does write `status: 'scheduled'` with a `sendAtMs` —
+    # but NOTHING EVER CALLED the processor that claims those rows, so a
+    # scheduled campaign sat in the collection until someone opened the
+    # History list and cancelled it. The feature was advertised, sold and
+    # silently inert; the same shape as backfill-scope above.
+    #
+    # Every 15 minutes rather than daily because the composer takes a
+    # `datetime-local` down to the minute: a daily sweep would turn "9:00 AM"
+    # into "some time in the next 24 hours". 15 minutes is the granularity
+    # the UI can honestly promise, and the composer's helper text says so.
+    #
+    # The route claims at most 10 due campaigns per invocation (a
+    # transaction flips scheduled → sending, so overlapping runs cannot
+    # double-send). A backlog therefore drains at 40 campaigns/hour rather
+    # than stalling.
+    - cron: '*/15 * * * *' # campaigns/process-scheduled — every 15 minutes
+    # A custom domain's slow steps are not ours: a certificate issues over
+    # seconds to minutes, and an ownership challenge or a DNS correction
+    # happens in the customer's registrar on their own clock. Until AGL-2010
+    # nothing re-checked, so a domain that went healthy after the attach
+    # stayed dark until a human pressed Re-attach. Frequent because the
+    # customer is sitting there waiting for their site; cheap because a run
+    # with nothing pending is two Firestore reads and no Vercel calls.
+    #
+    # 20 minutes was re-examined when this cron turned CI red (AGL-2359) and
+    # KEPT. It is not over-frequent: an idle run is one `where
+    # cnameAttachmentPending == true` query — Firestore's minimum billing for
+    # an empty result is one read, so ~2.2k reads a month — and it makes no
+    # Vercel call at all until a host is actually pending. The pressure is the
+    # other way. AGL-2010 describes the customer as sitting in the window
+    # "after the record is added", and the sweep is what ends it; slowing it
+    # down means a correctly-configured domain stays dark for longer. It is
+    # the read cost per pending host (one Vercel status call each, MAX_HOSTS
+    # 200) that would argue for a longer interval, and that cost does not
+    # exist on an idle platform.
+    - cron: '*/20 * * * *' # finish-domain-attachments — every 20 minutes
   workflow_dispatch:
     inputs:
       path:
@@ -73,6 +148,9 @@ on:
         type: choice
         options:
           - /api/billing/report-usage
+          # The in-progress month (AGL-2219) — computes and stores the running
+          # figure, never meters. Safe to run by hand at any time.
+          - /api/billing/report-usage?month=current
           - /api/admin/audit-archive
           - /api/admin/run-erasures
           - /api/billing/usage-alerts
@@ -81,6 +159,8 @@ on:
           - /api/admin/reverify-plugin-versions
           - /api/admin/backfill-scope
           - /api/admin/firestore-export
+          - /api/campaigns/process-scheduled
+          - /api/admin/finish-domain-attachments
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -112,12 +192,15 @@ jobs:
             '0 2 * * *') path=/api/billing/report-usage ;;
             '0 3 * * *') path=/api/admin/audit-archive ;;
             '0 4 * * *') path=/api/admin/run-erasures ;;
+            '0 7 * * *') path='/api/billing/report-usage?month=current' ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 6 1 * *') path=/api/billing/usage-email ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;
+            '*/15 * * * *') path=/api/campaigns/process-scheduled ;;
+            '*/20 * * * *') path=/api/admin/finish-domain-attachments ;;
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then
@@ -126,7 +209,40 @@ jobs:
           fi
           echo "path=$path" >> "$GITHUB_OUTPUT"
 
+      # Only for tools/scripts/cron-deploy-state.sh — the POST below needs no
+      # checkout and does not get one.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/scripts/cron-deploy-state.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Is this route in the deployed tree yet?
+        id: deployed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUTE: ${{ steps.route.outputs.path }}
+        run: |
+          state=$(tools/scripts/cron-deploy-state.sh "$ROUTE")
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          impl=$(tools/scripts/cron-deploy-state.sh --impl "$ROUTE" || echo '(unmapped)')
+          if [ "$state" = 'not-deployed' ]; then
+            # Visible in the run's annotations AND in the job summary, because
+            # a skip nobody sees is the same silence this workflow is against.
+            echo "::notice title=Cron skipped — not deployed yet::${ROUTE} is on this branch but not on 'production' (${impl}). It will start running at the next promotion."
+            {
+              echo "### Skipped: \`${ROUTE}\`"
+              echo
+              echo "\`${impl}\` exists here but **not at \`refs/heads/production\`**, so the"
+              echo 'route is not in the deployed console yet and a POST could only 404.'
+              echo 'This cron starts running at the next promotion — nothing to fix here.'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: POST the console cron route
+        # `unknown` POSTs. The only outcome that skips is a proven absence
+        # from the deployed tree; a 404 from a route that IS in production
+        # still fails the job below, untouched.
+        if: steps.deployed.outputs.state != 'not-deployed'
         env:
           BASE_URL: ${{ vars.CONSOLE_BASE_URL || 'https://app.aglyn.com' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}

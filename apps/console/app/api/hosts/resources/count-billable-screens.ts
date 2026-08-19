@@ -140,11 +140,21 @@ export async function countBillableScreens(
  */
 export async function readScreenSources(
   hostRef: HostRefLike,
+  /**
+   * How to execute the projected query. Defaults to executing it directly;
+   * `/api/hosts/resources` passes `(query) => tx.get(query)` so the scan is
+   * the TRANSACTION's read and the pessimistic lock it takes covers every
+   * screen the cap is counted from (AGL-2231). A count read outside the
+   * transaction that then writes inside it is not serialized against a
+   * concurrent create, which is the whole defect.
+   */
+  read: (query: {
+    get(): Promise<QuerySnapshotLike>
+  }) => Promise<QuerySnapshotLike> = (query) => query.get(),
 ): Promise<Array<BillableScreenSource>> {
-  const screens = await hostRef
-    .collection('screens')
-    .select('kind', 'deletedAt')
-    .get()
+  const screens = await read(
+    hostRef.collection('screens').select('kind', 'deletedAt'),
+  )
   return screens.docs.map((screen) => ({
     id: screen.id,
     kind: screen.get('kind'),

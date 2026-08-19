@@ -18,6 +18,7 @@
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { generateSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -136,8 +137,8 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
       >
         <Typography variant="body2" color="text.secondary">
-          {'Your site goes live on its Aglyn subdomain immediately; connect ' +
-            'a custom domain any time from Setup.'}
+          {`Your site goes live on its ${TENANT_APEX} subdomain ` +
+            'immediately; connect a custom domain any time from Setup.'}
         </Typography>
         <TextField
           label="Site name"
@@ -169,7 +170,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           slotProps={{
             input: {
               endAdornment: (
-                <InputAdornment position="end">{'.aglyn.app'}</InputAdornment>
+                <InputAdornment position="end">{`.${TENANT_APEX}`}</InputAdornment>
               ),
             },
           }}

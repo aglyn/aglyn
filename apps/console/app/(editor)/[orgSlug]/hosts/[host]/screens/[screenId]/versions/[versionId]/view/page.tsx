@@ -881,7 +881,10 @@ function ScreenDetails() {
             children: displayName,
           },
         ]}
-        help="screens"
+        help={{
+          topic: 'screens',
+          anchor: '#versions--scheduled-publishing',
+        }}
         header={{
           children: displayName,
           icon: { path: ICON_VARIANT_PAGES.path },

@@ -32,6 +32,31 @@ export interface AglynLogoProps extends SvgIconProps {
   variant?: 'light' | 'dark' | 'black' | 'white'
 }
 
+/**
+ * ## The `<title>` on every wordmark below says `Aglyn`, deliberately
+ *
+ * The brand-literal ratchet learned to read JSX text in AGL-2350 and these six
+ * `<title>` elements are what it found. They are baselined rather than
+ * rewritten, and a future sweep should leave them alone.
+ *
+ * A `<title>` inside an `<svg>` is the ACCESSIBLE NAME of the artwork around
+ * it, and this artwork is Aglyn's own compass mark and logotype, drawn as
+ * vector paths. Substituting `productName` would announce a white-label org's
+ * name over a picture that unmistakably draws ours — the label would become
+ * false to the only users who ever hear it, for no gain, since a screen-reader
+ * user and a sighted one would then be told different things about the same
+ * image. It is the `docs-self-host.mjs` line: *what must not survive is a
+ * value the software ACTS on*, and an accessible name for a fixed drawing is
+ * not one.
+ *
+ * The real question is not what these say but WHERE they render.
+ * `main.layout.tsx` already swaps the console chrome on `whiteLabel`; the open
+ * item is every other placement, the tenant admin bar's `<AglynMark />` most
+ * of all, which sits on a white-label customer's PUBLISHED site. That is
+ * tracked as AGL-2350 and is a product decision, not a lint fix — no detector
+ * that reads source can see a wordmark anyway, because the paths carry the
+ * brand with no string in them at all.
+ */
 export const AglynLogoMark = styled(
   (props) => {
     return (

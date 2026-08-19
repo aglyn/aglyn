@@ -24,6 +24,7 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import { PLATFORM_BRAND_NAME, PLATFORM_SUPPORT_URL } from './platform-brand'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -32,16 +33,31 @@ export const UNLIMITED = Number.POSITIVE_INFINITY
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-org overrides live on `org.entitlements` and win
  * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
- * (AGL-67, 2026-07-07): storage-per-host is media storage and exceeds the
- * published total-site-size cap by design. Metered costs are passed through
+ * (AGL-67, 2026-07-07): storage-per-host is media storage; the published
+ * total-site-size cap it used to exceed by design was retired in AGL-2133.
+ * Metered costs are passed through
  * from Firebase/Vercel at cost × 1.30 separately (AGL-41).
  */
 /** Legacy host-keyed dataset overrides resolved into org keys (AGL-240). */
 type LegacyEntitlementKeys = 'datasetsPerHost' | 'maxDatasetsPerHost'
 
-/** Fully-resolved entitlements: every quota present, features complete. */
+/**
+ * Keys `OrgEntitlements` still carries so stored documents type-check, but
+ * that no plan declares and nothing resolves (AGL-2133). Kept as a named type
+ * rather than folded into `LegacyEntitlementKeys`: legacy keys are resolved
+ * INTO their replacements, retired ones are dropped, and conflating the two
+ * would eventually resolve a retired value into something.
+ *
+ * `RETIRED_ENTITLEMENT_KEYS` is the runtime half and must list the same keys.
+ */
+type RetiredEntitlementKeys = 'totalSiteSizeMb'
+
+/** Fully-resolved entitlements: every LIVE quota present, features complete. */
 export type ResolvedOrgEntitlements = Required<
-  Omit<OrgEntitlements, 'features' | LegacyEntitlementKeys>
+  Omit<
+    OrgEntitlements,
+    'features' | LegacyEntitlementKeys | RetiredEntitlementKeys
+  >
 > & {
   features: Required<OrgFeatureFlags>
 }
@@ -53,7 +69,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 1,
     templatesPerHost: 10,
     storagePerHostMb: 250,
-    totalSiteSizeMb: 100,
     membersPerHost: 1,
     managersPerOrg: 1,
     maxManagersPerOrg: 1,
@@ -127,7 +142,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 3,
     templatesPerHost: 50,
     storagePerHostMb: 2048,
-    totalSiteSizeMb: 1024,
     membersPerHost: 3,
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
@@ -201,7 +215,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 10240,
-    totalSiteSizeMb: 5120,
     membersPerHost: 10,
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
@@ -273,7 +286,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 51200,
-    totalSiteSizeMb: 25600,
     membersPerHost: 50,
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
@@ -346,7 +358,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 76800,
-    totalSiteSizeMb: 38400,
     membersPerHost: 75,
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
@@ -416,7 +427,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 102400,
-    totalSiteSizeMb: 51200,
     membersPerHost: 100,
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
@@ -490,7 +500,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 204800,
-    totalSiteSizeMb: 102400,
     membersPerHost: 250,
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
@@ -572,7 +581,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: UNLIMITED,
-    totalSiteSizeMb: UNLIMITED,
     membersPerHost: UNLIMITED,
     managersPerOrg: UNLIMITED,
     maxManagersPerOrg: UNLIMITED,
@@ -1047,9 +1055,24 @@ export function applyDiscountUsd(
  *    lower base plan;
  *  - a billing org on a **negotiated custom price** (`customMonthlyUsd > 0`) —
  *    a paying enterprise deal still parked on its pre-AGL-1118 base plan; or
- *  - an explicit **`org.enterprise`** marker — a *comped* enterprise account
- *    (full Enterprise capability + SSO, 100%-discounted so it collects $0,
- *    while infra cost is still metered).
+ *  - an explicit **`org.enterprise`** marker — a *comped* enterprise account,
+ *    100%-discounted so it collects $0 while infra cost is still metered.
+ *
+ * ⚠️ This function answers ONE question — "does this org read as Enterprise" —
+ * and it is not the same question as "what does this org get". Only the first
+ * bullet grants anything: `resolveEffectivePlan` reads `org.plan` and nothing
+ * else, so `org.enterprise` and `customMonthlyUsd` are read NOWHERE but here.
+ * A comped or custom-priced org resolves its BASE plan's entitlements, and
+ * gets Enterprise capability through a per-org `entitlements` override — see
+ * `ssoEnabled`, whose docblock calls that "how enterprise orgs provisioned
+ * before that plan existed still get it".
+ *
+ * This paragraph replaces a parenthetical claiming the comped marker carried
+ * "full Enterprise capability + SSO" (AGL-2297). It never did, and the billing
+ * page believed it: the Enterprise card ticked five entitlements against any
+ * org this function marked, so a comped org whose overrides granted SSO but
+ * not white-label was shown a green tick for full white-label while the
+ * branding card correctly refused it.
  *
  * The last two are kept for orgs provisioned before `enterprise` was a plan;
  * migrating such an org to `plan: 'enterprise'` is the clean end state and
@@ -1201,6 +1224,17 @@ export interface OrgUsageRollupInput {
   dataStorageMb?: number | null
   apiRequests?: number | null
   contactsCount?: number | null
+  /**
+   * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
+   *
+   * Unlike every other field here this is not a meter to be priced — it is
+   * `orgs/{id}/assistUsage/{month}.estCostUsd`, our own cost estimate at the
+   * provider's list rates, computed where the tokens were counted. So it
+   * enters the model at ×1 and has no entry in `ORG_COGS_UNIT_RATES_USD`;
+   * inventing a second per-token rate here is precisely the drift AGL-1134
+   * removed.
+   */
+  assistCostUsd?: number | null
 }
 
 export interface OrgCogsResult {
@@ -1258,6 +1292,24 @@ export function orgMonthlyCogsUsd(
     dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
     apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
     contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+    /*==========================================
+     * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
+     *
+     * Already dollars, so ×1 — see `OrgUsageRollupInput.assistCostUsd`.
+     *
+     * This is the ONE meter on the platform whose unit cost is not a fraction
+     * of a cent. `assist-usage.ts` records `estCostUsd` citing Zach's "Assist
+     * must not eat margins" constraint by name, and until now nothing in the
+     * margin model read it: the discount guardrail priced six meters that
+     * together measured $0.0000054 for the largest real org, and ignored the
+     * only line item that can plausibly clear the $2/site floor on its own.
+     * A 93%-off coupon on an org burning $40/month of tokens rated green.
+     *
+     * It is deliberately NOT in `billedCents` — what an org is charged is a
+     * separate decision with a price sheet behind it. This is what the org
+     * COSTS US, which is the only question the guardrail asks.
+     *=========================================*/
+    assist: num(rollup?.assistCostUsd),
   }
   const measuredUsd = Object.values(breakdown).reduce((sum, x) => sum + x, 0)
   const floorUsd = Math.max(0, siteCount) * INFRA_COGS_PER_SITE_USD
@@ -1305,6 +1357,10 @@ export function orgCogsInputFrom(
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
     contactsCount: read('contactsCount'),
+    // AGL-2280. Dollars, not a meter — the projection still has to forward it
+    // or the model prices Assist at nothing, which is the direction that
+    // approves a discount.
+    assistCostUsd: read('assistCostUsd'),
   }
 }
 
@@ -1573,6 +1629,33 @@ function resolvePurchasedAddons(
 }
 
 /**
+ * Numeric entitlement keys that were REMOVED from `PLAN_ENTITLEMENTS` and
+ * must never be resolved again from a stored override (AGL-2133).
+ *
+ * `totalSiteSizeMb` is the first. It carried a value on all 8 plans and was
+ * enforced by nothing — no gate, no meter, no alert. AGL-1107 added it and
+ * AGL-1370 deleted its meter and its alert on measurement rather than taste:
+ * `measure-node-map.ts` refuses any node map over 900 KB (AGL-678), so the
+ * measurable org total tops out at 2.3–20.9% of the cap depending on plan.
+ * What survived was a WRITABLE staff override field for a number nothing
+ * read, so a support engineer resolving a "this site is too big" ticket
+ * raised it, got a success and an audit row, and changed nothing.
+ *
+ * WIRING IT WAS THE OTHER OPTION AND IT IS WORSE. A cap the measurement can
+ * reach a fifth of is a gate that refuses nobody — the same "reports success,
+ * does nothing" shape, moved from the staff dialog to the enforcement point,
+ * plus a new hard wall introduced days before launch. The per-site size
+ * ceiling that actually binds is AGL-678's 900 KB node map, and it is real.
+ *
+ * The rollup's `siteSizeMb` MEASUREMENT stays — host-usage and the usage
+ * audit read it, and it is a genuine internal signal. Only the entitlement
+ * goes.
+ */
+export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
+  'totalSiteSizeMb',
+])
+
+/**
  * Effective entitlements for an org: plan defaults with the org doc's
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
@@ -1618,6 +1701,16 @@ export function resolveOrgEntitlements(
     } = overrides
     const merged = { ...defaults }
     for (const [key, value] of Object.entries(quotaOverrides)) {
+      // A RETIRED quota's stored override is dropped, not merged (AGL-2133).
+      // This loop copies any numeric key it finds, so removing a key from
+      // `PLAN_ENTITLEMENTS` alone would leave the value that staff already
+      // wrote onto live org documents still appearing on the resolved
+      // entitlements — a number with no default behind it and no reader in
+      // front of it, which is a worse artefact than the field that produced
+      // it. `tools/scripts/strip-retired-entitlements.mjs` clears them from
+      // Firestore; this makes the resolver correct before it has run, and
+      // stays correct if a document is restored from an old backup.
+      if (RETIRED_ENTITLEMENT_KEYS.has(key)) continue
       if (typeof value === 'number') (merged as any)[key] = value
     }
     // Pre-AGL-240 override docs keyed datasets per host; resolve them into
@@ -1847,6 +1940,195 @@ export function resolveMarketplaceFeePct(
 }
 
 /**
+ * The marketplace take rate that breaks even LATEST, derived from the plan
+ * table rather than copied from it (AGL-2343).
+ *
+ * The lowest rate is the binding one: a smaller cut of the same price against
+ * the same processing cost needs a dearer listing to cover it, so advice quoted
+ * at this band holds for every publisher on every plan. Derived on each call
+ * because a hand-written second copy of a rate is exactly the artifact that
+ * decays into wrong money copy shown to a publisher — the same reason
+ * `planGrantingFeature` reads the table instead of a map.
+ */
+export function bindingMarketplaceFeePct(): number {
+  return Math.min(
+    ...Object.values(PLAN_ENTITLEMENTS)
+      .map((plan) => plan.marketplaceFeePct)
+      .filter((pct) => Number.isFinite(pct) && pct > 0),
+  )
+}
+
+/**
+ * What one marketplace sale costs the PLATFORM to process (AGL-2343).
+ *
+ * NONE OF THESE IS AN AGLYN PRICE. They are Stripe's published US rates and
+ * the Texas rate the platform remits, and they exist only as inputs to a
+ * figure shown to a publisher while they type. Nothing is billed from them —
+ * the charged amounts are `resolveMarketplaceFeePct` and Stripe's own
+ * invoicing — so changing one changes a sentence, never a bill.
+ *
+ * WHY THE PLATFORM PAYS THE PROCESSING FEE AT ALL. Marketplace checkout is a
+ * DESTINATION charge with a fixed `transfer_data[amount]` and deliberately no
+ * `application_fee_amount`, so that the sales tax stays with the platform that
+ * owes it (AGL-1544). On a destination charge Stripe debits its fee from the
+ * PLATFORM's balance, and it is charged on `amount_total` — the listing price
+ * plus the tax added on top of it.
+ *
+ * So a $1 listing at a 20% take rate is a loss: the buyer pays $1.08, the
+ * seller is transferred $0.80, $0.08 is owed to the state, Aglyn keeps $0.20
+ * and pays Stripe about $0.33. Net −$0.13.
+ *
+ * THE BNPL RATE IS THE ONE THAT BINDS, and it is not hypothetical: the live
+ * default payment method configuration has `klarna` and `affirm` enabled
+ * alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`, and the
+ * marketplace session pins no `payment_method_types`, so a buyer may pay by
+ * either. Break-even is computed from the dearest enabled method, because a
+ * figure computed from the cheapest would be wrong exactly when it mattered.
+ * IF BNPL IS EVER TURNED OFF FOR MARKETPLACE SESSIONS, this constant is what
+ * has to move with it.
+ */
+export const MARKETPLACE_PROCESSING_PERCENT_CARD = 2.9
+/** Klarna/Affirm, roughly. See the note above — this is the binding one. */
+export const MARKETPLACE_PROCESSING_PERCENT_BNPL = 6
+/** Stripe's per-transaction fixed component, in cents. */
+export const MARKETPLACE_PROCESSING_FIXED_CENTS = 30
+/**
+ * The tax rate the break-even figure assumes. Tax is added ON TOP of the
+ * listing price and enlarges the base Stripe charges its percentage against,
+ * so it makes the platform's cost slightly worse; the real rate is whatever
+ * `automatic_tax` computes for the buyer's address, and this is the
+ * platform's own Texas rate as a representative figure.
+ */
+export const MARKETPLACE_ASSUMED_TAX_PERCENT = 8.25
+
+/** Where the money goes on one sale of a paid listing (AGL-2343). */
+export interface MarketplaceSaleEconomics {
+  /** The listing price. */
+  priceCents: number
+  /** Added on top, and owed to the state. */
+  taxCents: number
+  /** What the buyer is charged. */
+  buyerPaysCents: number
+  /** `transfer_data[amount]` — the seller's share of the pre-tax price. */
+  sellerReceivesCents: number
+  /** The platform's take. */
+  platformFeeCents: number
+  /** Stripe's fee, debited from the platform on a destination charge. */
+  processingCents: number
+  /** `platformFeeCents - processingCents`. Negative is a loss on the sale. */
+  platformNetCents: number
+}
+
+/**
+ * The funds flow for one sale, mirroring what `checkout.ts` actually builds
+ * (AGL-2343): tax exclusive and on top, a fixed transfer of the seller's share
+ * of the PRE-tax price, and Stripe's fee charged on the buyer's total.
+ */
+export function marketplaceSaleEconomics(
+  priceUsd: number,
+  feePercent: number,
+  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
+): MarketplaceSaleEconomics {
+  const priceCents = Math.max(0, Math.round(priceUsd * 100))
+  const taxCents = Math.round(
+    (priceCents * MARKETPLACE_ASSUMED_TAX_PERCENT) / 100,
+  )
+  const buyerPaysCents = priceCents + taxCents
+  const platformFeeCents = Math.round((priceCents * feePercent) / 100)
+  const sellerReceivesCents = priceCents - platformFeeCents
+  // A zero-price listing takes no payment at all, so there is no fee to pay.
+  const processingCents =
+    priceCents === 0
+      ? 0
+      : Math.round(
+          (buyerPaysCents * processingPercent) / 100 +
+            MARKETPLACE_PROCESSING_FIXED_CENTS,
+        )
+  return {
+    priceCents,
+    taxCents,
+    buyerPaysCents,
+    sellerReceivesCents,
+    platformFeeCents,
+    processingCents,
+    platformNetCents: platformFeeCents - processingCents,
+  }
+}
+
+/**
+ * The cheapest WHOLE-DOLLAR price at which the platform does not lose money on
+ * a sale (AGL-2343).
+ *
+ * Whole dollars because every publish route rounds `priceUsd` to one, so a
+ * fractional break-even is not a price anyone can actually set. Searched
+ * rather than solved algebraically so that it can never disagree with
+ * `marketplaceSaleEconomics` — the rounding in there is what decides the
+ * answer at these amounts, and a closed form would drift from it silently.
+ *
+ * THIS IS NOT A FLOOR AND NOTHING ENFORCES IT. Pricing for the September 1
+ * beta is locked, and a minimum price is publisher-facing policy rather than
+ * an implementation detail: it would appear in the publish form's validation
+ * copy and in the publisher handbook, and the right number depends on which
+ * payment methods stay enabled. So this is shown and not imposed; the decision
+ * is recorded on AGL-2343.
+ */
+export function marketplaceBreakEvenUsd(
+  feePercent: number = bindingMarketplaceFeePct(),
+  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
+): number {
+  // The listing price ceiling is the marketplace plugin's
+  // `MARKETPLACE_MAX_PRICE_USD`, which this library may not import (an app-tier
+  // lib cannot depend on an addon). The loop only needs SOME bound, and the
+  // answer is single digits at every rate the table holds, so a generous local
+  // one costs nothing and cannot drift into a wrong figure.
+  const searchCeilingUsd = 1000
+  for (let priceUsd = 1; priceUsd <= searchCeilingUsd; priceUsd += 1) {
+    if (
+      marketplaceSaleEconomics(priceUsd, feePercent, processingPercent)
+        .platformNetCents >= 0
+    ) {
+      return priceUsd
+    }
+  }
+  return searchCeilingUsd
+}
+
+/**
+ * The sentence a publish form shows under its price field when the price does
+ * not cover the cost of taking the payment (AGL-2343), or `undefined` when
+ * there is nothing to say.
+ *
+ * ADVISORY. It does not disable the publish button and no route refuses the
+ * price — see `marketplaceBreakEvenUsd` for why a floor is not being set here.
+ * Shared by every publish form rather than written into each, because the
+ * figure has to be the same one in all of them and the wording is the only
+ * place a publisher ever sees it.
+ *
+ * Quoted at the 20% take rate, which is the band that breaks even LATEST, so
+ * the advice holds for a free-plan publisher too.
+ */
+export function marketplacePriceCostNote(
+  priceUsd: unknown,
+): string | undefined {
+  const price = Math.round(Number(priceUsd) || 0)
+  const breakEven = marketplaceBreakEvenUsd()
+  // A free listing takes no payment, so it costs nothing to process and has
+  // nothing to warn about — silence there is the point, not an oversight.
+  if (!(price > 0) || price >= breakEven) return undefined
+  const { processingCents, platformFeeCents } = marketplaceSaleEconomics(
+    price,
+    bindingMarketplaceFeePct(),
+  )
+  const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  return (
+    `Processing a $${price} payment costs about ${usd(processingCents)}, ` +
+    `more than the ${usd(platformFeeCents)} platform fee — a price this low ` +
+    `does not cover the cost of taking it. $${breakEven} or more does, and a ` +
+    `free listing takes no payment at all.`
+  )
+}
+
+/**
  * The cheapest plan whose BASE features include `feature`, in ladder order —
  * the answer to "which plan do I need for this?", which is the one thing an
  * upsell has to say and the one thing no gate can hard-code without drifting
@@ -1912,18 +2194,31 @@ export interface ResolvedBrandingProfile {
 }
 
 /**
- * The Aglyn (non-white-label) brand — the fallback every surface gets when
- * an org lacks the `whiteLabel` entitlement, and the gap-filler for a
- * partial agency profile. Kept here beside the entitlement so brand and
- * gate stay reviewed together.
+ * The PLATFORM (non-white-label) brand — the fallback every surface gets when
+ * an org lacks the `whiteLabel` entitlement, and the gap-filler for a partial
+ * agency profile. Kept here beside the entitlement so brand and gate stay
+ * reviewed together.
+ *
+ * Renamed from `AGLYN_BRANDING_PROFILE` (AGL-2153), and the rename is the
+ * substance rather than tidying: the old name asserted *whose* brand this is,
+ * and on a self-host install that assertion is exactly what stopped being
+ * true. It is the platform's own brand, and which platform that is, is now
+ * configuration.
+ *
+ * This one change reaches further than it looks. `resolveBrandingProfile` is
+ * the single resolver EVERY branded surface routes through — console chrome,
+ * published-site badge and title, transactional email — and this is its
+ * fallback. Making the fallback read `platform-brand.ts` gives all of them a
+ * self-host brand without extending the white-label machinery at all; only its
+ * default needed to stop being a constant.
  */
-export const AGLYN_BRANDING_PROFILE: ResolvedBrandingProfile = {
-  productName: 'Aglyn',
+export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
+  productName: PLATFORM_BRAND_NAME,
   logoUrl: null,
   faviconUrl: null,
   primaryColor: null,
-  supportUrl: 'https://aglyn.com/support',
-  fromName: 'Aglyn',
+  supportUrl: PLATFORM_SUPPORT_URL,
+  fromName: PLATFORM_BRAND_NAME,
   emailLogoUrl: null,
   customConsoleDomain: null,
 }
@@ -1951,28 +2246,64 @@ function cleanBrandString(value: string | undefined): string | undefined {
 export function resolveBrandingProfile(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedBrandingProfile {
-  if (!checkEntitlement(org, 'whiteLabel')) return AGLYN_BRANDING_PROFILE
+  if (!checkEntitlement(org, 'whiteLabel')) return PLATFORM_BRANDING_PROFILE
   const profile = (org?.brandingProfile ?? {}) as OrgBrandingProfile
   return {
     productName:
       cleanBrandString(profile.productName) ??
-      AGLYN_BRANDING_PROFILE.productName,
-    logoUrl: cleanBrandString(profile.logoUrl) ?? AGLYN_BRANDING_PROFILE.logoUrl,
+      PLATFORM_BRANDING_PROFILE.productName,
+    logoUrl: cleanBrandString(profile.logoUrl) ?? PLATFORM_BRANDING_PROFILE.logoUrl,
     faviconUrl:
-      cleanBrandString(profile.faviconUrl) ?? AGLYN_BRANDING_PROFILE.faviconUrl,
+      cleanBrandString(profile.faviconUrl) ?? PLATFORM_BRANDING_PROFILE.faviconUrl,
     primaryColor:
       cleanBrandString(profile.primaryColor) ??
-      AGLYN_BRANDING_PROFILE.primaryColor,
+      PLATFORM_BRANDING_PROFILE.primaryColor,
     supportUrl:
-      cleanBrandString(profile.supportUrl) ?? AGLYN_BRANDING_PROFILE.supportUrl,
+      cleanBrandString(profile.supportUrl) ?? PLATFORM_BRANDING_PROFILE.supportUrl,
     fromName:
-      cleanBrandString(profile.fromName) ?? AGLYN_BRANDING_PROFILE.fromName,
+      cleanBrandString(profile.fromName) ?? PLATFORM_BRANDING_PROFILE.fromName,
     emailLogoUrl:
       cleanBrandString(profile.emailLogoUrl) ??
-      AGLYN_BRANDING_PROFILE.emailLogoUrl,
+      PLATFORM_BRANDING_PROFILE.emailLogoUrl,
     customConsoleDomain:
       cleanBrandString(profile.customConsoleDomain) ??
-      AGLYN_BRANDING_PROFILE.customConsoleDomain,
+      PLATFORM_BRANDING_PROFILE.customConsoleDomain,
+  }
+}
+
+/**
+ * The brand as MERGE TOKENS, for a staff-designed system-email template
+ * (AGL-2139).
+ *
+ * White-label inverted precisely when staff published a template, which is
+ * that feature's normal steady state. Every org-context sender has the shape
+ * `subject: designed?.subject ?? <branded fallback>` — the DESIGNED template
+ * wins — and the catalog copy hard-coded "Aglyn" throughout. There was no
+ * brand token to design against either: the merge maps carried `org.name`,
+ * `invite.role`, `signInUrl` and friends and nothing about the brand, and
+ * `blankUnresolvedTokens` BLANKS any token the caller did not supply. So a
+ * designer who reached for `{{brand.productName}}` would have shipped an
+ * email with a hole in the sentence.
+ *
+ * Token bodies are namespaced `brand.*` so a designer can tell them from the
+ * per-send values, and they resolve for EVERY org — Aglyn's own included,
+ * since `PLATFORM_BRANDING_PROFILE.productName` is `'Aglyn'`. That is what makes
+ * a single template correct for both populations instead of one hard-coded
+ * for the majority.
+ *
+ * The email LOGO is deliberately absent. It is structural — `renderEmailHtml`
+ * emits it as a header row above the designed body, or emits nothing — so it
+ * travels as an option rather than as a token a template could forget to
+ * place, and there is no sample URL a staff test-send could render without
+ * showing a broken image.
+ */
+export function brandMergeTokens(
+  branding: ResolvedBrandingProfile,
+): Record<string, string> {
+  return {
+    'brand.productName': branding.productName,
+    'brand.fromName': branding.fromName,
+    'brand.supportUrl': branding.supportUrl,
   }
 }
 
@@ -1987,7 +2318,7 @@ export function resolveBrandingProfile(
  * our runtime to no consumer. A detector needs the product name and nothing
  * else.
  */
-export const PLATFORM_GENERATOR_NAME = 'Aglyn'
+export const PLATFORM_GENERATOR_NAME = PLATFORM_BRAND_NAME
 
 /**
  * May this org's published pages say they were built with Aglyn? (AGL-2088)
@@ -2461,4 +2792,315 @@ export function checkFormSubmissionAbuseCeiling(
     : FORM_ABUSE_CEILING_UNLIMITED
   const used = Math.max(0, usedThisMonth)
   return { exceeded: used >= ceiling, ceiling, used }
+}
+
+/**
+ * Average transfer per page view (HTML + JS + a few images), the constant
+ * that turns the analytics view counter into a bandwidth number and back.
+ *
+ * Lives HERE rather than beside the metering rates (AGL-2155). It used to sit
+ * in `apps/console/utils/usage-metering.ts`, which the console imports and the
+ * tenant app cannot — and the bandwidth ceiling below has to be evaluated in
+ * the tenant app, at the beacon that writes the counter. Re-deriving the
+ * conversion there would have been a fourth hand-rolled copy of
+ * `× 1024³ / 600KB`, which is the exact drift AGL-1371 collapsed into one
+ * function. `usage-metering` now re-exports these three, so every existing
+ * importer is unchanged and there is still one definition.
+ */
+export const ESTIMATED_PAGE_TRANSFER_BYTES = 600 * 1024
+
+/**
+ * Bandwidth ⇄ page views: the one conversion three surfaces used to each
+ * write out by hand (AGL-1371).
+ *
+ * `bandwidthGb` is not a second cap next to metered page views — it IS the
+ * included band of the page-view meter, expressed in the unit customers
+ * understand. It is therefore used in both directions: forward by
+ * `meteredIncludedAllowance` to size the band the invoice subtracts, backward
+ * by the usage-alerts cron and the console meter to render live page views as
+ * GB.
+ */
+export function pageViewsFromBandwidthGb(bandwidthGb: number): number {
+  return (bandwidthGb * 1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
+}
+
+/** @see pageViewsFromBandwidthGb — the same constant, the other way. */
+export function bandwidthGbFromPageViews(pageViews: number): number {
+  return (
+    (Math.max(0, Number(pageViews) || 0) * ESTIMATED_PAGE_TRANSFER_BYTES) /
+    (1024 * 1024 * 1024)
+  )
+}
+
+/**
+ * How far past a plan's own included bandwidth the abuse ceiling sits
+ * (AGL-2155) — the same posture, and the same number, as
+ * {@link FORM_ABUSE_CEILING_MULTIPLE}. Ten times the bandwidth the customer
+ * bought is not growth; it is an upgrade conversation, or it is not the
+ * customer's traffic at all.
+ */
+export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 10
+
+/**
+ * Absolute floor for the bandwidth ceiling, in PAGE VIEWS per month, so the
+ * small plans get real headroom instead of a second, tighter plan limit
+ * wearing a different name.
+ *
+ * Free includes 5 GB ≈ 8,948 views; 10× would be ~89,500, which a genuinely
+ * successful hobby site (a post that lands on Hacker News) reaches in an
+ * afternoon and would be a miserable first experience of the platform.
+ * 100,000 views/month ≈ 58.6 GB ≈ **$10 of real COGS** at
+ * `METERED_UNIT_RATES_USD.perPageView` — an order of magnitude above the free
+ * band, and an order of magnitude below the $100 a million views costs. It is
+ * the number that makes "free stays free" true without making it stingy.
+ */
+export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
+
+/**
+ * Ceiling for plans whose bandwidth band is UNLIMITED (Enterprise), where a
+ * multiple has nothing to multiply. Kept at or above the ceiling of every
+ * finite plan below it — Agency includes 20,000 GB ≈ 35.8M views, so its
+ * ceiling is ~358M — so the ladder never inverts and a bigger plan never
+ * inherits a smaller ceiling.
+ */
+export const BANDWIDTH_ABUSE_CEILING_UNLIMITED = 500_000_000
+
+/**
+ * Machine-readable marker for a bandwidth containment, so a capped response
+ * is distinguishable from the maintenance/lockdown notices it shares a shell
+ * with. Deliberately NOT a {@link LockdownReasonCode}: a lockdown is a staff
+ * takedown, this is a billing containment that clears itself at the month
+ * boundary with nobody doing anything.
+ */
+export const BANDWIDTH_CEILING_CODE = 'bandwidth_ceiling'
+
+export interface BandwidthAbuseCeilingResult {
+  /** True once this month's page views for the SITE reached the ceiling. */
+  exceeded: boolean
+  /** The ceiling this site's plan resolves to, in page views. Finite. */
+  ceiling: number
+  used: number
+}
+
+/**
+ * Per-site monthly bandwidth abuse ceiling (AGL-2155).
+ *
+ * ## The hole this closes
+ *
+ * Every other free dimension had a runtime brace — `mediaStorageGate`,
+ * `checkFormSubmissionQuota`, a zero band for dataset storage and API, a
+ * hard band for contacts. Bandwidth had **none**: nothing anywhere refused a
+ * page view, so a free site that went viral served a million views — roughly
+ * **$100 of real COGS** — with no wall, no throttle and no alert. It was
+ * protected only by the structural zero on the billing side (free carries no
+ * rate, so the invoice stays $0), which protects the *bill* and not the
+ * *bleeding*. `free-tier-never-billed.spec.ts` said so in its own table.
+ *
+ * ## Why an abuse ceiling and not a plan gate
+ *
+ * Exactly the distinction {@link checkFormSubmissionAbuseCeiling} draws, and
+ * for the same reason. A plan gate answers "did the customer buy this?" — and
+ * for a metered plan the answer past the band is *yes, and we bill it*. This
+ * answers "is this still a customer's traffic at all?", and crossing it is an
+ * INCIDENT rather than a quota: the site is flagged, staff are told, and the
+ * render path degrades to a static notice instead of paying ~40 Firestore
+ * reads and ~600 KB of egress per view.
+ *
+ * ## Where it is evaluated
+ *
+ * NOT in the render path. The page-view counter is written *after* the render
+ * by `/api/analytics/collect`; that route evaluates this on a sampled cadence
+ * and stamps `bandwidthCeiling` onto the host document. The render path reads
+ * that field off a host doc **it already loads** (`load-page-data.ts` reads
+ * `hostRes.host` for the lockdown branch), so the containment costs the happy
+ * path exactly zero extra reads.
+ *
+ * An edge/CDN rule would be the other natural home and is deliberately not
+ * the answer here: it is not a repo change, nothing in this suite could
+ * verify it, and it cannot see which plan a host is on.
+ */
+export function checkBandwidthAbuseCeiling(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedPageViewsThisMonth: number,
+): BandwidthAbuseCeilingResult {
+  const includedGb = resolveOrgEntitlements(org).bandwidthGb ?? 0
+  const includedViews = pageViewsFromBandwidthGb(includedGb)
+  const ceiling = Number.isFinite(includedViews)
+    ? Math.max(
+        BANDWIDTH_ABUSE_CEILING_FLOOR,
+        Math.round(includedViews * BANDWIDTH_ABUSE_CEILING_MULTIPLE),
+      )
+    : BANDWIDTH_ABUSE_CEILING_UNLIMITED
+  const used = Math.max(0, Number(usedPageViewsThisMonth) || 0)
+  return { exceeded: used >= ceiling, ceiling, used }
+}
+
+/**
+ * Does crossing the ceiling **degrade what visitors see**, or only raise the
+ * incident? (AGL-2155)
+ *
+ * Only on a plan that does NOT meter the infra pass-through — which today is
+ * free/hobby, and is precisely Zach's requirement that free "always actually
+ * stays free". On free the traffic is uncompensated, so serving it is a
+ * straight loss and the least destructive way to stop the bleeding is to stop
+ * paying for the expensive render.
+ *
+ * On a metered plan the same traffic is *invoiced*, so taking a paying
+ * customer's site off the air would trade a bill they agreed to for an outage
+ * they did not. Their ceiling still trips, still flags the host and still
+ * escalates to staff — it just does not change what a visitor gets. Whether a
+ * paying host past its OWN ceiling should also be degraded is a product call
+ * and is left open on purpose; flipping it is this one function.
+ */
+export function bandwidthCeilingDegradesRender(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return !planMetersInfraOverage(org)
+}
+
+/**
+ * `hosts/{id}.bandwidthCeiling` — the flag the beacon stamps and the render
+ * path reads. Month-scoped so it **self-clears at the month boundary** with
+ * no staff action and no write, the same property `LockdownState.untilMs`
+ * has: a site contained in August serves normally on September 1.
+ *
+ * Admin-SDK-only. It is frozen against client writes in
+ * `cloud/firebase-firestore.rules` alongside the `suspendedAt` family, for
+ * the identical reason: a site that could clear its own containment does not
+ * have one.
+ */
+export interface HostBandwidthCeiling {
+  /** `YYYY-MM` (UTC) the trip belongs to. */
+  month: string
+  /** The ceiling that was crossed, in page views. */
+  ceiling: number
+  /** The month count observed when it tripped. */
+  used: number
+  trippedAtMs: number
+  /** False when the plan meters the overage — flagged, not degraded. */
+  degraded: boolean
+}
+
+/**
+ * Read the host document's containment flag, tolerantly. Returns null unless
+ * the flag is present, well-formed AND belongs to `month` — an August trip
+ * must not silence a September visitor.
+ */
+export function normalizeHostBandwidthCeiling(
+  host: Record<string, any> | null | undefined,
+  month: string,
+): HostBandwidthCeiling | null {
+  const raw = host?.['bandwidthCeiling']
+  if (!raw || typeof raw !== 'object') return null
+  if (String(raw.month ?? '') !== month) return null
+  const ceiling = Number(raw.ceiling ?? 0)
+  if (!Number.isFinite(ceiling) || ceiling <= 0) return null
+  return {
+    month,
+    ceiling,
+    used: Math.max(0, Number(raw.used ?? 0) || 0),
+    trippedAtMs: Math.max(0, Number(raw.trippedAtMs ?? 0) || 0),
+    degraded: raw.degraded === true,
+  }
+}
+
+/**
+ * Is the render path required to serve the capped notice instead of the page?
+ *
+ * Both halves must hold: the flag is for THIS month, and the trip was
+ * recorded as one that degrades. `degraded` is written by the evaluator from
+ * {@link bandwidthCeilingDegradesRender} at trip time rather than re-derived
+ * here, so a host that upgrades mid-month is not still being degraded by a
+ * flag written while it was free — and, in the other direction, a flag from a
+ * paying host can never take that host down.
+ */
+export function bandwidthCeilingDegradesHost(
+  host: Record<string, any> | null | undefined,
+  month: string,
+): boolean {
+  return normalizeHostBandwidthCeiling(host, month)?.degraded === true
+}
+
+/** UTC `YYYY-MM`, the key both the beacon and the render path agree on. */
+export function bandwidthCeilingMonthKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 7)
+}
+
+/**
+ * Visitor-facing copy for a contained site. Says what happened and that it
+ * ends, and names nothing about the plan, the count or the owner — this is
+ * read by a stranger to the site, exactly like the form ceiling's refusal
+ * body (AGL-1666).
+ */
+export function bandwidthCeilingNotice(): { title: string; body: string } {
+  return {
+    title: 'This site is temporarily unavailable',
+    body: 'It has served more traffic this month than its plan includes. It will be back at the start of next month, or sooner if the owner upgrades.',
+  }
+}
+
+/**
+ * What a quota check costs a caller that intends to ENFORCE it (AGL-2163).
+ *
+ * `checkDataStorageQuota` and `checkApiRequestQuota` each carry an `allowed`
+ * field, and their docblocks promise it refuses — "plans without one (free)
+ * hard-block at the included size", "plans without API access have
+ * `included: 0` and always block". Nothing read it. Both functions appeared
+ * only in `/api/billing/report-usage`, which reads `overageMonthlyUsd` and
+ * ignores `allowed`, so the promise was documentation and the free tier's
+ * "runtime braces" on those two dimensions did not exist.
+ *
+ * Enforcing them naively means measuring first, and for dataset storage the
+ * measurement is O(datasets) reads — far too much for a per-record write.
+ * This makes the cheap answer available: for every plan shipping today the
+ * verdict does not depend on the measurement at all, because a plan either
+ * has an overage RATE (then it always allows and meters) or a band of zero
+ * (then it always refuses). Measuring is required only for the shape a staff
+ * `entitlementOverrides` can create — a finite, non-zero band on a plan with
+ * no rate — and only then does the caller pay a read.
+ *
+ * - `'always-blocks'` — refuse now; no measurement, no read.
+ * - `'never-blocks'` — proceed; no measurement, no read. **This is every
+ *   metered/paid plan**, so enforcement costs a paying customer nothing and
+ *   can never refuse them.
+ * - `'measure'` — the verdict depends on usage; measure and call the check.
+ */
+export type QuotaEnforcementShape =
+  | 'always-blocks'
+  | 'never-blocks'
+  | 'measure'
+
+function enforcementShape(
+  atZero: boolean,
+  atCeiling: boolean,
+): QuotaEnforcementShape {
+  if (!atZero && !atCeiling) return 'always-blocks'
+  if (atZero && atCeiling) return 'never-blocks'
+  return 'measure'
+}
+
+/**
+ * Enforcement shape of {@link checkDataStorageQuota} for this org, before
+ * anything has been measured. @see QuotaEnforcementShape
+ */
+export function dataStorageEnforcementShape(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): QuotaEnforcementShape {
+  return enforcementShape(
+    checkDataStorageQuota(org, 0).allowed,
+    checkDataStorageQuota(org, Number.MAX_SAFE_INTEGER).allowed,
+  )
+}
+
+/**
+ * Enforcement shape of {@link checkApiRequestQuota} for this org, before
+ * anything has been measured. @see QuotaEnforcementShape
+ */
+export function apiRequestEnforcementShape(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): QuotaEnforcementShape {
+  return enforcementShape(
+    checkApiRequestQuota(org, 0).allowed,
+    checkApiRequestQuota(org, Number.MAX_SAFE_INTEGER).allowed,
+  )
 }

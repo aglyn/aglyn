@@ -55,6 +55,7 @@ let mockScreenAnalyticsReads: number
 let mockScreenAnalyticsDocId: string | undefined
 // The collection doc the AGL-1845 fallback queries by slug on a map miss.
 let mockCollectionData: FakeDocData | null
+let mockCollectionShadowData: FakeDocData | null
 let mockCollectionQueries: number
 let mockCollectionSlugQueried: string | undefined
 
@@ -122,13 +123,24 @@ function hostSubcollection(sub: string) {
         return {
           limit: (count: number) => ({
             get: async () => {
-              expect(count).toBe(1)
+              // A WINDOW, not `limit(1)` — a slug is unique only within a
+              // kind, so the route has to see the shadowing doc to skip it
+              // (AGL-954, restated for AGL-1845). Pinning 1 here is what
+              // made the divergence from `findContentCollection` invisible.
+              expect(count).toBe(5)
               mockCollectionQueries += 1
               mockCollectionSlugQueried = value
+              // Firestore returns no useful order across kinds, so the
+              // shadow is served FIRST — the position that broke it.
               return {
-                docs: mockCollectionData
-                  ? [docSnapshot(mockCollectionData)]
-                  : [],
+                docs: [
+                  ...(mockCollectionShadowData
+                    ? [docSnapshot(mockCollectionShadowData)]
+                    : []),
+                  ...(mockCollectionData
+                    ? [docSnapshot(mockCollectionData)]
+                    : []),
+                ],
               }
             },
           }),
@@ -160,7 +172,8 @@ function mockFirestore() {
         }),
       }),
       doc: () => ({
-        get: async () => docSnapshot(name === 'orgs' ? mockOrgData : mockHostData),
+        get: async () =>
+          docSnapshot(name === 'orgs' ? mockOrgData : mockHostData),
         collection: hostSubcollection,
       }),
     }),
@@ -179,8 +192,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     token === 'good-token'
       ? { hostId: 'host-1', uid: 'user-1', exp: 123456 }
       : null,
-  filterEnabledPluginsByReleaseFlags: jest.fn(
-    async (ids: readonly string[]) => mockFlagFilter(ids),
+  filterEnabledPluginsByReleaseFlags: jest.fn(async (ids: readonly string[]) =>
+    mockFlagFilter(ids),
   ),
 }))
 
@@ -220,6 +233,7 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     mockScreenAnalyticsReads = 0
     mockScreenAnalyticsDocId = undefined
     mockCollectionData = null
+    mockCollectionShadowData = null
     mockCollectionQueries = 0
     mockCollectionSlugQueried = undefined
   })
@@ -356,6 +370,29 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
     )
+  })
+
+  it('skips a catalog collection that shadows the blog slug (AGL-954)', async () => {
+    // Commerce catalog collections live in the SAME
+    // `hosts/{hostId}/collections`, and a slug is unique only within a
+    // kind. The fallback claimed to "resolve the same way the loader
+    // does", but used a bare `limit(1)` where `findContentCollection`
+    // uses a window plus a content-kind filter — so whichever doc
+    // Firestore returned first won, and a catalog could hand the bar the
+    // wrong collection name and deep-link "Edit this page" at the wrong
+    // template screen.
+    mockCollectionShadowData = {
+      kind: 'catalog',
+      displayName: 'Products',
+      entryScreenId: 'screen-CATALOG',
+    }
+    mockCollectionData = { displayName: 'Blog', entryScreenId: 'screen-1' }
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/aglyn-is-in-early-access'))
+    ).json()
+    expect(payload.collectionName).toBe('Blog')
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.screenId).not.toBe('screen-CATALOG')
   })
 
   it('falls back to the legacy templateScreenId pointer (pre-AGL-1400 docs)', async () => {

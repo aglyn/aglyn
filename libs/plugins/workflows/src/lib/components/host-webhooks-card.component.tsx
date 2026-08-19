@@ -20,10 +20,12 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   createResourceUid,
+  pluginDocsHelp,
   WEBHOOK_MAX_PER_HOST,
   WEBHOOK_URL_PATTERN,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -105,11 +107,9 @@ export function HostWebhooksCard(props: {
     .filter((workflow: any) => !workflow.deletedAt && workflow.name)
     .map((workflow: any) => workflow.name as string)
     .sort()
-  const siteBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : ''
+  // `hostPublicOrigin` (AGL-2195) — this base is printed into the webhook
+  // sample payload an operator copies into a third-party system.
+  const siteBase = hostPublicOrigin(host) ?? ''
 
   const [draft, setDraft] = useState<WebhookDraft | null>(null)
 
@@ -209,7 +209,12 @@ export function HostWebhooksCard(props: {
   )
 
   return (
-    <CardDisplay header={'Webhooks'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Webhooks'}
+      help={pluginDocsHelp('webhooks', { anchor: '#outbound-webhooks' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {'Send signed JSON to outside systems from the actions builder, ' +

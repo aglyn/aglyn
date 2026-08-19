@@ -30,6 +30,8 @@ import {
   type HostVariable,
   type HostWorkflow,
   buildDatasetRecordValues,
+  describeStepOutcome,
+  normalizeTriggerConditions,
   resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
@@ -114,11 +116,28 @@ async function executeAction(
 ): Promise<void> {
   const { hostId, hostRef, alerts, depth } = env
   const stepErrors: string[] = []
+  /**
+   * What each step actually DID (AGL-2171). Only failures were recorded,
+   * so a run that sent an email, wrote a row and posted a webhook logged
+   * the same eight words as a run that did nothing — and
+   * `/product/workflows` advertises a `What happened` column reading
+   * `Sent email · saved to Leads · webhook 200`.
+   */
+  const outcomes: string[] = []
   for (const step of (action.steps ?? []).slice(0, ACTION_MAX_STEPS)) {
+    const errorsBefore = stepErrors.length
+    /** False for a step this run never attempted. */
+    let attempted = false
+    /**
+     * The one fact worth carrying into the summary — the dataset's name,
+     * the webhook's status. Set by the branch that knows it.
+     */
+    let detail: string | undefined
     try {
       if (isClientActionStep(step) && step.type !== 'siteAlert') {
         continue // Runs in the visitor's page (AGL-257).
       }
+      attempted = true
       if (step.type === 'siteAlert') {
         alerts.push({
           message: String(step.message ?? '').slice(0, 300),
@@ -196,6 +215,7 @@ async function executeAction(
         // Two quick retries — serverless-friendly; longer retry queues
         // are a follow-up.
         let delivered = false
+        let lastStatus: number | undefined
         for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {
           try {
             const response = await fetch(hook.url, {
@@ -207,6 +227,7 @@ async function executeAction(
               body,
               signal: AbortSignal.timeout(5000),
             })
+            lastStatus = response.status
             delivered = response.ok
           } catch {
             // Retry below.
@@ -221,6 +242,12 @@ async function executeAction(
           stepErrors.push(
             `webhook "${step.webhookName || step.webhookId}" delivery failed`,
           )
+        } else {
+          // The status the mockup prints — discarded on the line it
+          // arrived until AGL-2171. A 200 and a 204 are both `ok`, and
+          // knowing which is the whole reason anyone opens a run history
+          // after a webhook.
+          detail = String(lastStatus ?? '')
         }
       } else if (step.type === 'datasetAppend') {
         // Id-first lookup (AGL-261/556); the name query is the legacy path.
@@ -248,6 +275,14 @@ async function executeAction(
             values,
             createdAt: FieldValue.serverTimestamp(),
           })
+          // `saved to Leads` beats `saved to dataset` (AGL-2171). Same
+          // name precedence `findDatasetByName` resolves in.
+          detail = String(
+            datasetDoc.get('displayName') ??
+              datasetDoc.get('name') ??
+              step.datasetName ??
+              '',
+          ).slice(0, 60)
         }
       } else if (step.type === 'updateDataset') {
         // Update-or-append (AGL-257): matches the record whose `email`
@@ -396,6 +431,14 @@ async function executeAction(
       }
     } catch (error) {
       stepErrors.push((error as Error).message)
+    } finally {
+      // A step that added no error of its own did what it said. `finally`
+      // rather than the end of the try block because every failure branch
+      // above reaches its error with `continue`, which would skip a plain
+      // trailing statement while still counting as a success.
+      if (attempted && stepErrors.length === errorsBefore) {
+        outcomes.push(describeStepOutcome(step.type, detail))
+      }
     }
   }
   const summary = stepErrors.length
@@ -409,7 +452,66 @@ async function executeAction(
     .add({
       actorId: null,
       actorEmail: null,
+      // The prose line stays exactly as it was: `activityPrimaryText` and
+      // three other renderers read it, and the run table is not the only
+      // thing this collection feeds.
       action: summary,
+      // The structured half (AGL-2171) — the two columns the advertised
+      // run-history table could not otherwise fill.
+      result: stepErrors.length ? 'failed' : 'succeeded',
+      trigger: event,
+      summary: (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
+      target: { type: 'workflow', id: actionId, name: action.name ?? '' },
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    .catch(() => undefined)
+}
+
+/**
+ * Events too frequent to log a skip for.
+ *
+ * `runEventActions` fires on EVERY page view of every published site. A
+ * Firestore write per visitor per non-matching action is not a run
+ * history, it is an outage — and a page-view condition is one an author
+ * tunes by watching the site, not by reading a log. The events people
+ * actually debug are the server-emitted ones (a form submission, a
+ * booking, a sign-up), and those are low-volume by construction.
+ */
+const SKIP_LOG_EXCLUDED_EVENTS = new Set(['pageView'])
+
+/**
+ * Writes the `Skipped` row (AGL-2171): which condition stopped the run,
+ * so the answer to "why didn't it fire?" is in the same place as every
+ * run that did.
+ *
+ * Never counts against `actionRunsPerMonth` — nothing executed, and
+ * charging for a condition that said no would be its own bug.
+ */
+async function recordSkippedRun(
+  hostRef: FirebaseFirestore.DocumentReference,
+  actionId: string,
+  action: HostAction,
+  event: string,
+): Promise<void> {
+  if (SKIP_LOG_EXCLUDED_EVENTS.has(event)) return
+  // `normalizeTriggerConditions`, not `trigger.conditions` — a pre-AGL-565
+  // action carries a single `condition` and reading only the array would
+  // give every one of them the nameless fallback.
+  const named = normalizeTriggerConditions(action.trigger)
+    .map((condition) => String(condition?.field ?? '').trim())
+    .filter(Boolean)
+  const reason = named.length
+    ? `Condition on ${named.slice(0, 3).join(', ')} not met`
+    : 'Trigger condition not met'
+  await hostRef
+    .collection('activity')
+    .add({
+      actorId: null,
+      actorEmail: null,
+      action: `Action skipped on ${event}`,
+      result: 'skipped',
+      trigger: event,
+      summary: reason.slice(0, 300),
       target: { type: 'workflow', id: actionId, name: action.name ?? '' },
       createdAt: FieldValue.serverTimestamp(),
     })
@@ -483,9 +585,15 @@ export async function runEventActions(
         }
       }
       // Structured payload conditions (AGL-557; AND/OR chaining AGL-565):
-      // same scope as the filter; unmet conditions skip the action (and
-      // never count as a run).
+      // same scope as the filter; unmet conditions skip the action and
+      // never count as a run against the quota.
       if (!evaluateTriggerConditions(action.trigger, { event, ...payload })) {
+        // …but they are RECORDED now (AGL-2171). This was a bare
+        // `continue`, so "why didn't my automation fire?" — the most
+        // common support question about automations — had no answer
+        // anywhere in the product, while `/product/workflows` advertises
+        // an amber `Skipped` row that answers it.
+        await recordSkippedRun(hostRef, doc.id, action, event)
         continue
       }
       executed += 1

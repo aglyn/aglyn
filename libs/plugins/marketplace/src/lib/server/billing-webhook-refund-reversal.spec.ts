@@ -42,6 +42,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const writes: Array<{ path: string; data: Record<string, unknown> }> = []
   const store: Record<string, Record<string, unknown> | undefined> = {}
   const docFor = (path: string) => ({
+    // A real DocumentReference carries its own id, and production code reads
+    // it: the reversal stamps `metadata[purchaseId]` from it and the GA
+    // `refund` is keyed by it. A double without it fabricates an `undefined`
+    // transaction id that no assertion here could have distinguished from a
+    // real one.
+    id: path.split('/').pop() ?? path,
     set: (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       writes.push({ path, data })
       store[path] = options?.merge ? { ...(store[path] ?? {}), ...data } : data
@@ -52,6 +58,13 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       data: () => store[path],
       get: (field: string) => (store[path] ?? {})[field],
     }),
+    // Firestore's delete removes the document and is a no-op on one that is
+    // already absent — never an error, which is why the drain can call it
+    // unconditionally.
+    delete: () => {
+      delete store[path]
+      return Promise.resolve()
+    },
   })
   const ga4: Ga4PurchaseInput[] = []
   const ga4Refunds: Ga4PurchaseInput[] = []
@@ -478,15 +491,25 @@ describe('what a refund must NOT reverse (AGL-1995)', () => {
   // Positive controls for the branch's selectivity. A reversal that fired on
   // everything would be a worse bug than the one being fixed: it would debit
   // publishers for sales that were never refunded.
-  it('leaves a PARTIAL refund alone — the share stays with the publisher', async () => {
+  it('leaves a partial refund UNREVOKED — it is a concession, not an un-buy', async () => {
+    // The money half of a partial refund CHANGED in AGL-2299 (see the
+    // dedicated describe below); what this case pins is the half that did
+    // not. The buyer keeps what they bought, GA is not told the sale came
+    // back, and the one-shot settle marker is not consumed.
     process.env.STRIPE_SECRET_KEY = 'sk_double_1995'
+    stubStripe({
+      charge: { body: { ...chargeBody, amount_refunded: 5000 } },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_partial', amount: 3695 } },
+    })
     await marketplaceBillingWebhookHandler(
       refundEvent({ refunded: false, amount_refunded: 5000 }) as any,
     )
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(purchase()['reversedTransferCents']).toBeUndefined()
-    // And it stays a concession: no revocation either.
     expect(purchase()['refundedAt']).toBeUndefined()
+    expect(adminMock.__ga4Refunds).toHaveLength(0)
+    // The one-shot marker stays free, so a LATER full refund or lost dispute
+    // can still run — with only the remainder left to take.
+    expect(purchase()['reversedTransferCents']).toBeUndefined()
   })
 
   it('touches nothing when the refund belongs to another payment intent', async () => {
@@ -506,5 +529,275 @@ describe('what a refund must NOT reverse (AGL-1995)', () => {
     expect(purchase()).toMatchObject({ refundedAt: 'NOW' })
     expect(purchase()['reversedTransferCents']).toBeUndefined()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A PARTIAL refund pulls back the publisher's proportional share (AGL-2299).
+ *
+ * The worked example throughout: a $100 listing at a 20% take rate with $8.25
+ * of tax. `charge.amount` is 10825, `transfer.amount` is 8000 — the seller's
+ * share of the PRE-TAX price, because the marketplace pays a fixed
+ * `transfer_data[amount]` rather than an application fee.
+ *
+ * Before this, none of it happened: the branch was gated on `refunded ===
+ * true`, so a $50 goodwill refund was paid entirely out of the platform's
+ * balance while the publisher's $80 had already left on the destination
+ * transfer. Aglyn holds $20 of that charge plus tax it owes the state, so the
+ * platform was $30 down and the seller untouched. Publisher agreement §8.4
+ * covers the pull-back in as many words.
+ *
+ * The arithmetic: floor(5000 × 8000 ÷ 10825) = 3695.
+ */
+describe('a partial refund reverses the seller share proportionally (AGL-2299)', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_double_2291'
+  })
+
+  const partial = (amountRefunded: number) =>
+    refundEvent({ refunded: false, amount_refunded: amountRefunded }) as any
+
+  it('POSTs the proportional slice and records it', async () => {
+    stubStripe({
+      charge: { body: { ...chargeBody, amount_refunded: 5000 } },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_p1', amount: 3695 } },
+    })
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+
+    expect(posts).toHaveLength(1)
+    expect(String(posts[0].init.body)).toContain('amount=3695')
+    expect(purchase()).toMatchObject({
+      partialRefundedCents: 5000,
+      partialReversedTransferCents: 3695,
+      partialTransferReversalId: 'trr_p1',
+    })
+  })
+
+  it('is idempotent under a redelivery — Stripe’s amount_reversed is the ledger', async () => {
+    // The second delivery sees the reversal already on the transfer, so the
+    // target is met and nothing is POSTed. No settle marker of our own is
+    // involved: the convergence is against Stripe's own number.
+    let reversed = 0
+    fetchMock.mockImplementation(async (url: any, init?: any) => {
+      const address = String(url)
+      if (address === 'https://api.stripe.com/v1/charges/ch_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...chargeBody, amount_refunded: 5000 }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => transferBody({ amount_reversed: reversed }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1/reversals') {
+        posts.push({ url: address, init })
+        reversed += 3695
+        return { ok: true, status: 200, json: async () => ({ id: 'trr_p1', amount: 3695 }) }
+      }
+      throw new Error(`Unexpected fetch to ${address}`)
+    })
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+    await marketplaceBillingWebhookHandler(partial(5000))
+
+    expect(posts).toHaveLength(1)
+    expect(purchase()['partialReversedTransferCents']).toBe(3695)
+  })
+
+  it('a SECOND partial refund takes only the difference', async () => {
+    // Two refunds, $50 then a further $25, so the cumulative
+    // `amount_refunded` is 7500: target floor(7500 × 8000 ÷ 10825) = 5542,
+    // and 3695 has already come back, so the second call takes 1847.
+    let reversed = 0
+    let refunded = 5000
+    fetchMock.mockImplementation(async (url: any, init?: any) => {
+      const address = String(url)
+      if (address === 'https://api.stripe.com/v1/charges/ch_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...chargeBody, amount_refunded: refunded }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => transferBody({ amount_reversed: reversed }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1/reversals') {
+        posts.push({ url: address, init })
+        const amount = Number(new URLSearchParams(String(init.body)).get('amount'))
+        reversed += amount
+        return { ok: true, status: 200, json: async () => ({ id: 'trr_p', amount }) }
+      }
+      throw new Error(`Unexpected fetch to ${address}`)
+    })
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+    refunded = 7500
+    await marketplaceBillingWebhookHandler(partial(7500))
+
+    expect(posts.map((post) => new URLSearchParams(String(post.init.body)).get('amount'))).toEqual([
+      '3695',
+      '1847',
+    ])
+    expect(purchase()['partialReversedTransferCents']).toBe(5542)
+  })
+
+  it('a LATER full refund takes only the remainder — no double debit', async () => {
+    // The composition that matters most. The one-shot path caps at
+    // `transfer.amount − amount_reversed`, so after 3695 has come back on a
+    // partial, a full refund pulls 4305 rather than the whole 8000.
+    let reversed = 0
+    let refunded = 5000
+    let refundedFlag = false
+    fetchMock.mockImplementation(async (url: any, init?: any) => {
+      const address = String(url)
+      if (address === 'https://api.stripe.com/v1/charges/ch_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...chargeBody, amount_refunded: refunded }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => transferBody({ amount_reversed: reversed }),
+        }
+      }
+      if (address === 'https://api.stripe.com/v1/transfers/tr_1/reversals') {
+        posts.push({ url: address, init })
+        const amount = Number(new URLSearchParams(String(init.body)).get('amount'))
+        reversed += amount
+        return { ok: true, status: 200, json: async () => ({ id: 'trr_x', amount }) }
+      }
+      throw new Error(`Unexpected fetch to ${address}`)
+    })
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+    refunded = 10825
+    refundedFlag = true
+    await marketplaceBillingWebhookHandler(
+      refundEvent({ refunded: refundedFlag, amount_refunded: 10825 }) as any,
+    )
+
+    expect(posts.map((post) => new URLSearchParams(String(post.init.body)).get('amount'))).toEqual([
+      '3695',
+      '4305',
+    ])
+    // Together they are the whole seller share, and no more.
+    expect(reversed).toBe(8000)
+    // And the full refund did everything else a full refund does.
+    expect(purchase()['refundedAt']).toBe('NOW')
+    expect(purchase()['reversedTransferCents']).toBe(4305)
+  })
+
+  it('does nothing once the one-shot path has already settled', async () => {
+    // A lost dispute took the share; a partial refund arriving afterwards must
+    // not debit the publisher a second time.
+    stubStripe({
+      charge: { body: { ...chargeBody, amount_refunded: 10825 } },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_full', amount: 8000 } },
+    })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    posts.length = 0
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+
+    expect(posts).toHaveLength(0)
+  })
+
+  it('ignores a partial refund on a charge with no purchase and no marketplace stamp', async () => {
+    // The selectivity control. `charge.refunded` reaches this endpoint for
+    // storefront orders and subscription charges; a reversal that fired on
+    // those would debit merchants for sales this handler knows nothing about.
+    await marketplaceBillingWebhookHandler(
+      refundEvent({
+        refunded: false,
+        amount_refunded: 5000,
+        payment_intent: 'pi_someone_else',
+      }) as any,
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('records a definitive Stripe refusal for recovery rather than losing it', async () => {
+    // `balance_insufficient` on a connected account is a 400, so it neither
+    // throws nor redelivers — AGL-2140's queue is where it has to land.
+    stubStripe({
+      charge: { body: { ...chargeBody, amount_refunded: 5000 } },
+      transfer: { body: transferBody() },
+      reversalPost: {
+        ok: false,
+        status: 400,
+        body: { error: { code: 'balance_insufficient' } },
+      },
+    })
+
+    await marketplaceBillingWebhookHandler(partial(5000))
+
+    expect(purchase()).toMatchObject({
+      reversalFailedReason: 'reversal-refused',
+      reversalFailedCause: 'partial-refund',
+      reversalOwedCents: 3695,
+    })
+    // NOT settled: the one-shot marker stays free, so a later full refund or
+    // dispute still pulls back what it can.
+    expect(purchase()['reversedTransferCents']).toBeUndefined()
+  })
+
+  it('records the MEASURED owed amount, not a constant (AGL-2309)', async () => {
+    // AGL-2309 gave the queue a staff surface, and a surface is only worth
+    // building if the number on it is the real one. The test above pins a
+    // single refusal at 3695 — which any writer hardcoding 3695 would also
+    // pass, and a hardcoded owed amount is exactly the failure that makes a
+    // recovery queue worse than none: staff would chase the wrong sum.
+    //
+    // So: two refusals of DIFFERENT sizes on the same purchase, and the
+    // recorded amount has to move with the refund. A refusal does not settle
+    // (`reversedTransferCents` stays free, asserted above), so the second
+    // refund re-runs and overwrites.
+    //
+    // floor(5000 × 8000 ÷ 10825) = 3695; floor(8000 × 8000 ÷ 10825) = 5912.
+    const refuse = (amountRefunded: number) =>
+      stubStripe({
+        charge: { body: { ...chargeBody, amount_refunded: amountRefunded } },
+        transfer: { body: transferBody() },
+        reversalPost: {
+          ok: false,
+          status: 400,
+          body: { error: { code: 'balance_insufficient' } },
+        },
+      })
+
+    refuse(5000)
+    await marketplaceBillingWebhookHandler(partial(5000))
+    expect(purchase()['reversalOwedCents']).toBe(3695)
+
+    refuse(8000)
+    await marketplaceBillingWebhookHandler(partial(8000))
+    expect(purchase()['reversalOwedCents']).toBe(5912)
+  })
+
+  it('THROWS on a transient Stripe failure so the redelivery is the retry', async () => {
+    stubStripe({
+      charge: { body: { ...chargeBody, amount_refunded: 5000 } },
+      transfer: { ok: false, status: 503, body: {} },
+    })
+    await expect(
+      marketplaceBillingWebhookHandler(partial(5000)),
+    ).rejects.toThrow(/transfer read failed/i)
   })
 })

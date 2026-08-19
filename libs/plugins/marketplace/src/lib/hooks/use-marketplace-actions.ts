@@ -90,6 +90,35 @@ function landingMessage(
 }
 
 /**
+ * What to tell someone whose install will never be three-way mergeable
+ * (AGL-2339).
+ *
+ * Every install route returns `baseStored`, and `provenance.ts` says what a
+ * false one means: *"a snapshot that cannot be written leaves `baseStored:
+ * false` and an artifact that reports itself as not updatable"*. It reported
+ * it to NOBODY — zero `.tsx` readers across all seven routes.
+ *
+ * The consequence is silent and expensive. `hasDivergedFromBase` needs the
+ * base snapshot to tell the publisher's change from the user's; without one
+ * an update can only overwrite. So a user who customizes a large artifact —
+ * one whose content exceeded `ARTIFACT_BASE_MAX_BYTES`, or whose snapshot
+ * write failed — LOSES those changes on the next update, having been told
+ * nothing at install time. The update dialog does explain itself when the
+ * moment arrives (`preview.mergeable` renders `preview.reason`), but by then
+ * the choice is take-the-update-or-stay-behind, not "keep a copy first".
+ *
+ * Persistent rather than a timed toast: it is advice to act on before
+ * editing, and it is the only moment this is knowable in advance.
+ */
+function baseMissingWarning(displayName: string): string {
+  return (
+    `"${displayName}" is too large to keep a reference copy of, so a future ` +
+    'update will REPLACE it rather than merge. Export or note any changes ' +
+    'you make to it.'
+  )
+}
+
+/**
  * Shared install/buy handlers for marketplace listings (AGL-95): used by the
  * browse grid and the listing detail page. Install copies the pinned
  * version snapshot server-side (/api/marketplace/install); buy opens a
@@ -186,6 +215,20 @@ export function useMarketplaceActions(hostId: string) {
               : `Installed "${listing.displayName}" — find it under Your components`),
           { variant: 'success', persist: false },
         )
+        // No base snapshot: this copy can never be three-way merged, and a
+        // future update will overwrite whatever the user does to it. The
+        // route has always said so on the wire; nothing listened (AGL-2339).
+        //
+        // `=== false` rather than a falsy test: a route that omitted the
+        // field entirely has told us nothing, and warning on silence would
+        // put a scary, unactionable message on every install from any
+        // endpoint that had not been updated yet.
+        if (payload.baseStored === false) {
+          enqueueSnackbar(baseMissingWarning(listing.displayName), {
+            variant: 'warning',
+            persist: true,
+          })
+        }
         // A schema whose reference fields couldn't be relinked installs with
         // those fields degraded to text — silently changing a field's type
         // would be the kind of thing you discover much later (AGL-657).
@@ -249,6 +292,13 @@ export function useMarketplaceActions(hostId: string) {
          */
         const abiWarnings = new Set<string>()
         /**
+         * Sites whose copy landed with no base snapshot (AGL-2339). Counted
+         * rather than toasted per step: the fan-out installs the SAME
+         * artifact everywhere, so the answer is the same on every site and N
+         * identical warnings would read as N different problems.
+         */
+        let withoutBase = 0
+        /**
          * A feature lockdown refuses every step identically (AGL-1532), so
          * the fan-out stops at the first one and says "installs are paused"
          * ONCE. N identical refusals stacked into the error summary would
@@ -277,6 +327,7 @@ export function useMarketplaceActions(hostId: string) {
             if (payload?.hostAbiWarning) {
               abiWarnings.add(String(payload.hostAbiWarning))
             }
+            if (payload?.baseStored === false) withoutBase += 1
           } else {
             lockedNotice = parseLockdownRefusal(response.status, payload)
             if (lockedNotice) break
@@ -329,6 +380,12 @@ export function useMarketplaceActions(hostId: string) {
         }
         for (const warning of abiWarnings) {
           enqueueSnackbar(warning, { variant: 'warning', allowDuplicate: true })
+        }
+        if (withoutBase) {
+          enqueueSnackbar(baseMissingWarning(listing.displayName), {
+            variant: 'warning',
+            persist: true,
+          })
         }
       } catch (error) {
         console.error(error)

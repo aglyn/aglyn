@@ -90,6 +90,23 @@ Every element on the canvas is a node in a tree. The hierarchy panel lets you:
 - **Copy** a node and its children and **paste** them elsewhere — including into a different
   screen, layout or component. See [Copy & paste elements](copy-paste.md).
 
+## The inspector {#the-inspector}
+
+The right-hand panel has three tabs — **Attributes**, **Styles** and **Info** — and one
+header above all three naming what they act on, with a **SELECTED** chip opposite. It
+reads like `Hero · Section`: the element's name as the hierarchy shows it, then the
+component it actually is.
+
+Read it before you edit. On a canvas, clicking a child moves the selection *under* you —
+click a heading inside a hero and the panel silently switches from the section to the
+heading, with three tabs of controls that look identical either way. The header is what
+tells you which of the two your next change lands on.
+
+The second half is dropped when it would only repeat the first, so a plain box reads
+`Box`, not `Box · Box`. Because the header is shared, **Attributes**, **Styles** and
+**Info** cannot disagree about what is selected. With nothing selected the panel shows
+its empty state instead.
+
 ## Inline and rich text
 
 - **Double-click** any text-capable component to edit its text on the canvas.

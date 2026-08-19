@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   type HostPopup,
+  pluginDocsHelp,
   useMediaPicker,
 } from '@aglyn/aglyn'
 import { CardDisplay, useLoading } from '@aglyn/shared-ui-jsx'
@@ -176,7 +177,17 @@ export function PopupCard(props: PopupCardProps) {
   }
 
   return (
-    <CardDisplay header="Promotional popup" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Promotional popup"
+      help={pluginDocsHelp('marketingOverlays', {
+        anchor: '#promotional-popups',
+        excerpt:
+          'The site-wide default popup. Its only frequency cap is a number ' +
+          'of days — the once-per-session choice is on the overlays card.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       {!entitled ? (
         <Alert severity="info">
           {'Popups are included from the Starter plan — see Billing to ' +

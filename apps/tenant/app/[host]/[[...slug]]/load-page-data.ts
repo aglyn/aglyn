@@ -177,7 +177,16 @@ const loadPageDataCached = cache(
     if (
       canonicalDomain &&
       !host.startsWith(CNAME_HOST_PREFIX) &&
-      process.env.VERCEL_ENV === 'production'
+      // Any PRODUCTION deployment, not Vercel's alone (AGL-2180). Gated on
+      // `VERCEL_ENV === 'production'`, this never fired on a self-host
+      // container, so every site was served at BOTH its platform subdomain and
+      // its connected custom domain — the split-ranking outcome our own docs
+      // warn about, on the deployment shape that had no way to avoid it.
+      //
+      // Production specifically, not `isDeployedRuntime`: the comment above
+      // explains why a preview must not redirect, and the broader predicate
+      // would have started bouncing reviewers onto customers' live sites.
+      Aglyn.isProductionDeployment()
     ) {
       // Path preserved segment by segment, re-encoded: `params` arrives
       // URL-decoded, and a decoded segment goes straight into a `Location`
@@ -282,6 +291,112 @@ const loadPageDataCached = cache(
           }),
         ),
         revalidate: 30,
+      }
+    }
+
+    // TWO bandwidth controls sit here, cap first, and they are different
+    // instruments rather than two goes at one. The CAP (AGL-1967/2070/2155) is
+    // the plan rule: a free org past the band it was sold stops being served.
+    // The CEILING (AGL-2155) is the abuse backstop at 10x that band, which
+    // still has to exist for the metered plans the cap deliberately never
+    // touches, and which reacts in minutes where the cap's daily sweep takes
+    // up to a day. An org over 10x is necessarily over 1x, so ordering the cap
+    // first is what makes a free site's visitor read "over its plan's
+    // bandwidth" — true, and actionable by the owner — rather than an abuse
+    // notice about traffic that is merely popular.
+    //
+    // Both are placed after lockdown and before maintenance: a staff takedown
+    // outranks a billing containment, and a contained site must not be able to
+    // look like it is merely under maintenance.
+
+    // THE FREE PLAN'S BANDWIDTH CAP (AGL-1967/2070/2155), and it is defence
+    // in depth exactly as the lockdown branch above is: the middleware's
+    // request-level verdict is the gate that matters, because it runs before
+    // the ISR cache and a capped site's remaining traffic is served FROM that
+    // cache. This branch is what keeps a freshly-regenerated page honest and
+    // covers any path that reaches the loader without the middleware.
+    //
+    // ZERO ADDED READS. `orgRes.org` is already in hand — loaded once above
+    // for the lockdown branch and reused by branding, entitlements and the
+    // overlay branches below — so the cap is a pure predicate over a document
+    // this render was always going to fetch. That is the whole reason the
+    // verdict is denormalized onto the org doc rather than derived from the
+    // page-view counters, which would be a Firestore read on the hot path of
+    // every public page on the platform, paid by paying customers too.
+    //
+    // Short revalidate, matching the lockdown branch: an org that upgrades
+    // must get its site back in seconds, not at the end of a 60s window.
+    if (Aglyn.bandwidthCapEngaged(orgRes.org)) {
+      const notice = Aglyn.bandwidthCapNotice()
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            maintenanceFallback: true,
+            // Carried in the `lockdown` prop because that is the shape the
+            // fallback UI already renders (title/message, noindex, no JSON-LD)
+            // — the RENDERING channel, reused. The WORDS are the cap's own and
+            // deliberately not `lockdownNotice`'s: nobody took this site down
+            // and support cannot lift it, so "contact support" would send a
+            // customer to a door that does not open. `reason` names the cap so
+            // the two are distinguishable in the payload.
+            lockdown: {
+              reason: Aglyn.BANDWIDTH_CAP_CODE,
+              title: notice.title,
+              message: notice.body,
+            },
+          }),
+        ),
+        revalidate: 30,
+      }
+    }
+
+    // Bandwidth abuse ceiling (AGL-2155) — the backstop above the cap.
+    //
+    // COSTS THIS PATH ZERO EXTRA READS, and that is the whole reason the flag
+    // has the shape it does. `hostRes.host` is already in hand (the redirect,
+    // screen-directory and lockdown branches above all read it), so the
+    // containment is a field test on a document this render already paid for.
+    // The alternative — reading a page-view counter before every render — is
+    // the objection that kept this hole open, and it is answered by
+    // evaluating the ceiling where the counter is WRITTEN
+    // (`/api/analytics/collect`) and reading only the verdict here.
+    //
+    // Only `degraded` trips serve this — a metered plan's overage bills, so
+    // its ceiling flags and escalates without changing what a visitor gets.
+    // Month-scoped, so this clears itself on the 1st with no write and no
+    // staff action.
+    if (
+      Aglyn.bandwidthCeilingDegradesHost(
+        hostRes.host as any,
+        Aglyn.bandwidthCeilingMonthKey(),
+      )
+    ) {
+      const notice = Aglyn.bandwidthCeilingNotice()
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            maintenanceFallback: true,
+            // Reuses the notice slot the lockdown branch renders through
+            // (`catch-all-client`), with its own reason code so a contained
+            // site is distinguishable from a takedown by anything reading
+            // props. Deliberately NOT a `LockdownReasonCode`: lockdown is a
+            // staff action, this is arithmetic on a counter.
+            lockdown: {
+              reason: Aglyn.BANDWIDTH_CEILING_CODE,
+              title: notice.title,
+              message: notice.body,
+            },
+          }),
+        ),
+        // Shorter than the lockdown branch's 30s would gain nothing: the
+        // containment lasts until the month ends or the owner upgrades, and
+        // an upgrade already revalidates. 60s bounds how long a cleared flag
+        // keeps serving the notice.
+        revalidate: 60,
       }
     }
 
@@ -597,41 +712,21 @@ const loadPageDataCached = cache(
           }
         }
       }
-      // Custom not-found screen (AGL-87): render the designated screen's
-      // content with noindex — SSG can't emit a real 404 status for
-      // dynamic content, so noindex keeps soft-404s out of search.
-      const notFoundScreenId =
-        (hostRes.host as any)?.errorScreens?.notFound ??
-        (hostRes.host as any)?.notFoundScreenId
-      if (notFoundScreenId) {
-        const fallbackScreen = await getScreen({
-          hostId,
-          screenId: notFoundScreenId,
-        })
-        if (fallbackScreen.screen) {
-          const fallbackNodes = await composeScreenNodes({
-            host: hostRes.host as any,
-            hostId,
-            screenId: notFoundScreenId,
-            screen: fallbackScreen.screen,
-          })
-          if (fallbackNodes) {
-            return {
-              props: JSON.parse(
-                JSON.stringify({
-                  data: {
-                    host: hostRes.host,
-                    screen: { data: fallbackScreen.screen },
-                  },
-                  nodes: fallbackNodes,
-                  notFoundFallback: true,
-                }),
-              ),
-              revalidate: 60,
-            }
-          }
-        }
-      }
+      /**
+       * A path that matched nothing is a 404 — always (AGL-2342).
+       *
+       * This branch USED to return the host's designated not-found screen as
+       * ordinary `props`, which meant a `200 OK` carrying `noindex`. That was
+       * the AGL-87 trade — "SSG can't emit a real 404 status for dynamic
+       * content" — and it is no longer one we are willing to make: a soft-404
+       * tells every crawler that a mistyped URL is a real page, and `noindex`
+       * is a request, not a status.
+       *
+       * The designed screen did not go away; it moved. `loadNotFoundScreen`
+       * below composes it, `/api/screen/not-found` serves it, and the
+       * `[host]/not-found` boundary renders it — which is the one place in the
+       * App Router where a real `404` status and a designed body coexist.
+       */
       return {
         notFound: true,
         revalidate: 60, // never=false, always=1, since=SECONDS
@@ -894,3 +989,92 @@ export const loadPageData = (
   hostParam: string,
   slug: string[],
 ): Promise<LoadResult> => loadPageDataCached(hostParam, JSON.stringify(slug))
+
+/**
+ * Which screen a host wants shown when a path matches nothing (AGL-2342).
+ *
+ * Three sources, in precedence order, and the third is the one that makes this
+ * work for the sites that exist today:
+ *
+ *  1. `errorScreens.notFound` — the Error pages card's binding (AGL-131). The
+ *     explicit answer, and the only one an author can see and change.
+ *  2. `notFoundScreenId` — the pre-AGL-131 field, still set on older hosts.
+ *  3. **The routing map's `404` entry.** Measured on production 2026-08-19,
+ *     `errorScreens` was unset on every host, and yet `aglyn.com` publishes a
+ *     screen named *"Not found (404)"* at the path `404` — which is, per
+ *     `get-screen.ts`, "exactly how every error screen on the platform exists
+ *     today". Reading the map means designing a 404 screen the obvious way
+ *     (publish it at `/404`) is enough; binding it in the console is an
+ *     upgrade, not a prerequisite.
+ *
+ * The map is consulted LAST so that binding a slot always wins over an
+ * accident of pathing, and a host that has bound one screen and published a
+ * different one at `/404` gets the one it asked for.
+ *
+ * Note what source 3 does NOT buy: `/404` itself is a reserved Next.js output
+ * (`x-matched-path: /404`, served from the build's own `404.html`), so that URL
+ * stays the framework's. What is fixed is every OTHER unmatched path, which is
+ * the URL a visitor actually mistypes.
+ */
+export function resolveNotFoundScreenId(host: unknown): string | undefined {
+  const record = host as {
+    errorScreens?: { notFound?: string }
+    notFoundScreenId?: string
+    screens?: Record<string, string>
+  } | null
+  if (!record) return undefined
+  const bound = record.errorScreens?.notFound ?? record.notFoundScreenId
+  if (bound) return bound
+  const routed = Object.entries(record.screens ?? {}).find(
+    ([, path]) => path === '404',
+  )
+  return routed?.[0]
+}
+
+/**
+ * The host's designed 404 body, composed (AGL-2342).
+ *
+ * Returns `null` — deliberately, and for every failure — when the host has no
+ * usable 404 screen. `null` is what makes the platform fallback the floor
+ * rather than a blank page: the caller renders `SiteStatusScreen` on `null`,
+ * so a missing host, an unresolvable screen id, a soft-deleted screen and a
+ * compose that yields nothing all land in the same safe place.
+ *
+ * Paid for ONLY on a 404. It is not called from `loadPageData`'s happy path
+ * and not from the layout — both of which run on every request — but from
+ * `/api/screen/not-found`, which the not-found boundary calls when it mounts.
+ * A site that never 404s never composes this screen.
+ */
+export async function loadNotFoundScreen(
+  hostParam: string,
+): Promise<Props | null> {
+  try {
+    const hostRes = await getHost({ host: hostParam })
+    if (hostRes.error || !hostRes.host) return null
+    const hostId = hostRes.host.$id as Aglyn.HostUid
+    const screenId = resolveNotFoundScreenId(hostRes.host)
+    if (!screenId) return null
+    const screenRes = await getScreen({
+      hostId,
+      screenId: screenId as Aglyn.ScreenUid,
+    })
+    if (!screenRes.screen) return null
+    const nodes = await composeScreenNodes({
+      host: hostRes.host as any,
+      hostId,
+      screenId: screenId as Aglyn.ScreenUid,
+      screen: screenRes.screen,
+    })
+    if (!nodes) return null
+    return JSON.parse(
+      JSON.stringify({
+        data: { host: hostRes.host, screen: { data: screenRes.screen } },
+        nodes,
+        notFoundFallback: true,
+      }),
+    ) as Props
+  } catch (error) {
+    console.error(error)
+    return null
+  }
+}

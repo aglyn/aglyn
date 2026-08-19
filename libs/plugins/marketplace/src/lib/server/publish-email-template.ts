@@ -31,6 +31,7 @@ import {
   sanitizeMarketplaceDefinition,
 } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 
 /**
  * Publishes a site's designed transactional email to the marketplace
@@ -115,18 +116,13 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
     }
 
     const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error:
-          'Set up payouts first — Marketplace → Payouts — to sell templates',
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2282) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'templates',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     const templateRef = hostRef
       .collection(TENANT_EMAIL_COLLECTION)

@@ -16,25 +16,28 @@
  */
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { darken, lighten } from '@mui/material/styles'
 import { useEffect } from 'react'
 import useBranding from '../hooks/use-branding'
 
 /**
- * Applies the current org's white-label brand to the two console-chrome
+ * Applies the current org's white-label brand to the three console-chrome
  * surfaces the React tree can't reach declaratively (White-Label Phase 2):
- * the browser favicon and the MUI primary color. Both read the ONE shared
- * `resolveBrandingProfile` (via `useBranding`) so they never drift from the
- * app-bar logo, the published site, or transactional email.
+ * the browser favicon, the MUI primary color, and the browser TAB TITLE. All
+ * read the ONE shared `resolveBrandingProfile` (via `useBranding`) so they
+ * never drift from the app-bar logo, the published site, or transactional
+ * email.
  *
  * Renders nothing. Only acts when the org is white-label entitled AND set the
  * field; otherwise it leaves — and, on cleanup or downgrade, restores — the
- * Aglyn defaults baked into the static theme and the root `<head>` icons.
+ * platform defaults baked into the static theme and the root `<head>`.
  */
 export function ConsoleBrandingEffects(): null {
   const { branding, whiteLabel } = useBranding()
   const primaryColor = whiteLabel ? branding.primaryColor : null
   const faviconUrl = whiteLabel ? branding.faviconUrl : null
+  const productName = whiteLabel ? branding.productName : null
 
   // Primary color: the console theme is a static CSS-var theme, so a per-org
   // color is applied by overriding the MUI primary custom properties inline on
@@ -88,6 +91,60 @@ export function ConsoleBrandingEffects(): null {
       })
     }
   }, [faviconUrl])
+
+  // Tab title. The console title is server-rendered from `TITLE_TEMPLATE`
+  // ("%s · Aglyn") and the root layout's `title.default`, both built from
+  // `PLATFORM_BRAND_NAME` — the DEPLOYMENT brand. AGL-2170 made that follow a
+  // self-hoster's env var, which is a different question from the one
+  // white-label asks: a per-ORG brand cannot be baked at build time, so every
+  // browser tab in a white-label org's console still read "· Aglyn" while the
+  // favicon beside it had already been replaced above. A half-branded tab is
+  // exactly the state `white-label.md` promises does not exist ("no flash of
+  // one brand turning into the other"), and it is the most-looked-at chrome
+  // in the product.
+  //
+  // Done as a `<head>` MutationObserver rather than a one-shot write because
+  // Next re-renders `<title>` on every client navigation, which would undo a
+  // single assignment on the first link click. Observing the head catches both
+  // a text mutation and a wholesale element swap.
+  //
+  // The loop this could obviously become is closed by the replacement itself:
+  // after a rewrite the title no longer CONTAINS `PLATFORM_BRAND_NAME`, so the
+  // observer's re-entry is a no-op. The `applied` check is the belt to that
+  // braces — it also makes an org whose productName happens to contain the
+  // platform name terminate rather than grow.
+  useEffect(() => {
+    // Renaming to the name it already has is not a rename, and attempting it
+    // would make every replacement a fixed point we cannot tell from a loop.
+    if (!productName || productName === PLATFORM_BRAND_NAME) return
+    /** The last value WE wrote — so an unrelated title change is not ours. */
+    let applied: string | null = null
+    /** What it read before we wrote, so cleanup restores rather than guesses. */
+    let original: string | null = null
+    const apply = () => {
+      const current = document.title
+      if (applied !== null && current === applied) return
+      if (!current.includes(PLATFORM_BRAND_NAME)) return
+      original = current
+      applied = current.split(PLATFORM_BRAND_NAME).join(productName)
+      document.title = applied
+    }
+    apply()
+    const observer = new MutationObserver(apply)
+    observer.observe(document.head, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+    return () => {
+      observer.disconnect()
+      // Only put back a title we are still the author of. If something else
+      // has since set the tab, restoring our stale value would be the bug.
+      if (applied !== null && original !== null && document.title === applied) {
+        document.title = original
+      }
+    }
+  }, [productName])
 
   return null
 }

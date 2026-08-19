@@ -17,8 +17,9 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { LEGAL_REFERENCE_URLS } from '../constants/shared'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Link, Stack, Typography } from '@mui/material'
 import type { User } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
@@ -146,6 +147,37 @@ export function DataExportCard({ user, orgId, description }: DataExportCardProps
               'includes secrets: an API key is reported as existing, never ' +
               'reproduced.'}
         </Typography>
+        {orgId ? (
+          /**
+           * The contract documents, reachable from the product (AGL-2189).
+           *
+           * They are published pages and neither is acceptance-pinned, and
+           * they were linked from nowhere in the console — so an enterprise
+           * reviewer, the one audience that needs them, could not reach either
+           * without emailing us, while the trust page told them to do exactly
+           * that for documents already on a public URL.
+           *
+           * Here rather than in the clickwrap, deliberately: this card is the
+           * data-handling surface, this export is the DPA §11 obligation it
+           * implements, and a reviewer looking for processing terms is already
+           * reading this screen. Putting them in the signup checkbox would
+           * make them look like something to accept, which they are not.
+           */
+          <Typography variant="body2" color="text.secondary">
+            {'Processing terms: '}
+            <Link href={LEGAL_REFERENCE_URLS.DPA} target="_blank" rel="noopener noreferrer">
+              {'Data Processing Addendum'}
+            </Link>
+            {' · '}
+            <Link
+              href={LEGAL_REFERENCE_URLS.SUBPROCESSORS}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {'Subprocessors'}
+            </Link>
+          </Typography>
+        ) : null}
         <Box>
           <Button
             variant="outlined"

@@ -515,7 +515,18 @@ export const config = {
   // of the script fails registration with a content-type error rather than
   // anything that names the cause. A service worker must also be fetched from
   // the scope it claims, so it cannot simply be moved under `/_static`.
+  //
+  // `manifest.webmanifest` is excluded for exactly the `sw.js` reason
+  // (AGL-2153). The manifest moved out of `/_static` — where this matcher
+  // already excluded it — and became `app/manifest.ts` so it could carry a
+  // configurable brand instead of a hard-coded "Aglyn Console". That move put
+  // it back inside the matcher, and a browser fetches the manifest BEFORE the
+  // user signs in: an auth redirect answered in its place makes the console
+  // uninstallable from the sign-in page. Excluding it restores exactly the
+  // reachability the static file had, and nothing more — it is a literal
+  // path, not a prefix, so it widens the public surface by one document that
+  // contains a product name and a list of icon URLs.
   matcher: [
-    '/((?!api|__|_next/static|_next/image|favicon.ico|_static|sw.js).*)',
+    '/((?!api|__|_next/static|_next/image|favicon.ico|_static|sw.js|manifest.webmanifest).*)',
   ],
 }

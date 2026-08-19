@@ -31,10 +31,20 @@ import {
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
  * price ALWAYS comes from the host's product doc (never the request), the
- * money goes to the host owner's Connect account (AGL-46 onboarding) with a
- * 2% platform fee, and the webhook records the order under the host.
- * Selling is gated on the owner's `marketplaceSelling` plan flag
- * (plan-less orgs resolve as free, AGL-247). 501 without Stripe env.
+ * money goes to the host owner's Connect account (AGL-46 onboarding) as a
+ * DESTINATION charge, and the webhook records the order under the host.
+ * 501 without Stripe env.
+ *
+ * Two claims in this comment were stale and are corrected here (AGL-2295),
+ * both in the direction that matters:
+ *
+ *  - The fee is NOT "2%". It is `resolveTransactionFeePct(org, productType)`
+ *    — a per-plan, per-product-type ladder with per-org staff overrides,
+ *    resolved per request. 2% is one cell of sixteen (Starter, physical).
+ *  - Selling is gated on `commerce`, not on `marketplaceSelling` (AGL-470).
+ *    They are different entitlements on different plans: `marketplaceSelling`
+ *    gates the marketplace, and reading this comment as current would gate a
+ *    storefront on the wrong one.
  */
 export const checkoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -196,7 +206,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ) {
         return res.status(400).json({ error: 'Invalid or expired coupon' })
       }
-      // Stripe's charge minimum is 50¢ — never discount below it.
+      // Stripe's charge minimum is 50¢ — never discount below it. The
+      // percentage comes off the ORDER total, matching `cart-checkout.ts`'s
+      // `Math.round(itemsCents * percentOff / 100)`, so the same code takes
+      // the same money whichever button the shopper pressed. What the SESSION
+      // is built from this figure is where the two used to diverge — see the
+      // line-item construction below (AGL-2159).
       amountCents = Math.max(
         50,
         Math.round((amountCents * (100 - percentOff)) / 100),
@@ -423,15 +438,61 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
     }
+    // The merchant priced shipping and no rate of theirs reaches this cart
+    // (AGL-2230). Released like every other deterministic refusal on this
+    // path — the shopper can change the basket and retry under the same key.
+    if (shippingPlan.refusal === 'cart-unpriceable') {
+      await claim.release()
+      return res
+        .status(409)
+        .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
 
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is
     // 0 on every buy-now session and the discount has to ride the metadata
     // (AGL-1711). Hoisted so the Stripe param and the metadata cannot drift.
-    const chargedUnitAmountCents = Math.round(amountCents / quantity)
+    // THE SESSION CHARGES `amountCents`, EXACTLY (AGL-2159).
+    //
+    // A Stripe line is `quantity` units at ONE integer `unit_amount`, so it can
+    // only express totals divisible by `quantity` — and a percentage coupon
+    // does not respect that. This used to be
+    // `Math.round(amountCents / quantity)` multiplied back by `quantity`, which
+    // missed `amountCents` by up to `quantity / 2` cents in either direction:
+    // the shopper was charged something the storefront never quoted, and the
+    // fee and the manual tax were computed on a base nothing collected.
+    // Rounding UP was worse still — `discountCents` below is
+    // `list - charged` under a `Math.max(0, …)`, so a charge that met or passed
+    // the list price clamped it to ZERO and the order recorded no discount on a
+    // sale the shopper had applied a coupon to. On a 99-unit order of a 50¢
+    // item with 1% off that is not a cent of drift: the shopper paid the full
+    // $49.50 and the promotion vanished from the merchant's own record.
+    //
+    // So when the total does not divide evenly, the line becomes ONE unit at
+    // the exact total, with the count moved into the display name. The
+    // shopper's real quantity was never carried by this field anyway —
+    // `metadata[quantity]` is what `computeBuyNowOrder` builds the order's line
+    // item from, and it is untouched — so nothing downstream can tell the
+    // difference except that the arithmetic now closes.
+    //
+    // The even case (every sale with no coupon, and most with one) keeps the
+    // per-unit shape byte for byte, so the ordinary Stripe checkout page is
+    // unchanged.
+    const evenUnitAmountCents = Math.floor(amountCents / quantity)
+    const remainderCents = amountCents - evenUnitAmountCents * quantity
+    const chargedQuantity = remainderCents === 0 ? quantity : 1
+    const chargedUnitAmountCents =
+      remainderCents === 0 ? evenUnitAmountCents : amountCents
+    const chargedLineName = `${String(product.name ?? 'Product')}${
+      remainderCents === 0 ? '' : ` × ${quantity}`
+    }`.slice(0, 120)
+    // What was ACTUALLY discounted, now that the charge and `amountCents` are
+    // the same number. `Math.max(0, …)` stays as a guard against a future floor
+    // lifting the charge above list; it no longer erases a real discount,
+    // because there is no longer a rounding that can push the charge past it.
     const discountCents = Math.max(
       0,
-      listUnitAmountCents * quantity - chargedUnitAmountCents * quantity,
+      listUnitAmountCents * quantity - amountCents,
     )
 
     // Subscriptions (AGL-303): recurring prices bill on the platform with
@@ -439,12 +500,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // `isSubscription` resolved above (AGL-545).
     const params = new URLSearchParams({
       mode: isSubscription ? 'subscription' : 'payment',
-      'line_items[0][quantity]': String(quantity),
+      'line_items[0][quantity]': String(chargedQuantity),
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
-      'line_items[0][price_data][product_data][name]': String(
-        product.name ?? 'Product',
-      ).slice(0, 120),
+      'line_items[0][price_data][product_data][name]': chargedLineName,
       ...(isSubscription
         ? {
             'line_items[0][price_data][recurring][interval]':
@@ -458,6 +517,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               : {}),
             'subscription_data[transfer_data][destination]':
               String(accountId),
+            // A PERCENT here, and Stripe applies it to the whole invoice —
+            // tax and shipping included — because it offers no items-only
+            // base for `application_fee_percent` and a Subscription carries
+            // no `application_fee_amount` to send instead. The basis is
+            // corrected on the paid invoice, where the composition is finally
+            // knowable and no event is racing: see
+            // `chargeSubscriptionFeeOnItemsOnly` in `billing-webhook.ts`
+            // (AGL-2317), which refunds the part taken on tax and shipping
+            // back to the merchant. `metadata[feeCents]` below — the
+            // items-only figure — is therefore what Aglyn ends up keeping.
             ...(feePct > 0
               ? {
                   'subscription_data[application_fee_percent]':

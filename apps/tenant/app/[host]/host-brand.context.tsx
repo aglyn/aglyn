@@ -17,6 +17,11 @@
 'use client'
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+// TYPE-ONLY, and it has to stay that way: `site-nav.ts` reaches
+// `@aglyn/aglyn/server`, and a value import here would drag the server entry
+// into this `'use client'` module's graph. The import is erased at compile
+// time, so the shape is shared without the dependency being real.
+import type { SiteNavLink } from '../../utils/site-nav'
 
 /**
  * The site's own mark, readable by anything under `[host]/layout` (AGL-2074).
@@ -47,6 +52,37 @@ export interface HostBrand {
   brandName?: string
   /** Resolved, site-relative logo URL; absent when the host set none. */
   brandLogoUrl?: string
+  /**
+   * The site's public top-level pages (AGL-2187) — the closest thing to a
+   * navigation a boundary can render, and it travels the same way and for the
+   * same reason as the two fields above: the layout is the last place in the
+   * tree that knows which site this is.
+   *
+   * Absent, or empty, means the site has no other public top-level page (or
+   * the sweep degraded). Both render as no nav at all rather than as an empty
+   * bar — see `get-site-nav.ts` on why this may never fail loudly.
+   *
+   * Filtered to PUBLIC screens by `buildSiteNavLinks`. Anything that widens
+   * what lands here is publishing page addresses to every visitor who mistypes
+   * a URL; read that function's docstring before changing where this comes
+   * from.
+   */
+  siteLinks?: SiteNavLink[]
+  /**
+   * The `[host]` route param for this request — `cname--example.com`,
+   * `acme` — as the tenant API routes spell it (AGL-2342).
+   *
+   * Published for ONE reader: the not-found boundary, which has no `params` of
+   * its own (Next does not pass them to `not-found.tsx`) and needs to name the
+   * host to ask `/api/screen/not-found` for its designed 404 body. It is not
+   * host DATA and nothing should render it — the brand fields above are what a
+   * screen shows.
+   *
+   * Not a leak: this value is already in the flight payload of every tenant
+   * response as the segment key, and already crosses to the client as
+   * `AdminBarSlot`'s `host` prop.
+   */
+  hostKey?: string
 }
 
 const HostBrandContext = createContext<HostBrand>({})
@@ -54,11 +90,13 @@ const HostBrandContext = createContext<HostBrand>({})
 export function HostBrandProvider({
   brandName,
   brandLogoUrl,
+  siteLinks,
+  hostKey,
   children,
 }: HostBrand & { children: ReactNode }) {
   const value = useMemo(
-    () => ({ brandName, brandLogoUrl }),
-    [brandName, brandLogoUrl],
+    () => ({ brandName, brandLogoUrl, siteLinks, hostKey }),
+    [brandName, brandLogoUrl, siteLinks, hostKey],
   )
   return (
     <HostBrandContext.Provider value={value}>

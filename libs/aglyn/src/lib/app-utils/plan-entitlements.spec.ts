@@ -16,7 +16,7 @@
  */
 
 import {
-  AGLYN_BRANDING_PROFILE,
+  PLATFORM_BRANDING_PROFILE,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
@@ -59,6 +59,12 @@ import {
   EXTRA_HOSTS_ADDON_MAX,
   POS_REGISTERS_ADDON_MAX,
   UNLIMITED,
+  MARKETPLACE_PROCESSING_PERCENT_BNPL,
+  MARKETPLACE_PROCESSING_PERCENT_CARD,
+  bindingMarketplaceFeePct,
+  marketplaceBreakEvenUsd,
+  marketplacePriceCostNote,
+  marketplaceSaleEconomics,
 } from './plan-entitlements'
 import type { OrgPlan } from '../foundation'
 
@@ -92,6 +98,24 @@ describe('plan entitlements', () => {
     expect(resolved.features.customDomain).toBe(false)
   })
 
+  it('drops a RETIRED quota a live org document still carries (AGL-2133)', () => {
+    // `totalSiteSizeMb` was staff-writable for months while nothing enforced
+    // it, so real org documents carry overrides of it. Removing the key from
+    // `PLAN_ENTITLEMENTS` alone would not remove those: the override loop
+    // copies any numeric key it finds, so the stored value would keep
+    // appearing on the resolved entitlements with no default behind it and no
+    // reader in front of it.
+    const org = {
+      plan: 'free',
+      entitlements: { totalSiteSizeMb: 99999, hostLimit: 10 },
+    } as any
+    const resolved = resolveOrgEntitlements(org)
+    expect(resolved).not.toHaveProperty('totalSiteSizeMb')
+    // The LIVE override beside it still applies — the strip is keyed on the
+    // retired list, not on "overrides are ignored now".
+    expect(resolved.hostLimit).toBe(10)
+  })
+
   it('checkQuota gates at the limit and never reports negative remaining', () => {
     const org = { plan: 'free' } as any
     expect(checkQuota(org, 'hostLimit', 0)).toEqual({
@@ -122,14 +146,14 @@ describe('plan entitlements', () => {
       // Enterprise (AGL-1118): uncapped at the top of the ladder.
       enterprise: [UNLIMITED, UNLIMITED, UNLIMITED],
     })
-    // Media storage exceeds the published-site cap by design (AGL-67) —
-    // vacuous on Enterprise, where both are unbounded, so it is pinned as
-    // unbounded rather than skipped silently.
+    // Media storage was pinned against the published-site cap (AGL-67) until
+    // `totalSiteSizeMb` was retired (AGL-2133) — there is no second figure to
+    // compare it to any more, so what is pinned now is that no plan declares
+    // the retired key at all. A default reintroduced by hand would put the
+    // staff override field back on the dialog with nothing behind it.
     expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(UNLIMITED)
-    expect(PLAN_ENTITLEMENTS.enterprise.totalSiteSizeMb).toBe(UNLIMITED)
-    for (const [name, plan] of Object.entries(PLAN_ENTITLEMENTS)) {
-      if (name === 'enterprise') continue
-      expect(plan.storagePerHostMb).toBeGreaterThan(plan.totalSiteSizeMb)
+    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+      expect(plan).not.toHaveProperty('totalSiteSizeMb')
     }
     expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
     // White-label (White-Label Phase 1): Agency and Enterprise only; every
@@ -1593,7 +1617,7 @@ describe('plan entitlements', () => {
     })
 
     it('returns the Aglyn defaults when white-label is off, ignoring any stored profile', () => {
-      expect(resolveBrandingProfile(undefined)).toEqual(AGLYN_BRANDING_PROFILE)
+      expect(resolveBrandingProfile(undefined)).toEqual(PLATFORM_BRANDING_PROFILE)
       expect(resolveBrandingProfile({ plan: 'business' } as any).productName).toBe(
         'Aglyn',
       )
@@ -1602,7 +1626,7 @@ describe('plan entitlements', () => {
         plan: 'pro',
         brandingProfile: { productName: 'Acme Sites', fromName: 'Acme' },
       } as any
-      expect(resolveBrandingProfile(notEntitled)).toEqual(AGLYN_BRANDING_PROFILE)
+      expect(resolveBrandingProfile(notEntitled)).toEqual(PLATFORM_BRANDING_PROFILE)
     })
 
     it('applies the org profile when white-label is on, filling gaps with Aglyn defaults', () => {
@@ -1622,7 +1646,7 @@ describe('plan entitlements', () => {
       expect(brand.logoUrl).toBe('https://cdn.acme.com/logo.png')
       expect(brand.primaryColor).toBe('#ff5a00')
       // Unset fields fall back to the Aglyn defaults, not undefined.
-      expect(brand.supportUrl).toBe(AGLYN_BRANDING_PROFILE.supportUrl)
+      expect(brand.supportUrl).toBe(PLATFORM_BRANDING_PROFILE.supportUrl)
       expect(brand.faviconUrl).toBeNull()
       expect(brand.customConsoleDomain).toBeNull()
     })
@@ -1653,5 +1677,136 @@ describe('plan entitlements', () => {
     expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(56)
     expect(PLAN_PRICING.business.basePriceAnnualMonthlyUsd).toBe(99)
     expect(PLAN_PRICING.business.basePriceMonthlyUsd).toBe(139)
+  })
+})
+
+/**
+ * The arithmetic a publisher is shown while they type a price (AGL-2343).
+ *
+ * Pinned to whole cents because these are the amounts Stripe actually moves,
+ * and pinned in BOTH directions — a fee test that only ever asserts the loss
+ * cannot tell a correct calculation from one that returns a negative number
+ * for everything.
+ */
+describe('marketplace sale economics (AGL-2343)', () => {
+  // Read from the table, not restated: a spec that hard-codes the rate it is
+  // checking cannot notice the table moving under it.
+  const PAID_PLAN_FEE_PCT = PLAN_ENTITLEMENTS.pro.marketplaceFeePct
+  const FREE_PLAN_FEE_PCT = PLAN_ENTITLEMENTS.free.marketplaceFeePct
+
+  it('takes the binding band from the plan table, and it is the lower rate', () => {
+    // The whole advice rests on quoting the band that breaks even latest. If
+    // the table ever gains a cheaper paid rate, this is what notices.
+    expect(PAID_PLAN_FEE_PCT).toBeLessThan(FREE_PLAN_FEE_PCT)
+    expect(bindingMarketplaceFeePct()).toBe(PAID_PLAN_FEE_PCT)
+  })
+
+  it('says nothing about a free listing and nothing about a healthy price', () => {
+    // The note must be SILENT in the ordinary cases or it is noise, and a
+    // note that never returns undefined would pass every other test here.
+    expect(marketplacePriceCostNote(0)).toBeUndefined()
+    expect(marketplacePriceCostNote('')).toBeUndefined()
+    expect(marketplacePriceCostNote(25)).toBeUndefined()
+    expect(marketplacePriceCostNote(marketplaceBreakEvenUsd())).toBeUndefined()
+  })
+
+  it('names the cost, the fee and the covering price when the price is too low', () => {
+    const note = marketplacePriceCostNote(1)
+    expect(note).toContain('$1')
+    expect(note).toContain('$0.36')
+    expect(note).toContain('$0.20')
+    expect(note).toContain(`$${marketplaceBreakEvenUsd()} or more`)
+  })
+
+  it('reproduces the $1 destination charge, cent for cent', () => {
+    // Buyer $1.08, seller $0.80, $0.08 to the state, Aglyn keeps $0.20 and
+    // pays Stripe $0.33 on the card rate. Net −$0.13.
+    const card = marketplaceSaleEconomics(
+      1,
+      PAID_PLAN_FEE_PCT,
+      MARKETPLACE_PROCESSING_PERCENT_CARD,
+    )
+    expect(card).toMatchObject({
+      priceCents: 100,
+      taxCents: 8,
+      buyerPaysCents: 108,
+      sellerReceivesCents: 80,
+      platformFeeCents: 20,
+      processingCents: 33,
+      platformNetCents: -13,
+    })
+    // Pay-later is dearer, and it is enabled, so it is the one that binds.
+    expect(
+      marketplaceSaleEconomics(
+        1,
+        PAID_PLAN_FEE_PCT,
+        MARKETPLACE_PROCESSING_PERCENT_BNPL,
+      ).platformNetCents,
+    ).toBe(-16)
+  })
+
+  it('turns a profit at a price that covers the processing fee', () => {
+    // The OTHER branch. Without this the suite would pass against a function
+    // that reported every price as a loss.
+    const ten = marketplaceSaleEconomics(10, PAID_PLAN_FEE_PCT)
+    expect(ten.platformFeeCents).toBe(200)
+    expect(ten.platformNetCents).toBeGreaterThan(0)
+    expect(ten.sellerReceivesCents).toBe(800)
+    expect(ten.buyerPaysCents).toBe(1083)
+    // Stripe's percentage is charged on the BUYER'S TOTAL, tax included, not
+    // on the listing price — the tax is added on top and enlarges the base.
+    // Asserted at $10 rather than at $1 because at a dollar the two readings
+    // round to the same cent, so the cheap fixture cannot tell them apart.
+    // 1083c x 6% + 30c = 95c; off the price alone it would be 90c.
+    expect(ten.processingCents).toBe(95)
+  })
+
+  it('charges nothing to process a free listing', () => {
+    // A $0 listing takes no payment, so the fixed 30c must not be invented.
+    expect(marketplaceSaleEconomics(0, PAID_PLAN_FEE_PCT))
+      .toMatchObject({
+        buyerPaysCents: 0,
+        processingCents: 0,
+        platformNetCents: 0,
+      })
+  })
+
+  it('breaks even at $3 on the enabled payment methods', () => {
+    // $2 is still a loss at the 20% take rate once pay-later is in the mix,
+    // so $3 is the first whole dollar that clears it — the figure the publish
+    // forms show. Asserted as the BOUNDARY: the dollar below must lose.
+    const breakEven = marketplaceBreakEvenUsd(PAID_PLAN_FEE_PCT)
+    expect(breakEven).toBe(3)
+    expect(
+      marketplaceSaleEconomics(breakEven, PAID_PLAN_FEE_PCT)
+        .platformNetCents,
+    ).toBeGreaterThanOrEqual(0)
+    expect(
+      marketplaceSaleEconomics(breakEven - 1, PAID_PLAN_FEE_PCT)
+        .platformNetCents,
+    ).toBeLessThan(0)
+  })
+
+  it('breaks even sooner on the free plan, which takes a bigger share', () => {
+    // 30% of the price against the same processing cost, so the lower band is
+    // NOT the binding one and the shown figure must come from the 20% band.
+    expect(
+      marketplaceBreakEvenUsd(FREE_PLAN_FEE_PCT),
+    ).toBe(2)
+    expect(
+      marketplaceBreakEvenUsd(FREE_PLAN_FEE_PCT),
+    ).toBeLessThan(marketplaceBreakEvenUsd(PAID_PLAN_FEE_PCT))
+  })
+
+  it('breaks even sooner on cards alone, which is why BNPL is the default', () => {
+    // If marketplace sessions ever pin `payment_method_types[0]=card`, this is
+    // the figure that becomes correct — and the gap between them is the cost
+    // of leaving pay-later on.
+    expect(
+      marketplaceBreakEvenUsd(
+        PAID_PLAN_FEE_PCT,
+        MARKETPLACE_PROCESSING_PERCENT_CARD,
+      ),
+    ).toBe(2)
   })
 })

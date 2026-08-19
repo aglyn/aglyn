@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   clearStoredEditToken,
@@ -685,7 +686,7 @@ export default function AdminBar({
     return (
       <iframe
         src={probeUrl}
-        title="Aglyn edit access check"
+        title={`${PLATFORM_BRAND_NAME} edit access check`}
         aria-hidden="true"
         tabIndex={-1}
         style={{ display: 'none' }}
@@ -721,7 +722,7 @@ export default function AdminBar({
       style={barStyle}
       data-aglyn-admin-bar=""
       role="region"
-      aria-label="Aglyn admin bar"
+      aria-label={`${PLATFORM_BRAND_NAME} admin bar`}
     >
       <style>{BAR_CSS}</style>
       <a

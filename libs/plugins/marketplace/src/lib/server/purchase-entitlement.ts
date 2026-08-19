@@ -44,7 +44,19 @@
  * be missed, and the failure mode of that is a 402 on a listing the buyer owns
  * — recoverable and visible — rather than free paid content.
  */
+
+import {
+  hasLivePurchaseOf,
+  type PurchaseLiveness,
+} from '../model/marketplace'
+
 const PURCHASE_SCAN_LIMIT = 10
+
+// The liveness test itself lives in the model (AGL-2158), not here: the
+// listing page asks the same question and cannot import a server module, and
+// its own copy had drifted to no refund test at all — showing a refunded
+// buyer as an owner while these routes 402'd them.
+
 
 interface LivePurchaseQuery {
   firestore: FirebaseFirestore.Firestore
@@ -77,7 +89,10 @@ export async function hasLivePurchase({
     .where('listingId', '==', listingId)
     .limit(PURCHASE_SCAN_LIMIT)
     .get()
-  return purchases.docs.some((purchase) => !purchase.get('refundedAt'))
+  return hasLivePurchaseOf(
+    purchases.docs.map((purchase) => purchase.data() as PurchaseLiveness),
+    listingId,
+  )
 }
 
 /**

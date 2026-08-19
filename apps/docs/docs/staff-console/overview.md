@@ -38,105 +38,221 @@ set password](/img/staff-console/admin-user-password.png)
 
 ## What's there
 
-- **Staff overview** — platform metrics, the newest organizations, purchases, and
-  per-org usage; plus search. The **MRR estimate** counts only organizations with a
-  live Stripe subscription — staff plan overrides, comped accounts, and canceled or
-  unpaid subscriptions contribute $0, and annual plans count at their per-month
-  equivalent rather than the month-to-month price. The tile shows how many
-  organizations are billing and how many are comped, so a paid plan that bills
-  nothing never inflates the headline.
-- **[Support queue](support-queue.md)** — every organization's support tickets in one
-  triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
-- **Plugin reviews & realm trust** — the marketplace review queue, plus a
-  **Listed plugins — realm trust** table for granting or revoking
-  [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
-  per version.
-  Rejecting a version is a **verdict, not a kill**: it stops new installs, but a
-  site already pinned to those bytes keeps running them. Where that has happened
-  the review panel says so and offers **Stop this version**, the per-version kill
-  switch — every site pinned to it renders a placeholder on the next load, and
-  the rest of the listing's versions are untouched. **Taking the listing down**
-  is the wider hammer: it stops *every* version, including the approved one
-  customers are using. Restoring a listing clears only what the takedown did, so
-  a version stopped separately stays stopped.
-- **Organization management** — audited plan and entitlement overrides, suspension,
-  and GDPR-erasure flags, per organization. The directory is listed server-side with
-  the Admin SDK (so it shows *every* org, not the subset client rules would return),
-  ordered by organization id, 25 per page with Previous/Next.
-- **Entitlement editor** — full override editor for an organization's entitlements,
-  its plan, and per-organization release flags. Every override needs a **reason**
-  chosen from a fixed list (negotiated contract, support remediation, early access,
-  correction, sales trial, or *other* — which requires a note). The reason and note
-  are written onto the audit row beside the before/after and shown wherever that row
-  is: the audit log, the organization's own page, and the acting staff account's
-  trail. The log is append-only, so a reason not given at the time cannot be added
-  afterwards. The reason is checked by the **server** that performs the override,
-  not only by the dialog, so a request without one is refused rather than applied.
-  The database now refuses a plan, entitlement or release-flag change made any
-  other way, so that server is the *only* route an override can take and the
-  reason cannot be skipped by going around the console.
-  Changing an organization's release flags needs the **super** staff role; plan and
-  entitlement changes are open to **billing** staff as well.
-  **Clearing an override removes it.** Emptying a quota field, or setting a feature
-  or release flag back to *Inherit*, deletes that override on save and hands the
-  organization back to its plan default — one at a time, so the overrides you leave
-  in place are untouched. **`0` is not empty**: a quota of zero is a real override,
-  a cap of none (a comped 0% fee, an organization held to no POS registers), and it
-  is kept. A quota field that cannot be read as a number of 0 or more refuses the
-  save rather than being ignored.
-  The override and its audit row are saved **together** — either both land or
-  neither does. Read the message on a failure rather than assuming: it says
-  *"nothing was written … safe to retry"* when the server refused the change, and
-  says the outcome is **not known** when the request never got an answer (a dropped
-  connection, a gateway error). In that second case, check the organization and the
-  audit log before saving again — saving blind would record a before-state that is
-  already overridden.
-- **Users admin** — staff-claim management and disabling users, with gated listing
-  and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
-  granted to an **existing** account, so if someone isn't found, have them sign in to
-  Aglyn once and then search their email again.
-  Each account opens a **detail page** showing identity/auth state, staff role, every
-  organization membership with roles and per-site access, and its recent audit trail.
-- **Password help** — on that detail page, a **Password** card can email the account a
-  reset link, or set its password directly for an account that cannot receive mail.
-  Setting a password revokes the account's refresh tokens (so every device signs out)
-  and emails the holder that an admin changed it. Both actions need the **super** staff
-  role and are audited; the password itself is never recorded. An account with no email
-  address supports neither.
-- **Staff notes** — free-text support/billing context on each organization's detail
-  page, visible to staff only (never in tenant-readable data) and audited.
-- **Broadcast announcements** — push a product announcement or maintenance notice as
-  an in-app notification to every organization's owner/admins (optionally one plan
-  tier), respecting each recipient's mute preferences; audited.
-- **Billing insight** — every organization's Stripe **invoice history** and default
-  **payment method** (with delinquency state) render on its detail page.
-- **Impersonation** — staff can open the console as a customer account (audited **with a
-  required reason**, AGL-2125 — the dialog will not submit without one; a
-  pinned warning banner with one-click exit shows for the entire session; staff
-  accounts cannot be impersonated).
-- **System emails** — the mail Aglyn itself sends (organization invites, the monthly
-  usage summary, internal alerts). Each one ships with built-in copy and can be
-  replaced with a designed template built in the besigner, using email-safe blocks
-  only. Set the subject and preheader from the editor's **Properties** panel; merge
-  tokens the email supplies are listed there, and any token left unresolved is blanked
-  before sending. **Reset to default** puts the built-in copy back.
-  The list is generated from the emails the product actually sends, so staff edit the
-  system emails that exist — adding one is a code change. Password reset and email
-  verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
-  payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
-- **[Feature flags](feature-flags.md)** — release-gate console features via Remote
-  Config, with percentage rollout; staff preview everything.
-- **[Multi-tenant architecture](architecture-multi-tenancy.md)** — how organizations,
-  membership, security rules, subdomains, and billing attribution fit together.
-- **Audit archival** — a nightly cron moves audit entries past the 90-day retention
-  window into a Storage compliance trail (JSON lines, month-partitioned) and reminds
-  staff of GDPR erasure requests past their 7-day hold.
-- **[Organization suspension](lockdown.md)** — a staff toggle that serves 503s on the org's sites and shows the
-  owner a banner.
-- **[Sales tax return](sales-tax-return.md)** — the quarterly Texas return: pick a
-  period, read the Form 01-114 figures for Texas, see every row the sweep could not
-  fully read, and export the working papers for the Webfile session.
-- **Audit log viewer** — a record of staff actions.
+### Staff overview {#staff-overview}
+
+Platform metrics, the newest organizations, purchases, and
+per-org usage; plus search. The **MRR estimate** counts only organizations with a
+live Stripe subscription — staff plan overrides, comped accounts, and canceled or
+unpaid subscriptions contribute $0, and annual plans count at their per-month
+equivalent rather than the month-to-month price. The tile shows how many
+organizations are billing and how many are comped, so a paid plan that bills
+nothing never inflates the headline.
+
+### [Support queue](support-queue.md) {#support-queue}
+
+Every organization's support tickets in one
+triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
+
+### Plugin reviews & realm trust {#plugin-reviews}
+
+The marketplace review queue, plus a
+**Listed plugins — realm trust** table for granting or revoking
+[realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
+per version.
+Rejecting a version is a **verdict, not a kill**: it stops new installs, but a
+site already pinned to those bytes keeps running them. Where that has happened
+the review panel says so and offers **Stop this version**, the per-version kill
+switch — every site pinned to it renders a placeholder on the next load, and
+the rest of the listing's versions are untouched. **Taking the listing down**
+is the wider hammer: it stops *every* version, including the approved one
+customers are using. Restoring a listing clears only what the takedown did, so
+a version stopped separately stays stopped.
+
+### Organization management {#organizations-admin}
+
+Audited plan and entitlement overrides, suspension,
+and GDPR-erasure flags, per organization. The directory is listed server-side with
+the Admin SDK (so it shows *every* org, not the subset client rules would return),
+ordered by organization id, 25 per page with Previous/Next.
+
+### Entitlement editor {#entitlement-editor}
+
+Full override editor for an organization's entitlements,
+its plan, and per-organization release flags. Every override needs a **reason**
+chosen from a fixed list (negotiated contract, support remediation, early access,
+correction, sales trial, or *other* — which requires a note). The reason and note
+are written onto the audit row beside the before/after and shown wherever that row
+is: the audit log, the organization's own page, and the acting staff account's
+trail. The log is append-only, so a reason not given at the time cannot be added
+afterwards. The reason is checked by the **server** that performs the override,
+not only by the dialog, so a request without one is refused rather than applied.
+The database now refuses a plan, entitlement or release-flag change made any
+other way, so that server is the *only* route an override can take and the
+reason cannot be skipped by going around the console.
+Changing an organization's release flags needs the **super** staff role; plan and
+entitlement changes are open to **billing** staff as well.
+**Clearing an override removes it.** Emptying a quota field, or setting a feature
+or release flag back to *Inherit*, deletes that override on save and hands the
+organization back to its plan default — one at a time, so the overrides you leave
+in place are untouched. **`0` is not empty**: a quota of zero is a real override,
+a cap of none (a comped 0% fee, an organization held to no POS registers), and it
+is kept. A quota field that cannot be read as a number of 0 or more refuses the
+save rather than being ignored.
+The override and its audit row are saved **together** — either both land or
+neither does. Read the message on a failure rather than assuming: it says
+*"nothing was written … safe to retry"* when the server refused the change, and
+says the outcome is **not known** when the request never got an answer (a dropped
+connection, a gateway error). In that second case, check the organization and the
+audit log before saving again — saving blind would record a before-state that is
+already overridden.
+
+### Users admin {#users-admin}
+
+Staff-claim management and disabling users, with gated listing
+and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
+granted to an **existing** account, so if someone isn't found, have them sign in to
+Aglyn once and then search their email again.
+Each account opens a **detail page** showing identity/auth state, staff role, every
+organization membership with roles and per-site access, and its recent audit trail.
+
+A **Legal acceptances** card on the same page answers the two questions a terms
+dispute asks: which version of the Terms and Privacy Policy this person accepted and
+when, and whether the **30-day arbitration opt-out window** (ToS §18.5) is still open.
+The window runs from the person's **first** acceptance of any version, so a later
+re-acceptance does not restart it. Each row carries the content hashes of the exact
+documents that were shown, the door the acceptance came through, and the IP recorded
+at the time. The card is read-only — those records are evidence about the account
+holder, and nothing in the product can add, amend or delete one.
+
+If the card says the records **could not be read**, that is not the same as "no
+acceptance on file": do not answer a dispute from that screen until it loads. An
+account can also legitimately have no record — accounts created before clickwrap
+capture, and SSO/invite doors, never passed a consent checkbox. Those accounts are
+asked to accept by a banner in the console the next time they sign in, as is anyone
+whose accepted version has been superseded by a newer publish.
+
+### Password help {#password-help}
+
+On that detail page, a **Password** card can email the account a
+reset link, or set its password directly for an account that cannot receive mail.
+Setting a password revokes the account's refresh tokens (so every device signs out)
+and emails the holder that an admin changed it. Both actions need the **super** staff
+role and are audited; the password itself is never recorded. An account with no email
+address supports neither.
+
+### Staff notes {#staff-notes}
+
+Free-text support/billing context on each organization's detail
+page, visible to staff only (never in tenant-readable data) and audited.
+
+### Broadcast announcements {#broadcast-announcements}
+
+Push a product announcement or maintenance notice as
+an in-app notification to every organization's owner/admins (optionally one plan
+tier), respecting each recipient's mute preferences; audited.
+
+### Billing insight {#billing-insight}
+
+Every organization's Stripe **invoice history** and default
+**payment method** (with delinquency state) render on its detail page.
+
+### Impersonation {#impersonation}
+
+Staff can open the console as a customer account (audited **with a
+required reason**, AGL-2125 — the dialog will not submit without one; a
+pinned warning banner with one-click exit shows for the entire session; staff
+accounts cannot be impersonated).
+
+### System emails {#system-emails}
+
+The mail Aglyn itself sends (organization invites, the monthly
+usage summary, internal alerts). Each one ships with built-in copy and can be
+replaced with a designed template built in the besigner, using email-safe blocks
+only. Set the subject and preheader from the editor's **Properties** panel; merge
+tokens the email supplies are listed there, and any token left unresolved is blanked
+before sending. **Reset to default** puts the built-in copy back.
+The list is generated from the emails the product actually sends, so staff edit the
+system emails that exist — adding one is a code change. Password reset and email
+verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
+payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
+
+### [Feature flags](feature-flags.md) {#feature-flags}
+
+Release-gate console features via Remote
+Config, with percentage rollout; staff preview everything.
+
+### [Multi-tenant architecture](architecture-multi-tenancy.md) {#multi-tenant-architecture}
+
+How organizations,
+membership, security rules, subdomains, and billing attribution fit together.
+
+### Audit archival {#audit-archival}
+
+A nightly cron moves audit entries past the 90-day retention
+window into a Storage compliance trail (JSON lines, month-partitioned) and reminds
+staff of GDPR erasure requests past their 7-day hold.
+
+### [Organization suspension](lockdown.md) {#organization-suspension}
+
+A staff toggle that serves 503s on the org's sites and shows the
+owner a banner.
+
+### [Sales tax return](sales-tax-return.md) {#sales-tax-return}
+
+The quarterly Texas return: pick a
+period, read the Form 01-114 figures for Texas, see every row the sweep could not
+fully read, and export the working papers for the Webfile session.
+
+### Audit log viewer {#audit-log}
+
+A record of staff actions.
+
+### Coupons {#coupons}
+
+Discount codes for **Aglyn's own subscriptions**. They live in Stripe — the console
+creates them there and reads them back, so a coupon made in the Stripe Dashboard shows
+up here and vice versa. Nothing on this page touches the discount codes a *customer*
+creates for their own storefront; those belong to the commerce plugin on their site.
+
+**Create a coupon** takes a name (the text that appears on the customer's invoice), a
+type — **Percent off** or **Fixed amount off** — a **Duration** of *Once*, *Repeating*
+(for a number of months) or *Forever*, and optionally a **redemption code**, a **max
+redemptions** cap and an expiry date. A coupon with no code is applied by staff to a
+subscription; a coupon with one can be typed by the customer at checkout.
+
+Before you commit, the form shows a **net-margin rating** for the discount — what is
+left after Stripe's fees and the plan's own cost. It is illustrative only: the binding
+check runs on the server when the discount is actually applied, so a rating that looks
+survivable is not permission.
+
+**Existing coupons** lists every Stripe coupon with its promotion codes, redemption
+count, and a **valid** or **expired** state.
+
+### Do not contact {#contact-suppressions}
+
+The platform do-not-contact list for **phone numbers** — calls and texts. It is not the
+email unsubscribe list; email opt-outs live with the campaign that sent them.
+
+Aglyn sends no marketing calls or texts today, and the page says so: there is no consent
+record behind them yet. The list exists so that an outbound programme has something to
+check the day one starts, and so that an opt-out we receive *now* is not lost.
+
+**Record a request** is for an opt-out that arrived outside the product — by email to
+privacy@aglyn.com, or spoken on a call. Give the number, how the request arrived (*Said
+on a call*, or *Other / staff*), the channel it covers (**Calls** or **Texts**), and a
+note. Replying STOP to a text will be handled automatically once texting exists; this
+form is for everything that does not arrive that way.
+
+If they also asked us to **delete the number we hold**, tick that box and give the
+account uid. The number stays on the suppression list — that is the only thing that
+keeps it from being dialled again — and what is deleted is the copy on their profile,
+with SSO blocked from re-asserting it on the next sign-in.
+
+A suppression **outlives the contact record**, and it can be undone: a number the person
+later opts back in for is marked **Opted back in** rather than removed, so the history of
+what was asked and when survives.
+
+### Access {#access}
 
 Access is gated on a **staff claim**, enforced per handler and by scoped Firestore
 rules. The area doesn't advertise itself: `/admin/*` returns a plain **404** to anyone

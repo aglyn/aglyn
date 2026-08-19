@@ -106,6 +106,13 @@ export type LegalAcceptanceContext =
   | 'signup-password'
   | 'signup-google'
   | 'signup-google-redirect'
+  /**
+   * Re-acceptance inside the console after a version bump (AGL-2316). A
+   * distinct literal rather than reusing a signup door: the record is what a
+   * dispute reads, and "agreed at sign-up" and "agreed to the new Terms
+   * eleven months later" are different facts about different documents.
+   */
+  | 'reaccept-console'
 
 /**
  * Hand the acceptance to the server, which stamps it with the version and the

@@ -224,12 +224,17 @@ async function handler(request: Request): Promise<Response> {
       return emailUnverifiedResponse()
     }
     if (!decoded['staff']) return refuse('Staff only', 403)
-    // Fails CLOSED to the least-privileged role on a missing claim would be
-    // wrong HERE: the rules read `token.get('staffRole', 'super')`, so a
-    // pre-RBAC staff account with no claim can make this write today
-    // (AGL-206's migration path). Diverging would lock those accounts out of
-    // a surface they use, which is a different bug from the one being fixed.
-    const actorRole = String(decoded['staffRole'] ?? 'super')
+    // Fails CLOSED to the least-privileged role, like every other staff route
+    // (AGL-2131). This one defaulted to `super` on the grounds that the rules
+    // read `token.get('staffRole', 'super')` and a pre-RBAC account would
+    // otherwise lose a surface it used — but AGL-495 already inverted that
+    // default everywhere else, so those accounts have resolved to `support`
+    // on every OTHER staff route since. `tools/scripts/audit-staff-claims.mjs`
+    // exists precisely to find them and says so in its header. The migration
+    // path this comment protected has been over for a while; what was left was
+    // a claim-less token resolving to `super` HERE and `support` there, which
+    // is the inconsistency, not the fix for one.
+    const actorRole = String(decoded['staffRole'] ?? 'support')
     if (actorRole !== 'super' && actorRole !== 'billing') {
       return refuse('Requires the billing or super staff role', 403)
     }
@@ -280,6 +285,18 @@ async function handler(request: Request): Promise<Response> {
       const numeric = typeof value === 'number' ? value : Number(value)
       if (!Number.isFinite(numeric) || numeric < 0) {
         return refuse(`quotas.${key} must be a number >= 0`, 400)
+      }
+      // A PERCENTAGE HAS A CEILING (AGL-2293), and these ones are money.
+      // `transactionFee*Pct` becomes Stripe's `application_fee_amount` at
+      // checkout, so a typed `200` produces a fee larger than the charge;
+      // Stripe refuses the session and EVERY sale on that storefront dies
+      // until someone connects a 400 at a shopper's checkout to a number typed
+      // into the staff dialog weeks earlier. `resolveMarketplaceFeePct` has
+      // clamped its own read at `<= 100` since AGL-1543 — this is the same
+      // rule at the write, where it can still be reported to the person
+      // making the mistake.
+      if (key.endsWith('Pct') && numeric > 100) {
+        return refuse(`quotas.${key} is a percentage and must be <= 100`, 400)
       }
       quotas[key] = numeric
     }

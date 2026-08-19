@@ -384,6 +384,58 @@ export interface AnalyticsEventParams {
     plan?: string
     funnel_completed: boolean
   }
+
+  // --- Plan changes taken from the grid (AGL-2235, under AGL-1859 §4) ------
+  /**
+   * Custom: no GA4 equivalent. A downgrade was confirmed and SCHEDULED from
+   * the billing plan grid — the same economic event `downsell_accepted`
+   * records, arrived at by the other door.
+   *
+   * Why this has to exist separately: all four retention events above fire
+   * from `retention-funnel.dialog.tsx` and from nowhere else. A customer who
+   * moves Pro → Starter through the cancel funnel is counted; a customer who
+   * moves Pro → Starter by clicking Downgrade on the plan card was counted by
+   * nothing. So "how many orgs moved down" was unanswerable, and the number
+   * that WAS answerable — `downsell_accepted` — undercounted by exactly the
+   * share that took the direct route while reading like a total. A save rate
+   * computed against it is wrong in the flattering direction, which is the
+   * worst direction for a retention number to be wrong in.
+   *
+   * `effective_at` is the whole point of the event's name: this is the
+   * asymmetric-friction arm of AGL-1859 §2, and a downgrade that has been
+   * SCHEDULED is not a downgrade that has HAPPENED. Reported as the server's
+   * ISO date so the gap between decision and effect — up to a full cycle, and
+   * the window in which "keep my plan" can still save the org — is visible in
+   * the data instead of being collapsed into the decision day.
+   *
+   * No amount, price or fee: pricing is locked for Sept 1, money belongs to
+   * `purchase`/`refund`, and a tier pair already says what changed.
+   */
+  plan_downgrade_scheduled: {
+    from_plan: string
+    to_plan: string
+    interval: string
+    effective_at?: string
+  }
+  /**
+   * Custom: no GA4 equivalent. An existing subscriber moved UP in place.
+   *
+   * Not `app_upgrade` — that name is GA4-RESERVED (it means an app binary
+   * version bump) and a hit using it is dropped, which is silence rather than
+   * pollution and therefore the harder failure to notice.
+   *
+   * `purchase` covers only the Checkout path, so before this, expansion
+   * revenue from customers who ALREADY had a subscription was dark: the
+   * in-place switch never opens a Checkout and never mints a new
+   * subscription, so nothing in the revenue taxonomy saw it. Upgrades are the
+   * half of AGL-1859 §2 that is supposed to be frictionless, and an
+   * unmeasured half cannot be shown to be.
+   */
+  plan_upgraded: {
+    from_plan: string
+    to_plan: string
+    interval: string
+  }
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventParams
@@ -693,6 +745,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   downsell_accepted: true,
   winback_discount_accepted: true,
   cancellation_completed: true,
+  plan_downgrade_scheduled: true,
+  plan_upgraded: true,
 }
 
 /** The taxonomy, enumerable. */

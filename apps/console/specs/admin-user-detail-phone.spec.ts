@@ -121,6 +121,27 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     if (mockSuppressionThrows) throw new Error('rules denied')
     return mockSuppression
   },
+  // AGL-2316 added a second compliance read to this route. A wholesale
+  // `jest.mock` is a CLOSED WORLD: every export the route reaches has to be
+  // here, or the call throws and the route's own failure branch quietly
+  // absorbs it. Stubbed rather than exercised — `admin-user-detail-legal.spec.ts`
+  // is where the acceptance projection is actually asserted.
+  getLegalAcceptanceStatus: async () => ({
+    currentVersion: 'v6',
+    accepted: true,
+    acceptedVersions: ['v6'],
+    latestAcceptedVersion: 'v6',
+    currentVersionAcceptedAt: '2026-08-18T00:00:00.000Z',
+    reacceptanceRequired: false,
+    reacceptanceReason: 'none',
+    arbitration: {
+      firstAcceptedAt: '2026-08-18T00:00:00.000Z',
+      deadline: '2026-09-17T00:00:00.000Z',
+      open: true,
+      daysRemaining: 30,
+    },
+    acceptances: [],
+  }),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires

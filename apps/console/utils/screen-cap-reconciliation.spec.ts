@@ -42,7 +42,8 @@
 import {
   measureScreenCaps,
   recordedMaxBillableScreens,
-  screenCapMaxBillable,
+  recordedOverCapHostIds,
+  screenCapReading,
   SCREEN_CAP_ROLLUP_MAX_AGE_MS,
 } from './screen-cap-reconciliation'
 
@@ -137,24 +138,42 @@ describe('measureScreenCaps read cost (AGL-1440)', () => {
     expect(fromRows.maxBillable).toBe(scanned.maxBillable)
   })
 
-  it('still reports over-cap hosts from rows', async () => {
+  it('still reports over-cap hosts from rows — the ones that ARE over', async () => {
+    /*
+     * The ids are `alpha` and `beta`, and the UNDER-cap host comes FIRST.
+     *
+     * This test previously used a single host called `over`, which made
+     * `overCapHostIds: ['over']` — a literal constant — pass it. Verified by
+     * making exactly that mutation while closing AGL-2321: the suite stayed
+     * green. A guard whose fixture is named after the answer is not a guard.
+     */
     const counter = { reads: 0 }
+    const pages = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: `s${index}`,
+        kind: 'page',
+      }))
     const report = await measureScreenCaps(
       [
         {
-          id: 'over',
+          id: 'alpha',
           ref: hostRef([], counter) as never,
           routingMap: {},
-          screens: Array.from({ length: 7 }, (_, index) => ({
-            id: `s${index}`,
-            kind: 'page',
-          })),
+          // Inside the cap of 5 — the control that stops "return every host".
+          screens: pages(3),
+        },
+        {
+          id: 'beta',
+          ref: hostRef([], counter) as never,
+          routingMap: {},
+          screens: pages(7),
         },
       ],
       {},
     )
-    expect(report.overCapHostIds).toEqual(['over'])
-    expect(report.rows[0].overBy).toBe(2)
+    expect(report.overCapHostIds).toEqual(['beta'])
+    expect(report.rows[1].overBy).toBe(2)
+    expect(report.rows[0].overBy).toBe(0)
     expect(counter.reads).toBe(0)
   })
 })
@@ -230,15 +249,22 @@ describe('recordedMaxBillableScreens (AGL-1440)', () => {
   })
 })
 
-describe('screenCapMaxBillable — measure only when we must (AGL-1440)', () => {
+describe('screenCapReading — measure only when we must (AGL-1440)', () => {
   const now = Date.UTC(2026, 7, 12, 8, 0, 0)
-  const fresh = { maxBillableScreens: 4, computedAt: { toMillis: () => now } }
+  const fresh = {
+    maxBillableScreens: 4,
+    computedAt: { toMillis: () => now },
+    screensOverCapHostIds: ['host-a'],
+  }
+  /** What `measureScreenCaps` returns, narrowed to what this consumes. */
+  const report = (maxBillable: number, overCapHostIds: string[] = []) =>
+    ({ rows: [], limit: 5, maxBillable, overCapHostIds }) as any
 
   it('never measures when a fresh figure is recorded', async () => {
     const measure = jest.fn()
-    const result = await screenCapMaxBillable(fresh, now, measure)
+    const result = await screenCapReading(fresh, now, measure)
 
-    expect(result).toBe(4)
+    expect(result.maxBillable).toBe(4)
     // The whole saving: no scan of any host's screens collection.
     expect(measure).not.toHaveBeenCalled()
   })
@@ -246,19 +272,78 @@ describe('screenCapMaxBillable — measure only when we must (AGL-1440)', () => 
   it('measures when nothing is recorded', async () => {
     // A brand-new org, or one the chunked rollup has not reached. Reporting 0
     // here would silently answer the only question this detector exists to ask.
-    const measure = jest.fn(async () => 6)
-    expect(await screenCapMaxBillable(null, now, measure)).toBe(6)
+    const measure = jest.fn(async () => report(6))
+    expect((await screenCapReading(null, now, measure)).maxBillable).toBe(6)
     expect(measure).toHaveBeenCalledTimes(1)
   })
 
   it('measures when the recorded figure has gone stale', async () => {
-    const measure = jest.fn(async () => 6)
+    const measure = jest.fn(async () => report(6))
     const stale = {
       maxBillableScreens: 4,
       computedAt: { toMillis: () => now - SCREEN_CAP_ROLLUP_MAX_AGE_MS - 1 },
     }
-    expect(await screenCapMaxBillable(stale, now, measure)).toBe(6)
+    expect((await screenCapReading(stale, now, measure)).maxBillable).toBe(6)
     expect(measure).toHaveBeenCalledTimes(1)
+  })
+
+  /*==========================================
+   * WHICH SITES (AGL-2321).
+   *
+   * `screensOverCapHostIds` was written beside `maxBillableScreens` and read
+   * by nothing, so the alert could say a site was over its cap and not say
+   * which. BOTH arms have to answer it: an alert that could name the sites
+   * only when it had just scanned them would go quiet in exactly the steady
+   * state AGL-1440's caching was introduced to produce.
+   *=========================================*/
+  it('names the RECORDED sites, not a placeholder', async () => {
+    const measure = jest.fn()
+    const reading = await screenCapReading(
+      { ...fresh, screensOverCapHostIds: ['host-b', 'host-c'] },
+      now,
+      measure,
+    )
+    // Its own list, in its own order. A helper returning a constant, or the
+    // first id twice, satisfies neither of these.
+    expect(reading.overCapHostIds).toEqual(['host-b', 'host-c'])
+    expect(measure).not.toHaveBeenCalled()
+  })
+
+  it('names the MEASURED sites when it had to scan', async () => {
+    const measure = jest.fn(async () => report(6, ['host-x']))
+    expect((await screenCapReading(null, now, measure)).overCapHostIds).toEqual(
+      ['host-x'],
+    )
+  })
+
+  it('reports an empty list as empty, never as unknown', async () => {
+    // The normal case. Inventing a placeholder here would put "which sites?"
+    // straight back where it started, on every healthy org.
+    const reading = await screenCapReading(
+      { ...fresh, screensOverCapHostIds: [] },
+      now,
+      jest.fn(),
+    )
+    expect(reading.overCapHostIds).toEqual([])
+  })
+
+  it('drops rubbish rather than rendering it into a customer sentence', async () => {
+    // The stored value predates any reader and crosses a JSON boundary, so
+    // `undefined` in a "Over the cap: …" line is a live possibility.
+    expect(
+      recordedOverCapHostIds({
+        screensOverCapHostIds: ['host-a', '', '  ', 7, null, 'host-a', 'host-b'],
+      }),
+    ).toEqual(['host-a', 'host-b'])
+    expect(recordedOverCapHostIds({ screensOverCapHostIds: 'host-a' })).toEqual([])
+    expect(recordedOverCapHostIds(null)).toEqual([])
+  })
+
+  it('caps a runaway list so the alert stays readable', async () => {
+    const many = Array.from({ length: 50 }, (_, index) => `host-${index}`)
+    expect(
+      recordedOverCapHostIds({ screensOverCapHostIds: many }),
+    ).toHaveLength(20)
   })
 
   it('leaves room for a daily rollup to be a few hours late', async () => {

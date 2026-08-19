@@ -19,9 +19,11 @@
 
 import {
   canLinkSocialProvider,
+  isMediaCdnPath,
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_ADDRESS_CITY,
@@ -84,6 +86,7 @@ import CardDisplayFormTemplate from '../../../../components/card-display-form-te
 import CloseAccountCard from '../../../../components/close-account-card.component'
 import DataExportCard from '../../../../components/data-export-card.component'
 import PasskeysCard from '../../../../components/passkeys-card.component'
+import RecentSignInsCard from '../../../../components/recent-sign-ins-card.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -365,11 +368,18 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   }, [(data as any)?.photoUrl, user?.photoURL])
   const handlePhotoSave = useCallback(async () => {
     const cleaned = photoUrl.trim()
-    if (cleaned && !/^https:\/\//i.test(cleaned)) {
-      return void enqueueSnackbar('Image URLs must be https://', {
-        variant: 'warning',
-        persist: false,
-      })
+    // Must accept what this card's own Browse button produces (AGL-2286) —
+    // `MediaUrlField` writes `media.cdnPath`, which is never absolute. This
+    // check fired FIRST, so a user who picked a library image never even
+    // reached the server's identical refusal; the field's own helper text
+    // offers the library. Mirrors `normalizeMemberPhotoUrl`, which is the
+    // boundary — this one is the courtesy.
+    const cleanedIsHttps = /^https:\/\//i.test(cleaned)
+    if (cleaned && !cleanedIsHttps && !isMediaCdnPath(cleaned)) {
+      return void enqueueSnackbar(
+        'Image URL must be an https:// URL or an image from your media library',
+        { variant: 'warning', persist: false },
+      )
     }
     const dequeueLoading = queueLoading()
     try {
@@ -481,7 +491,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         code === 'auth/credential-already-in-use' ||
           code === 'auth/email-already-in-use' ||
           code === 'auth/provider-already-linked'
-          ? 'That Google account is already linked to an Aglyn account.'
+          ? `That Google account is already linked to an ${PLATFORM_BRAND_NAME} account.`
           : 'Connecting Google failed',
         { variant: 'warning' },
       )
@@ -552,8 +562,8 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           <Typography variant="subtitle2">{'Sign-in methods'}</Typography>
           <Typography variant="caption" color="text.secondary">
             {ssoGoverned
-              ? 'How you sign in to Aglyn, managed by your organization.'
-              : 'How you sign in to Aglyn. Connect another for a backup way in.'}
+              ? `How you sign in to ${PLATFORM_BRAND_NAME}, managed by your organization.`
+              : `How you sign in to ${PLATFORM_BRAND_NAME}. Connect another for a backup way in.`}
           </Typography>
         </Box>
         {providerIds.length === 0 ? (
@@ -752,7 +762,12 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     // saving merges — so a blank field deletes the real value.
     if (schema.id === 'basic' && profileUnreadableAndEmpty) {
       return (
-        <CardDisplay header="Basic info" contentGutterX contentGutterY>
+        <CardDisplay header="Basic info"
+          help={docsHelp('manageAccount', {
+            excerpt:
+              'Your name and contact details, as they appear to teammates across ' +
+              'every organization you belong to.',
+          })} contentGutterX contentGutterY>
           <Alert severity="error" sx={{ maxWidth: 560 }}>
             {'We could not load your profile, so it is not shown here — the ' +
               'form is hidden rather than blank, because saving a blank form ' +
@@ -801,6 +816,10 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                   ? formPanel(securitySchema, handleSecuritySave)
                   : null}
                 <PasskeysCard />
+                {/* The other half of the new-device email (AGL-2318). Below
+                    passkeys because that is the ACTION someone takes after
+                    reading a sign-in they do not recognise. */}
+                <RecentSignInsCard />
               </Stack>
             ),
           },

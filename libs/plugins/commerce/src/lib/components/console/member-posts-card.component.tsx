@@ -36,6 +36,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { EntitlementGatedCard } from './entitlement-gate.component'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface MemberPostsCardProps {
   hostId: string
@@ -54,6 +55,11 @@ export interface MemberPostsCardProps {
  * have the renderer serve it to the public — believing content was protected
  * while it was not. A refusal the operator can see is the fix.
  */
+
+const memberPostsHelp = pluginDocsHelp('membersOnly', {
+  anchor: '#manage-your-members',
+})
+
 export function MemberPostsCard(props: MemberPostsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -114,6 +120,7 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
 
   return (
     <EntitlementGatedCard
+      help={memberPostsHelp}
       hostId={hostId}
       feature="contentGating"
       header={'Member updates'}
@@ -123,7 +130,12 @@ export function MemberPostsCard(props: MemberPostsCardProps) {
         'them.'
       }
     >
-    <CardDisplay header={'Member updates'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Member updates'}
+      help={memberPostsHelp}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {posts.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

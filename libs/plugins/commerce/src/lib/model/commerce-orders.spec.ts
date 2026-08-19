@@ -25,8 +25,16 @@ import {
   computeOrderTotals,
   formatOrderNumber,
   liftLegacyOrder,
+  ORDER_CHANNEL_LABELS,
+  ORDER_STATUS_COLOR,
+  ORDER_STATUS_LABELS,
+  orderChannelLabel,
   orderContainsProduct,
+  orderCreatedAtMs,
+  orderNetCents,
+  summarizeOrderWindow,
 } from './commerce-orders'
+import type { OrderChannel, OrderStatus } from './commerce-orders'
 
 describe('canTransitionOrder', () => {
   it('allows the documented lifecycle and blocks the rest', () => {
@@ -39,6 +47,23 @@ describe('canTransitionOrder', () => {
     expect(canTransitionOrder('fulfilled', 'cancelled')).toBe(false)
     expect(canTransitionOrder('refunded', 'paid')).toBe(false)
     expect(canTransitionOrder('cancelled', 'paid')).toBe(false)
+  })
+
+  /**
+   * AGL-2149. `cancel-order.ts` accepts a PAID order and moves no money, so
+   * with `cancelled: []` an admin who cancelled instead of refunding locked the
+   * shopper's money out of `refund.ts` — which gates on exactly this call —
+   * permanently. This edge is the money's way back out.
+   */
+  it('lets a cancelled order still be refunded', () => {
+    expect(canTransitionOrder('cancelled', 'refunded')).toBe(true)
+  })
+
+  /** …and `refunded` really is terminal, which is what makes the flip once-only. */
+  it('keeps refunded terminal', () => {
+    expect(canTransitionOrder('refunded', 'cancelled')).toBe(false)
+    expect(canTransitionOrder('refunded', 'refunded')).toBe(false)
+    expect(canTransitionOrder('refunded', 'fulfilled')).toBe(false)
   })
 })
 
@@ -62,6 +87,66 @@ describe('computeOrderTotals', () => {
     const totals = computeOrderTotals(lines, { discountCents: 99999 })
     expect(totals.discountCents).toBe(9000)
     expect(totals.totalCents).toBe(0)
+  })
+
+  /**
+   * AGL-2229. `Math.max(0, Math.round(x))` reads like a sanitiser and is not
+   * one: `Math.max`/`Math.min` PROPAGATE `NaN`. One non-finite part therefore
+   * made every field `NaN`, including `totalCents` — and `NaN` does not fail a
+   * comparison, it defeats it, so `cashReceivedCents < totals.totalCents` in
+   * the POS handler read `false` and rang up a sale that took no money.
+   *
+   * Asserted per FIELD rather than on the total alone: a total that survives
+   * while `discountCents` is `NaN` still poisons every merchant report that
+   * sums the decomposition.
+   */
+  describe('non-finite parts (AGL-2229)', () => {
+    it('discards a NaN part instead of spreading it through every field', () => {
+      const totals = computeOrderTotals(lines, {
+        shippingCents: NaN,
+        taxCents: Number('eight'),
+        discountCents: NaN,
+        feeCents: Infinity,
+      })
+      expect(totals.itemsCents).toBe(9000)
+      expect(totals.shippingCents).toBe(0)
+      expect(totals.taxCents).toBe(0)
+      expect(totals.discountCents).toBe(0)
+      expect(totals.feeCents).toBe(0)
+      expect(totals.totalCents).toBe(9000)
+      // The property the POS guard actually depends on. `NaN` is a number by
+      // `typeof`, so this is the test that would have caught it.
+      expect(Number.isFinite(totals.totalCents)).toBe(true)
+    })
+
+    it('drops a line whose own price is not a number', () => {
+      const totals = computeOrderTotals([
+        { productId: 'a', name: 'Priced', quantity: 2, unitAmountCents: 2500 },
+        {
+          productId: 'b',
+          name: 'Unpriced',
+          quantity: 1,
+          unitAmountCents: undefined as unknown as number,
+        },
+      ])
+      expect(totals.itemsCents).toBe(5000)
+      expect(totals.totalCents).toBe(5000)
+    })
+
+    /**
+     * POSITIVE CONTROL. Without it every assertion above is satisfied by a
+     * helper that answers zero for everything.
+     */
+    it('POSITIVE CONTROL: finite parts still fold in unchanged', () => {
+      const totals = computeOrderTotals(lines, {
+        shippingCents: 799,
+        taxCents: 450,
+        discountCents: 1000,
+        feeCents: 180,
+      })
+      expect(totals.totalCents).toBe(9000 + 799 + 450 - 1000)
+      expect(totals.feeCents).toBe(180)
+    })
   })
 })
 
@@ -739,5 +824,178 @@ describe('appendOrderEvent', () => {
       detail: 'Sent via UPS',
     })
     expect(order.timeline).toHaveLength(1)
+  })
+})
+
+/**
+ * AGL-2136 — the advertised orders screen. `/product/commerce`'s deep-dive
+ * mockup shows coloured status pills, a Channel column and three money
+ * tiles carrying a period-over-period delta; none of the three existed.
+ */
+describe('order status + channel presentation', () => {
+  const EVERY_STATUS: OrderStatus[] = [
+    'pending',
+    'paid',
+    'partially_fulfilled',
+    'fulfilled',
+    'delivered',
+    'cancelled',
+    'refunded',
+  ]
+  const EVERY_CHANNEL: OrderChannel[] = [
+    'online',
+    'pos',
+    'draft',
+    'subscription',
+  ]
+
+  it('labels and colours EVERY status — a new one cannot render blank', () => {
+    for (const status of EVERY_STATUS) {
+      expect(ORDER_STATUS_LABELS[status]).toBeTruthy()
+      expect(ORDER_STATUS_COLOR[status]).toBeTruthy()
+    }
+    expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual(
+      [...EVERY_STATUS].sort(),
+    )
+  })
+
+  it('gives the three advertised statuses three DIFFERENT colours', () => {
+    // The defect this replaces was not a missing colour, it was one colour
+    // for all seven — so sameness is the thing to assert against.
+    const advertised = [
+      ORDER_STATUS_COLOR.paid,
+      ORDER_STATUS_COLOR.fulfilled,
+      ORDER_STATUS_COLOR.refunded,
+    ]
+    expect(new Set(advertised).size).toBe(3)
+    expect(ORDER_STATUS_COLOR.refunded).toBe('error')
+  })
+
+  it('labels every channel, and tolerates an unknown one', () => {
+    for (const channel of EVERY_CHANNEL) {
+      expect(ORDER_CHANNEL_LABELS[channel]).toBeTruthy()
+    }
+    expect(orderChannelLabel('pos')).toBe('POS')
+    // A legacy row has no channel at all; the column must not render blank.
+    expect(orderChannelLabel(undefined)).toBe('Online')
+    expect(orderChannelLabel('kiosk')).toBe('kiosk')
+  })
+})
+
+describe('orderNetCents / orderCreatedAtMs', () => {
+  it('subtracts refunds from the charged total', () => {
+    expect(
+      orderNetCents({
+        totals: { totalCents: 5000 },
+        refundedCents: 1500,
+      } as never),
+    ).toBe(3500)
+  })
+
+  it('falls back to the legacy flat amount', () => {
+    expect(orderNetCents({ amountCents: 900 } as never)).toBe(900)
+  })
+
+  it('reads a timestamp from every writer shape', () => {
+    expect(orderCreatedAtMs({ createdAtMs: 1700 } as never)).toBe(1700)
+    expect(orderCreatedAtMs({ createdAt: { seconds: 2 } } as never)).toBe(2000)
+    expect(
+      orderCreatedAtMs({
+        createdAt: { toDate: () => new Date(4000) },
+      } as never),
+    ).toBe(4000)
+    // A `serverTimestamp` that has not landed yet reads back as nothing.
+    expect(orderCreatedAtMs({} as never)).toBe(0)
+  })
+})
+
+describe('summarizeOrderWindow', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const NOW = 1_000 * DAY
+  // A COMPLETE `OrderTotals`, not `{ totalCents }` alone (AGL-2242).
+  // `Partial<HostOrder>` makes `totals` optional but leaves its value type
+  // whole, so a five-field-short literal is a type error — and the fixture
+  // was worth more than a cast either way: `orderNetCents` reads `totalCents`
+  // and `refundedCents`, and a totals object whose parts do not add up to its
+  // own total is a double that could never come out of the checkout it stands
+  // in for. Items carry the whole amount; nothing here ships, taxes,
+  // discounts or takes a platform fee.
+  const totals = (cents: number) => ({
+    itemsCents: cents,
+    shippingCents: 0,
+    taxCents: 0,
+    discountCents: 0,
+    feeCents: 0,
+    totalCents: cents,
+  })
+  const order = (agoDays: number, cents: number, extra: object = {}) => ({
+    status: 'paid' as const,
+    createdAtMs: NOW - agoDays * DAY,
+    totals: totals(cents),
+    lineItems: [{ productId: 'p', name: 'P', quantity: 1, unitAmountCents: cents }],
+    ...extra,
+  })
+
+  it('splits current and prior 30-day windows and computes the delta', () => {
+    const summary = summarizeOrderWindow(
+      [
+        order(1, 6000),
+        order(10, 4000),
+        // Prior window: 31..60 days ago.
+        order(35, 5000),
+        // Older than both windows — must not reach either.
+        order(120, 999_999),
+      ],
+      { nowMs: NOW },
+    )
+    expect(summary.revenueCents).toBe(10_000)
+    expect(summary.orders).toBe(2)
+    expect(summary.aovCents).toBe(5000)
+    expect(summary.revenueDeltaPct).toBe(100)
+    expect(summary.ordersDeltaPct).toBe(100)
+    // AOV went 5000 -> 5000: flat, and flat is 0, never null.
+    expect(summary.aovDeltaPct).toBe(0)
+  })
+
+  it('returns null rather than "+100%" when the prior window is empty', () => {
+    const summary = summarizeOrderWindow([order(2, 2500)], { nowMs: NOW })
+    expect(summary.revenueCents).toBe(2500)
+    expect(summary.revenueDeltaPct).toBeNull()
+    expect(summary.ordersDeltaPct).toBeNull()
+    expect(summary.aovDeltaPct).toBeNull()
+  })
+
+  it('excludes pending and cancelled orders from both windows', () => {
+    const summary = summarizeOrderWindow(
+      [
+        order(1, 1000, { status: 'pending' }),
+        order(2, 1000, { status: 'cancelled' }),
+        order(40, 1000, { status: 'pending' }),
+      ],
+      { nowMs: NOW },
+    )
+    expect(summary.revenueCents).toBe(0)
+    expect(summary.orders).toBe(0)
+    expect(summary.revenueDeltaPct).toBeNull()
+  })
+
+  it('pushes the delta DOWN when an order in the window was refunded', () => {
+    const withRefund = summarizeOrderWindow(
+      [order(1, 10_000, { refundedCents: 6000 }), order(40, 10_000)],
+      { nowMs: NOW },
+    )
+    expect(withRefund.revenueCents).toBe(4000)
+    expect(withRefund.revenueDeltaPct).toBe(-60)
+  })
+
+  it('honours a shorter window', () => {
+    const summary = summarizeOrderWindow(
+      [order(1, 1000), order(10, 5000)],
+      { nowMs: NOW, days: 7 },
+    )
+    // The 10-day-old order lands in the PRIOR 7-day window (7..14 days).
+    expect(summary.revenueCents).toBe(1000)
+    expect(summary.orders).toBe(1)
+    expect(summary.revenueDeltaPct).toBe(-80)
   })
 })

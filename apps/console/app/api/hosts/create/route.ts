@@ -28,6 +28,7 @@ import {
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
 import {
+  consumeRateLimit,
   emailUnverifiedResponse,
   ensureOrgForUser,
   firebaseAdmin,
@@ -138,6 +139,53 @@ async function handler(request: Request): Promise<Response> {
       org,
     })
     if (locked) return locked
+
+    // Rate limit (AGL-1968) — the always-on layer under the hostLimit quota.
+    // `*.aglyn.app` is ONE global namespace shared by every customer, so a
+    // subdomain someone squats is gone for everybody. The quota below bounds
+    // how many sites an org may HOLD; nothing bounded how fast it could try,
+    // and on open-signup day that is a name-grab at whatever rate Vercel will
+    // serve. Same durable limiter as every other consequence endpoint
+    // (AGL-794), keyed per uid (a scripted account) AND per IP (a bot farm
+    // rotating accounts behind one address).
+    //
+    // Sized to be invisible to real use and fatal to a sweep: the most sites a
+    // person creates by hand in an hour is a handful, and an agency onboarding
+    // a client does it once per client.
+    //
+    // Fails soft by design — a limiter outage must not stop people making
+    // sites. Deliberately AFTER the 401/403/423 refusals, matching
+    // `orgs/create`: they win the order, and a refused request never burns a
+    // token.
+    const ip = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? 'unknown'
+    const perUid = await consumeRateLimit(`host-create:${decoded.uid}`, {
+      limit: 20,
+      windowMs: 60 * 60 * 1000,
+    })
+    const perIp = await consumeRateLimit(`host-create-ip:${ip}`, {
+      limit: 60,
+      windowMs: 60 * 60 * 1000,
+    })
+    // `.allowed`, not the result object — a truthiness check would be
+    // permanently true and the limit would never bite.
+    const overLimit = !perUid.allowed ? perUid : !perIp.allowed ? perIp : null
+    if (overLimit) {
+      return Response.json(
+        {
+          error:
+            'Too many new sites in a short time — wait a while and try ' +
+            'again. The name you typed is kept.',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(
+              Math.max(1, Math.ceil((overLimit.resetMs - Date.now()) / 1000)),
+            ),
+          },
+        },
+      )
+    }
 
     // Enforced for every org — a plan-less org resolves as `free`
     // (hostLimit 1), not unmetered.

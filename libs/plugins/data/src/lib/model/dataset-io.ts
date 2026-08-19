@@ -16,71 +16,25 @@
  */
 
 /**
- * Dataset CSV/JSON round-tripping (AGL-182). Serialization is the
- * predictable inverse of `coerceDocumentValues`: ISO dates, `lat, lon`
- * coordinates, comma-joined lists, JSON maps, reference ids — so an
- * export re-imports losslessly through the same coercion.
+ * Dataset CSV/JSON round-tripping (AGL-182) — the IMPORT half.
+ *
+ * The serialization half moved to `@aglyn/aglyn`'s `dataset-csv` (AGL-2335)
+ * so the server export route can share one escaper; it is re-exported here
+ * unchanged, so `@aglyn/plugins-data/model` remains the one import site for
+ * everything dataset-io. Nothing outside this plugin parses a CSV, so the
+ * parser stays.
  */
 
-import type {
-  DatasetFieldDefinition,
-  DatasetModel,
-} from '@aglyn/aglyn'
-
-/** Storage value → portable string (CSV cell / JSON value). */
-export function serializeDatasetValue(
-  field: DatasetFieldDefinition,
-  value: unknown,
-): string {
-  if (value == null) return ''
-  switch (field.type) {
-    case 'timestamp':
-      return typeof value === 'number' && Number.isFinite(value)
-        ? new Date(value).toISOString()
-        : String(value)
-    case 'coordinates': {
-      const coordinates = value as { latitude?: number; longitude?: number }
-      return coordinates &&
-        typeof coordinates.latitude === 'number' &&
-        typeof coordinates.longitude === 'number'
-        ? `${coordinates.latitude}, ${coordinates.longitude}`
-        : String(value)
-    }
-    case 'sorted':
-    case 'reference':
-      return Array.isArray(value) ? value.join(', ') : String(value)
-    case 'map':
-      try {
-        return JSON.stringify(value)
-      } catch {
-        return String(value)
-      }
-    default:
-      return String(value)
-  }
-}
-
-const csvEscape = (cell: string): string =>
-  /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
-
-/** Rows (storage-form value maps) → CSV with a fieldId header row. */
-export function datasetRecordsToCsv(
-  model: DatasetModel,
-  rows: Array<Record<string, unknown>>,
-): string {
-  const header = model.order.map(csvEscape).join(',')
-  const lines = rows.map((row) =>
-    model.order
-      .map((fieldId) => {
-        const field = model.fields[fieldId]
-        return csvEscape(
-          field ? serializeDatasetValue(field, row[fieldId]) : '',
-        )
-      })
-      .join(','),
-  )
-  return [header, ...lines].join('\n')
-}
+import type { DatasetModel } from '@aglyn/aglyn'
+export {
+  countCsvDataRows,
+  datasetCsvHeader,
+  datasetCsvRow,
+  datasetRecordToJson,
+  datasetRecordsToCsv,
+  exportShortfall,
+  serializeDatasetValue,
+} from '@aglyn/aglyn/app-utils/dataset-csv'
 
 /** Minimal RFC-4180 CSV parser (quoted fields, escaped quotes, CRLF). */
 export function parseCsv(text: string): string[][] {

@@ -33,6 +33,10 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  PLATFORM_BRAND_NAME,
+  PLATFORM_SUPPORT_URL,
+} from '@aglyn/aglyn/app-utils/platform-brand'
 
 /** Swapped per case; the card reads it through `useCurrentOrg`. */
 const mockOrgState: { org: Record<string, unknown>; ready: boolean } = {
@@ -40,6 +44,38 @@ const mockOrgState: { org: Record<string, unknown>; ready: boolean } = {
   ready: true,
 }
 let mockEntitled = true
+
+/**
+ * `useBranding` (AGL-2319 gave this surface its brand-aware copy). Mocked
+ * NARROWLY — the module's one default export and one named export — for the
+ * reason `white-label-tab-title.spec.tsx` states: the real hook reaches
+ * `use-secondary-nav`, which pulls in the console plugin gate, the Firebase
+ * services provider and `next/navigation`, a module graph a card's unit test
+ * has no business loading. The value is `PLATFORM_BRANDING_PROFILE` rebuilt
+ * from its own two constants — literally what `resolveBrandingProfile` returns
+ * for an org that is not white-label — and it is a module-level singleton, so
+ * a consumer memoizing on the object cannot be made to loop (AGL-2365).
+ */
+const mockBranding = {
+  branding: {
+    productName: PLATFORM_BRAND_NAME,
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: null,
+    supportUrl: PLATFORM_SUPPORT_URL,
+    fromName: PLATFORM_BRAND_NAME,
+    emailLogoUrl: null,
+    customConsoleDomain: null,
+  },
+  whiteLabel: false,
+  ready: true,
+}
+
+jest.mock('../hooks/use-branding', () => ({
+  __esModule: true,
+  useBranding: () => mockBranding,
+  default: () => mockBranding,
+}))
 
 jest.mock('@aglyn/aglyn', () => ({
   canManageOrg: () => true,
@@ -61,7 +97,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
 }))
 
-jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
+// A closed world: this mock replaces the WHOLE module, so the card's new
+// `buildDocsUrl` call threw "is not a function" until it was added (AGL-2186).
+// The real implementation, not a stub — the card renders the returned string
+// into an href, and a double that ignored configuration would let a hardcoded
+// origin come back without any assertion here noticing.
+jest.mock('../constants/docs-links', () => ({
+  docsHelp: () => undefined,
+  buildDocsUrl: (
+    jest.requireActual('../constants/docs-links') as {
+      buildDocsUrl: (path?: string) => string
+    }
+  ).buildDocsUrl,
+}))
 
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,

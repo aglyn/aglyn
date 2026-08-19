@@ -86,6 +86,19 @@ jest.mock('../components/staff-only.component', () => ({
 jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
   useIsStaff: () => true,
+  /*
+   * AGL-2190. The panic page grew a `StaffSuperOnly` gate, which reads
+   * `useStaffRole` — an export this closed-world mock did not carry, so
+   * every case here died on `useStaffRole is not a function` before it
+   * asserted anything.
+   *
+   * `'super'`, not `true` and not `null`. The hook returns the ROLE
+   * string, and its `null` means "still reading the token": the gate
+   * treats that as unresolved and renders nothing blocked, so a mock
+   * returning `null` would leave the controls this file drives disabled
+   * and fail it in a new way.
+   */
+  useStaffRole: () => 'super',
 }))
 
 import AdminLockdown from '../app/(app)/admin/lockdown/page'

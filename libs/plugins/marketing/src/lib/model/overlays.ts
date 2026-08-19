@@ -134,3 +134,49 @@ export function resolveActiveOverlays(
       null,
   }
 }
+
+/** What a popup's frequency cap reads and writes. */
+export type PopupCapStore = 'session' | 'local'
+
+/**
+ * Which store a popup's frequency cap uses (AGL-2174).
+ *
+ * `sessionStorage` for a per-session cap, because that IS the lifetime the
+ * setting names: it clears when the tab closes. `frequencyDays: 1` cannot
+ * express it — a visitor who dismissed at 23:59 would be suppressed for
+ * one minute and then shown the popup again.
+ *
+ * The read and the write must agree. Stamping `localStorage` for a
+ * session-capped popup leaves a timestamp nothing reads, which outlives
+ * the cap it was meant to record.
+ */
+export function popupCapStore(popup: {
+  oncePerSession?: boolean
+}): PopupCapStore {
+  return popup?.oncePerSession ? 'session' : 'local'
+}
+
+/**
+ * Whether a popup is currently suppressed by its own frequency cap.
+ *
+ * `sessionFlag` is whatever `sessionStorage` holds for it; `lastShownMs`
+ * is the `localStorage` timestamp. Exactly one is consulted — the two caps
+ * are alternative answers to the same question, and honouring both would
+ * suppress a popup for the session AND for a week afterwards.
+ */
+export function popupSuppressed(
+  popup: { oncePerSession?: boolean; frequencyDays?: number },
+  state: { sessionFlag?: string | null; lastShownMs?: number | null },
+  nowMs: number,
+): boolean {
+  if (popup?.oncePerSession) return Boolean(state.sessionFlag)
+  const stamp = Number(state.lastShownMs ?? 0)
+  if (!stamp) return false
+  // A missing or zero `frequencyDays` means "no day cap configured", and
+  // the comparison already says so: `now - stamp` is positive for any
+  // real stamp, so it is never below zero. Stated rather than guarded —
+  // an `if (!days) return false` above this line reads like a guard while
+  // being unreachable, which is the kind of line a later reader trusts.
+  const days = Number(popup?.frequencyDays ?? 0)
+  return nowMs - stamp < days * 86_400_000
+}

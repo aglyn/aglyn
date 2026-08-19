@@ -581,7 +581,7 @@ function SystemEmailBesignerPage() {
             {'System email has no media library — it belongs to no site or ' +
               'organization, so there is nothing host-scoped to browse. Add ' +
               'an image by dropping in an Image block and pasting a publicly ' +
-              'reachable https URL (for example an asset on aglyn.com) into ' +
+              'reachable https URL (for example an asset on your own site) into ' +
               'its URL field.'}
           </Alert>
         </Stack>

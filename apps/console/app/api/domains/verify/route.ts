@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { isDevelopmentRuntime, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -219,8 +219,19 @@ async function handler(request: Request): Promise<Response> {
   // NXDOMAIN / no CNAME comes back as an empty list — reported as unverified.
   const records = await resolveCnameRecords(domain)
   // Local dev has no DNS pointing at the tenant edge, so any CNAME is a soft
-  // pass there. On Vercel the target must match exactly (AGL-733).
-  const softPass = !process.env.VERCEL
+  // pass there. Anywhere else the target must match exactly (AGL-733).
+  //
+  // This was `!process.env.VERCEL` (AGL-2180). On a self-host container VERCEL
+  // is never set, so the soft pass was ON in production and ANY domain with
+  // ANY CNAME verified — the exact defect AGL-733 exists to prevent, one line
+  // below the comment saying so, reinstated on every self-host install. A user
+  // of an operator's platform could claim a domain they do not control.
+  //
+  // `isDevelopmentRuntime` and not `!isDeployedRuntime`, deliberately: a
+  // relaxation must key on the variable that means "not production", not on
+  // the absence of a hosting vendor's. A security check that loosens because
+  // it cannot find an env var is failing open on an unrelated axis.
+  const softPass = isDevelopmentRuntime()
   const cnameVerified =
     records.includes(CNAME_TARGET) || (softPass && records.length > 0)
   // Only fall back to the address comparison when there is no CNAME at all.

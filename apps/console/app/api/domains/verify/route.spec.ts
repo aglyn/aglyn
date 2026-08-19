@@ -102,6 +102,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
     query: Object.fromEntries(new URL(request.url).searchParams),
     headers: Object.fromEntries(request.headers),
   }),
+  // The REAL predicate, re-implemented to the same rule rather than stubbed
+  // to a constant (AGL-2180). This mock is a closed world: the moment the
+  // route imported a second symbol from this module, every case here threw
+  // `isDevelopmentRuntime is not a function`. A stub returning `false` would
+  // have made them pass again while pinning nothing — and the whole point of
+  // the suite below is which environments get the soft pass, so a double that
+  // ignores the environment would assert the opposite of the thing under test.
+  isDevelopmentRuntime: (
+    env: Record<string, string | undefined> = process.env,
+  ) => env['NODE_ENV'] !== 'production',
 }))
 
 const { GET } = require('./route') as {
@@ -118,17 +128,25 @@ function get(domain: string, token = 'token') {
 /** The pool `sites.aglyn.app` itself resolves to, as production does today. */
 const TARGET_POOL = ['64.29.17.1', '216.198.79.1']
 
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
+
 beforeEach(() => {
   mockCnames = new Map()
   mockAddresses = new Map([['sites.aglyn.app', [...TARGET_POOL]]])
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
   // Production semantics. Without this the route soft-passes any CNAME.
+  // `NODE_ENV`, not `VERCEL`, since AGL-2180 — the soft pass now keys on
+  // whether this is a development runtime rather than on which vendor is
+  // hosting, so a container gets production rules. `VERCEL` is still set
+  // because other assertions below speak about it.
   process.env.VERCEL = '1'
+  Object.assign(process.env, { NODE_ENV: 'production' })
 })
 
 afterEach(() => {
   delete process.env.VERCEL
+  Object.assign(process.env, { NODE_ENV: ORIGINAL_NODE_ENV })
   jest.restoreAllMocks()
 })
 
@@ -240,15 +258,32 @@ describe('it is the wizard lookup, not a public one', () => {
   })
 })
 
-describe('off Vercel it stays testable, on Vercel it does not', () => {
+describe('in dev it stays testable; anywhere deployed it does not', () => {
   it('soft-passes any CNAME in local dev, where nothing points at the edge', async () => {
-    delete process.env.VERCEL
+    Object.assign(process.env, { NODE_ENV: 'development' })
     mockCnames.set('www.example.com', ['whatever.example.net'])
     expect((await (await GET(get('www.example.com'))).json()).verified).toBe(true)
   })
 
-  it('but the same lookup on Vercel refuses it — the AGL-733 regression', async () => {
+  it('but the same lookup in production refuses it — the AGL-733 regression', async () => {
     mockCnames.set('www.example.com', ['whatever.example.net'])
     expect((await (await GET(get('www.example.com'))).json()).verified).toBe(false)
+  })
+
+  it('REFUSES it on a self-host container, which has no VERCEL set', async () => {
+    // The AGL-2180 case, and the one that was broken. `softPass` read
+    // `!process.env.VERCEL`, so on an operator's container it was ON in
+    // production and any domain carrying any CNAME verified — a user could
+    // claim a domain they do not control. Note VERCEL is deleted here on
+    // purpose: that is exactly the container's environment, and the case
+    // would have passed before this fix only by verifying the wrong thing.
+    delete process.env.VERCEL
+    process.env.AGLYN_STANDALONE = '1'
+    Object.assign(process.env, { NODE_ENV: 'production' })
+    mockCnames.set('www.example.com', ['whatever.example.net'])
+    expect((await (await GET(get('www.example.com'))).json()).verified).toBe(
+      false,
+    )
+    delete process.env.AGLYN_STANDALONE
   })
 })

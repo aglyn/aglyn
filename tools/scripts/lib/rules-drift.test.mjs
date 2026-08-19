@@ -58,7 +58,10 @@ describe('normalizeRulesText', () => {
   })
 
   it('inner content differences survive normalization', () => {
-    assert.notEqual(normalizeRulesText('a\n\nb\n'), normalizeRulesText('a\nb\n'))
+    assert.notEqual(
+      normalizeRulesText('a\n\nb\n'),
+      normalizeRulesText('a\nb\n'),
+    )
   })
 
   it('empty stays empty', () => {
@@ -213,7 +216,9 @@ async function withStub({ firestore, storage, database }, run) {
       }
       return respond(
         200,
-        JSON.stringify({ source: { files: [{ name: 'r', content: ruleset }] } }),
+        JSON.stringify({
+          source: { files: [{ name: 'r', content: ruleset }] },
+        }),
       )
     }
     if (path === '/db/.settings/rules.json') {
@@ -303,7 +308,8 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
       .filter((line) => !line.includes('mediaTombstones'))
       .join('\n')
     if (
-      normalizeRulesText(doctoredFirestore) === normalizeRulesText(headFirestore)
+      normalizeRulesText(doctoredFirestore) ===
+      normalizeRulesText(headFirestore)
     ) {
       // HEAD no longer mentions mediaTombstones; drop the closing lines
       // instead so the drift stays planted.
@@ -434,7 +440,10 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
     })
 
   it('live at the promoted baseline is GREEN even though HEAD is ahead, and the pending commit is itemised', async () => {
-    const promotedFirestore = showAt(promotedRef, 'cloud/firebase-firestore.rules')
+    const promotedFirestore = showAt(
+      promotedRef,
+      'cloud/firebase-firestore.rules',
+    )
     // Guard the premise: the chosen commit really does change this file, so
     // "green" below is not green-because-identical.
     assert.notEqual(
@@ -469,7 +478,11 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
 
   it('a baseline that does not resolve exits 2 — never a silent fall back to HEAD', async () => {
     await withStub(
-      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      {
+        firestore: headFirestore,
+        storage: headStorage,
+        database: headDatabase,
+      },
       async (port) => {
         const result = await runCli({
           port,
@@ -490,7 +503,11 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
 
   it('RULES_DRIFT_BASELINE sets the baseline without a flag (the CI path)', async () => {
     await withStub(
-      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      {
+        firestore: headFirestore,
+        storage: headStorage,
+        database: headDatabase,
+      },
       async (port) => {
         const result = await runCli({
           port,
@@ -585,8 +602,14 @@ describe('the checker is wired (workflow + package.json)', () => {
     // "no drift", which is indistinguishable from convergence.
     const selfTest = workflow.indexOf('npm run test:rules-drift')
     const check = workflow.indexOf('npm run check:rules-drift')
-    assert.ok(selfTest !== -1, 'rules-drift.yml must run npm run test:rules-drift')
-    assert.ok(check !== -1, 'rules-drift.yml must run npm run check:rules-drift')
+    assert.ok(
+      selfTest !== -1,
+      'rules-drift.yml must run npm run test:rules-drift',
+    )
+    assert.ok(
+      check !== -1,
+      'rules-drift.yml must run npm run check:rules-drift',
+    )
     // Order matters: a failing comparator must fail the job before its
     // verdict is printed, not after.
     assert.ok(
@@ -597,10 +620,12 @@ describe('the checker is wired (workflow + package.json)', () => {
     // this suite. Asserted solely from inside rules-drift.yml it would be
     // circular — removing the step would remove the check on the removal.
     //
-    // AGL-1816: that second home used to be nx-ci.yml, which is
-    // `disabled_manually` and runs on no runner, so the redundancy existed
-    // only as text in a file that never executes. index-drift.yml is active,
-    // and the two drift workflows now each run both self-tests.
+    // AGL-1816: that second home used to be nx-ci.yml. It is ACTIVE and does
+    // run this suite — the `disabled_manually` claim recorded here was false
+    // (AGL-2381) — but it runs it behind `typecheck` and `docs:typecheck` in
+    // one sequential job, so the step executed in 26 of 72 runs on 2026-08-19.
+    // index-drift.yml answers on every push, and the two drift workflows now
+    // each run both self-tests.
     const indexDrift = readFileSync(
       join(repoRoot, '.github', 'workflows', 'index-drift.yml'),
       'utf8',
@@ -608,10 +633,12 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(indexDrift, /npm run test:rules-drift/)
   })
 
-  it('the seven homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
-    // These suites' only other home is nx-ci.yml, which is `disabled_manually`
-    // and runs on no runner (AGL-1816) — text in a file that never executes.
-    // tools-guards.yml is their active home. The assertion lives HERE, in a
+  it('the homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
+    // These suites' only other home is nx-ci.yml. It is ACTIVE and does run
+    // them — the `disabled_manually` claim here was false (AGL-2381) — but it
+    // runs them behind `typecheck` and `docs:typecheck` in one sequential job,
+    // so they executed in 26 of 72 runs on 2026-08-19 (AGL-1816).
+    // tools-guards.yml is the home that answers on every push. The assertion lives HERE, in a
     // suite that rules-drift.yml, index-drift.yml AND tools-guards.yml all
     // run, because asserted only from inside tools-guards.yml it would be
     // circular: deleting a step would delete the check on the deletion (the
@@ -629,14 +656,41 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:disk-space',
       'test:deploy-guard',
       'test:erase-cli',
+      'test:demo-brands', // AGL-1734
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:manifest-versions', // AGL-2108
+      'check:manifest-versions', // AGL-2108
+      'test:pricing-tables', // AGL-1278
+      'check:pricing-tables', // AGL-1278
+      'test:marketing-containers', // AGL-1296
+      'test:marketing-width-doctrine', // AGL-1298 — the DOC half of the ban
+      'check:marketing-width-doctrine', // AGL-1298
+      'test:docs-self-host', // AGL-2124
+      'check:docs-self-host', // AGL-2124
+      'test:monaco-dompurify', // AGL-2300
+      'check:monaco-dompurify', // AGL-2300
       // AGL-2025 — the source-side hardcoded-colour ratchet. Registered here
       // for the same reason as the seven above: its only homes are this
       // workflow and a developer's memory.
       'test:hardcoded-colours',
       'check:hardcoded-colours',
+      // AGL-2376 / AGL-2377 — the guard that catches a test file with no
+      // runner and a `test` target with no tests. Six orphans and five empty
+      // targets on its first run.
+      'test:test-wiring',
+      'check:test-wiring',
+      // AGL-2376 — applyPlan's create/update/unknown-op refusals.
+      'test:backfill-core',
+      // AGL-2379 — the legal-drift comparator's pure-node self-test. The
+      // comparator itself is scheduled in legal-drift.yml (it needs the live
+      // site and a Drive credential); this half needs nothing and must not be
+      // the part that goes unrun.
+      'test:legal-drift',
+      // AGL-2379 / AGL-2240 — no model-provider key reachable from the client
+      // bundle. A security control that ran in no workflow at all.
+      'check:provider-key-exposure',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -655,11 +709,28 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:disk-space',
       'test:deploy-guard',
       'test:erase-cli',
+      'test:demo-brands', // AGL-1734
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:manifest-versions', // AGL-2108
+      'check:manifest-versions', // AGL-2108
+      'test:pricing-tables', // AGL-1278
+      'check:pricing-tables', // AGL-1278
+      'test:marketing-containers', // AGL-1296
+      'test:marketing-width-doctrine', // AGL-1298 — the DOC half of the ban
+      'check:marketing-width-doctrine', // AGL-1298
+      'test:docs-self-host', // AGL-2124
+      'check:docs-self-host', // AGL-2124
+      'test:monaco-dompurify', // AGL-2300
+      'check:monaco-dompurify', // AGL-2300
       'test:hardcoded-colours',
       'check:hardcoded-colours',
+      'test:test-wiring', // AGL-2376 / AGL-2377
+      'check:test-wiring', // AGL-2376 / AGL-2377
+      'test:backfill-core', // AGL-2376
+      'test:legal-drift', // AGL-2379
+      'check:provider-key-exposure', // AGL-2379 / AGL-2240
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',
@@ -671,8 +742,11 @@ describe('the checker is wired (workflow + package.json)', () => {
   it('the two emulator guard suites run in the ACTIVE emulator-guards.yml (AGL-2002)', () => {
     // Same argument as the block above, one tier heavier. `test:rules` and
     // `test:emulator-guards` need a JVM and the emulator suite, so nx-ci.yml
-    // excludes the first ON PURPOSE and never had the second — and nx-ci.yml
-    // is `disabled_manually` anyway. emulator-guards.yml is their only home.
+    // excludes the first ON PURPOSE and never had the second.
+    // emulator-guards.yml is their only home. (This note used to add "and
+    // nx-ci.yml is `disabled_manually` anyway" — false, and corrected in
+    // AGL-2381. It was never load-bearing here: nx-ci.yml being active does
+    // not give it a JVM, and it still runs neither suite.)
     //
     // Asserted from HERE for the anti-circularity reason: this suite runs in
     // rules-drift.yml, index-drift.yml and tools-guards.yml, none of which is
@@ -752,7 +826,11 @@ describe('the checker is wired (workflow + package.json)', () => {
     //
     // Asserted from inside the suite so removing the setting goes red on the
     // push that removes it, in all three workflows at once.
-    for (const file of ['rules-drift.yml', 'index-drift.yml', 'tools-guards.yml']) {
+    for (const file of [
+      'rules-drift.yml',
+      'index-drift.yml',
+      'tools-guards.yml',
+    ]) {
       const workflow = readFileSync(
         join(repoRoot, '.github', 'workflows', file),
         'utf8',

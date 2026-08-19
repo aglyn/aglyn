@@ -149,14 +149,43 @@ function fakeOrgDoc(org: SeededOrg) {
 const fakeFirestore = {
   collection: (name: string) => {
     if (name === 'orgs') {
-      const api: any = {
-        limit: () => api,
-        get: async () => ({
-          docs: mockOrgs.map(fakeOrgDoc),
-          size: mockOrgs.length,
-        }),
+      /**
+       * ORDER, LIMIT and an EXCLUSIVE START-AFTER, all modelled (AGL-2220).
+       *
+       * The sweep is chunked and resumable now. `limit: () => api` — a stub
+       * that accepts the call and drops it — would hand back every seeded org
+       * on every page, so a cursor that never advanced, a page that skipped
+       * orgs, or an infinite resume loop would all read as green here. The
+       * double has to be able to express a boundary for the assertions below
+       * to mean anything.
+       */
+      const build = (limit: number | null, startAfter: string | null): any => {
+        const api: any = {
+          orderBy: () => api,
+          limit: (size: number) => build(size, startAfter),
+          startAfter: (ref: any) =>
+            build(limit, typeof ref === 'string' ? ref : ref?.id),
+          get: async () => {
+            const ordered = [...mockOrgs].sort((a, b) =>
+              a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+            )
+            // Strictly greater than: the cursor names an org the previous
+            // page already finished, so including it would redo one org per
+            // resume.
+            const remaining = startAfter
+              ? ordered.filter((org) => org.id > startAfter)
+              : ordered
+            const page = limit == null ? remaining : remaining.slice(0, limit)
+            return { docs: page.map(fakeOrgDoc), size: page.length }
+          },
+          // `startAfter` is handed a DocumentReference built from this same
+          // collection, so the double has to serve `.doc()` as well as the
+          // query.
+          doc: (orgId: string) => ({ id: orgId }),
+        }
+        return api
       }
-      return api
+      return build(null, null)
     }
     if (name === 'hosts') {
       let orgId = ''
@@ -193,12 +222,22 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL entitlements — a stubbed allowance would make the threshold
   // arithmetic below unfalsifiable.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The route stamps and reads the free-plan bandwidth cap through the same
+  // barrel (AGL-2155); a stubbed export here would fail as "not a function"
+  // rather than as anything to do with this suite's subject.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
   buildRoute: () => '/org/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
-    body: {},
+    // The REAL body, not a hardcoded `{}` (AGL-2220). The sweep reads its
+    // page size and resume cursor from here; a double that always answers
+    // `{}` would run page one no matter what a test posted.
+    body: await request
+      .clone()
+      .json()
+      .catch(() => ({})),
     headers: {
       'x-cron-secret': request.headers.get('x-cron-secret') ?? undefined,
     },
@@ -208,7 +247,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 jest.mock('../utils/screen-cap-reconciliation', () => ({
   __esModule: true,
   measureScreenCaps: async () => ({ maxBillable: 0, overCapHostIds: [] }),
-  screenCapMaxBillable: async () => 0,
+  screenCapReading: async () => ({ maxBillable: 0, overCapHostIds: [] }),
 }))
 
 import { POST } from '../app/api/billing/usage-alerts/route'

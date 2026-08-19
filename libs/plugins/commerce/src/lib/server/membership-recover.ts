@@ -17,6 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -98,15 +99,17 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       memberDoc.id,
       memberDoc.get('passwordScrypt'),
     )
-    // Same site-base resolution as campaign links: custom domain first,
-    // else the aglyn.app subdomain.
-    const subdomain = hostSnapshot.get('subdomain')
-    const siteBase = hostSnapshot.get('cname')
-      ? `https://${hostSnapshot.get('cname')}`
-      : `https://${subdomain}.aglyn.app`
+    // `hostPublicOrigin`, not a hand-rolled apex (AGL-2195). This URL is
+    // minted server-side and mailed out, so a wrong apex is not a display
+    // bug — it is a live link on somebody else's domain.
+    const siteBase =
+      hostPublicOrigin({
+        cname: hostSnapshot.get('cname'),
+        subdomain: hostSnapshot.get('subdomain'),
+      }) ?? ''
     const resetUrl = `${siteBase}/recover?token=${encodeURIComponent(token)}`
     const siteName = String(
-      hostSnapshot.get('displayName') ?? subdomain ?? 'your site',
+      hostSnapshot.get('displayName') ?? hostSnapshot.get('subdomain') ?? 'your site',
     )
     // White-label sender identity (White-Label Phase 3): the store's brand via
     // the one shared resolver (the copy already uses the site name).

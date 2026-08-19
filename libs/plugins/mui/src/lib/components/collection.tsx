@@ -94,9 +94,10 @@ export interface CollectionEntriesProps extends StackProps {
    * every existing instance renders exactly as before.
    *
    * Client-evaluated over the entries this block already holds — the page is
-   * ISR-cached, so a keystroke never costs a Firestore read. On a paginated
-   * list that set is the CURRENT PAGE, and the empty state says so rather
-   * than pretending global search.
+   * ISR-cached, so a keystroke never costs a Firestore read. That set is
+   * whatever the expansion left the block holding, which paging, an
+   * `entriesLimit` or the 100-entry cap can each cut down; the empty state
+   * says so rather than pretending global search (AGL-1516).
    */
   search?: boolean
   /** Hint text inside the search box (blank = "Search posts…"). */
@@ -106,6 +107,14 @@ export interface CollectionEntriesProps extends StackProps {
    * (`expandCollectionEntries`, AGL-1516); never set by hand.
    */
   searchIndex?: Aglyn.CollectionEntrySearchItem[]
+  /**
+   * How many entries `searchIndex` was drawn from — server-stamped by
+   * `expandCollectionEntries` alongside it (AGL-1516), never set by hand.
+   * `searchIndex.length < searchTotal` is the only honest test of whether
+   * this block holds the whole set; `perPage` is not, because
+   * `entriesLimit` and the 100-entry cap truncate too.
+   */
+  searchTotal?: number
 }
 
 /** The toolbar search field, from the frame (Figma 494:1220). */
@@ -161,6 +170,7 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
       search,
       searchPlaceholder,
       searchIndex,
+      searchTotal,
       children,
       ...props
     },
@@ -223,16 +233,37 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
         matched.has(Math.floor(index / groupSize)),
       )
       if (!(visible as ReactNode[]).length) {
-        // HONEST scope (AGL-1516): a paginated block holds one page window,
-        // and pretending the search was global would turn every miss into a
-        // false "this post does not exist".
+        // HONEST scope (AGL-1516): this block holds whatever window the
+        // expansion gave it, and pretending the search was global would turn
+        // every miss into a false "this post does not exist".
+        //
+        // The test is whether the window is SMALLER THAN THE SET, which only
+        // the server knows — `perPage` was the wrong proxy for it in both
+        // directions. A block truncated by `entriesLimit` or by the
+        // 100-entry cap has no `perPage` at all and used to claim a global
+        // miss over 6 of 40 posts; a block whose `perPage` exceeds its entry
+        // count is a single complete page and used to blame pages that do
+        // not exist. `searchTotal` is stamped with `searchIndex`, so the two
+        // are always in step.
+        //
+        // Absent — a page cached before this shipped — falls back to the old
+        // `perPage` reading rather than guessing "complete": understating
+        // the scope of a search is the safe direction to be wrong in.
         const paginated = (toCount(perPage, 0) ?? 0) > 0
+        const truncated =
+          typeof searchTotal === 'number'
+            ? (items?.length ?? 0) < searchTotal
+            : paginated
+        const shown = items?.length ?? 0
         emptyState = (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {paginated
-              ? `No matches for “${trimmed}” on this page — other pages ` +
-                'are not searched.'
-              : `No matches for “${trimmed}”.`}
+            {!truncated
+              ? `No matches for “${trimmed}”.`
+              : paginated
+                ? `No matches for “${trimmed}” on this page — other pages ` +
+                  'are not searched.'
+                : `No matches for “${trimmed}” in the ${shown} entries ` +
+                  'shown here — the rest of the collection is not searched.'}
           </Typography>
         )
       }
@@ -335,7 +366,8 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         description:
           'Show a search box that filters the rendered entries by title ' +
           'and excerpt as the reader types. It searches the entries this ' +
-          'block rendered — on a paginated list, the current page only.',
+          'block rendered — whatever paging, an entry limit or the ' +
+          '100-entry cap left it holding, and it says so on a miss.',
         component: Aglyn.FieldComponentType.SWITCH,
       },
       {
@@ -347,9 +379,9 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         // Meaningless while there is no search box to hint in.
         condition: { when: 'search', is: true },
       },
-      // `searchIndex` is deliberately NOT an attribute: it is server-stamped
-      // by expandCollectionEntries, like Category Pills' `items` and Related
-      // Posts' `entries`.
+      // `searchIndex` and `searchTotal` are deliberately NOT attributes: both
+      // are server-stamped by expandCollectionEntries, like Category Pills'
+      // `items` and Related Posts' `entries`.
       {
         name: 'spacing',
         label: 'Spacing',
@@ -428,6 +460,11 @@ const CollectionEntryBody = forwardRef<
     () => (unresolved ? [] : Aglyn.parseMarkdownLite(source)),
     [source, unresolved],
   )
+  // Heading anchors, on the same terms as the Markdown element (AGL-1162).
+  // Without them a blog article could not carry an "On this page" aside at
+  // all: the Table of Contents element emits `#slug` links, and there was
+  // nothing on this page for them to land on.
+  const slugs = useMemo(() => Aglyn.markdownHeadingSlugs(blocks), [blocks])
   if (unresolved) {
     // Editing surfaces get an affordance; the published site renders
     // nothing rather than a literal token.
@@ -456,12 +493,17 @@ const CollectionEntryBody = forwardRef<
     <Box ref={ref} {...rest}>
       {blocks.map((block, index) => {
         if (block.type === 'heading') {
-          return block.level === 2 ? (
-            <Typography key={index} variant="h4" component="h2" gutterBottom>
-              {renderInlines(block.inlines, suppressNavigation)}
-            </Typography>
-          ) : (
-            <Typography key={index} variant="h5" component="h3" gutterBottom>
+          return (
+            <Typography
+              key={index}
+              id={slugs[index]}
+              variant={block.level === 2 ? 'h4' : 'h5'}
+              component={block.level === 2 ? 'h2' : 'h3'}
+              gutterBottom
+              sx={{
+                scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+              }}
+            >
               {renderInlines(block.inlines, suppressNavigation)}
             </Typography>
           )

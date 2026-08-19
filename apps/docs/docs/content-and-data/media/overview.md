@@ -60,11 +60,23 @@ feature; large video uploads and higher storage are gated by plan.
     it; on very large libraries it searches as much as it can and says where it stopped, so
     narrowing by folder, type or date gets you the rest.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
-  tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
-  storage metadata). Bulk-edit tags and folders across a selection.
-- Each card has an **overflow menu** (Copy URL, Replace file, Details, Delete) so actions
-  stay tidy. **Copy URL** gives you a full absolute URL on the site's own domain, ready to
-  paste anywhere — including outside Aglyn.
+  [tags](#tags), and your own **custom key/value metadata** (mirrored onto the delivered
+  object's storage metadata). Bulk-edit tags and folders across a selection.
+- Each card has an **overflow menu** (the ⋮ button that appears on hover) so actions stay
+  tidy. What it offers depends on the file:
+  - **Copy URL** — public files only. **Copy temporary link** replaces it on a private
+    file, because a private file has no permanent URL to copy.
+  - **Make private** / **Publish file** — only in the organization library, and only for
+    members with organization-wide access.
+  - **Download file** — always, public or private. See
+    [Download the original file](#download-file).
+  - **Replace file** — images only.
+  - **Details** and **Delete**.
+
+  **Copy URL** gives you a full absolute URL on the site's own domain, ready to paste
+  anywhere — including outside Aglyn. The whole menu is hidden when the library opens as
+  a **picker** (choosing an image for a page, a logo or a favicon): a picker is for
+  choosing, not for editing.
 - See **per-asset usage**: delivery counters load automatically, and a **Used on**
   audit runs on demand — click **Find where this is used** to list every screen,
   layout, and content entry that references the asset, each a link that opens it.
@@ -88,6 +100,32 @@ feature; large video uploads and higher storage are gated by plan.
 - **Deleting keeps your place.** However many times you clicked **Load more**, the files
   you deleted disappear and everything else stays exactly where it was — so a long
   clear-out is one pass, not one pass per file.
+
+### Tags {#tags}
+
+Open a file's **Details** drawer and look under **Tags**. Existing tags are **chips**:
+click the ✕ on one to remove it. Below them is an **Add a tag** field, with the helper
+text **Press Enter to add**. A file with no tags yet reads **No tags yet**.
+
+The typed tag is folded in when you press **Enter** — and also when you **click away
+from the field**, which is the case worth knowing: the commonest way to lose a tag is to
+type it and press **Save** without pressing Enter first, and here that still saves the
+tag. Nothing is stored until you press **Save** in the drawer, so a chip you removed by
+mistake comes back if you press **Cancel** instead.
+
+A tag is tidied **as you add it**, not quietly at save time:
+
+- surrounding blanks are trimmed, and a blank entry is dropped;
+- it is **lower-cased**, so `Hero` and `hero` are the same tag;
+- a tag already on the file is not added twice — re-adding one looks like nothing
+  happened, because it is nothing.
+
+That matters for finding things again. The library's filter chips and the `tag:` search
+prefix match the **stored** tag, so a tag that carried a trailing space used to become a
+tag no chip could ever match — a file you tagged and then could not find by that tag.
+Normalising at entry is what makes the chip you see and the tag that gets stored the
+same thing. The exact caps are in
+[Tag limits](#tag-limits).
 
 ## Upload
 
@@ -141,6 +179,28 @@ every place the asset is used at once.
 
 <!-- screenshot: media/image-editor-dialog.png per SCREENSHOT_PLAN.md -->
 
+### Download the original file {#download-file}
+
+**Download file** saves the file itself back to your computer, under the **file name the
+library shows** — not the storage object's name. You'll find it in two places:
+
+- in the file's **Details** drawer, beside **Copy URL**;
+- in the card's **overflow menu**, without opening the drawer.
+
+It works for **private** files as well as public ones, and that is the point:
+**Copy URL** is the wrong tool for a private file (it is hidden there — see
+[Private files](#private-files)), so downloading is how you get the bytes of a private
+asset out of Aglyn. Behind the scenes the console mints the private file's temporary link
+per click and never holds it, which is why there is no link to copy but there is always a
+file to save.
+
+Two things you may see:
+
+- The menu item is **absent in the media picker**. Pick the file, then download it from
+  the library.
+- If your browser blocks the direct save, Aglyn opens the file in a new tab instead and
+  says so. You still get the file; it arrives under the server's own name.
+
 ## Deliver over CDN
 
 Paid tiers serve media via a **CDN** with automatic **WebP variants**, so images load fast
@@ -170,7 +230,31 @@ image hosted elsewhere. Images placed before this shipped keep rendering exactly
 did.
 
 When a visitor saves a delivered file, it keeps the asset's **original filename and
-extension**, even though the URL itself doesn't carry one.
+extension**, even though the URL itself doesn't carry one — the CDN response declares the
+name. [Download file](#download-file) in the console arrives under that same name by a
+different route: the console names the saved file from the library's own **File name**
+field, so renaming a file in the drawer changes what a download is called.
+
+### What the drawer says about delivery {#delivery-line}
+
+Open a file's **Details** drawer and read the line with the small dot next to it. It
+describes **this file**, and it says one of exactly three things:
+
+| Line | Dot | What it means |
+| --- | --- | --- |
+| **Served from storage · no CDN, no variants** | grey | This asset has no CDN path — a plan without the media CDN, or an asset stored before you had it. |
+| **CDN · variants 320 / 640 / 1280** | green | On the CDN, with those WebP widths generated for it. The widths listed are the ones this file actually has. |
+| **CDN · no responsive variants for this file** | green | On the CDN, serving the original bytes only. |
+
+The third line is **not a fault report**. A file has no variants when there was nothing
+to generate — an SVG, a PDF, a video, anything that isn't a raster image — and also when
+generation has not run or did not succeed for it. From outside those look identical, so
+the drawer says what is true either way: there are none right now. An image that stays
+variant-less after a re-upload is worth a support ticket; a logo in SVG is working as
+designed.
+
+The line reads the asset, not your plan: a paid plan does not make a line say
+`variants 320 / 640 / 1280` for a file that has none.
 
 ## Who an asset is shared with
 
@@ -220,10 +304,23 @@ someone who simply has the URL, mark them **Private** — see below.
 
 A private file:
 
-- has **no public URL** — the normal media link does not exist for it,
+- has **no public URL** — the normal media link does not exist for it, and **Copy URL is
+  hidden** on it in both the card menu and the drawer,
 - **cannot be placed on a page**; the picker refuses it and says why,
 - is viewable and downloadable in the console by people who can already see it, through a
   **temporary link that stops working after about fifteen minutes**.
+
+Two menu items do that last part, and they are not interchangeable:
+
+- **Copy temporary link** (organization library, organization-wide members) puts a
+  fifteen-minute link on your clipboard — for handing to one person, once, now. Nothing
+  in Aglyn renews it, so it is a trap in a document or a page: what you paste stops
+  working while the page still looks fine.
+- **[Download file](#download-file)** saves the bytes. Aglyn mints a fresh link for that
+  click, so the expiry never reaches you.
+
+**Copy URL** being hidden rather than disabled is deliberate: there is no permanent
+address to hand over, and a copied link that 404s is worse than no button.
 
 That expiry is the point. A normal media URL, once shared, works forever and there's no way
 to take it back. A private file's link dies on its own, so a link pasted somewhere it
@@ -235,6 +332,37 @@ off one particular site — that's what sharing is for, and marking it private w
 the image working everywhere.
 
 To publish a private file later, turn Private off. It gets a normal URL from that moment on.
+
+## Reference {#reference}
+
+The details behind the screens above, for anyone wiring media into their own code.
+
+### Variant widths {#variant-widths}
+
+Aglyn generates WebP variants at **320**, **640** and **1280** pixels wide when an image
+is uploaded. Those three are the whole set — there is no arbitrary resizing service
+behind the CDN URL.
+
+Add `?w=` to a CDN URL to ask for one: `…/api/media/cdn/org:{orgId}/{mediaId}?w=640`. A
+width the asset does not have generated is not an error and not a resize — the original
+bytes are served instead, so a `?w=200` request answers with the full-size file. Check
+the drawer's [delivery line](#delivery-line) to see which widths a given file has.
+
+`?download=1` on the same URL makes the response save rather than open in a tab. Both
+parameters are read after every access check, so neither widens what is served, and both
+are part of the cache key, so they cannot bleed into each other.
+
+### Tag limits {#tag-limits}
+
+Tags are stored lower-cased and de-duplicated. A tag longer than **40 characters** is
+dropped, and a file keeps at most **20 tags** — entries past the twentieth are dropped
+rather than replacing an earlier one.
+
+### Over the API
+
+Media is **read-only** over the REST API: file names, sizes, dimensions, tags, folders,
+and both URL forms. See [the Media API resource](/api/resources/media), including
+[what it does not return](/api/resources/media#no-variants).
 
 ## Components
 
@@ -251,3 +379,4 @@ dialog.
 
 - [Bindings](../../building-sites/bindings/overview.md)
 - [SEO toolkit](../../building-sites/seo/overview.md) (Open Graph & Twitter images)
+- [Media API resource](/api/resources/media) — reading the library from your own code

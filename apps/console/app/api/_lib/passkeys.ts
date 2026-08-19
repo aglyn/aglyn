@@ -23,6 +23,7 @@ import {
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 /**
@@ -79,7 +80,20 @@ import { WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
  * authenticator degrades to the pre-passkey sign-in experience.
  */
 
-export const RP_NAME = 'Aglyn'
+/**
+ * The WebAuthn relying-party name (AGL-2153).
+ *
+ * Not an internal label: this is the string the OPERATING SYSTEM shows in its
+ * credential prompt and stores next to the saved passkey, so on a self-host
+ * install every user's password manager listed a credential for "Aglyn" —
+ * a company with no relationship to the site they were signing in to. Reads
+ * the platform brand, like every other user-visible name.
+ *
+ * `rpID` below is separate and already correct: it derives from
+ * `WORKSPACE_DOMAIN` because it is a security binding (the origin the
+ * credential is scoped to), not a display string.
+ */
+export const RP_NAME = PLATFORM_BRAND_NAME
 export const CHALLENGES_COLLECTION = 'webauthnChallenges'
 export const CREDENTIAL_INDEX_COLLECTION = 'passkeyCredentialIndex'
 export const PASSKEYS_SUBCOLLECTION = 'passkeys'

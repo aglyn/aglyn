@@ -21,6 +21,7 @@ import {
   type HostVariable,
   type HostWebhook,
   type HostWorkflow,
+  resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
 import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
@@ -56,7 +57,10 @@ function secretsMatch(expected: string, provided: string): boolean {
  * `/api/hooks/{hostId}/{hookId}` with the hook's secret in
  * `x-aglyn-secret`; a valid call enrolls the configured workflow with the
  * payload's top-level primitives in scope. Business tier (`webhooks`
- * flag); runs bill against the workflow-runs meter like any other run.
+ * flag); runs bill against the workflow-runs meter like any other run —
+ * `workflowRunsPerMonth` is checked before the run and
+ * `hosts/{id}/counters/workflowRuns` is incremented after it (AGL-2228).
+ * That sentence was here before either half of it was true.
  */
 const inboundHookHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -89,16 +93,52 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
       return res.status(401).json({ error: 'Bad secret' })
     }
 
-    // Plan gate (dark-launch rule preserved).
-    const hostSnapshot = await hostRef.get()
-    {
-      // Plan/quota gates ride the owning org's doc (AGL-238).
-      const org = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(org as any, 'webhooks')) {
-        return res
-          .status(403)
-          .json({ error: 'Webhooks are not enabled on this site' })
-      }
+    // Plan/quota gates ride the owning org's doc (AGL-238).
+    const org = (await getOrgForHost(hostId))?.org
+    if (!checkEntitlement(org as any, 'webhooks')) {
+      return res
+        .status(403)
+        .json({ error: 'Webhooks are not enabled on this site' })
+    }
+    /*
+     * The MONTHLY RUN CAP, which this handler's own docblock claimed for
+     * years — "runs bill against the workflow-runs meter like any other run"
+     * — and did not have. It read neither `workflowRunsPerMonth` nor
+     * `hosts/{id}/counters/workflowRuns`, and it wrote neither, so an inbound
+     * hook was a workflow execution that no cap could refuse and no meter
+     * could see: the customer's usage card, the usage-alerts cron and the
+     * COGS rollup all read a counter this path never moved.
+     *
+     * The refusal is a 402 rather than the silent `return` of
+     * `runEventWorkflows`: that path is fired from a visitor request whose
+     * success must not depend on the workflow, where this one is an
+     * integration calling us on purpose and a caller that gets a 200 for a
+     * run that did not happen will keep sending. `Retry-After` is deliberately
+     * absent — the month, not a delay, is what clears this.
+     *
+     * The plan-less/unreadable org resolves as FREE
+     * (`workflowRunsPerMonth: 0`), so an org doc we cannot read refuses rather
+     * than runs. `checkEntitlement(webhooks)` above already refuses free on
+     * today's price list; this is not a second gate on the same fact, because
+     * a staff `entitlementOverrides` can grant `webhooks` without granting
+     * runs, and because the cap is what bounds a BUSINESS org's spend.
+     *
+     * Read-then-write, like the event path, and bounded the same way: the
+     * per-hook limiter above is 30/60s, so the overshoot a race can buy is
+     * bounded by concurrency rather than unbounded by design. Making it
+     * atomic means a transaction around the whole run and is the same trade
+     * `runEventWorkflows` declined.
+     */
+    const monthKey = new Date().toISOString().slice(0, 7)
+    const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
+    const runLimit = resolveOrgEntitlements(org as any).workflowRunsPerMonth
+    const runsUsed = Number(
+      (await runCounterRef.get()).get(monthKey) ?? 0,
+    )
+    if (!(runsUsed + 1 <= runLimit)) {
+      return res.status(402).json({
+        error: `This site has used its ${runLimit} workflow runs for the month`,
+      })
     }
 
     // Top-level primitives from the JSON body join the workflow scope.
@@ -155,9 +195,24 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
         action: failed
           ? `Inbound webhook run failed: ${run.error}`.slice(0, 300)
           : `Inbound webhook ran "${hook.workflowName}"`,
+        // The run-history shape (AGL-2222) — without `result` this execution
+        // is invisible to the Runs table, which reads a verdict and not prose.
+        result: failed ? 'failed' : 'succeeded',
+        trigger: `hook:${hook.name ?? hookId}`,
+        summary: failed
+          ? String(run.error).slice(0, 300)
+          : `Ran ${hook.workflowName}`,
         target: { type: 'workflow', id: hookId, name: hook.name ?? '' },
         createdAt: FieldValue.serverTimestamp(),
       })
+      .catch(() => undefined)
+
+    // The run happened, so it counts — including a FAILED one, exactly as
+    // `runEventWorkflows` counts its failures. A run that executed and threw
+    // spent the same compute as one that returned a value; only a run that
+    // never started (the cap above, a missing workflow) must not count.
+    await runCounterRef
+      .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
       .catch(() => undefined)
 
     if (failed) return res.status(422).json({ error: run.error })

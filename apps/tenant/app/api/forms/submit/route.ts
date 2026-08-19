@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
   consumeRateLimit,
+  dataStorageRefusal,
   firebaseAdmin,
   getOrgForHost,
   notifyHostManagers,
@@ -259,7 +260,8 @@ export async function POST(request: Request): Promise<Response> {
     // Monthly quota by the owning org's plan (dark-launch: orgs
     // without a plan are uncapped, matching every other gate).
     // Plan/quota gates ride the owning org's doc (AGL-238).
-    const orgBilling = (await getOrgForHost(hostId))?.org
+    const owningOrg = await getOrgForHost(hostId)
+    const orgBilling = owningOrg?.org
     // Shared with the console surface that reads these counters back
     // (AGL-1666) — a differently-derived key there would read 0 refusals on
     // exactly the sites being refused.
@@ -416,10 +418,71 @@ export async function POST(request: Request): Promise<Response> {
               recordCount,
             ).allowed
           }
+          /*
+           * BYTES, not just rows (AGL-2253). This leg checked
+           * `recordsPerDataset` and never `dataStorageMbPerOrg`, so a public
+           * form wired to a dataset wrote past a byte band the console route
+           * hard-blocks at — the one dataset-writing path a visitor can drive
+           * without an account, and therefore the one where the volume is not
+           * the customer's to control.
+           *
+           * Costs nothing on a metered plan: `dataStorageRefusal` answers
+           * `null` with no read whenever the plan carries an
+           * `extraDataGbMonthlyUsd` rate, which is every plan that sells the
+           * data store. The read is paid only on the two unmetered shapes.
+           *
+           * Swallowed like the row quota above — the submission still lands in
+           * the inbox, and `routing.dataset` is not stamped, exactly as when
+           * `recordsPerDataset` is full. A lost lead is the worse error here.
+           */
+          if (allowed && owningOrg?.orgId) {
+            allowed = !(await dataStorageRefusal(
+              orgBilling as any,
+              firestore.collection('orgs').doc(owningOrg.orgId),
+            ))
+          }
           if (allowed) {
-            await datasetDoc.ref.collection('records').add({
-              values,
-              createdAt: FieldValue.serverTimestamp(),
+            const recordRef = await datasetDoc.ref
+              .collection('records')
+              .add({
+                values,
+                createdAt: FieldValue.serverTimestamp(),
+              })
+            /*
+             * Provenance (AGL-2168). `/product/forms`'s hero mockup shows
+             * the detail pane carrying `Added to "Leads" dataset` under
+             * the fields, and nothing here recorded WHERE a submission
+             * went — the record was appended and the link thrown away, so
+             * the Inbox could not have said it if it wanted to.
+             *
+             * Written only on the success path, and only when a record was
+             * really created. The two ways this block does nothing — a
+             * dataset that was deleted, and a full `recordsPerDataset`
+             * quota — are both swallowed on purpose so a submission is
+             * never lost to them; a chip that claimed a row in either case
+             * would be worse than the silence it replaced.
+             *
+             * One extra write per submission, on the submissions that
+             * actually route somewhere. A form with no dataset bound pays
+             * nothing, which is the same shape as `rateDegraded` above.
+             */
+            await submissionRef.update({
+              routing: {
+                dataset: {
+                  id: datasetDoc.id,
+                  // `displayName` first, then the legacy `name`, then the
+                  // name the form was bound by — the same precedence
+                  // `findDatasetByName` resolves in. Reading only `name`
+                  // would leave every modern dataset's chip unnamed.
+                  name: String(
+                    datasetDoc.get('displayName') ??
+                      datasetDoc.get('name') ??
+                      datasetName ??
+                      '',
+                  ).slice(0, 60),
+                  recordId: recordRef.id,
+                },
+              },
             })
           }
         }

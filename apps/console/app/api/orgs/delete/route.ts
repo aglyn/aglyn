@@ -23,7 +23,7 @@ import {
   lockdownRefusal,
   logOrgActivity,
 } from '@aglyn/tenant-data-admin'
-import { RETENTION_COLLECTION } from '../../_lib/retention'
+import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 
 /**
  * Self-serve organization deletion (AGL-485). This route only sets/clears
@@ -120,7 +120,7 @@ async function handler(request: Request): Promise<Response> {
           .collection(RETENTION_COLLECTION)
           .doc()
           .create({
-            kind: 'delete_requested',
+            kind: RETENTION_KINDS.deleteRequested,
             surface: 'account_delete',
             funnelSkipped: !funnelId,
             ...(funnelId ? { funnelId } : {}),

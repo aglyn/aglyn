@@ -95,6 +95,12 @@ export interface Props {
    * the outage is a staff lockdown rather than the customer's own
    * maintenance switch. Sanitized at the loader — reason code, per-reason
    * copy, optional contact/window; never an actor or internal rationale.
+   *
+   * ALSO the carrier for the free-plan bandwidth cap (AGL-2155), whose
+   * `reason` is `BANDWIDTH_CAP_CODE` rather than a `LockdownReasonCode` —
+   * which is why this `reason` is a plain string and not that union. Same
+   * rendering channel, different words and a different source; see
+   * `app-utils/bandwidth-cap` for why the two are not merged.
    */
   lockdown?: {
     reason: string

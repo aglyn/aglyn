@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -47,6 +47,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 
@@ -100,6 +101,8 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  // The id token the refund route authenticates with (AGL-2315).
+  const { data: user } = useUser()
 
   const {
     data: serviceDocs,
@@ -266,17 +269,91 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     [confirm, firestore, hostId],
   )
 
+  /**
+   * Cancelling a PAID booking refunds the guest (AGL-2315).
+   *
+   * This used to be one `updateDoc` writing `status: 'canceled'`, for a paid
+   * booking exactly as for a free one. The slot reopened, the appointment was
+   * gone, and the guest had paid for it — the money moved nowhere and nothing
+   * in the console said so. That was survivable only while the charge settled
+   * in Aglyn's own balance and could be given back by hand; a paid booking is
+   * a destination charge now, so the funds are at the MERCHANT and there is no
+   * later opportunity to notice.
+   *
+   * So a paid booking cancels through the refund route, which reverses the
+   * merchant's share and Aglyn's fee, and which sets `canceled` itself once
+   * the money is actually back. A FAILED refund deliberately leaves the
+   * booking standing: a cancelled-and-unrefunded appointment is the worst of
+   * the three outcomes, and an admin who sees the row still there knows the
+   * cancel did not happen.
+   */
   const handleCancelBooking = useCallback(
     (booking: any) => async () => {
+      const paidCents = Math.max(0, Number(booking.paidAmountCents ?? 0))
+      const refundedCents = Math.max(0, Number(booking.refundedCents ?? 0))
+      const outstandingCents = Math.max(0, paidCents - refundedCents)
+      const refundable = outstandingCents > 0
       const confirmed = await confirm({
         title: 'Cancel this booking?',
-        description: `${booking.name} (${booking.email}) — the slot reopens.`,
-        confirmationText: 'Cancel booking',
+        description:
+          `${booking.name} (${booking.email}) — the slot reopens.` +
+          (refundable
+            ? ` $${(outstandingCents / 100).toFixed(2)} is refunded to them` +
+              ' through Stripe.'
+            : ''),
+        confirmationText: refundable ? 'Cancel and refund' : 'Cancel booking',
         confirmationButtonProps: { color: 'error' },
       })
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
+
+      if (refundable) {
+        // `randomUUID` needs a secure context, which the console always is,
+        // but fall back rather than throw on a refund.
+        const attemptKey =
+          globalThis.crypto?.randomUUID?.() ??
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`
+        try {
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/bookings/refund', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': attemptKey,
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ hostId, bookingId: booking.$id }),
+          })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok) {
+            // A 409 is a guard REFUSING with a body that says what to do
+            // instead — a booking paid before the PaymentIntent was recorded
+            // names the Stripe dashboard — not the refund machinery failing.
+            // It surfaces verbatim, the AGL-1818 rule.
+            enqueueSnackbar(payload?.error ?? 'Refund failed', {
+              variant: response.status === 409 ? 'warning' : 'error',
+              allowDuplicate: true,
+            })
+            // The booking stays. See the note above: cancelled-and-unrefunded
+            // is worse than not cancelled.
+            return
+          }
+          // The route wrote `canceled` itself once the money was back.
+          enqueueSnackbar('Booking canceled and refunded', {
+            variant: 'success',
+            persist: false,
+          })
+          return
+        } catch {
+          enqueueSnackbar('Refund failed — the booking was not canceled', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+          return
+        }
+      }
+
       await updateDoc(
         doc(firestore, 'hosts', hostId, 'bookings', booking.$id),
         { status: 'canceled' },
@@ -286,12 +363,22 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, hostId, enqueueSnackbar, user],
   )
 
   return (
     <Stack spacing={3}>
-      <CardDisplay header={'Services'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Services'}
+        help={pluginDocsHelp('bookings', {
+        anchor: '#set-up-bookings',
+        excerpt:
+          'The bookable services this site offers — how long each takes, ' +
+          'what it costs, and the hours it can be booked in.',
+      })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={1}>
           {services.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
@@ -366,7 +453,17 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header={'Upcoming bookings'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Upcoming bookings'}
+        help={pluginDocsHelp('bookings', {
+        anchor: '#manage',
+        excerpt:
+          'Bookings taken on this site, with the customer and the slot each ' +
+          'one holds.',
+      })}
+        contentGutterX
+        contentGutterY
+      >
         {upcoming.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No upcoming bookings.'}

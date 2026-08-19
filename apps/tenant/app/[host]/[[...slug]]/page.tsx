@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
 import type { Metadata } from 'next'
@@ -70,7 +71,8 @@ function buildMetadata(props: Props): Metadata {
   // white-label site with no SEO/display title never leaks the Aglyn brand
   // into its <title>/OG. `branding` is Aglyn defaults for non-white-label
   // orgs and absent surfaces, resolved through the one shared resolver.
-  const brandName = props.branding?.productName ?? 'Aglyn'
+  const brandName =
+    props.branding?.productName ?? PLATFORM_BRANDING_PROFILE.productName
   /**
    * One title rule for every branch below (AGL-1341).
    *
@@ -307,14 +309,14 @@ function buildMetadata(props: Props): Metadata {
   // routing map so slug renames stay correct; the current screen registers
   // under its own locale (or x-default).
   const localeVariants = screen?.localeVariants as
-    | Record<string, string>
-    | undefined
+    Record<string, string> | undefined
   const languages: Record<string, string> = {}
   if (canonicalBase && localeVariants) {
     for (const [locale, variantId] of Object.entries(localeVariants)) {
       const variantPath = host?.screens?.[variantId]
       if (variantPath != null) {
-        languages[locale] = `${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`
+        languages[locale] =
+          `${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`
       }
     }
     if (canonical) languages[screen?.locale || 'x-default'] = canonical
@@ -364,11 +366,13 @@ function buildJsonLd(props: Props): string[] {
     return []
   }
   const host = props.data?.host as any
-  const canonicalBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : undefined
+  // `hostPublicOrigin`, not a re-derived apex (AGL-2195). This branch was a
+  // hand-copied twin of it with `aglyn.app` written in, so every JSON-LD `@id`
+  // and `url` a self-hosted deployment emitted named OUR apex for a site we do
+  // not serve — published into the structured data search engines read, on a
+  // site the operator owns. The `<link rel="canonical">` above already asks the
+  // shared helper; there is no reason for the same question to have two answers.
+  const canonicalBase = Aglyn.hostPublicOrigin(host)
   const publisher = host?.seo?.entity?.name
     ? {
         '@type':

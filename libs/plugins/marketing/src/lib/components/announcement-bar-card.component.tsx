@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   type HostAnnouncementBar,
+  pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { CardDisplay, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -159,7 +160,14 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   }
 
   return (
-    <CardDisplay header="Announcement bar" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Announcement bar"
+      help={pluginDocsHelp('marketingOverlays', {
+        anchor: '#announcement-bar',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       {!entitled ? (
         <Alert severity="info">
           {'Announcement bars and popups are included from the Starter ' +

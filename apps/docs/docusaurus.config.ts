@@ -5,16 +5,61 @@ import type * as Preset from '@docusaurus/preset-classic'
 // The GitHub repo docs live in — used for the "Edit this page" links.
 const editUrl = 'https://github.com/aglyn/aglyn/tree/main/apps/docs/'
 
+/**
+ * SELF-HOST CONFIGURATION (AGL-2124).
+ *
+ * `apps/docs` ships in the open-source distribution and an operator can build
+ * and publish it as their own product documentation. Three values in it were
+ * bare literals, and none of them was cosmetic: each made a self-hosted docs
+ * site REPORT TO AGLYN.
+ *
+ * The load-bearing rule for every one of them is the same: **unset means OFF,
+ * never ours.** A missing analytics id must mean "no analytics"; it must never
+ * mean "Aglyn's". Wrong in both directions otherwise — the operator gets
+ * nothing of their own, and our September activation funnel is polluted by
+ * traffic from installs we do not run (the AGL-2064/2067 corruption, from a
+ * source those fixes did not consider).
+ *
+ * `trim() || undefined` throughout so a half-finished `.env` line reads as
+ * absent rather than as an empty tag id.
+ */
+const env = (name: string): string | undefined =>
+  (process.env[name] ?? '').trim() || undefined
+
+/**
+ * GA4 measurement id. UNSET → the `gtag` preset option is `undefined`, so
+ * Docusaurus loads no tag at all. Aglyn's own docs project sets this in its
+ * Vercel project like any other operator would.
+ */
+const docsGaTrackingId = env('DOCS_GA_TRACKING_ID')
+
+/**
+ * Where browser errors are POSTed. UNSET → the beacon installs NO handlers.
+ * Delivered to client code through `customFields`, because Docusaurus does not
+ * expose arbitrary `process.env` to browser bundles and a bespoke DefinePlugin
+ * for one string would be a second mechanism.
+ */
+const docsErrorBeaconEndpoint = env('DOCS_ERROR_BEACON_ENDPOINT')
+
+/**
+ * Comma-separated `name|label|origin|description` targets the /status page
+ * probes. UNSET → it probes nothing and says so, instead of live-probing
+ * Aglyn's infrastructure and reporting OUR uptime as the operator's.
+ */
+const docsStatusTargets = env('DOCS_STATUS_TARGETS')
+
 const config: Config = {
   title: 'Aglyn Docs',
   tagline: 'Build and run your site with Aglyn — the no-code website platform',
   favicon: 'img/favicon.ico',
 
-  // Set to the production URL once the Vercel project is linked.
-  url: 'https://docs.aglyn.com',
+  // The canonical origin this build publishes itself at (AGL-2124). An
+  // operator's docs advertising `docs.aglyn.com` as their canonical would send
+  // their readers, and every crawler, to us.
+  url: env('DOCS_URL') ?? 'https://docs.aglyn.com',
   baseUrl: '/',
 
-  organizationName: 'aglyn',
+  organizationName: env('DOCS_ORGANIZATION_NAME') ?? 'aglyn',
   projectName: 'core',
 
   // Fail the build on broken internal links so bad cross-references never ship.
@@ -40,6 +85,13 @@ const config: Config = {
   // (this app cannot import libs/ — AGL-1595); armed in production builds
   // only, PII-free by construction. See src/error-beacon.ts.
   clientModules: ['./src/error-beacon.ts'],
+
+  // The one channel Docusaurus offers from build config to browser code
+  // (AGL-2124). Read via `useDocusaurusContext().siteConfig.customFields`.
+  customFields: {
+    errorBeaconEndpoint: docsErrorBeaconEndpoint ?? null,
+    statusTargets: docsStatusTargets ?? null,
+  },
 
   // `content_group: 'docs'` (AGL-1857): the GA4 axis that separates docs
   // traffic from `marketing` and `console` in standard reports. The gtag
@@ -158,10 +210,14 @@ const config: Config = {
         // is NOT the privacy control: that is property-level (Google Signals
         // off, ads personalization 0/307 regions, no Ads link, 14-month
         // retention, email redaction on) and documented in docs/ANALYTICS.md.
-        gtag: {
-          trackingID: 'G-YW5PG16YTM',
-          anonymizeIP: true,
-        },
+        //
+        // AGL-2124: `undefined` when `DOCS_GA_TRACKING_ID` is unset, so an
+        // operator's build loads NO tag. It used to be a bare literal — our
+        // measurement id — so every operator who ran `docusaurus build`
+        // shipped OUR tag and reported their readers into our property.
+        gtag: docsGaTrackingId
+          ? { trackingID: docsGaTrackingId, anonymizeIP: true }
+          : undefined,
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -350,7 +406,9 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Aglyn LLC. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} ${
+        env('DOCS_ORGANIZATION_NAME') ?? 'Aglyn LLC'
+      }. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
