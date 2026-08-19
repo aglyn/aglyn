@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,8 @@
  * limitations under the License.
  */
 
-import { DndManager } from './dnd-manager'
-
-export * from './node-refs'
-export * from './clipboard-manager'
-export * from './dnd-manager'
-export * from './focus-manager'
-export * from './node-move'
-export * from './pick-manager'
-export * from './text-entry'
-
-export const dnd = new DndManager()
+export {
+  TEXT_ENTRY_HOST_SELECTOR,
+  isTextEntryElement,
+  isTextEntryFocused,
+} from './text-entry'
