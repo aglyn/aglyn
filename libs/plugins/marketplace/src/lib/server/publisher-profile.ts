@@ -129,8 +129,19 @@ export async function claimPublisherHandle(
     if (existing.exists && existing.get('orgId') !== orgId) {
       throw new PublisherHandleTakenError(handle)
     }
-    // A full set (not merge) clears any `movedTo` tombstone from a previous
-    // owner's rename — the same reason the org-slug claim replaces wholesale.
+    // A full set (not merge) clears any `movedTo` tombstone left by an
+    // earlier rename — the same reason the org-slug claim replaces wholesale.
+    //
+    // "A PREVIOUS OWNER'S rename" is what this comment used to say, and it
+    // cannot happen: a tombstone carries `orgId`, so the already-taken guard
+    // above refuses every org but the one that renamed away. A renamed handle
+    // is PARKED, not released, and only its original org can take it back.
+    //
+    // That was incidental until AGL-2312 and is load-bearing now: `movedTo`
+    // is a live redirect target on the publisher page, so if a stranger could
+    // claim the old handle, every link ever published to the original
+    // publisher would resolve to whoever grabbed it. Pinned in
+    // `publisher-handle-rename-tombstone.spec.ts`.
     tx.set(ref, { orgId })
     if (previousHandle && previousHandle !== handle) {
       tx.set(firestore.collection(PUBLISHER_HANDLES).doc(previousHandle), {

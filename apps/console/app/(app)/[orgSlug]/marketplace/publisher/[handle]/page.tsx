@@ -29,8 +29,8 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { CardDisplay, Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Alert, Avatar, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import { collection, doc, limit, query, where } from 'firebase/firestore'
-import { useParams } from 'next/navigation'
-import { useMemo } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -57,6 +57,16 @@ import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 // boundary. The save route only ever stores https URLs, but this renderer
 // must not trust stored data it did not write: a `javascript:` URL that
 // somehow reached the doc renders as nothing, not as a link.
+/**
+ * `publisherHandles/{handle}` — the marketplace's handle reservations, and
+ * since AGL-2312 the rename tombstones this page follows.
+ *
+ * Spelled out rather than imported for the same reason `safeHref` is: the
+ * console cannot cross the `aglyn:addons` boundary. The collection is a
+ * public read (`allow read: if true`), so a client lookup is legitimate here.
+ */
+const PUBLISHER_HANDLES = 'publisherHandles'
+
 const safeHref = (url: unknown): string | undefined =>
   typeof url === 'string' && /^https:\/\//i.test(url) && url.length <= 500
     ? url
@@ -77,7 +87,7 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
   // an id read backs it up so links already in the wild keep working. A
   // handle is `^[a-z0-9][a-z0-9-]{2,29}$`, which an id can also match, so
   // neither lookup can be skipped on the shape of the segment alone.
-  const { data: byHandle } = useFirestoreCollection<any>(
+  const { data: byHandle, status: byHandleStatus } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, 'publisherProfiles'),
@@ -87,13 +97,60 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
     [firestore, segment],
     { idField: '$id' },
   )
-  const { data: byId } = useFirestoreDoc<any>(
+  const { data: byId, status: byIdStatus } = useFirestoreDoc<any>(
     () => doc(firestore, 'publisherProfiles', segment || '-missing-'),
     [firestore, segment],
     { idField: '$id' },
   )
   const profile = (byHandle ?? [])[0] ?? byId
   const profileId = String(profile?.$id ?? '')
+
+  /**
+   * A RENAMED HANDLE STILL RESOLVES (AGL-2312).
+   *
+   * `claimPublisherHandle` leaves `{ orgId, movedTo, renamedAt }` on the old
+   * handle when a publisher renames, and says why: *"so old marketplace links
+   * can still resolve"*. Nothing read it. A publisher who renamed silently
+   * broke every existing link to their storefront — SEO and referral traffic
+   * to PAID listings — and the page rendered the bare title `'Publisher'`.
+   *
+   * The org-slug tombstone written identically in `organizations.ts` IS read:
+   * `/api/orgs/slug-verdict` feeds `middleware.ts`, which issues the redirect.
+   * That asymmetry is what makes this an omission rather than a decision, and
+   * this is the same move one layer in — client-side because the handle lives
+   * in a path segment the middleware does not resolve, and because
+   * `publisherHandles` is a public read.
+   *
+   * `redirect` rather than `push`: the old URL is not a place to come back to.
+   */
+  const router = useRouter()
+  const { data: handleTombstone, status: tombstoneStatus } =
+    useFirestoreDoc<any>(
+      () => doc(firestore, PUBLISHER_HANDLES, segment || '-missing-'),
+      [firestore, segment],
+    )
+  /**
+   * Only once BOTH profile lookups have settled to nothing.
+   *
+   * A tombstone that arrives before the profile does must not bounce a handle
+   * that resolves: re-claiming a handle replaces the reservation wholesale and
+   * clears `movedTo`, so the two states cannot coexist for long — but they can
+   * for one render, and a redirect fired on a half-loaded page is a redirect
+   * nobody can reproduce.
+   */
+  const movedTo =
+    !profile &&
+    byHandleStatus === 'success' &&
+    byIdStatus !== 'loading' &&
+    tombstoneStatus === 'success'
+      ? String(handleTombstone?.['movedTo'] ?? '')
+      : ''
+  useEffect(() => {
+    if (!movedTo || movedTo === segment) return
+    router.replace(
+      buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, { orgSlug, handle: movedTo }),
+    )
+  }, [movedTo, segment, orgSlug, router])
 
   const { hosts } = useOrgHosts(
     firestore,
