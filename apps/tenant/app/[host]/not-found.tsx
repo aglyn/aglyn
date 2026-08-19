@@ -40,6 +40,12 @@ import SiteStatusScreen from '../../components/site-status-screen.component'
  * exists for requests that never resolve a host; it is deliberately the
  * plainer one.
  *
+ * AGL-2187 leaned on that placement again: the site's public top-level pages
+ * ride the same context down from the layout, so this 404 renders a real
+ * header, nav and footer instead of a single button. `SiteStatusScreen` has
+ * the whole rule, including why the site's AUTHORED nav still cannot appear
+ * here and what is offered in its place.
+ *
  * ## Status code
  *
  * Next emits a real 404 for this boundary, which is what `x-matched-path:
@@ -53,6 +59,10 @@ export default function HostNotFound() {
   return (
     <SiteStatusScreen
       code="404"
+      // The 404, and only the 404, offers site search (AGL-2187): the page a
+      // visitor asked for exists somewhere often enough to be worth looking
+      // for. The 500 does not — see `SiteStatusScreenProps.search`.
+      search
       title={'We can’t find that page'}
       message={
         'The link may be out of date, or the page may have been moved or ' +

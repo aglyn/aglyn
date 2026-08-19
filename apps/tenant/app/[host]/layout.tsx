@@ -21,6 +21,7 @@ import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
+import getSiteNav from '../../utils/get-site-nav'
 import AdminBarSlot from './admin-bar/admin-bar-slot'
 import { getHostCached } from './host-data'
 import { HostThemeProviders } from './host-theme-providers'
@@ -80,11 +81,26 @@ export default async function HostLayout({
   const faviconHref = resolveMediaSrc(hostRes.host?.seo?.favicon, {
     hostId: hostRes.host?.$id,
   })
+  /**
+   * The site's public top-level pages (AGL-2187), for the error boundaries.
+   *
+   * Resolved HERE because `not-found.tsx` and `error.tsx` receive no `params`
+   * and so cannot resolve the host at all — the same constraint that put the
+   * logo and name on this line, documented on `host-brand.context.tsx`.
+   *
+   * Cached per host with a tag a publish busts, so this costs one cached
+   * lookup on the render path rather than a screen sweep per page, and it
+   * cannot reject: every failure inside degrades to an empty nav. A layout
+   * that threw over a decoration for the 404 would take the whole site down
+   * with it.
+   */
+  const siteLinks = await getSiteNav(hostRes.host)
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
       brandLogoUrl={brandLogoUrl}
       brandName={hostRes.host?.displayName}
+      siteLinks={siteLinks}
     >
       {/* Per-host manifest (AGL-1252). A relative href on purpose: the
           browser resolves it against the site's own origin, so one link tag

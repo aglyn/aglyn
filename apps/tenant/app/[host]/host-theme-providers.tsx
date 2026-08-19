@@ -28,6 +28,8 @@ import {
   HostThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
+// Type-only — see the note on the same import in `host-brand.context.tsx`.
+import type { SiteNavLink } from '../../utils/site-nav'
 import { HostBrandProvider } from './host-brand.context'
 
 /**
@@ -53,11 +55,13 @@ export function HostThemeProviders({
   hostTheme,
   brandLogoUrl,
   brandName,
+  siteLinks,
   children,
 }: {
   hostTheme?: HostTheme
   brandLogoUrl?: string
   brandName?: string
+  siteLinks?: SiteNavLink[]
   children: ReactNode
 }) {
   return (
@@ -68,7 +72,11 @@ export function HostThemeProviders({
       // customizes one value keeps the brand for the rest (AGL-1180).
       baseOptions={[consoleOptions, consoleOptionsDark]}
     >
-      <HostBrandProvider brandLogoUrl={brandLogoUrl} brandName={brandName}>
+      <HostBrandProvider
+        brandLogoUrl={brandLogoUrl}
+        brandName={brandName}
+        siteLinks={siteLinks}
+      >
         <LoadingLayoutAppComponent
           brandLogoUrl={brandLogoUrl}
           brandName={brandName}
