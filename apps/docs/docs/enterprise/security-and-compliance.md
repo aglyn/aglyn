@@ -22,6 +22,20 @@ assemble an answer from several.
   (see [Availability & status](./uptime-and-status.md)).
 - How to report a security issue.
 
+## Contract documents
+
+Both are published pages — read them without asking anyone, and send them to
+your reviewers directly:
+
+- **[Data Processing Addendum](https://aglyn.com/legal/dpa)** — the processing
+  terms, including the export and deletion obligations the product implements.
+- **[Subprocessor list](https://aglyn.com/legal/subprocessors)** — the
+  authoritative one. The table on [Trust & security](/trust) is the engineering
+  view of the same set and may lag it.
+
+Neither is acceptance-pinned, so neither carries a version bump you have to
+re-accept when it changes.
+
 ## Why the gaps are listed first
 
 Because a reviewer needs them, and because a questionnaire surfaces them

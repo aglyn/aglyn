@@ -28,6 +28,11 @@ Worth saying plainly, because it is the usual assumption:
 
 ## Getting Enterprise
 
-Contact us. SSO in particular is provisioned on our side (see
-[Single sign-on](./sso.md)), so it is not something you can switch on from
-**Organization → Settings** the way a plan upgrade works.
+Contact us — Enterprise is the one tier with no self-serve checkout, so the
+plan itself is arranged with us rather than bought from the billing page.
+
+Everything after that is yours to configure. [Single sign-on](./sso.md) in
+particular is set up by your own admins in **Organization → Settings → Single
+sign-on**: claim your domain, verify a DNS TXT record, exchange IdP metadata,
+rehearse enforcement, and activate. There is no provisioning step on our side
+and nothing to wait for.

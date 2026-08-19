@@ -115,7 +115,9 @@ Steps:
 
 Seats are metered and enforced per plan, and both kinds are available as
 [add-ons](/workspace-and-billing/billing-and-plans/add-ons) if you outgrow the
-included count. Invited people don't consume a seat until they accept.
+included count. A **pending invite holds a seat** — the count is checked when
+you send it and again when it is accepted — so plan headcount against invites
+sent, not invites accepted, or you will hit a refusal mid-onboarding.
 
 Full detail: [Teams, roles & membership](/workspace-and-billing/teams-and-roles/overview).
 

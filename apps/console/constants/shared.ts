@@ -65,6 +65,34 @@ export const LEGAL_URLS = {
   PRIVACY: `${LEGAL_ORIGIN}/legal/privacy`,
 }
 
+/**
+ * Published legal documents the console LINKS to but never asks anyone to
+ * accept (AGL-2189).
+ *
+ * Deliberately separate from {@link LEGAL_URLS}, and the separation is
+ * load-bearing rather than tidy. `LEGAL_URLS` is the CLICKWRAP manifest:
+ * `legal-document-version.spec.ts` asserts its keys map one-to-one onto the
+ * repo-committed snapshots under the `constants/legal` version folders,
+ * because — in that
+ * spec's words — "a link with no snapshot behind it is the original problem
+ * wearing a manifest: the record would name a document it cannot reproduce."
+ * The first draft of this change added these two to `LEGAL_URLS` and that
+ * spec refused it, correctly.
+ *
+ * These two are published pages that are deliberately NOT acceptance-pinned
+ * (see `./legal-documents`), so they carry no hash and cost no version bump.
+ * That is exactly why they can be linked freely, and it is also why they were
+ * missing: nothing forced anyone to notice them. The cost of the absence fell
+ * on the one audience that needed them — an enterprise reviewer could reach
+ * neither the DPA nor the subprocessor list from anywhere in the product,
+ * while the trust page told them to email for documents already on a public
+ * URL.
+ */
+export const LEGAL_REFERENCE_URLS = {
+  DPA: `${LEGAL_ORIGIN}/legal/dpa`,
+  SUBPROCESSORS: `${LEGAL_ORIGIN}/legal/subprocessors`,
+}
+
 // The version and content hashes of those documents live in
 // `./legal-documents`, which imports LEGAL_URLS from here (AGL-1497).
 
