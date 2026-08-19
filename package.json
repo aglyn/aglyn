@@ -83,6 +83,7 @@
     "test:stripe-tax-code": "node --test tools/scripts/lib/stripe-tax-code.test.mjs",
     "test:backup-copies": "node --test tools/scripts/lib/backup-copies.test.mjs",
     "test:authorized-domains": "node --test tools/scripts/lib/authorized-domains.test.mjs",
+    "test:firebase-credential-message": "node --test tools/scripts/lib/firebase-credential-message.test.mjs",
     "test:ttl-policies": "node --test tools/scripts/lib/ttl-policies.test.mjs",
     "test:standalone-installs": "node --test tools/scripts/lib/standalone-installs.test.mjs",
     "test:test-wiring": "node --test tools/scripts/lib/test-wiring.test.mjs",

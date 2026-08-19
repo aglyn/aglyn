@@ -220,6 +220,13 @@ jobs:
       # a self-host install gets TTL policies, and it had drifted to one of the
       # documented eight. Triggered by the `docs/FIRESTORE_MANUAL_CONFIG.md`
       # path added above, so editing the doc alone still runs it.
+      # test:firebase-credential-message  the message a self-hoster gets when
+      #                             Firebase refuses their service account
+      #                             (AGL-2447). The three rules-deploy scripts
+      #                             are the FIRST commands the runbook has an
+      #                             operator run, and a wrong account printed
+      #                             230 lines of GaxiosError naming no variable.
+      - run: npm run test:firebase-credential-message
       - run: npm run test:ttl-policies
 
       - run: npm run test:erase-cli
