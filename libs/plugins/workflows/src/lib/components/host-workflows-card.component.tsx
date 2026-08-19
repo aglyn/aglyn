@@ -24,6 +24,7 @@ import {
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
+  pluginDocsHelp,
   runWorkflow,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -374,7 +375,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   )
 
   return (
-    <CardDisplay header={'Workflows'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Workflows'}
+      help={pluginDocsHelp('buildAWorkflow', {
+        anchor: '#1-open-the-workflows-page',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {workflows.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

@@ -20,6 +20,7 @@ import {
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
+  pluginDocsHelp,
   submissionMonthKey,
 } from '@aglyn/aglyn'
 import { CampaignsCard as HostCampaignsCard } from '@aglyn/plugins-email'
@@ -255,6 +256,12 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                 content: (
                   <CardDisplay
                     header={'Form Submissions'}
+                    help={pluginDocsHelp('forms', {
+                      anchor: '#the-inbox',
+                      excerpt:
+                        'Messages your forms collected, newest first, showing who sent ' +
+                        'each one and where it was routed.',
+                    })}
                     contentGutterX
                     contentGutterY
                     contentBordered="all"
@@ -412,6 +419,9 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                   <Stack spacing={3}>
                     <CardDisplay
                       header={'Site Members & Leads'}
+                      help={pluginDocsHelp('membersOnly', {
+                        anchor: '#manage-your-members',
+                      })}
                       contentGutterX
                       contentGutterY
                       contentBordered="all"

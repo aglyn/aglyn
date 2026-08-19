@@ -26,6 +26,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -129,7 +130,14 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   }, [user, hostId, chargesEnabled, enqueueSnackbar])
 
   return (
-    <CardDisplay header={'Payments'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Payments'}
+      help={pluginDocsHelp('commerceEndToEnd', {
+        anchor: '#1-connect-payments',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" sx={{ flex: 1 }}>

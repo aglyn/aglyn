@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { scopeTokensForHost } from '@aglyn/aglyn'
+import { pluginDocsHelp, scopeTokensForHost } from '@aglyn/aglyn'
 import { auditHostReferences } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
@@ -155,6 +155,7 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   return (
     <CardDisplay
       header={'Reference health'}
+      help={pluginDocsHelp('bindings', { anchor: '#where-used--safety' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

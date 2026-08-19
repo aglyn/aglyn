@@ -37,14 +37,15 @@ import UninstallImpactDialog from './uninstall-impact-dialog.component'
 import { ListingImage } from './listing-image.component'
 import {
   buildRoute,
+  type MarkdownBlock,
+  type MarkdownInline,
   parseMarkdownLite,
   PLUGIN_HOST_ABI_VERSION,
+  pluginDocsHelp,
   resolveMediaSrc,
   resolveUpdateState,
   Route,
   updateStateLabel,
-  type MarkdownBlock,
-  type MarkdownInline,
 } from '@aglyn/aglyn'
 import {
   mdiCheckCircle,
@@ -200,7 +201,14 @@ function ListingChangelog({
   // implying they withheld one.
   if (!entries.length) return null
   return (
-    <CardDisplay header={'Changelog'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Changelog'}
+      help={pluginDocsHelp('publisherHandbook', {
+        anchor: '#versioning--updates',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2.5}>
         {entries.map((entry, index) => (
           <Stack key={entry.version} spacing={1}>
@@ -1374,6 +1382,9 @@ export function MarketplaceListingContent({
                           Here it leads the sidebar. */}
                       <CardDisplay
                         header={'Install'}
+                        help={pluginDocsHelp('installYourFirstPlugin', {
+                          anchor: '#step-4-targeting',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -1778,6 +1789,9 @@ export function MarketplaceListingContent({
                       </CardDisplay>
                       <CardDisplay
                         header={'Publisher'}
+                        help={pluginDocsHelp('publisherHandbook', {
+                          anchor: '#before-your-first-publish',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -1940,6 +1954,9 @@ export function MarketplaceListingContent({
                       {listing?.homepageUrl || listing?.repositoryUrl ? (
                         <CardDisplay
                           header={'Links'}
+                          help={pluginDocsHelp('publisherHandbook', {
+                            anchor: '#authoring-your-listing',
+                          })}
                           contentGutterX
                           contentGutterY
                         >
@@ -1977,6 +1994,9 @@ export function MarketplaceListingContent({
                           shaped cards for the same idea read as unfinished. */}
                       <CardDisplay
                         header={'Version history'}
+                        help={pluginDocsHelp('publisherHandbook', {
+                          anchor: '#shipping-a-new-version',
+                        })}
                         contentGutterX
                         contentGutterY
                       >

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { buildRoute, Route } from '@aglyn/aglyn'
+import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -114,7 +114,12 @@ export function EmailScreensCard(props: { hostId: string }) {
   }
 
   return (
-    <CardDisplay header={'Emails'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Emails'}
+      help={pluginDocsHelp('designedEmails', { anchor: '#create-a-template' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {emailScreens.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

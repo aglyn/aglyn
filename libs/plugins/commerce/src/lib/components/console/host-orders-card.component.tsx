@@ -19,7 +19,7 @@
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { checkEntitlement } from '@aglyn/aglyn'
+import { checkEntitlement, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   Alert,
   AlertTitle,
@@ -321,7 +321,17 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   )
 
   return (
-    <CardDisplay header={'Orders'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Orders'}
+      help={pluginDocsHelp('commerce', {
+        anchor: '#orders',
+        excerpt:
+          'Every order with its channel, status and net total. A refunded ' +
+          'order shows what is left, with the gross beneath it.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       {orders.length === 0 ? (
         /*
          * An invitation, not a report (AGL-1805). The "Draft order" button

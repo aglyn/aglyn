@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { buildRoute, Route } from '@aglyn/aglyn'
+import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -439,7 +439,18 @@ export function HostCampaignsCard(props: { hostId: string }) {
   )
 
   return (
-    <CardDisplay header={'Email campaigns'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Email campaigns'}
+      help={pluginDocsHelp('emailCampaigns', {
+        anchor: '#recipient-count',
+        excerpt:
+          'Compose and send to an audience. The recipient count under the ' +
+          'picker is the real send path with nothing written, so duplicates, ' +
+          'unsubscribes and your monthly cap are already in the number.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
           {'Send an update to your leads or site members. Every email ' +

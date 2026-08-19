@@ -21,7 +21,7 @@ import {
   actionRunSummary,
   actionTriggerLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
   Chip,
   Table,
@@ -38,6 +38,7 @@ import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostRunHistoryCardProps {
   hostId: string
@@ -45,6 +46,8 @@ export interface HostRunHistoryCardProps {
   targetId?: string
   max?: number
   header?: string
+  /** Overrides the default help affordance on the card header. */
+  help?: HelpTipContent
 }
 
 const RESULT_COLOR = {
@@ -76,7 +79,18 @@ const RESULT_LABEL = {
  * under a `Succeeded` that means nothing for it.
  */
 export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
-  const { hostId, targetId, max = 25, header = 'Run history' } = props
+  const {
+    hostId,
+    targetId,
+    max = 25,
+    header = 'Run history',
+    help = pluginDocsHelp('buildAWorkflow', {
+      anchor: '#4-save-and-test',
+      excerpt:
+        'Every run of this automation, including the ones a trigger ' +
+        'condition skipped — which is the answer to "why did it not fire?".',
+    }),
+  } = props
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'activity'), limit(200)),
@@ -105,6 +119,7 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
   return (
     <CardDisplay
       header={header}
+      help={help}
       contentGutterX
       contentGutterY
       contentBordered="all"

@@ -30,7 +30,12 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildRoute, type OrgPermissions, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  type OrgPermissions,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -423,7 +428,12 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   }, [listings, search, category, sort, publisherId, user?.uid])
 
   return (
-    <CardDisplay header={'Marketplace components'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Marketplace components'}
+      help={pluginDocsHelp('plugins', { anchor: '#install--upgrade' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack
         direction="row"
         spacing={1}

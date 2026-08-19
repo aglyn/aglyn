@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { buildRoute, PLUGIN_COMPONENT_ID, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  PLUGIN_COMPONENT_ID,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import {
   AppLink,
   CardDisplay,
@@ -347,7 +352,12 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   )
 
   return (
-    <CardDisplay header="Marketplace installs" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Marketplace installs"
+      help={pluginDocsHelp('plugins', { anchor: '#install--upgrade' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         {/* First-party plugins used to be re-listed here for context; that
             moved out (AGL-802) now that the switchboard sits directly above

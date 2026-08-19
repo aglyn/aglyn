@@ -16,7 +16,25 @@
  */
 'use client'
 
-import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
+import {
+  type AglynOrgBilling,
+  applyDatasetQuery,
+  checkDatasetQuota,
+  checkEntitlement,
+  checkQuota,
+  coerceDocumentValues,
+  datasetValueToInput,
+  effectiveDatasetModel,
+  formatDatasetValue,
+  getCustomFieldType,
+  modelFromFieldEntries,
+  parseDatasetFieldEntries,
+  parseDatasetFilter,
+  parseDatasetSort,
+  pluginDocsHelp,
+  sortDatasetRecords,
+  validateDocument,
+} from '@aglyn/aglyn'
 import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
@@ -1001,6 +1019,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   return (
     <CardDisplay
       header={'Data'}
+      help={pluginDocsHelp('datasets', { anchor: '#model-builder' })}
       contentGutterX
       contentGutterY
       contentBordered="all"

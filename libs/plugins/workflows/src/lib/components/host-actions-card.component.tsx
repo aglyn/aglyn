@@ -24,17 +24,18 @@ import {
   createResourceUid,
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
-  isSiteEventType,
-  normalizeTriggerConditions,
-  SITE_EVENT_TYPES,
   HOST_EVENT_TYPES,
   type HostAction,
   type HostActionStep,
   type HostActionStepType,
+  isSiteEventType,
+  normalizeTriggerConditions,
+  pluginDocsHelp,
+  scopeTokensForHost,
+  SITE_EVENT_TYPES,
   type TriggerCombinator,
   type TriggerConditionOp,
   validateHostAction,
-  scopeTokensForHost,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -531,7 +532,12 @@ export function HostActionsCard(props: {
   )
 
   return (
-    <CardDisplay header={'Actions'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Actions'}
+      help={pluginDocsHelp('actionsBuilder', { anchor: '#create-an-action' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {'When a site event fires, run automations in order — trigger a ' +

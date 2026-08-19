@@ -23,6 +23,7 @@ import {
   type FunctionComparator,
   type FunctionValueType,
   type HostFunction,
+  pluginDocsHelp,
   VARIABLE_NAME_PATTERN,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -451,7 +452,12 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   }
 
   return (
-    <CardDisplay header={'Functions'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Functions'}
+      help={pluginDocsHelp('bindings', { anchor: '#no-code-functions' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {functions.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

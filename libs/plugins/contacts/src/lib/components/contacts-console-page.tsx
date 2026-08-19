@@ -18,12 +18,13 @@
 
 import {
   checkContactQuota,
+  contactMatchesSegment,
   type ContactSegment,
   type ContactSource,
-  contactMatchesSegment,
   type HostContact,
   newResourceScopeFields,
   ORG_SCOPE_TOKEN,
+  pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -460,7 +461,12 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <>
-      <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Contacts'}
+        help={pluginDocsHelp('contacts', { anchor: '#the-contacts-page' })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={2}>
           <Stack
             direction="row"

@@ -20,6 +20,7 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   createResourceUid,
+  pluginDocsHelp,
   WEBHOOK_MAX_PER_HOST,
   WEBHOOK_URL_PATTERN,
 } from '@aglyn/aglyn'
@@ -208,7 +209,12 @@ export function HostWebhooksCard(props: {
   )
 
   return (
-    <CardDisplay header={'Webhooks'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Webhooks'}
+      help={pluginDocsHelp('webhooks', { anchor: '#outbound-webhooks' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
           {'Send signed JSON to outside systems from the actions builder, ' +

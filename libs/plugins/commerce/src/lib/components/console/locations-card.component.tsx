@@ -36,6 +36,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface LocationsCardProps {
   hostId: string
@@ -186,7 +187,12 @@ export function LocationsCard(props: LocationsCardProps) {
   )
 
   return (
-    <CardDisplay header={'Inventory locations'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Inventory locations'}
+      help={pluginDocsHelp('commerce', { anchor: '#inventory' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {locations.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

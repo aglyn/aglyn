@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
   Link,
   List,
@@ -35,6 +35,7 @@ import {
   activityHref,
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface HostActivityCardProps {
   hostId: string
@@ -45,6 +46,8 @@ export interface HostActivityCardProps {
   header?: string
   /** When set, a "View all activity" link renders under the list (AGL-249). */
   viewAllHref?: string
+  /** Overrides the default help affordance on the card header. */
+  help?: HelpTipContent
 }
 
 /**
@@ -53,8 +56,19 @@ export interface HostActivityCardProps {
  * pages show just their own history.
  */
 export function HostActivityCard(props: HostActivityCardProps) {
-  const { hostId, targetId, max = 20, header = 'Recent Activity', viewAllHref } =
-    props
+  const {
+    hostId,
+    targetId,
+    max = 20,
+    header = 'Recent Activity',
+    viewAllHref,
+    help = pluginDocsHelp('consoleTour', {
+      anchor: '#a-sites-dashboard',
+      excerpt:
+        'Changes made to this site from the console — publishes, media ' +
+        'saves, member changes — newest first.',
+    }),
+  } = props
   const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
@@ -76,6 +90,7 @@ export function HostActivityCard(props: HostActivityCardProps) {
   return (
     <CardDisplay
       header={header}
+      help={help}
       contentGutterX
       contentGutterY
       contentBordered="all"

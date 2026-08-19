@@ -34,6 +34,7 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -150,7 +151,12 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
   }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
 
   return (
-    <CardDisplay header={'Store settings'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Store settings'}
+      help={pluginDocsHelp('commerce')}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <TextField
           label="Product page template"

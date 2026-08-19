@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { type AglynOrgBilling, checkEntitlement, createResourceUid } from '@aglyn/aglyn'
+import {
+  type AglynOrgBilling,
+  checkEntitlement,
+  createResourceUid,
+  pluginDocsHelp,
+} from '@aglyn/aglyn'
 import { overlayActiveAt, type HostOverlay } from '../model'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
@@ -313,6 +318,12 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
   return (
     <CardDisplay
       header="Announcement bars & popups"
+      help={pluginDocsHelp('marketingOverlays', {
+        anchor: '#frequency',
+        excerpt:
+          'Every bar and popup on this site, with its schedule, page ' +
+          'targeting, and how often a visitor sees it again.',
+      })}
       contentGutterX
       contentGutterY
       contentBordered="all"

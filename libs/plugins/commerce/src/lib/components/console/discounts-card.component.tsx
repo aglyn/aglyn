@@ -46,6 +46,7 @@ import {
   useFirestoreCollection,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface DiscountsCardProps {
   hostId: string
@@ -173,7 +174,17 @@ export function DiscountsCard(props: DiscountsCardProps) {
   }
 
   return (
-    <CardDisplay header={'Discounts'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Discounts'}
+      help={pluginDocsHelp('commerceEndToEnd', {
+        anchor: '#4-what-checkout-does',
+        excerpt:
+          'Discount codes your customers type at your own checkout — not ' +
+          'the coupons Aglyn issues against your subscription.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {(discountDocs ?? []).length === 0 ? (
           <Typography variant="body2" color="text.secondary">

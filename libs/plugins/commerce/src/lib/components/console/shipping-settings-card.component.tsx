@@ -39,6 +39,7 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ShippingSettingsCardProps {
   hostId: string
@@ -215,7 +216,12 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
     raw.trim() === '' ? undefined : Math.round(Number(raw) * 100)
 
   return (
-    <CardDisplay header={'Shipping'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Shipping'}
+      help={pluginDocsHelp('commerce', { anchor: '#shipping--taxes' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="subtitle2">{'Zones'}</Typography>
         {(current.zones ?? []).map((zone, index) => (

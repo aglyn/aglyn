@@ -37,6 +37,7 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface TaxSettingsCardProps {
   hostId: string
@@ -132,7 +133,12 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache])
 
   return (
-    <CardDisplay header={'Taxes'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Taxes'}
+      help={pluginDocsHelp('commerce', { anchor: '#shipping--taxes' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         {decided ? null : (
           // The store is not selling. Saying so here is the whole point: the

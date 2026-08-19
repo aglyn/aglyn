@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { buildRoute, createResourceUid, Route } from '@aglyn/aglyn'
+import {
+  buildRoute,
+  createResourceUid,
+  pluginDocsHelp,
+  Route,
+} from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -267,7 +272,12 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
   )
 
   return (
-    <CardDisplay header={'Events'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Events'}
+      help={pluginDocsHelp('events', { anchor: '#manage-events' })}
+      contentGutterX
+      contentGutterY
+    >
       {!entitled ? (
         <Alert
           severity="info"

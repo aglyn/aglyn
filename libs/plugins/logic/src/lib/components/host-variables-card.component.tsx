@@ -23,6 +23,7 @@ import {
   HOST_VARIABLE_TYPE_LABELS,
   type HostVariable,
   type HostVariableType,
+  pluginDocsHelp,
   VARIABLE_NAME_PATTERN,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -388,7 +389,12 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   )
 
   return (
-    <CardDisplay header={'Variables'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Variables'}
+      help={pluginDocsHelp('bindings', { anchor: '#typed-variables' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1}>
         {variables.length === 0 ? (
           <Typography variant="body2" color="text.secondary">

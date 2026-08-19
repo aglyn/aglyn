@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -291,7 +291,17 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
 
   return (
     <Stack spacing={3}>
-      <CardDisplay header={'Services'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Services'}
+        help={pluginDocsHelp('bookings', {
+        anchor: '#set-up-bookings',
+        excerpt:
+          'The bookable services this site offers — how long each takes, ' +
+          'what it costs, and the hours it can be booked in.',
+      })}
+        contentGutterX
+        contentGutterY
+      >
         <Stack spacing={1}>
           {services.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
@@ -366,7 +376,17 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         </Stack>
       </CardDisplay>
 
-      <CardDisplay header={'Upcoming bookings'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Upcoming bookings'}
+        help={pluginDocsHelp('bookings', {
+        anchor: '#manage',
+        excerpt:
+          'Bookings taken on this site, with the customer and the slot each ' +
+          'one holds.',
+      })}
+        contentGutterX
+        contentGutterY
+      >
         {upcoming.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No upcoming bookings.'}

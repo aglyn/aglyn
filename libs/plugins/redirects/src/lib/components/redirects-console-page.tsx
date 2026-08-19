@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota } from '@aglyn/aglyn'
+import { checkQuota, pluginDocsHelp } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -389,7 +389,12 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   )
 
   return (
-    <CardDisplay header={'URL redirects'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'URL redirects'}
+      help={pluginDocsHelp('redirects', { anchor: '#manage-redirects' })}
+      contentGutterX
+      contentGutterY
+    >
       {!entitled ? (
         <Alert severity="info">
           {'URL redirects are included from the Starter plan — point old ' +

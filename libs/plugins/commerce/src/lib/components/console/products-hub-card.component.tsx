@@ -58,6 +58,7 @@ import {
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
+import { pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface ProductsHubCardProps {
   hostId: string
@@ -477,6 +478,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   return (
     <CardDisplay
       header={`Products${products.length ? ` (${products.length})` : ''}`}
+      help={pluginDocsHelp('commerce', { anchor: '#products-hub' })}
       contentGutterX
       contentGutterY
     >
