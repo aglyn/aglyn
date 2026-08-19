@@ -1553,6 +1553,8 @@ export function listingInclusions(
     tone: 'included',
   })
   return rows
+}
+
 /**
  * WHO STILL OWNS WHAT THEY BOUGHT — the one predicate (AGL-2158).
  *

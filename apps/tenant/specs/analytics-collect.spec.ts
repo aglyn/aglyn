@@ -534,6 +534,10 @@ describe('dwell time (AGL-2182)', () => {
     expect(dayDoc().total).toBe(1)
     expect(screenDoc().total).toBe(1)
     expect(screenDoc().dwellSamples).toBeUndefined()
+  })
+})
+
+/**
  * The bandwidth abuse ceiling, evaluated where the counter is WRITTEN
  * (AGL-2155).
  *
