@@ -33,6 +33,16 @@ name: Tools guards
 #                             the dismissals rest on monaco never passing the
 #                             config options those advisories need. This is the
 #                             only thing re-measuring that.
+#  - test:marketing-width-doctrine / check:marketing-width-doctrine  the
+#                             marketing authoring docs must state the stock
+#                             `maxWidth: "xl"` container invariant and never
+#                             prescribe a pixel column (AGL-1298). The
+#                             container specs already refuse a 1328 cap in
+#                             CODE; the docs went on recommending one — and
+#                             justified it with a 1280 column that appears in
+#                             no measurement of any frame — which points the
+#                             next agent at relaxing the test and narrowing a
+#                             site that is already exactly on-design
 #  - test:docs-self-host      / check:docs-self-host  apps/docs must not
 #                             compile in our GA id, our error collector or our
 #                             production origins (AGL-2124) — it ships in the
@@ -246,6 +256,33 @@ jobs:
       # container.spec.tsx — with a detector whose failure path is exercised,
       # so the census a human runs is worth reading.
       - run: npm run test:marketing-containers
+
+      # AGL-1298 / AGL-2360. The sibling guard above holds the ban in DATA;
+      # this holds it in the DOCS, and the docs were the half that rotted.
+      # `product-page-skeleton.md` went on prescribing `sx {maxWidth: '1328px'}`
+      # as an invariant — with "not `'xl'` (1536)" spelled out — for ten days
+      # after the sweep that removed all 144 of them.
+      #
+      # And the column it justified that with, 1280, appears in NO recorded
+      # measurement of any frame: the extracts measure 1392 at 1440, 1488 at
+      # 1920, 688 at 768. Stock `xl` caps at min(viewport, 1536) less its own
+      # gutters, so it renders 1392 and 1488 — the design exactly, at both
+      # desktop widths. An agent reading the old doc concludes the LIVE SITE is
+      # too wide and that the red container spec is what to relax, and narrows
+      # a site that had nothing wrong with it.
+      #
+      # The invariant guarded is "stock `xl`", NOT a pixel figure — 1536
+      # included; `xl` never renders 1536 of content at any breakpoint.
+      #
+      # Two-step order as everywhere else here: the unit test proves the
+      # detector goes red on the exact wording that stood (including the
+      # control that its blockquote and fenced-code exemptions are not holes),
+      # and only then is the real scan's green worth reading. The scan is
+      # markdown only — it does not measure the site, the node corpus, or
+      # Figma.
+      - run: npm run test:marketing-width-doctrine
+
+      - run: npm run check:marketing-width-doctrine
 
       # AGL-2124. Same two-step order: the unit test proves the scanner can
       # FAIL on the exact three literals (its first version reported green over

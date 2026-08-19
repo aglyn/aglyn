@@ -32,9 +32,41 @@ to match.
 ## Invariants that are already correct in the skeleton — do not re-derive
 
 - **Container:** `section` (full-bleed background + vertical padding, no
-  horizontal padding) → `muiContainer` props `{maxWidth: false}` sx
-  `{maxWidth: '1328px'}` → content. 1328 − 48 gutters = the 1280 content
-  column Figma uses at both 1440 and 1920. Not `'lg'` (1200), not `'xl'` (1536).
+  horizontal padding) → `muiContainer` props `{maxWidth: 'xl'}` → content.
+  **The invariant is the stock breakpoint `'xl'` — never an `sx` cap, never a
+  pixel literal.** AGL-1298 banned bespoke `Container.maxWidth` values
+  outright and swept the 144 containers that carried a hand-rolled `sx` pixel
+  cap onto stock MUI widths. Prose bands — legal, docs, blog and changelog
+  bodies — are the one deliberate exception and use `'md'`; see the "Prose
+  Container" preset.
+
+  **The column is viewport-derived, not a number you set.** Container caps at
+  `min(viewport, breakpoint)` and then subtracts its own gutters (24px either
+  side from `sm` up, 16px at `xs`). At the two desktop widths the frames are
+  drawn to, stock `xl` lands on the design **exactly**:
+
+  | canvas | `xl` renders | design column | source |
+  | -- | -- | -- | -- |
+  | 1440 | `min(1440,1536) − 48` = **1392** | **1392** | `pricing-copy/copy-desktop.json`, 9 sections |
+  | 1920 | `min(1920,1536) − 48` = **1488** | **1488** | `pricing-copy/copy-widescreen.json`, 9 sections |
+  | 768 | `768 − 48` = 720 | 688 | `pricing-copy/copy-tablet.json`, 11 sections |
+  | 375 | `375 − 32` = 343 | 375 (full-bleed) | `pricing-copy/copy-mobile.json` |
+
+  Desktop and widescreen match to the pixel — **there is nothing to fix
+  there.** Tablet and mobile differ by 32px because MUI's stock gutters differ
+  from the frames'; that is a real small-width question, tracked on AGL-2362,
+  and it is a **gutter** question — **not** a reason to reach for a pixel cap.
+
+  > ⚠️ **This bullet asserted the opposite until 2026-08-19, and its wording
+  > is the trap.** It read *"`{maxWidth: false}` sx `{maxWidth: '1328px'}` →
+  > content. 1328 − 48 gutters = the 1280 content column Figma uses at both
+  > 1440 and 1920. Not `'lg'` (1200), not `'xl'` (1536)"* — a bespoke cap of
+  > exactly the shape AGL-1298 bans, justified by a column the design does not
+  > use. **1280 was never the design column**: it appears in no recorded
+  > measurement anywhere under `tools/marketing/`, and 1328 is simply 1280 +
+  > 48. That last clause is the sentence most likely to make a future agent
+  > narrow the live site by 112px to close a diff that does not exist. It is
+  > backwards. Do not restore it.
 - **The hero is the deliberate exception**: its mockup overflows the container
   to the right. Container gets `overflow: visible`, the section
   `overflow: hidden`.

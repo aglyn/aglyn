@@ -638,6 +638,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
       'test:marketing-containers', // AGL-1296
+      'test:marketing-width-doctrine', // AGL-1298 — the DOC half of the ban
+      'check:marketing-width-doctrine', // AGL-1298
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
       'test:monaco-dompurify', // AGL-2300
@@ -674,6 +676,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
       'test:marketing-containers', // AGL-1296
+      'test:marketing-width-doctrine', // AGL-1298 — the DOC half of the ban
+      'check:marketing-width-doctrine', // AGL-1298
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
       'test:monaco-dompurify', // AGL-2300

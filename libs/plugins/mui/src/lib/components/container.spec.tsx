@@ -183,6 +183,22 @@ describe('Container preset (AGL-1435)', () => {
  * `maxWidth` — that is the whole of AGL-1298. `1328` is a CONTENT width
  * (1280 plus the Container's own 24px gutters), never a breakpoint, and it
  * is the number this standard exists to keep out.
+ *
+ * That parenthesis is ETYMOLOGY, and the etymology is of a MISTAKE. **1280 is
+ * not the design column and never was** — checked 2026-08-19 against every
+ * `widthPx` recorded under `tools/marketing/`, where it appears zero times.
+ * The frames measure 1392 at 1440, 1488 at 1920, 688 at 768.
+ *
+ * Which means stock `xl` is not a deviation from the design, it is the design:
+ * Container caps at `min(viewport, 1536)` and subtracts its own 24px gutters,
+ * giving 1392 at 1440 and 1488 at 1920 — the two frames, to the pixel. `xl`
+ * never renders a 1536-wide column at any real breakpoint.
+ *
+ * Recorded here because the marketing docs argued the opposite until
+ * 2026-08-19 and told the reader to hit 1280 with a 1328 cap. An agent who
+ * believes that meets these tests, finds them red, and concludes the TESTS are
+ * wrong. They are not. If a diff ever argues for 1280 again, re-measure before
+ * changing a width.
  */
 const STOCK_BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl']
 

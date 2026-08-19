@@ -187,7 +187,35 @@ falling back to file name or argument order.
 | `572:1218` | Pricing — Widescreen | 1920 |
 
 Widescreen is geometrically identical to desktop — same height, same six
-sections, same section heights, same 1280 content column on a wider canvas.
+sections, same section heights, the content column re-resolved for a wider
+canvas.
+
+### The measured content columns
+
+Read off the extracts themselves, not off memory. `widthPx` on each content
+section is the design's own inner width:
+
+| variant | canvas | design column | gutters | sections recorded |
+| -- | -- | -- | -- | -- |
+| desktop | 1440 | **1392** | 48 | 9 |
+| widescreen | 1920 | **1488** | 432 | 9 |
+| tablet | 768 | **688** | 80 | 11 |
+| mobile | 375 | 375 (full-bleed) | 0 | — |
+
+A stock `maxWidth="xl"` Container caps at `min(viewport, 1536)` and subtracts
+its own gutters, so it renders **1392 at 1440** and **1488 at 1920** — the
+design columns exactly, at both desktop widths. Nothing to reconcile there;
+`xl` never renders as a 1536-wide column at any real breakpoint. At 768 and
+375 MUI's stock gutters differ from the frames' (720 vs 688; 343 vs 375) — a
+separate small-width question tracked on AGL-2362, and a gutter question
+rather than a reason to hand-roll a cap.
+
+> ⚠️ This paragraph asserted a "same 1280 content column" until 2026-08-19,
+> and `product-page-skeleton.md` prescribed a bespoke `sx {maxWidth: '1328px'}`
+> to hit it — the exact shape AGL-1298 bans. **1280 was never the design
+> column.** It appears in no `widthPx` in any extract here; 1328 is just
+> 1280 + 48. The correct invariant is stock `xl`, and the column follows from
+> the viewport.
 
 ### Regenerating
 
