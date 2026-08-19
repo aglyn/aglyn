@@ -130,13 +130,41 @@ const fakeFirestore = {
         ? { id, get: async () => snapshotOf(id, mockStore.org) }
         : fakeHostRef,
   }),
-  runTransaction: async (body: (transaction: any) => Promise<unknown>) =>
-    body({
-      get: async (ref: any) =>
-        typeof ref?.get === 'function' ? ref.get() : { docs: [], empty: true },
-      create: () => undefined,
-      set: () => undefined,
-    }),
+  /*
+   * `create` DELEGATES TO THE REF (AGL-2231). It was `() => undefined`, which
+   * was harmless while the only transaction here wrote through `batch`, and
+   * became a lie the moment `/api/hosts/resources` moved its create inside the
+   * transaction: the route would report 200 and the store would never gain the
+   * document, so every "and the next one is refused" assertion in this file
+   * would have passed against a route that created nothing at all. An
+   * unfaithful double fabricates false greens and false reds alike.
+   *
+   * Reads-before-writes and deferred commit are modelled too, because the route
+   * now depends on both: Firestore refuses a read after a write in the same
+   * transaction, and a body that returns a refusal after buffering a create
+   * must persist nothing.
+   */
+  runTransaction: async (body: (transaction: any) => Promise<unknown>) => {
+    const buffered: Array<() => unknown> = []
+    const result = await body({
+      get: async (ref: any) => {
+        if (buffered.length) {
+          throw new Error('Firestore transactions cannot read after a write')
+        }
+        return typeof ref?.get === 'function'
+          ? ref.get()
+          : { docs: [], empty: true }
+      },
+      create: (ref: any, payload: unknown) => {
+        buffered.push(() => ref?.create?.(payload))
+      },
+      set: (ref: any, payload: unknown) => {
+        buffered.push(() => ref?.set?.(payload))
+      },
+    })
+    for (const write of buffered) write()
+    return result
+  },
   // The pointer write and the conversion it implies land together or not at
   // all, so the route batches them; the fake applies them in order on commit.
   batch: () => {
