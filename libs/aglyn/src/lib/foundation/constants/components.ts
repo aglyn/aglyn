@@ -46,6 +46,14 @@ export enum ComponentCategory {
  * "Marketplace" or the per-host "Your components") sort after the ranked
  * ones alphabetically, and Uncategorized/All always sink to the bottom.
  */
+/**
+ * Element-drawer group holding the host's own reusable components — the
+ * console registers one preset per definition under this label. Shared so
+ * the drawer's help affordance can find the group (AGL-2167) rather than
+ * re-typing the string in a second place.
+ */
+export const REUSABLE_COMPONENT_CATEGORY = 'Your components'
+
 export const COMPONENT_CATEGORY_ORDER: readonly string[] = [
   ComponentCategory.BLOCKS,
   ComponentCategory.LAYOUT,

@@ -16,7 +16,7 @@
  */
 
 import { mdiCodeBraces } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   IconButton,
@@ -31,6 +31,7 @@ import {
 import { type MouseEvent, useCallback, useMemo, useRef, useState } from 'react'
 
 import type { BindingOption } from '../contexts/binding-picker-context'
+import { besignerDocsUrl } from '../utils/docs-help'
 
 /**
  * Insert-token building blocks (AGL-583): the {x} input adornment that
@@ -182,7 +183,19 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
       // the inserted token), never to the adornment button.
       disableRestoreFocus
     >
-      <Box sx={{ px: 1.5, pb: 1 }}>
+      {/* One help affordance for BOTH bindings entry points (AGL-2167):
+          this menu is what the per-field {x} adornment opens and what the
+          element-level "Insert binding" button opens, so the explanation
+          of what a token is belongs here rather than duplicated at each. */}
+      <Box
+        sx={{
+          px: 1.5,
+          pb: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+        }}
+      >
         <TextField
           size="small"
           placeholder="Search data…"
@@ -191,6 +204,12 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
           onKeyDown={(event) => event.stopPropagation()}
           autoFocus
           fullWidth
+        />
+        <HelpTip
+          title="Bindings"
+          excerpt="Insert a variable or function token. It stays a rename-safe reference, and the canvas shows the resolved value until you toggle raw tokens."
+          href={besignerDocsUrl('bindings', '#insert-a-variable')}
+          sx={{ flexShrink: 0, fontSize: '0.9em' }}
         />
       </Box>
       {visibleOptions.length === 0 ? (

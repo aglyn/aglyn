@@ -1,0 +1,113 @@
+name: Auth domains drift
+
+# Fails when the LIVE Firebase Auth authorized-domain allowlist differs from
+# `cloud/firebase-auth-domains.json` (AGL-1940).
+#
+# The rules and index drift workflows exist because rules and indexes deploy
+# outside the git -> Vercel pipeline. This list is one step further out: it has
+# NO deploy step at all. It is edited in a console UI or through the Identity
+# Toolkit Admin API, and the only trace an edit leaves is the live value. So a
+# commit to the JSON is not evidence live changed, and live changing is not
+# evidence anyone approved it. Nothing but a scheduled comparison can see it.
+#
+# Four issues are the same drift, found by hand, months apart:
+#   AGL-1135  a `*.aglyn.com` wildcard
+#   AGL-1344  bare `vercel.app` — trusting every project on the platform
+#   AGL-1486  four dead `aglyn.io` OAuth redirect URIs
+#   AGL-1940  `aglyn-console.vercel.app`, a hostname in a namespace we do not
+#             control: Vercel hands out `<project>.vercel.app` by project NAME,
+#             our console project holds the suffixed `aglyn-console-aglyn`
+#             form, and the bare one answered byte-identically to a
+#             never-claimed control hostname.
+#
+# An authorized domain is what Firebase checks before letting a page run the
+# OAuth handshake. A stale entry on a hostname somebody else can claim is an
+# account-takeover vector. The list only ever grows by hand, and until this
+# workflow nobody re-read it — so it only ever grew.
+#
+# UNLIKE the rules and index checkers, there is no `origin/production`
+# baseline: the allowlist is not deployed from a promoted commit, so HEAD's
+# file is the approved state on every branch this runs on.
+#
+# Requires the SAME repo secrets rules-drift.yml already uses:
+#   gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'
+#   gh secret set FIREBASE_PRIVATE_KEY --body "$(jq -r .private_key service-account.json)"
+# Optional repo var FIREBASE_PROJECT_ID (the checker also reads `projectId`
+# from the JSON, which is the real default).
+#
+# When the secrets are ABSENT the guard step fails the job loudly. Never
+# convert that to a skip: a skipped check that renders green is the exact
+# silent drift this exists to prevent, and the checker exits 2 (cannot-check)
+# rather than 0 for the same reason.
+
+on:
+  push:
+    branches:
+      - main
+      - production
+    paths:
+      - cloud/firebase-auth-domains.json
+      - tools/scripts/check-authorized-domains.mjs
+      - tools/scripts/lib/authorized-domains.mjs
+      - tools/scripts/lib/authorized-domains.test.mjs
+      - .github/workflows/auth-domains-drift.yml
+  schedule:
+    # Daily, 06:41 UTC. Off the hour, and clear of rules-drift at 07:23.
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Same reasoning as rules-drift.yml: a cancelled push run leaves that commit
+  # unjudged, so pushes group by COMMIT and are never cancelled; the schedule
+  # and manual runs supersede.
+  group: auth-domains-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
+            echo "" >&2
+            echo "This job compares the LIVE Firebase Auth authorized-domain list" >&2
+            echo "against cloud/firebase-auth-domains.json. Without credentials it" >&2
+            echo "cannot see live, and passing anyway would be the silent-drift" >&2
+            echo "failure mode it exists to prevent (AGL-1940)." >&2
+            echo "Create the secrets once, from the service-account JSON:" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL --body '<client_email>'" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY --body \"\$(jq -r .private_key service-account.json)\"" >&2
+            exit 2
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # firebase-admin mints the service-account token — the same credential
+      # path the rules deploys and the rules drift checker use.
+      - run: npm ci
+
+      # Guard the guard, BEFORE the comparison. A comparator that reports
+      # "no drift" because it compared nothing is indistinguishable from
+      # convergence, which is the whole failure this workflow exists to stop.
+      - run: npm run test:authorized-domains
+
+      - name: Compare live against the repo
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: npm run check:authorized-domains
