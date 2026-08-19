@@ -179,7 +179,9 @@ for (const file of files) {
     continue
   }
   if (EXEMPT.some((pattern) => pattern.test(path))) continue
-  const found = findBrandLiterals(readFileSync(file, 'utf8'))
+  // The path selects the parse dialect — `.ts` and `.tsx` disagree about
+  // `<T>value`, so the detector must be told which it is holding.
+  const found = findBrandLiterals(readFileSync(file, 'utf8'), path)
   if (!found.length) continue
   counts[path] = found.length
   occurrences[path] = found

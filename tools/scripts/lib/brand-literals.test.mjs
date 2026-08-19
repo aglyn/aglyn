@@ -38,11 +38,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import {
-  compareToBaseline,
-  findBrandLiterals,
-  stripComments,
-} from './brand-literals.mjs'
+import { compareToBaseline, findBrandLiterals } from './brand-literals.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(HERE, '..', '..', '..')
@@ -152,19 +148,17 @@ test('an escaped quote does not end the string early', () => {
   assert.equal(findBrandLiterals("const a = 'it\\'s Aglyn'").length, 1)
 })
 
-test('stripComments preserves string contents verbatim', () => {
-  const source = "const a = 'keep // this'\n// drop this\nconst b = 1"
-  const stripped = stripComments(source)
-  assert.ok(stripped.includes("'keep // this'"))
-  assert.ok(!stripped.includes('drop this'))
-})
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Regex literals (AGL-2278). A `/[&<>"']/g` is an ordinary HTML escaper, and a
-// walker that reads its `"` as a string quote parses the rest of the file one
+// scanner that reads its `"` as a string quote parses the rest of the file one
 // quote out of phase — which both invents literals in comments and hides real
 // ones in code. Both directions get a test, because the second is the one that
 // would let the gate certify a file it can no longer read.
+//
+// AGL-2350 replaced the hand-rolled scanner with the TypeScript parser, which
+// cannot desynchronise this way at all. These stay — they pin the BEHAVIOUR,
+// not the implementation, and they are the cases that prove the replacement
+// kept every property the thing it replaced was fixed to have.
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('a quote inside a regex does not make a comment count as copy', () => {
@@ -226,6 +220,88 @@ test('reported line numbers survive a block comment', () => {
   assert.deepEqual(
     findBrandLiterals(source).map((one) => one.line),
     [5],
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JSX text (AGL-2350). Copy written as a JSX CHILD is not a quote token, so
+// the scanner that preceded the parser had never counted a word of it — and
+// JSX children are where a React codebase keeps most of its user-visible
+// copy. Three real leaks in `assist-panel.component.tsx` (the panel heading,
+// the empty-state paragraph, the proposal-card caption) sat inside a file the
+// baseline pinned at 5 while it held 8, and were found by eye.
+//
+// A false GREEN, like the two defects above it: the gate reported a file it
+// could not read as one it had checked.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('catches the brand written as JSX text', () => {
+  assert.equal(
+    findBrandLiterals('const a = <Typography>Aglyn Assist</Typography>').length,
+    1,
+  )
+})
+
+test('catches JSX text spread over its own line, which is how it is written', () => {
+  // The real shape: prettier puts the copy on a line of its own, surrounded by
+  // the whitespace that makes it a distinct JsxText node.
+  const source =
+    'const a = (\n' +
+    '  <Typography variant="h6">\n' +
+    '    Aglyn Assist\n' +
+    '  </Typography>\n' +
+    ')'
+  assert.deepEqual(
+    findBrandLiterals(source).map((one) => one.line),
+    [3],
+  )
+})
+
+test('catches a sentence of JSX text, counting each occurrence', () => {
+  const source = '<p>Ask anything about using Aglyn. Aglyn answers from the docs.</p>'
+  assert.equal(findBrandLiterals(source).length, 2)
+})
+
+test('catches the brand in a JSX attribute string', () => {
+  // Never a gap — an attribute value is an ordinary StringLiteral — but the
+  // gate now claims to cover JSX, so the claim gets a test.
+  assert.equal(findBrandLiterals('<img alt="Aglyn logo" />').length, 1)
+})
+
+test('catches the brand in an SVG title, which is an accessible name', () => {
+  assert.equal(findBrandLiterals('<svg><title>Aglyn Console</title></svg>').length, 1)
+})
+
+test('a JSX identifier is not JSX text', () => {
+  // `<AglynLogoMark />` names a component. The tag name is an identifier and
+  // must not be counted, or every logo call site becomes a row.
+  assert.equal(findBrandLiterals('const a = <AglynLogoMark />').length, 0)
+  assert.equal(findBrandLiterals('const a = <Aglyn.Logo />').length, 0)
+})
+
+test('a comment inside JSX is still not brand copy', () => {
+  assert.equal(
+    findBrandLiterals('<div>{/* Aglyn renders this */}<span>x</span></div>').length,
+    0,
+  )
+})
+
+test('a .ts file is parsed as TypeScript, not as TSX', () => {
+  // The two dialects disagree about `<T>value`: a type assertion in one, an
+  // unclosed JSX element in the other. Parsing `.ts` as `.tsx` would not
+  // throw — the parser recovers — it would quietly reshape the tree, which is
+  // the silent misreading this rewrite exists to end.
+  const source = "const a = <string>x\nconst b = 'Open Aglyn'"
+  assert.deepEqual(
+    findBrandLiterals(source, 'thing.ts').map((one) => one.line),
+    [2],
+  )
+})
+
+test('a .js file carrying JSX is still read as JSX', () => {
+  assert.equal(
+    findBrandLiterals('const a = <div>Aglyn</div>', 'thing.js').length,
+    1,
   )
 })
 

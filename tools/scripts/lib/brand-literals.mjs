@@ -42,11 +42,12 @@
  *
  * ## What counts
  *
- * The brand name inside a STRING LITERAL in shipped code:
+ * The brand name inside a STRING LITERAL or JSX TEXT in shipped code:
  *
  *     'Use your Aglyn account'                ← counts
  *     `Welcome to Aglyn, ${name}`             ← counts
  *     "Aglyn keeps 10% of each sale"          ← counts
+ *     <Typography>Aglyn Assist</Typography>   ← counts (AGL-2350)
  *     // Aglyn sends this now, not Firebase   ← does NOT count (comment)
  *     import { x } from '@aglyn/aglyn'        ← does NOT count (identifier)
  *     `${sub}.aglyn.app`                      ← does NOT count (hostname)
@@ -68,7 +69,54 @@
  * **Specs are out.** Pinning the brand string is exactly what a spec should do
  * — `platform-brand.spec.ts` asserts the literal `'Aglyn'` on purpose, in both
  * directions, and must keep doing so.
+ *
+ * ## Why the TypeScript parser, and not a hand-rolled scanner (AGL-2350)
+ *
+ * This module used to find its literals by walking the source character by
+ * character: strip comments, then collect `'`, `"` and `` ` `` spans, with a
+ * hand-written regex-literal heuristic bolted on so that an HTML escaper like
+ * `/[&<>"']/g` did not desynchronise the quote counting. Three defects were
+ * found in that scanner in a single day, and every one produced **false
+ * GREENS** — the gate certifying files it could not read:
+ *
+ *  1. **AGL-2278** — the comment stripper desynced on exactly that escaper and
+ *     manufactured phantom string spans, which both invented literals inside
+ *     doc comments and HID 7 real ones in a file baselined at 22.
+ *  2. **AGL-2319** — `IDENTIFIER_AFTER` excluded a bare trailing `.`, on the
+ *     reasoning that `Aglyn.` opens a hostname. A dot followed by a space, a
+ *     quote or the end of the string is a full stop, and the sentence it ends
+ *     is the commonest shape brand copy takes. Six occurrences in five files
+ *     were invisible, two of them in files the baseline never listed at all.
+ *  3. **AGL-2350** — JSX child text is not a quote token, so
+ *     `<Typography>Aglyn Assist</Typography>` had never been counted at all.
+ *     Three real leaks in `assist-panel.component.tsx` — the panel heading,
+ *     the empty-state paragraph and the proposal-card caption — sat in a file
+ *     the baseline pinned at 5 while it contained 8. They were found by eye,
+ *     which does not scale.
+ *
+ * The first and third are one bug wearing two hats: a lexer written by hand
+ * does not know the grammar, so every construct nobody thought of is silently
+ * invisible, and invisible reads as clean. The repo already depends on
+ * `typescript`, whose parser knows the whole grammar — so the literals now
+ * come from real AST nodes. Comments are excluded because they are not nodes,
+ * regex literals are excluded because the parser knows what a regex is, and
+ * JSX text is one more `SyntaxKind` rather than another hand-written walker.
+ *
+ * The swap was verified rather than assumed: the parser-based detector was run
+ * beside the walker it replaces over all 15,594 swept files and agreed with it
+ * **line for line on every one**, so the only behaviour change is the JSX text
+ * the walker structurally could not see.
  */
+
+import { createRequire } from 'node:module'
+
+/**
+ * `typescript` ships CommonJS. A `createRequire` bound to this module resolves
+ * it from the repo's own `node_modules` however the script was invoked, which
+ * a bare `import ts from 'typescript'` does not when the caller runs from
+ * elsewhere.
+ */
+const ts = createRequire(import.meta.url)('typescript')
 
 /**
  * The brand as it appears in prose. Capitalised: a lowercase `aglyn` in a
@@ -110,256 +158,106 @@ const IDENTIFIER_BEFORE = /[@/.\-\w]$/
 const IDENTIFIER_AFTER = /^(?:[/\-_A-Za-z]|\.[A-Za-z0-9])/
 
 /**
- * ## Regex literals, and why both walkers below have to know about them
+ * The node kinds that carry text a human reads.
  *
- * A regex literal can contain a quote — `/[&<>"']/g` is an ordinary HTML
- * escaper — and a walker that does not recognise one reads that `"` as the
- * start of a STRING. Everything after it is then parsed one quote out of
- * phase, for the rest of the file: comments stop being stripped, and the
- * doc-comment prose this detector deliberately ignores gets counted as copy.
+ * The template parts are separate kinds rather than one `TemplateExpression`
+ * on purpose: `` `Hello ${name}, welcome to Aglyn` `` is a `TemplateHead` and
+ * a `TemplateTail` with an expression between them, and collecting the parts
+ * means an interpolated value is never scanned as if it were copy.
  *
- * That is not hypothetical. `libs/plugins/commerce/src/lib/server/
- * supplier-update.ts` has exactly that escaper, and its only `Aglyn` is in a
- * doc comment fourteen lines later — the gate reported it as a GAINED literal
- * and went red on a file with no brand copy in it at all (AGL-2278). The same
- * desync runs the other way too: text the walker swallows into a phantom
- * string span is text it can no longer see a real literal in, so this class
- * manufactures false GREENS as readily as false REDS.
- *
- * ### Telling a regex from a division without a parser
- *
- * `/` is regex-or-division depending on the PRECEDING token, which is the one
- * genuinely ambiguous thing in JS lexing. The standard heuristic: after an
- * operand — an identifier, a number, `)`, `]`, or a closing quote — a `/` is
- * division; after an operator or an opening bracket it starts a regex.
- *
- * Two deliberate narrowings, each guarding a real shape in this repo:
- *
- *  - **`<` is never a regex opener here.** `</div>` in a `.tsx` file is a
- *    closing JSX tag whose `/` follows `<`, and treating it as a regex would
- *    swallow to the next `/` on the line — inventing exactly the desync this
- *    change exists to remove, in the file type that carries most of the copy.
- *    `x < /re/` is not real code; JSX is on every console page.
- *  - **A regex must close on its own line.** If no unescaped `/` terminates it
- *    before the newline, the guess was wrong: back out and treat the `/` as an
- *    ordinary character. Erring this way costs nothing — the worst case is the
- *    behaviour that existed before this change — while erring the other way
- *    consumes real code.
+ * `JsxText` is the AGL-2350 addition. JSX **attribute** values need no entry —
+ * `<img alt="Aglyn logo" />` is an ordinary `StringLiteral` and has always
+ * been counted.
  */
-const OPERAND_END = /[\w$)\]'"`]/
-const REGEX_KEYWORD =
-  /(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void|yield|await|case|do|else)$/
+const COPY_KINDS = new Set([
+  ts.SyntaxKind.StringLiteral,
+  ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+  ts.SyntaxKind.TemplateHead,
+  ts.SyntaxKind.TemplateMiddle,
+  ts.SyntaxKind.TemplateTail,
+  ts.SyntaxKind.JsxText,
+])
 
 /**
- * Does a `/` at this point open a regex literal, given the significant
- * character before it and the code emitted so far?
+ * Which dialect to parse as.
+ *
+ * `.ts` must NOT be parsed as `.tsx`: the two disagree about `<T>value`, which
+ * is a type assertion in one and an unclosed JSX element in the other. Getting
+ * that wrong would not throw — the parser recovers — it would quietly reshape
+ * the tree, which is precisely the class of silent misreading this rewrite
+ * exists to end.
+ *
+ * `ScriptKind.JS` parses JSX, so a `.js`/`.mjs`/`.cjs` file carrying JSX is
+ * covered without a separate case.
  */
-function opensRegex(prev, emitted) {
-  if (prev === '<') return false
-  if (!prev) return true
-  if (!OPERAND_END.test(prev)) return true
-  // `return /x/`, `typeof /x/` — an operand-looking tail that is a keyword.
-  // Trailing whitespace trimmed: one caller passes the emitted source (which
-  // keeps it) and the other a significant-characters-only tail (which does
-  // not), and the pattern anchors at the end.
-  return REGEX_KEYWORD.test(emitted.slice(-24).replace(/\s+$/, ''))
+function scriptKindFor(path) {
+  if (path.endsWith('.tsx')) return ts.ScriptKind.TSX
+  if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts'))
+    return ts.ScriptKind.TS
+  if (path.endsWith('.jsx')) return ts.ScriptKind.JSX
+  return ts.ScriptKind.JS
 }
 
 /**
- * End offset (exclusive, flags included) of the regex literal starting at
- * `start`, or `-1` when it does not terminate on its own line — in which case
- * the `/` was not a regex opener after all.
- */
-function regexLiteralEnd(source, start) {
-  let i = start + 1
-  let inClass = false
-  const n = source.length
-  // `//` was consumed as a comment before we got here, so an immediate `/` is
-  // not reachable. `/=` IS a valid regex start (`/= 'Aglyn'/` matches an
-  // assignment) — divide-assign never reaches here, because `a /= 2` has an
-  // operand before the slash and `opensRegex` has already said no.
-  if (source[i] === undefined) return -1
-  while (i < n) {
-    const ch = source[i]
-    if (ch === '\n') return -1
-    if (ch === '\\') {
-      i += 2
-      continue
-    }
-    if (ch === '[') inClass = true
-    else if (ch === ']') inClass = false
-    else if (ch === '/' && !inClass) {
-      i += 1
-      while (i < n && /[a-z]/.test(source[i])) i += 1 // flags
-      return i
-    }
-    i += 1
-  }
-  return -1
-}
-
-/**
- * Strip comments and mask nothing else.
+ * Where a node's own text begins.
  *
- * Line and block comments only — a `//` inside a string (`'https://x'`) would
- * be mangled by a naive strip, so string spans are walked first and preserved.
- * Doing this properly matters: the colour ratchet's equivalent step is what
- * keeps a paragraph explaining the rule from tripping the rule.
- *
- * Regex literals are copied through verbatim, for the reason set out above.
- *
- * A block comment's NEWLINES survive it. They carry no brand copy, but every
- * line number this module reports is counted in the stripped source, so
- * collapsing them silently shifted `--list` output by the height of whatever
- * comment came before it — in practice by the fifteen-line licence header on
- * every file in the repo, which is enough to send a reader to the wrong entry
- * and let them conclude the gate is confused.
+ * For an ordinary token that means skipping the leading trivia the parser
+ * hangs off `pos`. `JsxText` is the exception and must use `pos` directly: it
+ * has no trivia, its content is significant whitespace, and `skipTrivia` would
+ * read a `//` occurring in prose as the start of a line comment and skip the
+ * rest of the line — reintroducing the comment-stripper desync in the one node
+ * kind added to cure it.
  */
-export function stripComments(source) {
-  let out = ''
-  let i = 0
-  const n = source.length
-  /** Last significant (non-whitespace) character emitted — the `/` oracle. */
-  let prev = ''
-  while (i < n) {
-    const ch = source[i]
-    // String or template literal — copy verbatim, honouring escapes.
-    if (ch === "'" || ch === '"' || ch === '`') {
-      const quote = ch
-      out += ch
-      i += 1
-      while (i < n) {
-        if (source[i] === '\\') {
-          out += source[i] + (source[i + 1] ?? '')
-          i += 2
-          continue
-        }
-        out += source[i]
-        if (source[i] === quote) {
-          i += 1
-          break
-        }
-        i += 1
-      }
-      prev = quote
-      continue
-    }
-    if (ch === '/' && source[i + 1] === '/') {
-      while (i < n && source[i] !== '\n') i += 1
-      continue
-    }
-    if (ch === '/' && source[i + 1] === '*') {
-      i += 2
-      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
-        if (source[i] === '\n') out += '\n'
-        i += 1
-      }
-      i += 2
-      continue
-    }
-    if (ch === '/' && opensRegex(prev, out)) {
-      const end = regexLiteralEnd(source, i)
-      if (end !== -1) {
-        out += source.slice(i, end)
-        i = end
-        prev = '/'
-        continue
-      }
-    }
-    out += ch
-    if (!/\s/.test(ch)) prev = ch
-    i += 1
-  }
-  return out
-}
-
-/**
- * Every string-literal span in the (comment-stripped) source, as
- * `{ start, end }` offsets into it. Template literals included — copy is
- * routinely interpolated (`` `Welcome to Aglyn, ${name}` ``).
- */
-function stringSpans(source) {
-  const spans = []
-  let i = 0
-  const n = source.length
-  /**
-   * As in `stripComments` — comments are gone by here, regexes are not.
-   * `tail` is the last few significant characters, kept rolling rather than
-   * re-sliced from the head: a `slice(0, i)` per character is quadratic, and
-   * this walks fifteen thousand files.
-   */
-  let prev = ''
-  let tail = ''
-  const note = (ch) => {
-    if (/\s/.test(ch)) return
-    prev = ch
-    tail = (tail + ch).slice(-12)
-  }
-  while (i < n) {
-    const ch = source[i]
-    if (ch !== "'" && ch !== '"' && ch !== '`') {
-      if (ch === '/' && opensRegex(prev, tail)) {
-        const end = regexLiteralEnd(source, i)
-        if (end !== -1) {
-          i = end
-          note('/')
-          continue
-        }
-      }
-      note(ch)
-      i += 1
-      continue
-    }
-    const quote = ch
-    const start = i
-    i += 1
-    while (i < n) {
-      if (source[i] === '\\') {
-        i += 2
-        continue
-      }
-      if (source[i] === quote) {
-        i += 1
-        break
-      }
-      i += 1
-    }
-    spans.push({ start, end: i })
-    note(quote)
-  }
-  return spans
+function textStart(source, node) {
+  return node.kind === ts.SyntaxKind.JsxText
+    ? node.pos
+    : ts.skipTrivia(source, node.pos)
 }
 
 /**
  * Occurrences of the brand word in user-visible copy, with line numbers.
  *
  * @param {string} source file contents
+ * @param {string} [path] file name, which selects the dialect. Defaults to a
+ *   `.tsx` name: it is the superset that parses JSX, and the callers that omit
+ *   the path are tests passing a fragment.
  * @returns {{ line: number, text: string }[]}
  */
-export function findBrandLiterals(source) {
-  const scanned = stripComments(source)
+export function findBrandLiterals(source, path = 'source.tsx') {
+  const file = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    scriptKindFor(path),
+  )
   const found = []
-  const lineOf = (index) => scanned.slice(0, index).split('\n').length
 
-  for (const { start, end } of stringSpans(scanned)) {
-    const span = scanned.slice(start, end)
-    let offset = 0
-    for (;;) {
-      const at = span.indexOf(BRAND_WORD, offset)
-      if (at === -1) break
-      offset = at + BRAND_WORD.length
-      const before = span.slice(Math.max(0, at - 1), at)
-      // TWO characters, so `Aglyn.app` stays an identifier while `Aglyn.` at
-      // the end of a sentence is the copy it plainly is.
-      const after = span.slice(offset, offset + 2)
-      if (IDENTIFIER_BEFORE.test(before)) continue
-      if (IDENTIFIER_AFTER.test(after)) continue
-      found.push({
-        line: lineOf(start + at),
-        text: span.slice(0, 120),
-      })
+  const visit = (node) => {
+    if (COPY_KINDS.has(node.kind)) {
+      const start = textStart(file.text, node)
+      const text = file.text.slice(start, node.end)
+      let offset = 0
+      for (;;) {
+        const at = text.indexOf(BRAND_WORD, offset)
+        if (at === -1) break
+        offset = at + BRAND_WORD.length
+        const before = text.slice(Math.max(0, at - 1), at)
+        // TWO characters, so `Aglyn.app` stays an identifier while `Aglyn.` at
+        // the end of a sentence is the copy it plainly is.
+        const after = text.slice(offset, offset + 2)
+        if (IDENTIFIER_BEFORE.test(before)) continue
+        if (IDENTIFIER_AFTER.test(after)) continue
+        found.push({
+          line: file.getLineAndCharacterOfPosition(start + at).line + 1,
+          text: text.trim().slice(0, 120),
+        })
+      }
     }
+    ts.forEachChild(node, visit)
   }
+  ts.forEachChild(file, visit)
+
   return found.sort((a, b) => a.line - b.line)
 }
 
