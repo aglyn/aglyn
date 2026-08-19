@@ -846,6 +846,22 @@ export function expandCollectionEntries<
                 excerpt: entry.excerpt ?? '',
               }),
             ),
+            // How many entries the window above was drawn FROM (AGL-1516).
+            //
+            // The component has to tell the reader whether a miss means "not
+            // here" or "not anywhere", and it cannot work that out for
+            // itself: it sees `perPage`, but `perPage` is only one of three
+            // ways this block gets truncated. `entriesLimit` slices too, and
+            // so does COLLECTION_ENTRIES_MAX at 100. A block set to "latest 6
+            // posts" indexes 6 of 40 and, keyed off `perPage` alone, told the
+            // reader flatly that their post does not exist.
+            //
+            // Stamped as the COUNT rather than as a `truncated` verdict, so
+            // the component decides the wording and this stays a fact. It is
+            // the post-filter total — a category-filtered block searches its
+            // category, and "the rest of the collection" means the rest of
+            // what this block would otherwise show.
+            searchTotal: filtered.length,
           },
           nodes: childIds,
         }
