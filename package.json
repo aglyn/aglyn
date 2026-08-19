@@ -103,6 +103,7 @@
     "sync:next-tsconfigs": "node tools/scripts/sync-next-tsconfigs.mjs",
     "sync:next-tsconfigs:check": "node tools/scripts/sync-next-tsconfigs.mjs --check",
     "check:app-router-graph": "node tools/scripts/check-app-router-graph.mjs",
+    "check:provider-key-exposure": "node tools/scripts/check-provider-key-exposure.mjs",
     "release:prepare": "node tools/scripts/release-prepare.mjs",
     "release:tag": "node tools/scripts/release-tag.mjs",
     "test:release-version": "node --test tools/scripts/lib/release-version.test.mjs",
