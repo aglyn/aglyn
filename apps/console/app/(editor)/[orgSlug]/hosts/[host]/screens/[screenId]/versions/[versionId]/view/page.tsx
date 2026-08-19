@@ -115,6 +115,7 @@ import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 
 const whiteSpace = '--'
 
@@ -174,6 +175,18 @@ function ScreenDetails() {
   const { confirm } = useConfirmationContext()
   const { org, ready: orgReady } = useCurrentOrg()
   const logActivity = useHostActivityLogger(hostId)
+  /**
+   * The `author` host role edits content and may NOT publish it (AGL-2334).
+   * The rules have always refused it; this page invited the click anyway and
+   * answered with a raw `permission-denied`. Controls are DISABLED with a
+   * reason rather than hidden — a button that vanishes reads as a bug, and
+   * `canPublishHost` exists precisely "so the console can say no with a
+   * message".
+   */
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const publishBlock = hostRoleLoaded
+    ? 'Your role on this site can edit content but not publish it'
+    : 'Checking your access…'
 
   const screenRef = doc(firestore, 'hosts', hostId, 'screens', screenId)
   const {
@@ -1099,26 +1112,42 @@ function ScreenDetails() {
                         spacing={1}
                         sx={{ flexWrap: 'wrap', rowGap: 1 }}
                       >
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="primary"
-                          onClick={handlePublishRoute}
+                        <Tooltip title={canPublish ? '' : publishBlock}>
+                          <span>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              disabled={!canPublish}
+                              onClick={handlePublishRoute}
+                            >
+                              {isRoutePublished ? 'Update route' : 'Publish'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={canPublish ? '' : publishBlock}>
+                          <span>
+                            <Button
+                              size="small"
+                              disabled={!isRoutePublished || !canPublish}
+                              onClick={handleUnpublishRoute}
+                            >
+                              {'Unpublish'}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            canPublish
+                              ? 'Make a version live at a date/time'
+                              : publishBlock
+                          }
                         >
-                          {isRoutePublished ? 'Update route' : 'Publish'}
-                        </Button>
-                        <Button
-                          size="small"
-                          disabled={!isRoutePublished}
-                          onClick={handleUnpublishRoute}
-                        >
-                          {'Unpublish'}
-                        </Button>
-                        <Tooltip title="Make a version live at a date/time">
                           <span>
                             <Button
                               size="small"
                               color="primary"
+                              disabled={!canPublish}
                               onClick={openScheduler('publish')}
                               startIcon={
                                 <MdiIcon
@@ -1360,14 +1389,18 @@ function ScreenDetails() {
                                 align="right"
                                 sx={{ whiteSpace: 'nowrap' }}
                               >
-                                <Button
-                                  size="small"
-                                  color="primary"
-                                  disabled={isLive}
-                                  onClick={handlePublishVersion(version.$id)}
-                                >
-                                  {'Publish now'}
-                                </Button>
+                                <Tooltip title={canPublish ? '' : publishBlock}>
+                                  <span>
+                                    <Button
+                                      size="small"
+                                      color="primary"
+                                      disabled={isLive || !canPublish}
+                                      onClick={handlePublishVersion(version.$id)}
+                                    >
+                                      {'Publish now'}
+                                    </Button>
+                                  </span>
+                                </Tooltip>
                                 <Tooltip
                                   title={
                                     isLive

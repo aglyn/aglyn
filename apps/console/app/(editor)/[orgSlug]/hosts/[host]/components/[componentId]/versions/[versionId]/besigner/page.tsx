@@ -85,6 +85,7 @@ import usePresence from '../../../../../../../../../../hooks/use-presence'
 import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
+import useHostRole from '../../../../../../../../../../hooks/use-host-role'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -119,6 +120,13 @@ function ComponentBesignerPage(props) {
   const host = useHostSubdomain()
   const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
+  // The `author` host role edits content and may NOT publish it (AGL-2334).
+  // Disabled with a reason rather than hidden, so the console says no instead
+  // of the rules answering with a bare `permission-denied`.
+  const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
+  const publishBlock = hostRoleLoaded
+    ? 'Your role on this site can edit content but not publish it'
+    : 'Checking your access…'
   // Installed plugins as drawer entries and as the element panel's plugin
   // picker (AGL-1030). Registered on the screen editor since AGL-190 but
   // nowhere else, so a plugin could not be placed in a reusable component or a
@@ -497,11 +505,16 @@ function ComponentBesignerPage(props) {
                 // Saving records history; publishing is what live sites
                 // actually render (AGL-679).
                 id: 'center-nav-file-publish',
-                disabled: publishing || saveAvailable,
+                disabled: publishing || saveAvailable || !canPublish,
                 children:
                   publishedVersionId === versionId
                     ? 'Publish again'
                     : 'Publish to sites',
+                // A disabled menu item with no reason reads as a bug. The
+                // secondary line says which of the three reasons it is.
+                ...(canPublish
+                  ? {}
+                  : { ListItemTextProps: { secondary: publishBlock } }),
                 onClick: handlePublish,
               },
               {
