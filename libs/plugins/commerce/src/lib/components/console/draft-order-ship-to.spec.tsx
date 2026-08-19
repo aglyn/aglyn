@@ -83,8 +83,19 @@ jest.mock('firebase/firestore', () => ({
   limit: () => undefined,
 }))
 
+/** Settled, unentitled — the tiles stay off and the table still renders. */
+const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  /**
+   * AGL-2136 added the `commerceAnalytics`-gated money tiles to this card,
+   * so the module's closed-world mock has to carry `useOrgPlan` or the
+   * component throws before it renders a row. A STABLE object, not a fresh
+   * one per call: the real hook memoises, and handing back a new identity
+   * every render is how a mock turns a failing assertion into a hang.
+   */
+  useOrgPlan: () => ORG_PLAN,
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
   useFirestoreCollection: (build: () => string) => {
     const path = build()

@@ -25,8 +25,16 @@ import {
   computeOrderTotals,
   formatOrderNumber,
   liftLegacyOrder,
+  ORDER_CHANNEL_LABELS,
+  ORDER_STATUS_COLOR,
+  ORDER_STATUS_LABELS,
+  orderChannelLabel,
   orderContainsProduct,
+  orderCreatedAtMs,
+  orderNetCents,
+  summarizeOrderWindow,
 } from './commerce-orders'
+import type { OrderChannel, OrderStatus } from './commerce-orders'
 
 describe('canTransitionOrder', () => {
   it('allows the documented lifecycle and blocks the rest', () => {
@@ -739,5 +747,162 @@ describe('appendOrderEvent', () => {
       detail: 'Sent via UPS',
     })
     expect(order.timeline).toHaveLength(1)
+  })
+})
+
+/**
+ * AGL-2136 — the advertised orders screen. `/product/commerce`'s deep-dive
+ * mockup shows coloured status pills, a Channel column and three money
+ * tiles carrying a period-over-period delta; none of the three existed.
+ */
+describe('order status + channel presentation', () => {
+  const EVERY_STATUS: OrderStatus[] = [
+    'pending',
+    'paid',
+    'partially_fulfilled',
+    'fulfilled',
+    'delivered',
+    'cancelled',
+    'refunded',
+  ]
+  const EVERY_CHANNEL: OrderChannel[] = [
+    'online',
+    'pos',
+    'draft',
+    'subscription',
+  ]
+
+  it('labels and colours EVERY status — a new one cannot render blank', () => {
+    for (const status of EVERY_STATUS) {
+      expect(ORDER_STATUS_LABELS[status]).toBeTruthy()
+      expect(ORDER_STATUS_COLOR[status]).toBeTruthy()
+    }
+    expect(Object.keys(ORDER_STATUS_LABELS).sort()).toEqual(
+      [...EVERY_STATUS].sort(),
+    )
+  })
+
+  it('gives the three advertised statuses three DIFFERENT colours', () => {
+    // The defect this replaces was not a missing colour, it was one colour
+    // for all seven — so sameness is the thing to assert against.
+    const advertised = [
+      ORDER_STATUS_COLOR.paid,
+      ORDER_STATUS_COLOR.fulfilled,
+      ORDER_STATUS_COLOR.refunded,
+    ]
+    expect(new Set(advertised).size).toBe(3)
+    expect(ORDER_STATUS_COLOR.refunded).toBe('error')
+  })
+
+  it('labels every channel, and tolerates an unknown one', () => {
+    for (const channel of EVERY_CHANNEL) {
+      expect(ORDER_CHANNEL_LABELS[channel]).toBeTruthy()
+    }
+    expect(orderChannelLabel('pos')).toBe('POS')
+    // A legacy row has no channel at all; the column must not render blank.
+    expect(orderChannelLabel(undefined)).toBe('Online')
+    expect(orderChannelLabel('kiosk')).toBe('kiosk')
+  })
+})
+
+describe('orderNetCents / orderCreatedAtMs', () => {
+  it('subtracts refunds from the charged total', () => {
+    expect(
+      orderNetCents({
+        totals: { totalCents: 5000 },
+        refundedCents: 1500,
+      } as never),
+    ).toBe(3500)
+  })
+
+  it('falls back to the legacy flat amount', () => {
+    expect(orderNetCents({ amountCents: 900 } as never)).toBe(900)
+  })
+
+  it('reads a timestamp from every writer shape', () => {
+    expect(orderCreatedAtMs({ createdAtMs: 1700 } as never)).toBe(1700)
+    expect(orderCreatedAtMs({ createdAt: { seconds: 2 } } as never)).toBe(2000)
+    expect(
+      orderCreatedAtMs({
+        createdAt: { toDate: () => new Date(4000) },
+      } as never),
+    ).toBe(4000)
+    // A `serverTimestamp` that has not landed yet reads back as nothing.
+    expect(orderCreatedAtMs({} as never)).toBe(0)
+  })
+})
+
+describe('summarizeOrderWindow', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const NOW = 1_000 * DAY
+  const order = (agoDays: number, cents: number, extra: object = {}) => ({
+    status: 'paid' as const,
+    createdAtMs: NOW - agoDays * DAY,
+    totals: { totalCents: cents },
+    lineItems: [{ productId: 'p', name: 'P', quantity: 1, unitAmountCents: cents }],
+    ...extra,
+  })
+
+  it('splits current and prior 30-day windows and computes the delta', () => {
+    const summary = summarizeOrderWindow(
+      [
+        order(1, 6000),
+        order(10, 4000),
+        // Prior window: 31..60 days ago.
+        order(35, 5000),
+        // Older than both windows — must not reach either.
+        order(120, 999_999),
+      ],
+      { nowMs: NOW },
+    )
+    expect(summary.revenueCents).toBe(10_000)
+    expect(summary.orders).toBe(2)
+    expect(summary.aovCents).toBe(5000)
+    expect(summary.revenueDeltaPct).toBe(100)
+    expect(summary.ordersDeltaPct).toBe(100)
+    // AOV went 5000 -> 5000: flat, and flat is 0, never null.
+    expect(summary.aovDeltaPct).toBe(0)
+  })
+
+  it('returns null rather than "+100%" when the prior window is empty', () => {
+    const summary = summarizeOrderWindow([order(2, 2500)], { nowMs: NOW })
+    expect(summary.revenueCents).toBe(2500)
+    expect(summary.revenueDeltaPct).toBeNull()
+    expect(summary.ordersDeltaPct).toBeNull()
+    expect(summary.aovDeltaPct).toBeNull()
+  })
+
+  it('excludes pending and cancelled orders from both windows', () => {
+    const summary = summarizeOrderWindow(
+      [
+        order(1, 1000, { status: 'pending' }),
+        order(2, 1000, { status: 'cancelled' }),
+        order(40, 1000, { status: 'pending' }),
+      ],
+      { nowMs: NOW },
+    )
+    expect(summary.revenueCents).toBe(0)
+    expect(summary.orders).toBe(0)
+    expect(summary.revenueDeltaPct).toBeNull()
+  })
+
+  it('pushes the delta DOWN when an order in the window was refunded', () => {
+    const withRefund = summarizeOrderWindow(
+      [order(1, 10_000, { refundedCents: 6000 }), order(40, 10_000)],
+      { nowMs: NOW },
+    )
+    expect(withRefund.revenueCents).toBe(4000)
+    expect(withRefund.revenueDeltaPct).toBe(-60)
+  })
+
+  it('honours a shorter window', () => {
+    const summary = summarizeOrderWindow(
+      [order(1, 1000), order(10, 5000)],
+      { nowMs: NOW, days: 7 },
+    )
+    // The 10-day-old order lands in the PRIOR 7-day window (7..14 days).
+    expect(summary.revenueCents).toBe(1000)
+    expect(summary.orders).toBe(1)
+    expect(summary.revenueDeltaPct).toBe(-80)
   })
 })

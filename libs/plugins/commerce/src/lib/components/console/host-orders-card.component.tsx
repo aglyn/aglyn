@@ -16,10 +16,10 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { checkEntitlement } from '@aglyn/aglyn'
 import {
   Alert,
   AlertTitle,
@@ -31,14 +31,24 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useOrgPlan,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import CommerceStatTile from './commerce-stat-tile.component'
 import OrderDetailDialog, {
   DISPUTE_COLOR,
 } from './order-detail-dialog.component'
@@ -72,6 +82,18 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     }
     return map
   }, [productDocs])
+
+  /**
+   * The money tiles are the `commerceAnalytics` surface (AGL-1938,
+   * AGL-2056), and this is the third place they appear. Rendering them
+   * ungated here would undo both of those passes and hand a Starter org
+   * the Pro figures one tab away from the upgrade prompt that refuses
+   * them. The TABLE below is not gated — a list of your own orders is not
+   * a paid feature.
+   */
+  const { org, ready: orgReady } = useOrgPlan(hostId)
+  const showStats =
+    orgReady && checkEntitlement(org as never, 'commerceAnalytics')
 
   // Sorted client-side: orderBy would drop docs missing createdAt.
   const orders = [...(orderDocs ?? [])].sort(
@@ -165,6 +187,18 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       ),
     [orders],
   )
+  /**
+   * 30-day money summary with the prior 30 days behind it (AGL-2136). Over
+   * the LOADED window, like every other figure on this card — the query is
+   * `limit(200)`, so a store past 200 orders in 60 days is summarising a
+   * slice. That is the same bound the analytics card has always had, and
+   * making this one silently different would be worse than sharing it.
+   */
+  const summary = useMemo(
+    () => CommerceModel.summarizeOrderWindow(orders, { nowMs: Date.now() }),
+    [orders],
+  )
+
   const handleExportCsv = useCallback(() => {
     // The rows themselves are built by the pure model helper (AGL-1747) so the
     // column-by-column arithmetic is unit-testable without a Firestore mock.
@@ -324,6 +358,32 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         </Stack>
       ) : (
         <Stack spacing={1}>
+          {showStats ? (
+            <Stack
+              direction="row"
+              spacing={3}
+              sx={{ flexWrap: 'wrap', rowGap: 1 }}
+            >
+              <CommerceStatTile
+                label="Revenue · 30d"
+                value={`$${(summary.revenueCents / 100).toFixed(2)}`}
+                deltaPct={summary.revenueDeltaPct}
+                deltaCaption="vs the previous 30 days"
+              />
+              <CommerceStatTile
+                label="Orders · 30d"
+                value={String(summary.orders)}
+                deltaPct={summary.ordersDeltaPct}
+                deltaCaption="vs the previous 30 days"
+              />
+              <CommerceStatTile
+                label="Avg order value"
+                value={`$${(summary.aovCents / 100).toFixed(2)}`}
+                deltaPct={summary.aovDeltaPct}
+                deltaCaption="vs the previous 30 days"
+              />
+            </Stack>
+          ) : null}
           {openDisputes.count > 0 ? (
             <Alert
               severity={openDisputes.overdue ? 'error' : 'warning'}
@@ -390,13 +450,15 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               sx={{ minWidth: 130 }}
             >
               <MenuItem value="">{'All statuses'}</MenuItem>
-              {['pending', 'paid', 'fulfilled', 'delivered', 'cancelled', 'refunded'].map(
-                (status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ),
-              )}
+              {(
+                Object.keys(
+                  CommerceModel.ORDER_STATUS_LABELS,
+                ) as (keyof typeof CommerceModel.ORDER_STATUS_LABELS)[]
+              ).map((status) => (
+                <MenuItem key={status} value={status}>
+                  {CommerceModel.ORDER_STATUS_LABELS[status]}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField
               select
@@ -407,10 +469,15 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               sx={{ minWidth: 120 }}
             >
               <MenuItem value="">{'All channels'}</MenuItem>
-              <MenuItem value="online">{'Online'}</MenuItem>
-              <MenuItem value="pos">{'POS'}</MenuItem>
-              <MenuItem value="draft">{'Draft'}</MenuItem>
-              <MenuItem value="subscription">{'Subscription'}</MenuItem>
+              {(
+                Object.keys(
+                  CommerceModel.ORDER_CHANNEL_LABELS,
+                ) as (keyof typeof CommerceModel.ORDER_CHANNEL_LABELS)[]
+              ).map((channel) => (
+                <MenuItem key={channel} value={channel}>
+                  {CommerceModel.ORDER_CHANNEL_LABELS[channel]}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField
               select
@@ -436,70 +503,143 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               {'Draft order'}
             </Button>
           </Stack>
-          {visibleOrders.map((order: any) => {
-            const lifted = CommerceModel.liftLegacyOrder(order)
-            // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the
-            // status chip on this row cannot tell the two apart either.
-            const dispute = CommerceModel.describeOrderDispute(lifted)
-            return (
-              <Stack
-                key={order.$id}
-                spacing={0}
-                onClick={() => setSelectedId(order.$id)}
-                sx={{ cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
-              >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                    {`${CommerceModel.formatOrderNumber(lifted, order.$id)} · ` +
-                      (lifted.lineItems?.[0]?.name ??
-                        productNames[order.productId] ??
-                        order.productId ??
-                        '') +
-                      ` · $${(((lifted.totals?.totalCents ?? order.amountCents) ?? 0) / 100).toFixed(2)}`}
-                  </Typography>
-                  {dispute ? (
-                    <Tooltip title={dispute.detail}>
-                      <Chip
-                        label={dispute.label}
-                        size="small"
-                        color={DISPUTE_COLOR[dispute.tone]}
-                        variant="filled"
-                      />
-                    </Tooltip>
-                  ) : null}
-                  <Chip
-                    label={lifted.status.replace('_', ' ')}
-                    size="small"
-                    variant="outlined"
-                  />
-                </Stack>
-                <Typography variant="caption" color="text.secondary">
-                  {(order.customerEmail ? `${order.customerEmail} · ` : '') +
-                    (order.createdAt?.toDate?.()
-                      ? order.createdAt.toDate().toLocaleString()
-                      : '')}
-                </Typography>
+          <Table size="small" aria-label="Orders">
+            <TableHead>
+              <TableRow>
                 {/*
-                  The deadline on the row itself, while the case is open —
-                  the one fact on this screen that expires.
+                  The six columns `/product/commerce` advertises, in the
+                  order the mockup shows them. They were previously one
+                  `Typography` reading `#1042 · Product · $88.00` plus a
+                  caption of `email · date` — every fact present, none of
+                  them scannable, and Channel not present at all.
                  */}
-                {dispute?.evidenceDaysLeft !== undefined ? (
-                  <Typography
-                    variant="caption"
-                    color={
-                      dispute.evidenceDaysLeft < 0 ? 'error' : 'warning.main'
-                    }
+                <TableCell>{'Order'}</TableCell>
+                <TableCell>{'Customer'}</TableCell>
+                <TableCell>{'Channel'}</TableCell>
+                <TableCell align="right">{'Total'}</TableCell>
+                <TableCell>{'Status'}</TableCell>
+                <TableCell>{'Date'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visibleOrders.map((order: any) => {
+                const lifted = CommerceModel.liftLegacyOrder(order)
+                // A lost chargeback leaves `status: 'refunded'` (AGL-1787),
+                // so the status pill on this row cannot tell the two apart
+                // either — which is why the dispute chip sits beside it
+                // rather than being folded into the status.
+                const dispute = CommerceModel.describeOrderDispute(lifted)
+                const createdAt = order.createdAt?.toDate?.()
+                const itemName =
+                  lifted.lineItems?.[0]?.name ??
+                  productNames[order.productId] ??
+                  order.productId ??
+                  ''
+                const extraItems = Math.max(
+                  0,
+                  (lifted.lineItems?.length ?? 0) - 1,
+                )
+                return (
+                  <TableRow
+                    key={order.$id}
+                    hover
+                    onClick={() => setSelectedId(order.$id)}
+                    sx={{ cursor: 'pointer' }}
                   >
-                    {dispute.evidenceDaysLeft < 0
-                      ? 'Evidence deadline passed'
-                      : `Evidence due in ${dispute.evidenceDaysLeft} day${
-                          dispute.evidenceDaysLeft === 1 ? '' : 's'
-                        }`}
-                  </Typography>
-                ) : null}
-              </Stack>
-            )
-          })}
+                    <TableCell>
+                      <Typography variant="body2">
+                        {CommerceModel.formatOrderNumber(lifted, order.$id)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {extraItems
+                          ? `${itemName} +${extraItems} more`
+                          : itemName}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" noWrap>
+                        {order.customerEmail || '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {CommerceModel.orderChannelLabel(lifted.channel)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="body2">
+                        {`$${(CommerceModel.orderNetCents(lifted) / 100).toFixed(2)}`}
+                      </Typography>
+                      {order.refundedCents ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {`$${((lifted.totals?.totalCents ?? order.amountCents ?? 0) / 100).toFixed(2)} less refunds`}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{ alignItems: 'center' }}
+                      >
+                        <Chip
+                          label={
+                            CommerceModel.ORDER_STATUS_LABELS[lifted.status] ??
+                            lifted.status
+                          }
+                          size="small"
+                          color={
+                            CommerceModel.ORDER_STATUS_COLOR[lifted.status] ??
+                            'default'
+                          }
+                          variant="outlined"
+                        />
+                        {dispute ? (
+                          <Tooltip title={dispute.detail}>
+                            <Chip
+                              label={dispute.label}
+                              size="small"
+                              color={DISPUTE_COLOR[dispute.tone]}
+                              variant="filled"
+                            />
+                          </Tooltip>
+                        ) : null}
+                      </Stack>
+                      {/*
+                        The deadline on the row itself, while the case is
+                        open — the one fact on this screen that expires.
+                       */}
+                      {dispute?.evidenceDaysLeft !== undefined ? (
+                        <Typography
+                          variant="caption"
+                          component="div"
+                          color={
+                            dispute.evidenceDaysLeft < 0
+                              ? 'error'
+                              : 'warning.main'
+                          }
+                        >
+                          {dispute.evidenceDaysLeft < 0
+                            ? 'Evidence deadline passed'
+                            : `Evidence due in ${dispute.evidenceDaysLeft} day${
+                                dispute.evidenceDaysLeft === 1 ? '' : 's'
+                              }`}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" noWrap>
+                        {createdAt ? createdAt.toLocaleDateString() : '—'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {createdAt ? createdAt.toLocaleTimeString() : ''}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         </Stack>
       )}
       {selectedOrder ? (

@@ -36,8 +36,19 @@ import HostOrdersCard from './host-orders-card.component'
 /** Swapped per case, keyed by collection name. */
 let orderDocs: Array<Record<string, unknown>> = []
 
+/** Settled, unentitled — the tiles stay off and the table still renders. */
+const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
+  /**
+   * AGL-2136 added the `commerceAnalytics`-gated money tiles to this card,
+   * so the module's closed-world mock has to carry `useOrgPlan` or the
+   * component throws before it renders a row. A STABLE object, not a fresh
+   * one per call: the real hook memoises, and handing back a new identity
+   * every render is how a mock turns a failing assertion into a hang.
+   */
+  useOrgPlan: () => ORG_PLAN,
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: jest.fn() } }),
   useFirestoreCollection: (build: () => { __collection?: string }) => ({
     data: build()?.__collection === 'orders' ? orderDocs : [],
@@ -119,10 +130,16 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-/** Product names on the rows, in list order. */
+/**
+ * Product names on the rows, in list order.
+ *
+ * AGL-2136 turned the row from one `Typography` reading `#1042 · Mug ·
+ * $62.00` into the six advertised table cells, so the name is now its own
+ * text node rather than a fragment between two middots.
+ */
 const rowNames = () =>
   ['Mug', 'Kettle', 'Teapot', 'Saucer'].filter((name) =>
-    screen.queryByText(new RegExp(`· ${name} ·`)),
+    screen.queryByText(name),
   )
 
 describe('the orders list surfaces an open dispute (AGL-1796)', () => {
@@ -178,7 +195,8 @@ describe('the orders list surfaces an open dispute (AGL-1796)', () => {
     ]
     render(<HostOrdersCard hostId="host-1" />)
     fireEvent.mouseDown(screen.getByLabelText('Status'))
-    fireEvent.click(within(screen.getByRole('listbox')).getByText('delivered'))
+    // The status select now carries display labels, not raw enum values.
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Delivered'))
     expect(rowNames()).toEqual(['Kettle'])
     expect(screen.getByRole('alert').textContent).toContain('in 3 days')
   })
@@ -253,6 +271,10 @@ describe('the orders list surfaces an open dispute (AGL-1796)', () => {
       }),
     ]
     render(<HostOrdersCard hostId="host-1" />)
-    expect(screen.getByText('refunded')).toBeTruthy()
+    // The status pill now reads its display label (AGL-2136), and — the
+    // point of this test — still says REFUNDED beside the chargeback badge
+    // rather than being rewritten by it.
+    expect(screen.getByText('Refunded')).toBeTruthy()
+    expect(screen.getByText('Charged back')).toBeTruthy()
   })
 })

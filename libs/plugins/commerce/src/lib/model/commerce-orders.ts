@@ -848,6 +848,172 @@ function usd(cents: number): string {
 }
 
 /**
+ * Display labels for {@link OrderStatus}, and the MUI chip colour each one
+ * carries (AGL-2136). The orders screen advertised on `/product/commerce`
+ * shows the status as a COLOURED pill — `Paid`, `Fulfilled`, `Refunded` in
+ * three different colours — where the console rendered every status as the
+ * same default outlined chip, so the one column a merchant scans first
+ * carried no signal at all.
+ *
+ * Kept in the model rather than in the card because three surfaces render a
+ * status (the orders list, the detail dialog and the dashboard glance
+ * widget) and a colour that means "refunded" on one of them must not mean
+ * something else on the next.
+ */
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  partially_fulfilled: 'Partly fulfilled',
+  fulfilled: 'Fulfilled',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
+}
+
+/**
+ * Chip colour per status. `pending` is deliberately `default` rather than
+ * `warning`: an unpaid order is not a problem, it is simply not money yet,
+ * and reserving the alarming colours for `cancelled`/`refunded` is what
+ * makes them readable at a glance.
+ */
+export const ORDER_STATUS_COLOR: Record<
+  OrderStatus,
+  'default' | 'success' | 'info' | 'warning' | 'error'
+> = {
+  pending: 'default',
+  paid: 'success',
+  partially_fulfilled: 'warning',
+  fulfilled: 'info',
+  delivered: 'info',
+  cancelled: 'default',
+  refunded: 'error',
+}
+
+/** Display labels for {@link OrderChannel}. */
+export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
+  online: 'Online',
+  pos: 'POS',
+  draft: 'Draft',
+  subscription: 'Subscription',
+}
+
+/** Human label for a channel, tolerating a legacy/unknown value. */
+export function orderChannelLabel(channel: string | undefined): string {
+  return ORDER_CHANNEL_LABELS[(channel ?? 'online') as OrderChannel] ?? channel ?? 'Online'
+}
+
+/**
+ * Net cents an order actually earned: the charged total less anything
+ * refunded. The three commerce surfaces each had their own inline copy of
+ * this expression; a refunded order counted as revenue on whichever one
+ * was written first.
+ */
+export function orderNetCents(order: Partial<HostOrder>): number {
+  const gross = Number(
+    (order as { totals?: { totalCents?: number } }).totals?.totalCents ??
+      (order as { amountCents?: number }).amountCents ??
+      0,
+  )
+  return gross - Number((order as { refundedCents?: number }).refundedCents ?? 0)
+}
+
+/** Milliseconds an order was created at, across every writer's field shape. */
+export function orderCreatedAtMs(order: Partial<HostOrder> & {
+  createdAtMs?: number
+  createdAt?: { seconds?: number; toDate?: () => Date }
+}): number {
+  if (typeof order.createdAtMs === 'number') return order.createdAtMs
+  const seconds = order.createdAt?.seconds
+  if (typeof seconds === 'number') return seconds * 1000
+  const date = order.createdAt?.toDate?.()
+  return date ? date.getTime() : 0
+}
+
+/** One window's totals, plus how it moved against the window before it. */
+export interface OrderWindowSummary {
+  /** Net revenue in cents over the window. */
+  revenueCents: number
+  /** Orders counted in the window. */
+  orders: number
+  /** Average order value in cents, 0 when the window is empty. */
+  aovCents: number
+  /**
+   * Percentage change vs the immediately preceding window of the same
+   * length, rounded to one decimal. `null` when the prior window is EMPTY —
+   * "+100%" against zero is not a growth rate, it is a first sale, and the
+   * tile must say nothing rather than say something false.
+   */
+  revenueDeltaPct: number | null
+  ordersDeltaPct: number | null
+  aovDeltaPct: number | null
+}
+
+const ORDER_WINDOW_DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Percentage change from `previous` to `current`, or `null` when there is
+ * no baseline to divide by.
+ */
+function deltaPct(current: number, previous: number): number | null {
+  if (!previous) return null
+  return Math.round(((current - previous) / previous) * 1000) / 10
+}
+
+/**
+ * Summarises a window of orders and the window before it (AGL-2136).
+ *
+ * Every commerce mockup we advertise shows the money tiles carrying a
+ * period-over-period delta — `Revenue $26,540 +8.1%` — and the product had
+ * no prior-window computation anywhere in the repo, so no surface could
+ * have rendered one.
+ *
+ * `pending` and `cancelled` orders are excluded, matching the analytics
+ * card: neither is money. Refunds are subtracted rather than dropped, so a
+ * refund inside the window pushes the delta DOWN, which is the whole point
+ * of showing it.
+ */
+export function summarizeOrderWindow(
+  orders: readonly (Partial<HostOrder> & {
+    createdAtMs?: number
+    createdAt?: { seconds?: number; toDate?: () => Date }
+  })[],
+  options: { nowMs: number; days?: number } ,
+): OrderWindowSummary {
+  const days = options.days ?? 30
+  const spanMs = days * ORDER_WINDOW_DAY_MS
+  const { nowMs } = options
+  let revenueCents = 0
+  let count = 0
+  let priorRevenueCents = 0
+  let priorCount = 0
+  for (const order of orders) {
+    const lifted = liftLegacyOrder(order)
+    if (lifted.status === 'pending' || lifted.status === 'cancelled') continue
+    const age = nowMs - orderCreatedAtMs(order)
+    if (age < 0) continue
+    if (age < spanMs) {
+      revenueCents += orderNetCents(order)
+      count += 1
+    } else if (age < spanMs * 2) {
+      priorRevenueCents += orderNetCents(order)
+      priorCount += 1
+    }
+  }
+  const aovCents = count ? Math.round(revenueCents / count) : 0
+  const priorAovCents = priorCount
+    ? Math.round(priorRevenueCents / priorCount)
+    : 0
+  return {
+    revenueCents,
+    orders: count,
+    aovCents,
+    revenueDeltaPct: deltaPct(revenueCents, priorRevenueCents),
+    ordersDeltaPct: deltaPct(count, priorCount),
+    aovDeltaPct: deltaPct(aovCents, priorAovCents),
+  }
+}
+
+/**
  * Header for {@link buildOrdersCsv}. The original seven columns (AGL-96) keep
  * their names AND their positions, so a saved import mapping — by name or by
  * index — still resolves; the four reconciliation columns are appended.
