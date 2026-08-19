@@ -57,7 +57,7 @@ site.
 | `width`, `height` | integer \| null | Pixel dimensions. `null` for non-images and for images we couldn't read — never assume an image has them. |
 | `alt` | string \| null | Alt text. Worth syncing if you're auditing accessibility. |
 | `description` | string \| null | Free text set in the library. |
-| `tags` | array | Library tags. |
+| `tags` | array | Library tags. Stored **lower-cased and de-duplicated**, so match them in lower case — there is no `Hero` to find. |
 | `folderId` | string \| null | The folder it's in; `null` at the library root. |
 | `url` | string \| null | The **durable download URL**. Always present. See below. |
 | `cdnUrl` | string \| null | The CDN URL, **or `null`**. See below. |
@@ -93,6 +93,33 @@ if (!src) {
 
 Private files are reachable only through a short-lived signed link the console mints;
 there is no API endpoint that signs one.
+
+### The response does not tell you which variants exist {#no-variants}
+
+Aglyn generates WebP variants at **320**, **640** and **1280** pixels wide when an
+image is uploaded, and `cdnUrl` accepts a `?w=` parameter to select one:
+
+```
+https://app.aglyn.com/api/media/cdn/org:org_abc123/m_9fK2xQ?w=640
+```
+
+**The media object carries no `variants` field**, so the API cannot tell you which of
+those widths a particular file actually has. That is a known limitation of this
+resource, not something to derive from another field: `contentType` and `width` say
+what the original is, not what was generated from it. Only the console's media library
+— the delivery line in a file's **Details** drawer — reports the per-asset truth.
+
+Two consequences worth designing around:
+
+- **A `?w=` width the file doesn't have is not an error.** The CDN serves the original
+  bytes instead of resizing or 404ing. So a `srcset` built from all three widths always
+  renders; the cost of guessing wrong is full-size bytes over a mobile connection, not
+  a broken image.
+- **Non-images never have variants.** An SVG, a PDF, a video or a document is served as
+  uploaded whatever `?w=` says.
+
+Nothing about `?w=` applies when `cdnUrl` is `null` — there is no CDN address to add a
+parameter to.
 
 ## Endpoints
 
@@ -198,4 +225,6 @@ own files.
 
 - [Products](products.md) — `mediaUrls` point at these files.
 - [Media library](/content-and-data/media/overview) — uploading and organizing.
+- [Variant widths](/content-and-data/media/overview#variant-widths) — what `?w=` can ask
+  for, and what a file's own delivery line says it has.
 - [Conventions](../conventions.md) — pagination, ordering, errors.

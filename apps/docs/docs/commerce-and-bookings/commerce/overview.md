@@ -60,7 +60,8 @@ Every paid checkout becomes an order with a sequential number, line-item
 snapshots, totals, and a timeline:
 
 - **Statuses**: pending → paid → fulfilled (or partially) → delivered, with
-  cancel/refund exits guarded by a status machine.
+  cancel/refund exits guarded by a status machine. The seven of them, and the
+  labels the console shows, are in [Statuses and channels](#order-statuses).
 - **Fulfill with tracking**, print **packing slips**, add internal notes.
 - **Refunds** (full or partial) go through Stripe and reverse the platform
   fee; site-admin only.
@@ -76,6 +77,108 @@ snapshots, totals, and a timeline:
 - **Draft orders**: build an order in the console and send the buyer a
   payment link (Shopify parity). Requires an active plan with commerce — see
   the note below.
+
+### The Orders screen {#orders-screen}
+
+Open your site's **Products** hub and choose the **Orders** tab. Before your first
+sale the tab is an invitation rather than a table: it explains where orders come from
+and offers **Draft order**, so you can invoice a customer you already have. The
+filters and **Export CSV** appear once there are rows to filter.
+
+Above the table sit five filters and two buttons:
+
+| Control | Choices |
+| --- | --- |
+| **Product** | **All products**, or one product — matched against the order's line items, so carts, POS and draft orders are found too. |
+| **Period** | **All time**, **Last 7 days**, **Last 30 days**. |
+| **Status** | **All statuses**, or one of the seven below. |
+| **Channel** | **All channels**, or one of the four below. |
+| **Disputes** | **All orders**, **Open dispute**, **Charged back**. |
+| **Export CSV** | Writes the rows currently shown — the filters apply. |
+| **Draft order** | Builds an order by hand and sends the buyer a payment link. |
+
+**Disputes is its own filter, not a status.** An open dispute sits on an order that is
+still **Paid**, and a lost one sits on **Refunded** beside every ordinary refund, so
+folding either into Status would make that control select the wrong rows.
+
+The table has six columns:
+
+| Column | What the cell holds |
+| --- | --- |
+| **Order** | The order number, with the first line item underneath — `Blue Mug +2 more` when there is more than one. |
+| **Customer** | The buyer's email, or `—` when there isn't one. |
+| **Channel** | Online, POS, Draft or Subscription. |
+| **Total** | The **net** amount — what you charged, **less anything refunded**. |
+| **Status** | The status pill, plus a dispute chip and its evidence deadline when there is one. |
+| **Date** | The order date, with the time underneath. |
+
+**Total is net, and this is the column to read carefully.** A $100 order with a $30
+refund shows **$70**, and a second line appears under it reading **$100.00 less
+refunds** — the gross figure, so you can see both without opening the order. An order
+with no refund shows one figure and no caption. Reconciling against a Stripe payout
+means reading the caption, not assuming the big number is what was charged.
+
+### Statuses and channels {#order-statuses}
+
+Statuses render as coloured pills, and the colour is part of the message:
+
+| Status | Pill | Colour |
+| --- | --- | --- |
+| `pending` | **Pending** | Neutral grey — an unpaid order is not a problem, it is not money yet. |
+| `paid` | **Paid** | Green. |
+| `partially_fulfilled` | **Partly fulfilled** | Amber — something is still owed to the buyer. |
+| `fulfilled` | **Fulfilled** | Blue. |
+| `delivered` | **Delivered** | Blue. |
+| `cancelled` | **Cancelled** | Neutral grey. |
+| `refunded` | **Refunded** | Red. |
+
+The left column is the value in the API and the CSV; the middle one is what the
+console shows. They differ in one place — `partially_fulfilled` displays as **Partly
+fulfilled** — so a filter or a script written against the label will miss it.
+
+Red and grey are reserved deliberately. Cancelled and refunded are the states worth
+spotting in a scan of fifty rows, and colouring pending as a warning would spend that
+attention on orders that are merely young.
+
+Four channels say where the sale came through:
+
+| Channel | Label |
+| --- | --- |
+| `online` | **Online** — the storefront. |
+| `pos` | **POS** — the in-person register. |
+| `draft` | **Draft** — an order you built and invoiced. |
+| `subscription` | **Subscription** — one order per paid cycle of a *physical* subscription product. |
+
+### The money tiles {#order-money-tiles}
+
+Three figures sit above the table: **Revenue · 30d**, **Orders · 30d** and **Avg order
+value**. Each carries a percentage change measured **against the previous 30 days** —
+hover it for that caption.
+
+:::info Plan availability
+The tiles need the commerce analytics entitlement — **Pro and above**. **The table
+itself is not gated**: a list of your own orders is not a paid feature, and every
+filter, the CSV export and draft orders work on any plan that can sell at all.
+:::
+
+Two behaviours here look like bugs and are not:
+
+- **Pending and cancelled orders are left out of the tiles.** Neither is money: one
+  has not been paid and the other never will be. So the tile count can be lower than
+  the number of rows you are looking at. Refunds are handled differently — they are
+  **subtracted** rather than dropped, so a refund inside the window pulls revenue and
+  the delta down, which is the point of showing them.
+- **A tile with no prior period shows no percentage at all** — not `+100%`, not `+0%`,
+  not a dash. A first sale has no growth rate, and every way of drawing one is a claim
+  that isn't true. The same rule governs the
+  [traffic delta in analytics](../../marketing-and-automation/analytics/overview.md#traffic-delta).
+
+:::caution The tiles summarise the loaded window, not your books
+The screen loads a bounded page of recent orders — 200 — and the tiles summarise what
+is loaded. A store past that many orders in 60 days is reading a slice, at the same
+bound the commerce analytics card has always had. Use **Export CSV** and your Stripe
+payouts to reconcile; use the tiles to see which way the last month went.
+:::
 
 ### If a dispute is lost, the money comes back out of your payout {#a-lost-dispute}
 

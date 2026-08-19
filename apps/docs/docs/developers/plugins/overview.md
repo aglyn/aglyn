@@ -48,9 +48,11 @@ find something, choose which sites get it, install, upgrade, remove — start wi
   happens, and a confirmation dialog names exactly where it will land before anything is
   written.
 - When you install a plugin, choose where it applies: **All sites** (organization-wide —
-  including sites you add later) or **Selected sites** (a specific subset). Components,
-  templates and layouts are site-scoped, so "All sites" installs them onto every current
-  site and does **not** cover sites added later.
+  including sites you add later) or **Selected sites** (a specific subset). Only plugins
+  and dataset schemas install org-wide; components, templates, layouts, themes and email
+  templates are site-scoped, so "All sites" installs them onto every current site and
+  does **not** cover sites added later. The listing's
+  [What's included](#whats-included) box says which of the two you are looking at.
 - Installs are **version-pinned**, and you can **upgrade** deliberately.
 - Installed plugins appear as named entries in the Besigner **drawer**, alongside built-in
   components.
@@ -67,6 +69,65 @@ find something, choose which sites get it, install, upgrade, remove — start wi
 - Installing enables the plugin for the workspace automatically; uninstalling disables
   it once no site keeps its own pin. **Uninstalling never deletes the data a plugin
   created** — reinstall and it picks up where it left off.
+
+## What a browse card shows {#browse-card}
+
+Every card in **Browse All** carries the same four claims, so two listings side by side
+are comparable:
+
+- **A price chip, always.** A paid listing shows the price — `$29` — and a free one
+  shows the word **Free**. There is no such thing as a card without a price chip: a
+  missing chip would read as an oversight next to the $29 beside it, which is the one
+  thing "free" must not look like. The card's button repeats the price for a paid
+  listing you don't own yet: **View details · $29**.
+- **A star rating, with its count.** Stars plus the average and the number of ratings
+  in brackets — `4.8 (12)`. The count is never dropped, because "5.0" from one rating
+  and "5.0" from forty are not the same claim.
+- **Not yet rated**, in words, when nobody has rated it. An unrated listing draws no
+  stars at all, and silence reads as "zero stars" rather than "no ratings yet".
+- **Version, publisher and installs** — `v3 · by @handle · 41 installs` — plus the
+  **Reviewed** badge when the version on offer has passed review.
+
+The listing's own page repeats the price chip and the rating in its header, where the
+install decision is actually made. On that page an unrated listing shows nothing rather
+than the "Not yet rated" wording.
+
+## What's included {#whats-included}
+
+A listing page carries a **What's included** box. Aglyn generates it from the listing —
+it is not publisher copy, so it cannot promise something the install does not do, and
+it says nothing about how much content is in there.
+
+The first row is what the install physically produces, which depends on the type:
+
+| Type | The row reads |
+| --- | --- |
+| Plugin | A plugin, sandboxed on its own origin with a per-plugin CSP |
+| Component | An editable component you can place on any screen |
+| Template | Editable screens you can rework in Besigner |
+| Layout | An editable layout you can apply to any screen |
+| Dataset schema | A new empty dataset with its fields already defined |
+| Email template | An editable email design you can send campaigns from |
+| Theme | A theme applied to the site you choose |
+
+Then, in order, up to four more rows:
+
+- **Where it lands.** Plugins and dataset schemas install org-wide — *Installs org-wide,
+  covering sites you add later*. Everything else is site-scoped and says so: *Installs
+  per site — new sites are not covered automatically*. That row is marked as a **note**,
+  not a tick, because it is a limit you are being told about rather than something you
+  are getting.
+- **Review** — *This version passed marketplace review* — only when the version on offer
+  is approved. A new release from the same publisher starts without it.
+- **The licence**, when the publisher set one: *Licensed MIT*.
+- **Price and updates.** A paid listing reads *A one-time purchase — updates to this
+  listing are included*; a free one reads *Free, including every future update*. Either
+  way, updates are not a second charge — but they are still
+  [deliberate](../../guides/install-your-first-plugin.md#step-7-off), not automatic.
+
+What the box will never tell you is how many screens or blocks a template contains.
+Aglyn collects no manifest of that, and counting it would mean inventing a number, so
+the box stays to facts the listing actually carries.
 
 ## What the badges on a listing mean
 

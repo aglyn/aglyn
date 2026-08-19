@@ -61,18 +61,32 @@ one, you're in the wrong section. [More on the split](../developers/plugins/over
 catalogue only — clicking one takes you to its **detail page**, which is the only
 place an install can happen. You cannot install by accident from the grid.
 
+Two things on a card are worth reading before you click into one:
+
+- **The price chip.** Every card has one. A paid listing shows `$29`; a free one shows
+  the word **Free**, rather than leaving the corner empty for you to interpret.
+- **The stars, and the number beside them.** `4.8 (12)` is twelve people's opinion;
+  `5.0 (1)` is one person's. A listing nobody has rated says **Not yet rated** instead
+  of showing no stars.
+
 <!-- screenshot: marketplace/listing-detail-header.png per SCREENSHOT_PLAN.md -->
 
 On the detail page, read three things before anything else:
 
-1. **What kind of thing it is.** A *plugin* adds capability. A *template*, *theme*,
-   *layout* or *component* adds design you then edit. A *dataset schema* adds an empty
-   dataset with its field model — **records never travel**, so you're getting the
-   shape, not somebody's data.
+1. **The What's included box.** Aglyn writes it from the listing itself, not the
+   publisher, so it is the one description that cannot oversell. Its first row names
+   what the install produces — a sandboxed *plugin*, an editable *component*,
+   *screens* you rework in Besigner, a *theme*, or **a new empty dataset with its
+   fields already defined** for a dataset schema, which is the reminder that **records
+   never travel**: you get the shape, not somebody's data. The rows after it cover
+   where it lands (step 4), review, licence and updates. See
+   [What's included](../developers/plugins/overview.md#whats-included) for every row it
+   can produce.
 2. **The badges.** They make two different claims, and it's worth knowing which is
    which — see [what the badges mean](../developers/plugins/overview.md#what-the-badges-on-a-listing-mean).
-3. **The price.** A paid listing's button reads **Buy for $12** rather than
-   **Install**. Free ones just say **Install**.
+3. **The price.** The header repeats the card's chip — `$29`, or **Free** — and the
+   button spells out what pressing it does: a paid listing reads **Buy for $29** rather
+   than **Install**. Buying is one payment; the listing's updates are included in it.
 
 ## Step 3 — Read the reviews, and know who can leave one {#step-3-reviews}
 
@@ -94,15 +108,22 @@ On the detail page you'll find an **Install to** dropdown with two options:
 
 <!-- screenshot: marketplace/install-to-selected-sites.png per SCREENSHOT_PLAN.md -->
 
-The helper text under the dropdown tells you exactly what will happen for *this*
-listing, because it isn't the same for every kind:
+**"All sites" does not mean the same thing for every kind of listing**, and that is the
+whole reason this step exists:
 
-- A **plugin** installed to "All sites" is genuinely organization-wide, and a site you
-  create next month gets it too.
-- **Components, templates and layouts are site-scoped.** "All sites" copies them onto
-  every site you have *right now*, and a site you add later will **not** have them.
-  The helper text says so — it reads "Installs to all 4 sites. New sites won't get it
-  automatically."
+- **Plugins and dataset schemas install organization-wide.** A site you create next
+  month gets them too.
+- **Components, templates, layouts, themes and email templates are site-scoped.** "All
+  sites" copies them onto every site you have *right now*; a site you add later will
+  **not** have them.
+
+You will have seen this fact once already, in the **What's included** box further up
+the page — *Installs org-wide, covering sites you add later*, or *Installs per site —
+new sites are not covered automatically*. The helper text under the **Install to**
+dropdown is the same fact with your own numbers in it: for the site-scoped case it
+reads "Installs to all 4 sites. New sites won't get it automatically." Two wordings,
+one behaviour — if they ever seem to disagree, the helper text is the one counting your
+actual sites.
 
 "Selected sites" only appears when there's a choice to make, so on a one-site
 organization you won't see it.
