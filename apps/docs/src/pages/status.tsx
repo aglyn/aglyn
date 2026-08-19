@@ -36,7 +36,13 @@
 
 import Layout from '@theme/Layout'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from 'react'
 
 interface Target {
   name: string
@@ -131,7 +137,7 @@ async function check(target: Target): Promise<Reading> {
   }
 }
 
-export default function StatusPage(): JSX.Element {
+export default function StatusPage(): ReactElement {
   const { siteConfig } = useDocusaurusContext()
   // Memoized: `parseTargets` builds a new array every call, and an unstable
   // identity here would make `refresh` unstable, which would tear down and
