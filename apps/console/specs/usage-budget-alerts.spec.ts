@@ -255,9 +255,18 @@ const fakeFirestore = {
       return build(null, null)
     }
     if (name === 'hosts') {
+      // This suite is about budgets, not sites, so the org owns none. It
+      // still has to answer the full chain the route issues since AGL-2421
+      // (`where().orderBy().limit().get()`, with a `.doc()` for the cursor) —
+      // a missing `orderBy` throws and the sweep 500s before a budget is ever
+      // evaluated, and every assertion below goes red for a reason that has
+      // nothing to do with budgets.
       const api: any = {
         where: () => api,
+        orderBy: () => api,
         limit: () => api,
+        startAfter: () => api,
+        doc: (hostId: string) => ({ id: hostId }),
         get: async () => ({ docs: [], size: 0 }),
       }
       return api
