@@ -40,8 +40,12 @@ import {
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
-  type AddonKind,
 } from '../../../../utils/server/billing-addons'
+import {
+  buildTargetItems,
+  preservePhaseTerms,
+  writePhaseItems,
+} from '../../../../utils/server/billing-schedule'
 import { RETENTION_COLLECTION } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
@@ -123,82 +127,6 @@ function isLadderDowngrade(from: OrgPlan | null, to: string): boolean {
 }
 
 /**
- * Restates the terms Stripe put on the schedule's current phase but that a
- * phase-list replacement would otherwise drop (AGL-2146).
- *
- * `subscription_schedules` update REPLACES the whole phase list, so anything
- * not written back is gone. The original restatement covered price, quantity
- * and the phase window — which meant a downgrade silently ended the customer's
- * coupon, their trial, and the tax/collection configuration.
- *
- * The discount is the one that costs money in both directions: an org holding
- * a staff coupon, a checkout promotion code, or the winback the retention
- * funnel just minted lost it at the flip, having been told nothing. An instant
- * UPGRADE never touches subscription discounts, so a downgrade must not
- * either — which is why the discount is restated on the target phase too and a
- * time-boxed coupon keeps running its remaining months across the change.
- *
- * `trial_end` and `automatic_tax` are restated only on the CURRENT phase: a
- * trial must not restart at the flip, and the target phase sets its own tax
- * flag explicitly.
- */
-function preservePhaseTerms(
-  params: URLSearchParams,
-  index: number,
-  phase: any,
-  options: { current: boolean },
-): void {
-  const prefix = `phases[${index}]`
-  // Both shapes: `discounts` is the current list-valued field, `coupon` the
-  // singular legacy one older API versions still return.
-  const discounts: any[] = Array.isArray(phase?.discounts) ? phase.discounts : []
-  let written = 0
-  for (const entry of discounts) {
-    const coupon =
-      typeof entry?.coupon === 'string' ? entry.coupon : entry?.coupon?.id
-    const promotionCode =
-      typeof entry?.promotion_code === 'string'
-        ? entry.promotion_code
-        : entry?.promotion_code?.id
-    if (coupon) {
-      params.set(`${prefix}[discounts][${written}][coupon]`, String(coupon))
-      written += 1
-    } else if (promotionCode) {
-      params.set(
-        `${prefix}[discounts][${written}][promotion_code]`,
-        String(promotionCode),
-      )
-      written += 1
-    }
-  }
-  if (written === 0 && phase?.coupon) {
-    const legacy =
-      typeof phase.coupon === 'string' ? phase.coupon : phase.coupon?.id
-    if (legacy) params.set(`${prefix}[coupon]`, String(legacy))
-  }
-  if (phase?.collection_method) {
-    params.set(`${prefix}[collection_method]`, String(phase.collection_method))
-  }
-  const paymentMethod =
-    typeof phase?.default_payment_method === 'string'
-      ? phase.default_payment_method
-      : phase?.default_payment_method?.id
-  if (paymentMethod) {
-    params.set(`${prefix}[default_payment_method]`, String(paymentMethod))
-  }
-  if (!options.current) return
-  if (phase?.trial_end) {
-    params.set(`${prefix}[trial_end]`, String(phase.trial_end))
-  }
-  if (phase?.automatic_tax?.enabled != null) {
-    params.set(
-      `${prefix}[automatic_tax][enabled]`,
-      phase.automatic_tax.enabled ? 'true' : 'false',
-    )
-  }
-}
-
-/**
  * Releases the subscription's pending downgrade schedule, if one exists.
  * Returns true when something was released — the caller then clears the
  * `pendingDowngrade` mirror. Releasing (not canceling) keeps the subscription
@@ -219,6 +147,46 @@ async function releasePendingSchedule(
     `subscription_schedules/${encodeURIComponent(String(scheduleId))}/release`,
   )
   return true
+}
+
+/**
+ * Clears the `pendingDowngrade` mirror — best effort, never fatal (AGL-2151).
+ *
+ * The downgrade and cancel paths both RELEASE the subscription's schedule
+ * before doing anything else, and every step after that release can throw. The
+ * outer catch turned that into a generic 502 while the org doc still carried
+ * the OLD `pendingDowngrade`, naming a `scheduleId` that no longer exists:
+ * Stripe has no pending downgrade, the console insists there is one, and the
+ * customer keeps being billed at the higher tier while the page tells them
+ * they are dropping to the lower one.
+ *
+ * That asymmetry is the whole reason this exists. An ABSENT pending downgrade
+ * is recoverable — the customer re-requests it and sees it take. A PHANTOM one
+ * is invisible as wrong to everybody: to the customer, to support reading the
+ * same page, and to any report derived from the mirror. So the failure path
+ * clears it rather than leaving it to assert a schedule that is not there.
+ * (The inverse of AGL-2144, a COMPLETED downgrade that stayed pending forever —
+ * same field, opposite direction.)
+ *
+ * Swallows its own failure: it runs inside a failure path that is already
+ * about to answer 502, and throwing here would replace the real error with a
+ * Firestore one.
+ */
+async function clearPendingDowngradeMirror(
+  orgId: string,
+  status: unknown,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await writeOrgBilling(orgId, {
+      subscription: { status, pendingDowngrade: null, ...extra },
+    } as never)
+  } catch (error) {
+    console.error(
+      '[billing/subscription] could not clear the pendingDowngrade mirror after a failed schedule swap — it may now assert a released schedule',
+      { orgId, error },
+    )
+  }
 }
 
 /**
@@ -352,14 +320,25 @@ async function handler(request: Request): Promise<Response> {
         secretKey,
         subscription,
       )
-      const updated = await stripeRequest(
-        secretKey,
-        'POST',
-        `subscriptions/${subscription.id}`,
-        new URLSearchParams({
-          cancel_at_period_end: action === 'cancel' ? 'true' : 'false',
-        }),
-      )
+      let updated: any
+      try {
+        updated = await stripeRequest(
+          secretKey,
+          'POST',
+          `subscriptions/${subscription.id}`,
+          new URLSearchParams({
+            cancel_at_period_end: action === 'cancel' ? 'true' : 'false',
+          }),
+        )
+      } catch (error) {
+        // The schedule is already gone; only the mirror can still be wrong
+        // (AGL-2151). Clear it before the 502 so it cannot go on naming a
+        // released schedule.
+        if (releasedSchedule) {
+          await clearPendingDowngradeMirror(org.ref.id, subscription.status)
+        }
+        throw error
+      }
       // Mirror onto the billing doc so the plan card reflects it immediately
       // (the webhook confirms on the next event). Writes through
       // `writeOrgBilling` (AGL-1028) — writing `subscription` straight onto the
@@ -425,6 +404,23 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
+    // Free is a real rung of `SELF_SERVE_PLANS` and `isLadderDowngrade` would
+    // happily classify `pro → free` as a downgrade, but `PRICE_ENV` has no
+    // `free` entry — so the request fell through to "Unknown target plan",
+    // which is both wrong and useless (AGL-2156). Nothing prevented a user
+    // reaching it except a disabled button on one card. Say the true thing
+    // instead: there is no Free price because moving to Free IS the cancel.
+    if (targetPlan === 'free') {
+      return Response.json(
+        {
+          error:
+            'Moving to Free means canceling your subscription — it runs to ' +
+            'the end of the period you have already paid for.',
+          code: 'cancel_required',
+        },
+        { status: 400 },
+      )
+    }
     const items: any[] = subscription.items?.data ?? []
     // The base plan item, matched on its known plan price id (AGL-1340).
     // This was "the item no add-on price claims" (AGL-528) — identification
@@ -466,7 +462,21 @@ async function handler(request: Request): Promise<Response> {
     // Switching to the plan you are already on is only meaningful as "keep my
     // plan" — the undo for a pending downgrade. Release the schedule and
     // clear the mirror; without one it is a no-op, said honestly.
-    if (action === 'switch' && targetPlan === currentPlan) {
+    // ...and only when the INTERVAL is unchanged too (AGL-2156). Keyed on the
+    // plan alone, a `pro/month → pro/year` switch answered `ok: true` having
+    // changed nothing, and the page snackbarred "Plan switched to pro" over an
+    // untouched subscription. Latent while the current tier's button is
+    // disabled, but it closed the only server path an annual-conversion UI
+    // could use — and annual conversion (AGL-532) is a retention lever. A
+    // same-tier interval change now falls through to the switch below, which
+    // re-prices the plan item, the add-ons and the metered item onto the
+    // target interval together (Stripe rejects a subscription whose items mix
+    // intervals).
+    if (
+      action === 'switch' &&
+      targetPlan === currentPlan &&
+      targetInterval === currentInterval
+    ) {
       const released = await releasePendingSchedule(secretKey, subscription)
       if (released) {
         await writeOrgBilling(org.ref.id, {
@@ -482,14 +492,57 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // The shared metered price (AGL-635), interval-matched to the target
+    // (AGL-1340/1280) — resolved here because BOTH the delta below and the
+    // absolute phase list further down need it.
+    const metered = meteredPriceId(targetInterval)
+
+    // The absolute item list this subscription becomes on the target plan.
+    // ONE derivation (AGL-2150): it is what a schedule phase is written from,
+    // and it is also the single place `droppedAddons` and the unrecognised
+    // items are named, so the delta below and the phase list cannot report
+    // different answers about what a switch costs the customer.
+    const targetItems = buildTargetItems(items, {
+      targetPlan: targetPlan as OrgPlan,
+      targetInterval,
+      targetPlanPrice: targetPrice,
+      meteredPrice: metered,
+    })
+    const dropped = targetItems.droppedAddons
+    // Items neither path can classify. The instant switch leaves them alone
+    // and the schedule now carries them through verbatim — but "carried
+    // through" is a claim, and until AGL-2150 the only report on this
+    // subscription was `droppedAddons`, which lists RECOGNISED kinds only and
+    // therefore read as complete while saying nothing about the line items it
+    // could not name. A legacy add-on whose env var was rotated, a price
+    // attached by hand in the dashboard, a negotiated line, or the flat
+    // POS/event-calendar add-ons in an environment that does not configure
+    // those env names all land here. Said out loud, and returned.
+    const unrecognizedItems = targetItems.unrecognizedPriceIds
+    if (unrecognizedItems.length) {
+      console.warn('[billing/subscription] subscription carries items this route cannot classify', {
+        orgId,
+        subscriptionId: subscription.id,
+        currentPlan,
+        targetPlan,
+        targetInterval,
+        priceIds: unrecognizedItems,
+        note:
+          'carried through unchanged; they are neither the plan item, the ' +
+          'metered item, nor a price any STRIPE_PRICE_*_EXTRA_*/flat add-on ' +
+          'env currently resolves to',
+      })
+    }
+
     // Per-plan add-on items (seats/members/datasets/hosts) re-price to
     // the target plan in the same update (AGL-528); kinds the target
     // doesn't sell are dropped and reported. Flat add-ons re-resolve too
     // so every item follows the target interval (one per subscription).
+    // A DELTA, deliberately: anything not named here is left exactly where
+    // it is, which is the posture the schedule phase now matches.
     const itemChanges: Array<Array<[string, string]>> = [
       [['id', String(itemId)], ['price', targetPrice]],
     ]
-    const dropped: AddonKind[] = []
     for (const item of items) {
       const kind = addonKindFromPriceId(item?.price?.id)
       if (!kind) continue
@@ -499,7 +552,6 @@ async function handler(request: Request): Promise<Response> {
         itemChanges.push([['id', String(item.id)], ['price', target]])
       } else {
         itemChanges.push([['id', String(item.id)], ['deleted', 'true']])
-        dropped.push(kind)
       }
     }
 
@@ -522,7 +574,6 @@ async function handler(request: Request): Promise<Response> {
     // item present recurs on the OTHER interval, and an equality check
     // against the target would miss it, add a second metered item, and make
     // the update mix intervals — the precise crash this is avoiding.
-    const metered = meteredPriceId(targetInterval)
     const meteredItem = items.find((item: any) =>
       isMeteredPriceId(item?.price?.id),
     )
@@ -570,113 +621,141 @@ async function handler(request: Request): Promise<Response> {
       // A fresh schedule per downgrade: releasing any prior one first keeps
       // exactly one owner of the period-end transition.
       await releasePendingSchedule(secretKey, subscription)
-      const schedule = await stripeRequest(
-        secretKey,
-        'POST',
-        'subscription_schedules',
-        new URLSearchParams({ from_subscription: subscription.id }),
-      )
-      const params = new URLSearchParams({
-        end_behavior: 'release',
-        // Nothing prorates: phase 0 is what they already bought, phase 1
-        // starts a clean period at the new price.
-        proration_behavior: 'none',
-      })
-      // Phase 0: the current items, verbatim, over the current phase's
-      // window. Updating a schedule replaces the whole phase list, so the
-      // present has to be restated to be preserved.
-      const currentPhase = schedule?.phases?.[0] ?? {}
-      const currentItems: any[] = currentPhase.items ?? []
-      currentItems.forEach((item: any, index: number) => {
-        params.set(`phases[0][items][${index}][price]`, String(item.price))
-        if (item.quantity != null) {
-          params.set(
-            `phases[0][items][${index}][quantity]`,
-            String(item.quantity),
-          )
-        }
-      })
-      if (currentPhase.start_date) {
-        params.set('phases[0][start_date]', String(currentPhase.start_date))
-      }
-      if (currentPhase.end_date) {
-        params.set('phases[0][end_date]', String(currentPhase.end_date))
-      }
-      // Everything else Stripe put on phase 0 from `from_subscription` has to
-      // be restated too (AGL-2146). Replacing the phase list with price,
-      // quantity and dates alone silently dropped the customer's DISCOUNT,
-      // their trial, and the tax configuration — a downgrade quietly cancelling
-      // a coupon nobody said anything about, including the winback the
-      // retention funnel had just minted to keep them.
+      // A pending CANCEL and a pending DOWNGRADE cannot both be true
+      // (AGL-2151). The cancel→downgrade direction was handled — cancel
+      // releases a pending schedule — but not the reverse: this branch never
+      // looked at `cancel_at_period_end`, so an org that had cancelled and
+      // then picked a smaller plan either 502'd out of the schedule create or
+      // ended up cancelling AND flipping phase at the same instant, with the
+      // billing page rendering both chips.
       //
-      // Carried onto BOTH phases, which is the parity that matters: an instant
-      // upgrade never touches the subscription's discounts, so a downgrade must
-      // not end one either. A time-boxed coupon keeps running its remaining
-      // months across the plan change, exactly as it would have without one.
-      preservePhaseTerms(params, 0, currentPhase, { current: true })
-      preservePhaseTerms(params, 1, currentPhase, { current: false })
-      // Phase 1: the target plan. Add-ons re-price to the target's rates
-      // exactly as an instant switch would (AGL-528); kinds it doesn't sell
-      // are dropped and reported. The interval-matched metered item rides
-      // along (AGL-635/1340) so overage keeps billing after the flip.
-      const phaseItems: Array<{ price: string; quantity?: number }> = [
-        { price: targetPrice, quantity: 1 },
-      ]
-      for (const item of items) {
-        const kind = addonKindFromPriceId(item?.price?.id)
-        if (!kind) continue
-        const target = addonPriceId(kind, targetPlan as OrgPlan, targetInterval)
-        if (target) {
-          phaseItems.push({ price: target, quantity: item?.quantity ?? 1 })
-        }
-      }
-      if (metered) phaseItems.push({ price: metered })
-      phaseItems.forEach((item, index) => {
-        params.set(`phases[1][items][${index}][price]`, item.price)
-        if (item.quantity != null) {
-          params.set(
-            `phases[1][items][${index}][quantity]`,
-            String(item.quantity),
+      // It CLEARS the cancel rather than refusing the downgrade, and that
+      // choice is the retention context: this path is reached straight out of
+      // the funnel — someone cancelled, changed their mind, and is trying to
+      // stay on something smaller. Refusing a customer who is in the act of
+      // staying, and making them find "resume" first, loses the save the whole
+      // funnel exists to make. Refusing is the safer-looking option and the
+      // worse outcome. The confirm copy says so before they click.
+      const clearedPendingCancel = subscription.cancel_at_period_end === true
+      try {
+        if (clearedPendingCancel) {
+          await stripeRequest(
+            secretKey,
+            'POST',
+            `subscriptions/${subscription.id}`,
+            new URLSearchParams({ cancel_at_period_end: 'false' }),
           )
         }
-      })
-      params.set('phases[1][iterations]', '1')
-      // The phase metadata is what the webhook's subscription.updated mirror
-      // reads (`object.metadata.plan` first) when the phase flips at period
-      // end — without it the subscription keeps the OLD metadata and the org
-      // doc's plan never moves.
-      params.set('phases[1][metadata][plan]', targetPlan)
-      params.set('phases[1][metadata][orgId]', orgId)
-      // Same tax posture as an instant switch (AGL-1537).
-      params.set('phases[1][automatic_tax][enabled]', 'true')
-      await stripeRequest(
-        secretKey,
-        'POST',
-        `subscription_schedules/${schedule.id}`,
-        params,
-      )
-      // The org doc's `plan` deliberately does NOT change — entitlements run
-      // at the paid tier until the period ends and the webhook mirrors the
-      // phase flip. Only the manager-gated pending marker moves.
-      await writeOrgBilling(org.ref.id, {
-        subscription: {
-          status: subscription.status,
-          pendingDowngrade: {
-            plan: targetPlan,
-            interval: targetInterval,
-            effectiveAt: periodEndIso,
-            scheduleId: String(schedule.id),
+        const schedule = await stripeRequest(
+          secretKey,
+          'POST',
+          'subscription_schedules',
+          new URLSearchParams({ from_subscription: subscription.id }),
+        )
+        const params = new URLSearchParams({
+          end_behavior: 'release',
+          // Nothing prorates: phase 0 is what they already bought, phase 1
+          // starts a clean period at the new price.
+          proration_behavior: 'none',
+        })
+        // Phase 0: the current items, verbatim, over the current phase's
+        // window. Updating a schedule replaces the whole phase list, so the
+        // present has to be restated to be preserved.
+        const currentPhase = schedule?.phases?.[0] ?? {}
+        const currentItems: any[] = currentPhase.items ?? []
+        currentItems.forEach((item: any, index: number) => {
+          params.set(`phases[0][items][${index}][price]`, String(item.price))
+          if (item.quantity != null) {
+            params.set(
+              `phases[0][items][${index}][quantity]`,
+              String(item.quantity),
+            )
+          }
+        })
+        if (currentPhase.start_date) {
+          params.set('phases[0][start_date]', String(currentPhase.start_date))
+        }
+        if (currentPhase.end_date) {
+          params.set('phases[0][end_date]', String(currentPhase.end_date))
+        }
+        // Everything else Stripe put on phase 0 from `from_subscription` has to
+        // be restated too (AGL-2146). Replacing the phase list with price,
+        // quantity and dates alone silently dropped the customer's DISCOUNT,
+        // their trial, and the tax configuration — a downgrade quietly cancelling
+        // a coupon nobody said anything about, including the winback the
+        // retention funnel had just minted to keep them.
+        //
+        // Carried onto BOTH phases, which is the parity that matters: an instant
+        // upgrade never touches the subscription's discounts, so a downgrade must
+        // not end one either. A time-boxed coupon keeps running its remaining
+        // months across the plan change, exactly as it would have without one.
+        preservePhaseTerms(params, 0, currentPhase, { current: true })
+        preservePhaseTerms(params, 1, currentPhase, { current: false })
+        // Phase 1: the target plan. Add-ons re-price to the target's rates
+        // exactly as an instant switch would (AGL-528); kinds it doesn't sell
+        // are dropped and reported. The interval-matched metered item rides
+        // along (AGL-635/1340) so overage keeps billing after the flip.
+        //
+        // Anything else on the subscription is carried through VERBATIM
+        // (AGL-2150). A phase is an ABSOLUTE list, so building it from the
+        // recognised kinds alone deleted every unclassified item at the flip —
+        // at renewal, with no log line and no field in the response naming it.
+        writePhaseItems(params, 1, targetItems.items)
+        params.set('phases[1][iterations]', '1')
+        // The phase metadata is what the webhook's subscription.updated mirror
+        // reads (`object.metadata.plan` first) when the phase flips at period
+        // end — without it the subscription keeps the OLD metadata and the org
+        // doc's plan never moves.
+        params.set('phases[1][metadata][plan]', targetPlan)
+        params.set('phases[1][metadata][orgId]', orgId)
+        // Same tax posture as an instant switch (AGL-1537).
+        params.set('phases[1][automatic_tax][enabled]', 'true')
+        await stripeRequest(
+          secretKey,
+          'POST',
+          `subscription_schedules/${schedule.id}`,
+          params,
+        )
+        // The org doc's `plan` deliberately does NOT change — entitlements run
+        // at the paid tier until the period ends and the webhook mirrors the
+        // phase flip. Only the manager-gated pending marker moves.
+        await writeOrgBilling(org.ref.id, {
+          subscription: {
+            status: subscription.status,
+            ...(clearedPendingCancel ? { cancelAtPeriodEnd: false } : {}),
+            pendingDowngrade: {
+              plan: targetPlan,
+              interval: targetInterval,
+              effectiveAt: periodEndIso,
+              scheduleId: String(schedule.id),
+            },
           },
-        },
-      } as never)
-      return Response.json({
-        ok: true,
-        scheduled: true,
-        plan: currentPlan,
-        pendingPlan: targetPlan,
-        effectiveAt: periodEndIso,
-        droppedAddons: dropped,
-      }, { status: 200 })
+        } as never)
+        return Response.json({
+          ok: true,
+          scheduled: true,
+          plan: currentPlan,
+          pendingPlan: targetPlan,
+          effectiveAt: periodEndIso,
+          droppedAddons: dropped,
+          unrecognizedItems,
+          clearedPendingCancel,
+        }, { status: 200 })
+      } catch (error) {
+        // Everything above ran AFTER the old schedule was released, so on any
+        // failure the mirror is the only thing left asserting a downgrade that
+        // does not exist (AGL-2151). Clear it — and state the cancel as
+        // cleared if that is what we did, so the mirror stays true to Stripe
+        // in the failure path too. The customer lands back on their current
+        // plan, no longer cancelling, with a 502 telling them the change
+        // failed: recoverable by re-requesting either one, and visible.
+        await clearPendingDowngradeMirror(
+          org.ref.id,
+          subscription.status,
+          clearedPendingCancel ? { cancelAtPeriodEnd: false } : {},
+        )
+        throw error
+      }
     }
 
     if (action === 'switch') {
@@ -687,7 +766,13 @@ async function handler(request: Request): Promise<Response> {
         secretKey,
         subscription,
       )
+      // Same contradiction as the downgrade branch (AGL-2151), same answer:
+      // somebody buying MORE is not leaving, so an upgrade clears a pending
+      // cancel instead of applying on top of one. Only sent when there is one
+      // to clear, so this changes nothing for every other switch.
+      const clearedPendingCancel = subscription.cancel_at_period_end === true
       const params = new URLSearchParams({
+        ...(clearedPendingCancel ? { cancel_at_period_end: 'false' } : {}),
         proration_behavior: 'create_prorations',
         // Stripe Tax (AGL-1537): checkout has created subscriptions with
         // automatic tax since AGL-1133, but a subscription created BEFORE
@@ -703,12 +788,21 @@ async function handler(request: Request): Promise<Response> {
           params.set(`items[${index}][${key}]`, value)
         }
       })
-      const updated = await stripeRequest(
-        secretKey,
-        'POST',
-        `subscriptions/${subscription.id}`,
-        params,
-      )
+      let updated: any
+      try {
+        updated = await stripeRequest(
+          secretKey,
+          'POST',
+          `subscriptions/${subscription.id}`,
+          params,
+        )
+      } catch (error) {
+        // The schedule was already released above (AGL-2151).
+        if (releasedSchedule) {
+          await clearPendingDowngradeMirror(org.ref.id, subscription.status)
+        }
+        throw error
+      }
       // Mirror immediately; the webhook confirms on the next event. `plan`
       // stays on the org doc (feature gating reads it); the commercial keys go
       // to the manager-gated billing doc (AGL-1028).
@@ -719,6 +813,7 @@ async function handler(request: Request): Promise<Response> {
           status: updated.status ?? subscription.status,
           priceId: targetPrice,
           interval: targetInterval,
+          ...(clearedPendingCancel ? { cancelAtPeriodEnd: false } : {}),
           ...(releasedSchedule ? { pendingDowngrade: null } : {}),
         },
       } as never)
@@ -726,6 +821,8 @@ async function handler(request: Request): Promise<Response> {
         ok: true,
         plan: targetPlan,
         droppedAddons: dropped,
+        unrecognizedItems,
+        clearedPendingCancel,
       }, { status: 200 })
     }
 
@@ -739,6 +836,7 @@ async function handler(request: Request): Promise<Response> {
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
+        unrecognizedItems,
         downgrade: true,
       }, { status: 200 })
     }
@@ -770,6 +868,7 @@ async function handler(request: Request): Promise<Response> {
         ? new Date(preview.period_end * 1000).toISOString()
         : null,
       droppedAddons: dropped,
+      unrecognizedItems,
     }, { status: 200 })
   } catch (error) {
     console.error(error)

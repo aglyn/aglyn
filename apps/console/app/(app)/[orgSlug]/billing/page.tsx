@@ -30,7 +30,6 @@ import {
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
   parseOnboardingPlanIntent,
-  PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -65,11 +64,10 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { collection, getCountFromServer } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import fetchSeatCounts from '../../../../utils/fetch-seat-counts'
+import { overLimitSummary as computeOverLimitSummary } from '../../../../utils/over-limit-summary'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
 } from '../../../../components/billing/billing-addons-card.component'
@@ -242,60 +240,23 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
 
   // Pre-downgrade check (AGL-483): resources that would exceed the target
   // plan. Downgrades never delete anything, but the user should know what
-  // they'll be over before confirming. Counts sites (already loaded),
-  // team members, and datasets (cheap org-scoped counts).
+  // they'll be over before confirming.
+  //
+  // The computation moved to `utils/over-limit-summary` (AGL-2154) so the
+  // retention funnel's downsell and the org-deletion downsell can state the
+  // same thing. It already took the target plan as a parameter — the funnel
+  // simply never called it. `siteCount` is passed explicitly here because this
+  // page already has the host list loaded; the shared helper counts it itself
+  // for callers that do not.
   const overLimitSummary = useCallback(
-    async (targetPlan: OrgPlan): Promise<string[]> => {
-      const target = PLAN_ENTITLEMENTS[targetPlan]
-      if (!target || !orgId) return []
-      // Seats from the server (AGL-1255). Two things were wrong here.
-      //
-      // The read was an unconstrained `orgs/{orgId}/members` list, denied for
-      // any reader the RULES do not call org-wide — and `.catch(() => 0)`
-      // turned that denial into "0 team members", which is under every plan's
-      // limit, so the warning that this downgrade would strand the org simply
-      // did not appear. The reassuring direction is the dangerous one here.
-      //
-      // It also counted EVERY member against `managersPerOrg`. Site-scoped
-      // collaborators meter per host against `membersPerHost` (AGL-1113), so
-      // this over-reported the number that decides whether you are warned.
-      const [seatCounts, datasetCount] = await Promise.all([
-        fetchSeatCounts(user, orgId),
-        getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
-          .then((snapshot) => snapshot.data().count)
-          .catch(() => null),
-      ])
-      const over: string[] = []
-      const siteCount = hosts?.length ?? 0
-      if (siteCount > target.hostLimit) {
-        over.push(`${siteCount} sites (${targetPlan} includes ${target.hostLimit})`)
-      }
-      // An unanswerable count is NOT "you are under the limit" — say so
-      // rather than omit the row, so the confirmation cannot read as a
-      // clean bill of health it never earned.
-      if (seatCounts == null) {
-        over.push(
-          `team seats — could not be checked (${targetPlan} includes ` +
-            `${target.managersPerOrg})`,
-        )
-      } else if (seatCounts.managerSeats > target.managersPerOrg) {
-        over.push(
-          `${seatCounts.managerSeats} team members (${targetPlan} includes ${target.managersPerOrg})`,
-        )
-      }
-      // Same rule for datasets, now that its failure is `null` too.
-      if (datasetCount == null) {
-        over.push(
-          `datasets — could not be checked (${targetPlan} includes ` +
-            `${target.maxDatasetsPerOrg})`,
-        )
-      } else if (datasetCount > target.maxDatasetsPerOrg) {
-        over.push(
-          `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
-        )
-      }
-      return over
-    },
+    (targetPlan: OrgPlan): Promise<string[]> =>
+      computeOverLimitSummary({
+        firestore,
+        user: user as never,
+        orgId,
+        targetPlan,
+        siteCount: hosts?.length ?? 0,
+      }),
     [firestore, orgId, hosts, user],
   )
 
@@ -322,10 +283,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * to carry that warning, and moving the decision without moving the
    * warning would have dropped it silently.
    */
+  const openCancelFunnel = useCallback(async () => {
+    setFunnelImpact(await overLimitSummary('free'))
+    setFunnelOpen(true)
+  }, [overLimitSummary])
+
   const handleCancelToggle = useCallback(async () => {
     if (!cancelAtPeriodEnd) {
-      setFunnelImpact(await overLimitSummary('free'))
-      setFunnelOpen(true)
+      await openCancelFunnel()
       return
     }
     const dequeue = queueLoading()
@@ -342,7 +307,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [
     cancelAtPeriodEnd,
-    overLimitSummary,
+    openCancelFunnel,
     subscriptionRequest,
     queueLoading,
     enqueueSnackbar,
@@ -453,6 +418,27 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
       try {
+        // Moving to Free is a CANCEL, not a switch (AGL-2156). There is no
+        // Free price to check out or switch to — the server says so in as many
+        // words now — and for a subscriber it is the cheapest save the
+        // retention funnel has, so the grid's Free card lands in the funnel
+        // rather than on a disabled button that said "No credit card
+        // required" to somebody already paying.
+        if (targetPlan === 'free' && subscriptionActive) {
+          dequeue()
+          if (cancelAtPeriodEnd) {
+            // Already on the way out: opening the funnel again would ask them
+            // to cancel something that is already canceled.
+            enqueueSnackbar(
+              'Your subscription already ends at the period end — this ' +
+                'organization moves to Free then.',
+              { variant: 'info', persist: false },
+            )
+            return
+          }
+          await openCancelFunnel()
+          return
+        }
         // Plan switches on a live subscription go through the proration
         // preview + subscription update, never a second Checkout (AGL-269).
         if (subscriptionActive && org?.plan && targetPlan !== 'free') {
@@ -485,6 +471,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `time before then.`
                 : `Prorated charge today: $${(preview.amountDueCents / 100).toFixed(2)} ` +
                   `${String(preview.currency).toUpperCase()}; renews ${effective}.`) +
+              // A pending cancel and a pending plan change cannot both stand
+              // (AGL-2151). The server clears the cancellation as part of this
+              // operation — a customer picking a smaller plan is trying to
+              // STAY — so the confirm has to say so before they click, or the
+              // cancellation they scheduled disappears without anyone telling
+              // them.
+              (cancelAtPeriodEnd
+                ? ` This also cancels your scheduled cancellation: the ` +
+                  `subscription continues on ${targetPlan} instead of ` +
+                  `ending. You can cancel again at any time.`
+                : '') +
               (over.length
                 ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
                   `${over.join('; ')}. Nothing is deleted and these keep ` +
@@ -645,6 +642,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       orgId,
       interval,
       subscriptionActive,
+      cancelAtPeriodEnd,
+      openCancelFunnel,
       org?.plan,
       overLimitSummary,
       subscriptionRequest,
@@ -1258,9 +1257,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               size: { xs: 12 },
               children: (
                 <BillingPlanCardsComponent
-                  plan={org?.plan as OrgPlan | undefined}
+                  // The page's own defaulted value (AGL-1422), not the raw
+                  // field (AGL-2156): a pre-billing workspace with no `plan`
+                  // handed the grid `undefined`, which is `currentIndex = -1` —
+                  // no "Current plan" chip, NO tier recommended at all, and
+                  // every button reading "Upgrade", while the rest of this
+                  // page said they were on Free.
+                  plan={plan}
                   interval={interval}
                   enterprise={enterprise}
+                  subscriptionActive={subscriptionActive}
                   highlight={planIntent?.plan}
                   onSelect={(tier) =>
                     permissions.editBilling
@@ -1291,6 +1297,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           orgId={orgId ?? ''}
           subscriptionActive={subscriptionActive}
           impact={funnelImpact}
+          // The downsell warns about the TARGET tier the same way the plan
+          // grid's confirm does (AGL-2154) — the server names the plan, so the
+          // summary has to be computed for it on the spot.
+          downsellImpact={overLimitSummary}
           currentPlan={org?.plan as OrgPlan | undefined}
           onClose={() => setFunnelOpen(false)}
           onDownsell={handleFunnelDownsell}

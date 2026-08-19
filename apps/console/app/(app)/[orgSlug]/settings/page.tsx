@@ -47,7 +47,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
 import OrgBrandingCard from '../../../../components/org-branding-card.component'
@@ -59,6 +59,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
+import { overLimitSummary } from '../../../../utils/over-limit-summary'
 
 const WORKSPACE_DOMAIN =
   process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
@@ -72,6 +73,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
   const { data: user } = useUser()
+  const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const [name, setName] = useState('')
@@ -955,6 +957,18 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
             isLiveSubscriptionStatus((org as any)?.subscription?.status)
           }
           currentPlan={org?.plan as OrgPlan | undefined}
+          // The deletion downsell is the same plan change the Billing grid
+          // warns about (AGL-2154), and it said nothing here. No host list is
+          // loaded on this page, so the shared helper counts the sites itself
+          // rather than this page mounting a live host listener to warn once.
+          downsellImpact={(targetPlan) =>
+            overLimitSummary({
+              firestore,
+              user: user as never,
+              orgId: currentOrg?.$id,
+              targetPlan,
+            })
+          }
           onClose={() => setDeleteFunnelOpen(false)}
           onDownsell={handleDeleteDownsell}
           onLeave={handleDeleteLeave}
