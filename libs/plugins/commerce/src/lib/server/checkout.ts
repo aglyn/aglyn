@@ -31,10 +31,20 @@ import {
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
  * price ALWAYS comes from the host's product doc (never the request), the
- * money goes to the host owner's Connect account (AGL-46 onboarding) with a
- * 2% platform fee, and the webhook records the order under the host.
- * Selling is gated on the owner's `marketplaceSelling` plan flag
- * (plan-less orgs resolve as free, AGL-247). 501 without Stripe env.
+ * money goes to the host owner's Connect account (AGL-46 onboarding) as a
+ * DESTINATION charge, and the webhook records the order under the host.
+ * 501 without Stripe env.
+ *
+ * Two claims in this comment were stale and are corrected here (AGL-2295),
+ * both in the direction that matters:
+ *
+ *  - The fee is NOT "2%". It is `resolveTransactionFeePct(org, productType)`
+ *    — a per-plan, per-product-type ladder with per-org staff overrides,
+ *    resolved per request. 2% is one cell of sixteen (Starter, physical).
+ *  - Selling is gated on `commerce`, not on `marketplaceSelling` (AGL-470).
+ *    They are different entitlements on different plans: `marketplaceSelling`
+ *    gates the marketplace, and reading this comment as current would gate a
+ *    storefront on the wrong one.
  */
 export const checkoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {

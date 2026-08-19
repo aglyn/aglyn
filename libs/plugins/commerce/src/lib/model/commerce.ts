@@ -25,13 +25,24 @@
  * shape via `liftLegacyProduct`, so existing docs keep working.
  */
 
-/**
- * Platform fee on tenant-site product sales (Commerce Starter, AGL-90) —
- * the tenant sells to their own visitors through their connected account,
- * so the platform takes a processing/management share only. (Relocated
- * from app-utils/marketplace.ts, where it was misfiled — AGL-411.)
+/*
+ * THERE IS NO STOREFRONT FEE CONSTANT, and that absence is load-bearing
+ * (AGL-2295).
+ *
+ * `COMMERCE_PLATFORM_FEE_PERCENT = 2` lived here with ZERO call sites. It
+ * asserted a flat 2% that agrees with the plan table for exactly one cell
+ * (Starter, physical) and disagrees with the other fifteen — Starter digital
+ * is 5%, Pro digital 3%, Business 2%, Scale 1%, and every physical rate above
+ * Starter is 0%. Nothing was wrong while nothing read it; the cost was that
+ * the next reader wiring it up would silently re-price every plan, and a
+ * constant sitting in the model beside the types reads like the answer.
+ *
+ * The single source is `resolveTransactionFeePct(org, productType)` in
+ * `plan-entitlements.ts`, resolved PER REQUEST from the org — because it
+ * depends on the plan, on per-org staff overrides, and on whether the
+ * subscription is still alive. A constant cannot express any of that.
+ * `commerce-fee-single-source.spec.ts` fails the build if one comes back.
  */
-export const COMMERCE_PLATFORM_FEE_PERCENT = 2
 /** Product price ceiling (whole USD). */
 export const COMMERCE_MAX_PRICE_USD = 10000
 
