@@ -691,6 +691,12 @@ describe('the checker is wired (workflow + package.json)', () => {
       // AGL-2379 / AGL-2240 — no model-provider key reachable from the client
       // bundle. A security control that ran in no workflow at all.
       'check:provider-key-exposure',
+      // AGL-1882 — the off-project backup-copy comparator's pure-node half.
+      // Its live half is scheduled in backup-copies.yml (it needs a Cloud
+      // Storage credential); this half needs nothing, and it is the ONLY
+      // place the verdict's success branch is ever executed, because no
+      // off-project copy exists for production to demonstrate it with.
+      'test:backup-copies',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can

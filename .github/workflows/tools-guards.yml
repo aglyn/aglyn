@@ -237,6 +237,20 @@ jobs:
 
       - run: npm run check:standalone-installs
 
+      # AGL-1882. The comparator behind `check:backup-copies`, which asks the
+      # one question `/api/health/backups` structurally cannot: does ANY copy
+      # of production data live outside the production GCP project? Every
+      # probe that endpoint makes is a probe from inside the thing that would
+      # be lost, and on 2026-08-19 it reported **ok** while all three copies
+      # sat in `aglyn-main`.
+      #
+      # Only the pure half runs here — the live half needs a Storage
+      # credential and is scheduled in backup-copies.yml. This half matters on
+      # its own because the verdict's GREEN branch is one production cannot
+      # currently produce: with no off-project copy in existence, a check run
+      # only against reality would never once execute its own success path.
+      - run: npm run test:backup-copies
+
       # AGL-2089. The versioning rules that decide what number a release
       # carries. Pure string logic, no git — so it runs anywhere, and its
       # dangerous failure mode is a plausible-looking wrong bump rather than a
