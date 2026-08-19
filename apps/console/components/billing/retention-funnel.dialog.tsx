@@ -62,19 +62,6 @@ const REASON_LABELS: Record<ChurnSurveyReason, string> = {
   other: 'Something else',
 }
 
-/**
- * One GA param, present only when the value is a real finite number
- * (AGL-1865). Spread into an event so an unusable value becomes an absent
- * key rather than a `NaN` GA will happily average.
- */
-function numericParam(
-  key: string,
-  value: unknown,
-): Record<string, number> | Record<string, never> {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? { [key]: parsed } : {}
-}
-
 /** The funnel's steps, in order. */
 type FunnelStep = 'survey' | 'downsell' | 'winback' | 'confirm'
 
@@ -268,17 +255,25 @@ export function RetentionFunnelDialog({
         // read: what was actually minted is the only honest answer, and the
         // margin question ("what did this save cost?") is answered wrong by
         // anything else.
-        // A missing or non-numeric field is OMITTED rather than sent as NaN
-        // (AGL-1865). `sanitizeEventParams` passes numbers through untouched,
-        // so a NaN would land in GA and quietly poison the average discount —
-        // the one number the margin question is asked of. An absent param
-        // shows up as a gap; a NaN shows up as an answer.
-        trackEvent('winback_discount_accepted', {
-          ...numericParam('percent_off', payload?.percentOff),
-          ...numericParam('duration_months', payload?.durationMonths),
-          surface,
-          ...(currentPlan ? { plan: currentPlan } : {}),
-        })
+        // Reported only when both terms are real numbers (AGL-1865).
+        // `sanitizeEventParams` passes numbers through untouched, so
+        // `Number(undefined)` would land a NaN in GA and poison the average
+        // discount — the one number the margin question is asked of. Omitting
+        // the params instead is no better: the taxonomy requires them because
+        // a save recorded without its price reads as a FREE save. So a save
+        // whose price we cannot state is not recorded as a priced save at all.
+        // The customer's discount is applied either way; only the telemetry
+        // abstains.
+        const percentOff = Number(payload?.percentOff)
+        const durationMonths = Number(payload?.durationMonths)
+        if (Number.isFinite(percentOff) && Number.isFinite(durationMonths)) {
+          trackEvent('winback_discount_accepted', {
+            percent_off: percentOff,
+            duration_months: durationMonths,
+            surface,
+            ...(currentPlan ? { plan: currentPlan } : {}),
+          })
+        }
         enqueueSnackbar(
           `Discount applied — ${payload?.percentOff}% off for the next ` +
             `${payload?.durationMonths} months.`,

@@ -392,7 +392,7 @@ describe('the funnel reports every step to GA4 (AGL-1865)', () => {
     )
   })
 
-  it('a winback response missing its numbers OMITS them — never NaN', async () => {
+  it('a winback response missing its numbers reports NO priced save — never NaN', async () => {
     ;(global.fetch as jest.Mock).mockImplementation(async (_url, init) => {
       const body = JSON.parse(init.body)
       if (body.action === 'survey') return jsonResponse(SURVEY_OK)
@@ -404,15 +404,12 @@ describe('the funnel reports every step to GA4 (AGL-1865)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'No thanks, continue' }))
     await screen.findByText('Stay for 50% off?')
     fireEvent.click(screen.getByRole('button', { name: 'Apply the discount' }))
-    await waitFor(() =>
-      expect(eventParams('winback_discount_accepted')).toBeTruthy(),
-    )
-    const params = eventParams('winback_discount_accepted') ?? {}
-    // Absent, not NaN. A gap is readable; a NaN averages into the margin
-    // number as though it were an answer.
-    expect('percent_off' in params).toBe(false)
-    expect('duration_months' in params).toBe(false)
-    expect(params).toMatchObject({ surface: 'subscription_cancel' })
+    // The discount still lands — only the telemetry abstains.
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    // Not NaN (which GA would average into the discount cost as though it
+    // were an answer) and not an omitted price (which the taxonomy says reads
+    // as a FREE save). A save we cannot price is not recorded as a priced save.
+    expect(eventParams('winback_discount_accepted')).toBeUndefined()
   })
 
   it('a REFUSED winback reports no acceptance', async () => {
