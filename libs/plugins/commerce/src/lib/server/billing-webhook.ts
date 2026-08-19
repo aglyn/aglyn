@@ -37,6 +37,7 @@ import * as CommerceModel from '../model'
 import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
+import { decrementVariantStock } from './reserve-stock'
 import { flagOrderRestock } from './restock-flag'
 import { recordStorefrontTax } from './storefront-tax-record'
 
@@ -1760,42 +1761,36 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             )
             if (stockVariantId && tracked) {
               const cycleQuantity = cycleLine?.quantity ?? 1
-              const variants = CommerceModel.adjustVariantInventory(
-                stocked,
-                stockVariantId,
-                -cycleQuantity,
-              )
-              // What the floor actually let go (AGL-2149).
-              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-                stocked,
-                stockVariantId,
-                -cycleQuantity,
-              )
-              const updated = { ...stocked, variants }
-              await hostRef
-                .collection('products')
-                .doc(productId)
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId,
-                  variantId: stockVariantId,
-                  delta: -cycleQuantity,
-                  ...(appliedDelta !== -cycleQuantity ? { appliedDelta } : {}),
-                  reason: 'sale',
-                  orderId: invoiceId,
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
-              alertLowStockCrossing(invoiceHostId, stocked, updated)
+              // Atomic since AGL-2320, like every other decrement: a renewal
+              // batch bills many subscribers at once, so two cycles of the same
+              // physical box are exactly the concurrent pair that lost a
+              // decrement here. The `stockSnapshot` read above still resolves
+              // the variant; the transaction re-reads before it writes.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: invoiceHostId,
+                productId,
+                variantId: stockVariantId,
+                quantity: cycleQuantity,
+              })
+              if (moved.before && moved.after) {
+                await hostRef
+                  .collection('inventoryAdjustments')
+                  .add({
+                    productId,
+                    variantId: stockVariantId,
+                    delta: -cycleQuantity,
+                    ...(moved.applied !== -cycleQuantity
+                      ? { appliedDelta: moved.applied }
+                      : {}),
+                    reason: 'sale',
+                    orderId: invoiceId,
+                    atMs: Date.now(),
+                  } satisfies CommerceModel.InventoryAdjustment)
+                  .catch(() => undefined)
+                alertLowStockCrossing(invoiceHostId, moved.before, moved.after)
+              }
             }
           }
         }
@@ -2314,44 +2309,37 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               variant.id === variantId && variant.inventory != null,
           )
           if (!variantId || !tracked) continue
-          const variants = CommerceModel.adjustVariantInventory(
-            product,
-            variantId,
-            -line.quantity,
-          )
-          // What the floor actually let go (AGL-2149).
-          const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-            product,
-            variantId,
-            -line.quantity,
-          )
           // Two lines of one product must COMPOUND (AGL-1830): a cart holds
           // two VARIANTS of one product as two lines (`lineKey` merges on
           // product+variant), and recomputing each from the product as first
           // read would erase this decrement when the sibling line's merge-set
-          // landed, while the ledger below recorded both. Same carry-forward
-          // as the POS loops (AGL-1825/AGL-1828); the gift-card pass below
-          // reads only the `giftCard` flag, which the swap preserves.
-          const updated = { ...product, variants }
-          productsById.set(line.productId, updated)
-          await hostRef
-            .collection('products')
-            .doc(line.productId)
-            .set(
-              {
-                variants,
-                inventory: CommerceModel.productInventory({ variants }),
-              },
-              { merge: true },
-            )
-            .catch(() => undefined)
+          // landed, while the ledger below recorded both.
+          //
+          // Since AGL-2320 the compounding is a PROPERTY of the transaction,
+          // not of the carry-forward: each line re-reads the product inside its
+          // own transaction, so it starts from the sibling line's committed
+          // write — and from a CONCURRENT request's committed write too, which
+          // the in-memory carry-forward could never see. `productsById` is
+          // still refreshed, because the gift-card pass below reads it.
+          const moved = await decrementVariantStock({
+            firestore,
+            hostRef,
+            hostId: String(hostId),
+            productId: line.productId,
+            variantId,
+            quantity: line.quantity,
+          })
+          if (!moved.before || !moved.after) continue
+          productsById.set(line.productId, moved.after)
           await hostRef
             .collection('inventoryAdjustments')
             .add({
               productId: line.productId,
               variantId,
               delta: -line.quantity,
-              ...(appliedDelta !== -line.quantity ? { appliedDelta } : {}),
+              ...(moved.applied !== -line.quantity
+                ? { appliedDelta: moved.applied }
+                : {}),
               reason: 'sale',
               orderId: String(object.id),
               atMs: Date.now(),
@@ -2363,7 +2351,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           // compounded pair; the `created` guard above bounds it on
           // redelivery. Fires per crossing line, which for a multi-product
           // basket is one nudge per product that breached.
-          alertLowStockCrossing(String(hostId), product, updated)
+          alertLowStockCrossing(String(hostId), moved.before, moved.after)
         }
         void notifyHostManagers(String(hostId), {
           type: 'content.order',
@@ -2732,60 +2720,48 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               String(object.metadata?.variantId ?? '') ||
               lifted.variants[0]?.id
             const quantity = order.lineItems?.[0]?.quantity ?? 1
-            if (
-              soldVariantId &&
-              lifted.variants.some(
-                (variant) =>
-                  variant.id === soldVariantId && variant.inventory != null,
-              )
-            ) {
-              const variants = CommerceModel.adjustVariantInventory(
-                lifted,
-                soldVariantId,
-                -quantity,
-              )
-              // What the floor actually let go (AGL-2149).
-              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-                lifted,
-                soldVariantId,
-                -quantity,
-              )
-              await productRef
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
-              // Adjustment ledger (AGL-1807): this was the one stock writer of
-              // four that moved the count and logged nothing, so a draft-link
-              // sale read as stock vanishing in the products hub's history —
-              // and the reason AGL-1797 could not derive its restock flag from
-              // this collection. Same shape and same swallowed failure as the
-              // cart and buy-now siblings; `orderId` is the ORDER doc id from
-              // the metadata, not `object.id` — unlike the siblings, this
-              // branch's session id names no order document.
-              await hostRef
-                .collection('inventoryAdjustments')
-                .add({
-                  productId: String(productId),
-                  variantId: soldVariantId,
-                  delta: -quantity,
-                  ...(appliedDelta !== -quantity ? { appliedDelta } : {}),
-                  reason: 'sale',
-                  orderId: String(orderId),
-                  atMs: Date.now(),
-                } satisfies CommerceModel.InventoryAdjustment)
-                .catch(() => undefined)
-              // Low-stock crossing alert (AGL-1826): a merchant-sent payment
-              // link used to sell a product down to its threshold in
-              // silence. The `pending` -> `paid` flip bounds redelivery.
-              alertLowStockCrossing(String(hostId), lifted, {
-                ...lifted,
-                variants,
+            if (soldVariantId) {
+              // Atomic since AGL-2320.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: String(hostId),
+                productId: String(productId),
+                variantId: soldVariantId,
+                quantity,
               })
+              // `before`/`after` absent means nothing was written — a missing
+              // product, an untracked variant, or a failed commit — and a
+              // ledger row would then claim a movement the count never made.
+              if (moved.before && moved.after) {
+                // Adjustment ledger (AGL-1807): this was the one stock writer
+                // of four that moved the count and logged nothing, so a
+                // draft-link sale read as stock vanishing in the products hub's
+                // history — and the reason AGL-1797 could not derive its
+                // restock flag from this collection. Same shape and same
+                // swallowed failure as the cart and buy-now siblings;
+                // `orderId` is the ORDER doc id from the metadata, not
+                // `object.id` — unlike the siblings, this branch's session id
+                // names no order document.
+                await hostRef
+                  .collection('inventoryAdjustments')
+                  .add({
+                    productId: String(productId),
+                    variantId: soldVariantId,
+                    delta: -quantity,
+                    ...(moved.applied !== -quantity
+                      ? { appliedDelta: moved.applied }
+                      : {}),
+                    reason: 'sale',
+                    orderId: String(orderId),
+                    atMs: Date.now(),
+                  } satisfies CommerceModel.InventoryAdjustment)
+                  .catch(() => undefined)
+                // Low-stock crossing alert (AGL-1826): a merchant-sent payment
+                // link used to sell a product down to its threshold in
+                // silence. The `pending` -> `paid` flip bounds redelivery.
+                alertLowStockCrossing(String(hostId), moved.before, moved.after)
+              }
             }
           } else {
             // POS card sale (AGL-1825). This branch's other tenant: the
@@ -2842,36 +2818,23 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ) {
                 continue
               }
-              const variants = CommerceModel.adjustVariantInventory(
-                lineProduct,
-                soldVariantId,
-                -soldQty,
-                order.locationId || undefined,
-              )
-              // What the floor actually let go (AGL-2149).
-              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-                lineProduct,
-                soldVariantId,
-                -soldQty,
-                order.locationId || undefined,
-              )
               // Two lines of one product must COMPOUND: the next line starts
               // from these variants, not from the product as first read —
               // recomputing from the original would erase this decrement
-              // when the sibling line's write landed.
-              const updated = { ...lineProduct, variants }
-              paidProducts.set(lineProductId, updated)
-              await hostRef
-                .collection('products')
-                .doc(lineProductId)
-                .set(
-                  {
-                    variants,
-                    inventory: CommerceModel.productInventory({ variants }),
-                  },
-                  { merge: true },
-                )
-                .catch(() => undefined)
+              // when the sibling line's write landed. Since AGL-2320 the
+              // transaction's own re-read is what compounds them, and it also
+              // sees a concurrent request's write, which this map never could.
+              const moved = await decrementVariantStock({
+                firestore,
+                hostRef,
+                hostId: String(hostId),
+                productId: lineProductId,
+                variantId: soldVariantId,
+                quantity: soldQty,
+                locationId: order.locationId || undefined,
+              })
+              if (!moved.before || !moved.after) continue
+              paidProducts.set(lineProductId, moved.after)
               // The AGL-1807 ledger row, from this decrement's first day —
               // joined to the ORDER doc (the session id names no order) and
               // carrying the location the units left, which is what lets
@@ -2883,7 +2846,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   productId: lineProductId,
                   variantId: soldVariantId,
                   delta: -soldQty,
-                  ...(appliedDelta !== -soldQty ? { appliedDelta } : {}),
+                  ...(moved.applied !== -soldQty
+                    ? { appliedDelta: moved.applied }
+                    : {}),
                   reason: 'sale',
                   orderId: String(orderId),
                   ...(order.locationId
@@ -2898,7 +2863,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               // pair means two lines of one product cross exactly once, on
               // the line that breaches; the `pending` -> `paid` flip bounds
               // redelivery.
-              alertLowStockCrossing(String(hostId), lineProduct, updated)
+              alertLowStockCrossing(String(hostId), moved.before, moved.after)
             }
           }
         }
@@ -3115,6 +3080,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // log; the checkout guard makes negative stock a race-window edge,
         // and the helper floors at zero. Legacy flat `inventory` stays
         // denormalized for the Product block.
+        //
+        // ATOMIC since AGL-2320. The read that decided the new count used to be
+        // this branch's own `productSnapshot`, taken before the order write,
+        // the licence keys and the receipt email — a wide window in which a
+        // second sale's write was simply overwritten. `decrementVariantStock`
+        // re-reads and writes inside one transaction, so concurrent sales
+        // serialize; the snapshot above is still read, for the product NAME on
+        // the receipt below, and no longer decides any count.
         {
           const lifted = CommerceModel.liftLegacyProduct(
             (productSnapshot.data() as any) ?? { name: 'Product' },
@@ -3122,56 +3095,41 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           const soldVariantId =
             String(object.metadata?.variantId ?? '') ||
             lifted.variants[0]?.id
-          if (
-            soldVariantId &&
-            lifted.variants.some(
-              (variant) =>
-                variant.id === soldVariantId && variant.inventory != null,
-            )
-          ) {
+          if (soldVariantId) {
             // AGL-1711: `-1` regardless of how many units were bought, so a
             // 3-unit buy-now sale decremented stock by one and the difference
             // was silently oversellable. `canPurchase` already gated the full
             // quantity at checkout, so this is the only place it was dropped.
-            const variants = CommerceModel.adjustVariantInventory(
-              lifted,
-              soldVariantId,
-              -soldQuantity,
-            )
-            // What the floor actually let go (AGL-2149).
-            const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-              lifted,
-              soldVariantId,
-              -soldQuantity,
-            )
-            const updated = { ...lifted, variants }
-            await productRef
-              .set(
-                {
-                  variants,
-                  inventory: CommerceModel.productInventory(updated),
-                },
-                { merge: true },
-              )
-              .catch(() => undefined)
-            await hostRef
-              .collection('inventoryAdjustments')
-              .add({
-                productId: String(productId),
-                variantId: soldVariantId,
-                delta: -soldQuantity,
-                ...(appliedDelta !== -soldQuantity ? { appliedDelta } : {}),
-                reason: 'sale',
-                orderId: String(object.id),
-                atMs: Date.now(),
-              } satisfies CommerceModel.InventoryAdjustment)
-              .catch(() => undefined)
-            // Low-stock alert (AGL-281): fires on the crossing sale only,
-            // so managers get one nudge per threshold breach, not one per
-            // order after it. The check lived inline here — the one branch
-            // of four that had it — until AGL-1826 extracted it to sit
-            // beside every decrement; semantics unchanged.
-            alertLowStockCrossing(String(hostId), lifted, updated)
+            const moved = await decrementVariantStock({
+              firestore,
+              hostRef,
+              hostId: String(hostId),
+              productId: String(productId),
+              variantId: soldVariantId,
+              quantity: soldQuantity,
+            })
+            if (moved.before && moved.after) {
+              await hostRef
+                .collection('inventoryAdjustments')
+                .add({
+                  productId: String(productId),
+                  variantId: soldVariantId,
+                  delta: -soldQuantity,
+                  ...(moved.applied !== -soldQuantity
+                    ? { appliedDelta: moved.applied }
+                    : {}),
+                  reason: 'sale',
+                  orderId: String(object.id),
+                  atMs: Date.now(),
+                } satisfies CommerceModel.InventoryAdjustment)
+                .catch(() => undefined)
+              // Low-stock alert (AGL-281): fires on the crossing sale only,
+              // so managers get one nudge per threshold breach, not one per
+              // order after it. The check lived inline here — the one branch
+              // of four that had it — until AGL-1826 extracted it to sit
+              // beside every decrement; semantics unchanged.
+              alertLowStockCrossing(String(hostId), moved.before, moved.after)
+            }
           }
         }
         if (couponCode) {

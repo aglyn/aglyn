@@ -30,6 +30,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { alertLowStockCrossing } from './low-stock'
+import { decrementVariantStock } from './reserve-stock'
 
 /**
  * The settlement claim (AGL-1691) now lives in `@aglyn/aglyn/server`
@@ -616,41 +617,45 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         (variant) => variant.id === variantId && variant.inventory != null,
       )
       if (!variantId || !tracked) continue
-      const variants = CommerceModel.adjustVariantInventory(
-        product,
-        variantId,
-        -line.quantity,
-        locationId || undefined,
-      )
-      // What the floor actually let go (AGL-2149).
-      const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
-        product,
-        variantId,
-        -line.quantity,
-        locationId || undefined,
-      )
       // Two lines of one product must COMPOUND (AGL-1828): the next line
       // starts from these variants, not from the product as first read —
       // recomputing from the original would erase this decrement when the
       // sibling line's merge-set landed, while the ledger below recorded
       // both. Same carry-forward as the webhook's POS card loop (AGL-1825).
-      const updated = { ...product, variants }
-      productsById.set(line.productId, updated)
-      await hostRef
-        .collection('products')
-        .doc(line.productId)
-        .set(
-          { variants, inventory: CommerceModel.productInventory({ variants }) },
-          { merge: true },
-        )
-        .catch(() => undefined)
+      //
+      // ATOMIC since AGL-2320, and the register is the channel that needed it
+      // most: `productsById` was read at the top of this handler, before the
+      // register quota check, the pricing pass, the settlement claim, the order
+      // transaction and the folio append. A shopper's webhook landing anywhere
+      // in that window had its decrement overwritten by this merge-set — two
+      // sales, one unit off the shelf, both in the ledger. The transaction's
+      // re-read is what compounds the lines now, and it sees the other
+      // channel's committed write too.
+      //
+      // The register still SELLS whatever is rung up. Refusing goods a cashier
+      // is physically holding is a product decision, not this fix's (AGL-2320);
+      // what the merchant gets instead is the oversold notification the helper
+      // fires when the shelf could not cover the sale.
+      const moved = await decrementVariantStock({
+        firestore,
+        hostRef,
+        hostId,
+        productId: line.productId,
+        variantId,
+        quantity: line.quantity,
+        locationId: locationId || undefined,
+      })
+      if (!moved.before || !moved.after) continue
+      productsById.set(line.productId, moved.after)
       await hostRef
         .collection('inventoryAdjustments')
         .add({
           productId: line.productId,
           variantId,
           delta: -line.quantity,
-          ...(appliedDelta !== -line.quantity ? { appliedDelta } : {}),
+          ...(moved.applied !== -line.quantity
+            ? { appliedDelta: moved.applied }
+            : {}),
           reason: 'sale',
           orderId: orderRef.id,
           ...(locationId ? { locationId } : {}),
@@ -663,7 +668,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       // button alerted. The compounded pair above means two lines of one
       // product cross exactly once, on the line that breaches; the
       // `claimAttempt` bounds a replayed settlement.
-      alertLowStockCrossing(hostId, product, updated)
+      alertLowStockCrossing(hostId, moved.before, moved.after)
     }
     // AGL-1757: the register's email box is optional, and a room charge is
     // exactly the sale nobody stops to re-ask an email for — so a stay's
