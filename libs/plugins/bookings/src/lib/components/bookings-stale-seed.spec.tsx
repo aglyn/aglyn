@@ -94,7 +94,16 @@ const enqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar }),
 }))
+// The REAL barrel is spread in, and only the three things this file needs to
+// control are replaced (AGL-2431). A factory that listed its exports was a
+// closed world: the page renders whatever the barrel exports, so the first
+// component to reach for a fourth — `HelpTip`, for a help affordance on the
+// reminder line — got `undefined` and every test here died with "Element type
+// is invalid" pointing at BookingsConsolePage, which is not where the fault
+// was. A mock that has to be edited whenever the component under test grows
+// is a mock that manufactures false reds.
 jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   MdiIcon: () => null,
   useConfirmationContext: () => ({

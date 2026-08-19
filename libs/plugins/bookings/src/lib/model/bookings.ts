@@ -50,6 +50,47 @@ export const BOOKING_MAX_DURATION_MINUTES = 8 * 60
 /** Slot enumeration horizon; the console/API never look further out. */
 export const BOOKING_MAX_DAYS_AHEAD = 60
 
+/**
+ * The band a booking has to fall in to earn its 24-hour reminder, in hours
+ * from now (AGL-160, scheduled in AGL-2431).
+ *
+ * IN THE MODEL, not beside the scan that uses them, so the console card can
+ * apply the identical window without importing server code into a client
+ * bundle. That sharing is the point rather than a convenience: a card that
+ * drew its own boundary would report a queue depth the job does not act on,
+ * and a merchant checking whether reminders are working would be reading a
+ * number produced by different arithmetic than the sender's.
+ */
+export const REMINDER_WINDOW_START_HOURS = 23
+export const REMINDER_WINDOW_END_HOURS = 25
+
+/**
+ * Whether `booking` is one this pass would mail — the three tests the scan
+ * applies, in one place both halves call.
+ *
+ * `nowMs` is a parameter and not `Date.now()` so the card and the job can be
+ * asked the same question about the same instant, and so a test can pin a
+ * booking exactly on either edge of the band.
+ */
+export function isBookingReminderDue(
+  booking: {
+    status?: string
+    email?: string
+    reminderSentAt?: unknown
+    startsAtMs?: number
+  },
+  nowMs: number,
+): boolean {
+  const startsAtMs = Number(booking.startsAtMs ?? 0)
+  return (
+    booking.status !== 'canceled' &&
+    !booking.reminderSentAt &&
+    Boolean(booking.email) &&
+    startsAtMs >= nowMs + REMINDER_WINDOW_START_HOURS * 60 * 60 * 1000 &&
+    startsAtMs <= nowMs + REMINDER_WINDOW_END_HOURS * 60 * 60 * 1000
+  )
+}
+
 /** Weekday (0-6) and minutes-since-midnight of an instant in a timezone. */
 function localParts(
   atMs: number,
