@@ -22,11 +22,14 @@
  */
 import {
   type AttemptClaim,
+  checkDatasetQuota,
   checkEntitlement,
   claimAttempt,
   coerceDocumentValues,
   createResourceUid,
+  defaultScopeForNewResource,
   effectiveDatasetModel,
+  newResourceScopeFields,
   validateDocument,
 } from '@aglyn/aglyn/server'
 import {
@@ -126,16 +129,24 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
  * and which no amount of documentation makes safe. `POST` keeps `records`
  * verbatim: changing its digest orphans keys in flight, and AGL-1709 already
  * paid that cost once.
+ *
+ * `scopeSuffix` is the object the key is scoped WITHIN — a dataset id for the
+ * record operations, and `*` for the two that act on the dataset collection
+ * itself (AGL-2126), where there is no dataset id yet (`POST /v1/datasets`) or
+ * the dataset is the thing being removed. `*` cannot collide with a dataset id:
+ * `createResourceUid()` never emits one, and the `kind` is separate anyway. The
+ * suffix is not the whole story — `kind` is hashed in too, which is what keeps
+ * a create's key from replaying into a delete.
  */
 async function claimWrite(
   ctx: ApiV1Context,
-  datasetId: string,
+  scopeSuffix: string,
   key: string | null,
-  kind: 'records' | 'record-deletes',
+  kind: 'records' | 'record-deletes' | 'datasets' | 'dataset-deletes',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
     kind,
-    scopeId: `${ctx.orgId}:${datasetId}`,
+    scopeId: `${ctx.orgId}:${scopeSuffix}`,
     // The field `eraseOrgIdempotencyKeys` sweeps on (AGL-1448).
     orgId: ctx.orgId,
     key: key ?? '',
@@ -199,6 +210,256 @@ function datasetsCollection(ctx: ApiV1Context) {
   return ctx.firestore.collection('orgs').doc(ctx.orgId).collection('datasets')
 }
 
+/** Serialized `model` ceiling, matching the console's create route. */
+const DATASET_MODEL_MAX_BYTES = 64 * 1024
+const DATASET_NAME_MAX = 120
+const DATASET_FIELDS_MAX = 100
+
+/**
+ * Validate the writable half of a dataset document (AGL-2126). Returns the
+ * cleaned values, or the per-field map `conventions.md` publishes under
+ * `validation_failed` — the same shape `validateDocument` produces for a
+ * record, so a client branches on one thing across the whole resource.
+ *
+ * `partial` is what separates PATCH from POST: a create must be told a name
+ * and at least one field, an update may send either alone. Absent keys are
+ * left alone rather than cleared, because a PATCH that silently emptied
+ * `fields` would take a dataset's schema away on a typo'd request body.
+ */
+function readDatasetInput(
+  body: Record<string, unknown>,
+  { partial }: { partial: boolean },
+):
+  | { values: { name?: string; fields?: string[]; model?: unknown } }
+  | { errors: Record<string, string> } {
+  const errors: Record<string, string> = {}
+  const values: { name?: string; fields?: string[]; model?: unknown } = {}
+
+  const hasName = body.name !== undefined
+  if (hasName || !partial) {
+    const name = String(body.name ?? '').trim().slice(0, DATASET_NAME_MAX)
+    if (!name) errors.name = 'Required'
+    else values.name = name
+  }
+
+  const hasFields = body.fields !== undefined
+  if (hasFields || !partial) {
+    if (!Array.isArray(body.fields)) {
+      errors.fields = 'Must be an array of field names'
+    } else {
+      const fields = (body.fields as unknown[])
+        .map((field) => String(field).trim())
+        .filter((field) => field.length > 0)
+        .slice(0, DATASET_FIELDS_MAX)
+      if (fields.length === 0) errors.fields = 'At least one field is required'
+      else values.fields = fields
+    }
+  }
+
+  if (body.model !== undefined) {
+    if (!body.model || typeof body.model !== 'object') {
+      errors.model = 'Must be an object'
+    } else if (JSON.stringify(body.model).length > DATASET_MODEL_MAX_BYTES) {
+      errors.model = `Must serialize to under ${DATASET_MODEL_MAX_BYTES} bytes`
+    } else {
+      values.model = body.model
+    }
+  }
+
+  return Object.keys(errors).length ? { errors } : { values }
+}
+
+/**
+ * `POST /v1/datasets` (AGL-2126) — the call that lets the API bootstrap itself.
+ *
+ * Until this shipped, `/v1` could create and edit RECORDS but not the dataset
+ * holding them, so an agency provisioning a client workspace, or a developer
+ * keeping a schema in source control, had to click a dataset into existence
+ * before their first API call could do anything. The console has been able to
+ * do this all along (`apps/console/app/api/orgs/datasets`, `create-dataset`).
+ *
+ * The gates are the console route's, not a looser set. `dataStore` is the
+ * entitlement, `checkDatasetQuota` is add-on aware, and — the one that is
+ * invisible until it bites — `newResourceScopeFields` stamps `visibleTo`.
+ * A dataset created without it matches no `array-contains-any` and therefore
+ * renders on NO site at all (AGL-1044): the API would happily create data
+ * that never appears anywhere, which is worse than refusing.
+ */
+async function createDataset(
+  request: Request,
+  ctx: ApiV1Context,
+): Promise<Response> {
+  if (!checkEntitlement(ctx.org, 'dataStore')) {
+    return ApiErrors.planRequired({
+      message: 'Datasets are not included in this organization’s plan',
+      code: 'data_store',
+      headers: ctx.headers,
+    })
+  }
+
+  const parsed = readDatasetInput(await readJsonBody(request), {
+    partial: false,
+  })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Dataset failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+
+  // Quota BEFORE the claim, for the reason `createRecord` validates before
+  // claiming: a refusal an integrator can act on must not consume their key.
+  // A plan refusal is the most retried failure there is — it clears when
+  // somebody buys an add-on — and burning the key would mean the retry that
+  // finally should succeed replays the refusal instead.
+  const collection = datasetsCollection(ctx)
+  const datasetCount = (await collection.count().get()).data().count
+  const quota = checkDatasetQuota(ctx.org, datasetCount)
+  if (!quota.allowed) {
+    return ApiErrors.planRequired({
+      message:
+        `Dataset limit reached (${quota.limit}). ` +
+        (quota.upgradeRequired
+          ? 'Upgrade the plan to add more.'
+          : `Buy extra datasets for $${quota.addonPriceUsd}/mo each, or upgrade.`),
+      code: 'dataset_quota',
+      headers: ctx.headers,
+    })
+  }
+
+  const claimed = await claimWrite(
+    ctx,
+    '*',
+    request.headers.get('Idempotency-Key'),
+    'datasets',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const id = createResourceUid()
+    await collection.doc(id).create({
+      displayName: parsed.values.name,
+      fields: parsed.values.fields,
+      ...(parsed.values.model ? { model: parsed.values.model } : {}),
+      // AGL-1484: the required argument exists so a creator that has not
+      // decided cannot compile. No site is in context on an org-scoped API
+      // key, so the org's own default is the only honest answer.
+      ...newResourceScopeFields(
+        defaultScopeForNewResource({
+          defaultResourceScope: (
+            ctx.org as { defaultResourceScope?: 'org' | 'host' }
+          )?.defaultResourceScope,
+          hostId: null,
+        }),
+      ),
+      createdAt: Timestamp.now(),
+    })
+    const view = datasetView(await collection.doc(id).get())
+    // Stored as 200 so a replay is distinguishable from the fresh 201 — the
+    // rule `conventions.md` publishes and `createRecord` already follows.
+    await claim.record(200, view)
+    return apiJson(view, { status: 201, headers: ctx.headers })
+  } catch (error) {
+    // Same direction as every other v1 write: a stranded key is irreversible
+    // from outside, a duplicate dataset is one DELETE away.
+    await claim.release()
+    throw error
+  }
+}
+
+/**
+ * `PATCH /v1/datasets/{id}` — rename, re-field, or re-model. Takes no
+ * `Idempotency-Key` and does not need one, for `updateRecord`'s reason: the
+ * same body twice lands the same state AND returns the same `200`.
+ */
+async function updateDataset(
+  request: Request,
+  ctx: ApiV1Context,
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const snap = await datasetRef.get()
+  if (!snap.exists) {
+    return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+  }
+  const parsed = readDatasetInput(await readJsonBody(request), { partial: true })
+  if ('errors' in parsed) {
+    return ApiErrors.badRequest({
+      message: 'Dataset failed validation',
+      code: 'validation_failed',
+      fields: parsed.errors,
+      headers: ctx.headers,
+    })
+  }
+  const { name, fields, model } = parsed.values
+  const update: Record<string, unknown> = {}
+  if (name !== undefined) update.displayName = name
+  if (fields !== undefined) update.fields = fields
+  if (model !== undefined) update.model = model
+  // An empty body is a no-op, answered with the current dataset rather than a
+  // 400: a client re-sending an unchanged object should not have to special-
+  // case it, and there is no state to disagree about.
+  if (Object.keys(update).length > 0) await datasetRef.update(update)
+  return apiJson(datasetView(await datasetRef.get()), { headers: ctx.headers })
+}
+
+/**
+ * `DELETE /v1/datasets/{id}` — refuses while records remain.
+ *
+ * A recursive delete is not something a single REST call should do quietly:
+ * the records are the customer's content, and one mistyped id would take all
+ * of them with no receipt naming what went. So this answers `409 conflict`
+ * with the count, and the integrator deletes the records first — with the
+ * same key semantics, through an endpoint that already exists.
+ */
+async function deleteDataset(
+  request: Request,
+  ctx: ApiV1Context,
+  datasetRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    datasetRef.id,
+    request.headers.get('Idempotency-Key'),
+    'dataset-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await datasetRef.get()
+    if (!snap.exists) {
+      // Release: a wrong id is the integrator's to correct and retry with the
+      // same key, exactly as `deleteRecord` does.
+      await claim.release()
+      return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+    }
+    const records = (await datasetRef.collection('records').count().get()).data()
+      .count
+    if (records > 0) {
+      // Release too — this refusal clears once the records are gone, and the
+      // retry that should then succeed must not replay the refusal.
+      await claim.release()
+      return ApiErrors.conflict({
+        message: `Dataset still holds ${records} record${
+          records === 1 ? '' : 's'
+        }. Delete them first.`,
+        code: 'dataset_not_empty',
+        headers: ctx.headers,
+      })
+    }
+    await datasetRef.delete()
+    const view = { id: datasetRef.id, object: 'dataset', deleted: true }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
+}
+
 async function handleDatasets(
   request: Request,
   ctx: ApiV1Context,
@@ -209,23 +470,48 @@ async function handleDatasets(
 
   // /v1/datasets
   if (!datasetId) {
-    const denied = requireScope(ctx, 'datasets:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const { docs, nextCursor } = await paginate(datasetsCollection(ctx), url)
-    return listResponse(docs.map(datasetView), nextCursor, ctx.headers)
+    if (request.method === 'GET') {
+      const denied = requireScope(ctx, 'datasets:read')
+      if (denied) return denied
+      const { docs, nextCursor } = await paginate(datasetsCollection(ctx), url)
+      return listResponse(docs.map(datasetView), nextCursor, ctx.headers)
+    }
+    if (request.method === 'POST') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return createDataset(request, ctx)
+    }
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, POST' },
+    })
   }
 
   const datasetRef = datasetsCollection(ctx).doc(datasetId)
 
   // /v1/datasets/{id}
   if (!sub) {
-    const denied = requireScope(ctx, 'datasets:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const snap = await datasetRef.get()
-    if (!snap.exists) return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
-    return apiJson(datasetView(snap), { headers: ctx.headers })
+    if (request.method === 'GET') {
+      const denied = requireScope(ctx, 'datasets:read')
+      if (denied) return denied
+      const snap = await datasetRef.get()
+      if (!snap.exists) {
+        return ApiErrors.notFound({ message: 'No such dataset', headers: ctx.headers })
+      }
+      return apiJson(datasetView(snap), { headers: ctx.headers })
+    }
+    if (request.method === 'PATCH') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return updateDataset(request, ctx, datasetRef)
+    }
+    if (request.method === 'DELETE') {
+      const denied = requireScope(ctx, 'datasets:write')
+      if (denied) return denied
+      return deleteDataset(request, ctx, datasetRef)
+    }
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
+    })
   }
 
   if (sub !== 'records') {

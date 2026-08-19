@@ -133,7 +133,7 @@ for failing fast at startup with a clear message.
 
 | Resource | Description |
 | --- | --- |
-| [Datasets & records](resources/datasets.md) | List datasets and create, read, update, and delete their records. |
+| [Datasets & records](resources/datasets.md) | Create, read, update, and delete datasets and the records inside them — the one resource the API can provision from nothing. |
 | [Contacts](resources/contacts.md) | Read your organization's contacts. |
 | [Sites & form submissions](resources/sites.md) | List sites and read their form submissions. |
 | [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes. |
