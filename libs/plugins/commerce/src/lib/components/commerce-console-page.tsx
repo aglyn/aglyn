@@ -34,6 +34,7 @@ import RegistersCard from './console/registers-card.component'
 import ReservationsCard from './console/reservations-card.component'
 import ReviewsModerationCard from './console/reviews-moderation-card.component'
 import ShippingSettingsCard from './console/shipping-settings-card.component'
+import StockMovementsCard from './console/stock-movements-card.component'
 import StoreSettingsCard from './console/store-settings-card.component'
 import SuppliersCard from './console/suppliers-card.component'
 import TaxSettingsCard from './console/tax-settings-card.component'
@@ -61,6 +62,14 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
                 {
                   size: { xs: 12 },
                   children: <CatalogOrganizationCard hostId={hostId} />,
+                },
+                // The ledger every stock writer fills and nothing displayed
+                // (AGL-2341). Directly under the catalog, because the question
+                // it answers — "why does this count disagree with the shelf" —
+                // is asked while looking at the count.
+                {
+                  size: { xs: 12 },
+                  children: <StockMovementsCard hostId={hostId} />,
                 },
                 { size: { xs: 12 }, children: <MemberPostsCard hostId={hostId} /> },
               ]}

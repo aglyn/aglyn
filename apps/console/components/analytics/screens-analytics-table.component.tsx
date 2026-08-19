@@ -48,6 +48,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import { recentDayIds } from '../../utils/analytics-day-cache'
 import {
   aggregateScreenDays,
+  topReferrer,
   topDevice,
   type ScreenTrafficRow,
 } from '../../utils/screen-analytics-aggregate'
@@ -227,6 +228,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
               <TableCell align="right">{'Views'}</TableCell>
               <TableCell align="right">{'Share'}</TableCell>
               <TableCell>{'Top device'}</TableCell>
+              <TableCell>{'Top referrer'}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -252,6 +254,16 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
                   </TableCell>
                   <TableCell sx={{ textTransform: 'capitalize' }}>
                     {topDevice(row) || '--'}
+                  </TableCell>
+                  {/*
+                    * Not capitalized: a referrer is a HOSTNAME, and
+                    * `News.ycombinator.com` is a different string from the
+                    * one stored. AGL-2341.
+                    */}
+                  <TableCell sx={{ maxWidth: 200 }}>
+                    <Typography variant="body2" noWrap>
+                      {topReferrer(row) || '--'}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               )
