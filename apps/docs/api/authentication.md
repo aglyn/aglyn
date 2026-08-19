@@ -64,9 +64,15 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `contacts:read` | List and read contacts. |
 | `sites:read` | List sites and read their details. |
 | `forms:read` | Read a site's form submissions. |
+| `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
 | `orders:read` | Read a site's store orders. |
 | `products:read` | Read a site's products, variants, prices and stock. |
 | `media:read` | List files in the organization library and in a site's media. |
+
+`forms:write` is deliberately narrow. It grants the `read` flag and the delete, and
+nothing that rewrites a submission's `fields` — a submission is a record of what a
+visitor typed, and an API that could edit it would make the inbox unattributable. See
+[form submissions](resources/form-submissions.md#read-is-the-only-writable-field).
 
 Several resources are **read-only** over the API, and the missing write scope is
 deliberate in each case rather than an oversight:

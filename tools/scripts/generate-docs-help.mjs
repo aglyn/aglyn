@@ -69,16 +69,23 @@ const CONSOLE_ALIASES = {
 
 // The besigner designer lib can't import console constants, so it gets its own
 // generated subset. Keys are the besignerDocsUrl() page ids.
+//
+// EVERY key here must have a real call site (AGL-2130). This list held nine
+// topics and the besigner referenced exactly one of them —
+// `responsiveStyling` — so eight of the nine were a generated, type-checked
+// promise of a help link that no surface in the product could follow. That is
+// the `API_SCOPES` failure in another costume: a declaration nobody enforces
+// reads as a feature, and the only symptom is its absence.
+//
+// So the rule is the one that file states: a topic lands here in the same
+// change that ships the surface linking to it, never ahead of it.
+// `apps/console/specs/besigner-docs-topics.spec.ts` fails when the two drift.
+//
+// Removed here, and each named with its destination in AGL-2167: besigner,
+// dragDropHierarchy, textEditing, reusableComponents, interactions, bindings,
+// screens, seo. Re-add one line at a time, beside its call site.
 const BESIGNER_TOPICS = {
-  besigner: '/building-sites/besigner/overview',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
-  dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
-  textEditing: '/building-sites/besigner/text-editing',
-  reusableComponents: '/building-sites/besigner/reusable-components',
-  interactions: '/building-sites/besigner/interactions-and-custom-html',
-  bindings: '/building-sites/bindings/overview',
-  screens: '/building-sites/screens-and-layouts/overview',
-  seo: '/building-sites/seo/overview',
 }
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

@@ -300,12 +300,20 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     !enterprise && highlight && highlight !== plan
       ? PLAN_ORDER.indexOf(highlight)
       : -1
-  const recommendedIndex =
-    highlightIndex >= 0
-      ? highlightIndex
-      : !enterprise && currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
-        ? currentIndex + 1
-        : -1
+  // A deep link EXPANDS a lower tier (below) but never RECOMMENDS one
+  // (AGL-2142). `?plan=starter` on a Pro org used to badge the Starter card
+  // "Recommended" with a primary border while the same card was dimmed to 0.66
+  // and labelled Downgrade — a card recommending and de-emphasizing itself in
+  // the same breath, and a recommendation the product does not mean. AGL-1859
+  // §2 is explicit that a downgrade is never the emphasized control, so the
+  // highlight only wins the recommendation when it points UP the ladder.
+  const highlightRecommends =
+    highlightIndex >= 0 && (currentIndex < 0 || highlightIndex > currentIndex)
+  const recommendedIndex = highlightRecommends
+    ? highlightIndex
+    : !enterprise && currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
+      ? currentIndex + 1
+      : -1
 
   // Lower tiers start collapsed (AGL-1859). Only ever collapsed for an org
   // that HAS a plan to be below: a visitor with no plan yet, or an enterprise

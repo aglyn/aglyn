@@ -69,6 +69,12 @@ export interface MediaAssetCardProps {
    * the console calling it.
    */
   onCopySignedLink?: () => void
+  /**
+   * Save the file itself (AGL-2143). Distinct from both link items above:
+   * `Copy URL` hands over an address, and for a private asset there is no
+   * permanent one — the DAM offered no way to get the BYTES back at all.
+   */
+  onDownload?: () => void
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
@@ -111,6 +117,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onToggleSelect,
     onCopyUrl,
     onCopySignedLink,
+    onDownload,
     onReplace,
     onDetails,
     onDelete,
@@ -342,21 +349,23 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           ) : null}
         </Box>
         {picker ? null : (
-          <IconButton
-            className="media-card-affordance"
-            size="small"
-            aria-label="File actions"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={openMenu}
-            sx={{
-              mt: -0.25,
-              mr: -0.5,
-              opacity: { xs: 1, md: 0 },
-              transition: (theme) => theme.transitions.create('opacity'),
-            }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="File actions">
+            <IconButton
+              className="media-card-affordance"
+              size="small"
+              aria-label="File actions"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={openMenu}
+              sx={{
+                mt: -0.25,
+                mr: -0.5,
+                opacity: { xs: 1, md: 0 },
+                transition: (theme) => theme.transitions.create('opacity'),
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
 
@@ -377,6 +386,14 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
         {onSetPrivate ? (
           <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>
             {media.private ? 'Publish file' : 'Make private'}
+          </MenuItem>
+        ) : null}
+        {/* Offered for public AND private assets, unlike the two link items:
+            the handler mints a signed URL for a private file, which is the
+            case `Copy URL` cannot serve (AGL-2143). */}
+        {onDownload ? (
+          <MenuItem onClick={runAction(onDownload)}>
+            {'Download file'}
           </MenuItem>
         ) : null}
         {onReplace ? (

@@ -92,6 +92,24 @@ describe('plan entitlements', () => {
     expect(resolved.features.customDomain).toBe(false)
   })
 
+  it('drops a RETIRED quota a live org document still carries (AGL-2133)', () => {
+    // `totalSiteSizeMb` was staff-writable for months while nothing enforced
+    // it, so real org documents carry overrides of it. Removing the key from
+    // `PLAN_ENTITLEMENTS` alone would not remove those: the override loop
+    // copies any numeric key it finds, so the stored value would keep
+    // appearing on the resolved entitlements with no default behind it and no
+    // reader in front of it.
+    const org = {
+      plan: 'free',
+      entitlements: { totalSiteSizeMb: 99999, hostLimit: 10 },
+    } as any
+    const resolved = resolveOrgEntitlements(org)
+    expect(resolved).not.toHaveProperty('totalSiteSizeMb')
+    // The LIVE override beside it still applies — the strip is keyed on the
+    // retired list, not on "overrides are ignored now".
+    expect(resolved.hostLimit).toBe(10)
+  })
+
   it('checkQuota gates at the limit and never reports negative remaining', () => {
     const org = { plan: 'free' } as any
     expect(checkQuota(org, 'hostLimit', 0)).toEqual({
@@ -122,14 +140,14 @@ describe('plan entitlements', () => {
       // Enterprise (AGL-1118): uncapped at the top of the ladder.
       enterprise: [UNLIMITED, UNLIMITED, UNLIMITED],
     })
-    // Media storage exceeds the published-site cap by design (AGL-67) —
-    // vacuous on Enterprise, where both are unbounded, so it is pinned as
-    // unbounded rather than skipped silently.
+    // Media storage was pinned against the published-site cap (AGL-67) until
+    // `totalSiteSizeMb` was retired (AGL-2133) — there is no second figure to
+    // compare it to any more, so what is pinned now is that no plan declares
+    // the retired key at all. A default reintroduced by hand would put the
+    // staff override field back on the dialog with nothing behind it.
     expect(PLAN_ENTITLEMENTS.enterprise.storagePerHostMb).toBe(UNLIMITED)
-    expect(PLAN_ENTITLEMENTS.enterprise.totalSiteSizeMb).toBe(UNLIMITED)
-    for (const [name, plan] of Object.entries(PLAN_ENTITLEMENTS)) {
-      if (name === 'enterprise') continue
-      expect(plan.storagePerHostMb).toBeGreaterThan(plan.totalSiteSizeMb)
+    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+      expect(plan).not.toHaveProperty('totalSiteSizeMb')
     }
     expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
     // White-label (White-Label Phase 1): Agency and Enterprise only; every
@@ -942,6 +960,52 @@ describe('plan entitlements', () => {
         'digital',
       ),
     ).toBe(0)
+  })
+
+  /**
+   * A MALFORMED override must never zero the platform's cut (AGL-2114).
+   *
+   * `resolveOrgEntitlements` merges any numeric override indistinguishably
+   * from the plan default, and `strictNullChecks` is off repo-wide, so a
+   * hand-edited or partially-written org doc can put a `NaN`, an `Infinity`, a
+   * stringly-typed number or a negative in this field. Every one of them used
+   * to resolve to **0** — no fee, on a paying merchant, on a DESTINATION
+   * charge where Stripe's 2.9%+30c comes out of Aglyn's balance.
+   *
+   * `resolveMarketplaceFeePct` has forbidden exactly this since AGL-1543 and
+   * says so in its own docblock; this is the storefront half of that rule.
+   *
+   * Driven on STARTER, whose physical rate is a non-zero 2%: on any plan whose
+   * table rate is a deliberate 0 the assertion could not fail, which is how a
+   * guard for this ends up vacuous. Forced red by restoring
+   * `if (Number.isFinite(pct) && pct > 0) return pct` over the raw value —
+   * every case below returns 0.
+   */
+  it('falls back to the plan rate on a malformed fee override (AGL-2114)', () => {
+    const withOverride = (value: unknown) =>
+      resolveTransactionFeePct(
+        {
+          plan: 'starter',
+          subscription: { status: 'active' },
+          entitlements: { transactionFeePhysicalPct: value },
+        } as any,
+        'physical',
+      )
+    for (const bad of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      -5,
+      '2' as unknown,
+      null,
+    ]) {
+      expect(withOverride(bad)).toBe(2)
+    }
+    // POSITIVE CONTROL, both directions: a WELL-FORMED override still wins,
+    // including a deliberate comp at 0 with a reason attached. Without these
+    // the fallback above is satisfied by a function that ignores overrides.
+    expect(withOverride(7)).toBe(7)
+    expect(withOverride(0)).toBe(0)
   })
 
   it('never sells at 0% on a commerce-overridden free org (AGL-2071)', () => {

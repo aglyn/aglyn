@@ -324,6 +324,14 @@ export interface OrgEntitlements {
   // marketplace owns the bare word; billing copy always qualifies it.
   // Firestore and Stripe lookup keys stay as they are — they are persisted.
   storagePerHostMb?: number
+  /**
+   * RETIRED (AGL-2133). Enforced by nothing and unreachable by measurement —
+   * see `RETIRED_ENTITLEMENT_KEYS`. It stays on the TYPE because live org
+   * documents still carry staff overrides of it and `OrgEntitlements` is the
+   * shape those documents are read through; `resolveOrgEntitlements` drops
+   * it, and no plan declares it any more, so nothing can resolve a value.
+   * @deprecated
+   */
   totalSiteSizeMb?: number
   /**
    * Included per-site COLLABORATOR seats (`hosts/{id}/members`,

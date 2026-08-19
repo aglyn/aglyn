@@ -172,6 +172,86 @@ describe('marketplace purchase record (AGL-46/1544)', () => {
     )
     expect(adminMock.__writes).toHaveLength(0)
   })
+
+  /**
+   * THE REDELIVERY GUARD (AGL-2109).
+   *
+   * The ledger doc is not only the sale — it is the buyer's ENTITLEMENT
+   * (`hasLivePurchase` reads `refundedAt`), the refund trail, and the
+   * transfer-reversal settle marker (`reversedTransferCents`, which the
+   * reversal short-circuits on so a seller is never debited twice).
+   *
+   * Every LATER write on this path merges. The session write did not, so it
+   * was a full document REPLACE — and Stripe redelivers
+   * `checkout.session.completed` for up to three days whenever this endpoint
+   * 500s, which it does on purpose for every transient Stripe failure and for
+   * any throw from a sibling plugin handler running after this one. A
+   * redelivery landing after a refund therefore erased `refundedAt` (the
+   * refunded buyer silently got their access back) and erased
+   * `reversedTransferCents` (the seller became reversible a second time).
+   *
+   * Forced red on purpose by dropping `{ merge: true }` from the session
+   * write in `billing-webhook.ts`: `refundedAt` comes back `undefined` and
+   * both assertions below fail.
+   */
+  it('a session REDELIVERY after a refund does not erase the refund or the reversal marker', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    // The refund trail and the settle marker, written by the later branches.
+    adminMock.__store['marketplacePurchases/cs_test_1'] = {
+      ...(adminMock.__store['marketplacePurchases/cs_test_1'] ?? {}),
+      refundedAt: 'NOW',
+      refundedCents: 10825,
+      reversedTransferCents: 8000,
+      transferReversalId: 'trr_1',
+    }
+
+    // Stripe redelivers the SAME session event.
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    const row = adminMock.__store['marketplacePurchases/cs_test_1'] ?? {}
+    // Entitlement: `hasLivePurchase` is `!purchase.get('refundedAt')`, so
+    // losing this field hands a refunded buyer their install back.
+    expect(row['refundedAt']).toBe('NOW')
+    expect(row['refundedCents']).toBe(10825)
+    // Settle marker: losing it re-opens `reverseMarketplaceSellerShare`,
+    // which would debit the publisher's Connect account a second time.
+    expect(row['reversedTransferCents']).toBe(8000)
+    expect(row['transferReversalId']).toBe('trr_1')
+    // And the sale itself is still intact — a merge must not be a no-op.
+    expect(row['amountCents']).toBe(10825)
+    expect(row['transferCents']).toBe(8000)
+  })
+
+  /**
+   * The other half of AGL-2109, and the drift the merge itself would have
+   * introduced: `createdAt` is the date the seller ledger and every revenue
+   * period read, so a redelivery three days later must not move the sale to
+   * today. Forced red by putting `createdAt` back unconditionally in the
+   * session write — the second delivery then stamps it again.
+   */
+  it('a session REDELIVERY does not restamp createdAt', async () => {
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    // Distinguishable from the mock's 'NOW' sentinel, so a restamp is
+    // visible rather than coincidentally equal.
+    adminMock.__store['marketplacePurchases/cs_test_1']['createdAt'] = 'DAY_ONE'
+
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(
+      adminMock.__store['marketplacePurchases/cs_test_1']['createdAt'],
+    ).toBe('DAY_ONE')
+    // A FIRST delivery still stamps it — otherwise this passes on a handler
+    // that never writes the field at all.
+    expect(
+      adminMock.__store['marketplacePurchases/cs_test_9'],
+    ).toBeUndefined()
+    await marketplaceBillingWebhookHandler(
+      completedSession({ id: 'cs_test_9' }) as any,
+    )
+    expect(
+      adminMock.__store['marketplacePurchases/cs_test_9']['createdAt'],
+    ).toBe('NOW')
+  })
 })
 
 describe('GA4 purchase reporting (AGL-1561)', () => {

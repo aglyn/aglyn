@@ -72,11 +72,14 @@ for the how-to.
   install, manage and publish marketplace items from a single **Marketplace** destination in
   the organization navigation (**Browse**, **Installed**, and **Publish** tabs), instead of a
   per-site Marketplace tab. Old per-site links redirect here.
-- **One section for everything pluggable and sellable** — the separate **Plugins** and
-  **Marketplace** org tabs were folded into the Marketplace. The **Installed** tab now holds the
-  first-party plugin switchboard and per-plugin settings alongside marketplace installs, and
-  the seller area is its own set of tabs — **Publish**, **Profile**, **Listings**, **Payouts**,
-  and **Sales**. The old `/plugins` and `/marketplace` links redirect into the matching tab.
+- **Marketplace is the market; Plugins is the switchboard** — the two live side by side in
+  the organization navigation and do different jobs. **Marketplace** is where you browse,
+  install and publish. **Plugins** is where you turn things on and off: an **Installed from
+  the marketplace** card and a **Built in** card, each row with a switch and its per-plugin
+  settings. Look for a plugin's on/off switch under **Plugins**, not under Marketplace.
+  The seller area is its own set of marketplace sections — **Publish**, **Publisher
+  Profile**, **Listings**, **Payouts** and **Sales**. Old per-site links redirect into the
+  matching organization section.
 - **Install targeting** — when you install, choose **All sites** (organization-wide, and any
   sites you add later) or **Selected sites**. Site-scoped artifacts (components, templates,
   layouts) install onto every current site and note that new sites aren't added automatically.

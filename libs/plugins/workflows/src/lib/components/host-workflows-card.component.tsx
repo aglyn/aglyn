@@ -27,6 +27,7 @@ import {
   runWorkflow,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -449,6 +450,16 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         >
           {'Add workflow'}
         </Button>
+        {/* The cap, standing rather than only on refusal (AGL-2113).
+            `workflowCount` is the server aggregate the gate uses, not
+            `workflows.length` — the listener is `limit(100)` and its length
+            saturates (AGL-1716). */}
+        <QuotaReadoutComponent
+          ready={org != null}
+          used={workflowCount}
+          limit={checkQuota(org, 'workflowsPerHost', workflowCount).limit}
+          noun="workflow"
+        />
       </Stack>
 
       <Dialog

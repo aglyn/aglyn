@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
-import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { brandMergeTokens, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -26,6 +26,7 @@ import {
   eraseOrg,
   findUserByUidAcrossPools,
   firebaseAdmin,
+  isImpersonationSession,
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
 
@@ -42,8 +43,49 @@ import {
  */
 const MAX_PER_RUN = 5
 
+/**
+ * How many pending erasures the GET preview lists. Higher than
+ * `MAX_PER_RUN` on purpose: the point of the preview is to show what is
+ * WAITING, including the ones this run will not reach.
+ */
+const MAX_PENDING_LISTED = 50
+
+/**
+ * Staff, or the scheduler (AGL-2165).
+ *
+ * This route was cron-secret-only, and the console had no way to reach it:
+ * `staff-org-actions.component.tsx` documents it as the operator's escape
+ * hatch while itself only calling `erasure-request`, which QUEUES an erasure.
+ * So a staff member could ask for a workspace to be erased and then had no way
+ * to run it, see what was pending, or find out why one had not gone through —
+ * short of hand-dispatching a GitHub workflow, or `tools/scripts/erase-tenant.mjs`,
+ * neither of which is the console.
+ *
+ * A staff ID token is accepted alongside the cron secret rather than instead of
+ * it: the scheduler has no user and must keep working. Returns the actor for
+ * the audit row, or null when neither credential checks out.
+ */
+async function authorizeActor(
+  headers: Partial<Record<string, string>>,
+): Promise<{ uid: string; kind: 'cron' | 'staff' } | null> {
+  if (isCronAuthorized(headers)) return { uid: 'system:cron', kind: 'cron' }
+  const authorization = headers.authorization ?? ''
+  if (!authorization.startsWith('Bearer ')) return null
+  try {
+    const decoded = await firebaseAdmin
+      .app()
+      .auth()
+      .verifyIdToken(authorization.slice('Bearer '.length))
+    if (!decoded.email_verified && !isImpersonationSession(decoded)) return null
+    if (!decoded['staff']) return null
+    return { uid: decoded.uid, kind: 'staff' }
+  } catch {
+    return null
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -52,12 +94,96 @@ async function handler(request: Request): Promise<Response> {
   if (!cronSecret) {
     return Response.json({ error: 'Erasure runner is not configured (CRON_SECRET).' }, { status: 501 })
   }
-  if (!isCronAuthorized(headers)) {
+  const actor = await authorizeActor(headers)
+  if (!actor) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
   try {
     const firestore = firebaseAdmin.app().firestore()
+
+    // GET is READ-ONLY (AGL-2165). It used to be an alias for POST, so a bare
+    // GET on this URL permanently erased up to five workspaces. Nothing ever
+    // called it that way — `scheduled-crons.yml` POSTs every route it fires,
+    // and the manual dispatch goes through the same step — so the alias was
+    // pure hazard: an irreversible delete behind the one verb everything on
+    // the web treats as safe to retry, prefetch and follow.
+    //
+    // It is now the preview the console reads: what is due, what is still
+    // holding, and when each hold expires.
+    if (method === 'GET') {
+      const now = Date.now()
+      // `orderBy` rather than `where('erasureRequestedAt', '!=', null)`:
+      // both filter to documents that HAVE the field, but orderBy rides the
+      // automatic single-field index every Firestore collection already has,
+      // while the inequality wants a composite one that is not deployed —
+      // and a missing index fails this query at runtime, in production only,
+      // which is the one place this surface has to work.
+      // Oldest first, which is also the order the runner takes them in.
+      const pending = await firestore
+        .collection('orgs')
+        .orderBy('erasureRequestedAt', 'asc')
+        .limit(MAX_PENDING_LISTED)
+        .get()
+      const rows = pending.docs
+        .map((org) => {
+          const requestedAt = org.get('erasureRequestedAt')
+          const requestedMs =
+            typeof requestedAt?.toMillis === 'function'
+              ? requestedAt.toMillis()
+              : Number(requestedAt ?? 0)
+          return {
+            orgId: org.id,
+            name: String(org.get('name') ?? ''),
+            slug: String(org.get('slug') ?? ''),
+            requestedAtMs: requestedMs || null,
+            // The whole question a staff member has: is this one waiting on
+            // the hold, or waiting on us?
+            holdExpiresAtMs: requestedMs ? requestedMs + ERASURE_HOLD_MS : null,
+            due: Boolean(requestedMs) && requestedMs + ERASURE_HOLD_MS <= now,
+          }
+        })
+      return Response.json(
+        {
+          pending: rows,
+          dueCount: rows.filter((row) => row.due).length,
+          maxPerRun: MAX_PER_RUN,
+          // A lower bound, and said so: the query is capped, so a longer
+          // queue reads identically to a complete one from the length alone.
+          truncated: pending.size >= MAX_PENDING_LISTED,
+        },
+        { status: 200 },
+      )
+    }
+
+    // A staff-triggered run is recorded with its actor and reason BEFORE it
+    // runs anything: `eraseOrg` audits each erasure, but nothing said who
+    // asked for the batch or why they did not wait for 04:00 UTC.
+    if (actor.kind === 'staff') {
+      const reason = String(body?.reason ?? '').trim().slice(0, 500)
+      if (reason.length < 8) {
+        return Response.json(
+          {
+            error:
+              'Running erasures early needs a reason of at least 8 ' +
+              'characters — this permanently deletes workspaces.',
+          },
+          { status: 400 },
+        )
+      }
+      await firestore
+        .collection('adminAudit')
+        .add({
+          actorUid: actor.uid,
+          action: 'erasure.runBatch',
+          target: 'orgs/*',
+          reason,
+          before: null,
+          after: { maxPerRun: MAX_PER_RUN },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
+        .catch(() => undefined)
+    }
     const holdCutoff = new Date(Date.now() - ERASURE_HOLD_MS)
     const due = await firestore
       .collection('orgs')
@@ -115,12 +241,19 @@ async function handler(request: Request): Promise<Response> {
             `${orgName} and all of its data have been permanently erased ` +
             `from ${branding.productName}, as requested. This is complete and ` +
             'cannot be undone.'
-          const designed = await renderSystemEmail('erasure-confirmation', {
-            'org.name': String(orgName),
-          })
+          const designed = await renderSystemEmail(
+            'erasure-confirmation',
+            { ...brandMergeTokens(branding), 'org.name': String(orgName) },
+            { brandLogoUrl: branding.emailLogoUrl },
+          )
           await sendEmail({
             to: ownerEmail,
-            subject: designed?.subject ?? 'Your Aglyn data has been erased',
+            // AGL-2139: this line read 'Your Aglyn data has been erased' two
+            // lines above a body that already used `branding.productName` —
+            // the confusion inside a single send site.
+            subject:
+              designed?.subject ??
+              `Your ${branding.productName} data has been erased`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: branding.fromName,

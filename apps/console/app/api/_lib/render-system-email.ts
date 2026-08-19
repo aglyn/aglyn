@@ -26,6 +26,27 @@ import {
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { AGLYN_BRANDING_PROFILE, brandMergeTokens } from '@aglyn/aglyn/server'
+
+/**
+ * `brand.*` tokens every system email resolves, UNDER whatever the caller
+ * supplies (AGL-2139).
+ *
+ * The order is the whole safety property. `blankUnresolvedTokens` deletes any
+ * token the caller did not provide, so a designed template written against
+ * `{{brand.productName}}` would ship with a hole in the sentence at any send
+ * site that forgot to pass one. Defaulting to the Aglyn profile means the
+ * worst case is the copy we send TODAY rather than a gap — and an
+ * org-context sender that spreads `brandMergeTokens(branding)` into its merge
+ * map wins, because a later key overwrites an earlier one.
+ *
+ * The platform-scoped senders — password reset, email verification, the
+ * security alerts, the staff erasure-hold alert — genuinely have no org (each
+ * says so at its own call site, and password reset deliberately refuses to
+ * look one up because that would be an enumeration oracle). Aglyn IS their
+ * brand, so they need no change and get the right answer.
+ */
+const DEFAULT_BRAND_TOKENS = brandMergeTokens(AGLYN_BRANDING_PROFILE)
 
 /**
  * Blanks any `{{token}}` the caller did not supply.
@@ -51,6 +72,19 @@ function blankUnresolvedTokens(value: string): string {
  */
 const CONSOLE_ORIGIN =
   process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.com'
+
+/**
+ * Brand inputs that are NOT merge tokens (AGL-2139).
+ *
+ * `brand.productName` and friends ride the merge map because a designer types
+ * them into copy. The logo is structural — it is a row the renderer emits or
+ * does not — so it is an option rather than a token a template could forget
+ * to place.
+ */
+export interface SystemEmailBrandOptions {
+  /** Resolved `emailLogoUrl`; absent or null emits no logo row. */
+  brandLogoUrl?: string | null
+}
 
 export interface RenderedSystemEmail {
   subject: string
@@ -141,24 +175,31 @@ export async function loadSystemEmail(
 export function renderLoadedSystemEmail(
   loaded: LoadedSystemEmail,
   merge: Record<string, string> = {},
+  options: SystemEmailBrandOptions = {},
 ): RenderedSystemEmail | null {
+  const merged = { ...DEFAULT_BRAND_TOKENS, ...merge }
   const rendered = renderEmailHtml({
     nodes: loaded.nodes as never,
     // Besigner maps are rooted at '_@_', not renderEmailHtml's default
     // 'root' — without this a designed template rendered empty and the send
     // fell back to built-in copy, so designing did nothing (AGL-765).
     rootId: EMAIL_NODE_ROOT_ID,
-    subject: substituteMergeTokens(loaded.subjectTemplate, merge),
-    preheader: substituteMergeTokens(loaded.preheaderTemplate, merge),
-    merge,
+    subject: substituteMergeTokens(loaded.subjectTemplate, merged),
+    preheader: substituteMergeTokens(loaded.preheaderTemplate, merged),
+    merge: merged,
     // Without this a staff-picked image resolves to a site-relative CDN path,
     // which is a broken-image box in the recipient's inbox (AGL-1224).
     mediaOrigin: CONSOLE_ORIGIN,
+    // The white-label email logo (AGL-2139). Absent for an org without one,
+    // and for every org without the `whiteLabel` entitlement, because
+    // `resolveBrandingProfile` hands those the Aglyn profile whose
+    // `emailLogoUrl` is null.
+    brandLogoUrl: options.brandLogoUrl ?? undefined,
   })
   if (!rendered?.html) return null
   return {
     subject: blankUnresolvedTokens(
-      substituteMergeTokens(loaded.subjectTemplate, merge),
+      substituteMergeTokens(loaded.subjectTemplate, merged),
     ),
     html: blankUnresolvedTokens(rendered.html),
     text: blankUnresolvedTokens(rendered.text ?? ''),
@@ -182,9 +223,10 @@ export function renderLoadedSystemEmail(
 export async function renderSystemEmail(
   templateKey: string,
   merge: Record<string, string> = {},
+  options: SystemEmailBrandOptions = {},
 ): Promise<RenderedSystemEmail | null> {
   const loaded = await loadSystemEmail(templateKey)
-  return loaded ? renderLoadedSystemEmail(loaded, merge) : null
+  return loaded ? renderLoadedSystemEmail(loaded, merge, options) : null
 }
 
 /**
@@ -201,25 +243,28 @@ export async function renderSystemEmail(
 export async function renderEffectiveSystemEmail(
   templateKey: string,
   merge: Record<string, string> = {},
+  options: SystemEmailBrandOptions = {},
 ): Promise<RenderedSystemEmail | null> {
   const definition = getSystemEmailTemplate(templateKey)
   if (!definition || !isSystemEmailEditable(definition)) return null
 
-  const designed = await renderSystemEmail(templateKey, merge)
+  const designed = await renderSystemEmail(templateKey, merge, options)
   if (designed) return designed
 
   // Nothing published — render the catalog default the editor would seed.
   const nodes = buildDefaultEmailNodeMap(definition)
+  const merged = { ...DEFAULT_BRAND_TOKENS, ...merge }
   const rendered = renderEmailHtml({
     nodes: nodes as never,
     rootId: EMAIL_NODE_ROOT_ID,
-    subject: substituteMergeTokens(definition.defaultSubject, merge),
-    merge,
+    subject: substituteMergeTokens(definition.defaultSubject, merged),
+    merge: merged,
     mediaOrigin: CONSOLE_ORIGIN,
+    brandLogoUrl: options.brandLogoUrl ?? undefined,
   })
   return {
     subject: blankUnresolvedTokens(
-      substituteMergeTokens(definition.defaultSubject, merge),
+      substituteMergeTokens(definition.defaultSubject, merged),
     ),
     html: blankUnresolvedTokens(rendered.html),
     text: blankUnresolvedTokens(rendered.text ?? ''),

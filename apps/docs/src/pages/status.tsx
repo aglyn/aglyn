@@ -35,7 +35,8 @@
  */
 
 import Layout from '@theme/Layout'
-import { useCallback, useEffect, useState } from 'react'
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 interface Target {
   name: string
@@ -44,20 +45,32 @@ interface Target {
   base: string
 }
 
-const TARGETS: Target[] = [
-  {
-    name: 'console',
-    label: 'Console',
-    description: 'Sign-in, editing, billing and everything at app.aglyn.com.',
-    base: 'https://app.aglyn.com',
-  },
-  {
-    name: 'tenant',
-    label: 'Published sites',
-    description: 'The runtime that serves every published site and storefront.',
-    base: 'https://demo.aglyn.com',
-  },
-]
+/**
+ * WHAT THIS PAGE PROBES IS CONFIGURATION (AGL-2124).
+ *
+ * The two targets were Aglyn's own production origins, so a self-hosted docs
+ * build live-probed OUR infrastructure and reported OUR uptime as the
+ * operator's — a status page confidently wrong about somebody else's product.
+ *
+ * `DOCS_STATUS_TARGETS` is a comma-separated list of
+ * `name|label|origin|description`. UNSET means the page probes NOTHING and
+ * says so, which is the same posture it already takes about uptime history:
+ * admitting it does not know beats inventing a number.
+ */
+function parseTargets(raw: unknown): Target[] {
+  if (typeof raw !== 'string' || !raw.trim()) return []
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [name, label, base, description] = entry
+        .split('|')
+        .map((part) => part.trim())
+      return { name, label: label || name, base, description: description || '' }
+    })
+    .filter((target) => Boolean(target.name && target.base))
+}
 
 type Verdict = 'checking' | 'operational' | 'degraded' | 'unreachable'
 
@@ -119,26 +132,37 @@ async function check(target: Target): Promise<Reading> {
 }
 
 export default function StatusPage(): JSX.Element {
+  const { siteConfig } = useDocusaurusContext()
+  // Memoized: `parseTargets` builds a new array every call, and an unstable
+  // identity here would make `refresh` unstable, which would tear down and
+  // rebuild the 60s interval on every render.
+  const targets = useMemo(
+    () => parseTargets(siteConfig.customFields?.['statusTargets']),
+    [siteConfig.customFields],
+  )
   const [readings, setReadings] = useState<Record<string, Reading>>(
-    Object.fromEntries(TARGETS.map((t) => [t.name, { verdict: 'checking' as Verdict }])),
+    Object.fromEntries(
+      targets.map((t) => [t.name, { verdict: 'checking' as Verdict }]),
+    ),
   )
   const [checkedAt, setCheckedAt] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const results = await Promise.all(
-      TARGETS.map(async (target) => [target.name, await check(target)] as const),
+      targets.map(async (target) => [target.name, await check(target)] as const),
     )
     setReadings(Object.fromEntries(results))
     setCheckedAt(new Date().toLocaleTimeString())
-  }, [])
+  }, [targets])
 
   useEffect(() => {
+    if (!targets.length) return undefined
     void refresh()
     const timer = setInterval(() => void refresh(), 60_000)
     return () => clearInterval(timer)
-  }, [refresh])
+  }, [refresh, targets.length])
 
-  const verdicts = TARGETS.map((t) => readings[t.name]?.verdict)
+  const verdicts = targets.map((t) => readings[t.name]?.verdict)
   const allGood = verdicts.every((v) => v === 'operational')
   const anyChecking = verdicts.some((v) => v === 'checking')
 
@@ -147,15 +171,21 @@ export default function StatusPage(): JSX.Element {
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '3rem 1rem' }}>
         <h1 style={{ marginBottom: '0.25rem' }}>Status</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-700)', marginTop: 0 }}>
-          {anyChecking
-            ? 'Checking each service from your browser…'
-            : allGood
-              ? 'All services are responding normally.'
-              : 'One or more services are not responding normally.'}
+          {/* AGL-2124: no configured targets means this build probes nothing.
+              Saying so is the honest answer — the alternative was probing
+              Aglyn's infrastructure and calling the result the operator's. */}
+          {targets.length === 0
+            ? 'No services are configured for this documentation build to check. ' +
+              'Set DOCS_STATUS_TARGETS to monitor your own deployment.'
+            : anyChecking
+              ? 'Checking each service from your browser…'
+              : allGood
+                ? 'All services are responding normally.'
+                : 'One or more services are not responding normally.'}
         </p>
 
         <div style={{ display: 'grid', gap: '1rem', marginTop: '2rem' }}>
-          {TARGETS.map((target) => {
+          {targets.map((target) => {
             const reading = readings[target.name] ?? { verdict: 'checking' as Verdict }
             return (
               <div

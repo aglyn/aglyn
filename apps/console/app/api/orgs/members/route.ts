@@ -23,6 +23,7 @@ import {
   type HostAccessRole,
   isOrgRole,
   isOrgWideMember,
+  brandMergeTokens,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
@@ -342,11 +343,17 @@ async function handler(request: Request): Promise<Response> {
           const fallbackText =
             `You were added to ${orgName} as ${role}.\n\n` +
             `Sign in at ${origin} to switch to it from your dashboard.`
-          const designed = await renderSystemEmail('member-added', {
-            'org.name': String(orgName),
-            'member.role': role,
-            signInUrl: origin,
-          })
+          const designed = await renderSystemEmail(
+            'member-added',
+            {
+              // AGL-2139, as on the invite beside it.
+              ...brandMergeTokens(branding),
+              'org.name': String(orgName),
+              'member.role': role,
+              signInUrl: origin,
+            },
+            { brandLogoUrl: branding.emailLogoUrl },
+          )
           await sendEmail({
             to: email,
             subject: designed?.subject ?? `You've been added to ${orgName}`,

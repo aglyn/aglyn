@@ -301,26 +301,37 @@ describe('cart checkout idempotency (AGL-1697)', () => {
   })
 
   /**
-   * The AGL-1714 decomposition. A coupon + gift-card cart posts THREE Stripe
-   * objects in one attempt; each must carry its own derivation of the one
-   * digest — Stripe parameter-compares a repeated key, so a shared one would
-   * error the second call — and a doubled request must add ZERO calls.
+   * The AGL-1714 decomposition, re-cut by AGL-2112.
+   *
+   * This case used to assert TWO coupon objects for a coupon + gift-card cart,
+   * and three distinct derived keys. That count was the DEFECT wearing a
+   * guard's clothes: a Checkout Session takes exactly one entry in
+   * `discounts`, and the three blocks that minted those objects each did
+   * `params.set('discounts[0][coupon]', …)`, so the second mint replaced the
+   * first on the session and the shopper never received it. Two coupons was
+   * never a healthy number — it was one real discount and one orphan.
+   *
+   * The invariant AGL-1714 actually cares about is unchanged and still
+   * asserted: every Stripe object carries its OWN derivation of the one
+   * digest (Stripe parameter-compares a repeated key, so a shared one errors
+   * the second call), and a doubled request adds ZERO calls.
    */
-  it('derives one distinct Stripe key per object, and a retry re-mints none of them', async () => {
+  it('mints ONE coupon for a coupon + gift-card cart, and a retry re-mints nothing', async () => {
     const body = { couponCode: 'SAVE10', giftCardCode: 'GIFTCARD1' }
     const first = await post(body, { 'idempotency-key': 'attempt-b' })
     expect(first.status).toBe(200)
-    expect(couponCalls()).toHaveLength(2)
+    // One discount object, carrying both reductions.
+    expect(couponCalls()).toHaveLength(1)
     expect(sessionCalls()).toHaveLength(1)
     const keys = stripeCalls.map((call) => call.idempotencyKey)
     for (const key of keys) expect(key).toBeTruthy()
-    expect(new Set(keys).size).toBe(3)
+    expect(new Set(keys).size).toBe(2)
 
     const second = await post(body, { 'idempotency-key': 'attempt-b' })
     expect(second.status).toBe(200)
     expect(second.body.url).toBe(first.body.url)
-    // Still three calls TOTAL: no stray coupon, no second session.
-    expect(stripeCalls).toHaveLength(3)
+    // Still two calls TOTAL: no stray coupon, no second session.
+    expect(stripeCalls).toHaveLength(2)
   })
 
   it('opens a genuinely new checkout under a fresh attempt key', async () => {
@@ -332,21 +343,27 @@ describe('cart checkout idempotency (AGL-1697)', () => {
   })
 
   /**
-   * The release-on-deterministic-failure rule (AGL-1714). An empty gift card
-   * is a 400 the shopper fixes and retries — but by then a real coupon object
-   * exists on the merchant's account. Releasing the claim means the retry
-   * re-derives the SAME coupon key, so Stripe replays the first coupon
-   * instead of minting a twin.
+   * The release-on-deterministic-failure rule (AGL-1714), strengthened by
+   * AGL-2112.
+   *
+   * An empty gift card is a 400 the shopper fixes and retries. This case used
+   * to assert that a real coupon object ALREADY existed on the merchant's
+   * account by then, and that the retry re-derived its key so Stripe replayed
+   * it rather than minting a twin. Since every reduction is now resolved
+   * before anything is minted, the refusal happens with NOTHING minted — the
+   * strictly better outcome, and the one asserted here. The rule itself is
+   * unchanged: the claim is released so the retry can proceed.
    */
-  it('releases the key when the gift card refuses, and the retry replays the coupon', async () => {
+  it('releases the key when the gift card refuses, having minted nothing', async () => {
     docs.set('hosts/host-1/giftCards/EMPTY', { balanceCents: 0 })
     const refused = await post(
       { couponCode: 'SAVE10', giftCardCode: 'EMPTY' },
       { 'idempotency-key': 'attempt-c' },
     )
     expect(refused.status).toBe(400)
-    expect(couponCalls()).toHaveLength(1)
-    expect(couponCalls()[0].idempotencyKey).toBeTruthy()
+    // Nothing was minted against the merchant's account for a cart that never
+    // checked out — no orphan coupon to reconcile later.
+    expect(couponCalls()).toHaveLength(0)
     expect(sessionCalls()).toHaveLength(0)
     expect(claimDocs()).toHaveLength(0)
 
@@ -355,12 +372,9 @@ describe('cart checkout idempotency (AGL-1697)', () => {
       { 'idempotency-key': 'attempt-c' },
     )
     expect(retry.status).toBe(200)
-    expect(couponCalls()).toHaveLength(3)
-    // The retried coupon call re-derived the first call's key, so Stripe
-    // replayed the existing coupon rather than minting a twin.
-    expect(couponCalls()[1].idempotencyKey).toBe(
-      couponCalls()[0].idempotencyKey,
-    )
+    // The retry mints the one coupon it needs, and only then.
+    expect(couponCalls()).toHaveLength(1)
+    expect(couponCalls()[0].idempotencyKey).toBeTruthy()
   })
 
   /** A failed session releases the claim so the cart is not locked out. */
@@ -390,5 +404,101 @@ describe('cart checkout idempotency (AGL-1697)', () => {
     expect(checkoutDocs()).toHaveLength(2)
     expect(claimDocs()).toHaveLength(0)
     expect(sessionCalls()[0].idempotencyKey).toBeNull()
+  })
+})
+
+/**
+ * DISCOUNT STACKING ON A CART CHECKOUT (AGL-2112).
+ *
+ * Lives in this file rather than its own because the harness it needs is
+ * exactly this one — a fake Stripe that records every call's parameters — and
+ * a second 250-line copy of that harness is how two suites end up disagreeing
+ * about what the same handler does.
+ *
+ * THE DEFECT. A Checkout Session takes exactly one entry in `discounts`. The
+ * handler had three independent blocks (AGL-305 discount, AGL-96 coupon code,
+ * AGL-322 gift card), each minting its own Stripe coupon and each calling
+ * `params.set('discounts[0][coupon]', …)`. `URLSearchParams.set` REPLACES, so
+ * a cart carrying a coupon AND a gift card sent only the gift card's coupon —
+ * the shopper paid the coupon's worth too much, a real orphan coupon object
+ * was left on the merchant's account, and the webhook still burned the
+ * coupon's redemption against `maxRedemptions`.
+ *
+ * Forced red by restoring any one of the three `params.set` calls: the
+ * `amount_off` assertion below reads the last reduction instead of the sum.
+ */
+describe('a coupon and a gift card both reach the session (AGL-2112)', () => {
+  /** Basket: 2 × $40 = 8000c. SAVE10 is 10% = 800c. */
+  const ITEMS_CENTS = 8000
+
+  it('mints one coupon worth the SUM of every reduction', async () => {
+    docs.set('hosts/host-1/giftCards/BIG', { balanceCents: 4000 })
+    const result = await post({ couponCode: 'SAVE10', giftCardCode: 'BIG' })
+    expect(result.status).toBe(200)
+    expect(couponCalls()).toHaveLength(1)
+    // 800 (the coupon) + 4000 (the card) = 4800. The defect sent 4000 — the
+    // gift card alone — and 800 of the shopper's discount vanished.
+    expect(couponCalls()[0].params.get('amount_off')).toBe('4800')
+    expect(couponCalls()[0].params.get('duration')).toBe('once')
+    // Both are recorded, so the webhook can burn the redemption and decrement
+    // the card against a session that actually carried them.
+    expect(sessionCalls()[0].params.get('metadata[couponCode]')).toBe('SAVE10')
+    expect(sessionCalls()[0].params.get('metadata[giftCardCode]')).toBe('BIG')
+    expect(sessionCalls()[0].params.get('metadata[giftCardCents]')).toBe('4000')
+  })
+
+  /**
+   * The gift card applies against what is LEFT, not against the whole basket.
+   * The old cap was `min(balance, itemsCents)`, and the webhook decrements the
+   * card by exactly `metadata[giftCardCents]` — so a card bigger than the
+   * post-coupon remainder had the difference burned off it for nothing.
+   */
+  it('caps the gift card at the post-coupon remainder', async () => {
+    docs.set('hosts/host-1/giftCards/HUGE', { balanceCents: 100000 })
+    await post({ couponCode: 'SAVE10', giftCardCode: 'HUGE' })
+    // 8000 - 800 = 7200 of goods left for the card to cover.
+    expect(sessionCalls()[0].params.get('metadata[giftCardCents]')).toBe('7200')
+    // And the coupon never exceeds the basket.
+    expect(Number(couponCalls()[0].params.get('amount_off'))).toBe(ITEMS_CENTS)
+  })
+
+  /**
+   * The platform fee is scaled ONCE, by the reduction that actually reached
+   * the session. Three blocks meant up to three compounding reductions for one
+   * discount, so Aglyn under-charged its own cut on exactly the carts that
+   * stacked. Driven on a DIGITAL product because Business — the fixture's
+   * plan — charges a deliberate 0% on physical goods, and a fee assertion at
+   * zero cannot fail.
+   */
+  it('scales the platform fee once, by the total reduction', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+    docs.set('hosts/host-1/giftCards/BIG', { balanceCents: 4000 })
+    await post({ couponCode: 'SAVE10', giftCardCode: 'BIG' })
+    // Business digital is 2%: 2% of 8000 = 160. Reduced by 4800 of 8000, so
+    // 160 × 3200/8000 = 64. The compounding defect sent 72
+    // (160 × 0.9 = 144, then 144 × 4000/8000).
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBe('64')
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('64')
+  })
+
+  /**
+   * NEGATIVE CONTROL. A cart with no code and no card mints no coupon and
+   * sends no `discounts` entry — otherwise the assertions above would pass
+   * against a handler that discounts everything unconditionally.
+   */
+  it('sends no discount at all when the cart carries neither', async () => {
+    const result = await post({})
+    expect(result.status).toBe(200)
+    expect(couponCalls()).toHaveLength(0)
+    expect(sessionCalls()[0].params.has('discounts[0][coupon]')).toBe(false)
   })
 })

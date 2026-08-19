@@ -691,6 +691,11 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
               confirmation, which is what the per-resource flow prevents. */}
           <CardDisplay
             header={'Default sharing for new data and media'}
+            help={docsHelp('datasets', {
+              excerpt:
+                'Sets what a NEW dataset or upload is shared with. Existing ' +
+                'ones keep the sharing they already have.',
+            })}
             contentGutterX
             contentGutterY
             sx={{ mt: 3 }}
@@ -739,6 +744,12 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       content: (
                         <CardDisplay
                           header={'Plugins'}
+                          help={docsHelp('installYourFirstPlugin', {
+                            anchor: '#step-7-off',
+                            excerpt:
+                              'Turning plugins on and off moved to its own ' +
+                              'Plugins section. This card points you there.',
+                          })}
                           contentGutterX
                           contentGutterY
                         >

@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -536,6 +537,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             {'Export'}
           </Button>
         </Stack>
+        {/* The cap, standing rather than only on refusal (AGL-2113). The
+            count is `productCount` — the site's products, the same number
+            the gate above counts — not `products.length`, which is the
+            filtered, `limit()`-ed page (AGL-1716). */}
+        <QuotaReadoutComponent
+          ready={productQuota !== null}
+          used={productCount}
+          limit={productQuota?.limit ?? 0}
+          noun="product"
+        />
         {products.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {search || statusFilter !== 'all'

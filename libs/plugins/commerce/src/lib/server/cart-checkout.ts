@@ -294,31 +294,39 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return derived ? { 'Idempotency-Key': derived } : {}
     }
 
+    // ONE Stripe discount, and that is the whole shape of this block
+    // (AGL-2112).
+    //
+    // A Checkout Session takes exactly one entry in `discounts`. This used to
+    // be three independent blocks — an AGL-305 discount, a legacy AGL-96
+    // coupon code, and an AGL-322 gift card — each minting its own Stripe
+    // coupon and each doing `params.set('discounts[0][coupon]', …)`.
+    // `URLSearchParams.set` REPLACES, so a cart carrying a discount AND a gift
+    // card minted two real coupon objects on the merchant's account and sent
+    // only the LAST one. The shopper paid full price minus the gift card; the
+    // discount silently evaporated — and the webhook still burned its
+    // redemption against `maxRedemptions`, so the code was spent on an order
+    // that never got it.
+    //
+    // The fee was wrong in the same combination and in Aglyn's favour by
+    // accident, then against it: `feeCents` was scaled DOWN once per block, so
+    // two reductions compounded for one discount that was actually applied.
+    //
+    // So: resolve every reduction FIRST, add them up, and mint a single
+    // `amount_off` coupon for the sum. A percentage coupon becomes its cash
+    // equivalent against `itemsCents` — which is what the fee arithmetic here
+    // has always assumed it was, and what `checkout.ts` already does for
+    // buy-now (`amountCents * (100 - percentOff) / 100`).
+    //
+    // Validation still happens in the same order and still 400s the same way,
+    // BEFORE anything is minted — the shopper fixes the code and presses the
+    // same button, so the claim is released and the key survives (AGL-1697).
+    let totalOffCents = 0
     if (resolvedDiscount && resolvedDiscount.discountCents > 0) {
-      const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          ...stripeKeyHeader('coupon-discount'),
-        },
-        body: new URLSearchParams({
-          amount_off: String(resolvedDiscount.discountCents),
-          currency: 'usd',
-          duration: 'once',
-        }).toString(),
-      }).then((response) => response.json())
-      if (stripeCoupon?.id) {
-        params.set('discounts[0][coupon]', stripeCoupon.id)
-        params.set('metadata[discountId]', resolvedDiscount.discountId)
-        feeCents = Math.round(
-          (feeCents * (itemsCents - resolvedDiscount.discountCents)) /
-            Math.max(1, itemsCents),
-        )
-      }
+      totalOffCents += resolvedDiscount.discountCents
+      params.set('metadata[discountId]', resolvedDiscount.discountId)
     }
-    // Coupons (AGL-96 semantics): percent off the items total, applied
-    // as a Stripe coupon so line prices stay honest.
+    // Coupons (AGL-96 semantics): percent off the items total.
     if (couponCode && !resolvedDiscount) {
       const couponSnapshot = await hostRef
         .collection('coupons')
@@ -343,23 +351,8 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(400).json({ error: 'Invalid or expired coupon' })
       }
-      const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          ...stripeKeyHeader('coupon-code'),
-        },
-        body: new URLSearchParams({
-          percent_off: String(percentOff),
-          duration: 'once',
-        }).toString(),
-      }).then((response) => response.json())
-      if (stripeCoupon?.id) {
-        params.set('discounts[0][coupon]', stripeCoupon.id)
-        params.set('metadata[couponCode]', couponCode)
-        feeCents = Math.round((feeCents * (100 - percentOff)) / 100)
-      }
+      totalOffCents += Math.round((itemsCents * percentOff) / 100)
+      params.set('metadata[couponCode]', couponCode)
     }
 
     // Gift cards (AGL-322): balance applies as amount-off; the webhook
@@ -371,33 +364,47 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         .get()
       const balanceCents = Number(cardSnapshot.get('balanceCents') ?? 0)
       if (!cardSnapshot.exists || balanceCents <= 0) {
-        // Deterministic and retryable, but a discount coupon may already
-        // exist by now. Releasing means the retry re-derives the SAME derived
-        // key for it, so Stripe replays that coupon rather than minting a
-        // twin (AGL-1714's rule).
+        // Deterministic and retryable; nothing has been minted yet.
         await claim.release()
         return res.status(400).json({ error: 'Gift card is empty or invalid' })
       }
-      const applyCents = Math.min(balanceCents, itemsCents)
+      // Against what is LEFT after the discount, not against the whole basket
+      // (AGL-2112). The old cap was `min(balance, itemsCents)`, so a $50 card
+      // on a $100 basket already 30% off consumed $50 of card against $70 of
+      // goods — the webhook decrements by exactly this number, so the extra
+      // was burned off the customer's card for nothing.
+      const applyCents = Math.min(
+        balanceCents,
+        Math.max(0, itemsCents - totalOffCents),
+      )
+      if (applyCents > 0) {
+        totalOffCents += applyCents
+        params.set('metadata[giftCardCode]', giftCardCode)
+        params.set('metadata[giftCardCents]', String(applyCents))
+      }
+    }
+
+    if (totalOffCents > 0) {
       const stripeCoupon = await fetch('https://api.stripe.com/v1/coupons', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
           'Content-Type': 'application/x-www-form-urlencoded',
-          ...stripeKeyHeader('coupon-gift'),
+          // ONE derived object key now, because there is one coupon. The
+          // three old keys existed only because there were three mints.
+          ...stripeKeyHeader('coupon'),
         },
         body: new URLSearchParams({
-          amount_off: String(applyCents),
+          amount_off: String(Math.min(totalOffCents, itemsCents)),
           currency: 'usd',
           duration: 'once',
         }).toString(),
       }).then((response) => response.json())
       if (stripeCoupon?.id) {
         params.set('discounts[0][coupon]', stripeCoupon.id)
-        params.set('metadata[giftCardCode]', giftCardCode)
-        params.set('metadata[giftCardCents]', String(applyCents))
+        // Scaled ONCE, by the reduction that actually reached the session.
         feeCents = Math.round(
-          (feeCents * Math.max(0, itemsCents - applyCents)) /
+          (feeCents * Math.max(0, itemsCents - totalOffCents)) /
             Math.max(1, itemsCents),
         )
       }
@@ -462,6 +469,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
+    }
+    const taxMisconfigured =
+      CommerceModel.storefrontTaxMisconfiguration(taxSettings)
+    if (taxMisconfigured) {
+      // AGL-2145: the merchant DECIDED to collect and the sale would have
+      // charged zero anyway — an unfinished settings card, not a
+      // jurisdiction miss. Refused in the same words and the same place as
+      // the undecided case above.
+      // Below the claim here too, so release it for the same reason.
+      await claim.release()
+      return res.status(409).json({ error: taxMisconfigured })
     }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')

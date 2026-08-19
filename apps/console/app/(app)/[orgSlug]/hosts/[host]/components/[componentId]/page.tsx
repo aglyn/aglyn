@@ -57,6 +57,7 @@ import { useHostId, useHostSubdomain } from '../../../../../../../components/hos
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
+import { docsHelp } from '../../../../../../../constants/docs-links'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
@@ -309,7 +310,16 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
             {
               size: { xs: 12, lg: 5 },
               children: (
-        <CardDisplay header={'Details'} contentGutterX contentGutterY>
+        <CardDisplay
+          header={'Details'}
+          help={docsHelp('components', {
+            excerpt:
+              'A reusable component: build it once, drop it on any screen, ' +
+              'and every instance updates when you publish a new version.',
+          })}
+          contentGutterX
+          contentGutterY
+        >
           <Stack spacing={2}>
             <TextField
               label="Display name"
@@ -358,7 +368,13 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
             {
               size: { xs: 12, lg: 7 },
               children: (
-        <CardDisplay header={'Versions'} contentGutterX contentGutterY>
+        <CardDisplay header={'Versions'}
+          help={docsHelp('components', {
+            anchor: '#save-then-publish',
+            excerpt:
+              'Publishing a component version updates every screen using it. ' +
+              'Saving does not — a save is not a publish.',
+          })} contentGutterX contentGutterY>
           {versions.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {'No versions yet — opening the besigner creates the first one.'}

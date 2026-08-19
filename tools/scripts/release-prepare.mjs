@@ -274,6 +274,34 @@ function main() {
   pkg.version = version
   write(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
 
+  // THE LOCKFILE CARRIES THE VERSION TOO (AGL-2108). Writing package.json and
+  // stopping there is how the repo carried `1.0.0-alpha.0` in
+  // package-lock.json for the whole of the first real release: `npm ci`
+  // validates that a lockfile satisfies the DEPENDENCY SET, never that its
+  // root `version` matches, so Vercel and the promotion gate stayed green over
+  // a drift nothing read. Anything that treats the lockfile as the authority
+  // on what version an install is — an SBOM, a self-host image tag — got the
+  // wrong answer silently.
+  //
+  // `--package-lock-only` touches no node_modules and runs offline: it
+  // rewrites the two `version` fields and nothing else on a version-only bump.
+  let lockfileWritten = true
+  try {
+    execFileSync('npm', ['install', '--package-lock-only', '--silent'], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+  } catch (error) {
+    // Not fatal — the version bump itself is correct and committable. Say so
+    // loudly instead, because a silent skip here is the original bug.
+    lockfileWritten = false
+    out.push('')
+    out.push('  !! npm install --package-lock-only FAILED — package-lock.json')
+    out.push('     still carries the OLD version. Run it by hand before')
+    out.push('     committing, or `npm run check:manifest-versions` will fail.')
+    out.push(`     ${String(error?.message ?? error).split('\n')[0]}`)
+  }
+
   const existing = exists(changelogPath)
     ? read(changelogPath, 'utf8')
     : CHANGELOG_HEADER
@@ -288,6 +316,7 @@ function main() {
 
   out.push('  ' + '-'.repeat(60))
   out.push('  WROTE  package.json  (version → ' + version + ')')
+  if (lockfileWritten) out.push('  WROTE  package-lock.json  (AGL-2108)')
   out.push('  WROTE  CHANGELOG.md')
   out.push('')
   out.push(
@@ -301,7 +330,11 @@ function main() {
   if (!changelogTracked) {
     out.push('    git add CHANGELOG.md   # new file — --only cannot stage it')
   }
-  out.push('    git commit --only package.json CHANGELOG.md \\')
+  out.push(
+    lockfileWritten
+      ? '    git commit --only package.json package-lock.json CHANGELOG.md \\'
+      : '    git commit --only package.json CHANGELOG.md \\',
+  )
   out.push(`      -m 'chore(release): ${tagForVersion(version)} (AGL-2089)'`)
   out.push('')
   out.push('  Then push to main and open the main→production PR as usual.')

@@ -255,12 +255,25 @@ export function RetentionFunnelDialog({
         // read: what was actually minted is the only honest answer, and the
         // margin question ("what did this save cost?") is answered wrong by
         // anything else.
-        trackEvent('winback_discount_accepted', {
-          percent_off: Number(payload?.percentOff),
-          duration_months: Number(payload?.durationMonths),
-          surface,
-          ...(currentPlan ? { plan: currentPlan } : {}),
-        })
+        // Reported only when both terms are real numbers (AGL-1865).
+        // `sanitizeEventParams` passes numbers through untouched, so
+        // `Number(undefined)` would land a NaN in GA and poison the average
+        // discount — the one number the margin question is asked of. Omitting
+        // the params instead is no better: the taxonomy requires them because
+        // a save recorded without its price reads as a FREE save. So a save
+        // whose price we cannot state is not recorded as a priced save at all.
+        // The customer's discount is applied either way; only the telemetry
+        // abstains.
+        const percentOff = Number(payload?.percentOff)
+        const durationMonths = Number(payload?.durationMonths)
+        if (Number.isFinite(percentOff) && Number.isFinite(durationMonths)) {
+          trackEvent('winback_discount_accepted', {
+            percent_off: percentOff,
+            duration_months: durationMonths,
+            surface,
+            ...(currentPlan ? { plan: currentPlan } : {}),
+          })
+        }
         enqueueSnackbar(
           `Discount applied — ${payload?.percentOff}% off for the next ` +
             `${payload?.durationMonths} months.`,

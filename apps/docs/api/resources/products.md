@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: Products
 description: Read your store's catalog over the API — variants, prices and stock levels — to feed a PIM, a marketplace listing, or a stock dashboard.
 ---

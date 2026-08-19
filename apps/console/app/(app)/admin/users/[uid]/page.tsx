@@ -43,7 +43,6 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { signInWithCustomToken } from 'firebase/auth'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
@@ -53,6 +52,7 @@ import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import PasswordAdminControls from '../../../../../components/password-admin-controls.component'
 import StaffUserEraseCard from '../../../../../components/staff-user-erase-card.component'
+import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -227,36 +227,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     [uid, user],
   )
 
-  const handleImpersonate = useCallback(async () => {
-    if (!uid) return
-    try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/impersonate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ uid }),
-      })
-      const payload = await response.json()
-      if (!response.ok) {
-        return void enqueueSnackbar(payload?.error ?? 'Impersonation failed', {
-          variant: 'warning',
-          persist: false,
-        })
-      }
-      // Replaces THIS browser session with the target account; the
-      // impersonation banner (claims.impersonatedBy) offers the exit.
-      // Use the named-app auth instance (useAuth) — bare getAuth() resolves
-      // the '[DEFAULT]' app, which this app never registers.
-      await signInWithCustomToken(auth, payload.token)
-      window.location.assign('/')
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('Impersonation failed', { variant: 'error' })
-    }
-  }, [uid, user, auth, enqueueSnackbar])
+  // The mint, the reason dialog and the sign-in all live in
+  // `useImpersonationReason` (AGL-2125): the route requires a reason and
+  // records it on the audit row, so this page must not be able to reach the
+  // endpoint around the dialog that collects one.
+  const impersonation = useImpersonationReason({ auth, user })
 
   return (
     <DashboardLayout
@@ -411,7 +386,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                           color="warning"
                           variant="outlined"
                           sx={{ alignSelf: 'flex-start' }}
-                          onClick={() => void handleImpersonate()}
+                          onClick={() =>
+                            impersonation.request(
+                              uid ?? '',
+                              detail?.user.email ?? undefined,
+                            )
+                          }
                         >
                           {'Impersonate (replaces your session)'}
                         </Button>
@@ -692,6 +672,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         )}
         </StaffOnly>
       </Container>
+      {impersonation.dialog}
     </DashboardLayout>
   )
 }

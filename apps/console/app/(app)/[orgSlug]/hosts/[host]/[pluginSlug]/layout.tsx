@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pluginPageTitle } from '../../../../../plugin-page-title'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 
@@ -27,7 +28,18 @@ export async function generateMetadata({
   params: Promise<{ host: string; pluginSlug: string }>
 }): Promise<Metadata> {
   const { host, pluginSlug } = await params
-  return { title: `${pluginSlug} · ${host}` }
+  /*
+   * The DISPLAYED name, not the URL slug (AGL-2184). This returned
+   * `${pluginSlug} · ${host}` — the raw lowercase segment — so every plugin
+   * page's browser tab read `products · aglyn-marketing` while the page
+   * itself rendered `Products`. The page has always had the right string
+   * (`navItem.header?.title ?? navItem.label`); the tab was reading the URL.
+   *
+   * A title also must not depend on whether this org has the plugin enabled —
+   * naming the page is not a permission decision, and the page below already
+   * gates itself.
+   */
+  return { title: `${pluginPageTitle(pluginSlug)} · ${host}` }
 }
 
 export default function HostPluginTitleLayout({

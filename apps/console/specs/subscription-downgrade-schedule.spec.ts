@@ -118,6 +118,13 @@ const PERIOD_END = 1767225600
 let subscriptionItems: any[] = []
 let subscriptionSchedule: string | null = null
 let capturedSubUpdateBody: URLSearchParams | null = null
+/**
+ * Extra fields Stripe puts on phase 0 when a schedule is created
+ * `from_subscription` — the discount, trial and tax configuration a phase-list
+ * replacement would drop (AGL-2146). Seeded per test.
+ */
+let schedulePhaseExtras: Record<string, unknown> = {}
+
 let capturedScheduleCreateBody: URLSearchParams | null = null
 let capturedScheduleUpdateBody: URLSearchParams | null = null
 let releasedScheduleIds: string[] = []
@@ -166,6 +173,7 @@ beforeEach(() => {
   subscriptionItems = [PRO_ITEM, METERED_ITEM]
   subscriptionSchedule = null
   capturedSubUpdateBody = null
+  schedulePhaseExtras = {}
   capturedScheduleCreateBody = null
   capturedScheduleUpdateBody = null
   releasedScheduleIds = []
@@ -213,6 +221,7 @@ beforeEach(() => {
               price: item.price.id,
               ...(item.quantity != null ? { quantity: item.quantity } : {}),
             })),
+            ...schedulePhaseExtras,
           },
         ],
       }
@@ -360,5 +369,89 @@ describe('a downgrade waits for the period end (AGL-1862)', () => {
     expect(releasedScheduleIds).toEqual(['sub_sched_old'])
     expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBe('true')
     expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+})
+
+/**
+ * A `subscription_schedules` update REPLACES the phase list, so every term not
+ * restated is dropped (AGL-2146). The original restatement wrote price,
+ * quantity and the phase window and nothing else — which meant a downgrade
+ * quietly ended the customer's coupon, their trial, and the tax configuration.
+ *
+ * The discount is the expensive one. Checkout sends `allow_promotion_codes`,
+ * staff mint coupons through /api/admin/coupons, and the retention funnel
+ * mints the winback — so an org holding a discount and choosing a smaller plan
+ * is an ordinary customer, and losing the coupon at the flip is a price rise
+ * nobody mentioned. An instant UPGRADE never touches subscription discounts;
+ * this is the parity.
+ */
+describe('a downgrade preserves the terms it did not change (AGL-2146)', () => {
+  async function downgrade() {
+    const post = loadSubscription()
+    return call(post, { action: 'switch', plan: 'starter', interval: 'month' })
+  }
+
+  it('carries the discount onto BOTH phases — the coupon outlives the plan change', async () => {
+    schedulePhaseExtras = {
+      discounts: [{ coupon: { id: 'coupon_winback_1' } }],
+    }
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    // The period they already paid for keeps its discount...
+    expect(update?.get('phases[0][discounts][0][coupon]')).toBe('coupon_winback_1')
+    // ...and so does the tier they move to, so a time-boxed coupon runs its
+    // remaining months instead of being cancelled by an unrelated change.
+    expect(update?.get('phases[1][discounts][0][coupon]')).toBe('coupon_winback_1')
+  })
+
+  it('reads a coupon given as a bare id, and a promotion code', async () => {
+    schedulePhaseExtras = {
+      discounts: [{ coupon: 'LAUNCH30' }, { promotion_code: 'promo_abc' }],
+    }
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    expect(update?.get('phases[0][discounts][0][coupon]')).toBe('LAUNCH30')
+    expect(update?.get('phases[0][discounts][1][promotion_code]')).toBe('promo_abc')
+  })
+
+  it('reads the LEGACY singular `coupon` on the phase', async () => {
+    schedulePhaseExtras = { coupon: 'OLDDEAL' }
+    expect((await downgrade()).status).toBe(200)
+    expect(capturedScheduleUpdateBody?.get('phases[0][coupon]')).toBe('OLDDEAL')
+  })
+
+  it('keeps a TRIAL on the current phase, and never restarts it on the next', async () => {
+    schedulePhaseExtras = { trial_end: PERIOD_END }
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    expect(update?.get('phases[0][trial_end]')).toBe(String(PERIOD_END))
+    // A trial that restarted at the flip would hand back free time the
+    // customer already used.
+    expect(update?.get('phases[1][trial_end]')).toBeNull()
+  })
+
+  it('restates the collection method and payment method', async () => {
+    schedulePhaseExtras = {
+      collection_method: 'send_invoice',
+      default_payment_method: { id: 'pm_1' },
+    }
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    expect(update?.get('phases[0][collection_method]')).toBe('send_invoice')
+    expect(update?.get('phases[0][default_payment_method]')).toBe('pm_1')
+    expect(update?.get('phases[1][collection_method]')).toBe('send_invoice')
+  })
+
+  it('NEGATIVE CONTROL: a phase with no such terms invents none', async () => {
+    // The plain downgrade must not start sending empty discount or trial
+    // params — Stripe would reject some and silently reinterpret others.
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    expect(update?.get('phases[0][discounts][0][coupon]')).toBeNull()
+    expect(update?.get('phases[0][coupon]')).toBeNull()
+    expect(update?.get('phases[0][trial_end]')).toBeNull()
+    expect(update?.get('phases[0][collection_method]')).toBeNull()
+    // The move itself still happened.
+    expect(update?.get('phases[1][items][0][price]')).toBe('price_starter_monthly')
   })
 })

@@ -35,7 +35,8 @@
  * Exit codes: 0 clean · 1 a file gained a colour, or a baseline row is stale.
  */
 
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -55,16 +56,6 @@ const BASELINE_PATH = join(
 /** Ships, or generates something that ships. Mirrors the census's sweep. */
 const SWEEP_ROOTS = ['apps', 'libs', 'tools', 'cloud']
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  '.next',
-  'coverage',
-  '.nx',
-  'tmp',
-  '.turbo',
-  '.git',
-])
 
 /**
  * Code only. The census also sweeps `.md`/`.json` because prose can instruct
@@ -91,25 +82,34 @@ const asJson = args.includes('--json')
 const write = args.includes('--write')
 const list = args.includes('--list')
 
-function sweptFiles(dir, found = []) {
-  let entries
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return found
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name)) sweptFiles(full, found)
-      continue
-    }
-    if (SWEPT.test(entry.name)) found.push(full)
-  }
-  return found
+/**
+ * TRACKED files only, via `git ls-files` — never a filesystem walk.
+ *
+ * The walk this replaces used `readdirSync` with a directory skip-list, so it
+ * swept whatever happened to be on disk. That made the ratchet depend on
+ * machine state rather than on the repo: `apps/docs/build/`,
+ * `apps/docs/.docusaurus/` and the vendored `apps/console/public/monaco/`
+ * bundles are build OUTPUT, untracked and full of minified colour literals.
+ * A developer who had built the docs saw 21 files "gain" a colour; one who had
+ * not saw a clean run, off the same commit. CI went red for the same reason.
+ *
+ * Enumerating what git tracks makes the guard deterministic and means
+ * generated output can never trip it — the same correction AGL-2002 applied to
+ * the emulator specs, for the same reason.
+ */
+function trackedFiles() {
+  const out = execFileSync(
+    'git',
+    ['ls-files', '-z', '--', ...SWEEP_ROOTS],
+    { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  )
+  return out
+    .split('\0')
+    .filter((path) => path && SWEPT.test(path))
+    .map((path) => join(REPO_ROOT, path))
 }
 
-const files = SWEEP_ROOTS.flatMap((root) => sweptFiles(join(REPO_ROOT, root)))
+const files = trackedFiles()
 
 const counts = {}
 const occurrences = {}

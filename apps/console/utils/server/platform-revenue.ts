@@ -77,6 +77,23 @@ export interface PlatformRevenueRecord {
   taxCents: number
   /** Gross minus tax — Aglyn's revenue; the tax is held for the state. */
   netCents: number
+  /**
+   * The charge and payment intent this invoice settled through — the ONLY
+   * link back from a `charge.dispute.*` event (AGL-2120).
+   *
+   * A Stripe Dispute carries `charge` and `payment_intent` and no `customer`
+   * and no `invoice`, so without these stored the webhook cannot tell that a
+   * chargeback reverses one of Aglyn's OWN subscription charges — the row
+   * keeps its full `netCents` and the return over-reports by the disputed
+   * amount. Storing them makes the reversal resolvable with a Firestore
+   * query instead of a live Stripe read on a webhook path.
+   *
+   * Null on an invoice paid entirely from credit balance (no charge at all),
+   * which is also the shape every pre-AGL-2120 row has — the dispute branch
+   * counts an unresolvable dispute out loud rather than guessing.
+   */
+  chargeId: string | null
+  paymentIntentId: string | null
   currency: string
   /** False marks an invoice billed before its subscription gained tax. */
   automaticTax: boolean
@@ -192,6 +209,20 @@ export function platformInvoiceRevenue(
     totalCents: asCents(source?.total),
     taxCents,
     netCents: grossCents - taxCents,
+    // Both generations of the field: newer API versions moved the charge and
+    // the payment intent under `payments[]`/`confirmation_secret`, older ones
+    // state them at the top level. Read as an id OR an expanded object,
+    // exactly like `subscription` and `customer` above.
+    chargeId:
+      asStringOrNull(source?.charge) ??
+      asStringOrNull(source?.charge?.id) ??
+      asStringOrNull(source?.payments?.data?.[0]?.payment?.charge) ??
+      null,
+    paymentIntentId:
+      asStringOrNull(source?.payment_intent) ??
+      asStringOrNull(source?.payment_intent?.id) ??
+      asStringOrNull(source?.payments?.data?.[0]?.payment?.payment_intent) ??
+      null,
     currency: asStringOrNull(source?.currency) ?? 'usd',
     automaticTax: source?.automatic_tax?.enabled === true,
     customerAddress:

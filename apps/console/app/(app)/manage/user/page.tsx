@@ -79,6 +79,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import AccountIdentitiesCard from '../../../../components/account-identities-card.component'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import CloseAccountCard from '../../../../components/close-account-card.component'
 import DataExportCard from '../../../../components/data-export-card.component'
@@ -677,6 +678,9 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
             {'Continue with Google'}
           </Button>
         ) : null}
+        {/* Which records exist for this address (AGL-2119). Sits with the
+            sign-in methods because that is the question it answers. */}
+        <AccountIdentitiesCard />
       </Stack>
     </CardDisplay>
   )
@@ -748,7 +752,12 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     // saving merges — so a blank field deletes the real value.
     if (schema.id === 'basic' && profileUnreadableAndEmpty) {
       return (
-        <CardDisplay header="Basic info" contentGutterX contentGutterY>
+        <CardDisplay header="Basic info"
+          help={docsHelp('manageAccount', {
+            excerpt:
+              'Your name and contact details, as they appear to teammates across ' +
+              'every organization you belong to.',
+          })} contentGutterX contentGutterY>
           <Alert severity="error" sx={{ maxWidth: 560 }}>
             {'We could not load your profile, so it is not shown here — the ' +
               'form is hidden rather than blank, because saving a blank form ' +

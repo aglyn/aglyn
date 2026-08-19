@@ -641,12 +641,14 @@ export function AssistPanelComponent() {
               anchor="#what-it-can-do"
               sx={{ color: 'text.secondary' }}
             />
-            <IconButton
-              aria-label="Close Aglyn Assist"
-              onClick={() => setOpen(false)}
-            >
-              <MdiIcon path={mdiClose.path} />
-            </IconButton>
+            <Tooltip title="Close Aglyn Assist">
+              <IconButton
+                aria-label="Close Aglyn Assist"
+                onClick={() => setOpen(false)}
+              >
+                <MdiIcon path={mdiClose.path} />
+              </IconButton>
+            </Tooltip>
           </Stack>
 
           <Box ref={scrollRef} sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
@@ -725,30 +727,55 @@ export function AssistPanelComponent() {
                     )}
                   {message.role === 'assistant' && message.exchangeId && (
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        aria-label="Helpful answer"
-                        color={message.feedback === 'up' ? 'primary' : 'default'}
-                        disabled={Boolean(message.feedback)}
-                        onClick={() => void sendFeedback(index, 'up')}
+                      {/* The span is load-bearing (AGL-2128): a disabled MUI
+                          button fires no pointer events, so a Tooltip on it
+                          directly never opens — and "already answered" is
+                          precisely the state a reader most needs explained,
+                          because the greyed thumbs otherwise look broken. */}
+                      <Tooltip
+                        title={
+                          message.feedback
+                            ? 'Thanks — you already rated this answer'
+                            : 'Helpful answer'
+                        }
                       >
-                        <MdiIcon
-                          path={mdiThumbUpOutline.path}
-                          sx={{ fontSize: 16 }}
-                        />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        aria-label="Unhelpful answer"
-                        color={message.feedback === 'down' ? 'primary' : 'default'}
-                        disabled={Boolean(message.feedback)}
-                        onClick={() => void sendFeedback(index, 'down')}
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Helpful answer"
+                            color={message.feedback === 'up' ? 'primary' : 'default'}
+                            disabled={Boolean(message.feedback)}
+                            onClick={() => void sendFeedback(index, 'up')}
+                          >
+                            <MdiIcon
+                              path={mdiThumbUpOutline.path}
+                              sx={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          message.feedback
+                            ? 'Thanks — you already rated this answer'
+                            : 'Unhelpful answer'
+                        }
                       >
-                        <MdiIcon
-                          path={mdiThumbDownOutline.path}
-                          sx={{ fontSize: 16 }}
-                        />
-                      </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Unhelpful answer"
+                            color={message.feedback === 'down' ? 'primary' : 'default'}
+                            disabled={Boolean(message.feedback)}
+                            onClick={() => void sendFeedback(index, 'down')}
+                          >
+                            <MdiIcon
+                              path={mdiThumbDownOutline.path}
+                              sx={{ fontSize: 16 }}
+                            />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Stack>
                   )}
                 </Box>
@@ -804,18 +831,24 @@ export function AssistPanelComponent() {
                   }
                 }}
               />
-              <IconButton
-                color="primary"
-                aria-label="Send message"
-                disabled={busy || !input.trim()}
-                onClick={() => void send()}
+              <Tooltip
+                title={busy ? 'Waiting for an answer…' : 'Send message'}
               >
-                {busy ? (
-                  <CircularProgress size={20} />
-                ) : (
-                  <MdiIcon path={mdiSend.path} />
-                )}
-              </IconButton>
+                <span>
+                  <IconButton
+                    color="primary"
+                    aria-label="Send message"
+                    disabled={busy || !input.trim()}
+                    onClick={() => void send()}
+                  >
+                    {busy ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <MdiIcon path={mdiSend.path} />
+                    )}
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Stack>
           </Stack>
         </Stack>

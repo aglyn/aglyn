@@ -44,6 +44,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import { MarkdownLiteView } from '@aglyn/aglyn-markdown-editor'
 import StaffOnly from '../../../../../components/staff-only.component'
+import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
 import {
@@ -496,7 +497,13 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
             <Stack spacing={3}>
               {/* Status first: a reviewer needs to know what state they
                   are acting on before they read a word of the manifest. */}
-              <CardDisplay header="Status" contentGutterX contentGutterY>
+              <CardDisplay header="Status"
+                help={docsHelp('publisherHandbook', {
+                  anchor: '#review-what-happens-after-you-publish',
+                  excerpt:
+                    'Where this version stands: submitted, listed, verified, or ' +
+                    'rejected — and what each state lets a customer do.',
+                })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Stack
                     direction="row"
@@ -597,7 +604,12 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
 
-              <CardDisplay header="Overview" contentGutterX contentGutterY>
+              <CardDisplay header="Overview"
+                help={docsHelp('publisherHandbook', {
+                  excerpt:
+                    'The listing as a customer sees it — name, description, media and ' +
+                    'links, all publisher-supplied.',
+                })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Typography variant="body2">
                     {detail.description || 'No description.'}
@@ -699,7 +711,12 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
               {/* What the bundle is allowed to reach, and what the static
                   verifier found in it. The two questions that decide
                   whether this code may run in the app realm. */}
-              <CardDisplay header="Security" contentGutterX contentGutterY>
+              <CardDisplay header="Security"
+                help={docsHelp('sandboxSecurity', {
+                  excerpt:
+                    'What the bundle asked for, against what the sandbox enforces ' +
+                    'regardless of what it asked for.',
+                })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   {/* The version under review, not the latest one: the
                       verifier diffs network calls against THESE declared
@@ -874,6 +891,12 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                   than a judgement call. */}
               <CardDisplay
                 header={`Publisher attestation — v${detail.reviewVersion} (${detail.attestation.length}/${PUBLISHER_ATTESTATION.length})`}
+                help={docsHelp('publisherHandbook', {
+                  anchor: '#the-two-badges-and-what-each-one-promises',
+                  excerpt:
+                    'What the publisher asserted about THIS version. Their claim, not ' +
+                    'our finding — the checklist below is ours.',
+                })}
                 contentGutterX
                 contentGutterY
               >
@@ -962,6 +985,12 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                     (item) => detail.checklist?.[item.id],
                   ).length
                 }/${PLUGIN_REVIEW_CHECKLIST.length})`}
+                help={docsHelp('publisherHandbook', {
+                  anchor: '#review-what-happens-after-you-publish',
+                  excerpt:
+                    'The checklist a reviewer works through. Re-earned per version — a ' +
+                    'new release starts with none of it ticked.',
+                })}
                 contentGutterX
                 contentGutterY
               >
@@ -1507,7 +1536,13 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
 
-              <CardDisplay header="Versions" contentGutterX contentGutterY>
+              <CardDisplay header="Versions"
+                help={docsHelp('publisherHandbook', {
+                  anchor: '#versioning--updates',
+                  excerpt:
+                    'Every version this publisher has submitted. Review lives on the ' +
+                    'VERSION, so each one is judged on its own.',
+                })} contentGutterX contentGutterY>
                 <Stack spacing={1}>
                   <Typography variant="body2" color="text.secondary">
                     {'Granting realm trust signs a version to run inside ' +
@@ -1596,21 +1631,26 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           ? ` · ${entry.activeInstalls} pinned here`
                           : ''}
                       </Typography>
-                      <Button
-                        size="small"
-                        color={entry.trust === 'realm' ? 'error' : 'success'}
-                        disabled={busy}
-                        onClick={() =>
-                          void signRealm(
-                            entry.version,
-                            entry.trust === 'realm' ? 'revoke' : 'grant',
-                          )
-                        }
-                      >
-                        {entry.trust === 'realm'
-                          ? 'Revoke realm trust'
-                          : 'Grant realm trust'}
-                      </Button>
+                      {/* Realm trust bypasses the plugin sandbox's CSP, so
+                          /api/admin/sign-plugin is super-only. The button was
+                          live for support staff (AGL-2131). */}
+                      <SuperStaffOnly>
+                        <Button
+                          size="small"
+                          color={entry.trust === 'realm' ? 'error' : 'success'}
+                          disabled={busy}
+                          onClick={() =>
+                            void signRealm(
+                              entry.version,
+                              entry.trust === 'realm' ? 'revoke' : 'grant',
+                            )
+                          }
+                        >
+                          {entry.trust === 'realm'
+                            ? 'Revoke realm trust'
+                            : 'Grant realm trust'}
+                        </Button>
+                      </SuperStaffOnly>
                       {/* The kill switch for THESE bytes (AGL-1085) —
                           narrower than the takedown below, which stops every
                           version including the one customers are happily
@@ -1632,7 +1672,13 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
 
               {/* Separated on purpose: this is the only control here that
                   reaches code already running in customers' workspaces. */}
-              <CardDisplay header="Danger zone" contentGutterX contentGutterY>
+              <CardDisplay header="Danger zone"
+                help={docsHelp('publisherHandbook', {
+                  anchor: '#review-what-happens-after-you-publish',
+                  excerpt:
+                    'Rejecting a version is not a kill switch — it stops new installs ' +
+                    'and leaves existing ones running.',
+                })} contentGutterX contentGutterY>
                 <Stack spacing={1.5}>
                   <Typography variant="body2" color="text.secondary">
                     {'Taking a plugin down de-lists it AND writes the kill ' +

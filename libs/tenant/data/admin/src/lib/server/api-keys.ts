@@ -43,6 +43,14 @@ export const API_SCOPES = [
   'contacts:read',
   'sites:read',
   'forms:read',
+  // AGL-2127. A lead sync could READ a submission and never record that it
+  // had — so it re-pushed the same lead on every poll, or kept its own
+  // high-water mark against a list ordered by document id rather than by
+  // time. `read` is the flag the console already toggles on the same
+  // document, so the scope grants exactly the state the integration needs
+  // (plus the delete that lets it purge after export), and nothing that
+  // rewrites what a visitor actually typed.
+  'forms:write',
   // Commerce and media reads (AGL-1928). Each is separate from `sites:read`
   // for the same reason `forms:read` is: a key handed to a fulfilment or
   // accounting integration needs the order history and nothing else, and a

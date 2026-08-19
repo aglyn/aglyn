@@ -16,9 +16,11 @@
  */
 
 import {
+  checkDiscountMargin,
   isLiveSubscriptionStatus,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
+import { latestMeasuredCogsUsd } from '../../_lib/org-cogs'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -65,6 +67,26 @@ async function stripeRequest(
     throw new Error(payload?.error?.message ?? `Stripe ${path} failed`)
   }
   return payload
+}
+
+/**
+ * Whether a Stripe subscription already carries a discount (AGL-2117).
+ *
+ * Both shapes are checked because both are real: `discounts` is the current
+ * list-valued field, and `discount` is the singular legacy one that older API
+ * versions still return. Reading only the modern name would answer "no
+ * discount" for exactly the long-lived subscriptions most likely to hold a
+ * promo — the ones this guard exists to protect.
+ *
+ * A `discounts` array that exists but is empty is not a discount; a live
+ * subscription reports `discounts: []` routinely.
+ */
+function hasExistingDiscount(subscription: any): boolean {
+  const list = subscription?.discounts
+  if (Array.isArray(list) && list.some((entry: unknown) => Boolean(entry))) {
+    return true
+  }
+  return Boolean(subscription?.discount)
 }
 
 /**
@@ -199,6 +221,109 @@ async function handler(request: Request): Promise<Response> {
     )
     if (!subscription) {
       return Response.json({ error: 'No active subscription' }, { status: 409 })
+    }
+    // A subscription that already carries a discount is refused rather than
+    // overwritten (AGL-2117). The apply below sets `discounts[0][coupon]`, and
+    // Stripe's `discounts` parameter SETS the list — it does not append. On a
+    // customer who checked out with a promotion code (checkout sends
+    // `allow_promotion_codes`) that write silently deletes the promo they
+    // were promised: they take 50% for two months, lose whatever months
+    // remained, and land on full list price at month three — a price rise
+    // nobody agreed to, delivered by the flow whose whole job is retention.
+    //
+    // Refused, not stacked. Stacking the winback on top of an existing large
+    // discount walks toward the free account `assertBoundedWinbackCoupon`
+    // exists to make impossible, and a retained org still has to cover its
+    // costs. Checked BEFORE the reservation below so the org keeps its one
+    // shot without needing the reservation released.
+    if (hasExistingDiscount(subscription)) {
+      return Response.json(
+        {
+          error:
+            'This subscription already has a discount applied — the winback ' +
+            'offer would replace it. Contact support to change the discount.',
+        },
+        { status: 409 },
+      )
+    }
+
+    // THE MARGIN GUARDRAIL, which this path did not have (AGL-2118).
+    //
+    // Every OTHER way a discount reaches a live subscription runs
+    // `checkDiscountMargin` against the org that will bear it —
+    // `api/admin/org-discount` blocks on a `block` rating unless staff pass
+    // `confirmBelowFloor`. This route mints a real Stripe coupon and applies
+    // it to a real subscription with nobody in the loop at all, and it was the
+    // ONLY such path: `assertBoundedWinbackCoupon` checks the SHAPE of two
+    // module constants and cannot fail on today's values, so it proved nothing
+    // about whether the resulting subscription still covers what the org costs
+    // to serve.
+    //
+    // Rated against the org's MEASURED cost, exactly as the staff route does,
+    // because the flat per-site estimate is the wrong input for the org shape
+    // that reaches a cancel dialog: heavy usage is a common reason to leave.
+    //
+    // NO OVERRIDE PARAMETER. `confirmBelowFloor` exists on the staff route
+    // because a human with a name is choosing to go underwater for a reason
+    // they record. There is no equivalent here — a customer clicking "keep my
+    // discount" is not an approval — so a `block` verdict simply refuses the
+    // offer and the funnel falls back to the downsell, which is the cheaper
+    // plan and therefore the honest thing to sell someone whose usage will not
+    // support a discounted one.
+    //
+    // SHAPE FIRST, then economics (AGL-2118). `assertBoundedWinbackCoupon`
+    // used to run only inside the mint block, after the one-shot reservation
+    // was taken and with a delete-on-throw to give it back. Hoisted here it
+    // refuses before anything is written at all, and it keeps its place ahead
+    // of the margin verdict so an unbounded-constants edit still surfaces as
+    // the loud 502 its own guard asserts rather than as a quiet 409 about
+    // margin. It stays in the mint block too — it is pure, and the mint site
+    // is where the promise is written down.
+    assertBoundedWinbackCoupon({
+      percentOff: WINBACK_PERCENT_OFF,
+      duration: 'repeating',
+      durationInMonths: WINBACK_DURATION_MONTHS,
+    })
+
+    // The subscription STATUS and INTERVAL come from the Stripe object fetched
+    // above, not from the org doc's mirror, and that is what keeps the check
+    // from being inert. `checkDiscountMargin` prices through
+    // `orgListPriceMonthlyUsd`, which returns **0** for an org whose
+    // `subscription.status` is missing or dead — and 0 gross rates every
+    // discount `ok`. The webhook mirror can lag or have been missed entirely
+    // (AGL-1763 records orphaned subscriptions for exactly that reason), so a
+    // guardrail reading the mirror alone would pass hardest on the orgs whose
+    // records are worst. Stripe just told us this subscription is live; use
+    // that. The interval decides which of the two base prices is list.
+    const stripeInterval = ((subscription?.items?.data ?? []) as any[]).find(
+      (item) => item?.price?.recurring?.interval,
+    )?.price?.recurring?.interval
+    const orgForMargin = {
+      ...(orgSnapshot.data() ?? {}),
+      subscription: {
+        ...((orgSnapshot.get('subscription') as Record<string, unknown>) ?? {}),
+        status: String(subscription?.status ?? ''),
+        ...(stripeInterval ? { interval: String(stripeInterval) } : {}),
+      },
+    }
+    const measuredCogsUsd = await latestMeasuredCogsUsd(orgId)
+    const marginRating = checkDiscountMargin(
+      orgForMargin as never,
+      { percentOff: WINBACK_PERCENT_OFF },
+      { measuredCogsUsd },
+    )
+    if (marginRating.rating === 'block') {
+      return Response.json(
+        {
+          error:
+            'This workspace costs more to run than a discounted subscription ' +
+            'would cover, so the winback offer is not available. Switching to ' +
+            'a smaller plan is the better fit.',
+          code: 'margin_floor',
+          rating: marginRating,
+        },
+        { status: 409 },
+      )
     }
 
     const funnelId = typeof body?.funnelId === 'string' ? body.funnelId : null

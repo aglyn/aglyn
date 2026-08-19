@@ -35,6 +35,7 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import SitePluginsCard from '../../../../../../components/site-plugins-card.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import { docsHelp } from '../../../../../../constants/docs-links'
 import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /** Per-site plugins tab id; `/admin?tab=plugins` deep links land here. */
@@ -145,7 +146,16 @@ const HostAdmin: NextPageWithLayout<Record<string, never>> = () => {
             />
           </TabContext>
         ) : (
-          <CardDisplay header="Admin" contentGutterX contentGutterY>
+          <CardDisplay
+            header="Admin"
+            help={docsHelp('team', {
+              excerpt:
+                'Site admin actions — per-site plugin choices and deleting ' +
+                'the site — are limited to site admins.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
             <Typography variant="body2" color="text.secondary">
               {'Only site admins can open this area.'}
             </Typography>

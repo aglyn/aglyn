@@ -131,6 +131,42 @@ Three things the report says that are easy to skim past:
   loop cannot depend on the server ever saying stop. If the card reports it stopped
   before the route said done, run the scan again to continue.
 
+## Pending erasures {#pending-erasures}
+
+An erasure request from a customer waits out a **7-day hold** and is then executed by the
+04:00 UTC job. This card is that queue, and the only place in the console it has ever
+been visible: until AGL-2165 `/api/admin/run-erasures` accepted the cron secret and
+nothing else, so a browser could not reach it at all. Staff could *queue* an erasure from
+an organization's detail page and then had no way to run it, to see what was pending, or
+to find out why one had not gone through — short of hand-dispatching a GitHub workflow.
+
+That gap mattered more than most missing cron surfaces, because what is being waited on
+is a **statutory deadline**, and "it runs at 04:00 UTC" is not something a data-protection
+request can be closed with.
+
+Each row answers the one question worth asking:
+
+- **Holding** — the 7-day hold has not expired. Nothing will run, and nothing should.
+- **Due** — the hold has expired. The next scheduled run will take it.
+
+**Run due erasures now** is for when a deadline will not wait for the schedule. Three
+things about it:
+
+- **It is audited with your reason**, and the route refuses a staff-triggered run
+  without one. `eraseOrg` writes its own per-organization audit row either way; the
+  reason on *this* row answers why the batch did not wait.
+- **It is bounded.** A run takes a fixed number of organizations, because the work is
+  irreversible and a bounded batch is re-runnable. If more are due, run it again.
+- **The hold is re-verified by the eraser, not by this list.** A stale list cannot make
+  anything delete early.
+
+A **skipped** organization is not a retry — `eraseOrg` has already written a durable
+`org.erase-failed` audit row by the time the card reports it, and the request stays
+queued. Read that row before running again.
+
+Listing is capped, and the card says so when it hits the cap. Treat the length as a
+floor.
+
 ## Re-checking
 
 **Re-check now** re-runs every probe. The probes memoise their expensive work for five
