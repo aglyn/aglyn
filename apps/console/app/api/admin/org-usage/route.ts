@@ -27,12 +27,28 @@ import {
 } from '@aglyn/tenant-data-admin'
 
 /**
+ * "The rollup did not record this" and "the rollup recorded zero/false" are
+ * different answers, and a projection that collapses them invents history
+ * (AGL-2321). Used only for the `recorded` block, whose fields all postdate
+ * rollups that are still inside the twelve-month window.
+ */
+const nullableFlag = (value: unknown): boolean | null =>
+  value == null ? null : Boolean(value)
+
+const nullableNumber = (value: unknown): number | null =>
+  value == null ? null : Number(value)
+
+/**
  * Per-organization usage drill-down (AGL-205/238): the last 12 monthly
  * rollups for one org with month-over-month deltas, powering the Usage
  * dialog on the staff Organizations page. Staff-gated, read-only.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const {
+    method,
+    query,
+    headers: rawHeaders,
+  } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -41,7 +57,8 @@ async function handler(request: Request): Promise<Response> {
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
-  if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  if (!idToken)
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   const orgId = String(query.orgId ?? '')
   if (!orgId) return Response.json({ error: 'Missing orgId' }, { status: 400 })
 
@@ -83,6 +100,68 @@ async function handler(request: Request): Promise<Response> {
       // the projection drops makes the browser's cost SMALLER than the
       // server's, and smaller approves a discount.
       assistCostUsd: Number(doc.get('assistCostUsd') ?? 0),
+      // THE RECORDED-NOT-PRICED HALF (AGL-2321). `report-usage` writes these
+      // and argues, correctly, that inventing a per-email or per-run rate
+      // would put a made-up number into `billedCents` on the same day the
+      // meter first had data. That argument justifies not PRICING them. It
+      // never justified nothing being able to READ them — and this projection
+      // dropping them is AGL-1134's starved-model hazard recurring one layer
+      // up: the history a rate would be derived from was unreachable from the
+      // only surface anyone looks at it on.
+      //
+      // Grouped rather than flattened so the boundary stays legible: nothing
+      // in `recorded` is an input to `orgMonthlyCogsUsd`, and a future field
+      // that IS priced belongs beside `assistCostUsd` above, not here.
+      //
+      // A field the rollup never wrote reads as NULL, not as zero or false.
+      // An org whose July rollup predates the meter did not send zero emails
+      // and was not "not billed" for its library — nothing was recorded, and
+      // a surface that cannot tell those apart is the same silence the
+      // withheld/billed pairs below exist to end.
+      recorded: {
+        // Meters: counted, never charged.
+        emailSends: Number(doc.get('emailSends') ?? 0),
+        emailSendsOverage: Number(doc.get('emailSendsOverage') ?? 0),
+        workflowRuns: Number(doc.get('workflowRuns') ?? 0),
+        actionRuns: Number(doc.get('actionRuns') ?? 0),
+        // Dollars the rollup computed but nothing could read back.
+        billableCostUsd: Number(doc.get('billableCostUsd') ?? 0),
+        apiOverageUsd: Number(doc.get('apiOverageUsd') ?? 0),
+        // The withheld/billed PAIRS. Each `*WithheldUsd` is zero when the
+        // release flag was on, so the dollar figure alone cannot distinguish
+        // a withheld month from an in-band one — which is the defect the
+        // writer's own comment names. The flag is what disambiguates it, so
+        // the two travel together or neither is worth serving.
+        formSubmissionsBilled: nullableFlag(doc.get('formSubmissionsBilled')),
+        formSubmissionsOverageWithheldUsd: Number(
+          doc.get('formSubmissionsOverageWithheldUsd') ?? 0,
+        ),
+        contactsOverageBilled: nullableFlag(doc.get('contactsOverageBilled')),
+        contactsOverageUsd: Number(doc.get('contactsOverageUsd') ?? 0),
+        contactsOverageWithheldUsd: Number(
+          doc.get('contactsOverageWithheldUsd') ?? 0,
+        ),
+        // THE AUDIT FIELDS (AGL-2321 item 3). `orgLibraryBilled` and
+        // `orgLibraryBilledFrom` were frozen onto the rollup precisely so a
+        // later reader would not have to know what
+        // `BILL_ORG_LIBRARY_STORAGE_FROM` held when the cron ran. That reader
+        // is this one, and until now it did not exist — which is the actual
+        // gap, not "a historical caller reads the live env var". Every
+        // `process.env` read of that switch answers "what is it NOW" for a
+        // current-month estimate, and would be WRONG to serve from a stored
+        // past value. `usage-config` is correct as written.
+        orgLibraryStorageGb: nullableNumber(doc.get('orgLibraryStorageGb')),
+        orgLibraryBilled: nullableFlag(doc.get('orgLibraryBilled')),
+        orgLibraryBilledFrom:
+          doc.get('orgLibraryBilledFrom') == null
+            ? null
+            : String(doc.get('orgLibraryBilledFrom')),
+        // `siteSizeTruncated` changes what `siteSizeMb` MEANS — a truncated
+        // measurement is a lower bound, not a total — so serving the number
+        // without the flag would be worse than serving neither.
+        siteSizeMb: nullableNumber(doc.get('siteSizeMb')),
+        siteSizeTruncated: nullableFlag(doc.get('siteSizeTruncated')),
+      },
     }))
     /**
      * The newest rollup, priced by the shared cost model (AGL-1134) — the

@@ -135,6 +135,28 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
       // projection has to carry the VALUE, and a row seeded at 0 would pass
       // against a projection that hardcoded one.
       assistCostUsd: 18.75,
+      // The recorded-not-priced half (AGL-2321). Every value distinct from
+      // every other, and none of them 0, 1 or `true` twice in a row — a
+      // projection that transposed two fields, or hardcoded one, has to be
+      // unable to pass. `contactsOverageBilled` is deliberately the opposite
+      // flag to `formSubmissionsBilled`: a projection reading one for both
+      // would otherwise go unnoticed.
+      emailSends: 4321,
+      emailSendsOverage: 321,
+      workflowRuns: 87,
+      actionRuns: 219,
+      billableCostUsd: 3.0625,
+      apiOverageUsd: 6.5,
+      formSubmissionsBilled: false,
+      formSubmissionsOverageWithheldUsd: 4.25,
+      contactsOverageBilled: true,
+      contactsOverageUsd: 7.75,
+      contactsOverageWithheldUsd: 0,
+      orgLibraryStorageGb: 1.875,
+      orgLibraryBilled: true,
+      orgLibraryBilledFrom: '2026-07',
+      siteSizeMb: 512.4,
+      siteSizeTruncated: true,
     }
     mockUsageGet.mockResolvedValueOnce({
       docs: [
@@ -165,9 +187,75 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         // dollars rather than fractions of a cent, so a dropped projection
         // here is the difference between a discount refused and approved.
         assistCostUsd: 18.75,
+        // AGL-2321 — the history a rate gets derived from. Asserted as a
+        // whole object rather than field by field, so a projection that ADDS
+        // a field without a reader, or silently drops one, both fail here.
+        recorded: {
+          emailSends: 4321,
+          emailSendsOverage: 321,
+          workflowRuns: 87,
+          actionRuns: 219,
+          billableCostUsd: 3.0625,
+          apiOverageUsd: 6.5,
+          formSubmissionsBilled: false,
+          formSubmissionsOverageWithheldUsd: 4.25,
+          contactsOverageBilled: true,
+          contactsOverageUsd: 7.75,
+          contactsOverageWithheldUsd: 0,
+          orgLibraryStorageGb: 1.875,
+          orgLibraryBilled: true,
+          orgLibraryBilledFrom: '2026-07',
+          siteSizeMb: 512.4,
+          siteSizeTruncated: true,
+        },
       deltas: null,
       },
     ])
+  })
+
+  /**
+   * NULL IS NOT ZERO (AGL-2321). A rollup written before a meter existed
+   * recorded nothing; serving `0` and `false` for it would make the staff
+   * table state, as measurement, that the org sent no email and was not
+   * billed for its library. The flags and the two sizes carry null through;
+   * the counters and dollar figures keep their `?? 0` because a missing
+   * counter and a zero counter mean the same thing to a rate derivation.
+   */
+  it('does not turn an unrecorded field into a measured zero', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce({
+      uid: 'staff-1',
+      email_verified: true,
+      staff: true,
+    })
+    const fields = { month: '2026-01', storageGb: 1, pageViews: 2 }
+    mockUsageGet.mockResolvedValueOnce({
+      docs: [
+        {
+          id: '2026-01',
+          get: (key: string) => fields[key as keyof typeof fields],
+          data: () => fields,
+        },
+      ],
+    })
+    const payload = await (await get({ token: 'tok' })).json()
+    expect(payload.months[0].recorded).toEqual({
+      emailSends: 0,
+      emailSendsOverage: 0,
+      workflowRuns: 0,
+      actionRuns: 0,
+      billableCostUsd: 0,
+      apiOverageUsd: 0,
+      formSubmissionsBilled: null,
+      formSubmissionsOverageWithheldUsd: 0,
+      contactsOverageBilled: null,
+      contactsOverageUsd: 0,
+      contactsOverageWithheldUsd: 0,
+      orgLibraryStorageGb: null,
+      orgLibraryBilled: null,
+      orgLibraryBilledFrom: null,
+      siteSizeMb: null,
+      siteSizeTruncated: null,
+    })
   })
 
   it('serves the newest rollup priced by the shared cost model (AGL-1134)', async () => {
