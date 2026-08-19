@@ -502,3 +502,13 @@ never rate or comment on its own listing.
 One-time prices in whole USD (up to $1000). Purchases flow through the
 platform's Stripe; your share (80%, or 70% on free plans) pays out via
 your Connect account. The Marketplace → Sales tab tracks every sale.
+
+Your share is calculated on the **pre-tax** price. Buyers also pay sales tax
+on top of it, which Aglyn collects and remits under its marketplace-provider
+registration — that money is never yours and is not part of your payout. The
+Sales tab reports **net paid out**, the amount that reached your Stripe
+account, with what buyers paid, the tax and the platform fee shown beside it.
+
+Refunds and lost chargebacks are excluded from that total: your share is
+pulled back from your Connect account, and the amount returned is listed
+separately.
