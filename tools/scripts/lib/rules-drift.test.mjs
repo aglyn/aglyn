@@ -58,7 +58,10 @@ describe('normalizeRulesText', () => {
   })
 
   it('inner content differences survive normalization', () => {
-    assert.notEqual(normalizeRulesText('a\n\nb\n'), normalizeRulesText('a\nb\n'))
+    assert.notEqual(
+      normalizeRulesText('a\n\nb\n'),
+      normalizeRulesText('a\nb\n'),
+    )
   })
 
   it('empty stays empty', () => {
@@ -213,7 +216,9 @@ async function withStub({ firestore, storage, database }, run) {
       }
       return respond(
         200,
-        JSON.stringify({ source: { files: [{ name: 'r', content: ruleset }] } }),
+        JSON.stringify({
+          source: { files: [{ name: 'r', content: ruleset }] },
+        }),
       )
     }
     if (path === '/db/.settings/rules.json') {
@@ -303,7 +308,8 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
       .filter((line) => !line.includes('mediaTombstones'))
       .join('\n')
     if (
-      normalizeRulesText(doctoredFirestore) === normalizeRulesText(headFirestore)
+      normalizeRulesText(doctoredFirestore) ===
+      normalizeRulesText(headFirestore)
     ) {
       // HEAD no longer mentions mediaTombstones; drop the closing lines
       // instead so the drift stays planted.
@@ -434,7 +440,10 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
     })
 
   it('live at the promoted baseline is GREEN even though HEAD is ahead, and the pending commit is itemised', async () => {
-    const promotedFirestore = showAt(promotedRef, 'cloud/firebase-firestore.rules')
+    const promotedFirestore = showAt(
+      promotedRef,
+      'cloud/firebase-firestore.rules',
+    )
     // Guard the premise: the chosen commit really does change this file, so
     // "green" below is not green-because-identical.
     assert.notEqual(
@@ -469,7 +478,11 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
 
   it('a baseline that does not resolve exits 2 — never a silent fall back to HEAD', async () => {
     await withStub(
-      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      {
+        firestore: headFirestore,
+        storage: headStorage,
+        database: headDatabase,
+      },
       async (port) => {
         const result = await runCli({
           port,
@@ -490,7 +503,11 @@ describe('check-rules-drift CLI (planted drift, stubbed live API)', () => {
 
   it('RULES_DRIFT_BASELINE sets the baseline without a flag (the CI path)', async () => {
     await withStub(
-      { firestore: headFirestore, storage: headStorage, database: headDatabase },
+      {
+        firestore: headFirestore,
+        storage: headStorage,
+        database: headDatabase,
+      },
       async (port) => {
         const result = await runCli({
           port,
@@ -585,8 +602,14 @@ describe('the checker is wired (workflow + package.json)', () => {
     // "no drift", which is indistinguishable from convergence.
     const selfTest = workflow.indexOf('npm run test:rules-drift')
     const check = workflow.indexOf('npm run check:rules-drift')
-    assert.ok(selfTest !== -1, 'rules-drift.yml must run npm run test:rules-drift')
-    assert.ok(check !== -1, 'rules-drift.yml must run npm run check:rules-drift')
+    assert.ok(
+      selfTest !== -1,
+      'rules-drift.yml must run npm run test:rules-drift',
+    )
+    assert.ok(
+      check !== -1,
+      'rules-drift.yml must run npm run check:rules-drift',
+    )
     // Order matters: a failing comparator must fail the job before its
     // verdict is printed, not after.
     assert.ok(
@@ -653,6 +676,21 @@ describe('the checker is wired (workflow + package.json)', () => {
       // workflow and a developer's memory.
       'test:hardcoded-colours',
       'check:hardcoded-colours',
+      // AGL-2376 / AGL-2377 — the guard that catches a test file with no
+      // runner and a `test` target with no tests. Six orphans and five empty
+      // targets on its first run.
+      'test:test-wiring',
+      'check:test-wiring',
+      // AGL-2376 — applyPlan's create/update/unknown-op refusals.
+      'test:backfill-core',
+      // AGL-2379 — the legal-drift comparator's pure-node self-test. The
+      // comparator itself is scheduled in legal-drift.yml (it needs the live
+      // site and a Drive credential); this half needs nothing and must not be
+      // the part that goes unrun.
+      'test:legal-drift',
+      // AGL-2379 / AGL-2240 — no model-provider key reachable from the client
+      // bundle. A security control that ran in no workflow at all.
+      'check:provider-key-exposure',
     ]) {
       // Match the STEP syntax, not the bare script name — the workflow's own
       // comments mention these scripts, and an assertion a comment can
@@ -688,6 +726,11 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:monaco-dompurify', // AGL-2300
       'test:hardcoded-colours',
       'check:hardcoded-colours',
+      'test:test-wiring', // AGL-2376 / AGL-2377
+      'check:test-wiring', // AGL-2376 / AGL-2377
+      'test:backfill-core', // AGL-2376
+      'test:legal-drift', // AGL-2379
+      'check:provider-key-exposure', // AGL-2379 / AGL-2240
     ]) {
       assert.ok(
         typeof pkg.scripts[script] === 'string' && pkg.scripts[script] !== '',
@@ -783,7 +826,11 @@ describe('the checker is wired (workflow + package.json)', () => {
     //
     // Asserted from inside the suite so removing the setting goes red on the
     // push that removes it, in all three workflows at once.
-    for (const file of ['rules-drift.yml', 'index-drift.yml', 'tools-guards.yml']) {
+    for (const file of [
+      'rules-drift.yml',
+      'index-drift.yml',
+      'tools-guards.yml',
+    ]) {
       const workflow = readFileSync(
         join(repoRoot, '.github', 'workflows', file),
         'utf8',

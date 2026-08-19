@@ -378,3 +378,62 @@ jobs:
       # spec cannot see this class at all, and one written to try would be
       # green for an unrelated reason.
       - run: npm run check:next-public-access
+
+      # AGL-2376 / AGL-2377. The guard that catches the thing this whole
+      # workflow is an answer to, from the OTHER end: a test file with no
+      # runner, and a `test` target with no tests.
+      #
+      # It found six orphans on its first real run — five Firestore rules specs
+      # sitting directly in `cloud/` with 31 live assertions about who may read
+      # a billing document, plus the backfill `applyPlan` suite — none of them
+      # executed by anything, one edited the day before. And five nx `test`
+      # targets over source trees with no spec file at all, which exit 1 with
+      # "No tests found" whenever they are affected.
+      #
+      # Two-step order as everywhere else here. The self-test matters more than
+      # usual: this guard's entire subject is checks that cannot fail, and its
+      # own first version could not — it globbed `cloud/**/*.spec.mjs`, which
+      # git does not match against a file sitting directly in `cloud/`, so it
+      # reported green over all five of the orphans it was written for. The
+      # suite now pins both glob depths.
+      #
+      # ⚠️ The remedy for an empty target is a spec, or removing the target and
+      # declaring it in UNTESTED_PROJECTS. It is NOT `passWithNoTests` — that
+      # flag turns "asserts nothing" into a green indistinguishable from real
+      # coverage, so the guard refuses it outright.
+      - run: npm run test:test-wiring
+
+      - run: npm run check:test-wiring
+
+      # AGL-2376. `applyPlan`'s refusals — update() on a missing doc FAILS,
+      # create() on an existing doc FAILS, an unknown op is refused outright.
+      # These are the guards that stop a backfill conjuring a record or
+      # overwriting a live one, and every other tools/scripts/lib/*.test.mjs
+      # (21 of them) already had an npm script. This one alone did not, so 17
+      # passing tests about destructive writes ran nowhere.
+      - run: npm run test:backfill-core
+
+      # AGL-2379. The pure-node self-test for the legal-drift comparator. The
+      # comparator itself needs the live site AND Drive credentials, so it runs
+      # on a schedule in legal-drift.yml rather than here — but its 40-test
+      # self-test needs nothing, and a comparator that has stopped comparing
+      # reports "no drift", which is indistinguishable from convergence.
+      - run: npm run test:legal-drift
+
+      # AGL-2379 / AGL-2240. A SECURITY control that ran in no workflow: it
+      # walks the Next app-router module graph and proves no model-provider key
+      # (ANTHROPIC_API_KEY) is reachable from the client closure, and that none
+      # is read under a `NEXT_PUBLIC_` prefix — which publishes the VALUE by
+      # definition, with no import needed.
+      #
+      # It is NOT the subprocessor gate. That spec enumerates every file that
+      # NAMES the key, and cannot see this: an allowlisted reader that gains a
+      # `'use client'` directive leaves the file set unchanged while the key
+      # compiles into JavaScript served to every visitor. The question there is
+      # which files; here it is which graph.
+      #
+      # Belongs here rather than beside its sibling `check:app-router-graph` in
+      # nx-ci.yml: this is the workflow whose steps the AGL-1822 wiring block
+      # in rules-drift.test.mjs actually asserts, so deleting this step turns
+      # three other active workflows red.
+      - run: npm run check:provider-key-exposure
