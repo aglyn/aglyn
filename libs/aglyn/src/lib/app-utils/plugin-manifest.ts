@@ -611,6 +611,45 @@ export function isListingWideRevocation(
 }
 
 /**
+ * The newest version a buyer could actually install right now (AGL-2306).
+ *
+ * Two things have to be true of an offer, and the listing's
+ * `latestApprovedVersion` mirror only ever tracked one of them: the version
+ * must be APPROVED (AGL-966 — review lives on the version) and it must not be
+ * REVOKED (AGL-1085 — `install-plugin` answers 409 to a revoked pin).
+ *
+ * Written here rather than in the console route that repairs the mirror, and
+ * rather than reusing `newestApprovedVersion` in the marketplace plugin's
+ * model, because the console is `scope:app` and may not depend on
+ * `aglyn:addons`. Both may import core, and "what is on offer" is one
+ * question that must have one answer.
+ *
+ * `compare` is injected rather than imported so this module stays free of the
+ * artifact-version comparator's own dependencies; every caller already has it.
+ * A `null` comparison (an unparseable version string) sorts as "not newer",
+ * which keeps a malformed version out of an offer rather than into one.
+ *
+ * Returns `null` when nothing qualifies — an ABSENT mirror reads as "no update
+ * to offer", while a stale string reads as an update that does not exist.
+ */
+export function newestInstallableVersion(
+  versions: readonly { version: string; reviewState?: unknown }[],
+  revocation: PluginRevocation | null | undefined,
+  compare: (a: string, b: string) => number | null,
+): string | null {
+  let newest: string | null = null
+  for (const entry of versions) {
+    if (!entry?.version) continue
+    if (entry.reviewState !== 'approved') continue
+    if (isPluginRevoked(revocation, entry.version)) continue
+    if (newest == null || (compare(newest, entry.version) ?? 0) < 0) {
+      newest = entry.version
+    }
+  }
+  return newest
+}
+
+/**
  * The next `revocations/{listingId}` state after one write (AGL-1085).
  *
  * Two writers share this doc and neither may erase the other:

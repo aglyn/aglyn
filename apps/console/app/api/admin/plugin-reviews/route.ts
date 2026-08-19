@@ -24,6 +24,7 @@ import {
 import {
   checkPluginBundle,
   isPluginRevoked,
+  newestInstallableVersion,
   isStoredVerdictCurrent,
   nextRevocationState,
   PLUGIN_HOST_ABI_VERSION,
@@ -440,6 +441,59 @@ async function listingDetail(
     },
     { status: 200 },
   )
+}
+
+/**
+ * Re-derive `latestApprovedVersion` from the versions themselves (AGL-2306).
+ *
+ * The mirror was written on approval only, with a comment saying it "only ever
+ * moves forward" — true of approvals, and the reason it is there. What nothing
+ * did was move it BACK. A version approved and later rejected on re-review, or
+ * killed with the per-version switch, left the listing still advertising it:
+ * `host-plugins-card` and `marketplace-update-state` read this field to offer
+ * "Update to vX", and `install-plugin` would then refuse those exact bytes.
+ *
+ * Contained, because `install-plugin` recomputes approval live and never
+ * trusts this field — no unreviewed or revoked bytes could ship — but it is
+ * the AGL-1016 guarantee leaking back out through a badge, which is where
+ * AGL-966 came in.
+ *
+ * Recomputed rather than decremented: "the newest version that is approved AND
+ * not revoked" is a property of the whole set, and stepping it back one at a
+ * time is how a mirror drifts in the other direction.
+ *
+ * Revoked versions are excluded because the offer has to be installable, and
+ * `install-plugin` 409s on a revoked pin. That also makes un-revoking restore
+ * the offer, which is why this runs on both revoke and unrevoke.
+ *
+ * Deletes the field when nothing qualifies: an absent mirror reads as "no
+ * update to offer", while a stale string reads as an update that does not
+ * exist.
+ */
+async function repairLatestApprovedVersion(
+  listingRef: FirebaseFirestore.DocumentReference,
+  revocation: PluginRevocation | null | undefined,
+): Promise<void> {
+  const versions = await listingRef
+    .collection('pluginVersions')
+    .orderBy('publishedAt', 'desc')
+    .limit(50)
+    .get()
+  // The DECISION lives in core (`newestInstallableVersion`), where it is
+  // testable without a Firestore double and shared with anything else that
+  // has to answer "what is on offer". This function is only the query.
+  const newest = newestInstallableVersion(
+    versions.docs.map((doc) => ({
+      version: doc.id,
+      reviewState: doc.get('reviewState'),
+    })),
+    revocation,
+    compareArtifactVersions,
+  )
+  await updateExisting(listingRef, {
+    latestApprovedVersion: newest ?? FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+  })
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -874,6 +928,30 @@ async function handler(request: Request): Promise<Response> {
             : {
                 reviewRejectionReason: reason,
                 reviewRejectionCategory: category,
+                // REALM TRUST IS WITHDRAWN WITH THE APPROVAL (AGL-2306).
+                //
+                // `sign-plugin` refuses to grant `trust: 'realm'` unless the
+                // version is approved — approval gates the grant. Nothing
+                // ungated it: the realm load path checks `hiddenAt`, the sha,
+                // the signature and the revocation, and never re-reads
+                // `reviewState`. So approve → sign → re-review → reject left
+                // the version loading IN THE APP REALM, where neither the
+                // sandbox iframe nor the plugin-origin CSP is between it and
+                // user data, until staff separately reached for the kill
+                // switch.
+                //
+                // The same four fields `sign-plugin`'s own revoke branch
+                // clears, so there is one shape of "untrusted" rather than
+                // two. This does NOT stop the bundle running as a sandboxed
+                // plugin — that is what the per-version revocation beside
+                // this decision is for, and it is deliberately a separate
+                // choice (a thin README is the usual rejection, and an
+                // unannounced site outage is worse). It withdraws only the
+                // privilege that approval was the precondition for.
+                trust: FieldValue.delete(),
+                signature: FieldValue.delete(),
+                trustGrantedBy: FieldValue.delete(),
+                trustGrantedAt: FieldValue.delete(),
               }),
         },
         { merge: true },
@@ -929,6 +1007,15 @@ async function handler(request: Request): Promise<Response> {
             updatedAt: FieldValue.serverTimestamp(),
           })
         }
+      } else if (String(listing.latestApprovedVersion ?? '') === version) {
+        // …and BACK when the version being offered is the one just rejected
+        // (AGL-2306). Nothing did this, so a re-review that turned a live
+        // version down left the listing advertising it — an "Update to vX"
+        // for bytes `install-plugin` answers 409 to.
+        const revocation = (
+          await firestore.collection('revocations').doc(listingId).get()
+        ).data() as PluginRevocation | undefined
+        await repairLatestApprovedVersion(listingRef, revocation)
       }
 
       await firestore.collection('adminAudit').add({
@@ -1099,6 +1186,12 @@ async function handler(request: Request): Promise<Response> {
           { merge: true },
         )
       }
+
+      // The offer follows the kill switch (AGL-2306). A revoked version is
+      // refused by `install-plugin`, so leaving it as `latestApprovedVersion`
+      // advertises an update that cannot be taken; un-revoking restores it.
+      // Both directions, because both change what is installable.
+      await repairLatestApprovedVersion(listingRef, next)
 
       await firestore.collection('adminAudit').add({
         actorUid: decoded.uid,

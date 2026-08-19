@@ -20,6 +20,7 @@ import {
   isPluginNetworkAllowed,
   isPluginRevoked,
   isListingWideRevocation,
+  newestInstallableVersion,
   nextRevocationState,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
@@ -169,6 +170,80 @@ describe('isPluginRevoked', () => {
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.0.0')).toBe(true)
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.1.0')).toBe(false)
     expect(isPluginRevoked(null, '1.0.0')).toBe(false)
+  })
+})
+
+/**
+ * What the listing may advertise as an update (AGL-2306).
+ *
+ * `latestApprovedVersion` was written on approval and never moved back, so a
+ * version rejected on re-review or killed with the per-version switch stayed
+ * on offer — an "Update to vX" that `install-plugin` answers 409 to. Two
+ * properties, not one: approved AND not revoked.
+ */
+describe('newestInstallableVersion (AGL-2306)', () => {
+  const compare = (a: string, b: string) =>
+    Number(a.split('.')[0]) - Number(b.split('.')[0])
+
+  const v = (version: string, reviewState?: string) => ({ version, reviewState })
+
+  it('picks the newest approved version', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('3.0.0', 'approved'), v('2.0.0', 'approved')],
+        null,
+        compare,
+      ),
+    ).toBe('3.0.0')
+  })
+
+  it('skips a version that is not approved — pending, rejected or absent', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'rejected'), v('3.0.0', 'pending'), v('4.0.0')],
+        null,
+        compare,
+      ),
+    ).toBe('1.0.0')
+  })
+
+  it('skips a REVOKED version even though it is approved', () => {
+    // The half that a mirror tracking only `reviewState` would get wrong: a
+    // revoked version keeps its approval, and `install-plugin` still 409s.
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'approved')],
+        { versions: ['2.0.0'] },
+        compare,
+      ),
+    ).toBe('1.0.0')
+  })
+
+  it('answers null under a listing-wide kill', () => {
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('2.0.0', 'approved')],
+        { versions: 'all' },
+        compare,
+      ),
+    ).toBeNull()
+  })
+
+  it('answers null when nothing qualifies — an absent mirror, not a stale one', () => {
+    expect(newestInstallableVersion([v('1.0.0', 'rejected')], null, compare)).toBeNull()
+    expect(newestInstallableVersion([], null, compare)).toBeNull()
+  })
+
+  it('keeps an uncomparable version out of the offer rather than into it', () => {
+    // A null comparison sorts as "not newer": a malformed version string must
+    // not become what everyone is told to upgrade to.
+    expect(
+      newestInstallableVersion(
+        [v('1.0.0', 'approved'), v('nonsense', 'approved')],
+        null,
+        () => null,
+      ),
+    ).toBe('1.0.0')
   })
 })
 
