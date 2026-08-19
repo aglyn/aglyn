@@ -52,9 +52,11 @@ export interface SiteStatusScreenProps {
  * ## What it is for
  *
  * A host can designate a designed screen per status code
- * (`host.errorScreens`, AGL-131) and that screen — with the site's real
- * header, nav and footer — is what a visitor should see. This renders only
- * when the host designated NOTHING, which until now meant Next's own
+ * (`host.errorScreens`, AGL-131) — or, since AGL-2342, simply publish one at
+ * the path `404` — and that screen, with the site's real header, nav and
+ * footer, is what a visitor should see. `SiteNotFound` fetches it; this
+ * renders only when there is NOTHING to fetch, which until AGL-2074 meant
+ * Next's own
  * `404 | This page could not be found`: no brand, no navigation, no way back.
  * Measured on 2026-08-18, `errorScreens` was unset on 6 of 6 hosts in
  * production, so that framework page was the live behaviour of every site on

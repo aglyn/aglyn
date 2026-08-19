@@ -56,12 +56,14 @@ export function HostThemeProviders({
   brandLogoUrl,
   brandName,
   siteLinks,
+  hostKey,
   children,
 }: {
   hostTheme?: HostTheme
   brandLogoUrl?: string
   brandName?: string
   siteLinks?: SiteNavLink[]
+  hostKey?: string
   children: ReactNode
 }) {
   return (
@@ -76,6 +78,7 @@ export function HostThemeProviders({
         brandLogoUrl={brandLogoUrl}
         brandName={brandName}
         siteLinks={siteLinks}
+        hostKey={hostKey}
       >
         <LoadingLayoutAppComponent
           brandLogoUrl={brandLogoUrl}

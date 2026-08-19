@@ -712,41 +712,21 @@ const loadPageDataCached = cache(
           }
         }
       }
-      // Custom not-found screen (AGL-87): render the designated screen's
-      // content with noindex — SSG can't emit a real 404 status for
-      // dynamic content, so noindex keeps soft-404s out of search.
-      const notFoundScreenId =
-        (hostRes.host as any)?.errorScreens?.notFound ??
-        (hostRes.host as any)?.notFoundScreenId
-      if (notFoundScreenId) {
-        const fallbackScreen = await getScreen({
-          hostId,
-          screenId: notFoundScreenId,
-        })
-        if (fallbackScreen.screen) {
-          const fallbackNodes = await composeScreenNodes({
-            host: hostRes.host as any,
-            hostId,
-            screenId: notFoundScreenId,
-            screen: fallbackScreen.screen,
-          })
-          if (fallbackNodes) {
-            return {
-              props: JSON.parse(
-                JSON.stringify({
-                  data: {
-                    host: hostRes.host,
-                    screen: { data: fallbackScreen.screen },
-                  },
-                  nodes: fallbackNodes,
-                  notFoundFallback: true,
-                }),
-              ),
-              revalidate: 60,
-            }
-          }
-        }
-      }
+      /**
+       * A path that matched nothing is a 404 — always (AGL-2342).
+       *
+       * This branch USED to return the host's designated not-found screen as
+       * ordinary `props`, which meant a `200 OK` carrying `noindex`. That was
+       * the AGL-87 trade — "SSG can't emit a real 404 status for dynamic
+       * content" — and it is no longer one we are willing to make: a soft-404
+       * tells every crawler that a mistyped URL is a real page, and `noindex`
+       * is a request, not a status.
+       *
+       * The designed screen did not go away; it moved. `loadNotFoundScreen`
+       * below composes it, `/api/screen/not-found` serves it, and the
+       * `[host]/not-found` boundary renders it — which is the one place in the
+       * App Router where a real `404` status and a designed body coexist.
+       */
       return {
         notFound: true,
         revalidate: 60, // never=false, always=1, since=SECONDS
@@ -1009,3 +989,92 @@ export const loadPageData = (
   hostParam: string,
   slug: string[],
 ): Promise<LoadResult> => loadPageDataCached(hostParam, JSON.stringify(slug))
+
+/**
+ * Which screen a host wants shown when a path matches nothing (AGL-2342).
+ *
+ * Three sources, in precedence order, and the third is the one that makes this
+ * work for the sites that exist today:
+ *
+ *  1. `errorScreens.notFound` — the Error pages card's binding (AGL-131). The
+ *     explicit answer, and the only one an author can see and change.
+ *  2. `notFoundScreenId` — the pre-AGL-131 field, still set on older hosts.
+ *  3. **The routing map's `404` entry.** Measured on production 2026-08-19,
+ *     `errorScreens` was unset on every host, and yet `aglyn.com` publishes a
+ *     screen named *"Not found (404)"* at the path `404` — which is, per
+ *     `get-screen.ts`, "exactly how every error screen on the platform exists
+ *     today". Reading the map means designing a 404 screen the obvious way
+ *     (publish it at `/404`) is enough; binding it in the console is an
+ *     upgrade, not a prerequisite.
+ *
+ * The map is consulted LAST so that binding a slot always wins over an
+ * accident of pathing, and a host that has bound one screen and published a
+ * different one at `/404` gets the one it asked for.
+ *
+ * Note what source 3 does NOT buy: `/404` itself is a reserved Next.js output
+ * (`x-matched-path: /404`, served from the build's own `404.html`), so that URL
+ * stays the framework's. What is fixed is every OTHER unmatched path, which is
+ * the URL a visitor actually mistypes.
+ */
+export function resolveNotFoundScreenId(host: unknown): string | undefined {
+  const record = host as {
+    errorScreens?: { notFound?: string }
+    notFoundScreenId?: string
+    screens?: Record<string, string>
+  } | null
+  if (!record) return undefined
+  const bound = record.errorScreens?.notFound ?? record.notFoundScreenId
+  if (bound) return bound
+  const routed = Object.entries(record.screens ?? {}).find(
+    ([, path]) => path === '404',
+  )
+  return routed?.[0]
+}
+
+/**
+ * The host's designed 404 body, composed (AGL-2342).
+ *
+ * Returns `null` — deliberately, and for every failure — when the host has no
+ * usable 404 screen. `null` is what makes the platform fallback the floor
+ * rather than a blank page: the caller renders `SiteStatusScreen` on `null`,
+ * so a missing host, an unresolvable screen id, a soft-deleted screen and a
+ * compose that yields nothing all land in the same safe place.
+ *
+ * Paid for ONLY on a 404. It is not called from `loadPageData`'s happy path
+ * and not from the layout — both of which run on every request — but from
+ * `/api/screen/not-found`, which the not-found boundary calls when it mounts.
+ * A site that never 404s never composes this screen.
+ */
+export async function loadNotFoundScreen(
+  hostParam: string,
+): Promise<Props | null> {
+  try {
+    const hostRes = await getHost({ host: hostParam })
+    if (hostRes.error || !hostRes.host) return null
+    const hostId = hostRes.host.$id as Aglyn.HostUid
+    const screenId = resolveNotFoundScreenId(hostRes.host)
+    if (!screenId) return null
+    const screenRes = await getScreen({
+      hostId,
+      screenId: screenId as Aglyn.ScreenUid,
+    })
+    if (!screenRes.screen) return null
+    const nodes = await composeScreenNodes({
+      host: hostRes.host as any,
+      hostId,
+      screenId: screenId as Aglyn.ScreenUid,
+      screen: screenRes.screen,
+    })
+    if (!nodes) return null
+    return JSON.parse(
+      JSON.stringify({
+        data: { host: hostRes.host, screen: { data: screenRes.screen } },
+        nodes,
+        notFoundFallback: true,
+      }),
+    ) as Props
+  } catch (error) {
+    console.error(error)
+    return null
+  }
+}

@@ -155,8 +155,13 @@ describe('the links actually reach the screen (AGL-2187)', () => {
     )
   })
 
-  it('the 404 boundary asks for site search and the 500 does not', () => {
-    const notFound = read('app', '[host]', 'not-found.tsx')
+  it('the 404 path asks for site search and the 500 does not', () => {
+    // The `search` prop moved with the 404 body (AGL-2342): the boundary now
+    // renders `SiteNotFound`, which sets it on the fallback it falls back TO.
+    // The 500 half is unchanged and is the half that makes this assert
+    // something — `error.tsx` must still never offer a page served by the
+    // runtime that just failed.
+    const notFound = read('components', 'site-not-found.component.tsx')
     const error = read('app', '[host]', 'error.tsx')
     const strip = (source: string) =>
       source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
