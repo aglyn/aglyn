@@ -233,6 +233,20 @@ jobs:
 
       - run: npm run check:pricing-tables
 
+      # AGL-1296. The detector half only — the corpus it audits is authored
+      # node data in Firestore, so `npm run audit:marketing-containers` needs
+      # ADC on `aglyn-main` and cannot run on a PR. What CAN run here is proof
+      # that the detector fails on the shapes AGL-1298 banned: a bespoke `sx`
+      # pixel cap (the 1328px the deleted one-shot script wrote) and a
+      # `props.maxWidth` that is not one of MUI's six prebuilt values.
+      #
+      # Worth stating plainly rather than implying more coverage than exists:
+      # this does NOT measure the live site. It replaces a COMMENT — the
+      # "/pricing audit measured 8/8 sections on maxWidthXl" line in
+      # container.spec.tsx — with a detector whose failure path is exercised,
+      # so the census a human runs is worth reading.
+      - run: npm run test:marketing-containers
+
       # AGL-2124. Same two-step order: the unit test proves the scanner can
       # FAIL on the exact three literals (its first version reported green over
       # one of them — a `//.*$` comment strip eats everything after the `//` in

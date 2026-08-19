@@ -217,6 +217,16 @@ describe('the three width cases the standard now has (AGL-1298)', () => {
     // that." The /pricing audit measured 8/8 sections on `maxWidthXl`, so
     // the earlier premise that the site was "designed with LG" was off by
     // one step and the default does NOT move.
+    //
+    // ⚠️ That sentence is a COMMENT and this `expect` asserts a preset
+    // literal in this file — it says nothing about the live site and would
+    // not fail if /pricing drifted to 3 of 8 (AGL-1296). The corpus reading
+    // is re-derived by `npm run audit:marketing-containers` (needs ADC on
+    // `aglyn-main`, so it cannot run on a PR), whose detector is exercised by
+    // `npm run test:marketing-containers` in tools-guards.yml. Re-derived
+    // 2026-08-19 across the whole `aglyn-marketing` host: 251 Containers,
+    // 248 `xl` / 2 `sm` / 1 `md`, ZERO bespoke `sx` caps, zero non-stock
+    // values. Do not quote that count as a target either — re-run it.
     expect(presets[0].data.props).toEqual({ maxWidth: 'xl' })
   })
 

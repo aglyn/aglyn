@@ -94,6 +94,7 @@
     "test:monaco-dompurify": "node --test tools/scripts/lib/monaco-dompurify.test.mjs",
     "test:manifest-versions": "node --test tools/scripts/lib/manifest-versions.test.mjs",
     "check:pricing-tables": "node tools/scripts/check-pricing-tables.mjs",
+    "test:marketing-containers": "node --test tools/scripts/lib/marketing-containers.test.mjs",
     "test:pricing-tables": "node --test tools/scripts/lib/pricing-tables.test.mjs",
     "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
     "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",

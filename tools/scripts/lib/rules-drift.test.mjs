@@ -637,6 +637,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:manifest-versions', // AGL-2108
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
+      'test:marketing-containers', // AGL-1296
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
       'test:monaco-dompurify', // AGL-2300
@@ -672,6 +673,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:manifest-versions', // AGL-2108
       'test:pricing-tables', // AGL-1278
       'check:pricing-tables', // AGL-1278
+      'test:marketing-containers', // AGL-1296
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
       'test:monaco-dompurify', // AGL-2300

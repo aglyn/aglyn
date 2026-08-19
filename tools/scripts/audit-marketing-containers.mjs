@@ -82,6 +82,11 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
 import { decodeNodesField } from './lib/retired-colours-nodes.mjs'
+// The detector itself, split out so it can be self-tested without Firestore
+// (AGL-1296). `npm run test:marketing-containers` proves it flags a bespoke
+// `sx` cap and a non-stock `props.maxWidth`, and only then is a clean census
+// here worth anything.
+import { auditContainerNodes } from './lib/marketing-containers.mjs'
 
 const arg = (name) =>
   process.argv
@@ -96,22 +101,6 @@ const subdomain = arg('subdomain') ?? 'aglyn-marketing'
 /** Where node documents live under a host. */
 const KINDS = ['screens', 'layouts', 'components', 'templates']
 
-const CONTAINER = 'muiContainer'
-
-/**
- * Bands that are components in their own right rather than page sections.
- * A `layoutSlot` is where the screen's own content lands, and the ecommerce
- * and email blocks render their own layout — none of them is a section an
- * author wraps.
- */
-const NOT_A_SECTION = new Set([
-  'layoutSlot',
-  'emailSection',
-  'cart',
-  'customer-account',
-  'product-grid',
-])
-
 initializeApp({
   credential: applicationDefault(),
   projectId: process.env.GCLOUD_PROJECT ?? 'aglyn-main',
@@ -122,22 +111,18 @@ const forms = { map: 0, msgpack: 0, absent: 0 }
 const errors = []
 const widths = {}
 const bespoke = []
+/**
+ * A `props.maxWidth` that is not one of MUI's six prebuilt values (AGL-1298).
+ * The attribute dropdown cannot produce one, so a hit here means an import, an
+ * API write or a pasted node map — the write paths the dropdown does not
+ * cover, and the reason the ban needed measuring rather than assuming.
+ */
+const nonStock = []
 const uncontained = []
 let reads = 0
 let documents = 0
 let sections = 0
 let skippedDocuments = 0
-
-/** The nearest Container in a band's subtree, by depth, or `null`. */
-function containerDepth(node, nodes, depth = 0) {
-  if (!node) return null
-  if (node.componentId === CONTAINER) return depth
-  for (const childId of node.nodes ?? []) {
-    const found = containerDepth(nodes[childId], nodes, depth + 1)
-    if (found !== null) return found
-  }
-  return null
-}
 
 function auditDocument(snapshot, meta) {
   let decoded
@@ -154,40 +139,15 @@ function auditDocument(snapshot, meta) {
   if (decoded.form === 'absent') return
   documents += 1
 
-  const nodes = decoded.nodes
   const where = { ...meta, path: snapshot.ref.path, form: decoded.form }
+  const census = auditContainerNodes(decoded.nodes, where)
 
-  for (const [nodeId, node] of Object.entries(nodes)) {
-    if (node?.componentId !== CONTAINER) continue
-    const width = node.props?.maxWidth
-    const key = width === undefined ? '(missing)' : JSON.stringify(width)
-    widths[key] = (widths[key] ?? 0) + 1
-    // A Container's width belongs in its attribute. An `sx` cap is a bespoke
-    // number by construction — it cannot be one of MUI's stock widths.
-    const sxWidth = node.sx?.maxWidth ?? node.props?.sx?.maxWidth
-    if (sxWidth !== undefined)
-      bespoke.push({ ...where, nodeId, sx: sxWidth, props: width ?? null })
-  }
-
-  const root = Object.values(nodes).find((node) => !node?.parentId)
-  for (const bandId of root?.nodes ?? []) {
-    const band = nodes[bandId]
-    if (!band) continue
-    // A reusable instance delegates its structure to a component document,
-    // which this same sweep audits directly.
-    if (band.componentId === 'reusableInstance') continue
-    if (NOT_A_SECTION.has(band.componentId)) continue
-    sections += 1
-    const depth = containerDepth(band, nodes)
-    if (depth === null)
-      uncontained.push({
-        ...where,
-        nodeId: bandId,
-        componentId: band.componentId,
-        label: band.props?.ariaLabel ?? band.props?.element ?? null,
-        blocks: (band.nodes ?? []).length,
-      })
-  }
+  for (const [width, count] of Object.entries(census.widths))
+    widths[width] = (widths[width] ?? 0) + count
+  bespoke.push(...census.bespoke)
+  nonStock.push(...census.nonStock)
+  uncontained.push(...census.uncontained)
+  sections += census.sections
 }
 
 let host
@@ -255,6 +215,7 @@ if (asJson) {
         containers: { total, widths },
         sections,
         bespoke,
+        nonStock,
         uncontained,
         errors,
       },
@@ -305,9 +266,20 @@ if (asJson) {
       )
   } else console.log('\n  No Container carries a bespoke `sx` width cap.')
 
+  if (nonStock.length) {
+    console.log(
+      `\n  ${nonStock.length} Container(s) carry a NON-STOCK props.maxWidth:`,
+    )
+    for (const hit of nonStock)
+      console.log(
+        `    ${hit.kind}/${hit.name} ${hit.nodeId} — props.maxWidth=` +
+          `${JSON.stringify(hit.props)}\n      ${hit.path}`,
+      )
+  } else console.log('  Every props.maxWidth is a prebuilt breakpoint.')
+
   for (const failure of errors)
     console.log(`  ERROR ${failure.path} — ${failure.error}`)
 }
 
 if (errors.length) process.exit(2)
-process.exit(bespoke.length || uncontained.length ? 1 : 0)
+process.exit(bespoke.length || nonStock.length || uncontained.length ? 1 : 0)
