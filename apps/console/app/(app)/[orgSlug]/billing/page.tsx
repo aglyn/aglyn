@@ -485,6 +485,17 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   `time before then.`
                 : `Prorated charge today: $${(preview.amountDueCents / 100).toFixed(2)} ` +
                   `${String(preview.currency).toUpperCase()}; renews ${effective}.`) +
+              // A pending cancel and a pending plan change cannot both stand
+              // (AGL-2151). The server clears the cancellation as part of this
+              // operation — a customer picking a smaller plan is trying to
+              // STAY — so the confirm has to say so before they click, or the
+              // cancellation they scheduled disappears without anyone telling
+              // them.
+              (cancelAtPeriodEnd
+                ? ` This also cancels your scheduled cancellation: the ` +
+                  `subscription continues on ${targetPlan} instead of ` +
+                  `ending. You can cancel again at any time.`
+                : '') +
               (over.length
                 ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
                   `${over.join('; ')}. Nothing is deleted and these keep ` +
@@ -645,6 +656,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       orgId,
       interval,
       subscriptionActive,
+      cancelAtPeriodEnd,
       org?.plan,
       overLimitSummary,
       subscriptionRequest,

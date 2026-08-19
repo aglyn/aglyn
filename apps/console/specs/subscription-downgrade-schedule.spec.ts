@@ -119,6 +119,16 @@ const PERIOD_END = 1767225600
 /** The subscription the mocked Stripe returns; tests override these. */
 let subscriptionItems: any[] = []
 let subscriptionSchedule: string | null = null
+/** `cancel_at_period_end` on the subscription Stripe returns (AGL-2151). */
+let subscriptionCancelAtPeriodEnd = false
+/**
+ * Tail of the Stripe path that should FAIL, standing in for any of the
+ * refusals the outer catch turns into a generic 502 (AGL-2151). Matched on the
+ * END of the URL, so failing the schedule CREATE
+ * (`…/v1/subscription_schedules`) does not also fail the RELEASE
+ * (`…/v1/subscription_schedules/{id}/release`) that runs before it.
+ */
+let failStripePathEndingWith: string | null = null
 let capturedSubUpdateBody: URLSearchParams | null = null
 /**
  * Extra fields Stripe puts on phase 0 when a schedule is created
@@ -174,6 +184,14 @@ const METERED_ITEM = {
 beforeEach(() => {
   subscriptionItems = [PRO_ITEM, METERED_ITEM]
   subscriptionSchedule = null
+  subscriptionCancelAtPeriodEnd = false
+  failStripePathEndingWith = null
+  // These are module-scope `jest.fn()`s, so `restoreAllMocks` does not empty
+  // them: without an explicit clear, "was this ever written?" accumulates
+  // across the file and can never be false.
+  mockWriteOrgBilling.mockClear()
+  mockVerifyIdToken.mockClear()
+  mockOrgGet.mockClear()
   capturedSubUpdateBody = null
   schedulePhaseExtras = {}
   capturedScheduleCreateBody = null
@@ -189,6 +207,14 @@ beforeEach(() => {
   mockWriteOrgBilling.mockResolvedValue(undefined)
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
+    // Modelled the way Stripe answers a refusal: a non-2xx carrying
+    // `error.message`, which `stripeRequest` turns into the throw the route's
+    // outer catch sees. Checked BEFORE the branches so a failed call records
+    // no side effect — a release that "failed" must not appear in
+    // `releasedScheduleIds`.
+    if (failStripePathEndingWith && href.endsWith(failStripePathEndingWith)) {
+      return { ok: false, json: async () => ({ error: { message: 'nope' } }) }
+    }
     let payload: unknown
     if (href.includes('/subscriptions?customer=')) {
       payload = {
@@ -198,6 +224,7 @@ beforeEach(() => {
             status: 'active',
             current_period_end: PERIOD_END,
             currency: 'usd',
+            cancel_at_period_end: subscriptionCancelAtPeriodEnd,
             schedule: subscriptionSchedule,
             items: { data: subscriptionItems },
           },
@@ -565,5 +592,167 @@ describe('a downgrade carries the items it cannot classify (AGL-2150)', () => {
       (price) => price === 'price_metered_usage',
     )
     expect(metered).toHaveLength(1)
+  })
+})
+
+/**
+ * Cancel and downgrade must not contradict each other, and a failed schedule
+ * swap must not leave the mirror lying (AGL-2151).
+ *
+ * Two separate faults with one shared cause — this branch does things to
+ * Stripe in a sequence and assumed every step lands.
+ */
+describe('a pending cancel and a pending downgrade cannot both stand (AGL-2151)', () => {
+  it('a downgrade clears the cancellation instead of racing it', async () => {
+    // Straight out of the retention funnel: cancelled, changed their mind,
+    // trying to stay on something smaller. Refusing them would be the save
+    // the funnel exists to make, lost.
+    subscriptionCancelAtPeriodEnd = true
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'starter',
+      interval: 'month',
+    })
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    // The cancellation was cleared FIRST — a schedule created underneath a
+    // pending cancel is the contradiction, not the fix for it.
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBe('false')
+    // ...and the downgrade still happened.
+    expect(capturedScheduleCreateBody?.get('from_subscription')).toBe('sub_1')
+    expect(payload.scheduled).toBe(true)
+    expect(payload.clearedPendingCancel).toBe(true)
+    // The mirror stops rendering both chips.
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+    expect(lastBillingPatch()?.pendingDowngrade).toMatchObject({
+      plan: 'starter',
+    })
+  })
+
+  it('an UPGRADE clears it too — buying more is not leaving', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    subscriptionCancelAtPeriodEnd = true
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBe('false')
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+  })
+
+  it('NEGATIVE CONTROL: an ordinary downgrade never touches the cancel flag', async () => {
+    // Sending `cancel_at_period_end=false` on every switch would silently
+    // resume a subscription nobody asked to resume.
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: an ordinary UPGRADE sends no cancel flag either', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    expect(capturedSubUpdateBody?.get('cancel_at_period_end')).toBeNull()
+  })
+})
+
+/**
+ * The mirror must never assert a schedule that is not there (AGL-2151).
+ *
+ * Every one of these branches RELEASES the subscription's schedule and then
+ * does more work. A failure after the release used to return a generic 502
+ * while the org doc kept the OLD `pendingDowngrade` naming the just-released
+ * `scheduleId`: Stripe has no pending downgrade, the console insists there is
+ * one, and the customer goes on being billed at the higher tier while the page
+ * says they are dropping. An ABSENT pending downgrade is recoverable by
+ * re-requesting; a PHANTOM one is invisible as wrong to everybody.
+ */
+describe('a failed schedule swap clears the mirror (AGL-2151)', () => {
+  it('a downgrade that dies at the schedule create leaves nothing pending', async () => {
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscription_schedules'
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'starter',
+      interval: 'month',
+    })
+    expect(response.status).toBe(502)
+    // The old schedule is genuinely gone...
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    // ...so the mirror must not go on naming it.
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('and states the cancel it cleared, so the mirror is true in failure too', async () => {
+    subscriptionCancelAtPeriodEnd = true
+    failStripePathEndingWith = 'v1/subscription_schedules'
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(502)
+    expect(lastBillingPatch()?.cancelAtPeriodEnd).toBe(false)
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('the same window in the CANCEL path is closed', async () => {
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscriptions/sub_1'
+    const post = loadSubscription()
+    expect((await call(post, { action: 'cancel' })).status).toBe(502)
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('and in the instant UPGRADE path', async () => {
+    subscriptionItems = [STARTER_ITEM, METERED_ITEM]
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = 'v1/subscriptions/sub_1'
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(502)
+    expect(releasedScheduleIds).toEqual(['sub_sched_old'])
+    expect(lastBillingPatch()?.pendingDowngrade).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: a failure BEFORE the release leaves the mirror ALONE', async () => {
+    // The old schedule still exists, so the pending marker naming it is
+    // ACCURATE. Clearing it here would invent the opposite lie — the console
+    // saying nothing is pending while Stripe still flips the plan.
+    subscriptionSchedule = 'sub_sched_old'
+    failStripePathEndingWith = '/release'
+    const post = loadSubscription()
+    expect(
+      (
+        await call(post, {
+          action: 'switch',
+          plan: 'starter',
+          interval: 'month',
+        })
+      ).status,
+    ).toBe(502)
+    expect(releasedScheduleIds).toEqual([])
+    expect(mockWriteOrgBilling).not.toHaveBeenCalled()
   })
 })
