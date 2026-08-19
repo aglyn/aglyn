@@ -72,7 +72,10 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
   const canManage = canManageOrg(currentOrg?.role)
 
   const firestore = useFirestore()
-  const { hosts } = useOrgHosts(firestore, user?.uid, currentOrg?.$id ?? null)
+  // `undefined`, never `null`, while the workspace resolves (AGL-2350) — see
+  // the note on the plugins page. This one feeds the per-site access picker,
+  // so a cross-org row here is a site a member could be granted by mistake.
+  const { hosts } = useOrgHosts(firestore, user?.uid, currentOrg?.$id)
   const [member, setMember] = useState<any | null>(null)
   const [loadingMember, setLoadingMember] = useState(true)
   const [role, setRole] = useState('viewer')

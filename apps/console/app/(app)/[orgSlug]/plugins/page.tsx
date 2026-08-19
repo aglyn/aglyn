@@ -84,7 +84,11 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   // AGL-773/997 — was absent from the workspace's own plugin inventory, and
   // the page said so silently. Fan-in per site, as elsewhere: the host count
   // is data, so a hook per host would change the hook count between renders.
-  const { hosts } = useOrgHosts(firestore, user?.uid, orgId || null)
+  // `undefined`, never `null`, while the workspace resolves (AGL-2350):
+  // `null` means "an account with no org — list every site they hold", and
+  // on an org-scoped route that is never the right answer. It listed another
+  // client's sites for the width of the cold-load window.
+  const { hosts } = useOrgHosts(firestore, user?.uid, orgId || undefined)
   const hostList = useMemo(
     () =>
       ((hosts as Array<{ $id: string; displayName?: string; subdomain?: string }>) ??

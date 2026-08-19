@@ -57,6 +57,22 @@ export interface UseSwitcherCollectionOptions<T> {
   deps: DependencyList
   /** Debounce for the search query in ms (default 200). */
   debounceMs?: number
+  /**
+   * Hold off entirely, because a value this listen must be SCOPED BY is not
+   * resolved yet (AGL-2350).
+   *
+   * The empty-path-segment hold-off below covers a scope that appears IN the
+   * path. A `where` filter is the other kind, and it fails the opposite way:
+   * an unresolved id makes `where` `undefined`, which does not error — it
+   * silently drops the filter and returns the UNSCOPED collection. For
+   * `users/{uid}/hostMemberships` that is every site the person holds in
+   * every org, which on an agency running one workspace per client puts two
+   * clients' site names in one dropdown.
+   *
+   * Defaults to `false`, so this is inert for any caller that does not scope
+   * by a filter.
+   */
+  skip?: boolean
 }
 
 export interface UseSwitcherCollectionResult<T> {
@@ -110,6 +126,7 @@ export function useSwitcherCollection<T = DocumentData>(
     filter,
     deps,
     debounceMs = 200,
+    skip = false,
   } = options
 
   const debounced = useDebouncedValue(rawQuery.trim(), debounceMs)
@@ -133,8 +150,10 @@ export function useSwitcherCollection<T = DocumentData>(
   useEffect(() => {
     const requestId = ++requestRef.current
     // A path segment can be momentarily empty (e.g. the uid before auth
-    // resolves); hold rather than build an invalid collection ref.
-    if (path.some((segment) => !segment)) {
+    // resolves); hold rather than build an invalid collection ref. `skip` is
+    // the same hold for a scope that lives in `where` rather than the path,
+    // where an unresolved id would widen the query instead of breaking it.
+    if (skip || path.some((segment) => !segment)) {
       setItems([])
       setLoading(true)
       return
@@ -167,7 +186,10 @@ export function useSwitcherCollection<T = DocumentData>(
         if (requestRef.current === requestId) setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, key, hasQuery, idleLimit, searchLimit])
+    // `skip` is listed even though it is derived from a value already in
+    // `deps` for every caller today — a future caller whose skip condition is
+    // independent of its scope would otherwise stay held after unblocking.
+  }, [...deps, key, hasQuery, idleLimit, searchLimit, skip])
 
   return { items, loading, hasQuery }
 }

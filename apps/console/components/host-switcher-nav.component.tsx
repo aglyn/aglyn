@@ -86,6 +86,12 @@ export function HostSwitcherNavComponent() {
     firestore,
     path: ['users', uid ?? '', 'hostMemberships'],
     where: orgId ? ['orgId', '==', orgId] : undefined,
+    // Hold until the workspace is known (AGL-2350). Without this the ternary
+    // above yields `undefined`, which does not narrow the query — it drops
+    // the filter and lists this person's site memberships across EVERY org.
+    // On an agency running one workspace per client that is two clients' site
+    // names in one dropdown, for the width of the cold-load window.
+    skip: !orgId,
     query,
     idField: '$id',
     deps: [firestore, uid, orgId],
