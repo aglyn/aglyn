@@ -22,6 +22,7 @@ import { HubTabs } from '@aglyn/shared-ui-next'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'
 import CommerceAnalyticsCard from './console/commerce-analytics-card.component'
 import DiscountsCard from './console/discounts-card.component'
+import GiftCardsCard from './console/gift-cards-card.component'
 import HostCouponsCard from './console/host-coupons-card.component'
 import HostOrdersCard from './console/host-orders-card.component'
 import LocationsCard from './console/locations-card.component'
@@ -94,6 +95,9 @@ export function CommerceConsolePage(props: ConsolePluginPageProps) {
               items={[
                 { size: { xs: 12 }, children: <DiscountsCard hostId={hostId} /> },
                 { size: { xs: 12 }, children: <HostCouponsCard hostId={hostId} /> },
+                // Store credit lives with the other money-off surfaces
+                // (AGL-2226) — it had no console anywhere before this.
+                { size: { xs: 12 }, children: <GiftCardsCard hostId={hostId} /> },
                 {
                   size: { xs: 12 },
                   children: <ReviewsModerationCard hostId={hostId} />,

@@ -69,6 +69,7 @@ import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
 import { draftOrderHandler } from './server/draft-order'
 import { fulfillOrderHandler } from './server/fulfill-order'
+import { giftCardsHandler } from './server/gift-cards'
 import { memberPostHandler } from './server/member-post'
 import { orderAnalyticsHandler } from './server/order-analytics'
 import { posOrderHandler } from './server/pos-order'
@@ -206,6 +207,10 @@ export function registerCommerceConsoleApi(): void {
   // (AGL-1819) — the same stale-dialog hole cancel-order closes, minus the
   // stock release those two transitions never had.
   registerPluginApiRoute('commerce/fulfill-order', fulfillOrderHandler)
+  // Issue / void store credit (AGL-2226). Server-side because the host
+  // catch-all in the Firestore rules would otherwise let a client write
+  // its own `balanceCents`, which checkout applies as amount-off.
+  registerPluginApiRoute('commerce/gift-cards', giftCardsHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
   registerPluginApiRoute('commerce/pos-order', posOrderHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
