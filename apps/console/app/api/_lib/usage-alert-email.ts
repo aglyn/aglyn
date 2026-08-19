@@ -20,6 +20,13 @@ import {
   findUserByUidAcrossPools,
   meterPlatformEmail,
 } from '@aglyn/tenant-data-admin'
+// From the LEAF, not the barrel (AGL-2407). Route- and cron-level specs mock
+// `@aglyn/tenant-data-admin` wholesale — its graph reaches the admin SDK — and
+// a `jest.mock` factory is a closed world, so a gate imported through the
+// barrel is silently replaced by `undefined` or by whatever stub the factory
+// lists. A suppression check that is not actually running is the exact defect
+// this issue is about, one level up. Same reasoning as `email-events.ts`.
+import { filterSuppressedEmails } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 /**
  * BILLING ALERTS BY EMAIL (AGL-2052, for AGL-1528).
@@ -221,7 +228,25 @@ export async function emailOrgAdmins(
   input: UsageAlertEmailInput,
 ): Promise<SendEmailResult> {
   try {
-    const to = await orgAdminEmails(input.firestore, input.orgId)
+    const resolved = await orgAdminEmails(input.firestore, input.orgId)
+    /*
+     * The platform suppression list (AGL-2407). THIS is a reader for it, and
+     * the reason this fan-out is one of the two:
+     *
+     * It is a monthly-ish cron over every owner and admin of every org. An
+     * address that hard-bounced here bounces again on the next sweep and the
+     * one after, forever, because nothing ever looked. Repeat delivery to a
+     * mailbox that has permanently said it does not exist is exactly what a
+     * mailbox provider scores a sending domain on, and `aglyn.com` carries
+     * the password resets and receipts on the same key.
+     *
+     * The gate is here and NOT in `sendEmail` on purpose. A password reset,
+     * a verification or an invite answers something the human just did;
+     * refusing one because an address once bounced would lock a real customer
+     * out of their own account. AGL-1438 drew the same line for quotas — only
+     * discretionary mail may be refused — and this is the same line.
+     */
+    const to = await filterSuppressedEmails(resolved, input.firestore)
     if (!to.length) return { sent: false, reason: 'no-recipient' }
     const result = await sendEmail({
       to,

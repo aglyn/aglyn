@@ -18,6 +18,7 @@
 import {
   RESEND_SEND_ENDPOINT,
   applyFromName,
+  contextTag,
   isEmailConfigured,
   sendEmail,
 } from './send-email'
@@ -206,6 +207,85 @@ describe('sendEmail', () => {
         tags: [{ name: 'hostId', value: 'host_1' }],
         reply_to: 'hello@aglyn.com',
       })
+    })
+
+    /*
+     * THE `context` TAG (AGL-2407).
+     *
+     * Until this, `campaign-send.ts` was the only sender in the product that
+     * set any tag, so a bounce on an invite, a password reset, a receipt or a
+     * usage summary reached the Resend webhook carrying NOTHING to identify
+     * it and was answered `200 {ignored:true}` — the address was re-mailed
+     * forever. Asserted on the POSTED BODY rather than on `contextTag` alone,
+     * because a tag computed correctly and never attached is precisely the
+     * shape the bug had.
+     */
+    it('stamps the context as a tag on a send that set none', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({ to: 'a@example.com', subject: 'Hi', context: 'invite' })
+
+      expect(lastBody(fetchMock).tags).toEqual([
+        { name: 'context', value: 'invite' },
+      ])
+    })
+
+    it('keeps the caller’s own tags alongside it', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        tags: [{ name: 'hostId', value: 'host_1' }],
+        context: 'campaign',
+      })
+
+      // The campaign sender's attribution tags are what the opens/clicks
+      // webhook runs on; losing them to make room for this one would trade
+      // one dropped event class for another.
+      expect(lastBody(fetchMock).tags).toEqual([
+        { name: 'hostId', value: 'host_1' },
+        { name: 'context', value: 'campaign' },
+      ])
+    })
+
+    it('does not duplicate a context tag the caller already set', async () => {
+      const fetchMock = mockFetch({})
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        tags: [{ name: 'context', value: 'explicit' }],
+        context: 'derived',
+      })
+
+      // Two tags of one name is not a shape worth discovering in production,
+      // and the explicit one is the more specific.
+      expect(lastBody(fetchMock).tags).toEqual([
+        { name: 'context', value: 'explicit' },
+      ])
+    })
+
+    it('sanitises a context Resend would reject', async () => {
+      const fetchMock = mockFetch({})
+      // The real value `usage-email/route.ts` passes. Resend restricts tag
+      // values to ASCII letters, digits, `_` and `-`; a rejected tag fails
+      // the WHOLE send, so a mail-delivery module must not hand one over
+      // untouched.
+      await sendEmail({
+        to: 'a@example.com',
+        subject: 'Hi',
+        context: 'usage summary (org-1)',
+      })
+
+      expect(lastBody(fetchMock).tags).toEqual([
+        { name: 'context', value: 'usage-summary-org-1' },
+      ])
+    })
+
+    it('adds no tag at all for a context that sanitises to nothing', () => {
+      // No tag beats an invalid one: an empty value would be rejected and
+      // take the message with it.
+      expect(contextTag('   ')).toEqual([])
+      expect(contextTag('!!!')).toEqual([])
+      expect(contextTag(undefined)).toEqual([])
     })
 
     it('lets an explicit from override the configured sender', async () => {

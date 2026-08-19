@@ -33,6 +33,13 @@ import {
   firebaseAdmin,
   meterOrgEmail,
 } from '@aglyn/tenant-data-admin'
+// From the LEAF, not the barrel (AGL-2407). Route- and cron-level specs mock
+// `@aglyn/tenant-data-admin` wholesale — its graph reaches the admin SDK — and
+// a `jest.mock` factory is a closed world, so a gate imported through the
+// barrel is silently replaced by `undefined` or by whatever stub the factory
+// lists. A suppression check that is not actually running is the exact defect
+// this issue is about, one level up. Same reasoning as `email-events.ts`.
+import { isEmailSuppressed } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller.
 
@@ -117,6 +124,26 @@ async function handler(request: Request): Promise<Response> {
         : undefined
       if (!email) {
         results[orgId] = { skipped: 'no email' }
+        continue
+      }
+      /*
+       * The platform suppression list (AGL-2407). THIS is a reader for it.
+       *
+       * The monthly summary is the purest case the list exists for: a cron
+       * that mails the same address on the same day every month, forever,
+       * with nothing anywhere that ever noticed the address stopped
+       * existing. Twelve deliveries a year at a dead mailbox is what teaches
+       * a provider that `aglyn.com` does not read its bounces — and
+       * `aglyn.com` carries the password resets and receipts on the same
+       * key and the same From address.
+       *
+       * Not in `sendEmail`, deliberately: a password reset or an invite
+       * answers something the human just did, and refusing one over a stale
+       * bounce would lock a real customer out of their own account. See
+       * `email-suppression.ts` for the full rule.
+       */
+      if (await isEmailSuppressed(email, firestore)) {
+        results[orgId] = { skipped: 'suppressed' }
         continue
       }
 

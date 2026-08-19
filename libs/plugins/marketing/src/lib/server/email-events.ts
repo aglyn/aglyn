@@ -24,6 +24,12 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 // now lives beside `updateExisting` in the library where Firestore paths are
 // built, which was always the better home and is now the reachable one.
 import { firebaseAdmin, updateExisting } from '@aglyn/tenant-data-admin'
+// From the LEAF, not the barrel, for the same reason `isDocumentId` is
+// (AGL-1771): a spec that mocks `@aglyn/tenant-data-admin` — which it must,
+// because that graph reaches the admin SDK — would otherwise replace the real
+// suppression writer with whatever the factory happened to list. A stub there
+// is a false green on the one behaviour AGL-2407 is about.
+import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -116,16 +122,40 @@ function tagMap(raw: unknown): Record<string, string> {
  * be a second list that `campaign-send` reads half of. `createdAt` is written
  * only when the document is new, so a bounce arriving after an unsubscribe
  * does not restamp the date the person actually unsubscribed.
+ *
+ * WHERE it lands, since AGL-2407: BOTH lists, and the per-host one is now the
+ * optional half.
+ *
+ * - The PLATFORM list (`emailSuppressions`) is always written. That is the
+ *   half that did not exist: a bounce on an invite, a password reset, a
+ *   receipt or a usage summary carries no `hostId` — only `campaign-send`
+ *   ever stamped one — so this webhook had nowhere to file it and answered
+ *   `200 {ignored:true}`, exactly as if the address were fine. A dead mailbox
+ *   was re-mailed on every subsequent send, forever.
+ * - The PER-HOST list is written when the send named a site, because that is
+ *   the list `campaign-send` filters its audience against and a merchant's
+ *   own list is theirs to see and undo (AGL-2410).
+ *
+ * A hard bounce is address-level truth and belongs on the platform list even
+ * when a site was named — the mailbox does not exist for anyone. A COMPLAINT
+ * is a judgement about one sender's mail, and it goes on the platform list too
+ * for a narrower reason: the platform list is consulted only by bulk mail, and
+ * someone who pressed "report spam" on anything from `noreply@aglyn.com` must
+ * not receive more bulk mail from `noreply@aglyn.com`. Neither list is
+ * consulted by transactional mail; see `email-suppression.ts` for why.
  */
 async function recordDeliveryFailure(args: {
   firestore: FirebaseFirestore.Firestore
-  hostRef: FirebaseFirestore.DocumentReference
+  /** Null when the send named no site — the case AGL-2407 exists for. */
+  hostRef: FirebaseFirestore.DocumentReference | null
   type: 'email.bounced' | 'email.complained'
   recipient: string
   bounceType: string
+  /** The `context` tag `sendEmail` stamps, naming which sender produced it. */
+  context: string
   res: Parameters<PluginApiHandler>[1]
 }) {
-  const { firestore, hostRef, type, recipient, bounceType, res } = args
+  const { firestore, hostRef, type, recipient, bounceType, context, res } = args
   if (!recipient) return res.status(200).json({ ignored: true })
 
   const complaint = type === 'email.complained'
@@ -134,24 +164,41 @@ async function recordDeliveryFailure(args: {
     // A transient bounce is real information we deliberately do not act on.
     return res.status(200).json({ ok: true, suppressed: false })
   }
+  const reason = complaint ? 'complaint' : 'bounce'
 
-  const ref = hostRef.collection('suppressions').doc(suppressionId(recipient))
-  await firestore.runTransaction(async (transaction) => {
-    const existing = await transaction.get(ref)
-    transaction.set(
-      ref,
-      {
-        email: recipient,
-        reason: complaint ? 'complaint' : 'bounce',
-        suppressedAt: FieldValue.serverTimestamp(),
-        ...(existing.exists
-          ? {}
-          : { createdAt: FieldValue.serverTimestamp() }),
-      },
-      { merge: true },
-    )
+  // The platform list FIRST, and unconditionally. Ordered ahead of the
+  // per-host write because it is the one that must happen for every failure:
+  // if the per-host write throws, the outer handler answers 200 and the
+  // address is still off the bulk senders' lists.
+  await suppressEmail({
+    email: recipient,
+    reason,
+    context: context || null,
+    hostId: hostRef?.id ?? null,
+    firestore,
   })
-  return res.status(200).json({ ok: true, suppressed: true })
+
+  if (hostRef) {
+    const ref = hostRef.collection('suppressions').doc(suppressionId(recipient))
+    await firestore.runTransaction(async (transaction) => {
+      const existing = await transaction.get(ref)
+      transaction.set(
+        ref,
+        {
+          email: recipient,
+          reason,
+          suppressedAt: FieldValue.serverTimestamp(),
+          ...(existing.exists
+            ? {}
+            : { createdAt: FieldValue.serverTimestamp() }),
+        },
+        { merge: true },
+      )
+    })
+  }
+  return res
+    .status(200)
+    .json({ ok: true, suppressed: true, scope: hostRef ? 'host' : 'platform' })
 }
 
 /**
@@ -205,27 +252,34 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
       .trim()
       .toLowerCase()
     // A path component, so "non-empty" was never the whole question.
-    if (!isDocumentId(hostId)) {
-      return res.status(200).json({ ignored: true })
-    }
     const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
+    const hostRef = isDocumentId(hostId)
+      ? firestore.collection('hosts').doc(hostId)
+      : null
 
     if (type === 'email.bounced' || type === 'email.complained') {
+      // NO `hostId` gate here since AGL-2407. It used to sit above this
+      // branch, which is what made every transactional bounce a no-op: only
+      // `campaign-send` stamps a `hostId` tag, so a bounce on an invite or a
+      // password reset failed the gate and was dropped with `ignored: true`.
+      // The failure path needs no site at all — `recordDeliveryFailure` files
+      // the platform record either way and adds the per-host one when there
+      // is a host to add it to.
       return await recordDeliveryFailure({
         firestore,
         hostRef,
         type,
         recipient,
         bounceType: String(data?.bounce?.type ?? ''),
+        context: tags['context'] ?? '',
         res,
       })
     }
 
-    // Opens and clicks are counted against the campaign, so this pair needs
-    // both ids; the failure path above needs only the host, because a
-    // suppression outlives the campaign that discovered it.
-    if (!isDocumentId(campaignId)) {
+    // Opens and clicks ARE per-campaign, so this pair still needs both ids —
+    // and therefore still needs the host, which the failure path above no
+    // longer does.
+    if (!hostRef || !isDocumentId(campaignId)) {
       return res.status(200).json({ ignored: true })
     }
     // Plain refusal (AGL-1768). A merge-set against a missing path CREATES it,

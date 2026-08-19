@@ -2045,6 +2045,25 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The PLATFORM email suppression list (AGL-2407): addresses that hard
+    // bounced or complained, on any send, with or without a site to attribute
+    // it to. Same posture as `contactSuppressions` above and for the same
+    // reasons — staff may read it to answer "why did this person stop getting
+    // mail", and nothing but the Admin SDK may write it, because every writer
+    // is a signed Resend webhook or a staff action that has already been
+    // authorized server-side.
+    //
+    // Delete stays closed. Putting an address back in circulation is
+    // `releasedAt` on the existing document, not a delete: the record is the
+    // evidence that the suppression was honoured while it stood.
+    //
+    // Note this is NOT `hosts/{hostId}/suppressions`, which is a merchant's
+    // own list of their own unsubscribes and is governed by the host rules.
+    match /emailSuppressions/{emailKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
     // Designed templates for Aglyn's own outbound email — invites, usage
     // summaries, staff alerts (AGL-747). Platform-level, not per-org: there
     // is no membership to check, only the staff claim.

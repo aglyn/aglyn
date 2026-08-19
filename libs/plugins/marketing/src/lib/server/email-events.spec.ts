@@ -703,6 +703,18 @@ import { suppressionId } from './campaign-send'
 
 const SUPPRESSION_PATH = `hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`
 
+/**
+ * The PLATFORM list (AGL-2407). Keyed by the same `suppressionId` derivation,
+ * which is asserted rather than assumed: two lists that disagree about which
+ * document describes which person is a defect nothing would ever report.
+ *
+ * The writer reached from `email-events` is the REAL `suppressEmail`, imported
+ * through its leaf entry point so the `@aglyn/tenant-data-admin` barrel mock
+ * above does not replace it with a stub. A stub here would be a false green on
+ * exactly the behaviour this issue is about.
+ */
+const PLATFORM_PATH = `emailSuppressions/${suppressionId(RECIPIENT)}`
+
 /** A Resend delivery-failure payload, tagged as Aglyn tags a campaign send. */
 const failure = (
   type: 'email.bounced' | 'email.complained',
@@ -771,17 +783,65 @@ describe('a bounce', () => {
   })
 })
 
-describe('a delivery failure that cannot be placed', () => {
-  it('ignores an event with no host tag', async () => {
+/**
+ * TRANSACTIONAL DELIVERY FAILURES (AGL-2407).
+ *
+ * This block used to assert the opposite: "ignores an event with no host tag",
+ * `{ignored: true}`, nothing written. That WAS the shipped behaviour and it
+ * was the defect. Only `campaign-send.ts` ever stamped a `hostId` tag, so
+ * every bounce on an invite, a password reset, a verification, a receipt, a
+ * booking confirmation or the monthly usage summary failed that gate and was
+ * acknowledged-and-dropped — the address re-mailed on every subsequent send,
+ * forever, on the same Resend key and the same From address as the campaigns.
+ */
+describe('a delivery failure with no site to attribute it to', () => {
+  it('files a PLATFORM suppression instead of dropping it', async () => {
     const result = await deliver(
-      failure('email.complained', {}, { campaignId: CAMPAIGN }),
+      failure(
+        'email.bounced',
+        { bounce: { type: 'Permanent' } },
+        { context: 'invite' },
+      ),
     )
 
-    expect(result.body).toEqual({ ignored: true })
+    expect(result.body).toMatchObject({ suppressed: true, scope: 'platform' })
+    expect(docs.get(PLATFORM_PATH)).toMatchObject({
+      email: RECIPIENT,
+      reason: 'bounce',
+      // Which of our senders produced the address that died. `sendEmail`
+      // stamps this on every send now, which is what makes an untagged
+      // transactional bounce placeable at all.
+      context: 'invite',
+      hostId: null,
+      releasedAt: null,
+    })
+    // And no per-host document was invented for a site that was never named.
+    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+  })
+
+  it('files a platform complaint too', async () => {
+    // A complaint about mail from `noreply@aglyn.com` is a reason not to send
+    // more BULK mail from `noreply@aglyn.com`, whichever sender it came from.
+    await deliver(failure('email.complained', {}, { context: 'usage-summary' }))
+
+    expect(docs.get(PLATFORM_PATH)).toMatchObject({ reason: 'complaint' })
+  })
+
+  it('still does NOT suppress a transient bounce', async () => {
+    // The rule that protects a real subscriber from a full mailbox did not
+    // move when the destination did.
+    const result = await deliver(
+      failure('email.bounced', { bounce: { type: 'Transient' } }, {}),
+    )
+
+    expect(result.body).toEqual({ ok: true, suppressed: false })
     expect([...docs.keys()]).toEqual([])
   })
 
   it('ignores an event with no recipient', async () => {
+    // Nothing to key a suppression on. Unchanged, and the negative control
+    // for the block above: "writes something for every failure" would be a
+    // different bug.
     const result = await deliver({
       type: 'email.complained',
       data: { tags: TAGS },
@@ -789,6 +849,41 @@ describe('a delivery failure that cannot be placed', () => {
 
     expect(result.body).toEqual({ ignored: true })
     expect([...docs.keys()]).toEqual([])
+  })
+
+  it('writes NO platform record for a hostId that names a path', async () => {
+    // `isDocumentId` still rejects a path-shaped tag, and the failure path
+    // now treats that as "no host" rather than as "ignore the event" — so the
+    // platform record lands and no `hosts/a/b/c/...` document is created.
+    await deliver(
+      failure(
+        'email.bounced',
+        { bounce: { type: 'Permanent' } },
+        { hostId: 'host-1/campaigns/evil' },
+      ),
+    )
+
+    expect([...docs.keys()]).toEqual([PLATFORM_PATH])
+    expect(docs.get(PLATFORM_PATH)?.['hostId']).toBeNull()
+  })
+})
+
+describe('a delivery failure that DOES name a site', () => {
+  it('files BOTH lists — the merchant’s and the platform’s', async () => {
+    // A hard bounce is address-level truth: the mailbox does not exist for
+    // anyone, so it belongs on the platform list even though a site was
+    // named. The per-host copy is what `campaign-send` filters its audience
+    // against and what the merchant can see and undo.
+    const result = await deliver(
+      failure('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+
+    expect(result.body).toMatchObject({ scope: 'host' })
+    expect(docs.get(SUPPRESSION_PATH)?.['reason']).toBe('bounce')
+    expect(docs.get(PLATFORM_PATH)).toMatchObject({
+      reason: 'bounce',
+      hostId: HOST,
+    })
   })
 })
 
