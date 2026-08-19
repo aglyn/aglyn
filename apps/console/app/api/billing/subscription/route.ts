@@ -123,6 +123,82 @@ function isLadderDowngrade(from: OrgPlan | null, to: string): boolean {
 }
 
 /**
+ * Restates the terms Stripe put on the schedule's current phase but that a
+ * phase-list replacement would otherwise drop (AGL-2146).
+ *
+ * `subscription_schedules` update REPLACES the whole phase list, so anything
+ * not written back is gone. The original restatement covered price, quantity
+ * and the phase window — which meant a downgrade silently ended the customer's
+ * coupon, their trial, and the tax/collection configuration.
+ *
+ * The discount is the one that costs money in both directions: an org holding
+ * a staff coupon, a checkout promotion code, or the winback the retention
+ * funnel just minted lost it at the flip, having been told nothing. An instant
+ * UPGRADE never touches subscription discounts, so a downgrade must not
+ * either — which is why the discount is restated on the target phase too and a
+ * time-boxed coupon keeps running its remaining months across the change.
+ *
+ * `trial_end` and `automatic_tax` are restated only on the CURRENT phase: a
+ * trial must not restart at the flip, and the target phase sets its own tax
+ * flag explicitly.
+ */
+function preservePhaseTerms(
+  params: URLSearchParams,
+  index: number,
+  phase: any,
+  options: { current: boolean },
+): void {
+  const prefix = `phases[${index}]`
+  // Both shapes: `discounts` is the current list-valued field, `coupon` the
+  // singular legacy one older API versions still return.
+  const discounts: any[] = Array.isArray(phase?.discounts) ? phase.discounts : []
+  let written = 0
+  for (const entry of discounts) {
+    const coupon =
+      typeof entry?.coupon === 'string' ? entry.coupon : entry?.coupon?.id
+    const promotionCode =
+      typeof entry?.promotion_code === 'string'
+        ? entry.promotion_code
+        : entry?.promotion_code?.id
+    if (coupon) {
+      params.set(`${prefix}[discounts][${written}][coupon]`, String(coupon))
+      written += 1
+    } else if (promotionCode) {
+      params.set(
+        `${prefix}[discounts][${written}][promotion_code]`,
+        String(promotionCode),
+      )
+      written += 1
+    }
+  }
+  if (written === 0 && phase?.coupon) {
+    const legacy =
+      typeof phase.coupon === 'string' ? phase.coupon : phase.coupon?.id
+    if (legacy) params.set(`${prefix}[coupon]`, String(legacy))
+  }
+  if (phase?.collection_method) {
+    params.set(`${prefix}[collection_method]`, String(phase.collection_method))
+  }
+  const paymentMethod =
+    typeof phase?.default_payment_method === 'string'
+      ? phase.default_payment_method
+      : phase?.default_payment_method?.id
+  if (paymentMethod) {
+    params.set(`${prefix}[default_payment_method]`, String(paymentMethod))
+  }
+  if (!options.current) return
+  if (phase?.trial_end) {
+    params.set(`${prefix}[trial_end]`, String(phase.trial_end))
+  }
+  if (phase?.automatic_tax?.enabled != null) {
+    params.set(
+      `${prefix}[automatic_tax][enabled]`,
+      phase.automatic_tax.enabled ? 'true' : 'false',
+    )
+  }
+}
+
+/**
  * Releases the subscription's pending downgrade schedule, if one exists.
  * Returns true when something was released — the caller then clears the
  * `pendingDowngrade` mirror. Releasing (not canceling) keeps the subscription
@@ -526,6 +602,19 @@ async function handler(request: Request): Promise<Response> {
       if (currentPhase.end_date) {
         params.set('phases[0][end_date]', String(currentPhase.end_date))
       }
+      // Everything else Stripe put on phase 0 from `from_subscription` has to
+      // be restated too (AGL-2146). Replacing the phase list with price,
+      // quantity and dates alone silently dropped the customer's DISCOUNT,
+      // their trial, and the tax configuration — a downgrade quietly cancelling
+      // a coupon nobody said anything about, including the winback the
+      // retention funnel had just minted to keep them.
+      //
+      // Carried onto BOTH phases, which is the parity that matters: an instant
+      // upgrade never touches the subscription's discounts, so a downgrade must
+      // not end one either. A time-boxed coupon keeps running its remaining
+      // months across the plan change, exactly as it would have without one.
+      preservePhaseTerms(params, 0, currentPhase, { current: true })
+      preservePhaseTerms(params, 1, currentPhase, { current: false })
       // Phase 1: the target plan. Add-ons re-price to the target's rates
       // exactly as an instant switch would (AGL-528); kinds it doesn't sell
       // are dropped and reported. The interval-matched metered item rides
