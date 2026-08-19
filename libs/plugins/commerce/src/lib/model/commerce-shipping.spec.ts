@@ -663,3 +663,100 @@ describe('a cart no rate can price (AGL-2230)', () => {
     })
   })
 })
+
+/**
+ * AGL-2298. Two ways the zone matcher misread a merchant's own settings, both
+ * silent and both expensive.
+ */
+describe('reading a zone that was not written by the console (AGL-2298)', () => {
+  it('trims a stored country code before matching it', () => {
+    // The console trims on save; an import, the REST API or a hand edit does
+    // not. `' US'` upper-cases to `' US'`, matched nothing, and the store then
+    // refused every US shopper with "This store does not ship to the United
+    // States" while its settings card showed `US` right there.
+    const imported: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: [' US '] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    expect(
+      resolveShippingRates(imported, 'US', { subtotalCents: 5000 }),
+    ).toEqual([{ rateId: 'std', name: 'Standard', amountCents: 799 }])
+    expect(planCheckoutShipping(imported, { subtotalCents: 5000 }, 'US')
+      .refusal).toBeUndefined()
+  })
+
+  it('trims a stored wildcard too', () => {
+    const imported: ShippingSettings = {
+      zones: [{ id: 'world', name: 'Everywhere', countries: [' * '] }],
+      rates: [
+        { id: 'std', zoneId: 'world', name: 'Standard', kind: 'flat', amountCents: 999 },
+      ],
+    }
+    expect(
+      resolveShippingRates(imported, 'FR', { subtotalCents: 5000 }),
+    ).toEqual([{ rateId: 'std', name: 'Standard', amountCents: 999 }])
+  })
+
+  /**
+   * A zone spelled `['*','US']` matches EVERY country through its wildcard.
+   * The old specificity test was `!countries.every(code => code === '*')`, so
+   * such a zone counted as specific for all six destinations and suppressed
+   * every genuine rest-of-world zone — a merchant's worldwide rate vanished
+   * because one zone listed a country beside its wildcard.
+   */
+  it('does not let a wildcard-plus-country zone suppress rest-of-world', () => {
+    const mixed: ShippingSettings = {
+      zones: [
+        { id: 'odd', name: 'US and everywhere', countries: ['*', 'US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'domestic', zoneId: 'odd', name: 'Domestic', kind: 'flat', amountCents: 500 },
+        { id: 'intl', zoneId: 'world', name: 'International', kind: 'flat', amountCents: 2500 },
+      ],
+    }
+    // FR is served by BOTH wildcards, so both rates are on offer.
+    expect(
+      resolveShippingRates(mixed, 'FR', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic', 'intl'])
+    // US names the odd zone outright, so specificity applies and the
+    // rest-of-world zone is suppressed — which is the documented rule.
+    expect(
+      resolveShippingRates(mixed, 'US', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic'])
+  })
+
+  /**
+   * POSITIVE CONTROL: the documented precedence is untouched — a plain
+   * specific zone still hides a plain rest-of-world one.
+   */
+  it('POSITIVE CONTROL: a named zone still beats rest-of-world', () => {
+    const ordinary: ShippingSettings = {
+      zones: [
+        { id: 'us', name: 'US', countries: ['US'] },
+        { id: 'world', name: 'Everywhere else', countries: ['*'] },
+      ],
+      rates: [
+        { id: 'domestic', zoneId: 'us', name: 'Domestic', kind: 'flat', amountCents: 500 },
+        { id: 'intl', zoneId: 'world', name: 'International', kind: 'flat', amountCents: 2500 },
+      ],
+    }
+    expect(
+      resolveShippingRates(ordinary, 'US', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['domestic'])
+    expect(
+      resolveShippingRates(ordinary, 'FR', { subtotalCents: 5000 }).map(
+        (rate) => rate.rateId,
+      ),
+    ).toEqual(['intl'])
+  })
+})
+

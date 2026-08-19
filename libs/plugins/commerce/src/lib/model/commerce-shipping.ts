@@ -82,9 +82,24 @@ export interface ResolvedShippingRate {
   amountCents: number
 }
 
+/**
+ * One stored country code, normalised (AGL-2298).
+ *
+ * TRIMMED as well as upper-cased. The console trims on save, so this only
+ * matters for a document written any other way — an import, the REST API, a
+ * hand edit — but the failure it produces is silent and expensive: `' US'`
+ * upper-cases to `' US'`, matches nothing, and the store refuses every US
+ * shopper with "This store does not ship to the United States" while its
+ * settings card shows `US` right there.
+ */
+const zoneCode = (code: unknown): string => String(code ?? '').trim().toUpperCase()
+
+/** Whether a stored code is the rest-of-world wildcard. */
+const isWildcard = (code: unknown): boolean => zoneCode(code) === '*'
+
 function zoneMatches(zone: ShippingZone, country: string): boolean {
-  return zone.countries.some(
-    (code) => code === '*' || code.toUpperCase() === country,
+  return (zone.countries ?? []).some(
+    (code) => isWildcard(code) || zoneCode(code) === country,
   )
 }
 
@@ -114,10 +129,15 @@ export function resolveShippingRates(
   if (!settings || !destinationCountry) return []
   const country = destinationCountry.toUpperCase()
   const zones = settings.zones ?? []
-  const specific = zones.filter(
-    (zone) =>
-      zoneMatches(zone, country) &&
-      !zone.countries.every((code) => code === '*'),
+  // A zone is SPECIFIC when it names this country outright — not merely when
+  // it is "not wildcard-only" (AGL-2298). The old test was `!every(code ===
+  // '*')`, so a zone spelled `['*','US']` counted as specific for all six
+  // destinations (it matches every country through the `*`) and suppressed
+  // every genuine rest-of-world zone globally. Asking the narrower question
+  // makes such a zone specific for `US` and wildcard for the rest, which is
+  // what its two entries actually say.
+  const specific = zones.filter((zone) =>
+    (zone.countries ?? []).some((code) => zoneCode(code) === country),
   )
   const matched = specific.length
     ? specific
