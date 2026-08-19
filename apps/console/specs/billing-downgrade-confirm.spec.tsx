@@ -91,14 +91,21 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: mockConfirm }),
 }))
 
+/**
+ * `trackEvent` is CAPTURED, not merely stubbed (AGL-2235).
+ *
+ * Under jsdom the real `trackEvent` finds no transport and no `window.gtag`,
+ * so it no-ops — which is exactly why the funnel's four events could be
+ * deleted silently before AGL-1865 pinned them. The same hole would swallow
+ * these two, so the double is asserted against.
+ */
+const mockTrackEvent = jest.fn()
 // `readGaClientId` waits up to 500 ms for gtag before a checkout POST
 // (AGL-1561); resolve it immediately so a driven click is not a timer test.
-// `trackEvent` is stubbed rather than removed — AGL-2235 fires from this same
-// handler and a missing export would be a closed-world TypeError.
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/analytics-events'),
   readGaClientId: async () => null,
-  trackEvent: jest.fn(),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -203,6 +210,7 @@ let switchAnswers: Array<{ status: number; payload: unknown }>
 beforeEach(() => {
   mockEnqueueSnackbar.mockClear()
   mockConfirm.mockClear()
+  mockTrackEvent.mockClear()
   confirmCalls = []
   confirmAnswers = []
   subscriptionCalls = []
@@ -401,5 +409,88 @@ describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
     expect(String(mockEnqueueSnackbar.mock.calls[0][0])).toMatch(
       /^Plan switched to /,
     )
+  })
+})
+
+/**
+ * The grid's half of the funnel instrumentation (AGL-2235, AGL-1859 §4).
+ *
+ * `downsell_accepted` and friends fire from `retention-funnel.dialog.tsx`
+ * only. The identical move made from the plan card reported nothing, so the
+ * downsell number read as a total while being a fraction — and a save rate
+ * computed against it errs in the flattering direction.
+ */
+describe('a plan change from the grid is reported to GA4 (AGL-2235)', () => {
+  /** The `[name, params]` pairs, so an assertion can name the event. */
+  const events = () =>
+    mockTrackEvent.mock.calls.map(
+      ([name, params]) => [name, params] as [string, Record<string, unknown>],
+    )
+  const eventNamed = (name: string) =>
+    events().find(([sent]) => sent === name)?.[1]
+
+  it('a scheduled downgrade names BOTH tiers and WHEN it lands', async () => {
+    confirmAnswers = [true]
+    await press('Downgrade')
+    await waitFor(() => expect(mockTrackEvent).toHaveBeenCalled())
+
+    expect(eventNamed('plan_downgrade_scheduled')).toEqual({
+      from_plan: 'pro',
+      to_plan: 'starter',
+      interval: 'month',
+      // The SERVER's date, which is the difference between a decision and an
+      // effect — and the window in which "keep my plan" can still save them.
+      effective_at: PERIOD_END_ISO,
+    })
+    // Never reported as an upgrade as well; they are opposite facts.
+    expect(eventNamed('plan_upgraded')).toBeUndefined()
+  })
+
+  it('an in-place upgrade is reported too — expansion revenue was dark', async () => {
+    // `purchase` only covers the Checkout path, so a subscriber moving UP
+    // minted no event at all before this.
+    confirmAnswers = [true]
+    await press('Upgrade')
+    await waitFor(() => expect(mockTrackEvent).toHaveBeenCalled())
+
+    const params = eventNamed('plan_upgraded')
+    expect(params).toMatchObject({ from_plan: 'pro', interval: 'month' })
+    expect(String(params?.to_plan)).not.toBe('pro')
+    // An upgrade lands now, so it carries no effective date to explain away.
+    expect(params).not.toHaveProperty('effective_at')
+    expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
+  })
+
+  it('the names are in the shared taxonomy — an unregistered event is dropped', () => {
+    // Registration is not decoration: `trackEvent` sanitizes against
+    // `ANALYTICS_EVENT_NAMES`, so a name that is emitted but unregistered
+    // reports nothing while every call site looks correct.
+    const {
+      ANALYTICS_EVENT_NAMES,
+    } = jest.requireActual('@aglyn/aglyn/app-utils/analytics-events')
+    expect(ANALYTICS_EVENT_NAMES).toContain('plan_downgrade_scheduled')
+    expect(ANALYTICS_EVENT_NAMES).toContain('plan_upgraded')
+    // `app_upgrade` is GA4-RESERVED — a hit using it is DROPPED, which is
+    // silence rather than pollution and therefore the harder failure to spot.
+    expect(ANALYTICS_EVENT_NAMES).not.toContain('app_upgrade')
+  })
+
+  it('NEGATIVE CONTROL: a DECLINED downgrade reports nothing', async () => {
+    // The event has to mean "this happened", not "this was considered".
+    confirmAnswers = [false]
+    await press('Downgrade')
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled())
+    await waitFor(() => expect(previews()).toHaveLength(1))
+    expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
+  })
+
+  it('NEGATIVE CONTROL: a switch the SERVER refused reports nothing', async () => {
+    confirmAnswers = [true]
+    switchAnswers = [{ status: 409, payload: { error: 'Schedule failed' } }]
+    await press('Downgrade')
+    await waitFor(() => expect(switches()).toHaveLength(1))
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    expect(eventNamed('plan_downgrade_scheduled')).toBeUndefined()
+    expect(eventNamed('plan_upgraded')).toBeUndefined()
   })
 })

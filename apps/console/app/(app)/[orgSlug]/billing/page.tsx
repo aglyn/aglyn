@@ -501,6 +501,35 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             interval,
           })
           if (switched) {
+            // The plan change, REPORTED (AGL-2235, under AGL-1859 §4).
+            //
+            // The four retention events all fire from the funnel dialog and
+            // from nowhere else, so the identical move made here — Downgrade
+            // on the plan card — was invisible, and `downsell_accepted` read
+            // as a total while being a fraction. Emitted from the SERVER's
+            // answer, never the client's intent: a switch the route refused
+            // returns null above and is not counted, and the effective date
+            // is the one Stripe actually scheduled.
+            //
+            // `preview.downgrade` is the classification the same server made
+            // a moment ago, rather than a second ladder comparison here that
+            // could disagree with it.
+            if (preview.downgrade) {
+              trackEvent('plan_downgrade_scheduled', {
+                from_plan: String(org?.plan ?? ''),
+                to_plan: targetPlan,
+                interval,
+                ...(switched.effectiveAt
+                  ? { effective_at: String(switched.effectiveAt) }
+                  : {}),
+              })
+            } else {
+              trackEvent('plan_upgraded', {
+                from_plan: String(org?.plan ?? ''),
+                to_plan: targetPlan,
+                interval,
+              })
+            }
             // A scheduled downgrade has not switched anything yet; saying so
             // is the difference between a customer who understands their
             // bill and one who opens a ticket about it.

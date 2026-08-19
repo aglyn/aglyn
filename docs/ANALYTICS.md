@@ -117,6 +117,8 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `downsell_accepted` | Custom | Console (AGL-1865) | `from_plan`, `to_plan`, `surface` | Retention — saves by downgrade, and what they cost |
 | `winback_discount_accepted` | Custom | Console (AGL-1865) | `percent_off`, `duration_months`, `surface`, `plan?` | Retention — saves by discount, and what they cost |
 | `cancellation_completed` | Custom | Console (AGL-1865) | `surface`, `funnel_completed`, `plan?` | Retention — the funnel's denominator |
+| `plan_downgrade_scheduled` | Custom | Console (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at?` | Retention — downgrades taken from the plan grid, and the gap between decision and effect |
+| `plan_upgraded` | Custom | Console (AGL-2235) | `from_plan`, `to_plan`, `interval` | Revenue — expansion from EXISTING subscribers, which `purchase` never saw |
 | `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642) | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
@@ -287,6 +289,26 @@ decisions in full live on the issues.
   - `winback_discount_accepted` reports the SERVER's minted terms, not the
     constants the dialog was shown — the margin question ("what did this save
     cost?") is answered wrong by anything else.
+- **Plan changes from the grid (AGL-2235)** — `plan_downgrade_scheduled` and
+  `plan_upgraded`, client-side from the billing page's plan grid. The four
+  retention events above fire from the funnel dialog and from NOWHERE else, so
+  the identical move made by clicking Downgrade on a plan card was counted by
+  nothing: "how many orgs moved down" was unanswerable, and
+  `downsell_accepted` undercounted by exactly the share that took the direct
+  route while reading like a total.
+  - **`plan_downgrade_scheduled` is not `downsell_accepted`.** The first is
+    every downgrade; the second is only the downgrades the cancel funnel
+    saved. `downsell_accepted` over `plan_downgrade_scheduled` is the share of
+    downgrades that were RETENTION saves — sum them and you double-count the
+    funnel's own.
+  - `effective_at` is the period end Stripe scheduled, not the click. A
+    scheduled downgrade is not a completed one, and the gap — up to a full
+    cycle — is the window in which "keep my plan" can still save the org.
+  - `plan_upgraded`, never `app_upgrade`: that name is GA4-reserved and the
+    hit would be DROPPED. `purchase` covers only the Checkout path, so before
+    this, expansion from customers who already had a subscription was dark.
+  - Both fire from the server's answer, after the switch is confirmed — a
+    refused or declined switch reports nothing.
 - **`org_plan` / `org_role` user properties (AGL-1852)** — the active
   workspace's tier and role, read through `useOrgPlans` (enterprise
   override, no-field-means-free). `buildOrgUserProperties` owns the clearing
