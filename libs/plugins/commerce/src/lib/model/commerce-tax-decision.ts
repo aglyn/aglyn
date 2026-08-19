@@ -137,3 +137,65 @@ export function storefrontTaxDecision(
 export const STOREFRONT_TAX_UNDECIDED_MESSAGE =
   'This store has not set up sales tax yet, so we can’t take the order. ' +
   'The store owner can fix this in Commerce → Settings → Taxes.'
+
+/**
+ * A second refusal, for the two states that ARE decisions but that the path
+ * about to run cannot honour (AGL-2145).
+ *
+ * `storefrontTaxDecision` above answers "did a human decide?", and its
+ * docblock is careful about the difference between an undecided store and one
+ * that decided to collect nothing. Both of the states below sit outside that
+ * distinction: the merchant decided to collect tax, and the sale then charged
+ * zero anyway, silently, leaving the liability with them.
+ *
+ *  1. **Manual mode with no store origin.** `resolveTaxRate` opens with
+ *     `if (!country) return null`, and every caller reads that null as "no
+ *     rate applies" — the same value it returns for a shopper in a
+ *     jurisdiction the merchant has no rate for, which is a legitimate zero.
+ *     An empty `origin.country` is not a jurisdiction miss, it is an
+ *     unfinished settings card: the merchant chose Manual, and *every* order
+ *     is then untaxed regardless of who buys. A merchant who saved `manual`
+ *     with an origin and no matching rates still collects nothing, and that
+ *     stays fine — they answered, and the answer applies per shopper.
+ *
+ *  2. **Stripe-automatic at the REGISTER.** `pos-order.ts` sends the whole
+ *     basket as one opaque `In-store purchase` line at `totals.totalCents` and
+ *     sets no `automatic_tax[enabled]` — it cannot, there is no customer
+ *     address at a till — and the cash and folio tenders never reach Stripe at
+ *     all. So a store that chose "Stripe computes my tax" got **zero** tax on
+ *     every in-person sale, on both tenders, with no refusal and no log. This
+ *     is the same defect AGL-1999 closed for the three online paths, still
+ *     open at the one place a shopper stands in front of you.
+ *
+ * `inPerson` is what separates them: (2) is a property of the REGISTER, not of
+ * the store, and online Stripe-Tax sales are correct and must not be refused.
+ *
+ * Returns the message to refuse with, or null to proceed. Never a boolean —
+ * the four paths must refuse in the merchant's own words, and a boolean is how
+ * four hand-rolled strings drift.
+ */
+export function storefrontTaxMisconfiguration(
+  settings: TaxSettings | undefined | null,
+  options: { inPerson?: boolean } = {},
+): string | null {
+  const mode = settings?.mode
+  if (mode === 'manual' && !String(settings?.origin?.country ?? '').trim()) {
+    return STOREFRONT_TAX_NO_ORIGIN_MESSAGE
+  }
+  if (mode === 'stripe' && options.inPerson === true) {
+    return STOREFRONT_TAX_POS_STRIPE_MESSAGE
+  }
+  return null
+}
+
+/** @see storefrontTaxMisconfiguration — case 1. */
+export const STOREFRONT_TAX_NO_ORIGIN_MESSAGE =
+  'This store collects sales tax manually but has no store address set, so ' +
+  'no rate can be applied. The store owner can add it in Commerce → ' +
+  'Settings → Taxes.'
+
+/** @see storefrontTaxMisconfiguration — case 2. */
+export const STOREFRONT_TAX_POS_STRIPE_MESSAGE =
+  'This store uses automatic tax, which the register can’t calculate for an ' +
+  'in-person sale. The store owner can switch Taxes to Manual and add a rate ' +
+  'for the store address in Commerce → Settings → Taxes.'

@@ -217,6 +217,15 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
     }
+    const taxMisconfigured =
+      CommerceModel.storefrontTaxMisconfiguration(taxSettings)
+    if (taxMisconfigured) {
+      // AGL-2145: the merchant DECIDED to collect and the sale would have
+      // charged zero anyway — an unfinished settings card, not a
+      // jurisdiction miss. Refused in the same words and the same place as
+      // the undecided case above.
+      return res.status(409).json({ error: taxMisconfigured })
+    }
     const useStripeTax = taxDecision.kind === 'stripe-automatic'
     const manualRate =
       taxDecision.kind === 'manual' &&
