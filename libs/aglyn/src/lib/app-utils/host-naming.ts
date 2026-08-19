@@ -120,8 +120,48 @@ export function suggestSubdomains(base: string, year = new Date().getFullYear())
   ]
 }
 
-/** The apex tenant sites are served from. Console lives on `app.aglyn.com`. */
-export const TENANT_APEX = 'aglyn.app'
+/**
+ * The apex tenant sites are served from — `aglyn.app` on Aglyn's cloud, the
+ * operator's own apex on a self-host install (AGL-2121). Console lives on
+ * `app.aglyn.com`.
+ *
+ * ## Why this had to stop being a literal
+ *
+ * AGL-2022 moved the console's *display* links onto `NEXT_PUBLIC_TENANT_DOMAIN`
+ * and left this constant — the one every other consumer reads — as a bare
+ * `'aglyn.app'`. So a self-hoster who set that variable got correct "View
+ * live" links in their console while the software went on emitting our apex
+ * everywhere that actually reaches the public:
+ *
+ *  - {@link hostPublicOrigin} is the canonical origin. It is what the tenant
+ *    renderer puts in `<link rel="canonical">`, what `/api/sitemap` and
+ *    `/api/robots` publish, what `/api/collections-rss` emits as item links,
+ *    what `/api/manifest` names, what `social-image.ts` builds `og:image`
+ *    from, and what `email-media-src.ts` resolves inbox-bound `<img src>`
+ *    against. A self-hoster's own customers' sites told Google, every feed
+ *    reader and every inbox that they lived at `{sub}.aglyn.app` — a name the
+ *    operator does not control and we do not serve for them.
+ *  - {@link liveCustomDomain} refuses a `cname` inside the apex because
+ *    redirecting there loops forever. Pinned to `aglyn.app`, it never refused
+ *    a self-hoster's own apex, so the loop it exists to prevent was reachable
+ *    on exactly the deployments it was not guarding.
+ *  - `apps/tenant/utils/get-host.ts` resolves `{sub}.<apex>` to a subdomain.
+ *    Pinned, an operator's `acme.sites.example.com` resolved to nothing.
+ *
+ * The default is our value, not an unset state, and that asymmetry with
+ * `operator-identity.ts` is deliberate — its own header sets out the rule.
+ * A wrong apex is *visible to the operator on the first click*, in their own
+ * console, so a default they can see and correct is a default. A wrong
+ * contact address fails silently and off-site, which is why that one refuses
+ * to guess.
+ *
+ * Dot notation is load-bearing: this module reaches client bundles, and Next
+ * inlines `NEXT_PUBLIC_*` by substituting `process.env.NAME` textually. The
+ * bracket form is never substituted and reads `undefined` in the browser.
+ * Same env name the console already reads — one value, one name (AGL-733).
+ */
+export const TENANT_APEX =
+  process.env.NEXT_PUBLIC_TENANT_DOMAIN?.trim() || 'aglyn.app'
 
 /**
  * The absolute origin a published site is reachable at (AGL-1224).

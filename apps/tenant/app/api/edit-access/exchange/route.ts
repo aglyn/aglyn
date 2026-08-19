@@ -23,6 +23,7 @@ import {
   mintEditAccessToken,
   verifyEditHintToken,
 } from '@aglyn/tenant-data-admin'
+import { TENANT_APEX } from '@aglyn/aglyn/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,7 +132,7 @@ export async function POST(request: Request): Promise<Response> {
     const subdomain = host.get('subdomain') as string | undefined
     const isProductionAlias =
       hostname === cname ||
-      (subdomain && hostname === `${subdomain}.aglyn.app`)
+      (subdomain && hostname === `${subdomain}.${TENANT_APEX}`)
     const isDevOrPreview =
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||

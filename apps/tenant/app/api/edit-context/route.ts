@@ -24,6 +24,7 @@ import {
   resolveMediaSrc,
   Route,
   SCREEN_ROOT_PATH,
+  TENANT_APEX,
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
@@ -109,7 +110,8 @@ export async function POST(request: Request): Promise<Response> {
       .toLowerCase()
     const isProductionAlias =
       hostname === hostDoc.cname ||
-      (hostDoc.subdomain && hostname === `${hostDoc.subdomain}.aglyn.app`)
+      (hostDoc.subdomain &&
+        hostname === `${hostDoc.subdomain}.${TENANT_APEX}`)
     const isDevOrPreview =
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||
