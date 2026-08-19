@@ -1092,12 +1092,35 @@ service cloud.firestore {
       // or deletes an order — creates are checkout/POS/draft/webhook routes,
       // and delete stays closed because delete-and-recreate would re-mint
       // the document with any status at all.
+      // AN ALLOWLIST, NOT A STATUS DENYLIST (AGL-2233). The paragraph above
+      // states what the client legitimately writes — the note's `timeline`
+      // and the restock answer's `restockCheck` — and `hasOnly` is what
+      // actually says it. `hasAny(['status'])` said only "not the status",
+      // which left every OTHER field on an order client-writable, and an
+      // order carries the money:
+      //
+      //  - `refundedCents` and `totals` are the two figures `refund.ts` reads
+      //    inside its reserve transaction to cap an over-refund. Zeroing one
+      //    resets the cap; raising the other lifts the ceiling.
+      //  - Pre-writing `refundedCents` up to the total makes
+      //    `recordDisputeClosed` compute a `reversedCents` of 0, so a LOST
+      //    chargeback records nothing and `reverseSellerShare` never pulls
+      //    the seller's share back — Aglyn eats the whole principal.
+      //  - `dispute.reversedTransferCents` is that reversal's own once-only
+      //    marker; present, it short-circuits before any Stripe call.
+      //  - `supplierToken` is the bearer credential for the unauthenticated
+      //    supplier-update route, and `downloadAttempts` is the download cap.
+      //
+      // None of those has a client writer, so an allowlist costs nothing and
+      // is the shape the comment already claimed. `diff()` reports CHANGED
+      // keys only, so a patch that spells out an unchanged `status` still
+      // passes — the AGL-1795/1813/1824 property, unchanged.
       match /orders/{orderId} {
         allow read: if isStaff() || canWriteHostContent(hostId);
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-           !request.resource.data.diff(resource.data)
-             .affectedKeys().hasAny(['status']));
+           request.resource.data.diff(resource.data)
+             .affectedKeys().hasOnly(['timeline', 'restockCheck']));
       }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc

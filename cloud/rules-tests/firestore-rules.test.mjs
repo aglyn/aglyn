@@ -5230,6 +5230,68 @@ describe('an order status is Admin-SDK-only — notes and restock answers stay c
     )
   })
 
+  /**
+   * AGL-2233. The rule said `hasAny(['status'])`, i.e. "anything but the
+   * status", while the paragraph above it described an allowlist of the two
+   * writers the console actually has. Everything else on an order was
+   * therefore client-writable, and an order carries the money.
+   *
+   * Each assertion below is a distinct way to take money, not a variation on
+   * one: the refund cap, the chargeback reversal, the seller-share marker,
+   * the supplier bearer token, and the download cap.
+   */
+  it('no client rewrites the money on an order', async () => {
+    await mustDeny(
+      'the site ADMIN zeroing refundedCents (resets the over-refund cap)',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        refundedCents: 0,
+      }),
+    )
+    await mustDeny(
+      'the EDITOR raising the total (lifts the refund ceiling)',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        totals: { totalCents: 999999 },
+      }),
+    )
+    await mustDeny(
+      'pre-refunding an order so a LOST dispute reverses nothing',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        refundedCents: 4200,
+      }),
+    )
+    await mustDeny(
+      "setting the seller-share reversal's own once-only marker",
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        dispute: { id: 'dp_1', outcome: 'lost', reversedTransferCents: 0 },
+      }),
+    )
+    await mustDeny(
+      'minting a supplierToken for the unauthenticated supplier route',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        supplierToken: 'chosen-by-the-client',
+      }),
+    )
+    await mustDeny(
+      'resetting the download attempt counter',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        downloadAttempts: {},
+      }),
+    )
+    await mustDeny(
+      'repointing the payment intent a refund would be issued against',
+      updateDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER), {
+        paymentIntentId: 'pi_somebody_elses',
+      }),
+    )
+    await mustDeny(
+      'a money field smuggled in beside the note the rule does permit',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', ORDER), {
+        refundedCents: 0,
+        timeline: [{ type: 'note', message: 'and also', atMs: 1 }],
+      }),
+    )
+  })
+
   it('staff and the Admin SDK are untouched — the routes still transition', async () => {
     // Staff parity with the catch-all this replaces: `isStaff()` led every
     // one of its allows, so the dedicated block keeps it. Narrowing staff
