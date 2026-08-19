@@ -3478,17 +3478,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             }
             if (supplier.webhookUrl) {
               const body = JSON.stringify(payload)
-              const signature = createHmac(
-                'sha256',
-                supplier.webhookSecret ?? '',
-              )
-                .update(body)
-                .digest('hex')
+              // NO SECRET, NO SIGNATURE HEADER (AGL-2455). This was
+              // `createHmac('sha256', supplier.webhookSecret ?? '')` — an
+              // empty-key HMAC over a body whose every field is public, which
+              // any party can compute. A supplier who also left their secret
+              // unset would verify it successfully and believe the delivery was
+              // authenticated, which is worse than no header at all: an absent
+              // header fails their check closed, a forgeable one passes it.
+              // A supplier WITH a secret rejects either way, so nothing that
+              // worked stops working.
+              const webhookSecret = String(supplier.webhookSecret ?? '')
               await fetch(supplier.webhookUrl, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'x-aglyn-signature': signature,
+                  ...(webhookSecret
+                    ? {
+                        'x-aglyn-signature': createHmac('sha256', webhookSecret)
+                          .update(body)
+                          .digest('hex'),
+                      }
+                    : {}),
                 },
                 body,
               }).catch(() => undefined)

@@ -1005,6 +1005,71 @@ export function orderContainsProduct(
 }
 
 /**
+ * Line indexes already covered by a recorded fulfillment (AGL-2455).
+ *
+ * The set the supplier callback and the console's own fulfil both have to
+ * reason about, and the reason `status` alone could not: `supplier-update.ts`
+ * wrote `status: 'fulfilled'` as a LITERAL, so the first supplier to post
+ * tracking on a two-supplier order marked every line shipped — including lines
+ * they have never seen — and the second supplier's POST met a 409 because
+ * `fulfilled` cannot transition to `fulfilled`. The buyer was told their whole
+ * order shipped with one carrier and one tracking number.
+ */
+export function coveredLineItemIds(order: Partial<HostOrder>): Set<number> {
+  const covered = new Set<number>()
+  for (const fulfillment of order.fulfillments ?? []) {
+    for (const index of fulfillment?.lineItemIds ?? []) {
+      const line = Math.round(Number(index))
+      if (Number.isFinite(line) && line >= 0) covered.add(line)
+    }
+  }
+  return covered
+}
+
+/** Distinct suppliers with at least one line on this order (AGL-2455). */
+export function orderSupplierIds(order: Partial<HostOrder>): string[] {
+  return [
+    ...new Set(
+      (order.lineItems ?? [])
+        .map((line) => String(line.supplierId ?? ''))
+        .filter(Boolean),
+    ),
+  ]
+}
+
+/** Line indexes belonging to one supplier (AGL-2455). */
+export function supplierLineItemIds(
+  order: Partial<HostOrder>,
+  supplierId: string,
+): number[] {
+  return (order.lineItems ?? [])
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => String(line.supplierId ?? '') === supplierId)
+    .map(({ index }) => index)
+}
+
+/**
+ * The status an order reaches once `covered` lines are shipped (AGL-2455).
+ *
+ * COMPUTED from the fulfillment set rather than written as a literal, which is
+ * the whole of this issue's third requirement. `partially_fulfilled` has existed
+ * in `ORDER_TRANSITIONS` since orders shipped and nothing ever wrote it.
+ *
+ * An order with no lines at all reads as fulfilled — there is nothing left to
+ * ship, and answering `partially_fulfilled` would strand it forever.
+ */
+export function statusAfterFulfilling(
+  order: Partial<HostOrder>,
+  covered: Set<number>,
+): OrderStatus {
+  const lines = order.lineItems ?? []
+  if (lines.length === 0) return 'fulfilled'
+  return lines.every((_line, index) => covered.has(index))
+    ? 'fulfilled'
+    : 'partially_fulfilled'
+}
+
+/**
  * Statuses under which an order grants NO entitlement at all (AGL-2454).
  *
  * `pending` has not paid, `cancelled` was undone, `refunded` was given back.

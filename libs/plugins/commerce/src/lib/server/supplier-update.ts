@@ -19,7 +19,8 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
 import { escapeHtml } from '../utils/escape-html'
-import { timingSafeEqual } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
+import { tokenSigningSecret } from './download'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -44,6 +45,56 @@ function tokenMatches(stored: unknown, presented: string): boolean {
   return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 }
 
+/**
+ * WHICH supplier is posting (AGL-2455), and the observation that makes the
+ * issue's "structural blocker" not structural after all.
+ *
+ * The order document holds ONE `supplierToken` field, so the issue's reading
+ * was that scoping lines per supplier would strand every other supplier's lines
+ * permanently: only the last token written could authenticate, and the others
+ * would have no valid credential at all. That reading is right about the stored
+ * field and wrong about the token.
+ *
+ * The token is not a random secret that has to be stored to be known. It is
+ * `HMAC(hostId:orderId:supplierId)` under `TOKEN_SIGNING_SECRET`
+ * (`billing-webhook.ts`), a pure function of three identifiers the order
+ * already carries — `supplierId` is stamped onto every line at purchase time.
+ * So the expected token for EVERY supplier on the order can be re-derived here
+ * and compared, which both identifies the poster and lets every supplier
+ * authenticate. No schema change, no migration, no map.
+ *
+ * Every candidate is compared even after a match, so the work done is a
+ * function of the order's supplier count and not of which supplier posted.
+ *
+ * Returns `null` when nothing matches; the stored-scalar fallback is the
+ * caller's, because only it knows whether that fallback is ambiguous.
+ */
+function resolvePostingSupplier(
+  hostId: string,
+  orderId: string,
+  order: CommerceModel.HostOrder,
+  presented: string,
+): string | null {
+  let secret: string
+  try {
+    secret = tokenSigningSecret()
+  } catch {
+    // Unset secret: no token could have been MINTED either, so there is nothing
+    // to derive. Fall through to the stored scalar rather than throwing a 500
+    // at a supplier who cannot do anything about it.
+    return null
+  }
+  let matched: string | null = null
+  for (const supplierId of CommerceModel.orderSupplierIds(order)) {
+    const expected = createHmac('sha256', secret)
+      .update(`${hostId}:${orderId}:${supplierId}`)
+      .digest('hex')
+      .slice(0, 32)
+    if (tokenMatches(expected, presented)) matched = supplierId
+  }
+  return matched
+}
+
 
 /**
  * Supplier tracking callback (AGL-289): the routed order carried a
@@ -58,6 +109,13 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
   const trackingNumber = String(source.trackingNumber ?? '').slice(0, 60)
   const carrier = String(source.carrier ?? '').slice(0, 40)
   if (!hostId || !orderId || !token) {
+    return res.status(400).json({ error: 'Missing hostId, orderId, or token' })
+  }
+  // Firestore reserves `__…__` ids and `.doc()` throws SYNCHRONOUSLY on one,
+  // which fell into the catch below and answered 500 to what is a 400
+  // (AGL-2455). `fulfill-order.ts` has had this guard since it shipped; this is
+  // the sibling route that did not.
+  if (/^__.*__$/.test(hostId) || /^__.*__$/.test(orderId)) {
     return res.status(400).json({ error: 'Missing hostId, orderId, or token' })
   }
 
@@ -112,11 +170,90 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
         if (!orderSnapshot.exists) {
           return { status: 404, body: { error: 'Unknown order' } as any }
         }
-        if (!tokenMatches(orderSnapshot.get('supplierToken'), token)) {
+        const order = CommerceModel.liftLegacyOrder(orderSnapshot.data() as any)
+        // ONE SUPPLIER SHIPS ONE SUPPLIER'S LINES (AGL-2455).
+        //
+        // `lineItemIds` used to be every index on the order and the status was
+        // written as the literal `'fulfilled'`, so the first supplier to post
+        // marked the whole order shipped — lines they had never seen included —
+        // and the second supplier's POST met a 409. The buyer was told
+        // everything shipped with one carrier and one tracking number.
+        const suppliers = CommerceModel.orderSupplierIds(order)
+        const postingSupplier = resolvePostingSupplier(
+          hostId,
+          orderId,
+          order,
+          token,
+        )
+        let myLines: number[]
+        if (postingSupplier) {
+          myLines = CommerceModel.supplierLineItemIds(order, postingSupplier)
+        } else if (tokenMatches(orderSnapshot.get('supplierToken'), token)) {
+          // The STORED scalar matched but no supplier on the order derives to
+          // it — an order whose lines carry no `supplierId`, which is every
+          // order routed before that field was stamped.
+          //
+          // With at most one supplier there is only one door, so claiming every
+          // line is the same answer this route has always given and is right.
+          // With TWO OR MORE, the scalar cannot say whose token it is, and
+          // guessing would either close lines a supplier never shipped (the
+          // defect) or strand them (the naive fix). REFUSED LOUDLY instead:
+          // the merchant fulfils from the console, where they can see the
+          // lines, and the message says so rather than leaving them to work it
+          // out from an order that silently went quiet.
+          if (suppliers.length > 1) {
+            return {
+              status: 409,
+              body: {
+                error:
+                  'This order has more than one supplier and the link cannot ' +
+                  'say which of them you are. Nothing was changed. Please ask ' +
+                  'the merchant to record this shipment from their console.',
+              } as any,
+            }
+          }
+          myLines = (order.lineItems ?? []).map((_line, index) => index)
+        } else {
           return { status: 403, body: { error: 'Invalid token' } as any }
         }
-        const order = CommerceModel.liftLegacyOrder(orderSnapshot.data() as any)
-        if (!CommerceModel.canTransitionOrder(order.status, 'fulfilled')) {
+        if (myLines.length === 0) {
+          return {
+            status: 409,
+            body: { error: 'No lines on this order are yours' } as any,
+          }
+        }
+        const coveredBefore = CommerceModel.coveredLineItemIds(order)
+        if (myLines.every((index) => coveredBefore.has(index))) {
+          // Every line of theirs is already shipped: a redelivered POST, or the
+          // supplier pressing the emailed button twice. Refused rather than
+          // appending a second copy of the same fulfillment — the same rule
+          // `fulfill-order.ts` applies to a retried click.
+          return {
+            status: 409,
+            body: {
+              error:
+                suppliers.length > 1
+                  ? 'Your lines on this order are already marked shipped'
+                  : `Order is already ${order.status}`,
+            } as any,
+          }
+        }
+        const coveredAfter = new Set([...coveredBefore, ...myLines])
+        // COMPUTED, not written as a literal. `partially_fulfilled` has been in
+        // `ORDER_TRANSITIONS` since orders shipped and nothing ever wrote it.
+        const nextStatus = CommerceModel.statusAfterFulfilling(
+          order,
+          coveredAfter,
+        )
+        // Re-asked inside the transaction that writes, as AGL-2268 established:
+        // a supplier POST racing a refund must not write over `refunded`. Only
+        // when the status actually MOVES — a second supplier posting onto an
+        // already `partially_fulfilled` order changes nothing about the status
+        // and must not be refused by a table that has no self-edge.
+        if (
+          nextStatus !== order.status &&
+          !CommerceModel.canTransitionOrder(order.status, nextStatus)
+        ) {
           return {
             status: 409,
             body: { error: `Order is already ${order.status}` } as any,
@@ -124,35 +261,57 @@ export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
         }
         const fulfillment: CommerceModel.OrderFulfillment = {
           id: `supplier-${Date.now().toString(36)}`,
-          lineItemIds: (order.lineItems ?? []).map((_line, index) => index),
+          lineItemIds: myLines,
           ...(carrier ? { carrier } : {}),
           ...(trackingNumber ? { trackingNumber } : {}),
           atMs: Date.now(),
         }
+        const remaining = (order.lineItems ?? []).filter(
+          (_line, index) => !coveredAfter.has(index),
+        ).length
         transaction.set(
           orderRef,
           {
-            status: 'fulfilled',
+            status: nextStatus,
             fulfillments: [...(order.fulfillments ?? []), fulfillment],
             timeline: CommerceModel.appendOrderEvent(
               order,
-              'fulfilled',
-              `Supplier shipped${trackingNumber ? ` — ${carrier || 'tracking'} ${trackingNumber}` : ''}`,
+              nextStatus,
+              `Supplier shipped ${myLines.length} of ${
+                (order.lineItems ?? []).length
+              } line${(order.lineItems ?? []).length === 1 ? '' : 's'}` +
+                (trackingNumber
+                  ? ` — ${carrier || 'tracking'} ${trackingNumber}`
+                  : '') +
+                (remaining > 0
+                  ? `. ${remaining} line${remaining === 1 ? '' : 's'} still to ship.`
+                  : ''),
             ),
           },
           { merge: true },
         )
-        return { status: 200, body: { ok: true } as any, order }
+        return {
+          status: 200,
+          body: { ok: true, lineItemIds: myLines, orderStatus: nextStatus } as any,
+          order,
+          nextStatus,
+          remaining,
+        }
       })
     if (outcome.status !== 200) {
       return res.status(outcome.status).json(outcome.body)
     }
+    // The merchant is told what is STILL OUTSTANDING (AGL-2455). "Supplier
+    // shipped #1042" on an order where one of three suppliers has posted reads
+    // as done, which is the same misreport the status literal made — the
+    // merchant would stop watching an order that is two thirds unshipped.
+    const outstanding = Number((outcome as any).remaining ?? 0)
     void notifyHostManagers(hostId, {
       type: 'content.order',
       title: `Supplier shipped ${CommerceModel.formatOrderNumber(
         outcome.order as CommerceModel.HostOrder,
         orderId,
-      )}`,
+      )}${outstanding > 0 ? ` — ${outstanding} line${outstanding === 1 ? '' : 's'} still to ship` : ''}`,
       ...(trackingNumber ? { body: `${carrier} ${trackingNumber}` } : {}),
       link: `/${hostId}/products`,
     })
