@@ -23,7 +23,14 @@ import getAllScreens from '../../../utils/get-all-screens'
 
 export const dynamic = 'force-dynamic'
 
-/** Published screens for a host (`?host=&nextPageToken=`). GET only. */
+/**
+ * Published screens for a host (`?host=&nextPageToken=`). GET only.
+ *
+ * Anonymous by design — a site's page list is public — so what bounds it is
+ * the RESPONSE, not the caller. `getAllScreens` returns an allow-listed
+ * projection, never the screen documents; see the note there (AGL-2191) before
+ * widening what this hands back.
+ */
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams
   const host = params.get('host')
