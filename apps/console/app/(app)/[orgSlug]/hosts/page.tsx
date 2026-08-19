@@ -23,7 +23,6 @@ import {
   PLAN_LABELS,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn'
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
 import {
   hostDisplayDomain,
@@ -60,6 +59,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import {
@@ -109,6 +109,10 @@ function HostsContent() {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
+  // The org's resolved brand, never `PLATFORM_BRAND_NAME` (AGL-2350): this
+  // page is org-scoped, so the deployment brand would print "Aglyn Domain"
+  // to a white-label agency looking at its own client's site.
+  const { branding } = useBranding()
   const { currentOrg, loading: orgsLoading } = useOrgScope()
   // Workspace-scoped (AGL-236): the list shows the selected org's sites
   // only — a member of several orgs switches workspaces to see the rest.
@@ -322,7 +326,7 @@ function HostsContent() {
                       )
                     })()}
                     <HostInfoItem
-                      label={`${PLATFORM_BRAND_NAME} Domain`}
+                      label={`${branding.productName} Domain`}
                       value={hostPlatformDomain(hostAddress(host))}
                     />
                     <HostInfoItem
