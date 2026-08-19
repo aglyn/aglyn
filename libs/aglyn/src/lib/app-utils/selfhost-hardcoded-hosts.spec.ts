@@ -131,6 +131,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
   },
   {
+    file: 'apps/console/app/api/_lib/success-manager.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
     file: 'apps/console/app/api/_lib/usage-alert-email.ts',
     count: 1,
     reason:
