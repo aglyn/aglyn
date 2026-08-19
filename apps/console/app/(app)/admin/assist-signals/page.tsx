@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -129,7 +130,9 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
         },
       ]}
       header={{
-        children: 'Aglyn Assist Signal',
+        // The configured brand, not ours (AGL-2153/2260): a white-label
+        // deployment and a self-host operator both read this header.
+        children: `${PLATFORM_BRAND_NAME} Assist Signal`,
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
     >
