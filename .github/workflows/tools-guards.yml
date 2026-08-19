@@ -449,6 +449,17 @@ jobs:
       # reports "no drift", which is indistinguishable from convergence.
       - run: npm run test:legal-drift
 
+      # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
+      # Aglyn's own Stripe products — the single input that decides how much
+      # sales tax is collected and remitted from Sep 1. It was set by hand in
+      # the Dashboard and appeared NOWHERE in this repository, so a tier added
+      # by `setup-stripe.mjs` shipped taxed on the full base while every tier
+      # before it was taxed on 20%, and no TEST-mode product carried it at all
+      # — meaning the one environment safe to rehearse tax in was rehearsing a
+      # different position. This pins the string and the detector; the live
+      # account is checked by `setup-stripe.mjs --dry-run`, which needs a key.
+      - run: npm run test:stripe-tax-code
+
       # AGL-2379 / AGL-2240. A SECURITY control that ran in no workflow: it
       # walks the Next app-router module graph and proves no model-provider key
       # (ANTHROPIC_API_KEY) is reachable from the client closure, and that none

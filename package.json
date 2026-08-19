@@ -80,6 +80,7 @@
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",
+    "test:stripe-tax-code": "node --test tools/scripts/lib/stripe-tax-code.test.mjs",
     "test:backup-copies": "node --test tools/scripts/lib/backup-copies.test.mjs",
     "test:authorized-domains": "node --test tools/scripts/lib/authorized-domains.test.mjs",
     "test:ttl-policies": "node --test tools/scripts/lib/ttl-policies.test.mjs",
