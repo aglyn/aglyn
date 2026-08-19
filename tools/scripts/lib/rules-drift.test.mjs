@@ -629,6 +629,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:disk-space',
       'test:deploy-guard',
       'test:erase-cli',
+      'test:demo-brands', // AGL-1734
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
@@ -659,6 +660,7 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:disk-space',
       'test:deploy-guard',
       'test:erase-cli',
+      'test:demo-brands', // AGL-1734
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089

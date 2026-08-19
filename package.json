@@ -75,6 +75,7 @@
     "test:hardcoded-colours": "node --test tools/scripts/lib/hardcoded-colours.test.mjs",
     "test:disk-space": "node --test tools/scripts/lib/disk-space.test.mjs",
     "test:erase-cli": "node --test tools/scripts/lib/erase-org-cli.test.mjs",
+    "test:demo-brands": "node --test tools/scripts/lib/demo-brands.test.mjs",
     "test:deploy-guard": "node --test tools/scripts/lib/clean-deploy-source.test.mjs",
     "test:rules-drift": "node --test tools/scripts/lib/rules-drift.test.mjs",
     "test:index-drift": "node --test tools/scripts/lib/index-drift.test.mjs",
