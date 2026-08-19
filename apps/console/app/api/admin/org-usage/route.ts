@@ -77,6 +77,12 @@ async function handler(request: Request): Promise<Response> {
       dataStorageMb: Number(doc.get('dataStorageMb') ?? 0),
       apiRequests: Number(doc.get('apiRequests') ?? 0),
       contactsCount: Number(doc.get('contactsCount') ?? 0),
+      // Aglyn Assist provider spend for the month (AGL-2280). Dollars, not a
+      // meter, and the largest single cost line an org can run up — the same
+      // projection argument as the three above: a field the model prices and
+      // the projection drops makes the browser's cost SMALLER than the
+      // server's, and smaller approves a discount.
+      assistCostUsd: Number(doc.get('assistCostUsd') ?? 0),
     }))
     /**
      * The newest rollup, priced by the shared cost model (AGL-1134) — the

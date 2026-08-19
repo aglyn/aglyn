@@ -32,6 +32,17 @@ export interface StaffOrgUsageMonth {
   pageViews: number
   formSubmissions: number
   costUsd: number
+  /**
+   * Aglyn Assist provider spend for the month, in dollars (AGL-2280).
+   *
+   * A separate column rather than folded into `costUsd`, because they are not
+   * the same kind of number: `costUsd` is the metering estimate over storage,
+   * page views and form submissions, and this is a real provider bill. It is
+   * also the only line here that can plausibly clear the $2/site COGS floor
+   * on its own, which is why it needs to be visible next to the others rather
+   * than summed into one of them.
+   */
+  assistCostUsd?: number
   deltas: { pageViews: number | null; costUsd: number | null } | null
 }
 
@@ -56,6 +67,7 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
           <TableCell align="right">{'Page views'}</TableCell>
           <TableCell align="right">{'Storage GB'}</TableCell>
           <TableCell align="right">{'Forms'}</TableCell>
+          <TableCell align="right">{'Assist'}</TableCell>
           <TableCell align="right">{'Cost'}</TableCell>
         </TableRow>
       </TableHead>
@@ -85,6 +97,15 @@ const StaffOrgUsageTable = ({ months }: { months: StaffOrgUsageMonth[] }) => {
             <TableCell align="right">{row.storageGb.toFixed(2)}</TableCell>
             <TableCell align="right">
               {row.formSubmissions.toLocaleString()}
+            </TableCell>
+            {/*
+              Rendered to FOUR decimals, not two (AGL-2280). Assist spend
+              arrives in thousandths of a dollar per exchange, and `$0.00` for
+              a month that really cost eight cents is the same silence this
+              column exists to end.
+            */}
+            <TableCell align="right">
+              {`$${Number(row.assistCostUsd ?? 0).toFixed(4)}`}
             </TableCell>
             <TableCell align="right">
               {`$${row.costUsd.toFixed(2)}`}

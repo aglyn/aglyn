@@ -469,6 +469,7 @@ async function handler(request: Request): Promise<Response> {
         apiUsageSnap,
         contactsSnap,
         counterTotals,
+        assistUsageSnap,
       ] = await Promise.all([
         Promise.all(hostRefs.map(usageFor)),
         orgRef.get(),
@@ -497,6 +498,13 @@ async function handler(request: Request): Promise<Response> {
         // to a sum taken over hosts alone. Since AGL-1473 it also carries the
         // org LIBRARY's stored bytes, which had the identical defect.
         orgCounterTotals(firestore, hostRefs, month, orgRef),
+        // Aglyn Assist provider spend for the month (AGL-2280). `estCostUsd`
+        // was written by the assist route from day one, expressly so the paid
+        // gate could be tuned against Zach's "must not eat margins"
+        // constraint — and it lived in a collection the rollup never touched,
+        // so the one cost line big enough to matter was absent from the
+        // document every cost reader on the platform reads.
+        orgRef.collection('assistUsage').doc(month).get(),
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
@@ -677,6 +685,22 @@ async function handler(request: Request): Promise<Response> {
         counterTotals.emailSends,
         resolveOrgEntitlements(orgData).emailSendsPerMonth,
       )
+      /*==========================================
+       * AGLYN ASSIST PROVIDER SPEND, RECORDED AND PRICED (AGL-2280).
+       *
+       * Deliberately absent from `billedCents` below — Assist is entitled by
+       * plan, not metered on the invoice, and putting it there would start
+       * charging for it. It IS priced by `orgMonthlyCogsUsd`, because it is a
+       * real dollar cost we pay a provider, and the discount guardrail's
+       * entire job is to compare revenue against what an org costs us.
+       *
+       * Already dollars: `estCostUsd` is computed at the provider's list
+       * rates where the tokens were counted. Re-deriving it from tokens here
+       * would be a second cost model to drift from the first.
+       *=========================================*/
+      const assistCostRaw = Number(assistUsageSnap.get('estCostUsd') ?? 0)
+      const assistCostUsd =
+        Number.isFinite(assistCostRaw) && assistCostRaw > 0 ? assistCostRaw : 0
       const billedCents =
         billedEstimate.billedCents +
         Math.round(dataQuota.overageMonthlyUsd * 100) +
@@ -803,6 +827,9 @@ async function handler(request: Request): Promise<Response> {
           contactsOverageWithheldUsd: contactsOverageBilled
             ? 0
             : contactQuota.overageMonthlyUsd,
+          // AGL-2280 — see where it is computed. Priced into COGS, never into
+          // `billedCents`.
+          assistCostUsd,
           // Email sends and workflow/action runs (AGL-1134), summed across
           // the org's hosts. COUNTS for this month — see `orgCounterTotals`
           // for the unit and the double-count argument.

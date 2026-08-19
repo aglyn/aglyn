@@ -32,6 +32,23 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * dimensions through `orgMonthlyCogsUsd` — the metering estimate on the
  * document itself covers only storage, page views and form submissions.
  *
+ * PLUS Aglyn Assist provider spend for that same month (AGL-2280), read live
+ * from `orgs/{id}/assistUsage/{month}.estCostUsd`. Assist cost had five
+ * writers and two readers — the budget alert and the billing card — and
+ * neither of them is the margin model, so the one cost line that can actually
+ * clear the $2/site floor never reached the discount guardrail at all. Zach's
+ * standing constraint is that Assist must not eat margins; a guardrail that
+ * cannot see Assist cannot enforce it.
+ *
+ * SAME MONTH as the rollup, not "now". The cron writes the CLOSED month, so
+ * pairing its rollup with the current month's Assist spend would report two
+ * different periods as one figure — the exact mistake `/api/billing/
+ * usage-budget` refuses one field over.
+ *
+ * The live read wins over any `assistCostUsd` the rollup itself carries: the
+ * rollup is a snapshot taken when the cron ran, and Assist keeps spending
+ * after it.
+ *
  * Returns null when there is no rollup, which is the honest answer:
  * `checkDiscountMargin` then falls back to the flat per-site estimate rather
  * than treating "not measured" as "costs nothing".
@@ -45,21 +62,35 @@ export async function latestMeasuredCogsUsd(
   orgId: string,
 ): Promise<number | null> {
   try {
-    const snapshot = await firebaseAdmin
+    const orgRef = firebaseAdmin
       .app()
       .firestore()
       .collection('orgs')
       .doc(orgId)
+    const snapshot = await orgRef
       .collection('usage')
       .orderBy('month', 'desc')
       .limit(1)
       .get()
     const rollup = snapshot.docs[0]
     if (!rollup) return null
+    // The rollup's own month, so the Assist figure covers the same period the
+    // six meters do. `month` is written on every rollup; the id is the same
+    // string and is the fallback for a document written before it was.
+    const month = String(rollup.get('month') ?? rollup.id)
+    const assist = await orgRef.collection('assistUsage').doc(month).get()
+    const assistCostUsd = Number(assist.get('estCostUsd') ?? 0)
     const { measuredUsd } = orgMonthlyCogsUsd(
-      // One shared list of priced fields (AGL-1134) rather than a copy per
-      // call site.
-      orgCogsInputFrom(rollup.data()),
+      {
+        // One shared list of priced fields (AGL-1134) rather than a copy per
+        // call site.
+        ...orgCogsInputFrom(rollup.data()),
+        // Live, and therefore last — see the note above about the snapshot
+        // going stale between cron runs.
+        ...(Number.isFinite(assistCostUsd) && assistCostUsd > 0
+          ? { assistCostUsd }
+          : {}),
+      },
       // Site count comes from `checkDiscountMargin`, which applies the flat
       // floor itself — passing 0 here keeps this the MEASURED half only, so
       // the floor is not applied twice.

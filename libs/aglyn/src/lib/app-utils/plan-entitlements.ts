@@ -1209,6 +1209,17 @@ export interface OrgUsageRollupInput {
   dataStorageMb?: number | null
   apiRequests?: number | null
   contactsCount?: number | null
+  /**
+   * Aglyn Assist provider spend for the month, ALREADY IN DOLLARS (AGL-2280).
+   *
+   * Unlike every other field here this is not a meter to be priced — it is
+   * `orgs/{id}/assistUsage/{month}.estCostUsd`, our own cost estimate at the
+   * provider's list rates, computed where the tokens were counted. So it
+   * enters the model at ×1 and has no entry in `ORG_COGS_UNIT_RATES_USD`;
+   * inventing a second per-token rate here is precisely the drift AGL-1134
+   * removed.
+   */
+  assistCostUsd?: number | null
 }
 
 export interface OrgCogsResult {
@@ -1266,6 +1277,24 @@ export function orgMonthlyCogsUsd(
     dataStorage: (num(rollup?.dataStorageMb) / 1024) * rates.dataStoragePerGbMonth,
     apiRequests: num(rollup?.apiRequests) * rates.perApiRequest,
     contacts: num(rollup?.contactsCount) * rates.perContactMonth,
+    /*==========================================
+     * AGLYN ASSIST PROVIDER SPEND (AGL-2280).
+     *
+     * Already dollars, so ×1 — see `OrgUsageRollupInput.assistCostUsd`.
+     *
+     * This is the ONE meter on the platform whose unit cost is not a fraction
+     * of a cent. `assist-usage.ts` records `estCostUsd` citing Zach's "Assist
+     * must not eat margins" constraint by name, and until now nothing in the
+     * margin model read it: the discount guardrail priced six meters that
+     * together measured $0.0000054 for the largest real org, and ignored the
+     * only line item that can plausibly clear the $2/site floor on its own.
+     * A 93%-off coupon on an org burning $40/month of tokens rated green.
+     *
+     * It is deliberately NOT in `billedCents` — what an org is charged is a
+     * separate decision with a price sheet behind it. This is what the org
+     * COSTS US, which is the only question the guardrail asks.
+     *=========================================*/
+    assist: num(rollup?.assistCostUsd),
   }
   const measuredUsd = Object.values(breakdown).reduce((sum, x) => sum + x, 0)
   const floorUsd = Math.max(0, siteCount) * INFRA_COGS_PER_SITE_USD
@@ -1313,6 +1342,10 @@ export function orgCogsInputFrom(
     dataStorageMb: read('dataStorageMb'),
     apiRequests: read('apiRequests'),
     contactsCount: read('contactsCount'),
+    // AGL-2280. Dollars, not a meter — the projection still has to forward it
+    // or the model prices Assist at nothing, which is the direction that
+    // approves a discount.
+    assistCostUsd: read('assistCostUsd'),
   }
 }
 

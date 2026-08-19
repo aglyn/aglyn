@@ -131,6 +131,10 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
       dataStorageMb: 2048,
       apiRequests: 50_000,
       contactsCount: 400,
+      // Aglyn Assist provider spend (AGL-2280). A real figure, not zero: the
+      // projection has to carry the VALUE, and a row seeded at 0 would pass
+      // against a projection that hardcoded one.
+      assistCostUsd: 18.75,
     }
     mockUsageGet.mockResolvedValueOnce({
       docs: [
@@ -157,6 +161,10 @@ describe('/api/admin/org-usage authorization (AGL-939)', () => {
         dataStorageMb: 2048,
         apiRequests: 50_000,
         contactsCount: 400,
+        // AGL-2280 — the same argument one meter along, and this one is
+        // dollars rather than fractions of a cent, so a dropped projection
+        // here is the difference between a discount refused and approved.
+        assistCostUsd: 18.75,
       deltas: null,
       },
     ])
