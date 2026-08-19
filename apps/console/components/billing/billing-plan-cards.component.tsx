@@ -145,8 +145,12 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
   },
   {
     // Bookings ride the digital axis too (AGL-2315), so the predicate below
-    // was already right — only the wording scoped it to the storefront.
-    label: '0% platform fees on sales and bookings',
+    // was already right — only the wording scoped it to the storefront. It
+    // still has to say WHICH sales, though: `marketplaceFeePct` is 20 on
+    // Enterprise exactly as on every paid tier, so a bare "sales" promises a
+    // 0% that is not on the price list (AGL-2297, re-broken and re-fixed in
+    // AGL-2365).
+    label: '0% platform fees on storefront sales and bookings',
     holds: (org) =>
       resolveTransactionFeePct(org, 'physical') === 0 &&
       resolveTransactionFeePct(org, 'digital') === 0,
