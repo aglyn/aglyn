@@ -399,6 +399,15 @@ const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
   carts: 'Written only by libs/plugins/commerce server routes. AGL-2042.',
   checkouts:
     'Checkout sessions, written only by cart-checkout.ts server-side. AGL-2042.',
+  inventoryReconciliation:
+    'A per-order idempotency marker written only by ' +
+    'libs/plugins/commerce/src/lib/server/reconcile-stock.ts through the ' +
+    'Admin SDK (AGL-2358). Two greps agree there is no client-SDK writer: no ' +
+    "`'hosts', hostId, 'inventoryReconciliation'` path anywhere in `apps` or " +
+    '`libs`, and no addDoc/setDoc/updateDoc/deleteDoc against one. Parked ' +
+    'rather than waved through, and it is not cosmetic — the marker is what ' +
+    'stops a stock decrement being applied twice, so an editor who can write ' +
+    'it can make a lost decrement permanent. AGL-2042.',
   giftCards:
     'Stored value, issued and redeemed by the commerce billing webhook ' +
     'server-side. The one on this list with money in it. AGL-2042.',
