@@ -34,6 +34,14 @@ import {
   readAnalyticsDays,
   recentDayIds,
 } from '../../utils/analytics-day-cache'
+import {
+  deviceSplit,
+  deviceSplitLabel,
+  deviceSplitValue,
+  rollUp,
+  splitTrafficWindows,
+  trafficDeltaPct,
+} from '../../utils/analytics-summary'
 import { docsHelp } from '../../constants/docs-links'
 
 interface DayStat {
@@ -68,7 +76,13 @@ export function HostAnalyticsCard(props: {
     let active = true
     // Oldest first — the chart reads left to right. `recentDayIds` counts back
     // from today, so reverse it; index 0 of that list is the live UTC day.
-    const newestFirst = recentDayIds(Date.now(), range)
+    // TWICE the selected range (AGL-2160). The advertised tile reads
+    // `+12% vs prior`, which needs the window BEFORE the one on screen —
+    // and the card previously had only `range` days loaded, which is why
+    // its delta was pinned to a 7-vs-7 comparison that ignored the
+    // selector entirely. The extra days are closed counters, so the cache
+    // pays for each of them exactly once per tab.
+    const newestFirst = recentDayIds(Date.now(), range * 2)
     const ids = [...newestFirst].reverse()
     // Every day but today is a closed counter, so this panel pays for a day
     // once rather than on every dashboard visit and every range switch
@@ -116,33 +130,25 @@ export function HostAnalyticsCard(props: {
     }
   }, [firestore, hostId, range])
 
-  const total = (days ?? []).reduce((sum, day) => sum + day.total, 0)
+  // `days` now holds two windows back to back, oldest first. Everything
+  // displayed reads `windowDays`; only the comparison reads `priorDays`.
+  const { current: windowDays, prior: priorDays } = splitTrafficWindows(
+    days ?? [],
+    range,
+  )
+  const total = windowDays.reduce((sum, day) => sum + day.total, 0)
+  const priorTotal = priorDays.reduce((sum, day) => sum + day.total, 0)
+  const deltaPct = trafficDeltaPct(total, priorTotal)
   // Approximate uniques (AGL-1844): summing per-day counts is honest here
   // because the flag that feeds them cannot span a day — but it means a
   // multi-day visitor counts once per day, which the label says out loud.
-  const visitors = (days ?? []).reduce((sum, day) => sum + day.visitors, 0)
-  const max = Math.max(1, ...(days ?? []).map((day) => day.total))
-  const topPaths = Object.entries(
-    (days ?? []).reduce<Record<string, number>>((acc, day) => {
-      for (const [path, count] of Object.entries(day.paths)) {
-        acc[path] = (acc[path] ?? 0) + count
-      }
-      return acc
-    }, {}),
-  )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-  const topReferrers = Object.entries(
-    (days ?? []).reduce<Record<string, number>>((acc, day) => {
-      for (const [host, count] of Object.entries(day.referrers)) {
-        acc[host] = (acc[host] ?? 0) + count
-      }
-      return acc
-    }, {}),
-  )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-  const deviceTotals = (days ?? []).reduce<Record<string, number>>(
+  const visitors = windowDays.reduce((sum, day) => sum + day.visitors, 0)
+  const max = Math.max(1, ...windowDays.map((day) => day.total))
+  const allPaths = rollUp(windowDays, 'paths')
+  const allReferrers = rollUp(windowDays, 'referrers')
+  const topPaths = allPaths.slice(0, 5)
+  const topReferrers = allReferrers.slice(0, 5)
+  const deviceTotals = windowDays.reduce<Record<string, number>>(
     (acc, day) => {
       for (const [device, count] of Object.entries(day.devices)) {
         acc[device] = (acc[device] ?? 0) + count
@@ -151,13 +157,18 @@ export function HostAnalyticsCard(props: {
     },
     {},
   )
+  const devices = deviceSplit(deviceTotals)
+  // The single top row of each list, promoted to its own tile — the two
+  // the mockup shows beside Page views (AGL-2160).
+  const topPage = allPaths[0]
+  const topReferrer = allReferrers[0]
   // Campaign attribution (AGL-1844): the two UTM dimensions worth a list —
   // source says who sent the traffic, campaign says which push; medium is
   // recorded in the day docs but rarely earns list space (it repeats
   // 'email'/'cpc'), so it stays available without a section here.
   const topUtm = (param: 'source' | 'campaign') =>
     Object.entries(
-      (days ?? []).reduce<Record<string, number>>((acc, day) => {
+      windowDays.reduce<Record<string, number>>((acc, day) => {
         for (const [value, count] of Object.entries(day.utm[param] ?? {})) {
           acc[value] = (acc[value] ?? 0) + count
         }
@@ -174,14 +185,8 @@ export function HostAnalyticsCard(props: {
   )
   // Top insights (AGL-386): per-day average, week-over-week trend, and
   // the leading device — computed from the same day-counter docs.
-  const dayCount = (days ?? []).length || 1
+  const dayCount = windowDays.length || 1
   const avgPerDay = Math.round(total / dayCount)
-  const last7 = (days ?? []).slice(-7).reduce((sum, d) => sum + d.total, 0)
-  const prev7 = (days ?? []).slice(-14, -7).reduce((sum, d) => sum + d.total, 0)
-  const wowPct = prev7 ? Math.round(((last7 - prev7) / prev7) * 100) : null
-  const topDevice = Object.entries(deviceTotals).sort(
-    ([, a], [, b]) => b - a,
-  )[0]?.[0]
 
   return (
     <CardDisplay
@@ -236,9 +241,38 @@ export function HostAnalyticsCard(props: {
         <Stack spacing={2}>
           <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
             <Stack>
-              <Typography variant="h4">{total.toLocaleString()}</Typography>
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
+                <Typography variant="h4">{total.toLocaleString()}</Typography>
+                {/*
+                  The delta belongs ON the figure it describes and follows
+                  the RANGE SELECTOR (AGL-2160). It used to be a separate
+                  `Week over week` tile pinned to 7-vs-7, so choosing 90
+                  days still showed last week's movement — a number that
+                  was true of a window nobody had asked to see. Silent when
+                  the prior window recorded nothing: a site's first week has
+                  no growth rate.
+                 */}
+                {deltaPct === null ? null : (
+                  <Tooltip title={`vs the previous ${range} days`}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color:
+                          deltaPct > 0
+                            ? 'success.main'
+                            : deltaPct < 0
+                              ? 'error.main'
+                              : 'text.secondary',
+                      }}
+                    >
+                      {`${deltaPct > 0 ? '+' : ''}${deltaPct}% vs prior`}
+                    </Typography>
+                  </Tooltip>
+                )}
+              </Stack>
               <Typography variant="caption" color="text.secondary">
-                {'Pageviews'}
+                {'Page views'}
               </Typography>
             </Stack>
             {visitors > 0 ? (
@@ -270,32 +304,36 @@ export function HostAnalyticsCard(props: {
                 {'Avg / day'}
               </Typography>
             </Stack>
-            {wowPct !== null ? (
+            {devices.length ? (
+              // `Mobile / Desktop` over `61% / 39%`, as the mockup shows
+              // it. The one-word `Top device` tile it replaces answered a
+              // question nobody asks — a split is the whole point.
               <Stack>
-                <Typography
-                  variant="h4"
-                  color={
-                    wowPct > 0
-                      ? 'success.main'
-                      : wowPct < 0
-                        ? 'error.main'
-                        : 'text.primary'
-                  }
-                >
-                  {`${wowPct > 0 ? '+' : ''}${wowPct}%`}
+                <Typography variant="h4">
+                  {deviceSplitValue(devices)}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {'Week over week'}
+                  {deviceSplitLabel(devices)}
                 </Typography>
               </Stack>
             ) : null}
-            {topDevice ? (
-              <Stack>
-                <Typography variant="h4" sx={{ textTransform: 'capitalize' }}>
-                  {topDevice}
+            {topPage ? (
+              <Stack sx={{ minWidth: 0 }}>
+                <Typography variant="h4" noWrap sx={{ maxWidth: 220 }}>
+                  {topPage[0]}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {'Top device'}
+                  {`Top page · ${topPage[1].toLocaleString()} views`}
+                </Typography>
+              </Stack>
+            ) : null}
+            {topReferrer ? (
+              <Stack sx={{ minWidth: 0 }}>
+                <Typography variant="h4" noWrap sx={{ maxWidth: 220 }}>
+                  {topReferrer[0]}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {`Top referrer · ${topReferrer[1].toLocaleString()} views`}
                 </Typography>
               </Stack>
             ) : null}
@@ -305,7 +343,7 @@ export function HostAnalyticsCard(props: {
             spacing={0.5}
             sx={{ alignItems: 'flex-end', height: 64 }}
           >
-            {days.map((day) => (
+            {windowDays.map((day) => (
               <Tooltip key={day.day} title={`${day.day}: ${day.total}`}>
                 <Box
                   sx={{
@@ -318,19 +356,12 @@ export function HostAnalyticsCard(props: {
               </Tooltip>
             ))}
           </Stack>
-          {deviceSum ? (
-            <Typography variant="caption" color="text.secondary">
-              {['desktop', 'mobile', 'tablet']
-                .filter((device) => deviceTotals[device])
-                .map(
-                  (device) =>
-                    `${device} ${Math.round(
-                      ((deviceTotals[device] ?? 0) / deviceSum) * 100,
-                    )}%`,
-                )
-                .join(' · ')}
-            </Typography>
-          ) : null}
+          {/*
+            The lowercase `desktop 62% · mobile 31%` caption that used to
+            sit here is now the device tile above, which is where the
+            mockup puts it. Kept as one statement rather than two so the
+            same numbers cannot be rendered twice in two formats.
+           */}
           {topReferrers.length ? (
             <Stack spacing={0.5}>
               <Typography variant="subtitle2">{'Top referrers'}</Typography>
