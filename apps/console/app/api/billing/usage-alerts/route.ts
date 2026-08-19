@@ -61,7 +61,12 @@ import {
   orgMonthlySpend,
   resolveUsageBudget,
 } from '../../../../utils/usage-budget'
-import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
+import {
+  consoleOrigin,
+  emailFailureReason,
+  emailOrgAdmins,
+  emailStaffAlert,
+} from '../../_lib/usage-alert-email'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
 // the billing auto-lock sweep; gating the locker on the lock is circular.
@@ -677,7 +682,7 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           link: billingLink,
         })
-        await emailOrgAdmins({
+        const budgetEmail = await emailOrgAdmins({
           firestore,
           orgId: org.id,
           subject: title,
@@ -688,6 +693,15 @@ async function handler(request: Request): Promise<Response> {
           orgId: org.id,
           quota: BUDGET_GUARD_KEY,
           threshold: budgetThreshold,
+          // RECORDED, like the quota alerts above (AGL-2234). The result was
+          // awaited and thrown away, so an org whose budget alert reached
+          // zero addresses was indistinguishable from one it reached — and
+          // the guard is written either way, so the silence is permanent for
+          // that threshold and that month.
+          emailed: budgetEmail.sent,
+          ...(budgetEmail.sent
+            ? {}
+            : { emailReason: emailFailureReason(budgetEmail) }),
         })
       }
 
@@ -721,22 +735,45 @@ async function handler(request: Request): Promise<Response> {
           assistCogsThreshold,
         )
         guardUpdates['assistCogs'] = { month, threshold: multiple }
+        // ONE set of words for both channels, as with the quota alerts —
+        // hoisted rather than written twice so a staff inbox and the staff
+        // bell can never say different things about the same number.
+        const marginTitle =
+          `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
+        const marginBody =
+          `${org.get('slug') ?? org.id} has run about ` +
+          `$${spend.assistUsd.toFixed(2)} of Aglyn Assist tokens in ` +
+          `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
+          'threshold. Assist is a plan entitlement with no per-token ' +
+          'price, so this is margin, not revenue.'
         await notifyStaff({
           type: 'billing.usage',
-          title: `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`,
-          body:
-            `${org.get('slug') ?? org.id} has run about ` +
-            `$${spend.assistUsd.toFixed(2)} of Aglyn Assist tokens in ` +
-            `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
-            'threshold. Assist is a plan entitlement with no per-token ' +
-            'price, so this is margin, not revenue.',
+          title: marginTitle,
+          body: marginBody,
           orgId: org.id,
           link: '/admin/orgs',
+        })
+        // AND BY EMAIL (AGL-2234). `notifyStaff` writes
+        // `users/{uid}/notifications` and nothing turns that into mail — the
+        // identical defect AGL-2052 removed one audience over. This is the
+        // only dollar figure guarding a meter whose other ceiling is a
+        // MESSAGE count, so it is precisely the alert nobody will be sitting
+        // in the console waiting for. Sequenced after the console write and
+        // independently: a mail outage must degrade to what this did before,
+        // not to nothing.
+        const marginEmail = await emailStaffAlert({
+          subject: marginTitle,
+          text: `${marginBody}\n\nOrg: ${consoleOrigin()}/admin/orgs`,
+          context: 'assist-margin',
         })
         alerted.push({
           orgId: org.id,
           quota: 'assistCogs',
           threshold: multiple,
+          emailed: marginEmail.sent,
+          ...(marginEmail.sent
+            ? {}
+            : { emailReason: emailFailureReason(marginEmail) }),
         })
       }
 

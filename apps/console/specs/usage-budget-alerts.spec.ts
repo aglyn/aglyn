@@ -62,7 +62,14 @@ interface SeededOrg {
 let mockOrgs: SeededOrg[]
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 let mockStaffNotifications: Array<{ title: string; body: string }>
-let mockEmails: Array<{ to: string[]; subject: string; text: string; context: string }>
+let mockEmails: Array<{
+  to: string[] | string
+  subject: string
+  text: string
+  context: string
+}>
+/** `uid -> address` for the auth pools, when a member row has none. */
+let mockPooledEmails: Record<string, string>
 /** Every `usageAlerts` map written back, in order. */
 let mockGuardWrites: Array<Record<string, { month: string; threshold: number }>>
 
@@ -268,6 +275,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyOrgAdmins: (...args: unknown[]) => (mockNotifyOrgAdmins as any)(...args),
   notifyStaff: (...args: unknown[]) => (mockNotifyStaff as any)(...args),
   meterPlatformEmail: async () => undefined,
+  // The auth-pool fallback for an owner/admin whose member document carries no
+  // denormalized email (AGL-2234). A wholesale `jest.mock` is a CLOSED WORLD:
+  // omitting this would fail as "not a function" inside the fan-out, which
+  // reads as a broken suite rather than as a missing recipient.
+  findUserByUidAcrossPools: async (uid: string) =>
+    mockPooledEmails[uid] ? { record: { email: mockPooledEmails[uid] } } : null,
 }))
 
 jest.mock('@aglyn/shared-util-email', () => ({
@@ -359,14 +372,27 @@ async function runChunk(body?: Record<string, unknown>) {
 const budgetAlerts = () =>
   mockNotifications.filter((entry) => entry.title.includes('usage budget'))
 
+/**
+ * A captured send's recipients as a list.
+ *
+ * `sendEmail` takes one address or many, and since AGL-2234 both shapes are
+ * really used — the org fan-out passes an array, the staff alert a single
+ * `STAFF_ALERT_EMAIL`. Normalizing here keeps the union honest in the fixture
+ * instead of pretending every send is a fan-out.
+ */
+const recipientsOf = (entry: { to: string[] | string }): string[] =>
+  Array.isArray(entry.to) ? [...entry.to] : [entry.to]
+
 beforeEach(() => {
   process.env.CRON_SECRET = CRON_SECRET
   delete process.env.USAGE_ALERT_APPROACH_PCT
   delete process.env.BILL_ASSIST_TOKENS_FROM
   delete process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD
   delete process.env.AUTO_LOCK_BILLING_FROM
+  delete process.env.STAFF_ALERT_EMAIL
   jest.clearAllMocks()
   mockOrgs = []
+  mockPooledEmails = {}
 })
 
 /** An org on a metered plan with a $50 budget and one admin who can be mailed. */
@@ -559,7 +585,10 @@ describe('delivery is console AND email (AGL-2052)', () => {
     await run()
     const mail = mockEmails.filter((entry) => entry.context === 'usage-budget')
     expect(mail).toHaveLength(1)
-    expect(mail[0].to.sort()).toEqual(['admin@acme.test', 'owner@acme.test'])
+    expect(recipientsOf(mail[0]).sort()).toEqual([
+      'admin@acme.test',
+      'owner@acme.test',
+    ])
     expect(mail[0].subject).toBe(budgetAlerts()[0].title)
     // An email has no console context, so its link must be ABSOLUTE or it is
     // a dead link.
@@ -596,6 +625,129 @@ describe('delivery is console AND email (AGL-2052)', () => {
       expect(mail?.to).toEqual(['owner@acme.test'])
       expect(mail?.text).toContain(notification.body)
     }
+  })
+})
+
+describe('an alert that reaches nobody says so (AGL-2234)', () => {
+  /** One org over its $50 budget, with whatever member roster is given. */
+  function overBudget(members: SeededOrg['members']) {
+    return [
+      seededOrg({
+        monthRollup: { month: MONTH, billedCents: 5_000 },
+        usageBudget: { amountUsd: 50 },
+        members,
+      }),
+    ]
+  }
+
+  const budgetRow = (payload: Record<string, any>) =>
+    (payload['details'] as Array<Record<string, any>>).find(
+      (entry) => entry['quota'] === 'budget',
+    )
+
+  it('records that the budget alert was emailed', async () => {
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner', email: 'owner@acme.test' }])
+    const payload = await run()
+    expect(budgetRow(payload)).toMatchObject({ emailed: true })
+  })
+
+  it('records when it reached NOBODY, and why', async () => {
+    // THE NEGATIVE CONTROL, and the reason the field exists. The alert fires,
+    // the dedupe guard is written, and that threshold is now silent for the
+    // rest of the month — so a fan-out that resolved to zero addresses has to
+    // be legible in the run's own output or it is invisible forever.
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner' }])
+    const payload = await run()
+    expect(budgetAlerts()).toHaveLength(1) // it DID fire
+    expect(budgetRow(payload)).toMatchObject({
+      emailed: false,
+      emailReason: 'no-recipient',
+    })
+    expect(mockEmails).toHaveLength(0)
+  })
+
+  it('reaches an owner whose member row carries no email, through the pools', async () => {
+    // `createOrganization` writes `email: ownerEmail ?? null`, so an owner
+    // from an identity that carried no address leaves the org with no billing
+    // mail at all. Same fixture as the case above, one pooled record added.
+    mockOrgs = overBudget([{ id: 'u1', role: 'owner' }])
+    mockPooledEmails = { u1: 'Owner@Acme.test' }
+    const payload = await run()
+    expect(budgetRow(payload)).toMatchObject({ emailed: true })
+    expect(recipientsOf(mockEmails[0])).toEqual(['owner@acme.test'])
+  })
+
+  it('does NOT chase a member who is neither owner nor admin', async () => {
+    // The fallback must not become a lookup per member: that is the unbounded
+    // read the original comment was right to refuse.
+    mockOrgs = overBudget([
+      { id: 'u1', role: 'owner', email: 'owner@acme.test' },
+      { id: 'u2', role: 'editor' },
+    ])
+    mockPooledEmails = { u2: 'editor@acme.test' }
+    await run()
+    expect(recipientsOf(mockEmails[0])).toEqual(['owner@acme.test'])
+  })
+})
+
+describe('the Assist margin alert reaches staff by EMAIL too (AGL-2234)', () => {
+  function bigAssistSpend() {
+    return [
+      seededOrg({
+        assistEstCostUsd: 40,
+        monthRollup: { month: MONTH, billedCents: 0 },
+      }),
+    ]
+  }
+
+  const marginRow = (payload: Record<string, any>) =>
+    (payload['details'] as Array<Record<string, any>>).find(
+      (entry) => entry['quota'] === 'assistCogs',
+    )
+
+  it('emails STAFF_ALERT_EMAIL with the same words as the bell', async () => {
+    // `notifyStaff` writes `users/{uid}/notifications` and nothing turns that
+    // into mail — the identical defect AGL-2052 removed one audience over.
+    process.env.STAFF_ALERT_EMAIL = 'staff@aglyn.com'
+    mockOrgs = bigAssistSpend()
+    const payload = await run()
+
+    expect(mockStaffNotifications).toHaveLength(1)
+    const staffMail = mockEmails.filter(
+      (entry) => entry.context === 'assist-margin',
+    )
+    expect(staffMail).toHaveLength(1)
+    expect(staffMail[0].to).toBe('staff@aglyn.com')
+    // ONE set of words for both channels: an inbox and a bell disagreeing
+    // about the same number is how somebody ends up arguing with the alert.
+    expect(staffMail[0].subject).toBe(mockStaffNotifications[0].title)
+    expect(staffMail[0].text).toContain(mockStaffNotifications[0].body)
+    expect(marginRow(payload)).toMatchObject({ emailed: true })
+  })
+
+  it('does not mail the CUSTOMER about our margin', async () => {
+    // The org is not being charged for Assist and has done nothing wrong.
+    process.env.STAFF_ALERT_EMAIL = 'staff@aglyn.com'
+    mockOrgs = bigAssistSpend()
+    await run()
+    for (const entry of mockEmails) {
+      expect(recipientsOf(entry)).not.toContain('owner@acme.test')
+    }
+  })
+
+  it('reports unconfigured rather than pretending, with no address set', async () => {
+    // The ordinary answer in local and preview environments. It must not read
+    // as a delivered alert, and it must not throw.
+    mockOrgs = bigAssistSpend()
+    const payload = await run()
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(
+      mockEmails.filter((entry) => entry.context === 'assist-margin'),
+    ).toHaveLength(0)
+    expect(marginRow(payload)).toMatchObject({
+      emailed: false,
+      emailReason: 'unconfigured',
+    })
   })
 })
 
