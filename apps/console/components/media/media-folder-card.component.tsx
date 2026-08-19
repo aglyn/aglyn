@@ -186,21 +186,23 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
           ) : null}
         </Box>
         {readOnly ? null : (
-          <IconButton
-            className="media-card-affordance"
-            size="small"
-            aria-label="Folder actions"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={openMenu}
-            sx={{
-              mt: -0.25,
-              mr: -0.5,
-              opacity: { xs: 1, md: 0 },
-              transition: (theme) => theme.transitions.create('opacity'),
-            }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Folder actions">
+            <IconButton
+              className="media-card-affordance"
+              size="small"
+              aria-label="Folder actions"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={openMenu}
+              sx={{
+                mt: -0.25,
+                mr: -0.5,
+                opacity: { xs: 1, md: 0 },
+                transition: (theme) => theme.transitions.create('opacity'),
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
 

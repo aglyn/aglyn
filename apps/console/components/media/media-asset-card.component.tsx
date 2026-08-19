@@ -342,21 +342,23 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
           ) : null}
         </Box>
         {picker ? null : (
-          <IconButton
-            className="media-card-affordance"
-            size="small"
-            aria-label="File actions"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={openMenu}
-            sx={{
-              mt: -0.25,
-              mr: -0.5,
-              opacity: { xs: 1, md: 0 },
-              transition: (theme) => theme.transitions.create('opacity'),
-            }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="File actions">
+            <IconButton
+              className="media-card-affordance"
+              size="small"
+              aria-label="File actions"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={openMenu}
+              sx={{
+                mt: -0.25,
+                mr: -0.5,
+                opacity: { xs: 1, md: 0 },
+                transition: (theme) => theme.transitions.create('opacity'),
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
 

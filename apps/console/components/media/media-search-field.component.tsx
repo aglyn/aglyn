@@ -18,7 +18,7 @@
 
 import ClearIcon from '@mui/icons-material/Clear'
 import SearchIcon from '@mui/icons-material/Search'
-import { IconButton, InputAdornment, TextField } from '@mui/material'
+import { IconButton, InputAdornment, TextField, Tooltip } from '@mui/material'
 
 import {
   type MediaSearchMode,
@@ -84,14 +84,16 @@ export function MediaSearchField(props: MediaSearchFieldProps) {
           ),
           endAdornment: value ? (
             <InputAdornment position="end">
-              <IconButton
-                size="small"
-                edge="end"
-                aria-label="Clear search"
-                onClick={() => onChange('')}
-              >
-                <ClearIcon fontSize="small" />
-              </IconButton>
+              <Tooltip title="Clear search">
+                <IconButton
+                  size="small"
+                  edge="end"
+                  aria-label="Clear search"
+                  onClick={() => onChange('')}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </InputAdornment>
           ) : null,
         },
