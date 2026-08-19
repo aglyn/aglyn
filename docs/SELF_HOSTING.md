@@ -56,7 +56,32 @@ since the setup scripts in step 3 read them. Three rules matter:
 - `NEXT_PUBLIC_TENANT_DOMAIN` is the apex your sites' subdomains hang off.
   It defaults to `aglyn.app` — **Aglyn's cloud** — so leaving it unset makes
   your console display and link every one of your sites at an address you do
-  not control.
+  not control, and makes every published site advertise that address as its
+  canonical origin to Google, feed readers and inboxes (AGL-2121).
+
+### Building `apps/docs` as your own documentation (AGL-2124)
+
+Optional — skip the whole section if you do not publish the docs site. Every
+one of these is **off when unset, and never falls back to Aglyn's**:
+
+| Variable | Unset means |
+| --- | --- |
+| `DOCS_GA_TRACKING_ID` | no analytics tag is loaded at all |
+| `DOCS_ERROR_BEACON_ENDPOINT` | the browser error beacon installs no handlers |
+| `DOCS_STATUS_TARGETS` | `/status` probes nothing and says so |
+| `DOCS_URL` | canonical origin defaults to `https://docs.aglyn.com` — set it |
+| `DOCS_ORGANIZATION_NAME` | the footer copyright reads `Aglyn LLC` — set it |
+
+`DOCS_STATUS_TARGETS` is a comma-separated list of
+`name|label|origin|description`, for example:
+
+```
+DOCS_STATUS_TARGETS='console|Console|https://app.example.com|Sign-in and editing'
+```
+
+If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's
+`/api/errors`, set `NEXT_PUBLIC_AGLYN_DOCS_URL` on that console to your docs
+origin — the collector's CORS allowlist reads it, and defaults to Aglyn's.
 
 ## 3. Set your Firebase project up
 

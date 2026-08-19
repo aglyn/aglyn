@@ -86,6 +86,8 @@
     "check:index-drift": "node tools/scripts/check-index-drift.mjs",
     "check:standalone-installs": "node tools/scripts/check-standalone-installs.mjs",
     "check:manifest-versions": "node tools/scripts/check-manifest-versions.mjs",
+    "check:docs-self-host": "node tools/scripts/check-docs-self-host.mjs",
+    "test:docs-self-host": "node --test tools/scripts/lib/docs-self-host.test.mjs",
     "test:manifest-versions": "node --test tools/scripts/lib/manifest-versions.test.mjs",
     "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
     "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",

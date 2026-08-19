@@ -26,6 +26,10 @@ name: Tools guards
 #                             package-lock.json version agreement (AGL-2108) —
 #                             a drift `npm ci` does not read and the promotion
 #                             gate stayed green over for a whole release
+#  - test:docs-self-host      / check:docs-self-host  apps/docs must not
+#                             compile in our GA id, our error collector or our
+#                             production origins (AGL-2124) — it ships in the
+#                             open-source distribution
 #  - check:standalone-installs  asserts every nested package with its own
 #                             lockfile has an install step in nx-ci.yml. That
 #                             file is currently disabled; the check still
@@ -191,6 +195,16 @@ jobs:
       - run: npm run test:manifest-versions
 
       - run: npm run check:manifest-versions
+
+      # AGL-2124. Same two-step order: the unit test proves the scanner can
+      # FAIL on the exact three literals (its first version reported green over
+      # one of them — a `//.*$` comment strip eats everything after the `//` in
+      # `https://`), and only then is the repo scan's green worth anything.
+      # apps/docs ships in the open-source distribution, so a literal here
+      # makes an operator's readers, stack traces and uptime report to US.
+      - run: npm run test:docs-self-host
+
+      - run: npm run check:docs-self-host
 
       # AGL-2021. Two steps, and the order matters: the self-test proves the
       # comparator can still FAIL (it reconstructs the forbidden Webfile number
