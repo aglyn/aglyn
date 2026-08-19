@@ -128,7 +128,10 @@ const expectValidFeed = async (response: Response) => {
   expect(response.status).toBe(200)
   expect(response.headers.get('content-type')).toBe('application/rss+xml')
   const xml = await response.text()
-  expect(xml).toContain('<rss version="2.0">')
+  // Not `'<rss version="2.0">'`: the element carries the Atom namespace for
+  // its self link (AGL-2391), so matching the closing bracket would pin this
+  // assertion to the absence of any future namespace.
+  expect(xml).toContain('<rss version="2.0"')
   expect(xml).toContain(
     '<link>https://aglyn.com/blog/from-a-form-to-a-dataset-in-five-minutes</link>',
   )
@@ -172,6 +175,47 @@ describe('collections RSS host forms (AGL-1385)', () => {
 
   it('404s a host that names no site, rather than serving someone else', async () => {
     expect((await feedFor('not-a-site.example')).status).toBe(404)
+  })
+})
+
+/**
+ * The feed must say where it lives (AGL-2391).
+ *
+ * Missing `atom:link rel="self"` is a W3C Feed Validator ERROR, and it stopped
+ * being cosmetic when collection pages began announcing the feed with
+ * `<link rel="alternate">`: a reader that finds the feed through a page has
+ * only that page's word for the feed's address, and the self link is how the
+ * feed confirms it. The site is reachable at several aliases, so without it
+ * the same feed fetched two ways is two subscriptions.
+ */
+describe('the feed declares its own address (AGL-2391)', () => {
+  it('names the PUBLIC origin, whichever alias was asked', async () => {
+    // Asked as the bare subdomain; must still self-identify as the custom
+    // domain, exactly as `<guid>` does. A self link that echoed the request
+    // would re-announce every entry whenever the alias changed.
+    const xml = await (await feedFor('marketing')).text()
+
+    expect(xml).toContain(
+      '<atom:link href="https://aglyn.com/blog/rss.xml" rel="self" type="application/rss+xml"/>',
+    )
+  })
+
+  it('declares the Atom namespace the self link needs', async () => {
+    // Negative control on the element itself: the tag above is meaningless
+    // without the namespace, and a validator rejects it.
+    const xml = await (await feedFor('aglyn.com')).text()
+
+    expect(xml).toContain('xmlns:atom="http://www.w3.org/2005/Atom"')
+  })
+
+  it('dates the build from the newest ENTRY, never from now', async () => {
+    // `now` would tell every reader the feed changed on every poll, which is
+    // worse than omitting the element.
+    const xml = await (await feedFor('aglyn.com')).text()
+
+    expect(xml).toContain(
+      `<lastBuildDate>${new Date(1_754_714_956 * 1000).toUTCString()}</lastBuildDate>`,
+    )
   })
 })
 
