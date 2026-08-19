@@ -30,6 +30,20 @@
  * and that no failure downstream of the link turns into a failed recovery.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
+/**
+ * The platform brand, read from the module that owns it rather than restated.
+ * AGL-2319 made this route's subject and fallback body read
+ * `PLATFORM_BRAND_NAME` through `@aglyn/aglyn/server`, and the closed-world
+ * mock of that module below did not carry the name — so every fallback send
+ * rendered "Reset your undefined password" (AGL-2365). Exposed to the factory
+ * as a GETTER, not a value: babel hoists this file's route import above the
+ * module body, so the factory is built before a plain `const` here has been
+ * initialized, and only a deferred read sees it.
+ */
+const mockPlatformBrandName = PLATFORM_BRAND_NAME
+
 const mockSendEmail = jest.fn<
   Promise<{ sent: boolean; reason?: string }>,
   [Record<string, unknown>]
@@ -48,6 +62,7 @@ const mockGenerateLink = jest.fn<Promise<string>, [string, { url: string }]>(
     '?mode=resetPassword&oobCode=CODE-abc_123&apiKey=AIzaSyFake',
 )
 let mockRateLimitAllowed = true
+const mockMeterPlatformEmail = jest.fn<Promise<void>, []>(async () => undefined)
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
@@ -58,9 +73,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   consumeRateLimit: async () => ({ allowed: mockRateLimitAllowed }),
+  // AGL-1438's platform cost meter. Absent from this closed world since the
+  // day it was added: the route awaits it AFTER `sendEmail` and swallows the
+  // throw, so a `TypeError` here cost nothing visible and every assertion
+  // above it still passed. Present and asserted now, so the next name the
+  // route reaches for cannot go missing the same silent way (AGL-2365).
+  meterPlatformEmail: async () => mockMeterPlatformEmail(),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
+  get PLATFORM_BRAND_NAME() {
+    return mockPlatformBrandName
+  },
   pluginRequestFromWeb: async (request: Request) => {
     const headers: Record<string, string> = {}
     request.headers.forEach((value, key) => {
@@ -180,10 +204,19 @@ describe('send-password-reset template', () => {
     await post({ origin: 'https://app.aglyn.com' })
     const options = mockSendEmail.mock.calls[0][0]
     expect(options.html).toBeUndefined()
-    expect(options.subject).toBe('Reset your Aglyn password')
+    // The CONFIGURED brand, not the literal: a self-hosted deployment renames
+    // the product, and a hard-coded 'Aglyn' here would pin the leak instead of
+    // the behaviour (AGL-2319).
+    expect(options.subject).toBe(`Reset your ${PLATFORM_BRAND_NAME} password`)
+    expect(String(options.text)).toContain(
+      `Someone asked to reset the password for your ${PLATFORM_BRAND_NAME} `,
+    )
     expect(String(options.text)).toContain(
       'https://app.aglyn.com/reset-password',
     )
+    // The cost meter ran. Without this the mock could lose the name again and
+    // nothing would notice — the route swallows the resulting TypeError.
+    expect(mockMeterPlatformEmail).toHaveBeenCalledTimes(1)
   })
 })
 
