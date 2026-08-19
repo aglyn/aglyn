@@ -42,6 +42,11 @@
 //   WIRE_CONSOLE_BASE_URL    a running emulated console; when unset or
 //                            unreachable the console probes REPORT AS NOT RUN
 //                            rather than silently passing.
+//   WIRE_ALLOW_SKIPS=1       accept a run with SKIPPED sections as success.
+//                            Without it a skip exits 1 (AGL-2348): a console-
+//                            less run used to exit 0 under "every probed branch
+//                            observed on the wire", which is how an entire
+//                            unproven half reads as a pass.
 //
 // NO STRIPE, EVER. The checkout probe is only ever fired while a lock is
 // armed and only ever asserts the 423; localhost carries the LIVE Stripe key,
@@ -90,6 +95,7 @@ if (
 // ── evidence log ────────────────────────────────────────────────────────────
 const evidence = []
 let failures = 0
+let skipped = 0
 const record = (name, ok, detail) => {
   if (!ok) failures += 1
   evidence.push({ name, ok, detail })
@@ -98,6 +104,30 @@ const record = (name, ok, detail) => {
 const note = (name, detail) => {
   evidence.push({ name, ok: null, detail })
   console.log(`NOTE  ${name} — ${detail}`)
+}
+/**
+ * A section that did NOT run (AGL-2348). Distinct from `note`, which is
+ * commentary on a branch that did.
+ *
+ * `note` was carrying both meanings, and the difference is the whole verdict:
+ * when no emulated console answers, sections F and G — every console probe,
+ * including the AGL-1800 private-media pair this harness exists to prove — are
+ * skipped, `failures` stays 0, and the run ends on "every probed branch
+ * observed on the wire" with exit 0. That is a false green of the exact shape
+ * this file's own comment at the console boot warns about ("silently drops five
+ * branches from the run — which is the failure this whole issue exists to
+ * stop"): the retry loop stops a SLOW console being mistaken for a missing one,
+ * but nothing stopped a missing one being mistaken for a passing run.
+ *
+ * A skip now exits non-zero. `WIRE_ALLOW_SKIPS=1` opts out, for someone who
+ * deliberately wants only the sections a console-less run can reach — an
+ * explicit choice by the operator, never the default a CI job or a hurried
+ * reader inherits.
+ */
+const skip = (name, detail) => {
+  skipped += 1
+  evidence.push({ name, ok: null, skipped: true, detail })
+  console.log(`SKIP  ${name} — ${detail}`)
 }
 
 // ── admin SDK against the emulator ──────────────────────────────────────────
@@ -625,11 +655,12 @@ for (let attempt = 0; attempt < 3 && !consoleUp; attempt += 1) {
 }
 
 if (!consoleUp) {
-  note(
-    'F* console probes NOT RUN',
+  skip(
+    'F*/G* console probes NOT RUN',
     `no emulated console answering at ${CONSOLE_BASE} — start it with ` +
       `\`npm run serve:console:emulated\` and re-run. These branches are ` +
-      `NOT wire-proven by this run.`,
+      `NOT wire-proven by this run, and that includes the AGL-1800 private ` +
+      `media preview pair in section G.`,
   )
 } else {
   // A non-staff member of the locked org, created here rather than in the
@@ -940,9 +971,21 @@ try {
   /* artifacts are a convenience, not the gate */
 }
 
-console.log(
-  failures
-    ? `\n${failures} branch(es) FAILED on the wire`
-    : '\nread-only lockdown: every probed branch observed on the wire',
-)
-process.exit(failures ? 1 : 0)
+// The summary must never claim completeness it did not earn (AGL-2348). The
+// old success line — "every probed branch observed on the wire" — was literally
+// true of a console-less run and read as a full pass, because the sections that
+// did not run were the ones that would have said otherwise.
+const allowSkips = process.env.WIRE_ALLOW_SKIPS === '1'
+if (failures) {
+  console.log(`\n${failures} branch(es) FAILED on the wire`)
+} else if (skipped) {
+  console.log(
+    `\nread-only lockdown: NO branch failed, but ${skipped} section(s) were ` +
+      `SKIPPED and are therefore unproven — this is not a pass. Start what ` +
+      `the SKIP lines above name and re-run, or set WIRE_ALLOW_SKIPS=1 to ` +
+      `accept a partial run deliberately.`,
+  )
+} else {
+  console.log('\nread-only lockdown: every probed branch observed on the wire')
+}
+process.exit(failures || (skipped && !allowSkips) ? 1 : 0)
