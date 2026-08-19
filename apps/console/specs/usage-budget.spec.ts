@@ -25,6 +25,7 @@
  */
 
 import {
+  assistCeilingBreach,
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
   assistMarginMultiple,
@@ -340,6 +341,87 @@ describe('the Assist margin guard', () => {
         assistUsd: 30,
         thresholdUsd: 25,
         guard: { month: '2026-07', threshold: 9 },
+        month,
+      }),
+    ).toBe(true)
+  })
+})
+
+/**
+ * The HARD ceiling's staff announcement (AGL-2264).
+ *
+ * Distinct from the margin alert above and deliberately so: past this figure
+ * the org's assistant is REFUSED, not merely expensive, and the margin
+ * alert's whole-multiples arithmetic cannot say so — an org climbing from
+ * $25 to the $40 ceiling is still at 1x of the $25 threshold and stays
+ * silent. That silence is the failure this block exists to prevent, so the
+ * load-bearing test here is the third one.
+ */
+describe('assistCeilingBreach — staff hear that the assistant STOPPED', () => {
+  const month = '2026-08'
+
+  it('stays quiet under the ceiling, and fires once at it', () => {
+    expect(
+      assistCeilingBreach({ assistUsd: 39.99, ceilingUsd: 40, guard: null, month }),
+    ).toBe(false)
+    expect(
+      assistCeilingBreach({ assistUsd: 40, ceilingUsd: 40, guard: null, month }),
+    ).toBe(true)
+    // Announced once for the month: crossing is a state, and the org is
+    // refused from here to the boundary however far past it the sum climbs.
+    expect(
+      assistCeilingBreach({
+        assistUsd: 400,
+        ceilingUsd: 40,
+        guard: { month, threshold: 1 },
+        month,
+      }),
+    ).toBe(false)
+  })
+
+  it('says nothing when an operator turned the ceiling OFF', () => {
+    // Nothing is being refused, so there is nothing to announce. Without
+    // this, a deployment that opted out would be mailed about a stop that
+    // never happened.
+    expect(
+      assistCeilingBreach({
+        assistUsd: 10_000,
+        ceilingUsd: null,
+        guard: null,
+        month,
+      }),
+    ).toBe(false)
+  })
+
+  it('is NOT suppressed by the margin alert having already spoken', () => {
+    // The two guards are separate keys on purpose. This is the case the
+    // margin alert cannot carry: $40 is still 1x of its $25 threshold, so
+    // `assistMarginBreach` is silent on the very reading where the customer's
+    // assistant went off.
+    expect(
+      assistMarginBreach({
+        assistUsd: 41,
+        thresholdUsd: 25,
+        guard: { month, threshold: 1 },
+        month,
+      }),
+    ).toBe(false)
+    expect(
+      assistCeilingBreach({
+        assistUsd: 41,
+        ceilingUsd: 40,
+        guard: null,
+        month,
+      }),
+    ).toBe(true)
+  })
+
+  it('resets with the month', () => {
+    expect(
+      assistCeilingBreach({
+        assistUsd: 41,
+        ceilingUsd: 40,
+        guard: { month: '2026-07', threshold: 1 },
         month,
       }),
     ).toBe(true)

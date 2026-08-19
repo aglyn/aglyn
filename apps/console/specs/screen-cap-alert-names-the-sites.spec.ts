@@ -221,6 +221,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: { FieldPath: { documentId: () => '__name__' } },
   },
   notifyOrgAdmins: (...args: unknown[]) => (mockNotifyOrgAdmins as any)(...args),
+  // The REAL spend ceiling (AGL-2264), not a stand-in: this sweep also
+  // announces that an org's assistant has been refused, and a `jest.mock`
+  // factory is a CLOSED WORLD — omitting it fails as "not a function" inside
+  // the sweep, which reads as a broken suite rather than a missing export.
+  assistOrgMonthlyCostLimitUsd: (
+    jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/assist-usage',
+    ) as typeof import('../../../libs/tenant/data/admin/src/lib/server/assist-usage')
+  ).assistOrgMonthlyCostLimitUsd,
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

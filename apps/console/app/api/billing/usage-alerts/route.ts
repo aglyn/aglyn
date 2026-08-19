@@ -47,6 +47,7 @@ import {
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
 import {
+  assistOrgMonthlyCostLimitUsd,
   firebaseAdmin,
   notifyOrgAdmins,
   notifyStaff,
@@ -58,6 +59,7 @@ import {
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
 import {
+  assistCeilingBreach,
   assistCogsAlertThresholdUsd,
   assistMarginBreach,
   assistMarginMultiple,
@@ -916,6 +918,66 @@ async function handler(request: Request): Promise<Response> {
           ...(marginEmail.sent
             ? {}
             : { emailReason: emailFailureReason(marginEmail) }),
+        })
+      }
+
+      /*==========================================
+       * THE HARD CEILING — the org is being REFUSED right now (AGL-2264).
+       *
+       * The alert above warns; `assistOrgMonthlyCostLimitUsd` refuses, in the
+       * reservation transaction, for every assist entrypoint at once. So past
+       * this figure a customer's assistant has stopped answering, and staff
+       * must be told that in those words rather than left to infer it from a
+       * cost alert that fired at a different number.
+       *
+       * It cannot ride the margin guard. That one announces whole multiples
+       * of $25, so an org climbing from $25 to the $40 ceiling is still at 1x
+       * and says nothing — staff would learn the assistant had stopped only
+       * when the customer complained. Its own guard key, announced once for
+       * the month, because crossing is a state rather than an escalating sum.
+       *=========================================*/
+      const assistCeilingUsd = assistOrgMonthlyCostLimitUsd()
+      if (
+        assistCeilingBreach({
+          assistUsd: spend.assistUsd,
+          ceilingUsd: assistCeilingUsd,
+          guard: guards['assistCeiling'],
+          month,
+        })
+      ) {
+        guardUpdates['assistCeiling'] = { month, threshold: 1 }
+        const ceilingTitle =
+          `Assist is REFUSING ${org.get('slug') ?? org.id} — the ` +
+          `$${Number(assistCeilingUsd).toFixed(0)} monthly spend ceiling is crossed`
+        const ceilingBody =
+          `${org.get('slug') ?? org.id} has run about ` +
+          `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
+          `tokens in ${month}, past the ` +
+          `$${Number(assistCeilingUsd).toFixed(0)} ceiling. Every further ` +
+          'Assist request from this organization is refused until the month ' +
+          'rolls over — the assistant is not degraded or slowed, it is off. ' +
+          'The customer keeps whatever messages their plan has left, and the ' +
+          'refusal says so in its own words.'
+        await notifyStaff({
+          type: 'billing.usage',
+          title: ceilingTitle,
+          body: ceilingBody,
+          orgId: org.id,
+          link: '/admin/orgs',
+        })
+        const ceilingEmail = await emailStaffAlert({
+          subject: ceilingTitle,
+          text: `${ceilingBody}\n\nOrg: ${consoleOrigin()}/admin/orgs`,
+          context: 'assist-ceiling',
+        })
+        alerted.push({
+          orgId: org.id,
+          quota: 'assistCeiling',
+          threshold: 1,
+          emailed: ceilingEmail.sent,
+          ...(ceilingEmail.sent
+            ? {}
+            : { emailReason: emailFailureReason(ceilingEmail) }),
         })
       }
 

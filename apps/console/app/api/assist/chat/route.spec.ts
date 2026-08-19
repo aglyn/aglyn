@@ -460,10 +460,11 @@ describe('the gate ladder — every guard forced red once', () => {
   })
 
   it('429 spend ceiling, in its OWN words, with messages still in hand', async () => {
-    // AGL-2264's ceiling, off by default and switched on here. The words
-    // matter: this org has 995 of its 1,000 messages left, so borrowing the
-    // message cap's sentence would send the user to count a number that
-    // disagrees with the refusal they just got.
+    // AGL-2264's ceiling. Set explicitly here rather than leaning on the
+    // repo default, so this test still asserts the WORDS if the default ever
+    // moves. The words matter: this org has 995 of its 1,000 messages left,
+    // so borrowing the message cap's sentence would send the user to count a
+    // number that disagrees with the refusal they just got.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     try {
       seedOrgs()
@@ -484,16 +485,39 @@ describe('the gate ladder — every guard forced red once', () => {
     }
   })
 
-  it('THE DEFAULT IS INERT: the same spend answers normally with no ceiling', async () => {
-    // Pricing is locked for Sept 1. The ceiling ships unset, so the identical
-    // fixture must reach the model — this is the test that fails if anyone
-    // later gives the ceiling a default number.
+  it('THE DEFAULT IS ARMED: the same spend is refused with NOTHING set', async () => {
+    // The ceiling ships ON at $40 (AGL-2264). No environment variable here —
+    // a fresh deployment — and $41.50 of provider spend against a
+    // subscription that did not move is refused before a token is bought.
+    // This is the test that fails if anyone restores the unset default.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     seedOrgs()
     armUpstream()
     mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
       messages: 5,
       estCostUsd: 41.5,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(429)
+    await expect(response.json()).resolves.toMatchObject({
+      reason: 'quota',
+      quota: { refusedBy: 'budget', costLimitUsd: 40 },
+    })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('THE PAIRED CONTROL: an ordinary paid month still reaches the model', async () => {
+    // Pricing is locked for Sept 1, so arming the ceiling by default must
+    // change no paying workspace's behaviour. $28 is the worst case the
+    // 1,000-message guard can produce at Sonnet, and it answers normally.
+    // Without this, the test above is satisfied by a build that refuses
+    // every entitled org.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    armUpstream()
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 28,
     })
     const response = await POST(post(QUESTION_BODY(PRO_ORG)))
     expect(response.status).toBe(200)

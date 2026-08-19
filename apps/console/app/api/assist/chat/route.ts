@@ -533,12 +533,12 @@ async function handler(request: Request): Promise<Response> {
     // unbounded provider spend on a workspace that pays nothing.
     const quota = await reserveAssistMessage(firestore, body.orgId, entitled)
     if (!quota.allowed) {
-      // Three refusals, not two. The spend ceiling (AGL-2264) is off by
-      // default, but when an operator turns it on it must not borrow the
-      // message cap's words: "reached its limit for the month" invites the
-      // user to count their messages, and they will find they have plenty
-      // left. Same `reason: 'quota'` either way, so the panel's 429 handling
-      // and its remaining-messages line are unchanged.
+      // Three refusals, not two. The spend ceiling (AGL-2264) is armed by
+      // default at $40, and it must not borrow the message cap's words:
+      // "reached its limit for the month" invites the user to count their
+      // messages, and they will find they have plenty left. Same
+      // `reason: 'quota'` either way, so the panel's 429 handling and its
+      // remaining-messages line are unchanged.
       return Response.json(
         {
           error:

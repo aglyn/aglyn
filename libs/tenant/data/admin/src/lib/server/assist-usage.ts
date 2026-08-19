@@ -156,9 +156,35 @@ export function assistEntitledMonthlyLimit(): number {
 }
 
 /**
- * Optional per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half
- * of the cap (AGL-2264). Returns `null` when unset, and unset is the
- * shipped default.
+ * The repo default spend ceiling: **$40 per org per month** (Zach,
+ * 2026-08-19, closing AGL-2264).
+ *
+ * The number is arithmetic rather than pricing. After AGL-2441 the
+ * 1,000-message entitled guard bounds roughly $28/org/month of worst-case
+ * spend at Sonnet, and the staff margin alert already fires at $25. $40
+ * therefore sits ABOVE anything the message cap can produce at the current
+ * model, so it changes no charged amount and no plan's behaviour — it is a
+ * ceiling on OUR cost, not a customer price, which is why it is outside the
+ * Sept-1 pricing lock. It binds only when an assumption behind that
+ * arithmetic has moved: an `ASSIST_MODEL` swap to an Opus-class tier, a
+ * longer prompt, or a caller finding another way to inflate input. That is
+ * the failure it exists for.
+ *
+ * It ships as a DEFAULT rather than as an environment variable someone must
+ * remember, because an unset ceiling is the fail-open this issue was opened
+ * about: a fresh deployment and a self-hoster both inherit a sane bound
+ * without knowing the variable exists.
+ *
+ * The free tier gets no separate figure and needs none — its 10 messages a
+ * UTC day bound it at roughly $0.28/day, so this is a backstop it cannot
+ * reach rather than a cap it runs into.
+ */
+export const ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD = 40
+
+/**
+ * The per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half of
+ * the cap (AGL-2264). Defaults to
+ * {@link ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD}; `off` removes it.
  *
  * The message caps above bound spend only through an assumed cost per
  * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
@@ -168,29 +194,31 @@ export function assistEntitledMonthlyLimit(): number {
  * already increments at the SERVING model's rates. So it bounds the actual
  * bill rather than a forecast of it.
  *
- * ⚠️ **Default null on purpose, and the number is Zach's, not ours.** What
- * dollar figure an entitled workspace may reach, and what should happen when
- * it does — refuse, degrade to a cheaper model, or keep serving and eat it —
- * are pricing calls on a plan that is LOCKED for Sept 1. Choosing one here
- * would re-price a shipped plan. So the mechanism ships wired and inert, and
- * turning it on is one environment variable rather than a release: set
- * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` and every assist entrypoint that
- * reserves — the console chat route and the besigner copy assistant alike —
- * starts refusing above it in the same transaction that counts messages.
- *
  * The refusal is deliberately the same shape as the message refusal (a
  * reservation that did not move the counter), so an org at the ceiling
- * spends nothing at all rather than spending less.
+ * spends nothing at all rather than spending less. It refuses — it does
+ * NOT quietly swap to a cheaper model. A silent quality drop is worse than
+ * an honest stop, because nobody can tell it happened.
  *
- * Fails to NO ceiling on an unparseable value rather than to zero: a typo
- * that silently disabled every workspace's assistant would be a worse
- * outage than the overspend it guards, and the $25 staff alert
- * (`ASSIST_ORG_MONTHLY_COGS_ALERT_USD`) still fires either way.
+ * ⚠️ **Fails to the DEFAULT, never to “no ceiling”.** An empty, negative or
+ * unparseable value reads as unconfigured and takes the repo default, so a
+ * typo cannot reopen the fail-open this exists to close. It cannot become a
+ * ceiling of `$0` either — a value of zero is not “refuse everyone”, it is
+ * “not a number I will honour” — because an outage across every workspace
+ * would be worse than the overspend being guarded.
+ *
+ * Removing the ceiling therefore takes a WORD rather than a number:
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD=off`. A deployment paying its own
+ * provider bill may genuinely want none, and that is a decision someone
+ * should have to write down rather than reach by mistyping a digit.
  */
 export function assistOrgMonthlyCostLimitUsd(): number | null {
-  const raw = process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
-  const parsed = raw ? Number(raw) : Number.NaN
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  const raw = String(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD ?? '').trim()
+  if (raw.toLowerCase() === 'off') return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD
 }
 
 export interface AssistTokenRates {

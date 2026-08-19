@@ -178,6 +178,7 @@ const {
   assistEntitledMonthlyLimit,
   assistExchangeExpiry,
   assistFreeDailyLimit,
+  ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
   assistOrgMonthlyCostLimitUsd,
   assistUsageDay,
   assistUsageMonth,
@@ -471,28 +472,42 @@ describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () 
  * prompt's length, and how much history a client chooses to post. So these
  * assert against the MEASURED figure the meters already write.
  *
- * The ceiling ships UNSET, and that is a decision rather than an oversight —
- * see `assistOrgMonthlyCostLimitUsd`. Which means the load-bearing test in
- * this block is the last one: the default posture has to be pinned, or a
- * later change could turn a shipped plan into a refusal and nothing here
- * would notice.
+ * The ceiling ships ON, at a repo default of $40 (Zach, 2026-08-19) — an
+ * unset ceiling was the fail-open AGL-2264 was opened about, so a fresh
+ * deployment and a self-hoster must both inherit a bound without knowing
+ * the variable exists. Which means the load-bearing test in this block is
+ * the last one: the default posture has to be pinned, or a later change
+ * could quietly restore the fail-open and nothing here would notice.
+ *
+ * $40 changes no charged amount. It is a ceiling on OUR provider cost, and
+ * it sits above anything the 1,000-message entitled guard can produce at
+ * Sonnet (~$28), so no plan behaves differently for it.
  */
 describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () => {
   const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
 
-  it('is unset by default, and junk reads as unset rather than as zero', () => {
-    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
-    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
-    expect(assistOrgMonthlyCostLimitUsd()).toBe(40)
-    // A typo must not become a ceiling of $0, which would refuse every
-    // workspace on the deployment. Nor must an empty string: `Number('')`
-    // is 0, the same outage by a different route.
-    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'forty dollars'
-    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
-    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = ''
-    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
-    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '-5'
+  it('defaults to $40, and junk falls back to it rather than to zero or none', () => {
+    expect(assistOrgMonthlyCostLimitUsd()).toBe(
+      ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+    )
+    expect(ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD).toBe(40)
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '120'
+    expect(assistOrgMonthlyCostLimitUsd()).toBe(120)
+    // Junk must not become a ceiling of $0, which would refuse every
+    // workspace on the deployment. Nor an empty string — `Number('')` is 0,
+    // the same outage by a different route — and nor NO ceiling, which is
+    // the fail-open this whole mechanism closes. All three read as
+    // unconfigured and take the default.
+    for (const junk of ['forty dollars', '', '  ', '-5', '0']) {
+      process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = junk
+      expect(assistOrgMonthlyCostLimitUsd()).toBe(
+        ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
+      )
+    }
+    // Removing it takes a WORD, so nobody reaches "no ceiling" by mistyping
+    // a digit — every mistyped digit above landed on the default instead.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'OFF'
     expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
   })
 
@@ -516,10 +531,11 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     expect(mockDocs.get(dailyPath)).toBeUndefined()
   })
 
-  it('THE NEGATIVE CONTROL: the same fixture with NO ceiling set reserves', async () => {
+  it('THE NEGATIVE CONTROL: the same fixture with the ceiling OFF reserves', async () => {
     // Without this the test above passes for a build that refuses any org
     // carrying a cost at all, or one that refuses entitled orgs outright.
     // The only difference between the two fixtures is the env var.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
     expect(reservation).toMatchObject({
@@ -533,10 +549,16 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
   })
 
   it('reports costUsd as NULL when nothing consulted it, never as zero', async () => {
-    // The free tier gates on the daily counter, so with no ceiling
-    // configured there is no reason to open the monthly document — and a
+    // The free tier gates on the daily counter, so with the ceiling turned
+    // OFF there is no reason to open the monthly document — and a
     // reservation that answered `costUsd: 0` there would be reporting a
     // constant under a measurement's name. The org below has spent $41.50.
+    //
+    // This path is now only reachable by an operator who wrote `off`, since
+    // the shipped default always configures a ceiling. It is kept precisely
+    // so `costUsd: null` keeps meaning "nobody looked" rather than decaying
+    // into a value that can never occur.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'off'
     mockDocs.set(dailyPath, { '2026-08-17': 1 })
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
@@ -587,15 +609,47 @@ describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () =
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'messages' })
   })
 
-  it('SHIPS INERT: unset, no measured cost however large refuses anything', async () => {
-    // The pinned default posture. Pricing is locked for Sept 1, so the
-    // ceiling that ships must change no plan's behaviour; a later edit that
-    // gave it a default number would turn a paid workspace into a refusal,
-    // and this is the test that would stop it.
+  it('SHIPS BOUNDED: with NOTHING configured, a runaway org is refused', async () => {
+    // The pinned default posture, and the test that would stop a later edit
+    // restoring the fail-open. No environment variable is set here — this is
+    // a fresh deployment, or a self-hoster who has never heard of the
+    // variable — and the org has run $100,000 of provider spend against a
+    // subscription that did not move.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(monthPath, { messages: 3, estCostUsd: 100_000 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
-    expect(reservation).toMatchObject({ allowed: true, costLimitUsd: null })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      costLimitUsd: 40,
+    })
+    // Refused, and nothing moved: the org above the ceiling spends nothing
+    // more rather than spending less.
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 3 })
+  })
+
+  it('THE PAIRED DEFAULT CONTROL: an ordinary month is untouched by it', async () => {
+    // $40 sits above anything the 1,000-message guard can produce at Sonnet
+    // (~$28 worst case, AGL-2441), so turning the ceiling on by default must
+    // change no paying workspace's behaviour. Without this the test above is
+    // satisfied by a build that refuses every entitled org.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    mockDocs.set(monthPath, { messages: 950, estCostUsd: 28 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 951 })
+  })
+
+  it('and the DEFAULT binds the free tier too, without a separate figure', async () => {
+    // The free tier needs no ceiling of its own — 10 messages a UTC day
+    // bounds it at roughly $0.28/day — but it must not be EXEMPT from this
+    // one, or a tier-scoped read would leave the unpriced surface unbounded.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    mockDocs.set(dailyPath, { '2026-08-17': 0 })
+    mockDocs.set(monthPath, { messages: 400, estCostUsd: 4_000 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'budget' })
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
   })
 })
 
