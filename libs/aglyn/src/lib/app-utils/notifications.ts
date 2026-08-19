@@ -27,6 +27,15 @@ import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 export type AglynNotificationType =
   | 'billing.invoice'
   | 'billing.paymentFailed'
+  // Stripe gave up on a failed renewal and CANCELLED the subscription
+  // (AGL-1877). Distinct from `paymentFailed`, which announces one failed
+  // attempt inside a retry window the customer can still recover from; this
+  // one is the window having closed. Measured on the test account with a
+  // test clock: five attempts over 21.08 days, then
+  // `cancellation_details.reason: 'payment_failed'` — and until this existed
+  // the org went silently to Free at that moment, with the `past_due` banner
+  // disappearing at exactly the instant the consequence arrived.
+  | 'billing.subscriptionCanceled'
   | 'billing.usage'
   | 'team.invite'
   | 'team.roleChanged'
@@ -139,6 +148,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
   {
     'billing.invoice': 'Invoice available',
     'billing.paymentFailed': 'Payment failed',
+    'billing.subscriptionCanceled': 'Subscription canceled',
     'billing.usage': 'Usage threshold',
     'team.invite': 'Team invite',
     'team.roleChanged': 'Role changed',

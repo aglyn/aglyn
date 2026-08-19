@@ -569,6 +569,25 @@ export interface OrgSubscription {
     | 'canceled'
     | 'incomplete'
     | 'unpaid'
+  /**
+   * WHY the subscription ended, mirrored from Stripe's
+   * `cancellation_details.reason` on `customer.subscription.deleted`
+   * (AGL-1877). `'payment_failed'` is Stripe having exhausted the dunning
+   * retries; `'cancellation_requested'` is the customer leaving on purpose.
+   *
+   * The distinction is not cosmetic — it is the only thing that tells a
+   * DELINQUENT workspace apart from one that simply left, and both arrive as
+   * the same event with the same `status: 'canceled'` and the same
+   * `plan: 'free'` mirror. Without it `shouldAutoLockOrgForBilling` had no
+   * reachable delinquent state at all (see `billing-auto-lock.ts`), the
+   * churn funnel counted a dunning failure as voluntary churn, and nobody
+   * could be told which had happened.
+   *
+   * Absent on every org whose subscription ended before this shipped, and
+   * every consumer must fail CLOSED on that — an unknown reason is not a
+   * proven payment failure.
+   */
+  canceledReason?: string | null
   priceId?: string
   /**
    * Billing interval of the plan item (AGL-532), webhook-mirrored: the

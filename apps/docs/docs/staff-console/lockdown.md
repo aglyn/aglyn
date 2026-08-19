@@ -716,3 +716,15 @@ Billing locks for lapsed subscriptions are **manual by default**. The automated
 30-days-past-due sweep exists but ships disabled; it is enabled by setting the
 `AUTO_LOCK_BILLING_FROM` environment variable to a start month (`YYYY-MM`) — a
 deliberate operator decision, never a default.
+
+**What the sweep counts as delinquent, and why it is not just `past_due`
+(AGL-1877).** A Stripe test-clock drill of a failed renewal measured the real
+timeline: the subscription retries five times, stays `past_due` throughout, and
+Stripe **cancels it at 21.08 days** with
+`cancellation_details.reason: 'payment_failed'`. It never becomes `unpaid`. So the
+30-day grace clock outlives the `past_due`/`unpaid` statuses by nine days, and the
+predicate had no reachable true branch at all until it also accepted a
+**cancelled-for-non-payment** subscription. That reason is now mirrored onto
+`orgs/{id}/billing/stripe` as `subscription.canceledReason`, and the sweep locks
+only on the literal `'payment_failed'` — a workspace that cancelled on purpose, and
+every cancellation recorded before this shipped, fail closed and are never locked.

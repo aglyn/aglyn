@@ -1011,6 +1011,11 @@ async function handler(request: Request): Promise<Response> {
           const billingSubscription =
             (billingDoc.get('subscription') as {
               status?: string
+              // WHY it ended (AGL-1877) — the predicate's only reachable
+              // delinquent state on this account is a `canceled` subscription
+              // Stripe gave up retrying, so dropping this key here would put
+              // the guard straight back to never firing.
+              canceledReason?: string | null
               currentPeriodEnd?: { seconds?: number } | null
             } | null) ?? null
           if (
