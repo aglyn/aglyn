@@ -1269,6 +1269,36 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
+      /*
+       * THE AUDIT ROW THIS BRANCH NEVER WROTE (AGL-2328).
+       *
+       * Every sibling branch in this file audits, and the file header at the
+       * top claims the route is audited. This one mutated
+       * `verificationRequest.state`, notified the publisher and started a
+       * cooldown, and left no record — so a decline was the one staff
+       * decision here that could not be reviewed afterwards, on the action
+       * whose reason staff are REQUIRED to type.
+       *
+       * `reason` uses the audit log's own reason column rather than being
+       * buried in `after`, because the audit page renders and exports that
+       * column and searches it (AGL-1652) — a why nobody can filter on is a
+       * why nobody reads.
+       */
+      await firestore.collection('adminAudit').add({
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ? String(decoded.email) : null,
+        action: 'plugins.verification.decline',
+        scope: 'marketplace',
+        target: `marketplaceListings/${listingId}`,
+        before: { verificationState: 'pending' },
+        after: {
+          verificationState: 'declined',
+          cooldownDays: VERIFICATION_DECLINE_COOLDOWN_DAYS,
+        },
+        reason: declineReason,
+        at: FieldValue.serverTimestamp(),
+      })
+
       const publisherOrgId = String(listing.profileId ?? '')
       if (publisherOrgId) {
         await notifyOrgAdmins(publisherOrgId, {

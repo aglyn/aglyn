@@ -176,6 +176,38 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     return map
   }, [installs, revocationDocs])
 
+  /*==========================================
+   * WHY IT WAS DISABLED (AGL-2328).
+   *
+   * Staff are REQUIRED to type a reason to revoke a plugin version — the
+   * route refuses without one — and until now the customer whose site the
+   * plugin stopped working on was shown a bare "disabled" chip and a generic
+   * paragraph. The reason was stored, in the same document this card already
+   * reads, one field away from the flag it renders. Every consumer of
+   * `revocations` reads `versions` and nothing else; the type's own comment
+   * calls `versions` "the ONLY field any reader consults", which was true and
+   * is the defect.
+   *
+   * Only the REASON and the DATE are surfaced. `revokedBy` is a staff uid and
+   * belongs in the audit log, not on a customer's screen.
+   *=========================================*/
+  const revocationDetailByListing = useMemo(() => {
+    const map: Record<string, { reason: string | null; atMs: number | null }> =
+      {}
+    for (const doc of ((revocationDocs as any[]) ?? [])) {
+      const at = doc.revokedAt
+      map[doc.$id] = {
+        reason:
+          typeof doc.reason === 'string' && doc.reason.trim()
+            ? doc.reason.trim()
+            : null,
+        atMs:
+          at?.toMillis?.() ?? (typeof at?.seconds === 'number' ? at.seconds * 1000 : null),
+      }
+    }
+    return map
+  }, [revocationDocs])
+
   const handleUpgrade = useCallback(
     (install: any) => async () => {
       setBusy(install.$id)
@@ -472,6 +504,26 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                     {'The platform disabled this plugin version. It renders ' +
                       'a placeholder on your site until you upgrade or ' +
                       'uninstall it.'}
+                    {/*
+                      The reason staff were required to type, shown to the
+                      person it happened to (AGL-2328). Rendered only when one
+                      was recorded — a revocation written before the reason
+                      was required says so, rather than showing an empty
+                      quotation that reads as "no reason given".
+                    */}
+                    {revocationDetailByListing[install.$id]?.reason ? (
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        {`Reason: ${revocationDetailByListing[install.$id]?.reason}`}
+                      </Typography>
+                    ) : null}
+                    {revocationDetailByListing[install.$id]?.atMs ? (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                        {`Disabled ${new Date(
+                          revocationDetailByListing[install.$id]
+                            ?.atMs as number,
+                        ).toLocaleDateString()}`}
+                      </Typography>
+                    ) : null}
                   </Alert>
                 ) : null}
               </Stack>

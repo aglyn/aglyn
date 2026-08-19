@@ -203,12 +203,36 @@ interface CounterNoticeRow {
   restoredAtMs: number | null
 }
 
+/**
+ * One row of the §512(i) strike ledger (AGL-2328).
+ *
+ * `syncStrikeLedger` has written every one of these fields since the ledger
+ * existed, and its docblock says why withdrawal marks rather than deletes:
+ * *"'Did we know, and when' is the question this queue exists to answer."*
+ * The route projected `withdrawnAt` alone, so nothing could answer it — the
+ * count reached the screen and the evidence for the count did not. A strike
+ * count with no substantiation is not a repeat-infringer defence.
+ */
+interface StrikeLedgerRow {
+  reportId: string | null
+  url: string | null
+  recordedAt: number | null
+  recordedByEmail: string | null
+  withdrawnAt: number | null
+  withdrawnReason: string | null
+  withdrawnByEmail: string | null
+  /** Derived route-side so the list and the count cannot disagree. */
+  standing: boolean
+}
+
 /** The §512(i) verdict for one org, as `repeatInfringerVerdict()` computed it. */
 interface RepeatInfringerRow {
   strikes: number
   level: string
   decisionRequired: boolean
   consequence: string
+  /** The rows behind `strikes`, newest first (AGL-2328). */
+  ledger?: StrikeLedgerRow[]
 }
 
 interface ReportListing {
@@ -336,6 +360,79 @@ const formatMs = (value: number | null): string =>
   typeof value === 'number' && Number.isFinite(value)
     ? new Date(value).toLocaleString()
     : 'unknown'
+
+/**
+ * The strike ledger for one account (AGL-2328).
+ *
+ * Every field rendered here was already being written by `syncStrikeLedger`
+ * and thrown away by a `select('withdrawnAt')` one line above the only
+ * reader. What that cost was specific: the queue could say an account had
+ * three strikes and could not say WHICH pages, WHEN, or who recorded them —
+ * so the §512(i) repeat-infringer defence, whose whole content is "we knew,
+ * here is when, here is what we did", had no artefact behind it.
+ *
+ * Withdrawn rows stay in the list, struck through, with the reason and the
+ * person. That is the half a flattering implementation drops, and it is the
+ * half that shows the policy was applied rather than merely counted.
+ */
+function StrikeLedger({ rows }: { rows: StrikeLedgerRow[] }) {
+  return (
+    <Stack spacing={0.5}>
+      <Typography variant="caption" color="text.secondary">
+        {`Strike ledger for this account — ${
+          rows.filter((row) => row.standing).length
+        } standing of ${rows.length} recorded`}
+      </Typography>
+      {rows.map((row, index) => (
+        <Stack
+          key={`${row.reportId ?? index}`}
+          spacing={0.25}
+          sx={{ pl: 1, borderLeft: 2, borderColor: 'divider' }}
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'baseline', flexWrap: 'wrap', rowGap: 0.5 }}
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color={row.standing ? 'warning' : 'default'}
+              label={row.standing ? 'standing' : 'withdrawn'}
+            />
+            {/* Not a link, for the reason the reported address above is not
+                a link: this is an attacker-supplied URL and the browser
+                reading it can suspend any site on the platform. */}
+            <Typography
+              variant="caption"
+              component="span"
+              sx={{
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+                textDecoration: row.standing ? 'none' : 'line-through',
+              }}
+            >
+              {row.url ?? 'no address recorded'}
+            </Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {`Recorded ${formatMs(row.recordedAt)}${
+              row.recordedByEmail ? ` by ${row.recordedByEmail}` : ''
+            }`}
+          </Typography>
+          {row.standing ? null : (
+            <Typography variant="caption" color="text.secondary">
+              {`Withdrawn ${formatMs(row.withdrawnAt)}${
+                row.withdrawnByEmail ? ` by ${row.withdrawnByEmail}` : ''
+              }${row.withdrawnReason ? ` — ${row.withdrawnReason}` : ''}`}
+            </Typography>
+          )}
+        </Stack>
+      ))}
+    </Stack>
+  )
+}
 
 function AdminAbuseReports() {
   const { data: user } = useUser()
@@ -901,6 +998,21 @@ function AdminAbuseReports() {
                         {CATEGORY_HINT[report.category] ??
                           'This category is not one the current form offers — the report predates a change to the category list.'}
                       </Typography>
+                    ) : null}
+
+                    {/*
+                      THE EVIDENCE BEHIND THE STRIKE COUNT (AGL-2328).
+
+                      The chip in the header asserts a number; this is what
+                      substantiates it. Withdrawn rows are shown, struck
+                      through and with the reason they were lifted, because
+                      `syncStrikeLedger` marks rather than deletes precisely
+                      so "did we know, and when" has an answer — and a list
+                      that hid the reversals would answer a different,
+                      flattering question.
+                    */}
+                    {verdict?.ledger?.length ? (
+                      <StrikeLedger rows={verdict.ledger} />
                     ) : null}
 
                     <Stack spacing={0.5}>

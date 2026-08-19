@@ -275,25 +275,62 @@ function counterNoticePayload(
  * direction that matters. The ledger rows are the record; this is arithmetic
  * over them.
  *
- * `select('withdrawnAt')` projects to the one field the predicate reads —
- * deliberately that field and not none, because a projection that dropped it
- * would make `countStandingStrikes` see `undefined` on every row and count
- * every withdrawn strike as standing. A cheaper query that answers a
- * different question is the expensive kind of mistake here.
+ * ## The projection carries the whole answer now (AGL-2328)
+ *
+ * It used to be `select('withdrawnAt')` — the one field `countStandingStrikes`
+ * reads. That was right about the arithmetic and wrong about the question.
+ * `syncStrikeLedger` writes `url`, `recordedAt`, `recordedByEmail`,
+ * `withdrawnReason`, `withdrawnByEmail` and says in its own docblock why
+ * withdrawal MARKS rather than deletes: *"'Did we know, and when' is the
+ * question this queue exists to answer."* Nothing could answer it. The count
+ * reached a screen; every field that makes the count evidence was projected
+ * away one line above the only reader, so the §512(i) repeat-infringer
+ * defence was write-only.
+ *
+ * A projection that starves its consumer is the cheaper mistake here in both
+ * directions: dropping `withdrawnAt` would count every withdrawn strike as
+ * standing, and dropping the rest leaves a number nobody can substantiate.
  */
-async function standingStrikes(
+async function strikeLedger(
   firestore: any,
   orgId: string,
-): Promise<number> {
+): Promise<{
+  rows: Record<string, unknown>[]
+  standing: number
+}> {
   const snapshot = await firestore
     .collection('orgs')
     .doc(orgId)
     .collection(Aglyn.STRIKE_LEDGER_SUBCOLLECTION)
-    .select('withdrawnAt')
     .get()
-  return Aglyn.countStandingStrikes(
-    snapshot.docs.map((entry: any) => entry.data() as { withdrawnAt?: unknown }),
+  const data = snapshot.docs.map(
+    (entry: any) => entry.data() as Record<string, unknown>,
   )
+  const millis = (value: any) =>
+    value?.toMillis?.() ?? (value?.seconds ? value.seconds * 1000 : null)
+  const rows = data
+    .map((row) => ({
+      reportId: row['reportId'] ?? null,
+      url: row['url'] ?? null,
+      recordedAt: millis(row['recordedAt']),
+      recordedByEmail: row['recordedByEmail'] ?? null,
+      withdrawnAt: millis(row['withdrawnAt']),
+      withdrawnReason: row['withdrawnReason'] ?? null,
+      withdrawnByEmail: row['withdrawnByEmail'] ?? null,
+      // Derived here so the page and the count cannot disagree about which
+      // rows are standing — two implementations of that predicate is how a
+      // termination decision and the evidence for it drift apart.
+      standing: row['withdrawnAt'] == null,
+    }))
+    // Newest first. A §512(i) review reads "when did this start" off the
+    // bottom of the list and "are they still at it" off the top.
+    .sort((a, b) => (b.recordedAt ?? 0) - (a.recordedAt ?? 0))
+  return {
+    rows,
+    standing: Aglyn.countStandingStrikes(
+      data as { withdrawnAt?: unknown }[],
+    ),
+  }
 }
 
 /**
@@ -556,9 +593,15 @@ async function handler(request: Request): Promise<Response> {
       ]
       const strikes: Record<string, unknown> = {}
       for (const orgId of strikeOrgIds.slice(0, STRIKE_LOOKUP_MAX_ORGS)) {
-        strikes[orgId] = Aglyn.repeatInfringerVerdict(
-          await standingStrikes(firestore, orgId),
-        )
+        const ledger = await strikeLedger(firestore, orgId)
+        strikes[orgId] = {
+          ...Aglyn.repeatInfringerVerdict(ledger.standing),
+          // THE EVIDENCE BEHIND THE NUMBER (AGL-2328). The verdict alone is
+          // an assertion; the ledger is what makes it a §512(i) defence.
+          // Every field here was already being written and thrown away one
+          // line above the only reader.
+          ledger: ledger.rows,
+        }
       }
       return Response.json(
         {
@@ -866,7 +909,7 @@ async function handler(request: Request): Promise<Response> {
       .slice(0, 2000)
     if (closing && category === 'dmca' && reportOrgId) {
       const verdict = Aglyn.repeatInfringerVerdict(
-        await standingStrikes(firestore, reportOrgId),
+        (await strikeLedger(firestore, reportOrgId)).standing,
       )
       if (verdict.decisionRequired && !repeatInfringerDecision) {
         return Response.json(
@@ -914,9 +957,10 @@ async function handler(request: Request): Promise<Response> {
       url: asString(before.get('url')),
       withdrawalReason: 'staffReversed',
     })
-    const strikesAfter = reportOrgId
-      ? await standingStrikes(firestore, reportOrgId)
-      : 0
+    const ledgerAfter = reportOrgId
+      ? await strikeLedger(firestore, reportOrgId)
+      : null
+    const strikesAfter = ledgerAfter?.standing ?? 0
 
     await firestore.collection('adminAudit').add({
       actorUid: decoded.uid,
@@ -962,7 +1006,13 @@ async function handler(request: Request): Promise<Response> {
         // the number the page shows after an action is one the database
         // actually holds.
         repeatInfringer: reportOrgId
-          ? Aglyn.repeatInfringerVerdict(strikesAfter)
+          ? {
+              ...Aglyn.repeatInfringerVerdict(strikesAfter),
+              // The ledger travels with the verdict here too, so the card
+              // does not have to re-list the queue to refresh its evidence
+              // after an action (AGL-2328).
+              ledger: ledgerAfter?.rows ?? [],
+            }
           : null,
         confirmed: asString(after.get('status')) === status,
       },
