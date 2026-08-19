@@ -43,6 +43,7 @@ import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useIsStaff from '../../../../hooks/use-is-staff'
 import type { AssistMiningReport } from '../../../../utils/assist-signal-mining'
+import { costSplitRows } from '../../../../utils/assist-signal-mining'
 
 /**
  * The Assist docs-gap and cost board (AGL-1860, AGL-2252) — the read side of
@@ -79,6 +80,72 @@ const money = (value: number) =>
 
 const percent = (value: number | null) =>
   value == null ? '—' : `${Math.round(value * 100)}%`
+
+/**
+ * One cost breakdown — tier or model, dearest first (AGL-2340).
+ *
+ * The `share` column is why this is a table rather than a row of chips. The
+ * decision it feeds is always comparative — "is free eating the margin" is a
+ * question about proportion, not about a dollar figure — and a reader asked
+ * to divide two numbers in their head does not do it.
+ *
+ * `turns` is kept beside the money on purpose: a tier that is a third of the
+ * traffic and two thirds of the bill is the finding, and neither column says
+ * that alone.
+ */
+function CostSplitTable({
+  caption,
+  label,
+  rows,
+  totalUsd,
+}: {
+  caption: string
+  label: string
+  rows: { key: string; messages: number; estCostUsd: number }[]
+  totalUsd: number
+}) {
+  return (
+    <Table size="small" sx={{ width: 'auto' }}>
+      <TableHead>
+        <TableRow>
+          <TableCell colSpan={4}>
+            <Typography variant="subtitle2">{caption}</Typography>
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell>{label}</TableCell>
+          <TableCell align="right">Turns</TableCell>
+          <TableCell align="right">Cost</TableCell>
+          <TableCell align="right">Share</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {!rows.length ? (
+          <TableRow>
+            <TableCell colSpan={4}>
+              <Typography variant="body2" color="text.secondary">
+                No turns in this sample.
+              </Typography>
+            </TableCell>
+          </TableRow>
+        ) : (
+          rows.map((row) => (
+            <TableRow key={row.key}>
+              <TableCell>{row.key}</TableCell>
+              <TableCell align="right">
+                {row.messages.toLocaleString()}
+              </TableCell>
+              <TableCell align="right">{money(row.estCostUsd)}</TableCell>
+              <TableCell align="right">
+                {percent(totalUsd > 0 ? row.estCostUsd / totalUsd : null)}
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  )
+}
 
 const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -179,6 +246,17 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                         : 'default'
                     }
                   />
+                  {/*
+                   * Cache WRITES, beside the reads (AGL-2340). The pair only
+                   * means anything together: a write is billed at a premium
+                   * over a fresh input token and pays for itself only if
+                   * enough reads follow it. A board that showed the cheap
+                   * half alone made a prefix that is re-written every turn —
+                   * the expensive failure mode — look like a caching win.
+                   */}
+                  <Chip
+                    label={`cache writes ${totals.cacheWriteTokens.toLocaleString()}`}
+                  />
                   <Chip
                     label={`👍 ${totals.feedback.up} · 👎 ${totals.feedback.down} · unrated ${totals.feedback.none}`}
                   />
@@ -198,6 +276,35 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                       label={`${reason}: ${count}`}
                     />
                   ))}
+                </Stack>
+              )}
+            </CardDisplay>
+
+            <CardDisplay header={'Where the money goes'} contentGutterX contentGutterY>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                The same spend split two ways. By tier answers whether the free
+                cap or the paid price is the lever; by model answers whether a
+                cheaper model on the common path would do — the one lever that
+                never reaches the customer.
+              </Typography>
+              {!totals ? (
+                <Typography variant="body2" color="text.secondary">
+                  {loading ? 'Reading signals…' : 'No assist turns recorded yet.'}
+                </Typography>
+              ) : (
+                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 3 }}>
+                  <CostSplitTable
+                    caption="By tier"
+                    label="Tier"
+                    rows={costSplitRows(totals.byTier)}
+                    totalUsd={totals.estCostUsd}
+                  />
+                  <CostSplitTable
+                    caption="By model"
+                    label="Model"
+                    rows={costSplitRows(totals.byModel)}
+                    totalUsd={totals.estCostUsd}
+                  />
                 </Stack>
               )}
             </CardDisplay>

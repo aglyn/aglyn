@@ -131,6 +131,31 @@ export interface OrgCostRow {
   down: number
 }
 
+/** One row of a cost breakdown — see `totals.byTier` / `totals.byModel`. */
+export interface CostSplit {
+  messages: number
+  estCostUsd: number
+}
+
+/**
+ * A cost breakdown as a sorted, labelled list — dearest first (AGL-2340).
+ *
+ * Exported because the ordering is the readable half. A breakdown in
+ * whatever order the keys happened to be inserted is a table you have to
+ * scan; the point of the panel is that the expensive line is the top line.
+ */
+export function costSplitRows(
+  split: Record<string, CostSplit>,
+): { key: string; messages: number; estCostUsd: number }[] {
+  return Object.entries(split)
+    .map(([key, value]) => ({
+      key,
+      messages: value.messages,
+      estCostUsd: value.estCostUsd,
+    }))
+    .sort((a, b) => b.estCostUsd - a.estCostUsd || a.key.localeCompare(b.key))
+}
+
 export interface AssistMiningReport {
   scanned: number
   /** True when the read hit its ceiling — see `mineAssistSignals`. */
@@ -144,8 +169,20 @@ export interface AssistMiningReport {
     estCostUsd: number
     /** Share of billable prompt tokens served from cache, or null at zero. */
     cacheReadRate: number | null
-    byTier: Record<string, number>
-    byModel: Record<string, number>
+    /**
+     * Cost split by entitlement tier, then by model (AGL-2340).
+     *
+     * Both carried as `{ messages, estCostUsd }` rather than a bare turn
+     * count, because the questions these answer are money questions and a
+     * count cannot answer either of them. `byTier` settles "is the free tier
+     * eating the margin, or are paying orgs?" — the free tier can be a
+     * minority of turns and a majority of spend, and a count says the
+     * opposite of the truth in exactly that case. `byModel` settles "would a
+     * cheaper model on the common path fix this?", where the whole point is
+     * that turns and dollars do not move together.
+     */
+    byTier: Record<string, CostSplit>
+    byModel: Record<string, CostSplit>
     stopReasons: Record<string, number>
     feedback: { up: number; down: number; none: number }
   }
@@ -194,6 +231,18 @@ export function assistSignalRow(
   }
 }
 
+/** Accumulate one turn's spend into a `byTier`/`byModel` bucket. */
+function addToSplit(
+  split: Record<string, CostSplit>,
+  key: string,
+  estCostUsd: number,
+) {
+  const bucket = split[key] ?? { messages: 0, estCostUsd: 0 }
+  bucket.messages += 1
+  bucket.estCostUsd += estCostUsd
+  split[key] = bucket
+}
+
 /**
  * Rank the docs gaps and roll the money up.
  *
@@ -216,8 +265,8 @@ export function mineAssistSignals(
     cacheWriteTokens: 0,
     estCostUsd: 0,
     cacheReadRate: null as number | null,
-    byTier: {} as Record<string, number>,
-    byModel: {} as Record<string, number>,
+    byTier: {} as Record<string, CostSplit>,
+    byModel: {} as Record<string, CostSplit>,
     stopReasons: {} as Record<string, number>,
     feedback: { up: 0, down: 0, none: 0 },
   }
@@ -239,8 +288,8 @@ export function mineAssistSignals(
     totals.cacheReadTokens += row.cacheReadTokens
     totals.cacheWriteTokens += row.cacheWriteTokens
     totals.estCostUsd += row.estCostUsd
-    totals.byTier[row.tier] = (totals.byTier[row.tier] ?? 0) + 1
-    totals.byModel[row.model] = (totals.byModel[row.model] ?? 0) + 1
+    addToSplit(totals.byTier, row.tier, row.estCostUsd)
+    addToSplit(totals.byModel, row.model, row.estCostUsd)
     const stop = row.stopReason ?? 'none'
     totals.stopReasons[stop] = (totals.stopReasons[stop] ?? 0) + 1
     if (row.feedback === 'up') totals.feedback.up += 1

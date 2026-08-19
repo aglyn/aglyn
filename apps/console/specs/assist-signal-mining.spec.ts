@@ -99,6 +99,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 import { GET } from '../app/api/admin/assist-signals/route'
 import {
   assistSignalRow,
+  costSplitRows,
   mineAssistSignals,
   type AssistSignalRow,
 } from '../utils/assist-signal-mining'
@@ -262,11 +263,87 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
       none: 1,
       end_turn: 1,
     })
-    expect(report.totals.byTier).toMatchObject({ entitled: 4, free: 1 })
-    expect(report.totals.byModel).toMatchObject({
-      'claude-sonnet-5': 4,
-      'claude-haiku-4-5': 1,
+    expect(report.totals.byTier).toMatchObject({
+      entitled: { messages: 4 },
+      free: { messages: 1 },
     })
+    expect(report.totals.byModel).toMatchObject({
+      'claude-sonnet-5': { messages: 4 },
+      'claude-haiku-4-5': { messages: 1 },
+    })
+  })
+
+  /*==========================================
+   * THE COST SPLIT (AGL-2340).
+   *
+   * The fixture is built so TURNS AND DOLLARS DISAGREE, in both directions
+   * at once, because that disagreement is the entire reason the split is
+   * carried as money rather than as a count:
+   *
+   *  - `free` is 3 of 5 turns and the CHEAPER half ($0.006 of $0.406). A
+   *    count says the free tier is the problem; the money says it is not.
+   *  - `entitled` is 2 of 5 turns and 98% of the spend.
+   *  - the same inversion on the model axis: haiku is the majority of turns
+   *    and a rounding error of the bill.
+   *
+   * So an aggregator that summed `messages` into the cost field, or returned
+   * a constant, or attributed every bucket the first row's figure, produces
+   * a visibly wrong answer here rather than a plausible one.
+   *=========================================*/
+  it('splits cost by tier and by model, not turns by tier and by model', () => {
+    const report = mineAssistSignals([
+      signal({ tier: 'entitled', model: 'claude-sonnet-5', estCostUsd: 0.4 }),
+      signal({ tier: 'entitled', model: 'claude-sonnet-5', estCostUsd: 0.004 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.002 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.003 }),
+      signal({ tier: 'free', model: 'claude-haiku-4-5', estCostUsd: 0.001 }),
+    ])
+
+    expect(report.totals.byTier['entitled'].messages).toBe(2)
+    expect(report.totals.byTier['entitled'].estCostUsd).toBeCloseTo(0.404, 9)
+    expect(report.totals.byTier['free'].messages).toBe(3)
+    expect(report.totals.byTier['free'].estCostUsd).toBeCloseTo(0.006, 9)
+    // The minority of turns is the majority of the bill. This is the whole
+    // finding, and a count-keyed breakdown reports its exact opposite.
+    expect(report.totals.byTier['entitled'].estCostUsd).toBeGreaterThan(
+      report.totals.byTier['free'].estCostUsd,
+    )
+    expect(report.totals.byTier['free'].messages).toBeGreaterThan(
+      report.totals.byTier['entitled'].messages,
+    )
+
+    expect(report.totals.byModel['claude-sonnet-5'].estCostUsd).toBeCloseTo(
+      0.404,
+      9,
+    )
+    expect(report.totals.byModel['claude-haiku-4-5'].estCostUsd).toBeCloseTo(
+      0.006,
+      9,
+    )
+
+    // The split must reconcile with the fleet total, or one of the two is
+    // measuring a different population than the panel says it is.
+    const tierSum = Object.values(report.totals.byTier).reduce(
+      (sum, bucket) => sum + bucket.estCostUsd,
+      0,
+    )
+    expect(tierSum).toBeCloseTo(report.totals.estCostUsd, 9)
+  })
+
+  it('orders a breakdown dearest first, so the expensive line is the top line', () => {
+    // Inserted CHEAPEST FIRST, so insertion order and the required order
+    // disagree. A `costSplitRows` that returned `Object.entries` untouched
+    // passes any assertion written against a fixture that happened to agree.
+    const rows = costSplitRows({
+      free: { messages: 900, estCostUsd: 0.01 },
+      trial: { messages: 1, estCostUsd: 0.5 },
+      entitled: { messages: 12, estCostUsd: 2.25 },
+    })
+    expect(rows.map((row) => row.key)).toEqual(['entitled', 'trial', 'free'])
+    // And it carries EACH row's own figures across — a mapper that reused
+    // the first bucket for every row looks right and is wrong everywhere.
+    expect(rows.map((row) => row.estCostUsd)).toEqual([2.25, 0.5, 0.01])
+    expect(rows.map((row) => row.messages)).toEqual([12, 1, 900])
   })
 
   it('carries truncation through instead of ranking a partial sample silently', () => {
