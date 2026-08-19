@@ -183,6 +183,24 @@ updates:
       prefix: chore
       prefix-development: chore
       include: scope
+    ignore:
+      # THE SAME npm ALIAS THE ROOT ENTRY IGNORES. cloud/functions/package.json
+      # pins `typescript` to `npm:@typescript/typescript6@6.0.2` exactly as the
+      # root does, so Dependabot would resolve the alias name instead of the
+      # target here too. The root was guarded and this manifest was not; it
+      # simply had not misfired yet. Remove when the pin becomes a plain
+      # version — in both places at once. (AGL-2458)
+      - dependency-name: typescript
+      # firebase-admin v14 CANNOT be installed here. firebase-functions-test
+      # (devDependency) peers on ^8 || ^9 || ^10 || ^11 || ^12 || ^13 with no
+      # ^14, and 3.5.0 is the latest release, so there is nothing to upgrade it
+      # to; with admin ^14 `npm ci` dies on ERESOLVE. No workflow runs an
+      # install in this directory, so CI would not catch it. Minor and patch
+      # bumps of the v13 line still arrive. Drop this the moment
+      # firebase-functions-test ships a peer range including ^14. (AGL-2457)
+      - dependency-name: firebase-admin
+        update-types:
+          - version-update:semver-major
     groups:
       firebase:
         patterns:
