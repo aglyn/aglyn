@@ -95,6 +95,23 @@ export type AglynNotificationType =
   // §512(g)(2)(A). Raised on first submission only, like the one above, so a
   // resubmitting customer cannot re-alert.
   | 'system.dmcaCounterNotice'
+  // A site crossed the per-month bandwidth abuse ceiling (AGL-2155). Two
+  // audiences share one type: staff, because an uncompensated free site
+  // serving six figures of page views is an incident; and the site's own
+  // managers, because on free the site is now serving a capped notice and
+  // nobody should learn that from a visitor.
+  //
+  // `system.`, not `billing.`, for the AGL-1088 reason and one specific to
+  // this meter: on the free plan there is no bill, so `billing` would be the
+  // one category where the message is literally never about money — and it is
+  // exactly the free-tier trip that changes what visitors see.
+  | 'system.bandwidthCeilingTripped'
+  // A Stripe billing webhook threw AFTER its handlers had begun (AGL-2157),
+  // so its side effects may be half applied and its idempotency claim is
+  // being HELD — Stripe will not retry it. Staff audience: this is the one
+  // failure on that route no automatic retry can make safe, because the
+  // handlers behind it are not all idempotent, and a human has to reconcile.
+  | 'system.billingWebhookHalfApplied'
 
 export interface AglynNotification {
   $id?: string
@@ -133,6 +150,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.formSubmissionsPaused': 'Form submissions paused',
     'system.abuseReportUrgent': 'Urgent abuse report',
     'system.dmcaCounterNotice': 'DMCA counter-notice',
+    'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
+    'system.billingWebhookHalfApplied': 'Billing webhook half applied',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */

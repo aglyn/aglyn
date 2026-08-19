@@ -23,6 +23,7 @@ import {
   sendGa4Refund,
   sendGa4SubscriptionCancelled,
   notifyOrgAdmins,
+  notifyStaff,
   updateExisting,
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
@@ -273,9 +274,54 @@ async function handler(request: Request): Promise<Response> {
     try {
       await eventRef.create({ type, receivedAt: new Date() })
     } catch {
-      return Response.json({ received: true, duplicate: true }, { status: 200 })
+      // A held claim from a PARTIAL failure is not an ordinary duplicate
+      // (AGL-2157): it means an earlier delivery of this event ran side
+      // effects and then threw, and the claim is being kept on purpose so a
+      // redelivery cannot re-apply them. Still a 200 — Stripe must stop
+      // retrying an event no automatic retry can make safe — but it says so
+      // in the log rather than reading as a routine replay.
+      const held = await eventRef
+        .get()
+        .then((snapshot) => snapshot.get('failedAfterEffects') === true)
+        .catch(() => false)
+      if (held) {
+        console.warn(
+          '[billing/webhook] refusing a redelivery of a PARTIALLY APPLIED event',
+          { eventId, type },
+        )
+      }
+      return Response.json(
+        { received: true, duplicate: true, ...(held ? { held: true } : {}) },
+        { status: 200 },
+      )
     }
   }
+
+  /**
+   * Has anything irreversible been able to land yet? (AGL-2157)
+   *
+   * The bug: the catch below deleted the idempotency marker on EVERY throw,
+   * including a throw raised after a non-idempotent side effect had already
+   * been applied (an inventory decrement, a gift-card balance, a coupon
+   * redemption counter). Deleting the claim un-claims the event, so Stripe's
+   * redelivery re-runs the whole dispatch and re-applies it. The marker is
+   * the only thing standing between a retry and a double decrement, and it
+   * was being dropped precisely when it was doing its job.
+   *
+   * NOT every throw is like that, which is why this is a flag and not a
+   * blanket "never release". A failure raised before any dispatch began —
+   * `serverPluginLoader.ensureAll` unable to load the console API surfaces,
+   * for instance — landed nothing at all, and for those the redelivery path
+   * must keep working exactly as it does today.
+   *
+   * Flipped at the TOP of each branch rather than beside each write, and
+   * that is deliberate: once control is inside a handling branch this route
+   * cannot know which of its writes committed before the throw, so "a branch
+   * was entered" is the honest granularity. Erring toward holding the claim
+   * is the safe direction — a held claim is a visible incident, an
+   * unclaimed one is a silent duplicate charge.
+   */
+  let dispatchEntered = false
 
   try {
     if (
@@ -283,6 +329,7 @@ async function handler(request: Request): Promise<Response> {
       type === 'customer.subscription.updated' ||
       type === 'customer.subscription.deleted'
     ) {
+      dispatchEntered = true // AGL-2157
       const orgId = object?.metadata?.orgId
       const orgRef = orgId
         ? firebaseAdmin
@@ -628,6 +675,7 @@ async function handler(request: Request): Promise<Response> {
       type === 'invoice.paid' ||
       type === 'invoice.payment_failed'
     ) {
+      dispatchEntered = true // AGL-2157
       const customerId = String(object?.customer ?? '')
       if (customerId) {
         // Was `.where('stripeCustomerId', '==', …)` on the orgs collection.
@@ -833,6 +881,7 @@ async function handler(request: Request): Promise<Response> {
     // partial-only refund on a pre-AGL-1811 invoice stays unreported rather
     // than guessed.
     if (type === 'charge.refunded') {
+      dispatchEntered = true // AGL-2157
       const invoiceId =
         typeof object?.invoice === 'string'
           ? object.invoice
@@ -936,6 +985,7 @@ async function handler(request: Request): Promise<Response> {
     // the evidence window is still open, which is the only window in which
     // anything can be done about it.
     if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
+      dispatchEntered = true // AGL-2157
       const disputeId = String(object?.id ?? '')
       const paymentIntentId =
         typeof object?.payment_intent === 'string'
@@ -1087,6 +1137,11 @@ async function handler(request: Request): Promise<Response> {
     // metadata and errors propagate — a throw still 500s so Stripe
     // redelivers, matching the old inline behavior.
     await serverPluginLoader.ensureAll(['consoleApi'])
+    // AGL-2157, and the ORDER here is the point: `ensureAll` throwing means
+    // the plugin surfaces never loaded, so no plugin handler ran and the
+    // claim is safe to release. The flag flips only once dispatch is about
+    // to begin.
+    dispatchEntered = true
     await runBillingWebhookHandlers({
       type,
       object,
@@ -1096,9 +1151,52 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ received: true }, { status: 200 })
   } catch (error) {
     console.error(error)
-    // Let Stripe retry: drop the idempotency marker so the redelivery isn't
-    // skipped as a duplicate (AGL-498).
-    if (eventRef) await eventRef.delete().catch(() => undefined)
+    if (eventRef && !dispatchEntered) {
+      // NOTHING HAPPENED — retry freely. The failure was raised before any
+      // dispatch began, so no side effect can have landed and the redelivery
+      // must not be swallowed as a duplicate (AGL-498, preserved).
+      await eventRef.delete().catch(() => undefined)
+    } else if (eventRef) {
+      // SOMETHING MAY HAVE HAPPENED — retry carefully, which means not
+      // automatically (AGL-2157). The handlers this route reaches are not
+      // all idempotent — inventory decrements, gift-card balances, coupon
+      // redemption counters — so re-running the dispatch could apply an
+      // effect twice, and the claim is what prevents that. It is KEPT.
+      //
+      // Keeping it means Stripe's redelivery short-circuits as a duplicate,
+      // i.e. this event is not retried at all. That is a real cost and it is
+      // chosen with eyes open: a duplicated inventory decrement or a
+      // double-spent gift card is money and stock that cannot be un-applied,
+      // while a half-applied event that stops is a reconcilable incident.
+      // So it is recorded on the marker and escalated to staff — never
+      // dropped silently, which would be the worse half of both options.
+      //
+      // THE REAL FIX IS ELSEWHERE and this does not pretend otherwise:
+      // per-EFFECT idempotency inside the plugins' non-idempotent writes
+      // would make a redelivery safe and let this branch retry like the one
+      // above. Until that sweep lands, a human reconciles.
+      await eventRef
+        .set(
+          {
+            failedAfterEffects: true,
+            failedAt: new Date(),
+            failedType: type,
+            failedMessage: String((error as Error)?.message ?? error).slice(0, 500),
+          },
+          { merge: true },
+        )
+        .catch(() => undefined)
+      await notifyStaff({
+        type: 'system.billingWebhookHalfApplied',
+        title: `Billing webhook failed mid-dispatch — ${type}`,
+        body:
+          `Stripe event ${eventId} threw after its handlers had begun, so ` +
+          'side effects may be half applied. The idempotency claim is being ' +
+          'HELD, which means Stripe will not retry it — reconcile by hand. ' +
+          `Error: ${String((error as Error)?.message ?? error).slice(0, 200)}`,
+        link: buildRoute(Route.ADMIN_OVERVIEW),
+      })
+    }
     return Response.json({ error: 'Webhook handling failed' }, { status: 500 })
   }
 }

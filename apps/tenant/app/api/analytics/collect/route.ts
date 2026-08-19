@@ -15,10 +15,14 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn/server'
 import {
   analyticsDayExpiresAt,
   checkRateLimit,
   firebaseAdmin,
+  getOrgForHost,
+  notifyHostManagers,
+  notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -177,6 +181,161 @@ function utmFragment(
     fragment[param] = { [key]: FieldValue.increment(1) }
   }
   return Object.keys(fragment).length ? fragment : null
+}
+
+// ---------------------------------------------------------------------------
+// Bandwidth abuse ceiling (AGL-2155)
+// ---------------------------------------------------------------------------
+
+/**
+ * THE ONLY PLACE A PAGE VIEW IS EVER COUNTED, AND THEREFORE THE ONLY PLACE
+ * THE CEILING CAN BE EVALUATED WITHOUT COSTING THE RENDER ANYTHING.
+ *
+ * The hole (`free-tier-never-billed.spec.ts` names it in its own table):
+ * every other free dimension had a runtime brace and bandwidth had none, so a
+ * viral free site served a million views — ~$100 of real COGS at
+ * `METERED_UNIT_RATES_USD.perPageView` — with no wall, no throttle and no
+ * alert. Free never got *billed* for it, which was the point of the
+ * structural zero; it also never got *stopped*, which was the hole.
+ *
+ * Three things had to be true at once, and this is the arrangement that makes
+ * them true:
+ *
+ * 1. **No Firestore read in the render path.** The counter is written HERE,
+ *    after the render, so the ceiling is evaluated here too. Crossing it
+ *    stamps `hosts/{id}.bandwidthCeiling`, and the render path reads that
+ *    field off a host document it already loads for the lockdown branch
+ *    (`load-page-data.ts` → `hostRes.host`). Zero extra reads on the happy
+ *    path — verified by reading that loader, not assumed.
+ * 2. **No extra write, and no second counter, on the beacon.** The month sum
+ *    is taken over the SAME `analytics/{day}` documents
+ *    `/api/billing/report-usage` meters, with the same query, so the ceiling
+ *    and the invoice can never disagree about how much traffic a site served.
+ *    A dedicated `counters/pageViews` document was the obvious alternative
+ *    and was rejected: it is +1 write on the platform's highest-volume
+ *    endpoint (a 50% increase), and it would be a second, divergent truth
+ *    about the same number.
+ * 3. **Bounded cost.** Sampled per host per instance — the first beacon an
+ *    instance sees for a host, then every {@link BANDWIDTH_SAMPLE_EVERY}th.
+ *    ~31 reads per 200 views ≈ 0.155 reads/view ≈ $4.7e-8/view, against the
+ *    $1e-4/view this is containing. A cold instance under a spike evaluates
+ *    immediately, which is exactly when it matters.
+ *
+ * The slop is real and deliberate: the ceiling can be crossed by up to
+ * (SAMPLE × instances) views before it trips. An abuse ceiling is containment,
+ * not a quota — being late by a few hundred views on a ceiling of 100,000 is
+ * not a failure mode, and paying a read per view to remove it would cost more
+ * than the traffic does.
+ */
+const BANDWIDTH_SAMPLE_EVERY = 200
+const bandwidthSeen = new Map<string, number>()
+const MAX_TRACKED_BANDWIDTH_HOSTS = 5_000
+
+/**
+ * Per-instance memo of hosts already tripped THIS month, so a contained site
+ * still receiving beacons from cached pages does not re-run the month query
+ * (and re-notify) on every sample. Keyed by month, so it releases itself at
+ * the boundary like the flag it mirrors.
+ */
+const bandwidthTripped = new Map<string, string>()
+
+/** True on the instance's first beacon for a host, then every Nth. */
+function bandwidthSampleDue(hostId: string): boolean {
+  if (bandwidthSeen.size > MAX_TRACKED_BANDWIDTH_HOSTS) bandwidthSeen.clear()
+  const seen = bandwidthSeen.get(hostId) ?? 0
+  bandwidthSeen.set(hostId, seen + 1)
+  return seen % BANDWIDTH_SAMPLE_EVERY === 0
+}
+
+/**
+ * Sum the month, ask the ceiling, and on a trip stamp the host + escalate.
+ *
+ * Best-effort throughout, and it must stay that way: this runs after the
+ * pageview has already been recorded, on a fire-and-forget beacon that always
+ * 204s. A bookkeeping failure here must never cost the customer their
+ * analytics.
+ */
+async function evaluateBandwidthCeiling(hostId: string): Promise<void> {
+  const month = Aglyn.bandwidthCeilingMonthKey()
+  if (bandwidthTripped.get(hostId) === month) return
+  try {
+    const hostRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+    // The SAME query `report-usage`'s `hostUsage` runs. Deliberately not a
+    // differently-derived month key or range: a ceiling that counted
+    // differently from the invoice would refuse traffic nobody was ever
+    // charged for, or miss traffic that was.
+    const [days, orgForHost] = await Promise.all([
+      hostRef
+        .collection('analytics')
+        .where(
+          firebaseAdmin.firestore.FieldPath.documentId(),
+          '>=',
+          `${month}-01`,
+        )
+        .where(
+          firebaseAdmin.firestore.FieldPath.documentId(),
+          '<=',
+          `${month}-31`,
+        )
+        .get(),
+      getOrgForHost(hostId),
+    ])
+    const pageViews = days.docs.reduce(
+      (sum, day) => sum + Number(day.get('total') ?? 0),
+      0,
+    )
+    const org = orgForHost?.org ?? null
+    const ceiling = Aglyn.checkBandwidthAbuseCeiling(org as any, pageViews)
+    if (!ceiling.exceeded) return
+    bandwidthTripped.set(hostId, month)
+    // Whether the trip DEGRADES what visitors see is decided once, here, and
+    // stored — not re-derived at render time. A host that upgrades mid-month
+    // must not keep being degraded by a flag written while it was free.
+    const degraded = Aglyn.bandwidthCeilingDegradesRender(org as any)
+    await hostRef.set(
+      {
+        bandwidthCeiling: {
+          month,
+          ceiling: ceiling.ceiling,
+          used: ceiling.used,
+          trippedAtMs: Date.now(),
+          degraded,
+        },
+      },
+      { merge: true },
+    )
+    // Staff first: this is an incident, not a quota (AGL-1655's distinction,
+    // applied to the other meter). The existing detection — the 10x
+    // month-over-month spike flag on /api/admin/overview — has a month of
+    // latency and no action attached; this is the same signal at beacon
+    // latency with containment already applied.
+    await notifyStaff({
+      type: 'system.bandwidthCeilingTripped',
+      title: `Bandwidth ceiling tripped — ${hostId}`,
+      body: `${hostId} served ${ceiling.used.toLocaleString()} page views in ${month}, past its ${ceiling.ceiling.toLocaleString()} ceiling. ${
+        degraded
+          ? 'The site is now serving the capped notice.'
+          : 'The plan meters the overage, so the site keeps serving and the traffic bills.'
+      }`,
+      link: `/admin/hosts`,
+    })
+    await notifyHostManagers(hostId, {
+      type: 'system.bandwidthCeilingTripped',
+      title: degraded
+        ? 'Site paused — traffic past the free plan'
+        : 'Unusual traffic on this site',
+      body: degraded
+        ? `This site served ${ceiling.used.toLocaleString()} page views this month, past the ${ceiling.ceiling.toLocaleString()} the free plan allows. It is serving a temporary notice until next month. Upgrade to bring it straight back.`
+        : `This site served ${ceiling.used.toLocaleString()} page views this month, well past its plan's included bandwidth. It is still serving normally and the overage bills as usual — contact support if this is not real traffic.`,
+      link: `/${hostId}`,
+    })
+  } catch (error) {
+    console.error('bandwidth ceiling evaluation failed', error)
+  }
 }
 
 /**
@@ -396,6 +555,14 @@ export async function POST(request: Request): Promise<Response> {
           },
           { merge: true },
         )
+    }
+    // Bandwidth abuse ceiling (AGL-2155). AFTER the counter write, so the
+    // view being evaluated is included, and awaited only on the sampled
+    // beacon — 1-in-200 pays ~31 reads, the other 199 pay nothing. Never
+    // before the write: a ceiling evaluated on a stale count would refuse a
+    // view it had not yet counted.
+    if (bandwidthSampleDue(hostId)) {
+      await evaluateBandwidthCeiling(hostId)
     }
     // Event trigger (AGL-128/148): fire-and-forget — never delays the
     // beacon; alerts have no response channel here and are dropped.

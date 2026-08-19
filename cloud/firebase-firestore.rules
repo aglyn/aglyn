@@ -919,6 +919,14 @@ service cloud.firestore {
       // shorten their own takedown and could still republish through it.
       // `hostWritesFrozen` is the other half: the whole non-staff branch now
       // stands down while `suspendedAt` is set, at host scope as well as org.
+      //
+      // `bandwidthCeiling` is the free-tier bandwidth containment (AGL-2155),
+      // written only by /api/analytics/collect through the Admin SDK and read
+      // by the tenant loader to serve the capped notice. Frozen for exactly
+      // the reason `suspendedAt` is: a site whose editors could clear their
+      // own containment does not have one, and this one is cheaper to clear
+      // than a takedown — it is an ordinary map field on a document editors
+      // otherwise write on every publish.
       allow update: if isStaff() ||
         (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
           !request.resource.data.diff(resource.data).affectedKeys()
@@ -926,7 +934,7 @@ service cloud.firestore {
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
-                     'suspendedUntilMs', 'suspendedMode',
+                     'suspendedUntilMs', 'suspendedMode', 'bandwidthCeiling',
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()

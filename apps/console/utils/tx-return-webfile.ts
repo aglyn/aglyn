@@ -40,6 +40,7 @@
  */
 
 import type {
+  MarketplaceTaxSummary,
   StorefrontTaxSummary,
   TaxReturnSummary,
 } from './server/tx-return'
@@ -169,6 +170,29 @@ export interface StorefrontTaxSection {
   rows: StorefrontTaxRow[]
 }
 
+/** One row of the marketplace listing (AGL-2137). */
+export interface MarketplaceTaxRow {
+  id: string
+  sellerOrgId: string | null
+  createdAt: string | null
+  grossCents: number
+  taxCents: number
+  refundedCents: number
+}
+
+/**
+ * The marketplace half of the response (AGL-2137) — the THIRD bucket. Kept
+ * apart from Aglyn's own invoices and from merchant storefronts because a
+ * marketplace row's gross is mostly the PUBLISHER's money, while the tax on
+ * it is charged `exclusive` on the PLATFORM's own charge and stays
+ * platform-side. Optional so a payload from before AGL-2137 still reads.
+ */
+export interface MarketplaceTaxSection {
+  summary: MarketplaceTaxSummary
+  truncated: boolean
+  rows: MarketplaceTaxRow[]
+}
+
 /** The `/api/admin/tax-return` response. */
 export interface TaxReturnPayload {
   period: string
@@ -178,6 +202,8 @@ export interface TaxReturnPayload {
   rows: TaxReturnRow[]
   /** AGL-1904. Absent on a payload predating it. */
   storefront?: StorefrontTaxSection | null
+  /** AGL-2137. Absent on a payload predating it. */
+  marketplace?: MarketplaceTaxSection | null
   /**
    * AGL-2021. The filer's Texas registration, from server-only env on the
    * route. Optional because an unconfigured deployment is a legitimate state,
@@ -341,6 +367,74 @@ export function taxReturnAttentionItems(
         'Tax was collected but Stripe’s taxable_amount could not be read, so ' +
         'the storefront taxable-sales figure understates the base. Re-read ' +
         'the session in Stripe with the tax breakdown expanded.',
+    },
+    {
+      // AGL-2137, BLOCKING for the same reason the storefront figure is, and
+      // more directly: marketplace checkout adds Stripe Tax `exclusive` on
+      // the PLATFORM's own charge and the publisher's transfer is computed
+      // from the PRE-tax price, so the whole of this tax stays in Aglyn's
+      // balance. It is in no Webfile line below.
+      //
+      // Stated as the platform total rather than a Texas slice on purpose:
+      // `marketplacePurchases` stores no buyer address, so no jurisdiction
+      // can be claimed for any of it (see `rowsMissingJurisdiction`). A
+      // "Texas marketplace tax" figure would be a guess wearing a total's
+      // clothes, and this report does not print those.
+      id: 'marketplaceTaxCollected',
+      severity: 'blocking',
+      count: Number(payload.marketplace?.summary?.taxCollectedCents ?? 0),
+      label: 'Marketplace tax collected under Aglyn’s registration',
+      detail:
+        'Cents, net of refunds. Charged on marketplace purchases as an ' +
+        'EXCLUSIVE addition to the platform’s own charge, so none of it went ' +
+        'to the publisher and all of it is in Aglyn’s balance. It is NOT in ' +
+        'Items 1–3 below. Decide with counsel how it is reported before ' +
+        'filing — do not file as if it were zero.',
+    },
+    {
+      id: 'marketplaceTruncated',
+      severity: 'blocking',
+      count: payload.marketplace?.truncated ? 1 : 0,
+      label: 'Marketplace rows exceeded the row cap',
+      detail:
+        'The marketplace figures are a LOWER BOUND — purchases past the cap ' +
+        'were not summed. Narrow the period, or raise ROW_CAP in the route.',
+    },
+    {
+      id: 'marketplaceOverRefunded',
+      severity: 'blocking',
+      count: Number(
+        payload.marketplace?.summary?.attention?.rowsOverRefunded ?? 0,
+      ),
+      label: 'Marketplace rows refunded past their own charge',
+      detail:
+        'A refund larger than the charge is a data fault. The refunded tax ' +
+        'is clamped so the figure is never netted below zero — which means ' +
+        'these rows may OVERSTATE what was given back. Read them in Stripe.',
+    },
+    {
+      id: 'marketplaceMissingJurisdiction',
+      severity: 'review',
+      count: Number(
+        payload.marketplace?.summary?.attention?.rowsMissingJurisdiction ?? 0,
+      ),
+      label: 'Marketplace rows with no stated jurisdiction',
+      detail:
+        'No buyer address is stored on a purchase row, so none of this tax ' +
+        'can be placed in a state — expect this to equal the marketplace ' +
+        'transaction count until purchase rows record an address. It is why ' +
+        'no marketplace figure appears on the jurisdiction table.',
+    },
+    {
+      id: 'marketplaceMissingCreatedAt',
+      severity: 'review',
+      count: Number(
+        payload.marketplace?.summary?.attention?.rowsMissingCreatedAt ?? 0,
+      ),
+      label: 'Marketplace rows with no readable date',
+      detail:
+        'Period assignment fell back to the query bounds, so these purchases ' +
+        'may belong to a neighbouring period.',
     },
     {
       id: 'rowsMissingPaidAt',
@@ -520,6 +614,141 @@ function csvCell(value: unknown): string {
 }
 
 /**
+ * THE THREE BUCKETS, as rows to render (AGL-2163).
+ *
+ * `/api/admin/tax-return` computes three separate sets of figures and the
+ * screen showed one — the storefront bucket (AGL-1904) reached the page only
+ * as an attention count and two Webfile footnotes, and the marketplace bucket
+ * (AGL-2137) did not reach it at all. Two of the three buckets a human files
+ * this return from existed only in a JSON response nobody sees, which is the
+ * same "reachable only by curling a route is not shipped" rule this page was
+ * raised under.
+ *
+ * NO GRAND TOTAL, ever, and that is the whole reason these are three tables
+ * and not one. `aglynLiable` is money Aglyn holds under Aglyn's own
+ * registrations; `merchantManual` is a merchant's own configured rate that
+ * never touched them; marketplace tax is a third thing again. A reader who
+ * adds them has made precisely the mistake the response shape exists to
+ * prevent, so nothing here offers a column that invites it.
+ */
+export interface TaxBucketRow {
+  id: string
+  label: string
+  /** Who owes it — the sentence that decides whether it is on this return. */
+  liability: string
+  transactionCount: number
+  grossDollars: string
+  taxableSalesDollars: string
+  taxCollectedDollars: string
+  /** True when this row is money in Aglyn's balance under its registration. */
+  aglynLiable: boolean
+}
+
+/** The storefront section's three liability buckets (AGL-1904). */
+export function taxReturnStorefrontRows(
+  payload: TaxReturnPayload | null,
+): TaxBucketRow[] {
+  const summary = payload?.storefront?.summary
+  if (!summary) return []
+  const buckets: Array<{
+    id: keyof Pick<
+      StorefrontTaxSummary,
+      'aglynLiable' | 'merchantManual' | 'connectedAccountLiable'
+    >
+    label: string
+    liability: string
+    aglynLiable: boolean
+  }> = [
+    {
+      id: 'aglynLiable',
+      label: 'Computed against Aglyn’s registrations',
+      liability:
+        'In Aglyn’s balance. Stripe Tax computed it on Aglyn’s platform account.',
+      aglynLiable: true,
+    },
+    {
+      id: 'merchantManual',
+      label: 'Merchant’s own configured rate',
+      liability:
+        'The merchant’s. It never touched an Aglyn registration and is not Aglyn’s to remit.',
+      aglynLiable: false,
+    },
+    {
+      id: 'connectedAccountLiable',
+      label: 'Stripe Tax named the connected account liable',
+      liability: 'The connected account’s. Empty today.',
+      aglynLiable: false,
+    },
+  ]
+  return buckets.map((bucket) => {
+    const figures = summary[bucket.id]
+    return {
+      id: bucket.id,
+      label: bucket.label,
+      liability: bucket.liability,
+      transactionCount: Number(figures?.transactionCount ?? 0),
+      grossDollars: centsToDollars(figures?.grossCents),
+      taxableSalesDollars: centsToDollars(figures?.taxableSalesCents),
+      taxCollectedDollars: centsToDollars(figures?.taxCollectedCents),
+      aglynLiable: bucket.aglynLiable,
+    }
+  })
+}
+
+/** One label/value line of the marketplace figures (AGL-2137). */
+export interface TaxFigureLine {
+  label: string
+  value: string
+  note: string
+}
+
+/**
+ * The marketplace bucket's figures (AGL-2137).
+ *
+ * Charged and refunded are stated ALONGSIDE the net, never folded into it:
+ * "we charged X and gave back Y" is the sentence a return needs, and a single
+ * number that could be either is what this shape refuses to print.
+ */
+export function taxReturnMarketplaceLines(
+  payload: TaxReturnPayload | null,
+): TaxFigureLine[] {
+  const summary = payload?.marketplace?.summary
+  if (!summary) return []
+  return [
+    {
+      label: 'Purchases in period',
+      value: String(Number(summary.transactionCount ?? 0)),
+      note: 'Rows swept from marketplacePurchases.',
+    },
+    {
+      label: 'Gross paid by buyers',
+      value: `$${centsToDollars(summary.grossCents)}`,
+      note: 'Tax included, and mostly the publisher’s money — not Aglyn revenue.',
+    },
+    {
+      label: 'Taxable base',
+      value: `$${centsToDollars(summary.taxableSalesCents)}`,
+      note: 'Gross less tax.',
+    },
+    {
+      label: 'Tax charged',
+      value: `$${centsToDollars(summary.taxChargedCents)}`,
+      note: 'Added EXCLUSIVE on the platform’s own charge; the publisher’s transfer is computed pre-tax.',
+    },
+    {
+      label: 'Tax refunded',
+      value: `$${centsToDollars(summary.taxRefundedCents)}`,
+      note: 'Pro rata against each row’s own gross. Never remitted.',
+    },
+    {
+      label: 'Tax collected, net',
+      value: `$${centsToDollars(summary.taxCollectedCents)}`,
+      note: 'The remittable figure — and it is in NO Webfile line above.',
+    },
+  ]
+}
+
+/**
  * The working papers: one line per invoice behind the totals, in dollars.
  *
  * Prefixed with the figures actually filed and the counts that qualify them,
@@ -588,6 +817,36 @@ export function taxReturnCsv(payload: TaxReturnPayload | null): string {
       row.taxableSalesDollars,
       row.taxCollectedDollars,
     ]),
+    [],
+    ['Storefront commerce tax by liability (AGL-1904) — NOT in the Webfile figures'],
+    [
+      'Bucket',
+      'Who owes it',
+      'Transactions',
+      'Gross (USD)',
+      'Taxable sales (USD)',
+      'Tax collected (USD)',
+    ],
+    ...(taxReturnStorefrontRows(payload).length
+      ? taxReturnStorefrontRows(payload).map((row) => [
+          row.label,
+          row.liability,
+          String(row.transactionCount),
+          row.grossDollars,
+          row.taxableSalesDollars,
+          row.taxCollectedDollars,
+        ])
+      : [['—', 'No storefront figures in this payload', '0', '', '', '']]),
+    [],
+    ['Marketplace tax (AGL-2137) — NOT in the Webfile figures'],
+    ['Figure', 'Amount', 'Note'],
+    ...(taxReturnMarketplaceLines(payload).length
+      ? taxReturnMarketplaceLines(payload).map((line) => [
+          line.label,
+          line.value,
+          line.note,
+        ])
+      : [['—', 'No marketplace figures in this payload', '']]),
     [],
     ['Invoice rows'],
     [
