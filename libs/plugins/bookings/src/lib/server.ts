@@ -19,6 +19,7 @@ import { checkEntitlement,
   registerPluginConfigSchema,
   registerPluginJob,
   resolveBrandingProfile,
+  resolveTransactionFeePct,
 } from '@aglyn/aglyn/server'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isSlotOpen } from './model'
 import {
@@ -243,15 +244,15 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown service' })
     }
 
-    // Plan gate (dark-launch rule preserved).
-    {
-      // Plan/quota gates ride the owning org's doc (AGL-238).
-      const org = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(org as never, 'bookings')) {
-        return res
-          .status(403)
-          .json({ error: 'Bookings are not enabled on this site' })
-      }
+    // Plan gate (dark-launch rule preserved). Plan/quota gates ride the
+    // owning org's doc (AGL-238). Hoisted out of its block for AGL-2315:
+    // the same org doc now also prices the platform's cut below, and reading
+    // it twice would let a gate and a fee disagree within one request.
+    const ownerOrg = (await getOrgForHost(hostId))?.org
+    if (!checkEntitlement(ownerOrg as never, 'bookings')) {
+      return res
+        .status(403)
+        .json({ error: 'Bookings are not enabled on this site' })
     }
 
     const durationMs =
@@ -269,6 +270,75 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       return res.status(501).json({
         error: 'Paid bookings are not configured (STRIPE_SECRET_KEY).',
       })
+    }
+
+    // WHO GETS THE MONEY (AGL-2315). Until this landed, a paid booking opened
+    // a Checkout Session with no Connect wiring of any kind — no
+    // `transfer_data`, no `application_fee_amount`, no connected account read
+    // anywhere in the plugin — so 100% of every paid booking settled in
+    // AGLYN'S OWN platform balance and the merchant was never paid at all.
+    // Not under-paid: never paid. Every sibling tenant money path (storefront
+    // checkout, cart, draft orders, POS, reservations) was already a
+    // destination charge to the merchant's connected account; this was the one
+    // door that took a card and kept the proceeds.
+    //
+    // Resolved BEFORE the hold transaction on purpose, the `reserve.ts`
+    // ordering: an unconnected merchant is a deterministic refusal the site
+    // owner fixes out of band, and discovering it after the slot is written
+    // would strand a real appointment slot as `pendingPayment` for 15 minutes
+    // on a booking that could never be paid.
+    let chargeAccountId = ''
+    let feeCents = 0
+    if (paid) {
+      const ownerUid = (ownerOrg as { ownerUid?: unknown } | null)?.ownerUid
+      const ownerProfile = ownerUid
+        ? await firestore.collection('profiles').doc(String(ownerUid)).get()
+        : null
+      chargeAccountId = String(ownerProfile?.get('stripeAccountId') ?? '')
+      if (!chargeAccountId || !ownerProfile?.get('stripeChargesEnabled')) {
+        return res.status(409).json({ error: 'Payments are not set up yet' })
+      }
+
+      // THE TAKE RATE IS THE STOREFRONT LADDER'S, NOT A NEW ONE (AGL-2315).
+      //
+      // Zach's decision, 2026-08-19: bookings mirror the storefront ladder —
+      // the same rate a storefront sale already takes, tapering to 0% on the
+      // upper tiers. It is consistent with what merchants already agreed to
+      // and needs no new price communication, so pricing stays locked for
+      // Sept 1.
+      //
+      // Implemented by ROUTING THROUGH the existing resolver rather than
+      // adding a bookings rate: `resolveTransactionFeePct` already carries a
+      // `'service'` axis (it resolves to the digital rate), and a booking is a
+      // service sale — `reserve.ts` prices a stay through the identical call.
+      // So there is no new constant, no new plan-table row, and no second
+      // place for a rate to drift out of step with `/pricing`. Every guard
+      // that already holds for the storefront rate holds here for free: the
+      // malformed-override floor (AGL-2114), the lapsed-plan re-resolution,
+      // and the staff override.
+      //
+      // FEE BASIS: post-discount ITEMS ONLY, matching the one-time storefront
+      // paths and deliberately NOT the subscription path's
+      // `application_fee_percent`, which Stripe applies to the whole invoice
+      // and so takes a cut of sales tax and shipping (AGL-2317). Here the two
+      // bases happen to coincide, because this session carries exactly one
+      // line item and, by AGL-2000's stated decision, no tax line and no
+      // shipping option. That coincidence is not the reason for the choice —
+      // sending a computed CENTS amount rather than a percent is what makes
+      // the basis survive the day this path does compute service tax: a fee
+      // derived from `priceUsd` stays off the tax the moment tax is added,
+      // whereas a percent would silently start taxing the state's money.
+      //
+      // The `Math.max(1, ...)` floor and the `feePct > 0` skip are both
+      // `reserve.ts`'s, and they are two different branches: a merchant on a
+      // 0%-fee tier takes a destination charge with NO application fee at all
+      // (the advertised rate, not a rounding artefact), while a chargeable fee
+      // that rounds below a cent is charged as one cent rather than silently
+      // dropped to zero.
+      const feePct = resolveTransactionFeePct(ownerOrg as never, 'service')
+      const chargeCents = Math.round(priceUsd * 100)
+      feeCents =
+        feePct > 0 ? Math.max(1, Math.round((chargeCents * feePct) / 100)) : 0
     }
 
     // Transaction: re-read overlapping bookings and validate the slot so
@@ -368,12 +438,25 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         'line_items[0][price_data][product_data][name]': String(
           service.name ?? 'Booking',
         ).slice(0, 120),
+        // Destination charge to the MERCHANT's connected account (AGL-2315).
+        // Unconditional: `transfer_data[destination]` is what makes this the
+        // merchant's money, and it is required on every paid booking whatever
+        // the take rate. Only the fee below is conditional.
+        'payment_intent_data[transfer_data][destination]': chargeAccountId,
+        ...(feeCents > 0
+          ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
+          : {}),
         success_url: `${origin}/?booking=paid`,
         cancel_url: `${origin}/?booking=canceled`,
         customer_email: email,
         'metadata[type]': 'booking-payment',
         'metadata[hostId]': hostId,
         'metadata[bookingId]': bookingId,
+        // The fee actually charged, recorded on the session exactly as every
+        // sibling path records it — the figure a refund reverses and the
+        // figure a reconciliation reads. `'0'` on a 0%-fee tier is a real
+        // answer, not a missing one.
+        'metadata[feeCents]': String(feeCents),
         expires_at: String(Math.floor(Date.now() / 1000) + 30 * 60),
       })
       const stripeResponse = await fetch(

@@ -50,6 +50,14 @@ jest.mock('@aglyn/aglyn/server', () => ({
   registerBillingWebhookHandler: () => undefined,
   checkEntitlement: () => true,
   resolveBrandingProfile: () => ({ name: 'Acme' }),
+  // The REAL fee resolver (AGL-2315). A stub returning a constant would let
+  // this suite pass against a fee the plan ladder never priced. Required from
+  // the source module rather than through `requireActual` on the whole
+  // `/server` barrel, which drags in the realm server and the API adapter —
+  // the `apply-publish-schedule.spec.ts` pattern.
+  resolveTransactionFeePct: jest.requireActual(
+    '../../../../aglyn/src/lib/app-utils/plan-entitlements',
+  ).resolveTransactionFeePct,
 }))
 
 jest.mock('@aglyn/tenant-runtime', () => ({
@@ -88,9 +96,25 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       6: [{ start: 0, end: 1440 }],
     },
   }
+  // The OWNER'S CONNECTED-ACCOUNT PROFILE (AGL-2315). A paid booking is a
+  // destination charge, so the handler reads `profiles/{ownerUid}` for the
+  // merchant's Stripe account before it will open a session. The double models
+  // it because the double must model real semantics: without it every paid
+  // test 409s on "Payments are not set up yet" and the suite reads as a red
+  // that has nothing to do with what it asserts.
+  const ownerProfile: Record<string, unknown> = {
+    stripeAccountId: 'acct_merchant_1',
+    stripeChargesEnabled: true,
+  }
   const state = {
     service: serviceDoc,
     bookings,
+    ownerProfile,
+    /** The org doc `getOrgForHost` answers with — the fee's own input. */
+    org: { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' } as Record<
+      string,
+      unknown
+    >,
     /** Writes to every collection other than bookings/events/notifications. */
     written: {} as Record<string, Array<Record<string, unknown>>>,
   }
@@ -133,12 +157,28 @@ jest.mock('@aglyn/tenant-data-admin', () => {
             }),
           },
   }
+  // Top-level collections are resolved BY NAME (AGL-2315). The old double
+  // answered `hostRef` for every collection whatever it was called, so
+  // `profiles` and `hosts` were the same object — a fake in which the owner's
+  // Stripe account could not be told apart from the site document, and in
+  // which a handler reading the WRONG collection would still pass.
+  const profilesCollection = {
+    doc: (uid: string) => ({
+      id: uid,
+      get: async () => ({
+        exists: uid === state.org['ownerUid'],
+        get: (field: string) =>
+          uid === state.org['ownerUid'] ? state.ownerProfile[field] : undefined,
+      }),
+    }),
+  }
   return {
     __state: state,
     firebaseAdmin: {
       app: () => ({
         firestore: () => ({
-          collection: () => ({ doc: () => hostRef }),
+          collection: (name: string) =>
+            name === 'profiles' ? profilesCollection : { doc: () => hostRef },
           runTransaction: async (fn: any) =>
             fn({
               get: async () => ({ docs: [] }),
@@ -150,7 +190,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       }),
       firestore: { FieldValue: { serverTimestamp: () => 'NOW' } },
     },
-    getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
+    getOrgForHost: async () => ({ orgId: 'org-1', org: state.org }),
     resolveOrgIdForHost: async () => 'org-1',
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,
