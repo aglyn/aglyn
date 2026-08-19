@@ -92,7 +92,6 @@ const QUOTA_LABELS: Readonly<Record<string, string>> = {
   screensPerHost: 'Screens / site',
   sharedLayoutsPerHost: 'Layouts / site',
   storagePerHostMb: 'Storage MB',
-  totalSiteSizeMb: 'Site size MB',
   membersPerHost: 'Members / site',
   managersPerOrg: 'Team seats',
   maxManagersPerOrg: 'Max team seats',

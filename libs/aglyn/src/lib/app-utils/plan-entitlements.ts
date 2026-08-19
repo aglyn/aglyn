@@ -32,16 +32,31 @@ export const UNLIMITED = Number.POSITIVE_INFINITY
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-org overrides live on `org.entitlements` and win
  * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
- * (AGL-67, 2026-07-07): storage-per-host is media storage and exceeds the
- * published total-site-size cap by design. Metered costs are passed through
+ * (AGL-67, 2026-07-07): storage-per-host is media storage; the published
+ * total-site-size cap it used to exceed by design was retired in AGL-2133.
+ * Metered costs are passed through
  * from Firebase/Vercel at cost × 1.30 separately (AGL-41).
  */
 /** Legacy host-keyed dataset overrides resolved into org keys (AGL-240). */
 type LegacyEntitlementKeys = 'datasetsPerHost' | 'maxDatasetsPerHost'
 
-/** Fully-resolved entitlements: every quota present, features complete. */
+/**
+ * Keys `OrgEntitlements` still carries so stored documents type-check, but
+ * that no plan declares and nothing resolves (AGL-2133). Kept as a named type
+ * rather than folded into `LegacyEntitlementKeys`: legacy keys are resolved
+ * INTO their replacements, retired ones are dropped, and conflating the two
+ * would eventually resolve a retired value into something.
+ *
+ * `RETIRED_ENTITLEMENT_KEYS` is the runtime half and must list the same keys.
+ */
+type RetiredEntitlementKeys = 'totalSiteSizeMb'
+
+/** Fully-resolved entitlements: every LIVE quota present, features complete. */
 export type ResolvedOrgEntitlements = Required<
-  Omit<OrgEntitlements, 'features' | LegacyEntitlementKeys>
+  Omit<
+    OrgEntitlements,
+    'features' | LegacyEntitlementKeys | RetiredEntitlementKeys
+  >
 > & {
   features: Required<OrgFeatureFlags>
 }
@@ -53,7 +68,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 1,
     templatesPerHost: 10,
     storagePerHostMb: 250,
-    totalSiteSizeMb: 100,
     membersPerHost: 1,
     managersPerOrg: 1,
     maxManagersPerOrg: 1,
@@ -127,7 +141,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: 3,
     templatesPerHost: 50,
     storagePerHostMb: 2048,
-    totalSiteSizeMb: 1024,
     membersPerHost: 3,
     managersPerOrg: 2,
     maxManagersPerOrg: 5,
@@ -201,7 +214,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 10240,
-    totalSiteSizeMb: 5120,
     membersPerHost: 10,
     managersPerOrg: 5,
     maxManagersPerOrg: 20,
@@ -273,7 +285,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 51200,
-    totalSiteSizeMb: 25600,
     membersPerHost: 50,
     managersPerOrg: 15,
     maxManagersPerOrg: 100,
@@ -346,7 +357,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 76800,
-    totalSiteSizeMb: 38400,
     membersPerHost: 75,
     managersPerOrg: 25,
     maxManagersPerOrg: 150,
@@ -416,7 +426,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 102400,
-    totalSiteSizeMb: 51200,
     membersPerHost: 100,
     managersPerOrg: 50,
     maxManagersPerOrg: 250,
@@ -490,7 +499,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: 204800,
-    totalSiteSizeMb: 102400,
     membersPerHost: 250,
     managersPerOrg: 100,
     maxManagersPerOrg: 500,
@@ -572,7 +580,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     sharedLayoutsPerHost: UNLIMITED,
     templatesPerHost: UNLIMITED,
     storagePerHostMb: UNLIMITED,
-    totalSiteSizeMb: UNLIMITED,
     membersPerHost: UNLIMITED,
     managersPerOrg: UNLIMITED,
     maxManagersPerOrg: UNLIMITED,
@@ -1573,6 +1580,33 @@ function resolvePurchasedAddons(
 }
 
 /**
+ * Numeric entitlement keys that were REMOVED from `PLAN_ENTITLEMENTS` and
+ * must never be resolved again from a stored override (AGL-2133).
+ *
+ * `totalSiteSizeMb` is the first. It carried a value on all 8 plans and was
+ * enforced by nothing — no gate, no meter, no alert. AGL-1107 added it and
+ * AGL-1370 deleted its meter and its alert on measurement rather than taste:
+ * `measure-node-map.ts` refuses any node map over 900 KB (AGL-678), so the
+ * measurable org total tops out at 2.3–20.9% of the cap depending on plan.
+ * What survived was a WRITABLE staff override field for a number nothing
+ * read, so a support engineer resolving a "this site is too big" ticket
+ * raised it, got a success and an audit row, and changed nothing.
+ *
+ * WIRING IT WAS THE OTHER OPTION AND IT IS WORSE. A cap the measurement can
+ * reach a fifth of is a gate that refuses nobody — the same "reports success,
+ * does nothing" shape, moved from the staff dialog to the enforcement point,
+ * plus a new hard wall introduced days before launch. The per-site size
+ * ceiling that actually binds is AGL-678's 900 KB node map, and it is real.
+ *
+ * The rollup's `siteSizeMb` MEASUREMENT stays — host-usage and the usage
+ * audit read it, and it is a genuine internal signal. Only the entitlement
+ * goes.
+ */
+export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
+  'totalSiteSizeMb',
+])
+
+/**
  * Effective entitlements for an org: plan defaults with the org doc's
  * per-key overrides applied (features merge key-by-key too), then
  * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
@@ -1618,6 +1652,16 @@ export function resolveOrgEntitlements(
     } = overrides
     const merged = { ...defaults }
     for (const [key, value] of Object.entries(quotaOverrides)) {
+      // A RETIRED quota's stored override is dropped, not merged (AGL-2133).
+      // This loop copies any numeric key it finds, so removing a key from
+      // `PLAN_ENTITLEMENTS` alone would leave the value that staff already
+      // wrote onto live org documents still appearing on the resolved
+      // entitlements — a number with no default behind it and no reader in
+      // front of it, which is a worse artefact than the field that produced
+      // it. `tools/scripts/strip-retired-entitlements.mjs` clears them from
+      // Firestore; this makes the resolver correct before it has run, and
+      // stays correct if a document is restored from an old backup.
+      if (RETIRED_ENTITLEMENT_KEYS.has(key)) continue
       if (typeof value === 'number') (merged as any)[key] = value
     }
     // Pre-AGL-240 override docs keyed datasets per host; resolve them into
