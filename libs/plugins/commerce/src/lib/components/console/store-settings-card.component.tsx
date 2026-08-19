@@ -34,7 +34,7 @@ import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { hostPublicOrigin, pluginDocsHelp } from '@aglyn/aglyn'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -93,6 +93,33 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
   }
   const update = (patch: Partial<StoreSettings>) =>
     setDraft({ ...current, ...patch })
+
+  /**
+   * Google Merchant Center feed address (AGL-2249).
+   *
+   * `server/feed.ts` has served this since AGL-299, and the only place the
+   * URL was ever written down was that file's own docblock — so the feature
+   * was built, deployed, and undiscoverable. A feed nobody can find is a
+   * shopping channel nobody switches on.
+   *
+   * Through `hostPublicOrigin` rather than a hand-built string, because a
+   * store on a custom domain must be told ITS name: the feed's `<link>`
+   * elements are built from the request host, so submitting the `.aglyn.app`
+   * address for a site that serves on `shop.example.com` would put the wrong
+   * domain on every item in Merchant Center.
+   *
+   * Undefined until the host doc lands, and undefined forever for a host with
+   * neither a cname nor a subdomain — `hostPublicOrigin` returns undefined
+   * rather than a half-built URL, and a copyable half-URL is worse than none.
+   */
+  const feedUrl = host
+    ? (() => {
+        const origin = hostPublicOrigin(host)
+        return origin
+          ? `${origin}/api/commerce/feed?hostId=${hostId}`
+          : undefined
+      })()
+    : undefined
 
   // Host screen directory: {screenId: path} (AGL-292 template pick).
   const screenEntries = Object.entries(
@@ -250,6 +277,44 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         >
           {'Save store settings'}
         </Button>
+        <Stack spacing={0.5}>
+          <Typography variant="subtitle2">{'Product feed'}</Typography>
+          {feedUrl ? (
+            <>
+              <TextField
+                label="Google Merchant Center feed URL"
+                value={feedUrl}
+                size="small"
+                slotProps={{ input: { readOnly: true } }}
+                onFocus={(event) => event.target.select()}
+                helperText={
+                  'Paste this into Merchant Center → Products → Feeds as a ' +
+                  'scheduled fetch. It lists every active product with price ' +
+                  'and availability, and refreshes itself.'
+                }
+              />
+              <Button
+                size="small"
+                sx={{ alignSelf: 'flex-start' }}
+                onClick={() => {
+                  void navigator.clipboard?.writeText(feedUrl).then(() =>
+                    enqueueSnackbar('Feed URL copied', {
+                      variant: 'success',
+                      persist: false,
+                    }),
+                  )
+                }}
+              >
+                {'Copy feed URL'}
+              </Button>
+            </>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {'Publish this site to a subdomain or custom domain to get its ' +
+                'Google Merchant Center feed URL.'}
+            </Typography>
+          )}
+        </Stack>
       </Stack>
     </CardDisplay>
   )
