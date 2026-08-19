@@ -48,6 +48,43 @@ import { cartCheckoutHandler } from './cart-checkout'
 const docs = new Map<string, Record<string, any>>()
 let autoIdCounter = 0
 
+/**
+ * `FieldValue.delete()`, and the deep merge it exists to defeat (AGL-2449).
+ *
+ * The gift-card block now places a HOLD in a transaction rather than reading a
+ * balance, and the hold lives in a nested `holds` map. Firestore merges nested
+ * maps key-by-key, so a locally-pruned copy does not remove anything — only
+ * this sentinel does. A double that merged shallowly would report green for a
+ * settlement that silently decrements a card twice on a webhook redelivery,
+ * which is precisely the bug the sentinel was introduced to close.
+ */
+const DELETE = Symbol('FieldValue.delete')
+
+function mergeInto(
+  target: Record<string, any>,
+  patch: Record<string, any>,
+): Record<string, any> {
+  const next = { ...target }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === DELETE) {
+      delete next[key]
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      value.constructor === Object
+    ) {
+      next[key] = mergeInto(
+        (next[key] && typeof next[key] === 'object' ? next[key] : {}) as any,
+        value,
+      )
+    } else {
+      next[key] = value
+    }
+  }
+  return next
+}
+
 function childPaths(path: string): string[] {
   const prefix = `${path}/`
   return [...docs.keys()].filter(
@@ -73,7 +110,7 @@ function makeDocRef(path: string): any {
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
       docs.set(
         path,
-        options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value,
+        options?.merge ? mergeInto(docs.get(path) ?? {}, value) : value,
       )
     },
     /** `create()` rejecting on an existing doc IS the dedupe primitive. */
@@ -106,8 +143,44 @@ function makeCollectionRef(path: string): any {
   }
 }
 
+/**
+ * Buffers reads and writes the way a Firestore transaction does. Contention is
+ * NOT modelled here — this file drives one checkout at a time, and the
+ * concurrent case has its own spec (`gift-card-hold-race.spec.ts`) whose double
+ * tracks per-document versions and re-runs an aborted callback. Pretending to
+ * model it here without the version tracking would be the worse option: a fake
+ * that always commits reports green for a race it never ran.
+ */
+async function runTransaction(
+  body: (transaction: any) => Promise<any>,
+): Promise<any> {
+  const writes: { path: string; value: Record<string, any>; merge: boolean }[] =
+    []
+  const transaction = {
+    get: async (ref: any) => makeSnapshot(ref.path),
+    set: (ref: any, value: Record<string, any>, options?: any) => {
+      writes.push({ path: ref.path, value, merge: Boolean(options?.merge) })
+    },
+    update: (ref: any, value: Record<string, any>) => {
+      writes.push({ path: ref.path, value, merge: true })
+    },
+    create: (ref: any, value: Record<string, any>) => {
+      writes.push({ path: ref.path, value, merge: false })
+    },
+  }
+  const result = await body(transaction)
+  for (const write of writes) {
+    docs.set(
+      write.path,
+      write.merge ? mergeInto(docs.get(write.path) ?? {}, write.value) : write.value,
+    )
+  }
+  return result
+}
+
 const fakeFirestore = {
   collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
 }
 
 const mockOrg: any = {
@@ -123,6 +196,7 @@ const mockOrg: any = {
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
+    firestore: { FieldValue: { delete: () => DELETE } },
   },
   getOrgForHost: async () => mockOrg,
 }))

@@ -390,32 +390,128 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       params.set('metadata[couponCode]', couponCode)
     }
 
-    // Gift cards (AGL-322): balance applies as amount-off; the webhook
-    // decrements the balance on completion.
+    // Gift cards (AGL-322): balance applies as amount-off; the webhook settles
+    // the hold this places on completion.
+    //
+    // The read is a TRANSACTION and it WRITES (AGL-2449). A gift card is cash,
+    // and a plain `.get()` here was the last unreserved limited resource in the
+    // order path: two checkouts entering the same code both read $50, both got
+    // $50 off, and the webhook's bare `increment(-N)` settled the card at
+    // -$50 — $100 of goods against a $50 card, and a negative row in the
+    // outstanding-liability total. The increment was atomic the whole time;
+    // nothing ever CHECKED.
+    //
+    // Unlike stock (AGL-2320), this door can still refuse: the card is applied
+    // BEFORE Stripe is contacted, so no money has moved yet and a shortfall is
+    // a 400 rather than a shipped parcel and an apology. That is why this
+    // reserves instead of merely reporting.
+    //
+    // `giftCardCents` stays in the session metadata because the webhook still
+    // needs to know what to settle, but it is no longer the AUTHORITY for the
+    // decrement — the hold is, and it is keyed by the session id below.
+    // Set only once a hold actually stands, so the refusals below can call it
+    // unconditionally without knowing whether there was a gift card at all.
+    let releaseGiftCardHold: () => Promise<void> = async () => undefined
     if (giftCardCode) {
-      const cardSnapshot = await hostRef
-        .collection('giftCards')
-        .doc(giftCardCode)
-        .get()
-      const balanceCents = Number(cardSnapshot.get('balanceCents') ?? 0)
-      if (!cardSnapshot.exists || balanceCents <= 0) {
-        // Deterministic and retryable; nothing has been minted yet.
+      const cardRef = hostRef.collection('giftCards').doc(giftCardCode)
+      // Placed before the Stripe session exists, so it is keyed by the
+      // idempotency claim's derived key rather than by a session id we do not
+      // have yet — the same string the session is minted under below, so a
+      // retry of this attempt re-places the SAME hold rather than a second one.
+      const holdKey = claim.stripeKey
+      const nowMs = Date.now()
+      const held = await firestore
+        .runTransaction(async (transaction: any) => {
+          const fresh = await transaction.get(cardRef)
+          if (!fresh.exists) return null
+          const card = (fresh.data() ?? {}) as CommerceModel.HostGiftCard
+          const holds = CommerceModel.pruneGiftCardHolds(card.holds, nowMs)
+          // This attempt's own prior hold does not stand in its way — a retry
+          // must be able to re-claim what it already reserved, or the second
+          // press of the same button refuses the shopper their own money.
+          const mine = Number(holds[holdKey]?.cents ?? 0)
+          delete holds[holdKey]
+          const available = CommerceModel.giftCardAvailableCents(
+            { ...card, holds },
+            nowMs,
+          )
+          if (available <= 0 && mine <= 0) return null
+          // Against what is LEFT after the discount, not against the whole
+          // basket (AGL-2112). The old cap was `min(balance, itemsCents)`, so a
+          // $50 card on a $100 basket already 30% off consumed $50 of card
+          // against $70 of goods — the webhook decrements by exactly this
+          // number, so the extra was burned off the customer's card for nothing.
+          const applyCents = Math.min(
+            available + mine,
+            Math.max(0, itemsCents - totalOffCents),
+          )
+          if (applyCents <= 0) return 0
+          // Lapsed holds are deleted by SENTINEL, not by writing back a pruned
+          // copy of the map: `set(…, { merge: true })` merges nested maps
+          // rather than replacing them, so a locally-pruned object leaves every
+          // stale key exactly where it was. Correctness does not depend on this
+          // — every read prunes again — but the document would otherwise grow
+          // without bound, one dead key per abandoned checkout, forever.
+          const swept: Record<string, unknown> = {}
+          for (const stale of Object.keys(card.holds ?? {})) {
+            if (stale !== holdKey && !holds[stale]) {
+              swept[stale] = firebaseAdmin.firestore.FieldValue.delete()
+            }
+          }
+          transaction.set(
+            cardRef,
+            {
+              holds: {
+                ...swept,
+                [holdKey]: {
+                  cents: applyCents,
+                  expiresAtMs: nowMs + CommerceModel.GIFT_CARD_HOLD_TTL_MS,
+                },
+              },
+            },
+            { merge: true },
+          )
+          return applyCents
+        })
+        .catch((error: unknown) => {
+          console.error('Gift card hold failed', giftCardCode, error)
+          return null
+        })
+      if (held == null) {
+        // Deterministic and retryable; nothing has been minted yet. Covers the
+        // unknown card, the empty card, and the card whose whole balance is
+        // already held by someone else's live checkout — the shopper is told
+        // the same thing in each case, because "someone is spending it right
+        // now" is not a distinction a storefront should draw.
         await claim.release()
         return res.status(400).json({ error: 'Gift card is empty or invalid' })
       }
-      // Against what is LEFT after the discount, not against the whole basket
-      // (AGL-2112). The old cap was `min(balance, itemsCents)`, so a $50 card
-      // on a $100 basket already 30% off consumed $50 of card against $70 of
-      // goods — the webhook decrements by exactly this number, so the extra
-      // was burned off the customer's card for nothing.
-      const applyCents = Math.min(
-        balanceCents,
-        Math.max(0, itemsCents - totalOffCents),
-      )
-      if (applyCents > 0) {
-        totalOffCents += applyCents
+      if (held > 0) {
+        totalOffCents += held
         params.set('metadata[giftCardCode]', giftCardCode)
-        params.set('metadata[giftCardCents]', String(applyCents))
+        params.set('metadata[giftCardCents]', String(held))
+        params.set('metadata[giftCardHoldKey]', holdKey)
+        // Every refusal BELOW this point releases the claim so the shopper can
+        // retry; the hold has to come back with it or the retry finds the card
+        // empty and the shopper is locked out of their own balance until the
+        // TTL lapses. The expiry is the backstop for a crash, not the
+        // mechanism for a refusal the code can see happening.
+        releaseGiftCardHold = async () => {
+          await cardRef
+            .set(
+              {
+                holds: {
+                  [holdKey]: firebaseAdmin.firestore.FieldValue.delete(),
+                },
+              },
+              { merge: true },
+            )
+            .catch((error: unknown) => {
+              // Best effort: the TTL still releases it. Never let tidying up a
+              // hold turn a clean 409 into a 500.
+              console.error('Gift card hold release failed', giftCardCode, error)
+            })
+        }
       }
     }
 
@@ -507,6 +603,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     if (taxDecision.kind === 'undecided') {
       // BELOW the claim on this path, so release it: the merchant fixes the
       // setting and the shopper retries under the same key (AGL-1697).
+      await releaseGiftCardHold()
       await claim.release()
       return res
         .status(409)
@@ -520,6 +617,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // jurisdiction miss. Refused in the same words and the same place as
       // the undecided case above.
       // Below the claim here too, so release it for the same reason.
+      await releaseGiftCardHold()
       await claim.release()
       return res.status(409).json({ error: taxMisconfigured })
     }
@@ -558,6 +656,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // key goes back and the same button works once Stripe does
           // (AGL-1697); the retry re-derives the same digest, so Stripe
           // replays any rate the first run did mint.
+          await releaseGiftCardHold()
           await claim.release()
           return res.status(502).json({ error: 'Checkout failed' })
         }
@@ -639,6 +738,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // The checkout did not happen — hand the key back so one flaky moment
       // does not lock this cart out. The retry re-derives the same derived
       // keys, so Stripe replays whatever objects the first run did create.
+      await releaseGiftCardHold()
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }

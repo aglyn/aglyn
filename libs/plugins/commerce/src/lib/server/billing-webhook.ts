@@ -193,10 +193,27 @@ async function redeemExistingOrRecord(
   })
   if (applied !== false) return
   console.error('Redemption against a missing document', ref.path)
-  // `update()`, not a merge-set: the order was created by the transaction a few
-  // lines above (a redelivery returns before here), so it exists — and writing
-  // this note through the very call being fixed would mint an order stub on the
-  // one path where it does not.
+  await recordRedemptionOrphan(orderRef, detail)
+}
+
+/**
+ * Stamps a redemption that could not be recorded onto the order's own timeline.
+ *
+ * Split out of `redeemExistingOrRecord` (AGL-2449) so the gift-card settlement
+ * — which is a transaction rather than an `updateExisting`, and so cannot go
+ * through that helper — reports a missing card in exactly the same words, on
+ * exactly the same surface, as every other redemption. Two ways of telling a
+ * merchant the same fact is how one of them ends up never being built.
+ *
+ * `update()`, not a merge-set: the order was created by the transaction
+ * upstream (a redelivery returns before here), so it exists — and writing this
+ * note through a merge would mint an order stub on the one path where it does
+ * not.
+ */
+async function recordRedemptionOrphan(
+  orderRef: FirebaseFirestore.DocumentReference,
+  detail: string,
+): Promise<void> {
   await orderRef
     .update({
       timeline: firebaseAdmin.firestore.FieldValue.arrayUnion({
@@ -2610,23 +2627,101 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'exists, so the redemption is uncounted against its limit.',
           )
         }
-        // Gift card balance decrement (AGL-322).
+        // Gift card balance settlement (AGL-322, made a settlement by AGL-2449).
         if (object.metadata?.giftCardCode) {
           const giftCardCents = Number(object.metadata?.giftCardCents ?? 0)
-          await redeemExistingOrRecord(
-            hostRef
-              .collection('giftCards')
-              .doc(String(object.metadata.giftCardCode)),
-            {
-              balanceCents:
-                firebaseAdmin.firestore.FieldValue.increment(-giftCardCents),
-              lastUsedAtMs: Date.now(),
-            },
-            orderRef,
+          const holdKey = String(object.metadata?.giftCardHoldKey ?? '')
+          const cardRef = hostRef
+            .collection('giftCards')
+            .doc(String(object.metadata.giftCardCode))
+          const orphanNote =
             `$${(giftCardCents / 100).toFixed(2)} was applied from gift card ` +
-              `${object.metadata.giftCardCode}, which no longer exists. The ` +
-              'balance was not deducted from any card.',
-          )
+            `${object.metadata.giftCardCode}, which no longer exists. The ` +
+            'balance was not deducted from any card.'
+          if (!holdKey) {
+            // A session minted BEFORE holds existed. It reserved nothing, so
+            // the old unconditional decrement is still the only thing that can
+            // settle it — the shopper was given the discount and the merchant
+            // must be paid out of the card. Kept deliberately rather than
+            // refusing: in-flight sessions outlive the deploy by up to 24h, and
+            // dropping them would hand out free money instead of double-spent
+            // money. It ages out on its own once the last pre-deploy session
+            // completes.
+            await redeemExistingOrRecord(
+              cardRef,
+              {
+                balanceCents:
+                  firebaseAdmin.firestore.FieldValue.increment(-giftCardCents),
+                lastUsedAtMs: Date.now(),
+              },
+              orderRef,
+              orphanNote,
+            )
+          } else {
+            // The hold IS the authority, not the metadata: `giftCardCents` is
+            // a copy the session carries for the receipt, and settling against
+            // the reservation is what makes this idempotent under redelivery —
+            // the second delivery finds no hold and takes nothing.
+            const settled = await firestore
+              .runTransaction(async (transaction) => {
+                const fresh = await transaction.get(cardRef)
+                if (!fresh.exists) return null
+                const card = (fresh.data() ??
+                  {}) as CommerceModel.HostGiftCard
+                const take = CommerceModel.giftCardSettlementCents(
+                  card,
+                  holdKey,
+                  Date.now(),
+                )
+                transaction.set(
+                  cardRef,
+                  {
+                    balanceCents: Math.max(
+                      0,
+                      Number(card.balanceCents ?? 0) - take,
+                    ),
+                    // `FieldValue.delete()`, NOT a locally-pruned copy of the
+                    // map. `set(…, { merge: true })` merges nested maps rather
+                    // than replacing them, so writing back an object with the
+                    // key removed leaves the stored key exactly where it was —
+                    // and a redelivery would then find the hold still standing
+                    // and settle it a SECOND time, taking the balance twice for
+                    // one payment. The sentinel is what makes this settlement
+                    // idempotent.
+                    holds: {
+                      [holdKey]: firebaseAdmin.firestore.FieldValue.delete(),
+                    },
+                    ...(take > 0 ? { lastUsedAtMs: Date.now() } : {}),
+                  },
+                  { merge: true },
+                )
+                return take
+              })
+              .catch((error) => {
+                console.error('Gift card settlement failed', holdKey, error)
+                // Undefined, not null: null means "the card is gone", which is
+                // the orphan note below. A transport failure is neither — the
+                // hold stands and lapses on its own, and the merchant is short
+                // rather than the customer double-charged.
+                return undefined
+              })
+            if (settled === null) {
+              await recordRedemptionOrphan(orderRef, orphanNote)
+            } else if (settled != null && settled < giftCardCents) {
+              // The card could not cover what the session discounted, which
+              // after a hold means the merchant voided or hand-adjusted it
+              // mid-flight. Money moved on a discount the card did not fund,
+              // so it is recorded where the merchant reads it rather than
+              // quietly absorbed.
+              await recordRedemptionOrphan(
+                orderRef,
+                `$${(giftCardCents / 100).toFixed(2)} was discounted against ` +
+                  `gift card ${object.metadata.giftCardCode}, but only $${(
+                    settled / 100
+                  ).toFixed(2)} could be taken from its balance.`,
+              )
+            }
+          }
         }
         // Gift card issuance (AGL-322): each purchased gift-card line
         // mints a code for its unit price and emails it to the buyer.
