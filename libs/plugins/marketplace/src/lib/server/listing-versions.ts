@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  isPluginRevoked,
+  type PluginApiHandler,
+  type PluginRevocation,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   isVersionApproved,
@@ -114,6 +118,25 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
     .orderBy('publishedAt', 'desc')
     .limit(20)
     .get()
+  /**
+   * The kill switch, on the publisher's own view of their versions
+   * (AGL-2328).
+   *
+   * Staff are REQUIRED to type a reason to revoke a version. It was stored
+   * and nothing read it: every reader in the repo consulted `versions` and
+   * stopped, and this branch did not read the document at all — so a
+   * publisher whose version had been pulled saw the row it had before,
+   * still labelled by its REVIEW state. A version can be approved and
+   * revoked at once, and "Approved" was the only word on it.
+   *
+   * ONE document read for the whole card, not one per version: the switch
+   * is listing-scoped. The predicate is `isPluginRevoked`, shared with the
+   * installer and the loaders (AGL-1085), so what a publisher is told is
+   * disabled and what actually refuses to install cannot drift apart.
+   */
+  const revocation = (
+    await firestore.collection('revocations').doc(listingId).get()
+  ).data() as PluginRevocation | undefined
   // The counters the page prints, derived from the pins where there are pins
   // to derive from (AGL-1419) and reconciled against the listing totals
   // otherwise (AGL-1418), so this card cannot contradict the header above it.
@@ -144,6 +167,10 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
       // Only reached an email before this (AGL-1079), where it got buried
       // under everything else in an inbox.
       rejectionReason: String(doc.get('reviewRejectionReason') ?? ''),
+      // Per VERSION, because a listing-wide takedown and a single revoked
+      // version are the same document and only the predicate tells them
+      // apart.
+      revoked: isPluginRevoked(revocation, versionId),
       activeInstalls: tallies.byVersion.get(versionId)?.activeInstalls ?? 0,
       installCount: tallies.byVersion.get(versionId)?.installCount ?? 0,
       // What they claimed about THESE bytes (AGL-969) — so they can see it
@@ -168,7 +195,44 @@ const publisherVersions: PluginApiHandler = async (req, res) => {
     latestApprovedVersion: String(listing.latestApprovedVersion ?? ''),
     latestVersion: String(listing.latestVersion ?? ''),
     reviewStatus: String(listing.reviewStatus ?? ''),
+    /**
+     * Listing-scoped, like the document it comes from (AGL-2328) — one
+     * reason covers whatever `versions` names, so two revoked rows show the
+     * same sentence. That is what was recorded; inventing a per-version
+     * reason would be inventing a fact.
+     *
+     * `revokedBy` is deliberately NOT returned. It is a staff uid, and it
+     * belongs in the audit log rather than on a publisher's screen — the
+     * same line the consumer-facing card drew.
+     */
+    revocationReason: String(revocation?.reason ?? '').trim(),
+    // The writers store `revokedAt` as a server timestamp; `atMs` is on the
+    // TYPE but nothing writes it. Read both rather than trusting either,
+    // and treat a revocation with no readable date as dateless rather than
+    // printing an epoch.
+    revokedAtMs: revocationTimeMs(revocation),
   })
+}
+
+/**
+ * When the revocation was written, in millis, or null (AGL-2328).
+ *
+ * `PluginRevocation` declares `atMs?: number` and every writer in
+ * `plugin-reviews/route.ts` writes `revokedAt: serverTimestamp()` instead.
+ * A reader that trusted the type would print nothing for every revocation
+ * that exists; one that trusted the writer would break if `atMs` is ever
+ * the field that gets written. Both are read, admin `Timestamp` and the
+ * seconds-shaped form a client SDK produces included.
+ */
+function revocationTimeMs(
+  revocation: (PluginRevocation & { revokedAt?: unknown }) | undefined,
+): number | null {
+  const at = revocation?.revokedAt as
+    | { toMillis?: () => number; seconds?: number }
+    | undefined
+  if (typeof at?.toMillis === 'function') return at.toMillis()
+  if (typeof at?.seconds === 'number') return at.seconds * 1000
+  return typeof revocation?.atMs === 'number' ? revocation.atMs : null
 }
 
 /**

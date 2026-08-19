@@ -31,6 +31,12 @@
 
 jest.mock('@aglyn/aglyn/server', () => ({
   compareArtifactVersions: () => 0,
+  // The REAL predicate (AGL-2328), not a stub. It is shared with the
+  // installer and the loaders precisely so "what a publisher is told is
+  // disabled" and "what refuses to install" cannot drift, and a fake here
+  // would test the route against a second copy of the rule.
+  isPluginRevoked: jest.requireActual('@aglyn/aglyn/app-utils/plugin-manifest')
+    .isPluginRevoked,
 }))
 
 jest.mock('../model/marketplace', () => ({
@@ -115,6 +121,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       __pins: { total: number; byVersion: Record<string, number> } | 'no-index'
       __aggregations: string[]
       __writes: Array<Record<string, unknown>>
+      __revocation: Record<string, unknown> | undefined
     }
   const listingRef = {
     get: async () => ({
@@ -133,6 +140,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         limit: () => ({ get: async () => ({ docs: [versionDoc, approvedDoc] }) }),
       }),
     }),
+  }
+  /**
+   * `revocations/{listingId}` — the platform kill switch. Absent by default,
+   * which is the normal state of a listing and the one the pre-AGL-2328
+   * assertions in this file were written against.
+   */
+  const revocationRef = {
+    get: async () => ({ data: () => store().__revocation }),
   }
   /**
    * The live pins (AGL-1419). `count()` and never `get()`: the aggregation
@@ -195,11 +210,23 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       | 'no-index',
     __aggregations: [] as string[],
     __writes: [] as Array<Record<string, unknown>>,
+    __revocation: undefined as Record<string, unknown> | undefined,
     firebaseAdmin: {
       app: () => ({
         auth: () => ({ verifyIdToken: async () => ({ uid: 'uid-1' }) }),
         firestore: () => ({
-          collection: () => ({ doc: () => listingRef }),
+          // BY NAME (AGL-2328). This used to hand `listingRef` back for
+          // EVERY collection, so the route's `revocations` read would have
+          // been served the LISTING document: `isPluginRevoked` finds no
+          // `versions` field on it and answers false for everything. The
+          // fixtures that set a revocation would then fail for a reason
+          // that has nothing to do with the route, and — worse — the
+          // healthy-listing case would have PASSED, on a document that was
+          // never the one being tested.
+          collection: (name: string) =>
+            name === 'revocations'
+              ? { doc: () => revocationRef }
+              : { doc: () => listingRef },
           collectionGroup,
         }),
       }),
@@ -216,6 +243,7 @@ const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   __pins: { total: number; byVersion: Record<string, number> } | 'no-index'
   __aggregations: string[]
   __writes: Array<Record<string, unknown>>
+  __revocation: Record<string, unknown> | undefined
 }
 const DEFAULT_LISTING = { ...adminMock.__listing }
 
@@ -258,6 +286,7 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
     adminMock.__pins = { total: 3, byVersion: { '1.0.1': 1, '1.0.0': 1 } }
     adminMock.__aggregations = []
     adminMock.__writes = []
+    adminMock.__revocation = undefined
     // The backoff and single-flight maps outlive a test otherwise, and a
     // suite that passes because a previous test poisoned a cache is worse
     // than one that fails.
@@ -486,5 +515,114 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
     expect(result.body.versions.map((v: { version: string }) => v.version)).toContain(
       '1.0.1',
     )
+  })
+
+  /**
+   * The kill switch, on the publisher's own page (AGL-2328).
+   *
+   * Staff cannot revoke without typing a reason. It was stored on
+   * `revocations/{listingId}` and this route never opened the document, so
+   * the publisher whose version had been pulled saw the row they had
+   * before — labelled by its REVIEW state, which for the normal case is
+   * "approved". The consumer whose site broke was told the reason first.
+   */
+  describe('revocation reaches the publisher (AGL-2328)', () => {
+    it('marks the revoked version, and only that one', async () => {
+      // 1.0.0 is the APPROVED version, which is the real shape: a version
+      // is approved and then revoked, so both are true at once. Revoking
+      // the rejected one instead would let a `reviewState` confusion pass.
+      adminMock.__revocation = {
+        versions: ['1.0.0'],
+        reason: 'Exfiltrates form submissions to an undisclosed endpoint.',
+        revokedAt: { toMillis: () => 1_770_000_000_000 },
+        revokedBy: 'uid-staff-7',
+      }
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      const byVersion = Object.fromEntries(
+        result.body.versions.map((v: { version: string; revoked: boolean }) => [
+          v.version,
+          v.revoked,
+        ]),
+      )
+      expect(byVersion).toEqual({ '1.0.0': true, '1.0.1': false })
+      // The verdict is NOT overwritten — the publisher earned it, and the
+      // two facts are independent.
+      const approved = result.body.versions.find(
+        (v: { version: string }) => v.version === '1.0.0',
+      )
+      expect(approved.reviewState).toBe('approved')
+    })
+
+    it('carries the typed reason and the date', async () => {
+      adminMock.__revocation = {
+        versions: ['1.0.0'],
+        reason: 'Exfiltrates form submissions to an undisclosed endpoint.',
+        revokedAt: { toMillis: () => 1_770_000_000_000 },
+      }
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(result.body.revocationReason).toBe(
+        'Exfiltrates form submissions to an undisclosed endpoint.',
+      )
+      expect(result.body.revokedAtMs).toBe(1_770_000_000_000)
+    })
+
+    it('reads the date the WRITERS store, not the one the type declares', async () => {
+      // `PluginRevocation` declares `atMs?: number`; every writer in
+      // `plugin-reviews/route.ts` writes `revokedAt: serverTimestamp()`.
+      // A reader that trusted the type would print no date for every
+      // revocation that actually exists — so both are read, and this asserts
+      // the declared field still works rather than being quietly dead.
+      adminMock.__revocation = { versions: 'all', atMs: 1_700_000_000_000 }
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(result.body.revokedAtMs).toBe(1_700_000_000_000)
+    })
+
+    it('a listing-wide takedown marks every version', async () => {
+      // `versions: 'all'` and a single revoked version are the SAME
+      // document; only the predicate tells them apart, which is why the
+      // shared one is used rather than an array check written here.
+      adminMock.__revocation = { versions: 'all', reason: 'DMCA takedown.' }
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(
+        result.body.versions.every((v: { revoked: boolean }) => v.revoked),
+      ).toBe(true)
+    })
+
+    it('says nothing when there is no revocation', async () => {
+      // The normal state. A card that renders "Disabled" or an empty
+      // "Reason:" on every healthy listing would be worse than the defect.
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(
+        result.body.versions.every((v: { revoked: boolean }) => !v.revoked),
+      ).toBe(true)
+      expect(result.body.revocationReason).toBe('')
+      expect(result.body.revokedAtMs).toBeNull()
+    })
+
+    it('GUARD: never returns the staff uid that pulled it', async () => {
+      // Same line the consumer-facing card drew: WHO acted belongs in the
+      // audit log, not on the screen of the person it was done to.
+      adminMock.__revocation = {
+        versions: ['1.0.0'],
+        reason: 'Exfiltrates form submissions.',
+        revokedBy: 'uid-staff-7',
+      }
+      const result = await call({ listingId: 'l1', scope: 'publisher' })
+      expect(JSON.stringify(result.body)).not.toContain('uid-staff-7')
+      expect(JSON.stringify(result.body)).not.toContain('revokedBy')
+    })
+
+    it('GUARD: the PUBLIC branch does not gain the publisher payload', async () => {
+      // The public branch is a buyer's view. It has never carried review
+      // state or rejection reasons and must not start carrying revocation
+      // bookkeeping because the publisher branch now does.
+      adminMock.__revocation = {
+        versions: ['1.0.0'],
+        reason: 'Exfiltrates form submissions.',
+      }
+      const result = await call({ listingId: 'l1' })
+      expect(result.body.revocationReason).toBeUndefined()
+      expect(result.body.revokedAtMs).toBeUndefined()
+    })
   })
 })
