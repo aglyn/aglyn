@@ -195,8 +195,15 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       // into a lost restock on an unrelated line of the same order.
       let saleDecremented = true
       const releaseCap = new Map<string, number>()
+      // The separator is U+0000 written as an ESCAPE, not as a raw byte
+      // (AGL-2355). Emitted literally it made `file(1)` call this source
+      // `data`, so grep skipped the whole file as binary — an AGL-2320 sweep
+      // for `adjustVariantInventory(` missed the call below and drew the wrong
+      // conclusion from it. Same character at runtime; a key already in a live
+      // map is unchanged. NUL is still the right separator: it cannot occur in
+      // a Firestore document id, so no product/variant pair can collide.
       const capKey = (productId: string, variantId: string) =>
-        `${productId} ${variantId}`
+        `${productId}\u0000${variantId}`
       if (order.status === 'paid') {
         const orderAdjustments = await transaction.get(
           hostRef
