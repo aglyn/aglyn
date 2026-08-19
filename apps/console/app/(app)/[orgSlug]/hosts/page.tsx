@@ -17,10 +17,16 @@
 
 'use client'
 
+import {
+  ENTERPRISE_PLAN_LABEL,
+  isEnterpriseOrg,
+  PLAN_LABELS,
+  resolveOrgEntitlements,
+} from '@aglyn/aglyn'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
-import { Button, Typography } from '@mui/material'
+import { Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -34,7 +40,12 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import {
+  describeHostStatus,
+  describeSiteAllowance,
+} from '../../../../utils/host-status'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
@@ -88,6 +99,22 @@ function HostsContent() {
   )
   const [creating, setCreating] = useState(false)
   const { permissions } = useOrgPermissions()
+  /**
+   * `6 of 10 sites · Business plan` (AGL-2166). The console mockup puts
+   * this opposite the Sites heading, and nothing on the page counted hosts
+   * or named the plan — the only host-against-limit meter in the product
+   * was on the Billing page, which is not where anyone is standing when
+   * they run out of sites.
+   */
+  const { org, ready: orgReady } = useCurrentOrg()
+  const allowance = describeSiteAllowance({
+    used: data?.length ?? 0,
+    limit: resolveOrgEntitlements(org as never)?.hostLimit,
+    planLabel: isEnterpriseOrg(org as never)
+      ? ENTERPRISE_PLAN_LABEL
+      : PLAN_LABELS[((org as any)?.plan ?? 'free') as keyof typeof PLAN_LABELS],
+    ready: orgReady,
+  })
   // When the user has a pending invite, the banner's "accept" is the primary
   // path to their first org — so the zero-state steps aside to avoid two
   // competing calls to action (AGL-234).
@@ -107,15 +134,22 @@ function HostsContent() {
         icon: { path: ICON_VARIANT_HOST_GROUP.path },
       }}
       headerRight={
-        permissions.createHosts ? (
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => setCreating(true)}
-          >
-            {'Create site'}
-          </Button>
-        ) : undefined
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          {allowance ? (
+            <Typography variant="body2" color="text.secondary">
+              {allowance}
+            </Typography>
+          ) : null}
+          {permissions.createHosts ? (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setCreating(true)}
+            >
+              {'Create site'}
+            </Button>
+          ) : null}
+        </Stack>
       }
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
@@ -198,7 +232,7 @@ function HostsContent() {
                       },
                     },
                   }}
-                  subheader={host?.$id}
+                  subheader={host?.cname || `${host?.subdomain}.aglyn.app`}
                   header={host?.displayName}
                   help={docsHelp('gettingStarted', {
                     anchor: '#what-a-site-contains',
@@ -240,6 +274,30 @@ function HostsContent() {
                   }
                 >
                   <Typography color="textSecondary" component="div">
+                    {/*
+                      The Live/Draft pill the mockup puts on every card
+                      (AGL-2166), derived from `host.screens` — the routing
+                      map publishing writes — so it costs no extra read on
+                      a page that can list a hundred sites.
+                     */}
+                    {(() => {
+                      const status = describeHostStatus(host as never)
+                      return (
+                        <Tooltip title={status.detail}>
+                          <Chip
+                            size="small"
+                            label={status.label}
+                            color={status.color}
+                            variant={
+                              status.color === 'default'
+                                ? 'outlined'
+                                : 'filled'
+                            }
+                            sx={{ mb: 1 }}
+                          />
+                        </Tooltip>
+                      )
+                    })()}
                     <HostInfoItem
                       label={'Aglyn Domain'}
                       value={`${host?.subdomain}.aglyn.app`}

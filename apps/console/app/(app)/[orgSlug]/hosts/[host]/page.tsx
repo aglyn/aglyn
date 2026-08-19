@@ -17,7 +17,7 @@
 'use client'
 
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
-import { Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { AppLink, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -46,6 +46,30 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
         children: 'My Dashboard',
         icon: { path: ICON_VARIANT_HOME.path },
       }}
+      /*
+       * The `Visit site` button the console mockup puts in this header
+       * (AGL-2166). The dashboard had no `headerRight` at all, so the only
+       * route from a site's own dashboard to the site itself was back out
+       * to the Sites list and in through a card action.
+       *
+       * `?aglyn-edit` arms the admin bar, matching the Sites list's Visit
+       * link — an editor arriving from the console is an editor, and on a
+       * foreign custom domain no other hint can exist (AGL-1842).
+       */
+      headerRight={
+        host ? (
+          <AppLink
+            componentVariant="button"
+            variant="contained"
+            color="primary"
+            href={`https://${host}.aglyn.app/?aglyn-edit`}
+            target="_blank"
+            rel="nofollow"
+          >
+            {'Visit site'}
+          </AppLink>
+        ) : undefined
+      }
       breadcrumbItems={[
         {
           children: <HostDisplayNameComponent hostId={hostId} />,
