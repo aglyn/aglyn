@@ -2846,10 +2846,10 @@ export const BANDWIDTH_ABUSE_CEILING_MULTIPLE = 10
  * small plans get real headroom instead of a second, tighter plan limit
  * wearing a different name.
  *
- * Free includes 5 GB ≈ 8,948 views; 10× would be ~89,500, which a genuinely
+ * Free includes 5 GB ≈ 8,738 views; 10× would be ~87,381, which a genuinely
  * successful hobby site (a post that lands on Hacker News) reaches in an
  * afternoon and would be a miserable first experience of the platform.
- * 100,000 views/month ≈ 58.6 GB ≈ **$10 of real COGS** at
+ * 100,000 views/month ≈ 57.2 GB ≈ **$10 of real COGS** at
  * `METERED_UNIT_RATES_USD.perPageView` — an order of magnitude above the free
  * band, and an order of magnitude below the $100 a million views costs. It is
  * the number that makes "free stays free" true without making it stingy.
@@ -2859,8 +2859,8 @@ export const BANDWIDTH_ABUSE_CEILING_FLOOR = 100_000
 /**
  * Ceiling for plans whose bandwidth band is UNLIMITED (Enterprise), where a
  * multiple has nothing to multiply. Kept at or above the ceiling of every
- * finite plan below it — Agency includes 20,000 GB ≈ 35.8M views, so its
- * ceiling is ~358M — so the ladder never inverts and a bigger plan never
+ * finite plan below it — Agency includes 20,000 GB ≈ 35.0M views, so its
+ * ceiling is ~350M — so the ladder never inverts and a bigger plan never
  * inherits a smaller ceiling.
  */
 export const BANDWIDTH_ABUSE_CEILING_UNLIMITED = 500_000_000

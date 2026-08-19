@@ -68,7 +68,11 @@ let mockOrgs: SeededOrg[]
 let mockHosts: SeededHost[]
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
 /** Every merge written back to an org doc, in order. */
-let mockOrgWrites: Array<{ orgId: string; data: Record<string, unknown> }>
+let mockOrgWrites: Array<{
+  orgId: string
+  data: Record<string, unknown>
+  options?: { merge?: boolean }
+}>
 
 const mockNotifyOrgAdmins = jest.fn(
   async (orgId: string, payload: { title: string; body: string }) => {
@@ -132,8 +136,17 @@ function fakeOrgDoc(org: SeededOrg) {
     get: (field: string) => data[field],
     ref: {
       id: org.id,
-      set: async (value: Record<string, unknown>) => {
-        mockOrgWrites.push({ orgId: org.id, data: value })
+      // The OPTIONS argument is captured too (AGL-2413). It was dropped until
+      // then, which made the merge flag unassertable: a regression from
+      // `set(updates, { merge: true })` to a bare `set(updates)` would wipe
+      // `plan`, `subscription` and `slug` off every org this sweep caps — the
+      // withConverter-on-partial-writes bug class, without the converter —
+      // and every assertion in this file would still have been green.
+      set: async (
+        value: Record<string, unknown>,
+        options?: { merge?: boolean },
+      ) => {
+        mockOrgWrites.push({ orgId: org.id, data: value, options })
       },
       collection: () => emptyCollection(),
     },
@@ -276,6 +289,12 @@ const capWrite = (orgId: string) =>
     | { month: string; pageViews?: number; includedPageViews?: number }
     | undefined
 
+/** The full write record the cap rode on, options included. */
+const capWriteRecord = (orgId: string) =>
+  mockOrgWrites.find(
+    (write) => write.orgId === orgId && 'bandwidthCap' in write.data,
+  )
+
 const bandwidthAlert = () =>
   mockNotifications.find((entry) =>
     /bandwidth/i.test(`${entry.title} ${entry.body}`),
@@ -291,6 +310,19 @@ beforeEach(() => {
 })
 
 describe('the sweep engages the cap on a free org past its band', () => {
+  it('MERGES the write — it does not replace the org document', async () => {
+    // The one assertion this suite could not make until the double captured
+    // the options argument (AGL-2413). `set(updates)` without `{ merge: true }`
+    // REPLACES the document: every capped org would lose `plan`,
+    // `subscription`, `entitlements` and `hosts` — which resolves them to the
+    // free tier, which engages the cap, which is unrecoverable without a
+    // restore. Nothing else in this file can see the difference.
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    await run()
+    expect(capWriteRecord('org-1')?.options).toEqual({ merge: true })
+  })
+
   it('writes the marker, stamped with the CURRENT month', async () => {
     mockOrgs = [{ id: 'org-1', plan: 'free' }]
     mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
