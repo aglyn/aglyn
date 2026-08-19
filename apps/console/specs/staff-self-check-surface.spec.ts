@@ -133,10 +133,22 @@ describe('AGL-2119 · staff self-check has a console surface', () => {
     // the staff wording must be conditional on a record that already carries
     // the claim — never rendered unconditionally.
     const card = codeOf(CARD)
-    const staffMentions = card.match(/Aglyn staff/g) ?? []
+    // The brand is CONFIGURATION, not a literal (AGL-2153/2319), so this card
+    // names platform staff as `${PLATFORM_BRAND_NAME} staff`. The pattern
+    // admits BOTH forms, because the property being pinned is how many places
+    // name platform staff at all — not which spelling they use. Matching the
+    // bare literal made this an accidental second brand-literal ratchet: the
+    // AGL-2319 sweep replaced the last one and turned this red for making the
+    // product MORE correct, which is the one thing a guard must not do
+    // (AGL-2365). `check-brand-literals.mjs` is the guard that owns spelling.
+    const NAMES_PLATFORM_STAFF = /(?:Aglyn|\$\{PLATFORM_BRAND_NAME\}) staff/
+    const staffMentions =
+      card.match(new RegExp(NAMES_PLATFORM_STAFF, 'g')) ?? []
     expect(staffMentions).toHaveLength(1)
     // The single mention sits behind `row.staff`.
-    expect(card).toMatch(/row\.staff \?[\s\S]{0,300}Aglyn staff/)
+    expect(card).toMatch(
+      new RegExp(`row\\.staff \\?[\\s\\S]{0,300}${NAMES_PLATFORM_STAFF.source}`),
+    )
     // And nothing names the staff console's route or invites a customer to it.
     expect(card).not.toContain('/admin')
   })
