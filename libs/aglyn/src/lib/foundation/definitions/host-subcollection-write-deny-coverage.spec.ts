@@ -54,6 +54,7 @@
  */
 
 import { readFileSync, readdirSync } from 'fs'
+import type { Dirent } from 'fs'
 import { join, resolve } from 'path'
 
 import { parseHostSubcollectionRules } from './write-deny-coverage.util'
@@ -413,7 +414,14 @@ const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
 const hostSubcollectionsInRepo = (() => {
   const files: string[] = []
   const walk = (directory: string): void => {
-    let entries: ReturnType<typeof readdirSync>
+    // `Dirent[]`, NOT `ReturnType<typeof readdirSync>` (AGL-2243).
+    // `readdirSync` is overloaded eight ways and `ReturnType` resolves the
+    // LAST overload, which is the Buffer-encoded one — so the annotation said
+    // `Dirent<NonSharedBuffer>[]` while the `withFileTypes: true` call returns
+    // `Dirent<string>[]`, and every `entry.name` downstream was typed as a
+    // Buffer. That is a type error in the annotation itself, not in the code
+    // it describes: the walk has always been correct at runtime.
+    let entries: Dirent[]
     try {
       entries = readdirSync(directory, { withFileTypes: true })
     } catch {
