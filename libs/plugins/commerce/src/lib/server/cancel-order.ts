@@ -328,8 +328,51 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       return {
         status: 200,
         body: { ok: true, released: releasedLines.length, units },
+        // The live Stripe page this cancellation orphans, if any (AGL-2244).
+        // Read inside the transaction that flips the status so the expiry
+        // below cannot act on an order some other writer paid meanwhile.
+        expireSessionId:
+          order.status === 'pending' ? (order.checkoutSessionId ?? '') : '',
       }
     })
+    // EXPIRE THE PAYMENT LINK (AGL-2244). Cancelling a `pending` draft order or
+    // POS card sale left its Checkout Session live: the URL is on the
+    // customer's phone or in the email the merchant sent, and Stripe keeps it
+    // payable for 24 hours. Paying it captured real money on the merchant's
+    // account and the completing webhook then discarded the event — its
+    // `status !== 'pending'` guard cannot tell a redelivery from a cancelled
+    // order — so the sale existed in Stripe and nowhere in the product: no
+    // order, no stock move, no contact, no notification, not even a timeline
+    // line. The webhook now says so when it happens; this is the half that
+    // stops it happening.
+    //
+    // OUTSIDE the transaction, because it is a network call, and best-effort
+    // by design: the cancellation itself already landed and is what the
+    // merchant asked for. A failure here leaves the pre-existing behaviour
+    // (a payable link) plus the webhook's new record of it, which is strictly
+    // better than failing a cancel that has already released stock. Stripe
+    // answers 400 for a session that is already expired or already paid, and
+    // both are states this has nothing to add to.
+    const expireSessionId = (outcome as { expireSessionId?: string })
+      .expireSessionId
+    if (expireSessionId && process.env.STRIPE_SECRET_KEY) {
+      const expiry = await fetch(
+        `https://api.stripe.com/v1/checkout/sessions/${expireSessionId}/expire`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
+      ).catch(() => null)
+      if (!expiry?.ok) {
+        console.error(
+          'Cancelled order: Stripe session not expired, the payment link may still be payable',
+          { hostId, orderId, sessionId: expireSessionId },
+        )
+      }
+    }
     return res.status(outcome.status).json(outcome.body)
   } catch (error) {
     // Nothing landed — the transaction is all-or-nothing — so the order is

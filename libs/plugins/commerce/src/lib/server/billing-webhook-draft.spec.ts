@@ -1036,3 +1036,87 @@ describe('low-stock crossing alerts (AGL-1826)', () => {
     })
   })
 })
+
+/**
+ * AGL-2244. The branch's guard is `if (lifted.status !== 'pending') return
+ * false`, written for a REDELIVERY. It also caught the case that is not one: a
+ * cancelled order whose payment link was still live and got paid anyway.
+ *
+ * That is money that landed in the merchant's Stripe account with nothing in
+ * the product to show for it — no order, no stock move, no contact, no
+ * notification, not even a timeline line — so the merchant's books and
+ * Stripe's disagree and nobody is told which is right. `cancel-order.ts` now
+ * expires the session; this is the backstop for the window before it and for
+ * an expiry Stripe refused.
+ */
+describe('a cancelled order paid anyway (AGL-2244)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...DRAFT_ORDER,
+      status: 'cancelled',
+    })
+  })
+
+  it('records the payment on the order instead of discarding the event', async () => {
+    await deliver(DRAFT_SESSION)
+
+    const order = storedOrder()
+    // The cancellation stands — this event may NOT resurrect the order into
+    // `paid`, which would restock-in-reverse and fulfil goods nobody picked.
+    expect(order.status).toBe('cancelled')
+    expect(order.paidAfterCancel).toBe(true)
+    const events = (order.timeline ?? []).map((entry: any) => entry.event)
+    expect(events).toContain('paid-after-cancel')
+  })
+
+  it('tells the managers, since nothing else will', async () => {
+    await deliver(DRAFT_SESSION)
+
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0].hostId).toBe('host-1')
+    expect(String(notifications[0].title)).toContain('cancelled order was paid')
+  })
+
+  it('does not decrement stock or write a contact for it', async () => {
+    await deliver(DRAFT_SESSION)
+
+    // The sale did not happen in the product, and inventing its side effects
+    // would be worse than the silence this replaces.
+    expect(
+      (docs.get('hosts/host-1/products/product-1') as any).variants[0]
+        .inventory,
+    ).toBe(10)
+    expect(contactUpserts).toHaveLength(0)
+  })
+
+  it('stamps it ONCE across redeliveries', async () => {
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+    await deliver(DRAFT_SESSION)
+
+    const events = (storedOrder().timeline ?? []).filter(
+      (entry: any) => entry.event === 'paid-after-cancel',
+    )
+    expect(events).toHaveLength(1)
+    expect(notifications).toHaveLength(1)
+  })
+
+  /**
+   * POSITIVE CONTROL. A redelivery against an order this branch ALREADY paid
+   * must stay silent — it is not a second capture, and announcing it would
+   * send a merchant hunting money that is exactly where it should be.
+   */
+  it('POSITIVE CONTROL: a plain redelivery of a paid order says nothing', async () => {
+    docs.set('hosts/host-1/orders/order-1', { ...DRAFT_ORDER })
+    await deliver(DRAFT_SESSION)
+    const afterFirst = notifications.length
+    await deliver(DRAFT_SESSION)
+
+    expect(notifications).toHaveLength(afterFirst)
+    expect(storedOrder().paidAfterCancel).toBeUndefined()
+    expect(
+      (storedOrder().timeline ?? []).map((entry: any) => entry.event),
+    ).not.toContain('paid-after-cancel')
+  })
+})
+

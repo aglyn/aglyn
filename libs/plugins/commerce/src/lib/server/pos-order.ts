@@ -463,7 +463,11 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           body: params.toString(),
         },
       )
-      const session = (await response.json()) as { url?: string; error?: any }
+      const session = (await response.json()) as {
+        url?: string
+        id?: string
+        error?: any
+      }
       if (!response.ok || !session.url) {
         await orderRef.delete().catch(() => undefined)
         // The sale did not happen — let the same key be tried again rather
@@ -471,6 +475,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         await claim.release()
         return res.status(502).json({ error: 'Payment link failed' })
       }
+      // The session id, stored the way `draft-order.ts` has always stored it
+      // (AGL-2244). Without it a cancelled QR sale has no handle on the Stripe
+      // page still sitting on the customer's phone, so `cancel-order.ts` had
+      // nothing to expire and the register could take the money twice.
+      await orderRef
+        .set({ checkoutSessionId: session.id ?? null }, { merge: true })
+        .catch(() => undefined)
       const cardPayload = {
         orderId: orderRef.id,
         url: session.url,

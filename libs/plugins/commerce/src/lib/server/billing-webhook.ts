@@ -2426,13 +2426,58 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // Stripe populates this exactly when the session asked for an address,
         // which is exactly when a parcel was priced.
         const shipTo = object?.shipping_details
+        // A payment that arrived for an order NOT in `pending` — see the
+        // transaction below. Carried out so the money can be reported after
+        // the transaction commits.
+        let paidAfterCancel = false
         const flipped = await firestore.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(orderRef)
           if (!snapshot.exists) return false
           const lifted = CommerceModel.liftLegacyOrder(
             (snapshot.data() as any) ?? {},
           )
-          if (lifted.status !== 'pending') return false
+          if (lifted.status !== 'pending') {
+            // NOT ALL NON-`pending` ORDERS ARE REDELIVERIES (AGL-2244), and
+            // returning false for both is how a real capture went unrecorded.
+            // A `cancelled` order whose payment link was paid anyway is money
+            // that LANDED in the merchant's Stripe account with nothing in the
+            // product to show for it: no order, no stock move, no contact, no
+            // notification, not even a timeline line, so the merchant's books
+            // and Stripe's disagree and nobody is told which is right.
+            //
+            // `cancel-order.ts` now expires the session, which stops the
+            // ordinary case; this is the backstop for the window between the
+            // cancel and the expiry, and for an expiry Stripe refused. Stamped
+            // once, keyed on the same status the transaction reads and writes:
+            // a redelivery finds `cancelled` too, so the guard is the timeline
+            // entry itself, appended only when one is not already there.
+            const alreadyNoted = (lifted.timeline ?? []).some(
+              (entry) => entry?.event === 'paid-after-cancel',
+            )
+            if (lifted.status === 'cancelled' && !alreadyNoted) {
+              paidAfterCancel = true
+              // `set(..., { merge: true })`, the same call the paying branch
+              // below makes on this document. Nothing here is a nested map, so
+              // merge and replace agree, and the read above has just proven
+              // the document exists — the only thing `update()` would add.
+              transaction.set(
+                orderRef,
+                {
+                  paidAfterCancel: true,
+                  timeline: CommerceModel.appendOrderEvent(
+                    lifted,
+                    'paid-after-cancel',
+                    'This cancelled order was paid anyway — the payment link ' +
+                      'was still live. The money is in Stripe and this order ' +
+                      'records no sale; refund it in Stripe, or reconcile it ' +
+                      'by hand.',
+                  ),
+                },
+                { merge: true },
+              )
+            }
+            return false
+          }
           paidOrder = lifted
           transaction.set(
             orderRef,
@@ -2482,6 +2527,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           )
           return true
         })
+        // Told to a human, because nothing else will be (AGL-2244). The
+        // timeline line above is only findable by someone already looking at
+        // the order they have no reason to open; this is money sitting in
+        // Stripe against a sale the product does not have.
+        if (paidAfterCancel && hostId) {
+          await notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: 'A cancelled order was paid',
+            body:
+              `Order ${orderId} was cancelled, but its payment link was still ` +
+              'live and has been paid. The money is in Stripe and no sale was ' +
+              'recorded — refund it in Stripe or reconcile it by hand.',
+            link: `/${hostId}/orders`,
+          })
+        }
         if (flipped) {
           const order = paidOrder as unknown as CommerceModel.HostOrder
           void notifyHostManagers(String(hostId), {

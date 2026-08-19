@@ -53,9 +53,12 @@ import { cancelOrderHandler } from './cancel-order'
  * that wrote OUTSIDE the transaction would look atomic here and would not be.
  * Nothing under test writes outside it.
  *
- * NO STRIPE PATH IS EXERCISED — localhost carries the LIVE secret key. This
- * handler makes no network call at all, and `global.fetch` is a throwing stub
- * asserted UNCALLED after every case.
+ * ONE STRIPE PATH IS EXERCISED, AND ONLY ONE — the Checkout Session expiry a
+ * cancelled `pending` order now sends (AGL-2244). `global.fetch` is a throwing
+ * stub and every case asserts the EXACT number of calls it expected, which
+ * defaults to zero; a test that wants the expiry opts in by naming it. That
+ * keeps the original negative control — localhost carries the LIVE secret key
+ * — everywhere it still applies, instead of trading it for a blanket allowance.
  */
 
 // ---------------------------------------------------------------------------
@@ -405,6 +408,9 @@ const fetchMock = jest.fn(async (url: any) => {
   throw new Error(`Unexpected fetch to ${String(url)}`)
 })
 
+/** How many Stripe calls THIS case expects. Reset to 0 before every one. */
+let expectedStripeCalls = 0
+
 let consoleError: jest.SpyInstance
 
 beforeAll(() => {
@@ -419,6 +425,7 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  expectedStripeCalls = 0
   docs.clear()
   productReads = []
   failProductRead = ''
@@ -432,8 +439,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // No network, ever. Localhost carries the LIVE Stripe key.
-  expect(fetchMock).not.toHaveBeenCalled()
+  // Exactly what this case declared, which is zero unless it said otherwise.
+  // Localhost carries the LIVE Stripe key, so an unexpected call is a defect
+  // whichever direction it goes in.
+  expect(fetchMock).toHaveBeenCalledTimes(expectedStripeCalls)
 })
 
 // ---------------------------------------------------------------------------
@@ -1269,5 +1278,95 @@ describe('access', () => {
 
     expect(result.status).toBe(500)
     expect(storedOrder().status).toBe('paid')
+  })
+})
+
+/**
+ * AGL-2244. A `pending` draft order or POS card sale is a LIVE Stripe Checkout
+ * Session, and cancelling the order did nothing to it: the URL is in the email
+ * the merchant sent or on the customer's phone, and Stripe keeps it payable.
+ * Paying it captured real money on the merchant's account, and the completing
+ * webhook then discarded the event — its `status !== 'pending'` guard cannot
+ * tell a redelivery from a cancelled order — so the sale existed in Stripe and
+ * nowhere in the product.
+ *
+ * The expiry is best-effort BY DESIGN: the cancellation has already committed
+ * and released stock, and failing it to report a network blip would undo the
+ * thing the merchant asked for. A refusal is logged and the webhook's own
+ * backstop records the payment if one still arrives.
+ */
+describe('the payment link a cancelled order orphans (AGL-2244)', () => {
+  const realKey = process.env.STRIPE_SECRET_KEY
+
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_fake_never_used'
+  })
+
+  afterEach(() => {
+    if (realKey === undefined) delete process.env.STRIPE_SECRET_KEY
+    else process.env.STRIPE_SECRET_KEY = realKey
+  })
+
+  // `null`, not `undefined` — an omitted argument would take the default
+  // and the no-session case would silently test the session case instead.
+  function seedPendingLink(sessionId: string | null = 'cs_test_live') {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 12 }])
+    seedOrder({
+      status: 'pending',
+      lineItems: [
+        { productId: 'prod-tee', variantId: 'var-m', quantity: 3 },
+      ],
+      ...(sessionId ? { checkoutSessionId: sessionId } : {}),
+    })
+  }
+
+  it('expires the session so the link cannot be paid after the cancel', async () => {
+    seedPendingLink()
+    expectedStripeCalls = 1
+    fetchMock.mockImplementationOnce(async () => ({ ok: true }) as any)
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, any]
+    expect(url).toBe(
+      'https://api.stripe.com/v1/checkout/sessions/cs_test_live/expire',
+    )
+    expect(init.method).toBe('POST')
+  })
+
+  it('still cancels, and says so in the log, when Stripe refuses', async () => {
+    seedPendingLink()
+    expectedStripeCalls = 1
+    fetchMock.mockImplementationOnce(async () => ({ ok: false }) as any)
+
+    const result = await post()
+
+    // The cancel is what the merchant asked for and it already released
+    // stock — a failed expiry must not undo it.
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
+    expect(consoleError).toHaveBeenCalled()
+  })
+
+  it('calls nothing for a PAID order — there is no live link to expire', async () => {
+    // The default fixture is `paid`, whose session completed long ago.
+    seedTrackedShop({ checkoutSessionId: 'cs_test_done' })
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    // `expectedStripeCalls` is still 0, and the afterEach is the assertion.
+  })
+
+  it('calls nothing for a pending order with no session id', async () => {
+    seedPendingLink(null)
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    expect(storedOrder().status).toBe('cancelled')
   })
 })

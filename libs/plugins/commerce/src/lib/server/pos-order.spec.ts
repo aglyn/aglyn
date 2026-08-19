@@ -219,15 +219,27 @@ const fetchMock = jest.fn(async (url: any, init: any): Promise<any> => {
   // "we called twice but Stripe absorbed it" — only the first is a real fix,
   // but both leave one session, and the assertion below checks the CALLS.
   if (idempotencyKey && stripeSessionsByKey.has(idempotencyKey)) {
+    const replayed = stripeSessionsByKey.get(idempotencyKey) as string
     return {
       ok: true,
-      json: async () => ({ url: stripeSessionsByKey.get(idempotencyKey) }),
+      json: async () => ({ url: replayed, id: sessionIdFor(replayed) }),
     }
   }
   const sessionUrl = `https://checkout.stripe.com/pay/session-${++stripeSessionCounter}`
   if (idempotencyKey) stripeSessionsByKey.set(idempotencyKey, sessionUrl)
-  return { ok: true, json: async () => ({ url: sessionUrl }) }
+  // Real Stripe always answers with an `id` beside the `url`, and AGL-2244
+  // stores it so a cancelled QR sale can have its live page expired. A fake
+  // that omitted it would report the store as working with nothing in it.
+  return {
+    ok: true,
+    json: async () => ({ url: sessionUrl, id: sessionIdFor(sessionUrl) }),
+  }
 })
+
+/** The session id Stripe would have minted alongside this url. */
+function sessionIdFor(sessionUrl: string): string {
+  return `cs_test_${sessionUrl.split('-').pop()}`
+}
 
 // ---------------------------------------------------------------------------
 // Request / response plumbing
@@ -1746,5 +1758,27 @@ describe('an undecided store cannot ring a sale (AGL-1999)', () => {
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
     expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+  })
+})
+
+
+/**
+ * AGL-2244. A POS card sale opens a live Checkout Session the customer scans,
+ * and the order carried no handle on it — `draft-order.ts` has stored
+ * `checkoutSessionId` since it shipped, the register never did. So cancelling
+ * a QR sale left the page on the customer's phone payable, and paying it
+ * captured money the completing webhook then discarded as a redelivery.
+ */
+describe('a POS card sale records its Stripe session (AGL-2244)', () => {
+  it('stores the session id the cancel path expires', async () => {
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.checkoutSessionId).toBe('cs_test_1')
+  })
+
+  it('leaves a CASH sale without one — it never opened a session', async () => {
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.checkoutSessionId).toBeUndefined()
   })
 })
