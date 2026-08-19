@@ -16,7 +16,11 @@
  */
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
-import { pluginRequestFromWeb, resolveBrandingProfile } from '@aglyn/aglyn/server'
+import {
+  brandMergeTokens,
+  pluginRequestFromWeb,
+  resolveBrandingProfile,
+} from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
@@ -162,11 +166,20 @@ async function handler(request: Request): Promise<Response> {
       // Render the batch-resolved template for this org's values (AGL-768);
       // null falls back to the built-in copy above.
       const designed = template
-        ? renderLoadedSystemEmail(template, {
-            month,
-            'org.name': String(orgName),
-            'usage.summary': usageSummary,
-          })
+        ? renderLoadedSystemEmail(
+            template,
+            {
+              // AGL-2139. The template is loaded ONCE for the batch and
+              // rendered per org, so the brand has to ride the per-recipient
+              // merge map — a batch-level brand would send every org the
+              // first one's.
+              ...brandMergeTokens(branding),
+              month,
+              'org.name': String(orgName),
+              'usage.summary': usageSummary,
+            },
+            { brandLogoUrl: branding.emailLogoUrl },
+          )
         : null
       const result = await sendEmail({
         to: email,

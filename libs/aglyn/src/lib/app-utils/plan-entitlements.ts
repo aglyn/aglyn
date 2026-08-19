@@ -2002,6 +2002,42 @@ export function resolveBrandingProfile(
 }
 
 /**
+ * The brand as MERGE TOKENS, for a staff-designed system-email template
+ * (AGL-2139).
+ *
+ * White-label inverted precisely when staff published a template, which is
+ * that feature's normal steady state. Every org-context sender has the shape
+ * `subject: designed?.subject ?? <branded fallback>` — the DESIGNED template
+ * wins — and the catalog copy hard-coded "Aglyn" throughout. There was no
+ * brand token to design against either: the merge maps carried `org.name`,
+ * `invite.role`, `signInUrl` and friends and nothing about the brand, and
+ * `blankUnresolvedTokens` BLANKS any token the caller did not supply. So a
+ * designer who reached for `{{brand.productName}}` would have shipped an
+ * email with a hole in the sentence.
+ *
+ * Token bodies are namespaced `brand.*` so a designer can tell them from the
+ * per-send values, and they resolve for EVERY org — Aglyn's own included,
+ * since `AGLYN_BRANDING_PROFILE.productName` is `'Aglyn'`. That is what makes
+ * a single template correct for both populations instead of one hard-coded
+ * for the majority.
+ *
+ * The email LOGO is deliberately absent. It is structural — `renderEmailHtml`
+ * emits it as a header row above the designed body, or emits nothing — so it
+ * travels as an option rather than as a token a template could forget to
+ * place, and there is no sample URL a staff test-send could render without
+ * showing a broken image.
+ */
+export function brandMergeTokens(
+  branding: ResolvedBrandingProfile,
+): Record<string, string> {
+  return {
+    'brand.productName': branding.productName,
+    'brand.fromName': branding.fromName,
+    'brand.supportUrl': branding.supportUrl,
+  }
+}
+
+/**
  * The value of the `<meta name="generator">` tag and of the `x-powered-by`
  * header on published sites (AGL-2088) — the canonical CMS signal WordPress,
  * Squarespace, Drupal and Ghost all ship, and the thing tech-stack detectors

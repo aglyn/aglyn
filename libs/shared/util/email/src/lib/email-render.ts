@@ -78,6 +78,23 @@ export interface EmailRenderOptions {
    * through the qualified form.
    */
   mediaHostId?: string
+  /**
+   * Absolute URL of the sender's EMAIL logo, prepended as a centred row at
+   * the top of the 600px table (AGL-2139).
+   *
+   * `emailLogoUrl` was a first-class field of `OrgBrandingProfile`, resolved,
+   * collected in the branding editor, https-validated and persisted — and read
+   * at ZERO render sites. An agency admin on the tier that costs the most
+   * filled it in, the form saved, the value round-tripped, and it appeared in
+   * no email ever. This is the consumer that makes it a live capability
+   * rather than a stored string.
+   *
+   * Absent or blank emits NOTHING — not an empty row, not a spacer. An email
+   * with a gap where a logo should be reads as broken; one without a logo
+   * reads as plain, which is the correct appearance for an org that has not
+   * set one.
+   */
+  brandLogoUrl?: string
 }
 
 export interface RenderedEmail {
@@ -138,6 +155,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     sanitize = (html: string) => html,
     mediaOrigin,
     mediaHostId,
+    brandLogoUrl,
   } = options
 
   const textParts: string[] = []
@@ -327,6 +345,26 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
       `</div>`
     : ''
 
+  // INSIDE the 600px table, above the designed body, so it inherits the
+  // column's width on a phone instead of being centred against the viewport.
+  // `alt` is the product name where one is known, because a logo blocked by
+  // the client (which is the default in most inboxes) must still say who sent
+  // the mail. Height is capped rather than set, so a wordmark and a square
+  // mark both land at a sane size without the sender supplying dimensions.
+  const brandLogo = String(brandLogoUrl ?? '').trim()
+  // The product name from the merge map, because most inboxes block images by
+  // default — a logo with no `alt` is a blank box where the sender's identity
+  // should be. Falls back to nothing rather than to a literal, which would
+  // reintroduce the hard-coded brand this whole change removes.
+  const brandLogoAlt = merge?.['brand.productName'] ?? ''
+  const brandLogoHtml = brandLogo
+    ? row(
+        `<img src="${escapeEmailHtml(brandLogo)}" alt="${escapeEmailHtml(brandLogoAlt)}" ` +
+          `style="max-height:48px;max-width:200px;display:block;margin:0 auto;border:0;" />`,
+        'padding:24px 24px 0;text-align:center;',
+      )
+    : ''
+
   const html =
     `<!DOCTYPE html><html><head><meta charset="utf-8" />` +
     `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
@@ -336,6 +374,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">` +
     row(
       `<table role="presentation" width="600" cellpadding="0" cellspacing="0" align="center" style="max-width:600px;width:100%;margin:0 auto;">` +
+        brandLogoHtml +
         body +
         `</table>`,
       'padding:24px 8px;',
