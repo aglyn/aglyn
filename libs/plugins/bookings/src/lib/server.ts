@@ -383,6 +383,25 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           headers: {
             Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
             'Content-Type': 'application/x-www-form-urlencoded',
+            // AGL-2147. This was the ONE session-creating path in the repo
+            // with no idempotency key: console checkout, enterprise billing,
+            // marketplace checkout, and commerce's checkout / cart-checkout /
+            // draft-order / reservation / POS paths all carry one, and this
+            // takes a card payment exactly as they do.
+            //
+            // Keyed on the BOOKING, not on a client-minted header: the
+            // transaction above mints a fresh `bookingId` per attempt, so it
+            // already names this attempt uniquely and needs no widget change
+            // to supply. That also sidesteps Stripe's 24h key expiry — a key
+            // reused across attempts eventually replays a session that has
+            // since expired (these are opened with a 30-minute `expires_at`),
+            // handing the guest a dead checkout page instead of a new one.
+            //
+            // What it closes: a retried POST after Stripe has already created
+            // the session but before its response arrived. Without the key
+            // that opens a SECOND payable session against one held slot, and
+            // a guest who pays both is charged twice for one appointment.
+            'Idempotency-Key': `booking-${bookingId}`,
           },
           body: params.toString(),
         },
