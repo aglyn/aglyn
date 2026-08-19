@@ -359,6 +359,121 @@ describe("a refund pulls back the publisher's share (AGL-1995)", () => {
   })
 })
 
+/**
+ * AN ABANDONED REVERSAL SAYS SO, ON THE DOCUMENT (AGL-2140).
+ *
+ * Six paths settle the step with ZERO reversed for a DEFINITIVE reason, and
+ * the settle marker then short-circuits every redelivery forever. Before this
+ * the only difference between "the publisher's 8000 came back" and "the
+ * publisher kept 8000 and Aglyn ate the refund" was a `console.error` — the
+ * document read `reversedTransferCents: 0` either way, and nothing anywhere
+ * could be queried to find the money afterwards.
+ *
+ * The settle STAYS: re-running these paths would eventually double-debit a
+ * seller, which is worse than a recorded loss. What changes is that the loss
+ * is recorded.
+ *
+ * Forced red by dropping the `failure` argument at any of the six call sites:
+ * `reversalFailedReason` comes back undefined.
+ */
+describe('a reversal that cannot happen is recorded, not lost (AGL-2140)', () => {
+  beforeEach(() => {
+    process.env.STRIPE_SECRET_KEY = 'sk_double_2138'
+  })
+
+  /**
+   * THE ONE THAT COSTS REAL MONEY. `balance_insufficient` on a publisher's
+   * connected account is a **400** — definitive, so it does not throw and
+   * Stripe never redelivers. The whole share was forfeited silently.
+   */
+  it('a Stripe 4xx on the reversal POST records the reason and the amount owed', async () => {
+    stubStripe({
+      charge: { body: chargeBody },
+      transfer: { body: transferBody() },
+      reversalPost: {
+        ok: false,
+        status: 400,
+        body: { error: { code: 'balance_insufficient' } },
+      },
+    })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(purchase()).toMatchObject({
+      reversedTransferCents: 0,
+      reversalFailedReason: 'reversal-refused',
+      reversalFailedCause: 'refund',
+      // The publisher's full share, which is what someone recovering this has
+      // to know and could not have derived from a settled-at-zero row.
+      reversalOwedCents: 8000,
+    })
+    expect(purchase()['reversalFailedAt']).toBe('NOW')
+  })
+
+  /** A definitive refusal on the charge read, before any amount is known. */
+  it('a refused charge read records the reason with no amount claimed', async () => {
+    stubStripe({
+      charge: { ok: false, status: 404, body: { error: { code: 'resource_missing' } } },
+    })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(purchase()).toMatchObject({
+      reversedTransferCents: 0,
+      reversalFailedReason: 'charge-read-refused',
+    })
+    // Not invented: the share is unknowable at this point, so no figure is
+    // written rather than a misleading zero.
+    expect(purchase()['reversalOwedCents']).toBeUndefined()
+  })
+
+  /** A charge with no transfer on it — nothing was ever paid out. */
+  it('a charge with no transfer records that, distinctly', async () => {
+    stubStripe({ charge: { body: { id: 'ch_1', amount: 10825 } } })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(purchase()).toMatchObject({
+      reversedTransferCents: 0,
+      reversalFailedReason: 'no-transfer-on-charge',
+    })
+  })
+
+  /**
+   * An already fully-reversed transfer is NOT a failure — an earlier cause
+   * pulled it back — so it states `owedCents: 0` rather than leaving the
+   * amount unknown. Distinguishing this from the 4xx case is the whole point
+   * of the field.
+   */
+  it('a fully-reversed transfer records zero owed, not an unknown', async () => {
+    stubStripe({
+      charge: { body: chargeBody },
+      transfer: { body: transferBody({ amount_reversed: 8000 }) },
+    })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(purchase()).toMatchObject({
+      reversedTransferCents: 0,
+      reversalFailedReason: 'transfer-fully-reversed',
+      reversalOwedCents: 0,
+    })
+  })
+
+  /**
+   * POSITIVE CONTROL. A reversal that SUCCEEDS must carry none of these
+   * fields — otherwise `where('reversalFailedAt', '!=', null)` returns every
+   * refund ever processed and the recovery queue is useless.
+   */
+  it('POSITIVE CONTROL: a successful reversal records no failure at all', async () => {
+    stubStripe({
+      charge: { body: chargeBody },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_1', amount: 8000 } },
+    })
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    expect(purchase()).toMatchObject({
+      reversedTransferCents: 8000,
+      transferReversalId: 'trr_1',
+    })
+    expect(purchase()['reversalFailedAt']).toBeUndefined()
+    expect(purchase()['reversalFailedReason']).toBeUndefined()
+    expect(purchase()['reversalOwedCents']).toBeUndefined()
+  })
+})
+
 describe('what a refund must NOT reverse (AGL-1995)', () => {
   // Positive controls for the branch's selectivity. A reversal that fired on
   // everything would be a worse bug than the one being fixed: it would debit
