@@ -130,6 +130,13 @@ interface Row {
   /** Set when the frame carries this row twice; see the duplicate note. */
   duplicateOf?: string
   /**
+   * Why this row's value is written here rather than read from
+   * `plan-entitlements.ts`. Every row without it MUST derive from the code;
+   * the emitted `notes` says so, and `literals` in the output names the
+   * exceptions so the claim can be checked rather than believed.
+   */
+  literal?: string
+  /**
    * What Enterprise shows. The code resolves every Enterprise limit to
    * UNLIMITED, but that is the *default* — a real Enterprise contract sets
    * specific numbers through `org.entitlements` overrides. So publishing
@@ -195,7 +202,17 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
         label: 'Site collaborators',
         value: custom((p) => band(E(p).membersPerHost, E(p).maxMembersPerHost)),
       },
-      { label: 'Member accounts', value: () => 'Unlimited' },
+      {
+        label: 'Member accounts',
+        // The one LITERAL in this file, and it is declared as one. There is
+        // no `memberAccounts` entitlement to read: a site's end users are not
+        // metered on any plan, so there is no number in the code to derive
+        // this from. The emitted `notes` used to claim every value here is
+        // read from `plan-entitlements.ts`, which this quietly made false;
+        // `literal` is what keeps that claim checkable instead of aspirational.
+        literal: 'no `memberAccounts` entitlement exists — end users are not metered on any plan',
+        value: () => 'Unlimited',
+      },
       { label: 'White-label', value: (p) => bool(F(p).whiteLabel) },
       { label: 'Single sign-on (SAML/OIDC)', value: (p) => bool(F(p).ssoEnabled) },
     ],
@@ -238,6 +255,12 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       // that site's allocated seats.
       {
         label: 'POS registers per site',
+        // The frame still says the pre-AGL-1775 "POS registers"; the rename is
+        // ours and deliberate. Declared rather than left to surface as a
+        // missing row plus an extra row, which is what a rename looks like to
+        // the reconciler and is indistinguishable from a genuinely dropped
+        // row.
+        frameLabel: 'POS registers',
         value: talk((p) => num(E(p).posRegisters)),
       },
       // A fee only means something if you can sell. Free carries
@@ -530,33 +553,34 @@ const addons = {
   ],
 }
 
-mkdirSync(OUT, { recursive: true })
-writeFileSync(
-  join(OUT, 'tables.json'),
-  JSON.stringify(
-    {
-      source: 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
-      generatedBy: 'tools/marketing/build-pricing-tables.mts',
-      notes:
-        'Every value here is READ FROM CODE, never transcribed from Figma. ' +
-        'The frame supplies the shape (which rows, in which groups); the code ' +
-        'supplies the values. Regenerate rather than hand-edit.',
-      compare,
-      tiers,
-      usage,
-      fees,
-      addons,
-    },
-    null,
-    2,
-  ) + '\n',
-)
+// ------------------------------------------------------------------ cli
+
+/**
+ * `--check` reconciles and compares against the committed output WITHOUT
+ * writing, and is what CI runs. Anything else regenerates.
+ *
+ * `--frame` / `--out` exist so the self-test can drive this against fixtures
+ * it is allowed to corrupt. A guard that has never been made to fail is not
+ * evidence, and the only honest way to make this one fail is to hand it a
+ * broken frame — which must never mean editing the committed one.
+ */
+const argv = process.argv.slice(2)
+const flag = (name: string): string | undefined =>
+  argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=')
+const checkOnly = argv.includes('--check')
+const outDir = flag('out') ?? OUT
+const framePath = flag('frame') ?? join(OUT, 'copy-desktop.json')
 
 // ------------------------------------------------------- reconciliation
+//
+// Runs BEFORE anything is written (AGL-1278). It used to run after, which
+// made the headline invariant — "where frame and code disagree the code wins,
+// but the disagreement is printed" — true of the console and false of the
+// artifact: the file was already on disk by the time a disagreement was
+// discovered, and nothing ever exited non-zero, so no check could fail on it.
+// A reconciler that cannot fail is a printout.
 
-const frame = JSON.parse(
-  readFileSync(join(OUT, 'copy-desktop.json'), 'utf8'),
-) as {
+const frame = JSON.parse(readFileSync(framePath, 'utf8')) as {
   sections: Array<{
     name: string
     groups: Array<{ name: string; records: Array<{ cells: string[] }> }>
@@ -578,10 +602,74 @@ const framePlanOrder: Plan[] = [
   'enterprise',
 ]
 
-const frameRows = new Map<string, string[]>()
-for (const rec of frameTable?.records ?? []) {
-  if (rec.cells.length === 9) frameRows.set(rec.cells[0], rec.cells.slice(1))
+/** One label cell plus one cell per plan. */
+const FRAME_ROW_CELLS = framePlanOrder.length + 1
+
+const problems: string[] = []
+const fail = (headline: string, lines: string[]) => {
+  if (lines.length) problems.push(`${headline}\n${lines.map((l) => `  ${l}`).join('\n')}`)
 }
+
+/**
+ * Frame records that are not a full plan row.
+ *
+ * Skipped silently before, which is the quiet half of the same defect: a row
+ * the extractor emitted with eight cells instead of nine simply vanished from
+ * the comparison, and vanishing is exactly what a dropped pricing row does.
+ */
+const malformed: string[] = []
+const frameRows = new Map<string, string[]>()
+/**
+ * The frame carries a single-cell record for each group band — "Team",
+ * "Commerce" — which is table STRUCTURE, not a plan row. Recognised by name
+ * against our own group titles rather than by cell count alone, so a one-cell
+ * record that is not a band we know about is still reported.
+ */
+const groupBands = new Set(GROUPS.map((g) => g.title))
+for (const rec of frameTable?.records ?? []) {
+  const label = rec.cells[0]
+  if (rec.cells.length === FRAME_ROW_CELLS) {
+    frameRows.set(label, rec.cells.slice(1))
+  } else if (rec.cells.length === 1 && groupBands.has(label)) {
+    continue
+  } else {
+    malformed.push(`${label ?? '(no label)'}: ${rec.cells.length} cells, expected ${FRAME_ROW_CELLS}`)
+  }
+}
+
+if (!frameTable) {
+  problems.push(`the frame at ${framePath} has no "Compare features / Feature table" group`)
+}
+
+/**
+ * Rows OUR spec carries that the frame does not, each with the reason.
+ *
+ * The frame is a record of the design, not of the truth — but "the frame is
+ * stale" has to be an argument someone made once, not a shrug the reconciler
+ * repeats forever. An entry here that stops diverging fails too.
+ */
+const EXPECTED_MISSING: Record<string, string> = {
+  'Single sign-on (SAML/OIDC)':
+    'added beyond the frame when AGL-1210 shipped self-serve SSO; `ssoEnabled` is real and Enterprise-only, and the page said so before the design did',
+}
+
+/** Rows the FRAME carries that we deliberately do not emit, each with why. */
+const EXPECTED_EXTRA: Record<string, string> = {
+  'Total site size':
+    'AGL-2133 retired `totalSiteSizeMb`: it was enforced by nothing, and AGL-678 caps a node map at 900 KB, so the measurable org total can only reach a fraction of it. There is no number left to publish',
+  // Two records, both named for their Figma layer rather than for a feature:
+  // the header row (Free…Enterprise) and the price strip ($0…Custom). They
+  // are table furniture with a full complement of cells, which is why they
+  // reach this list rather than the group-band branch above.
+  Text: 'the table header row and the price strip, whose first cell is the Figma layer name rather than a feature label',
+}
+
+// `'Site backup & restore'` was exempted here until AGL-1278's reopening. It
+// is not a label the frame has ever carried — the row is `Site export &
+// backup`, and we emit it — so the entry excused nothing while reading as a
+// considered decision. It was found by the both-directions check below on the
+// first run after that check existed.
+
 
 const diffs: string[] = []
 const missing: string[] = []
@@ -609,20 +697,106 @@ for (const g of GROUPS) {
 }
 
 const ourLabels = new Set(GROUPS.flatMap((g) => g.rows.map((r) => r.label)))
-const extra = [...frameRows.keys()].filter(
-  (k) => !ourLabels.has(k) && !['Text', 'Site backup & restore'].includes(k),
+const ourFrameLabels = new Set(
+  GROUPS.flatMap((g) => g.rows.map((r) => r.frameLabel ?? r.label)),
 )
+const extra = [...frameRows.keys()].filter(
+  (k) => !ourLabels.has(k) && !ourFrameLabels.has(k),
+)
+
+const literals = GROUPS.flatMap((g) =>
+  g.rows.filter((r) => r.literal).map((r) => ({ label: r.label, why: r.literal })),
+)
+
+fail('frame records that are not a full plan row', malformed)
+fail(
+  'CODE-vs-FRAME disagreements (the code wins — but say so deliberately)',
+  diffs,
+)
+fail(
+  'rows in our spec but NOT in the frame, and not declared in EXPECTED_MISSING',
+  missing.filter((m) => !(m in EXPECTED_MISSING)),
+)
+fail(
+  'rows in the frame but NOT in our spec, and not declared in EXPECTED_EXTRA',
+  extra.filter((m) => !(m in EXPECTED_EXTRA)),
+)
+// Both directions, so a declaration cannot outlive the divergence it excuses.
+fail(
+  'declared in EXPECTED_MISSING but the frame now carries it — delete the entry',
+  Object.keys(EXPECTED_MISSING).filter((m) => !missing.includes(m)),
+)
+fail(
+  'declared in EXPECTED_EXTRA but the frame no longer carries it — delete the entry',
+  Object.keys(EXPECTED_EXTRA).filter((m) => !extra.includes(m)),
+)
+
+// ------------------------------------------------------------- output
+
+const payload =
+  JSON.stringify(
+    {
+      source: 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts',
+      generatedBy: 'tools/marketing/build-pricing-tables.mts',
+      notes:
+        'Every value here is READ FROM CODE, never transcribed from Figma, ' +
+        'except the rows named in `literals` below. The frame supplies the ' +
+        'shape (which rows, in which groups); the code supplies the values. ' +
+        'Regenerate rather than hand-edit: `npm run check:pricing-tables` ' +
+        'fails when this file and the code disagree.',
+      literals,
+      compare,
+      tiers,
+      usage,
+      fees,
+      addons,
+    },
+    null,
+    2,
+  ) + '\n'
+
+const outFile = join(outDir, 'tables.json')
 
 console.log(`compare: ${compare.groups.length} groups, ` +
   `${compare.groups.reduce((a, g) => a + g.rows.length, 0)} rows, ` +
   `${compare.columns.length} plan columns`)
 console.log(`usage:   ${usage.rows.length} rows, ${usage.columns.length} columns`)
 console.log(`fees:    ${fees.rows.length} rows`)
+console.log(`literal (not read from code) rows: ${literals.length}`)
+literals.forEach((l) => console.log(`  ${l.label} — ${l.why}`))
 console.log()
-console.log(`rows in our spec but NOT in the frame (${missing.length}):`)
-missing.forEach((m) => console.log(`  ${m}`))
-console.log(`rows in the frame but NOT in our spec (${extra.length}):`)
-extra.forEach((m) => console.log(`  ${m}`))
-console.log()
-console.log(`CODE-vs-FRAME disagreements (${diffs.length}) — code wins, but here they are:`)
-diffs.forEach((d) => console.log(d))
+console.log(`declared divergences from the frame: ` +
+  `${Object.keys(EXPECTED_MISSING).length} ours-only, ` +
+  `${Object.keys(EXPECTED_EXTRA).length} frame-only`)
+
+if (checkOnly) {
+  let committed: string | null = null
+  try {
+    committed = readFileSync(outFile, 'utf8')
+  } catch {
+    problems.push(`${outFile} does not exist — run the generator`)
+  }
+  if (committed !== null && committed !== payload) {
+    // The failure this mode exists for: AGL-2133 removed a row from the
+    // generator and left the generated file publishing a cap for an
+    // entitlement that no longer exists, because nothing regenerated or
+    // diffed it.
+    problems.push(
+      `${outFile} is STALE — regenerate it:\n` +
+        `  SWC_NODE_PROJECT=tools/marketing/tsconfig.tables.json \\\n` +
+        `    node --import @swc-node/register/esm-register \\\n` +
+        `    tools/marketing/build-pricing-tables.mts`,
+    )
+  }
+} else {
+  mkdirSync(outDir, { recursive: true })
+  writeFileSync(outFile, payload)
+  console.log(`wrote ${outFile}`)
+}
+
+if (problems.length) {
+  console.error('\nRECONCILIATION FAILED')
+  problems.forEach((p) => console.error(`\n${p}`))
+  process.exit(1)
+}
+console.log('\nreconciliation clean')

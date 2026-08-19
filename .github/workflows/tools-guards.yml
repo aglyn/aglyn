@@ -212,6 +212,27 @@ jobs:
 
       - run: npm run check:manifest-versions
 
+      # AGL-1278. Same two-step order. `/pricing`'s compare table is ~400
+      # cells generated from `plan-entitlements.ts`; the generator shipped with
+      # NO consumer — not an nx target, not a CI path, not a package script —
+      # so when AGL-2133 retired the `totalSiteSizeMb` entitlement and removed
+      # the row, the committed `pricing-copy/tables.json` went on publishing a
+      # storage cap for an entitlement that no longer exists, and nothing in
+      # the repo could fail on it. The generator also wrote its output BEFORE
+      # reconciling and never exited non-zero, so its "the disagreement is
+      # printed" invariant could not gate anything. The unit test proves the
+      # reconciler now fails on each shape (a wrong cell, a dropped row, an
+      # undeclared extra row, a malformed record, a dead exemption, a stale
+      # output), and only then is the check's green worth anything.
+      #
+      # The `libs/**` path filter above is load-bearing here, not incidental:
+      # this reads `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`, so an
+      # entitlement edit must trigger the guard that catches the stale output
+      # it produces. That is exactly the commit that went unnoticed.
+      - run: npm run test:pricing-tables
+
+      - run: npm run check:pricing-tables
+
       # AGL-2124. Same two-step order: the unit test proves the scanner can
       # FAIL on the exact three literals (its first version reported green over
       # one of them — a `//.*$` comment strip eats everything after the `//` in
