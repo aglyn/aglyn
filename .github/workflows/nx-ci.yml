@@ -74,11 +74,11 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: 'npm'
@@ -122,7 +122,7 @@ jobs:
       # of the first two was visible until CI (or a hand-run gate) hit it.
       - run: npm ci --prefix apps/docs
 
-      - uses: nrwl/nx-set-shas@v4
+      - uses: nrwl/nx-set-shas@v5
 
       # Native TypeScript 7 compiler; whole-workspace check runs in seconds
       # and is the only type gate (builds transpile with swc, no type-check).

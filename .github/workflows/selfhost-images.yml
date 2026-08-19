@@ -88,7 +88,7 @@ jobs:
       COMPOSE_DOCKER_CLI_BUILD: '1'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `docker/setup-buildx-action`: this repository's Actions policy is
       # `allowed_actions: selected` with `verified_allowed: false` and only
