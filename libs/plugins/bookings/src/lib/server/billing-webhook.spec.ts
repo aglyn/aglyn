@@ -328,3 +328,105 @@ describe('paid booking (AGL-1755)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * WHAT A REFUND WILL NEED (AGL-2315).
+ *
+ * A paid booking is a destination charge now, and reversing one needs the
+ * PaymentIntent — which appears on this event and nowhere else. The handler
+ * recorded `paidAmountCents` and nothing that identifies the charge, so a
+ * refund had no handle to pull, and unlike most gaps this one cannot be
+ * backfilled from our own data later: it is gone the moment the webhook
+ * returns.
+ */
+describe('the refund handles (AGL-2315)', () => {
+  const PAID_SESSION = {
+    ...BOOKING_SESSION,
+    payment_intent: 'pi_booking_1',
+    metadata: { ...BOOKING_SESSION.metadata, feeCents: '190' },
+  }
+
+  it('records the PaymentIntent the refund will reverse', async () => {
+    await deliver(PAID_SESSION)
+    expect(storedBooking().paymentIntentId).toBe('pi_booking_1')
+  })
+
+  it('reads an EXPANDED payment_intent object as well as an id string', async () => {
+    // Stripe sends the id on a delivered event, but an expanded read — or a
+    // replayed event captured with `expand` — carries the object. Coercing
+    // that with `String()` would store "[object Object]" and produce a refund
+    // route that 502s on a booking it says it can refund.
+    await deliver({ ...PAID_SESSION, payment_intent: { id: 'pi_expanded' } })
+    expect(storedBooking().paymentIntentId).toBe('pi_expanded')
+  })
+
+  it('records the fee as CHARGED, not as re-resolved later', async () => {
+    // The rate follows the plan and the plan moves (AGL-2289), so re-deriving
+    // Aglyn's cut at refund time would reverse a share that was never taken.
+    await deliver(PAID_SESSION)
+    expect(storedBooking().feeCents).toBe(190)
+  })
+
+  it('records a zero fee on the 0%-rate tiers as a real answer', async () => {
+    await deliver({
+      ...PAID_SESSION,
+      metadata: { ...PAID_SESSION.metadata, feeCents: '0' },
+    })
+    expect(storedBooking().feeCents).toBe(0)
+  })
+
+  it('does NOT seed refundedCents', async () => {
+    // Seeding it would be the AGL-1758 shape: a defaulted field written
+    // through `merge` destroying the real one. This handler can re-enter after
+    // a refund has accumulated a counter, and a zero written back over it
+    // would re-open the full amount for refunding a second time.
+    await deliver(PAID_SESSION)
+    expect('refundedCents' in storedBooking()).toBe(false)
+  })
+
+  it('leaves a refunded booking alone on redelivery', async () => {
+    // "Already processed" is WIDER than `confirmed` once money can flow back
+    // out: a full refund moves the booking OFF `confirmed`, so a redelivery
+    // arriving afterwards would otherwise read as unprocessed and re-confirm
+    // an appointment the merchant has already cancelled and refunded.
+    await deliver(PAID_SESSION)
+    docs.set('hosts/host-1/bookings/booking-1', {
+      ...storedBooking(),
+      status: 'canceled',
+      refundedCents: 9500,
+    })
+    contactUpserts.length = 0
+    sentEmails.length = 0
+    meteredHosts.length = 0
+
+    await deliver(PAID_SESSION)
+
+    expect(storedBooking().status).toBe('canceled')
+    expect(storedBooking().refundedCents).toBe(9500)
+    // ...and no second confirmation to a guest whose appointment is cancelled,
+    // no second contact write, no second metered email.
+    expect(sentEmails).toHaveLength(0)
+    expect(contactUpserts).toHaveLength(0)
+    expect(meteredHosts).toHaveLength(0)
+  })
+
+  it('leaves a PARTIALLY refunded booking alone on redelivery', async () => {
+    // Still `confirmed`, because a part-refunded appointment is still
+    // happening — so the status check alone cannot catch this one, and the
+    // refund counter is what proves the handler has already run.
+    await deliver(PAID_SESSION)
+    docs.set('hosts/host-1/bookings/booking-1', {
+      ...storedBooking(),
+      status: 'pendingPayment',
+      refundedCents: 3000,
+    })
+    contactUpserts.length = 0
+    sentEmails.length = 0
+
+    await deliver(PAID_SESSION)
+
+    expect(storedBooking().refundedCents).toBe(3000)
+    expect(sentEmails).toHaveLength(0)
+    expect(contactUpserts).toHaveLength(0)
+  })
+})

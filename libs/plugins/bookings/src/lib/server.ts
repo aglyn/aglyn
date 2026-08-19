@@ -30,6 +30,7 @@ import {
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
+import { bookingRefundHandler } from './server/refund'
 
 // Settings schema (AGL-428): registered here too so server-only loads
 // (API dispatchers) get defaults-merged getPluginConfig reads.
@@ -737,6 +738,9 @@ export function registerBookingsApi(): void {
 /** Registers the bookings plugin's console-side API routes (AGL-396). */
 export function registerBookingsConsoleApi(): void {
   registerPluginApiRoute('bookings/reminders', remindersHandler)
+  // Refunding a paid booking (AGL-2315). Console-side, because it is
+  // site-admin-gated and moves money — never a site-facing route.
+  registerPluginApiRoute('bookings/refund', bookingRefundHandler)
   // Paid-booking confirmation rides the platform Stripe webhook (AGL-418).
   registerBillingWebhookHandler(bookingsBillingWebhookHandler)
 }
