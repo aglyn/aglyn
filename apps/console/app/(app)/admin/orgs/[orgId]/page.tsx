@@ -51,7 +51,6 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { signInWithCustomToken } from 'firebase/auth'
 import {
   collection,
   getCountFromServer,
@@ -72,6 +71,7 @@ import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
+import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
 } from '../../../../../components/staff-org-usage-table.component'
@@ -585,37 +585,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   // Org impersonation (AGL-357): staff enters the workspace as its owner
-  // through the audited user-impersonation endpoint.
-  const handleImpersonateOwner = async () => {
-    if (!org?.ownerUid) return
-    try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/admin/impersonate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ uid: org.ownerUid }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload.token) {
-        return void enqueueSnackbar(payload?.error ?? 'Impersonation failed', {
-          variant: 'warning',
-          persist: false,
-        })
-      }
-      // Replaces THIS browser session with the owner account; the
-      // impersonation banner (claims.impersonatedBy) offers the exit.
-      // Use the named-app auth instance (useAuth) — bare getAuth() resolves
-      // the '[DEFAULT]' app, which this app never registers.
-      await signInWithCustomToken(auth, payload.token)
-      window.location.assign('/')
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('Impersonation failed', { variant: 'error' })
-    }
-  }
+  // through the audited user-impersonation endpoint. The mint, the reason
+  // dialog and the sign-in all live in `useImpersonationReason` (AGL-2125) —
+  // the route requires a reason and this page must not be able to reach it
+  // around the dialog that collects one.
+  const impersonation = useImpersonationReason({ auth, user })
 
   // Per-org discount (AGL-1105): staff attaches a Stripe coupon to this org's
   // subscription. Coupons come from the audited /api/admin/coupons list; the
@@ -978,7 +952,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       owner={
                         org?.ownerUid ? (people[org.ownerUid] ?? null) : null
                       }
-                      onImpersonateOwner={() => void handleImpersonateOwner()}
+                      onImpersonateOwner={() =>
+                        impersonation.request(
+                          org?.ownerUid ?? '',
+                          org?.name ?? undefined,
+                        )
+                      }
                     />
                   ),
                 },
@@ -2037,6 +2016,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         {/* Plugin zone (AGL-433): staff adminOrgDetail widgets. */}
         <PluginWidgetSlot slot="adminOrgDetail" orgId={orgId} />
       </Container>
+      {impersonation.dialog}
     </DashboardLayout>
   )
 }

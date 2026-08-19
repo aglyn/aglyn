@@ -13,6 +13,22 @@ not accessible to regular host owners.
 
 The **staff console** is where Aglyn operators manage the platform and support customer organizations.
 
+## Runbooks — read these before you need them {#runbooks}
+
+Every doc below is written to be followed under pressure, which is exactly when
+nobody has time to find it. Until AGL-2141 this index linked none of them, while
+two of them told the reader to pre-read a third.
+
+| When | Runbook |
+| -- | -- |
+| A customer wrote in | **[Support triage](support-triage.md)** — priority ladder, the billing answers, and every escalation route out of a ticket |
+| The site is down or degraded | [Incident response](https://github.com/aglyn/aglyn/blob/main/docs/INCIDENT_RESPONSE.md) · [Platform health board](platform-health.md) |
+| Personal data may have left | [Breach notification](https://github.com/aglyn/aglyn/blob/main/docs/BREACH_NOTIFICATION.md) |
+| Someone reported abuse, DMCA or CSAM | [Abuse reports](abuse-reports.md) |
+| An asset or a whole org has to be shut off | [Lockdown](lockdown.md) — feature locks, read-only mode, org suspension, and the [asset quarantine runbook](lockdown.md#quarantine-keys) |
+| Data has to be restored | [Disaster recovery](https://github.com/aglyn/aglyn/blob/main/docs/DISASTER_RECOVERY.md) |
+| A DSAR or erasure arrived | [Privacy requests](https://github.com/aglyn/aglyn/blob/main/docs/PRIVACY_REQUESTS.md) |
+
 ![The staff organizations directory](/img/staff-console/admin-orgs.png)
 
 ![The staff audit log](/img/staff-console/admin-audit.png)
@@ -94,7 +110,8 @@ set password](/img/staff-console/admin-user-password.png)
   tier), respecting each recipient's mute preferences; audited.
 - **Billing insight** — every organization's Stripe **invoice history** and default
   **payment method** (with delinquency state) render on its detail page.
-- **Impersonation** — staff can open the console as a customer account (audited; a
+- **Impersonation** — staff can open the console as a customer account (audited **with a
+  required reason**, AGL-2125 — the dialog will not submit without one; a
   pinned warning banner with one-click exit shows for the entire session; staff
   accounts cannot be impersonated).
 - **System emails** — the mail Aglyn itself sends (organization invites, the monthly
@@ -114,7 +131,7 @@ set password](/img/staff-console/admin-user-password.png)
 - **Audit archival** — a nightly cron moves audit entries past the 90-day retention
   window into a Storage compliance trail (JSON lines, month-partitioned) and reminds
   staff of GDPR erasure requests past their 7-day hold.
-- **Organization suspension** — a staff toggle that serves 503s on the org's sites and shows the
+- **[Organization suspension](lockdown.md)** — a staff toggle that serves 503s on the org's sites and shows the
   owner a banner.
 - **[Sales tax return](sales-tax-return.md)** — the quarterly Texas return: pick a
   period, read the Form 01-114 figures for Texas, see every row the sweep could not

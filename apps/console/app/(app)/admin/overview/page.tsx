@@ -64,6 +64,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
   const [error, setError] = useState<string | null>(null)
   // Staff broadcast (wave v5): system.announcement to org admins.
   const [broadcast, setBroadcast] = useState({
+    reason: '',
     title: '',
     body: '',
     link: '',
@@ -73,6 +74,10 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
 
   const handleBroadcast = async () => {
     if (!broadcast.title.trim() || broadcastBusy) return
+    // The route requires it (AGL-2162); the button is disabled without it, so
+    // the operator does not discover the requirement by being refused after
+    // composing the whole announcement.
+    if (broadcast.reason.trim().length < 8) return
     const accepted = await confirm({
       title: 'Send this announcement?',
       description:
@@ -98,6 +103,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
           ...(broadcast.body.trim() ? { body: broadcast.body.trim() } : {}),
           ...(broadcast.link.trim() ? { link: broadcast.link.trim() } : {}),
           ...(broadcast.plan ? { plan: broadcast.plan } : {}),
+          reason: broadcast.reason.trim(),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -111,7 +117,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
           `Announcement sent to admins of ${payload.orgs} organizations`,
           { variant: 'success', persist: false },
         )
-        setBroadcast({ title: '', body: '', link: '', plan: '' })
+        setBroadcast({ title: '', body: '', link: '', plan: '', reason: '' })
       }
     } catch (broadcastError) {
       console.error(broadcastError)
@@ -445,6 +451,26 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                           }))
                         }
                       />
+                      <TextField
+                        size="small"
+                        label="Reason (recorded on the audit trail)"
+                        placeholder="Why this cohort is being announced to"
+                        value={broadcast.reason}
+                        error={
+                          broadcast.reason.length > 0 &&
+                          broadcast.reason.trim().length < 8
+                        }
+                        helperText={
+                          'A broadcast reaches every organization and cannot ' +
+                          'be recalled. At least 8 characters.'
+                        }
+                        onChange={(event) =>
+                          setBroadcast((previous) => ({
+                            ...previous,
+                            reason: event.target.value,
+                          }))
+                        }
+                      />
                       <Stack
                         direction="row"
                         spacing={1}
@@ -466,7 +492,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                         <Button
                           variant="contained"
                           color="primary"
-                          disabled={broadcastBusy || !broadcast.title.trim()}
+                          disabled={
+                            broadcastBusy ||
+                            !broadcast.title.trim() ||
+                            broadcast.reason.trim().length < 8
+                          }
                           onClick={() => void handleBroadcast()}
                         >
                           {broadcastBusy ? 'Sending…' : 'Broadcast'}

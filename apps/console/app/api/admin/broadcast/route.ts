@@ -52,7 +52,21 @@ async function handler(request: Request): Promise<Response> {
     .slice(0, 1000)
   const link = String(payload?.link ?? '').trim()
   const plan = String(payload?.plan ?? '').trim()
+  // Required, and validated BEFORE the fan-out: a broadcast cannot be
+  // un-sent, so a reason collected afterwards would be a reason for something
+  // that already happened to every customer.
+  const reason = String(payload?.reason ?? '').trim().slice(0, 500)
   if (!title) return Response.json({ error: 'Missing title' }, { status: 400 })
+  if (reason.length < 8) {
+    return Response.json(
+      {
+        error:
+          'A broadcast needs a reason of at least 8 characters — it reaches ' +
+          'every organization and cannot be recalled.',
+      },
+      { status: 400 },
+    )
+  }
   if (link && !link.startsWith('/') && !link.startsWith('https://')) {
     return Response.json({ error: 'Links must be a path or https' }, { status: 400 })
   }
@@ -81,12 +95,37 @@ async function handler(request: Request): Promise<Response> {
       })
     }
 
+    // AGL-2162. Two gaps, and the second is the larger one.
+    //
+    // 1. No `reason`. Every neighbouring destructive staff surface records
+    //    one. The title says what was ANNOUNCED; the reason says why we
+    //    announced it to THIS cohort — which is the question asked when a
+    //    maintenance notice reaches the wrong plan tier.
+    // 2. The `body` was not recorded ANYWHERE. This route pushes a message to
+    //    every organization's owners and admins, and the only durable trace of
+    //    what those customers were told was a 150-character title. The
+    //    notifications themselves live per recipient; there was no one place
+    //    that could answer "what did we send on the 14th".
+    //
+    // `plan` and `link` join them for the same reason: the audience and the
+    // destination are as much a part of the act as the words.
     await firestore.collection('adminAudit').add({
       actorUid: decoded.uid,
       action: 'broadcast.send',
       target: plan ? `orgs?plan=${plan}` : 'orgs/*',
+      reason,
       before: null,
-      after: { title, orgs: orgs.size },
+      after: {
+        title,
+        body: body || null,
+        link: link || null,
+        plan: plan || null,
+        orgs: orgs.size,
+        // `MAX_ORGS_PER_BROADCAST` caps the query, so a send that hit the cap
+        // reached FEWER orgs than "everyone" — recorded, because a partial
+        // broadcast reads identically to a complete one from the count alone.
+        truncated: orgs.size >= MAX_ORGS_PER_BROADCAST,
+      },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
 

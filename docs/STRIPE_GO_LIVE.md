@@ -132,15 +132,78 @@ can still fail before trusting a green one. `tools/scripts/lib/stripe-webhook-he
 (`npm run test:stripe-webhook-health`) does the same against fixtures, giving
 every check a failing input including the AGL-1551 shape.
 
-## 4. Related, not blocking
+### The CONNECT destination is a SECOND destination (AGL-2122)
+
+`account.updated` for a **connected** account — a storefront merchant's or a
+marketplace publisher's Stripe account — is delivered only to a destination
+created with `connect: true`. It is deliberately **not** in `WEBHOOK_EVENTS`:
+putting it there subscribes the *platform's own* account,
+`syncConnectAccountStatus` finds no `profiles`/`publisherProfiles` document
+bound to the platform account id, nothing happens, and every check goes green
+over an unchanged fail-open. It lives in `CONNECT_WEBHOOK_EVENTS` instead.
+
+**What is broken until this exists.** `stripeChargesEnabled` is the cached flag
+every commerce money route gates on — checkout, cart checkout, draft orders,
+reservations, POS. AGL-1997 made `account.updated` refresh it, precisely so a
+merchant Stripe later restricts stops selling instead of failing the SHOPPER at
+payment time. That handler has never run: measured against the live account on
+**2026-08-18**, `GET /v1/webhook_endpoints` returned exactly **one** destination
+(`we_1TuaNvDYHP4psn7hmNkYMbEU`), carrying exactly the ten `WEBHOOK_EVENTS`, and
+no Connect destination at all.
+
+```bash
+STRIPE_SECRET_KEY=sk_live_... node tools/scripts/setup-stripe.mjs \
+  --webhook-url https://app.aglyn.com/api/billing/webhook
+```
+
+creates it and prints `STRIPE_CONNECT_WEBHOOK_SECRET`, which must be set on the
+console project — the Connect destination signs with its **own** key, so
+without it every connected-account delivery 400s on signature (the AGL-1551
+shape, behind a green *Active* badge).
+
+⚠️ **`connect=true` is settable only at CREATION.** There is no update that
+converts an account destination into a Connect one, and creating one is not
+undoable — endpoints are deleted, never archived.
+
+⚠️ **Stamp it, or the audit cannot see it.** Stripe's endpoint object says
+nothing about `connect: true` when read back — measured, the returned keys are
+`api_version`, `application`, `created`, `description`, `enabled_events`, `id`,
+`livemode`, `metadata`, `object`, `status`, `url`. The script stamps
+`metadata[aglyn_scope]=connect`; **a destination created by hand in the
+dashboard must have that metadata key set by hand too**, or
+`audit:stripe-webhook` reads it as a second account destination and fails
+`endpoint.count`. Failing loudly is the intended direction, but the fix is one
+metadata key, not a second endpoint.
+
+## 4. Dashboard-only settings, and what each one is worth
+
+None of these live in code, none are created by `setup-stripe.mjs`, and every
+one of them is something the **first paying customer sees**.
+
+| # | Where | Set it to | Why it matters |
+| -- | -- | -- | -- |
+| 1 | Settings → Business → **Public details** | Public business name `Aglyn`, support email, support URL `https://aglyn.com/support`, support phone | These render on the Checkout page, the receipt and the customer portal. Blank support details on a receipt is the single most common trigger for "I don't recognise this charge" → a chargeback. |
+| 2 | Settings → **Branding** | Icon + logo (`apps/console/public`), brand colour, accent colour | Checkout and the portal are the only pages in the purchase flow we do not render. Default-styled, they read as a third party. |
+| 3 | Settings → Payments → **Statement descriptor** | `AGLYN` (and a shortened descriptor if prompted) | This is the string on the cardholder's statement. An unrecognised descriptor is a chargeback, and a chargeback on a subscription invoice is the reversal AGL-2120 now handles — better not to cause it. |
+| 4 | Settings → **Emails** | ✅ "Successful payments", ✅ "Refunds" | **Off by default for card payments.** With it off, a customer who pays gets no receipt from Stripe at all. |
+| 5 | Settings → Billing → **Customer portal** | Configure it, and leave **"Customers can switch plans" OFF** | The portal IS built and shipped (AGL-275) — `POST /api/billing/subscription` with `action: 'portal'`, reached from **Manage billing**. An unconfigured portal errors on open. Enabling plan switching there opens a subscription-mutating path with one dashboard click and no code review, and `audit-metered-coverage.mjs` reports on exactly that. |
+| 6 | Settings → Tax (Stripe Tax) | Origin address, and every jurisdiction we are registered in | `automatic_tax[enabled]=true` is already set on every session-creating path in the repo (checkout, add-ons, plan switch, enterprise). With no registration Stripe computes **zero** tax and the checkout still succeeds — a silent under-collection, not an error. |
+| 7 | Developers → Webhooks | The Connect destination, per the section above | Every connected merchant's readiness flag is stale until it exists. |
+
+## 5. Related, not blocking
 
 - Firestore rules deploy (`firebase deploy --only firestore:rules`) —
   webhook writes use the admin SDK and bypass rules, but the console reads
   tenant docs under the new scoped rules.
-- Customer portal (self-service cancel/downgrade) is not built yet; the
-  Free card is intentionally non-purchasable.
+- The **Free** card is intentionally non-purchasable.
 
-## 5. Metered usage billing (AGL-41)
+  (This section used to say "Customer portal (self-service cancel/downgrade) is
+  not built yet". It has been built since AGL-275 and the claim was three
+  months stale — a support conversation reading this runbook would have told a
+  customer to write in for something they can do themselves. Its dashboard
+  configuration is item 5 above.)
+
+## 6. Metered usage billing (AGL-41)
 
 **What the code does** (AGL-1280): only usage **beyond the plan's included
 storage, bandwidth and form submissions** is priced, at our cost × 1.30. The

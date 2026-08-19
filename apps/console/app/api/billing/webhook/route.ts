@@ -178,7 +178,15 @@ async function handler(request: Request): Promise<Response> {
   // against STRIPE_WEBHOOK_SECRET_TEST when the live secret rejects (or is
   // unset). Secrets are never logged.
   const testSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST
-  if (!secret && !testSecret) {
+  // The CONNECT destination signs with its OWN secret (AGL-2122). Stripe
+  // delivers connected-account events (`account.updated` — the input to
+  // AGL-1997's Connect-readiness refresh) only to a destination created with
+  // `connect: true`, and that destination has a separate signing key. Without
+  // this arm, standing the destination up would 400 every one of its
+  // deliveries on signature — the exact AGL-1551 shape, behind a green
+  // "Active" badge, for the one event stream nothing else can supply.
+  const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
+  if (!secret && !testSecret && !connectSecret) {
     return Response.json({ error: 'Billing is not configured.' }, { status: 501 })
   }
 
@@ -190,6 +198,9 @@ async function handler(request: Request): Promise<Response> {
       : false) ||
     (testSecret
       ? verifyStripeSignature(payload, signatureHeader, testSecret)
+      : false) ||
+    (connectSecret
+      ? verifyStripeSignature(payload, signatureHeader, connectSecret)
       : false)
   if (!verified) {
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
@@ -887,6 +898,185 @@ async function handler(request: Request): Promise<Response> {
             }).catch(() => undefined)
           }
         }
+      }
+    }
+
+    // Card disputes against AGLYN'S OWN subscription revenue (AGL-2120).
+    //
+    // `charge.dispute.created` / `.closed` have been SUBSCRIBED since AGL-1787
+    // and both were handled only inside the commerce and marketplace plugins,
+    // which self-select by finding a storefront order or a marketplace
+    // purchase for the charge. A chargeback against an Aglyn *subscription*
+    // invoice matches neither, so it fell through every branch on this
+    // endpoint and produced nothing: the `platformRevenue` row kept its full
+    // `netCents` while the money had been pulled back, so the Texas return
+    // over-reported by the disputed amount; GA revenue was never netted; and
+    // no surface anywhere told staff a paying customer had disputed a charge.
+    // The refund path directly beside this one does all three.
+    //
+    // WHY A QUERY AND NOT AN OWNERSHIP TEST. A Stripe Dispute carries
+    // `charge` and `payment_intent`, and no `customer` and no `invoice`, so
+    // `findOrgIdByStripeCustomer` — the discriminator every other branch on
+    // this route uses — has nothing to read. `platformRevenue` only ever
+    // holds invoices whose customer already resolved through that index, so
+    // finding a row there IS the "is this ours" test, and a tenant
+    // storefront's or marketplace buyer's dispute finds none and falls
+    // through to the plugins exactly as before.
+    //
+    // WHY `refundedCents` AND `chargedBackCents` BOTH. This mirrors the order
+    // model AGL-1787 already established (`utils/site-member-purchases.ts`):
+    // the reversal lands in `refundedCents` because that is the field the
+    // return reads and a lost dispute reverses money precisely as a refund
+    // does, and `chargedBackCents` records how much of it the BANK took
+    // rather than the merchant choosing to — the two are not the same event
+    // and a return preparer needs to tell them apart.
+    //
+    // Only `closed` with `status === 'lost'` moves money. `created` moves
+    // none — it is recorded purely so staff learn about an open dispute while
+    // the evidence window is still open, which is the only window in which
+    // anything can be done about it.
+    if (type === 'charge.dispute.created' || type === 'charge.dispute.closed') {
+      const disputeId = String(object?.id ?? '')
+      const paymentIntentId =
+        typeof object?.payment_intent === 'string'
+          ? object.payment_intent
+          : String(object?.payment_intent?.id ?? '')
+      const chargeId =
+        typeof object?.charge === 'string'
+          ? object.charge
+          : String(object?.charge?.id ?? '')
+      const disputedCents = Math.max(0, Number(object?.amount ?? 0))
+      const lost = type === 'charge.dispute.closed' && object?.status === 'lost'
+      const revenueCollection = firebaseAdmin
+        .app()
+        .firestore()
+        .collection('platformRevenue')
+      // Payment intent first, charge second — an invoice records both, but a
+      // pre-AGL-2120 row records neither, so a miss is expected on history
+      // and is reported rather than treated as "not ours".
+      let revenueDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null
+      for (const [field, value] of [
+        ['paymentIntentId', paymentIntentId],
+        ['chargeId', chargeId],
+      ] as const) {
+        if (revenueDoc || !value) continue
+        const found = await revenueCollection
+          .where(field, '==', value)
+          .limit(1)
+          .get()
+        revenueDoc = found.docs[0] ?? null
+      }
+      if (revenueDoc) {
+        const orgId = String(revenueDoc.get('orgId') ?? '')
+        if (lost) {
+          // The row's own reversal total, not a blind add: `refundedCents`
+          // is CUMULATIVE (the refund branch above maintains it the same
+          // way), so a dispute redelivery must converge rather than
+          // double-count. Keyed by dispute id so a partially refunded and
+          // then disputed invoice sums both without either reversal
+          // swallowing the other.
+          const alreadyChargedBack = Number(
+            revenueDoc.get('chargedBackCents') ?? 0,
+          )
+          const previousDisputeId = String(revenueDoc.get('disputeId') ?? '')
+          const deltaCents =
+            previousDisputeId === disputeId
+              ? 0
+              : disputedCents - alreadyChargedBack
+          if (deltaCents > 0) {
+            // AWAITED like the revenue row itself — a lost stamp here is a
+            // wrong tax return, which is the whole point of this branch.
+            await revenueDoc.ref.set(
+              {
+                refundedCents:
+                  Number(revenueDoc.get('refundedCents') ?? 0) + deltaCents,
+                chargedBackCents: alreadyChargedBack + deltaCents,
+                disputeId,
+                disputeReason: String(object?.reason ?? ''),
+                refundRecordedAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            )
+            // Net GA by the same GROSS→NET scaling the refund branch uses,
+            // so a lost dispute and a full refund of the same invoice move
+            // GA revenue by the same amount. `transaction_id` is the INVOICE
+            // id — the id the original `purchase` reported — which is what
+            // makes GA net the two instead of recording a second sale.
+            const rowGrossCents = Number(revenueDoc.get('grossCents') ?? 0)
+            const rowTaxCents = Number(revenueDoc.get('taxCents') ?? 0)
+            const netDeltaCents =
+              rowGrossCents > 0 && rowTaxCents > 0
+                ? Math.round(
+                    (deltaCents * (rowGrossCents - rowTaxCents)) /
+                      rowGrossCents,
+                  )
+                : deltaCents
+            void sendGa4Refund({
+              transactionId: revenueDoc.id,
+              value: netDeltaCents / 100,
+              currency: String(object?.currency ?? 'usd'),
+              items: [],
+              stripeCustomerId: String(
+                revenueDoc.get('stripeCustomerId') ?? '',
+              ),
+            }).catch(() => undefined)
+          }
+        }
+        // Every platform dispute reaches staff, won or lost — `created` is
+        // the actionable one and `closed` is the outcome. Best-effort: a
+        // failed audit append must not 500 a billing webhook.
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('adminAudit')
+          .add({
+            actorUid: 'system:stripe-webhook',
+            action:
+              type === 'charge.dispute.created'
+                ? 'billing.disputeOpened'
+                : 'billing.disputeClosed',
+            target: orgId
+              ? `orgs/${orgId}`
+              : `platformRevenue/${revenueDoc.id}`,
+            reason:
+              type === 'charge.dispute.created'
+                ? `Card dispute opened against subscription invoice ${revenueDoc.id} — answer it in Stripe before the evidence deadline; an unanswered dispute is decided for the cardholder.`
+                : `Card dispute ${String(object?.status ?? 'closed')} on subscription invoice ${revenueDoc.id}${lost ? ' — the money has been reversed and the revenue row adjusted.' : ' — nothing was reversed.'}`,
+            before: null,
+            after: {
+              disputeId,
+              invoiceId: revenueDoc.id,
+              orgId: orgId || null,
+              status: String(object?.status ?? ''),
+              disputeReason: String(object?.reason ?? ''),
+              disputedCents,
+              chargeId: chargeId || null,
+              evidenceDueBy: Number(object?.evidence_details?.due_by ?? 0) || null,
+            },
+            at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          })
+          .catch(() => undefined)
+      } else if (lost && (paymentIntentId || chargeId)) {
+        // No row matched. This is the ORDINARY answer for a storefront or
+        // marketplace chargeback — the plugins below own those, and their
+        // handlers self-select on the same charge — so it is deliberately
+        // NOT written to `adminAudit`, which staff read: an entry per
+        // storefront chargeback would bury the platform ones this branch
+        // exists to surface. Handlers return `void`, so this route cannot
+        // ask whether a plugin claimed the dispute.
+        //
+        // It is still logged, because one shape here is genuinely ours: an
+        // invoice paid before AGL-2120 stored no `chargeId`/`paymentIntentId`
+        // and so can never be matched, however plainly it is a subscription
+        // charge. The log line is the only trace such a dispute leaves —
+        // that window closes on its own as those invoices renew.
+        console.warn('[billing/webhook] lost dispute matched no revenue row', {
+          disputeId,
+          paymentIntentId: paymentIntentId || null,
+          chargeId: chargeId || null,
+          disputedCents,
+        })
       }
     }
 
