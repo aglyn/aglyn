@@ -205,6 +205,13 @@ const fakeFirestore = {
       set: (ref: any, payload: unknown) => {
         buffered.push(() => ref?.set?.(payload))
       },
+      // AGL-2369 moved the conversion and the error-slot assignment inside the
+      // transaction, so `update` is now a transaction write here too. Buffered
+      // like the others, so a body that returns a refusal after deciding
+      // persists nothing and the read-after-write guard covers it.
+      update: (ref: any, payload: unknown) => {
+        buffered.push(() => ref?.update?.(payload))
+      },
     })
     for (const write of buffered) write()
     return result
