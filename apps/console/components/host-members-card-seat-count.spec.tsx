@@ -166,20 +166,32 @@ beforeEach(() => {
   }) as any
 })
 
+/**
+ * The readout line. Since AGL-2439 this is the shared `QuotaReadoutComponent`
+ * — `"60/50 collaborators on this site"` — rather than a caption this card
+ * wrote itself, and the denominator is the PER-SITE cap (the plan's allowance
+ * plus any pool seats assigned to this host) instead of an org-level number
+ * every site inherited. The count under test is unchanged: it is still the
+ * server aggregate, and still not the page window.
+ */
 const seatCaption = () =>
-  screen.queryByText(/member seats used/)?.textContent ?? ''
+  screen.queryByText(/collaborators on this site/)?.textContent ?? ''
+
+/** The upsell/limit sentence, which is now its own line beneath the readout. */
+const seatFooter = () =>
+  screen.queryByText(/Extra seats|Upgrade your plan/)?.textContent ?? ''
 
 describe('the member-seat count is a server aggregate (AGL-1716)', () => {
   it('counts the site, not the page of rows on screen', async () => {
     render(<HostMembersCard hostId="host-1" />)
 
-    // Before the fix this read "25 of 50 member seats used" — the page
+    // Before the fix this read "25/50" — the page
     // window, presented as the site's seat usage.
-    await waitFor(() => expect(seatCaption()).toContain('60 of 50'))
-    expect(seatCaption()).not.toContain('25 of 50')
+    await waitFor(() => expect(seatCaption()).toContain('60/50'))
+    expect(seatCaption()).not.toContain('25/50')
     // Over the included band on a plan that sells seats, so the purchase
     // prompt is reachable at all — it was not while the count saturated.
-    expect(seatCaption()).toContain('extra seats $')
+    expect(seatFooter()).toContain('Extra seats $')
     expect(mockCountedPaths).toContain('hosts/host-1/members')
   })
 
@@ -206,7 +218,7 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
 
     // The listener refreshes the LIST for free; a one-shot aggregate would
     // otherwise sit stale for the rest of the session.
-    await waitFor(() => expect(seatCaption()).toContain('61 of 50'))
+    await waitFor(() => expect(seatCaption()).toContain('61/50'))
   })
 
   it('falls back to the rows on screen, never to zero, when denied', async () => {
@@ -215,9 +227,9 @@ describe('the member-seat count is a server aggregate (AGL-1716)', () => {
 
     await waitFor(() => expect(mockCountedPaths.length).toBe(1))
     // The page window is a LOWER bound and this card's prior behaviour. A
-    // defaulted 0 would read "0 of 50 member seats used" — the flattering
+    // defaulted 0 would read "0/50 collaborators" — the flattering
     // direction, on a site that is actually over.
-    await waitFor(() => expect(seatCaption()).toContain('25 of 50'))
-    expect(seatCaption()).not.toContain('0 of 50')
+    await waitFor(() => expect(seatCaption()).toContain('25/50'))
+    expect(seatCaption()).not.toContain('0/50')
   })
 })

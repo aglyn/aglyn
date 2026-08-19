@@ -21,6 +21,7 @@ import {
   CardDisplay,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -47,7 +48,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
-import { checkOrgSeatQuota } from '../constants/entitlements'
+import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import MemberAvatar from './member-avatar.component'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -189,7 +190,17 @@ export function HostMembersCard(props: HostMembersCardProps) {
   // never overstate, so nothing this figure gates fires on a count larger
   // than the truth.
   const memberSeatsUsed = serverMemberCount ?? members.length
-  const seatQuota = checkOrgSeatQuota(org, 'members', memberSeatsUsed)
+  /**
+   * THE PER-SITE quota, not the org-level one (AGL-2439).
+   *
+   * `checkOrgSeatQuota(org, 'members', …)` answers the PLAN's allowance with
+   * no purchased seats in it, because `seatAddons.members` is an org POOL now
+   * and `org.collaboratorAllocations` says which site holds each seat. Using
+   * it here would quote a site a cap BELOW the one enforcement applies and
+   * suppress an Add the org has paid for — the mirror image of the bug being
+   * fixed, and the reason the host-scoped helper exists.
+   */
+  const seatQuota = checkHostCollaboratorSeatQuota(org, hostId, memberSeatsUsed)
 
   // The owner row is the ORG's owner (AGL-1123). It used to render the
   // signed-in `user` whenever they happened to be an admin on this host, so
@@ -410,22 +421,66 @@ export function HostMembersCard(props: HostMembersCardProps) {
             loading window told a paying site it was over a limit it is
             nowhere near. Only a loaded plan may quote a seat count. */}
         {orgReady && Number.isFinite(seatQuota.limit) ? (
-          <Typography variant="caption" color="text.secondary">
-            {/* The site's collaborators, not this page of them (AGL-1716). */}
-            {`${memberSeatsUsed} of ${seatQuota.limit} member seats used`}
-            {seatQuota.upgradeRequired ? (
-              ' — upgrade for more'
-            ) : seatQuota.addonPriceUsd != null ? (
-              <>
-                {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
+          <>
+            {/*
+              The shared readout (AGL-2113/2439), so this line and every other
+              per-site quota in the console say the number the same way. The
+              count is the site's collaborators, not this page of them
+              (AGL-1716), and the denominator is the PER-SITE cap: the plan's
+              allowance plus the pool seats assigned to this site.
+            */}
+            <QuotaReadoutComponent
+              ready={orgReady}
+              used={memberSeatsUsed}
+              limit={seatQuota.limit}
+              noun="collaborator"
+              period="on this site"
+            />
+            {/*
+              WHAT THE ORG HAS, beside what the cap is — the whole point of
+              the readout being here rather than only in Billing. A site that
+              holds pool seats should be able to see that it does, or the
+              add-on it paid for is invisible at the surface it acts on.
+            */}
+            {seatQuota.assignedSeats > 0 ? (
+              <Typography variant="caption" color="text.secondary" component="div">
+                {`Includes ${seatQuota.assignedSeats} purchased seat${
+                  seatQuota.assignedSeats === 1 ? '' : 's'
+                } assigned to this site · `}
                 <AppLink
-                  href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
+                  href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#collaborator-seats`}
                 >
-                  {'Billing'}
+                  {'Move seats'}
                 </AppLink>
-              </>
+              </Typography>
             ) : null}
-          </Typography>
+            {/*
+              THE GRANDFATHER, said out loud (AGL-2439). A site above its cap
+              keeps everyone on it — nothing removes a collaborator for being
+              over a cap — and is only refused the next add. Without this line
+              an admin reads the refusal as "somebody was removed", which is
+              the one wrong conclusion available.
+            */}
+            {seatQuota.retainedOverCap > 0 ? (
+              <Typography variant="caption" color="text.secondary" component="div">
+                {`${seatQuota.retainedOverCap} over the limit — everyone keeps their access, but this site can’t take on another collaborator until it’s back under.`}
+              </Typography>
+            ) : null}
+            <Typography variant="caption" color="text.secondary" component="div">
+              {seatQuota.upgradeRequired ? (
+                'Upgrade your plan for more collaborators per site.'
+              ) : seatQuota.addonPriceUsd != null ? (
+                <>
+                  {`Extra seats $${seatQuota.addonPriceUsd}/mo each, assigned per site, in `}
+                  <AppLink
+                    href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#collaborator-seats`}
+                  >
+                    {'Billing'}
+                  </AppLink>
+                </>
+              ) : null}
+            </Typography>
+          </>
         ) : null}
         <Table size="small">
           <TableHead>

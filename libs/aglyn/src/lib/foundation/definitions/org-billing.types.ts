@@ -432,9 +432,19 @@ export interface OrgSeatAddons {
   /** Extra tenant-manager seats. */
   managers?: number
   /**
-   * Extra per-site collaborator seats (applies per host). Legacy key name
-   * (AGL-888): the Stripe price env suffix is still `EXTRA_MEMBER` and
-   * existing org docs carry this key — persisted, do not rename.
+   * Extra per-site collaborator seats. Legacy key name (AGL-888): the Stripe
+   * price env suffix is still `EXTRA_MEMBER` and existing org docs carry this
+   * key — persisted, do not rename.
+   *
+   * A POOL, not a raise (AGL-2439) — the same correction `posRegisters`
+   * received in AGL-1775, applied to the key that never got it.
+   * `membersPerHost` is enforced PER SITE, so folding this org-wide quantity
+   * into the org-level entitlement handed every site the whole purchase: one
+   * extra collaborator seat bought 20 collaborators on a 20-site org. Since
+   * AGL-2439 the quantity here is the size of an org-level pool and
+   * `collaboratorAllocations` says which site each purchased seat is assigned
+   * to. Nothing reads this as a per-site number; use
+   * `checkHostCollaboratorQuota` / `resolveHostCollaboratorCap`.
    */
   members?: number
   /** Extra org datasets (AGL-132/240); billed monthly per dataset. */
@@ -482,6 +492,33 @@ export interface OrgSeatAddons {
  * than by a separate counter that could drift.
  */
 export type OrgRegisterAllocations = Record<string, number>
+
+/**
+ * Which SITE each purchased COLLABORATOR seat is assigned to (AGL-2439):
+ * `{ [hostId]: seats }`, drawn from the org-level pool `seatAddons.members`.
+ *
+ * The same object as `OrgRegisterAllocations` and for the same reasons —
+ * see that type's block, all of which applies verbatim. It is a distinct type
+ * because it is a distinct field on the document and the two pools are bought
+ * separately; nothing may read one as the other.
+ *
+ * AN ENTITLEMENT INPUT, and therefore Admin-SDK-only — denied to every client
+ * in `cloud/firebase-firestore.rules` alongside `seatAddons`,
+ * `registerAllocations` and `entitlements`. A client that could write this
+ * could assign itself the whole pool on every site, which is the defect the
+ * pool exists to close.
+ *
+ * A host id absent from the map holds ZERO purchased seats and resolves to
+ * the plan cap alone. Deleting a site deletes its key, returning its seats to
+ * the pool by arithmetic rather than by a counter that could drift.
+ *
+ * ONE THING DIFFERS FROM REGISTERS and it is deliberate: collaborator seats
+ * clamp to the plan's `maxMembersPerHost` band, because that is how they are
+ * sold. Assigning ten pool seats to a Starter site cannot lift it past ten —
+ * `resolveHostCollaboratorCap` applies the clamp, so the console must not
+ * present an assignment past the band as capacity.
+ */
+export type OrgCollaboratorAllocations = Record<string, number>
 
 /**
  * The monthly storage-overage spend cap an org CHOSE for itself (AGL-1886,
@@ -727,6 +764,12 @@ export interface AglynOrgBilling extends AglynDocument {
    * @see OrgRegisterAllocations
    */
   registerAllocations?: OrgRegisterAllocations
+  /**
+   * Per-site collaborator seats assigned out of the org pool (AGL-2439). An
+   * ENTITLEMENT INPUT: it raises a per-site cap, so it is Admin-SDK-only.
+   * @see OrgCollaboratorAllocations
+   */
+  collaboratorAllocations?: OrgCollaboratorAllocations
   /**
    * The free plan's engaged BANDWIDTH CAP (AGL-1967/2070/2155), denormalized
    * onto this doc by the `usage-alerts` cron so the serving path can refuse a

@@ -304,6 +304,35 @@ describe('every customer-facing billing route has a surface (AGL-1947)', () => {
     expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
   })
 
+  it('collaborator-allocations specifically is wired to the billing page (AGL-2439)', () => {
+    // The register pool's twin, on the `members` key. AGL-1947 is why this
+    // assertion is written the same day as the pool rather than after it: a
+    // pool whose seats have nowhere to go takes a customer's money for
+    // capacity the product gives no way to use, which is worse than the
+    // over-grant it replaced.
+    const callers = clientCallers('collaborator-allocations')
+    expect(
+      callers.some((file) =>
+        file.includes('billing-collaborator-allocations-card.component.tsx'),
+      ),
+    ).toBe(true)
+
+    const page = execFileSync(
+      'git',
+      [
+        'grep',
+        '-c',
+        '--',
+        'BillingCollaboratorAllocationsCardComponent',
+        '--',
+        'apps/console/app',
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    )
+    // Imported and rendered: two occurrences on the billing page.
+    expect(page).toMatch(/billing\/page\.tsx:[2-9]/)
+  })
+
   it('storage-overage specifically is wired to the billing page (AGL-1957)', () => {
     // The second instance of the same defect, and the worse one: the media
     // ingress gate refuses an upload with "turn it on in Billing", and until

@@ -23,7 +23,7 @@
  */
 
 import {
-  checkSeatQuota,
+  checkHostCollaboratorQuota,
   countCollaboratorSeats,
   createResourceUid,
   generateOrgSlug,
@@ -760,12 +760,20 @@ export class CollaboratorSeatLimitError extends Error {
   readonly limit: number
   readonly upgradeRequired: boolean
   readonly addonPriceUsd: number | null
+  /**
+   * Seats this site holds ABOVE `limit` (AGL-2439). Non-zero means the site
+   * is GRANDFATHERED: those collaborators keep their access, and the refusal
+   * is only of the NEXT one. Carried on the error so the refusal copy can say
+   * that rather than letting the admin read a 403 as "somebody was removed".
+   */
+  readonly retainedOverCap: number
   constructor(
     hostId: string,
     quota: {
       limit: number
       upgradeRequired: boolean
       addonPriceUsd: number | null
+      retainedOverCap?: number
     },
   ) {
     super(collaboratorSeatMessage(quota))
@@ -774,6 +782,7 @@ export class CollaboratorSeatLimitError extends Error {
     this.limit = quota.limit
     this.upgradeRequired = quota.upgradeRequired
     this.addonPriceUsd = quota.addonPriceUsd
+    this.retainedOverCap = Math.max(0, quota.retainedOverCap ?? 0)
   }
 }
 
@@ -842,6 +851,22 @@ async function readSeatEntries(
  * Only NEWLY granted hosts are charged. Changing an existing collaborator's
  * role on a site they already reach re-writes the same seat, and refusing that
  * would strand an over-limit org unable to even demote its way back.
+ *
+ * THE CAP IS PER SITE AND SO IS THE QUESTION (AGL-2439). This calls
+ * `checkHostCollaboratorQuota(org, hostId, used)` and not
+ * `checkSeatQuota(org, 'members', used)`: since AGL-2439 the purchased
+ * quantity is an org-level POOL and the latter deliberately answers the
+ * PLAN's cap with no pool in it. Passing the plan cap here would refuse a
+ * site the seats the org bought and assigned to it.
+ *
+ * THE GRANDFATHER LIVES HERE, in what this function does NOT do. It runs on
+ * the GRANT path only — `newlyScopedHosts` is empty for an existing seat — so
+ * a site already above its corrected cap keeps every collaborator it has and
+ * is merely refused the next one. There is no sweep, no reconciliation and no
+ * revocation anywhere in this file, and none may be added: the cap binds
+ * ALLOCATION, never ACCESS. `quota.retainedOverCap` is how many seats a site
+ * is over by, carried on the refusal so the console can say it out loud
+ * rather than leaving the customer to infer it from a rejected click.
  */
 async function assertCollaboratorSeats(options: {
   orgRef: FirebaseFirestore.DocumentReference
@@ -855,7 +880,7 @@ async function assertCollaboratorSeats(options: {
   const entries = await readSeatEntries(orgRef, read)
   for (const hostId of hostIds) {
     const used = countCollaboratorSeats(entries, hostId, self)
-    const quota = checkSeatQuota(org, 'members', used)
+    const quota = checkHostCollaboratorQuota(org, hostId, used)
     if (!quota.allowed) throw new CollaboratorSeatLimitError(hostId, quota)
   }
 }
@@ -898,6 +923,9 @@ export function collaboratorSeatRefusalResponse(
       code: 'collaborator_seat_limit',
       limit: error.limit,
       upgradeRequired: error.upgradeRequired,
+      // AGL-2439: how many seats this site is over by. NOBODY was removed —
+      // the client renders this as retention, not as a loss.
+      retainedOverCap: error.retainedOverCap,
     },
     { status: 403 },
   )

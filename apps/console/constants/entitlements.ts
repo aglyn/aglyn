@@ -18,6 +18,7 @@
 import {
   type AglynOrgBilling,
   checkEntitlement,
+  checkHostCollaboratorQuota,
   checkQuota,
   checkSeatQuota,
   type SeatKind,
@@ -66,11 +67,37 @@ export function checkOrgQuota(
   return checkQuota(org, quota, currentUsage)
 }
 
-/** Seat quota (AGL-112) on the same effective-plan resolution. */
+/**
+ * Seat quota (AGL-112) on the same effective-plan resolution.
+ *
+ * For `members` this is the PLAN's per-site allowance and nothing else since
+ * AGL-2439 — purchased collaborator seats are an org POOL and are not part of
+ * any org-level number. Any surface that knows WHICH SITE it is talking about
+ * must call `checkHostCollaboratorSeatQuota` instead, or it will quote a cap
+ * lower than the one enforcement applies and suppress an Add the org has paid
+ * for.
+ */
 export function checkOrgSeatQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
   kind: SeatKind,
   currentUsage: number,
 ): SeatQuotaResult {
   return checkSeatQuota(org, kind, currentUsage)
+}
+
+/**
+ * The per-site collaborator quota (AGL-2439) on the same effective-plan
+ * resolution — the plan's allowance plus the pool seats assigned to THIS site,
+ * clamped to the plan's band.
+ *
+ * `retainedOverCap` is the grandfather: seats the site holds above its cap,
+ * which are kept. A console surface rendering it must say retention, never
+ * loss — nothing removes a collaborator for being over a cap.
+ */
+export function checkHostCollaboratorSeatQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  hostId: string | null | undefined,
+  currentUsage: number,
+): ReturnType<typeof checkHostCollaboratorQuota> {
+  return checkHostCollaboratorQuota(org, hostId, currentUsage)
 }

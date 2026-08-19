@@ -21,6 +21,7 @@ import {
   checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
+  resolveHostCollaboratorCap,
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -244,8 +245,13 @@ function HostUsageMeters(props: {
     }
   }, [firestore, host.$id, user])
 
-  // Effective seat limit includes purchased addon seats (AGL-112).
-  const memberSeatLimit = checkSeatQuota(org, 'members', 0).limit
+  // The effective seat limit for THIS SITE (AGL-112, corrected AGL-2439):
+  // the plan's per-site allowance plus the pool seats assigned to this host,
+  // clamped to the plan's band. `checkSeatQuota(org, 'members', …)` answers
+  // the plan allowance alone now — the purchase is an org POOL, so an
+  // org-level number cannot be a per-site cap without handing every site the
+  // whole purchase, which is the defect AGL-2439 fixes.
+  const memberSeatLimit = resolveHostCollaboratorCap(org, host.$id)
 
   return (
     <>

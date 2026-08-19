@@ -223,11 +223,20 @@ service cloud.firestore {
       // `eraseHost`, both Admin SDK. A client that could write it would assign
       // itself the whole purchased pool on every site, which is precisely the
       // over-entitlement the pool was introduced to close.
+      //
+      // `collaboratorAllocations` joins them for the identical reason
+      // (AGL-2439) — the same pool mechanism on the `members` key. It decides
+      // how many console collaborators a site may hold on top of the plan
+      // cap, and is written only by /api/billing/collaborator-allocations
+      // (billing.manage) and by `eraseHost`, both Admin SDK. A client that
+      // could write it would hand itself the whole purchased pool on every
+      // site — the exact over-entitlement AGL-2439 closes.
       allow update: if (isSuperStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'storageOverage',
+             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'storageOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -236,7 +245,8 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'enabledPlugins', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'storageOverage',
+             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'storageOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
@@ -247,7 +257,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
              'releaseFlags',
              'enabledPlugins', 'seatAddons', 'registerAllocations',
-             'storageOverage', 'bandwidthCap',
+             'collaboratorAllocations', 'storageOverage', 'bandwidthCap',
              'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',

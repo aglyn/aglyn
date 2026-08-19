@@ -595,3 +595,168 @@ describe('the cap holds under concurrency (AGL-2068)', () => {
     expect(collaboratorsOnHost()).toBeGreaterThan(1)
   })
 })
+
+/**
+ * The purchased seat is a POOL, and the cap the grant transaction reads is the
+ * PER-SITE one (AGL-2439).
+ *
+ * `seatAddons.members` is bought once, org-wide; `membersPerHost` is enforced
+ * per site. `checkSeatQuota` used to add them, so one purchase raised the cap
+ * on every site the org ran. The resolver tests in
+ * `libs/aglyn/.../collaborator-allocation.spec.ts` prove the arithmetic; these
+ * prove the arithmetic is WIRED — that `assertCollaboratorSeats` calls
+ * `checkHostCollaboratorQuota` and not the org-level helper, which a green
+ * resolver suite cannot tell you.
+ */
+describe('the collaborator add-on is a per-site POOL (AGL-2439)', () => {
+  const OTHER_HOST = 'host-2'
+
+  /** One included collaborator per site, with band headroom to buy into. */
+  function seedPooledOrg(options: {
+    purchased?: number
+    allocations?: Record<string, number>
+  }): void {
+    store.set(`orgs/${ORG}`, {
+      plan: 'free',
+      name: 'Org',
+      slug: 'org',
+      hosts: { [HOST]: true, [OTHER_HOST]: true },
+      // The band must exceed the included figure or an assigned seat could
+      // not raise the cap and every assertion below would pass for the wrong
+      // reason — the same trap `seedOrg` documents.
+      entitlements: { membersPerHost: 1, maxMembersPerHost: 10 },
+      ...(options.purchased === undefined
+        ? {}
+        : { seatAddons: { members: options.purchased } }),
+      ...(options.allocations === undefined
+        ? {}
+        : { collaboratorAllocations: options.allocations }),
+    })
+  }
+
+  it('THE DEFECT: an UNASSIGNED purchased seat raises no site’s cap', async () => {
+    seedPooledOrg({ purchased: 1 })
+    await addCollaborator('user-a')
+    // Before AGL-2439 this landed: `checkSeatQuota` returned 1 + 1 = 2 and
+    // every site in the org inherited it.
+    await expect(addCollaborator('user-b')).rejects.toBeInstanceOf(
+      CollaboratorSeatLimitError,
+    )
+    expect(collaboratorsOnHost()).toBe(1)
+  })
+
+  it('GUARD IS LIVE: the same seat ASSIGNED to this site admits the second', async () => {
+    seedPooledOrg({ purchased: 1, allocations: { [HOST]: 1 } })
+    await addCollaborator('user-a')
+    await addCollaborator('user-b')
+    expect(collaboratorsOnHost()).toBe(2)
+    // …and the pool is spent, so the third is still refused.
+    await expect(addCollaborator('user-c')).rejects.toBeInstanceOf(
+      CollaboratorSeatLimitError,
+    )
+  })
+
+  it('a seat assigned to ANOTHER site does not raise this one’s cap', async () => {
+    seedPooledOrg({ purchased: 1, allocations: { [OTHER_HOST]: 1 } })
+    await addCollaborator('user-a')
+    await expect(addCollaborator('user-b')).rejects.toBeInstanceOf(
+      CollaboratorSeatLimitError,
+    )
+    expect(collaboratorsOnHost()).toBe(1)
+  })
+
+  it('a stale allocation cannot hand out more than was purchased', async () => {
+    // One seat bought, two sites each claiming two. `host-1` sorts first and
+    // takes the single real seat; `host-2` gets the plan cap alone.
+    seedPooledOrg({ purchased: 1, allocations: { [HOST]: 2, [OTHER_HOST]: 2 } })
+    await addCollaborator('user-a')
+    await addCollaborator('user-b')
+    await expect(addCollaborator('user-c')).rejects.toBeInstanceOf(
+      CollaboratorSeatLimitError,
+    )
+    expect(collaboratorsOnHost()).toBe(2)
+  })
+
+  /**
+   * THE GRANDFATHER, at the only place it could be violated.
+   *
+   * Zach's 2026-08-19 decision: do NOT evict or lock out any org that is
+   * currently over the corrected cap. The cap binds ALLOCATION, never ACCESS.
+   *
+   * These are the tests that would catch someone adding a reconciliation
+   * sweep, or making the refusal path clean up "excess" seats. The refusal is
+   * asserted alongside the survival of every existing collaborator, so a
+   * change that evicted would fail here even while the cap still "worked".
+   */
+  describe('THE GRANDFATHER: an over-cap site keeps everyone it has', () => {
+    /** Three collaborators on a site whose corrected cap is one. */
+    async function seedOverCapSite(): Promise<void> {
+      seedPooledOrg({ purchased: 3, allocations: { [HOST]: 2 } })
+      await addCollaborator('user-a')
+      await addCollaborator('user-b')
+      await addCollaborator('user-c')
+      expect(collaboratorsOnHost()).toBe(3)
+      // The seats are pulled back to the pool — the site's cap drops to 1
+      // while three people are on it. This is the migration moment.
+      const org = store.get(`orgs/${ORG}`) as Record<string, unknown>
+      store.set(`orgs/${ORG}`, { ...org, collaboratorAllocations: {} })
+    }
+
+    it('refuses the NEXT collaborator', async () => {
+      await seedOverCapSite()
+      await expect(addCollaborator('user-d')).rejects.toBeInstanceOf(
+        CollaboratorSeatLimitError,
+      )
+    })
+
+    it('KEEPS all three — nothing evicts, nothing is cleaned up', async () => {
+      await seedOverCapSite()
+      await addCollaborator('user-d').catch(() => undefined)
+      // The assertion that fails the day somebody adds a sweep.
+      expect(collaboratorsOnHost()).toBe(3)
+      for (const uid of ['user-a', 'user-b', 'user-c']) {
+        const member = store.get(`orgs/${ORG}/members/${uid}`) as any
+        expect(member?.hostAccess?.[HOST]).toBeTruthy()
+      }
+    })
+
+    it('still lets an EXISTING collaborator’s role change through', async () => {
+      // An over-limit org must be able to demote its way back rather than be
+      // frozen out of its own roster.
+      await seedOverCapSite()
+      await expect(
+        grantHostAccess({
+          orgId: ORG,
+          uid: 'user-a',
+          hostId: HOST,
+          role: 'viewer',
+          email: 'user-a@example.com',
+        }),
+      ).resolves.not.toThrow()
+      expect(collaboratorsOnHost()).toBe(3)
+      expect((store.get(`orgs/${ORG}/members/user-a`) as any)?.hostAccess?.[HOST]).toBe(
+        'viewer',
+      )
+    })
+
+    it('carries the retained count on the refusal so the console can say it', async () => {
+      await seedOverCapSite()
+      const error = await addCollaborator('user-d').catch((e) => e)
+      expect(error).toBeInstanceOf(CollaboratorSeatLimitError)
+      // Three on the site, cap of one: two are retained above it.
+      expect((error as any).retainedOverCap).toBe(2)
+      expect((error as any).limit).toBe(1)
+    })
+
+    it('lapses when the org buys and assigns the seats back', async () => {
+      await seedOverCapSite()
+      const org = store.get(`orgs/${ORG}`) as Record<string, unknown>
+      store.set(`orgs/${ORG}`, {
+        ...org,
+        collaboratorAllocations: { [HOST]: 3 },
+      })
+      await addCollaborator('user-d')
+      expect(collaboratorsOnHost()).toBe(4)
+    })
+  })
+})
