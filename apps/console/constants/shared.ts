@@ -30,14 +30,39 @@ export const TABLE_HEAD_HEIGHT = 48
 
 /**
  * Canonical, published legal documents. These are hosted on the production
- * marketing site (aglyn.com), not the console, so they are absolute
- * cross-origin URLs opened in a new tab — a full navigation, not in-SPA
- * routing (hence a plain anchor / MUI Link, not AppLink). Always point at
- * production so users see the canonical published terms from every env.
+ * marketing site, not the console, so they are absolute cross-origin URLs
+ * opened in a new tab — a full navigation, not in-SPA routing (hence a plain
+ * anchor / MUI Link, not AppLink). Always point at production so users see the
+ * canonical published terms from every env.
+ *
+ * ## The operator's own documents, when they have published some (AGL-2017)
+ *
+ * These were bare `https://aglyn.com/legal/*` literals, and this is the
+ * clickwrap: a self-hosted console showed its users a checkbox agreeing to
+ * **Aglyn LLC's** Terms and Privacy Policy, for a service Aglyn does not
+ * provide. Reading `NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN` — the variable AGL-2016
+ * already defined as "where YOUR published terms/privacy/DMCA pages live" —
+ * points the links at whoever actually operates the deployment.
+ *
+ * ⚠️ THIS IS HALF THE FIX, and the other half is a decision rather than code.
+ * `LEGAL_DOCUMENT_VERSION` and the `sha256`/`bytes` triples in
+ * `./legal-documents` still identify AGLYN's document snapshots, so the
+ * acceptance an operator records still names our bytes even while the link
+ * shows theirs. Closing that means deciding what a self-host install should
+ * record — the operator's own document identity, or an explicit "no platform
+ * agreement" mode that skips the clickwrap — and that is a legal question, not
+ * a refactor. AGL-2017 carries it, along with the trap: making the version
+ * dynamic turns today's silent degrade into a 500, because
+ * `recordLegalAcceptance` throws on a falsy version and the route returns 500.
+ * Any dynamic source must keep a non-empty fallback.
  */
+const LEGAL_ORIGIN = (
+  process.env.NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN || 'https://aglyn.com'
+).replace(/\/+$/, '')
+
 export const LEGAL_URLS = {
-  TERMS: 'https://aglyn.com/legal/terms',
-  PRIVACY: 'https://aglyn.com/legal/privacy',
+  TERMS: `${LEGAL_ORIGIN}/legal/terms`,
+  PRIVACY: `${LEGAL_ORIGIN}/legal/privacy`,
 }
 
 // The version and content hashes of those documents live in
