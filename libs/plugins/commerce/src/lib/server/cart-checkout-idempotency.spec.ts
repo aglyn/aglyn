@@ -502,3 +502,59 @@ describe('a coupon and a gift card both reach the session (AGL-2112)', () => {
     expect(sessionCalls()[0].params.has('discounts[0][coupon]')).toBe(false)
   })
 })
+
+/**
+ * AGL-2251. `resolveTransactionFeePct` keys on `productType === 'physical'`
+ * and routes EVERYTHING else — `undefined` included — to the digital rate.
+ * `liftLegacyProduct` only defaults `type` on docs it synthesises variants
+ * for, so a part-migrated product doc reaches these handlers without one.
+ *
+ * The cart passed the raw `product.type`, four lines under a comment promising
+ * "a missing `type` reads as physical, exactly as the fee ladder below reads
+ * it". It did not: the same product was billed at Business's 2% digital rate
+ * through the cart and at its 0% physical rate through buy-now, so the fee a
+ * merchant paid depended on which button the shopper pressed.
+ */
+describe('a product doc with no type (AGL-2251)', () => {
+  beforeEach(() => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      // No `type` at all — the part-migrated shape.
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+  })
+
+  it('is priced as PHYSICAL, the same as buy-now prices it', async () => {
+    await post()
+    // Business physical is 0%, so no application fee is sent at all. Read as
+    // the digital 2% it used to take, this would be '160'.
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBeNull()
+    expect(sessionCalls()[0].params.get('metadata[feeCents]')).toBe('0')
+  })
+
+  /**
+   * POSITIVE CONTROL: a doc that DOES say digital still pays the digital rate,
+   * so the assertion above is about the default and not about the ladder
+   * having stopped working.
+   */
+  it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 40, inventory: null }],
+    })
+    await post()
+    expect(
+      sessionCalls()[0].params.get(
+        'payment_intent_data[application_fee_amount]',
+      ),
+    ).toBe('160')
+  })
+})
+

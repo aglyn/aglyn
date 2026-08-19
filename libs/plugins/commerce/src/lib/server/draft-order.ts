@@ -143,9 +143,13 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         unitAmountCents,
       },
     ]
+    // `?? 'physical'` (AGL-2251), matching `checkout.ts` and the cart. Without
+    // it a product doc carrying no `type` fell to `resolveTransactionFeePct`'s
+    // digital branch, so a merchant's payment link took a different cut of the
+    // same product than their storefront did.
     const feePct = Aglyn.resolveTransactionFeePct(
       ownerOrg?.org as any,
-      product.type,
+      product.type ?? 'physical',
     )
     const itemsCents = unitAmountCents * quantity
     const feeCents =

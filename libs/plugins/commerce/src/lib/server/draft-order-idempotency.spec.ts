@@ -434,3 +434,45 @@ describe('the commerce entitlement gates the draft door (AGL-1873)', () => {
     expect(orderDocs()).toHaveLength(1)
   })
 })
+
+/**
+ * AGL-2251, the draft-order half. Same defect as the cart's: the raw
+ * `product.type` went to `resolveTransactionFeePct`, which sends everything
+ * that is not literally `'physical'` — `undefined` included — to the digital
+ * rate. A merchant's payment link therefore took a different cut of the same
+ * product than their own storefront did.
+ */
+describe('a product doc with no type (AGL-2251)', () => {
+  it('is priced as PHYSICAL on the payment link too', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 900, inventory: null }],
+    })
+
+    const result = await post({}, { 'idempotency-key': 'no-type' })
+
+    expect(result.status).toBe(200)
+    // Business physical is 0%, so nothing is sent. The digital rate this used
+    // to take would be 2% of $900 = '1800'.
+    expect(
+      stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
+    ).toBeNull()
+  })
+
+  it('POSITIVE CONTROL: an explicit digital product still pays 2%', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Desk plans PDF',
+      type: 'digital',
+      status: 'active',
+      variants: [{ id: 'default', priceUsd: 900, inventory: null }],
+    })
+
+    await post({}, { 'idempotency-key': 'digital' })
+
+    expect(
+      stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
+    ).toBe('1800')
+  })
+})
+

@@ -167,9 +167,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // synthesizes variants for, so a part-migrated doc can reach here
       // without one and the two reads must not disagree about what it is.
       if ((product.type ?? 'physical') === 'physical') hasPhysicalLine = true
+      // `?? 'physical'`, which the comment four lines up already promised and
+      // the code did not deliver (AGL-2251). `resolveTransactionFeePct` keys
+      // on `productType === 'physical'` and sends everything else — `undefined`
+      // included — to the DIGITAL rate, so a part-migrated product doc with no
+      // `type` was priced at 3%/2%/1% here while `checkout.ts` (`lifted.type ??
+      // 'physical'`) priced the identical product at the physical rate. The
+      // same basket cost the merchant a different fee depending on which
+      // button the shopper pressed.
       const feePct = Aglyn.resolveTransactionFeePct(
         ownerOrg.org as any,
-        product.type,
+        product.type ?? 'physical',
       )
       feeCents += Math.round((unitCents * line.quantity * feePct) / 100)
       params.set(`line_items[${index}][quantity]`, String(line.quantity))
