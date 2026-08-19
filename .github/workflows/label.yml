@@ -1,18 +1,20 @@
-# This workflow will triage pull requests and apply a label based on the
-# paths that are modified in the pull request.
+# Applies path-based labels to a pull request from .github/labeler.yml.
 #
-# To use this workflow, you will need to set up a .github/labeler.yml
-# file with configuration.  For more information, see:
-# https://github.com/actions/labeler
+# `on:` lists pull_request ONLY. It used to also list `issues`, which never
+# did anything: actions/labeler reads the changed-file list off the pull
+# request in the event payload, and an issues event carries no pull request.
+# Under v2 that was a silent no-op; from v5 on the action fails the job
+# outright, so the dead trigger is removed rather than left to break.
+#
+# The config format this action expects changed in v5 — see the header of
+# .github/labeler.yml.
 
 name: Labeler
-on: 
+on:
   - pull_request
-  - issues
 
 jobs:
   label:
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,4 +23,4 @@ jobs:
     steps:
       - uses: actions/labeler@v2
         with:
-          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          repo-token: '${{ secrets.GITHUB_TOKEN }}'

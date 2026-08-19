@@ -1,77 +1,116 @@
-# All configurations and dependency files
-
-'Configuration':
-  - tsconfig.json
-  - tsconfig.*.json
-  - jest.json
-  - jest.*.json
-  - nx.json
-  - workspace.json
-  - workspace.*.json
-  - migrations.json
-  - next.config.js
-  - nextjs-base.config.*
-  - firebase.json
-  - firebase.indexes.json
-  - firebase.rules
-  - babel.config.js
-  - .babelrc
-'Dependencies':
-  - package.json
-  - package-lock.json
-  - yarn.lock
-'TypeScript':
-  - tsconfig.json
-  - tsconfig.*.json
-'Jest':
-  - jest.json
-  - jest.*.json
-'Nx':
-  - nx.json
-  - workspace.json
-  - workspace.*.json
-  - migrations.json
-'Nextjs':
-  - next.config.js
-  - nextjs-base.config.*
-'Firebase':
-  - firebase.json
-  - firebase.indexes.json
-  - firebase.rules
-  - .firebaserc
-'Babel':
-  - babel.config.js
-  - .babelrc
-
-# Monorepo Top Level
-
-'Mono App':
-  - apps/*
-  - apps/**/*
-'Mono Lib':
-  - libs/*
-  - libs/**/*
-'Mono Shared':
-  - libs/shared/*
-  - libs/shared/**/*
-
-# Monorepo Apps
-
-'App: console':
-  - apps/console/*
-  - apps/console/**/*
-
-# Aglyn SDK
-
-'ADK Core':
-  - libs/core/data/framework/*
-  - libs/core/data/framework/**/*
-'ADK Renderer':
-  - libs/core/feature/renderer/*
-  - libs/core/feature/renderer/**/*
-'ADK Besigner':
-  - libs/core/feature/besigner/*
-  - libs/core/feature/besigner/**/*
-'ADK Add-ons':
-  - libs/addons/*
-  - libs/addons/**/*
+# Path-based PR labels, in the schema actions/labeler v5+ requires.
+#
+# THE FLAT LIST FORM THIS FILE USED TO CARRY IS NOT VALID ANY MORE. Up to
+# labeler v4 a label mapped straight to a list of globs:
+#
+#     'Nx':
+#       - nx.json
+#
+# From v5 on, each label maps to a list of MATCH OBJECTS, so the globs sit
+# under `changed-files:` / `any-glob-to-any-file:`. Handed the old form, v7
+# fails the job outright with:
+#
+#     Error: found unexpected type for label 'Configuration'
+#     (should be array of config options)
+#
+# which is exactly how the `label` check failed on the actions bump PR. The
+# 16 labels and all 50 globs below are the same ones the flat file carried —
+# only the nesting changed; nothing was added, dropped or re-scoped.
+"Configuration":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tsconfig.json"
+          - "tsconfig.*.json"
+          - "jest.json"
+          - "jest.*.json"
+          - "nx.json"
+          - "workspace.json"
+          - "workspace.*.json"
+          - "migrations.json"
+          - "next.config.js"
+          - "nextjs-base.config.*"
+          - "firebase.json"
+          - "firebase.indexes.json"
+          - "firebase.rules"
+          - "babel.config.js"
+          - ".babelrc"
+"Dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
+          - "yarn.lock"
+"TypeScript":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tsconfig.json"
+          - "tsconfig.*.json"
+"Jest":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "jest.json"
+          - "jest.*.json"
+"Nx":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "nx.json"
+          - "workspace.json"
+          - "workspace.*.json"
+          - "migrations.json"
+"Nextjs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "next.config.js"
+          - "nextjs-base.config.*"
+"Firebase":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "firebase.json"
+          - "firebase.indexes.json"
+          - "firebase.rules"
+          - ".firebaserc"
+"Babel":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "babel.config.js"
+          - ".babelrc"
+"Mono App":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/*"
+          - "apps/**/*"
+"Mono Lib":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/*"
+          - "libs/**/*"
+"Mono Shared":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/shared/*"
+          - "libs/shared/**/*"
+"App: console":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/console/*"
+          - "apps/console/**/*"
+"ADK Core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/core/data/framework/*"
+          - "libs/core/data/framework/**/*"
+"ADK Renderer":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/core/feature/renderer/*"
+          - "libs/core/feature/renderer/**/*"
+"ADK Besigner":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/core/feature/besigner/*"
+          - "libs/core/feature/besigner/**/*"
+"ADK Add-ons":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "libs/addons/*"
+          - "libs/addons/**/*"
