@@ -22,6 +22,11 @@ import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
+  type PromotionSlotHold,
+  holdPromotionSlot,
+  promotionHoldKey,
+} from './promotion-hold'
+import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
   readCheckoutSessionPayload,
@@ -84,6 +89,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
   }
 
   let claim: AttemptClaim | null = null
+  /**
+   * The coupon redemption slot this attempt reserved (AGL-2453), hoisted so
+   * every refusal below the claim — and the catch — can hand it back. A throw
+   * after the hold is placed is exactly the case where a slot would otherwise
+   * sit invisibly against the merchant's cap until the TTL lapsed.
+   */
+  let couponSlot: PromotionSlotHold | null = null
+  let couponHoldKey = ''
+  const releaseCouponSlot = async (): Promise<void> => {
+    const slot = couponSlot
+    couponSlot = null
+    couponHoldKey = ''
+    if (slot) await slot.release()
+  }
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
@@ -194,17 +213,28 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       const percentOff = Number(coupon?.percentOff ?? 0)
       const expired =
         coupon?.expiresAtMs != null && Number(coupon.expiresAtMs) < Date.now()
-      const exhausted =
-        coupon?.maxRedemptions != null &&
-        Number(coupon.redemptions ?? 0) >= Number(coupon.maxRedemptions)
+      // A PRE-FILTER, no longer the enforcement (AGL-2453). It answers early so
+      // an obviously spent code 400s before a claim is minted, and it counts
+      // live holds so it agrees with the transaction below — the authority is
+      // `holdPromotionSlot`, which re-asks this same question inside the write.
+      const exhausted = CommerceModel.promotionExhausted(coupon, Date.now())
       if (
         !coupon ||
         coupon.enabled === false ||
         expired ||
-        exhausted ||
         !(percentOff > 0 && percentOff <= 100)
       ) {
         return res.status(400).json({ error: 'Invalid or expired coupon' })
+      }
+      // Named separately from the invalid-code refusal (AGL-2453), and in the
+      // same words the transaction below uses. "Invalid or expired" is wrong
+      // about a code that is perfectly valid and simply spent — and once a live
+      // hold can produce this answer, a shopper told their code is invalid
+      // would stop trying rather than retry a moment later.
+      if (exhausted) {
+        return res
+          .status(400)
+          .json({ error: CommerceModel.PROMOTION_EXHAUSTED_MESSAGE })
       }
       // Stripe's charge minimum is 50¢ — never discount below it. The
       // percentage comes off the ORDER total, matching `cart-checkout.ts`'s
@@ -331,6 +361,43 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return derived ? { 'Idempotency-Key': derived } : {}
     }
 
+    // THE COUPON SLOT IS RESERVED HERE (AGL-2453), not merely read above.
+    //
+    // The check at the top of this handler was a comparison against a plain
+    // `.get()`, and the webhook incremented `redemptions` minutes later without
+    // re-asking — so a cap of one admitted every shopper who reached checkout
+    // before the first of them paid. Placed BELOW the claim because the hold is
+    // keyed by the attempt: a retry of one attempt must re-claim its own slot
+    // rather than be refused by it.
+    //
+    // Buy-now runs no automatic-discount path — `resolveDiscount` is the cart's
+    // — so the typed coupon is the only counter this handler can burn.
+    if (appliedCoupon) {
+      const slot = await holdPromotionSlot({
+        firestore,
+        ref: hostRef.collection('coupons').doc(appliedCoupon),
+        holdKey: promotionHoldKey(claimed.claim.stripeKey),
+        label: `coupon ${appliedCoupon}`,
+      })
+      if (!slot.ok) {
+        // Nothing has been minted yet, so this is retryable and the key goes
+        // back (AGL-1697). Exhaustion is named; anything else reads as the
+        // same invalid-code refusal the pre-filter above would have given.
+        await releaseCouponSlot()
+        await claim.release()
+        return res.status(400).json({
+          error:
+            slot.reason === 'exhausted'
+              ? CommerceModel.PROMOTION_EXHAUSTED_MESSAGE
+              : 'Invalid or expired coupon',
+        })
+      }
+      if (slot.holdKey) {
+        couponSlot = slot
+        couponHoldKey = slot.holdKey
+      }
+    }
+
     // Minting and caching now live in `manual-tax-rate.ts` (AGL-1953), which
     // the cart path needs too — two copies of a money-shaped cache is how two
     // paths quietly diverge. Behaviour here is unchanged.
@@ -346,6 +413,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       if (!recurringTaxRateId) {
         // Nothing was sold — hand the key back so the same button works
         // once Stripe does (AGL-1697).
+        await releaseCouponSlot()
         await claim.release()
         return res.status(502).json({ error: 'Checkout failed' })
       }
@@ -417,6 +485,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // A deterministic ask the shopper answers and retries under the same
       // key — released, not burned (AGL-1697). The tax rate possibly minted
       // above replays from its cache (or its derived key) on the retry.
+      await releaseCouponSlot()
       await claim.release()
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
@@ -428,6 +497,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       const declared = CommerceModel.normalizeCheckoutShippingCountry(
         body.shippingCountry,
       )
+      await releaseCouponSlot()
       await claim.release()
       return res.status(409).json({
         error: `This store does not ship to ${
@@ -442,6 +512,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // (AGL-2232). Released like every other deterministic refusal on this
     // path — the shopper can change the basket and retry under the same key.
     if (shippingPlan.refusal === 'cart-unpriceable') {
+      await releaseCouponSlot()
       await claim.release()
       return res
         .status(409)
@@ -597,6 +668,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
       'metadata[discountCents]': String(discountCents),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
+      // Set only when a slot was actually reserved (AGL-2453). Its ABSENCE is
+      // what tells the webhook to fall back to the unconditional increment,
+      // which is right for an uncapped coupon and for a session minted before
+      // this deploy — both of which reserved nothing and must still be counted.
+      ...(couponHoldKey ? { 'metadata[couponHoldKey]': couponHoldKey } : {}),
     })
     // Both keys or neither (AGL-1720). Stripe will not apply a shipping rate
     // without an address to ship to, and a merchant who configured nothing
@@ -667,15 +743,23 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       console.error('Stripe checkout error', session.error)
       // Nothing was sold — hand the key back so one flaky moment does not
       // lock this product out for the shopper.
+      await releaseCouponSlot()
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
+    // THE SESSION NOW EXISTS, SO THE SLOT BELONGS TO IT (AGL-2453). Past this
+    // line the hold must survive: the shopper can still pay, and the webhook
+    // settles against the reservation. A catch that released it here would
+    // leave a paid order whose redemption is never counted — the same
+    // over-redemption this fix closes, arriving through the release path.
+    couponSlot = null
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error) {
     console.error(error)
     // Release on the way out so a transient failure does not strand the key
     // (AGL-1691's rule).
+    await releaseCouponSlot()
     await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }

@@ -23,6 +23,11 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
+  type PromotionSlotHold,
+  holdPromotionSlot,
+  promotionHoldKey,
+} from './promotion-hold'
+import {
   applyNativeCheckoutParams,
   nativeCheckoutStripeHeaders,
   readCheckoutSessionPayload,
@@ -75,6 +80,15 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   ).trim().slice(0, 200)
 
   let claim: AttemptClaim | null = null
+  /**
+   * Promotion slots this attempt reserved (AGL-2453), hoisted so the catch
+   * below can hand them back too. A throw after a hold is placed is exactly the
+   * case where an invisible slot would sit against a merchant's cap for a day.
+   */
+  const heldPromotions: PromotionSlotHold[] = []
+  const releasePromotionHolds = async (): Promise<void> => {
+    for (const hold of heldPromotions.splice(0)) await hold.release()
+  }
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
@@ -356,35 +370,103 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // Validation still happens in the same order and still 400s the same way,
     // BEFORE anything is minted — the shopper fixes the code and presses the
     // same button, so the claim is released and the key survives (AGL-1697).
+    // REDEMPTION SLOTS ARE HELD, NOT MERELY READ (AGL-2453).
+    //
+    // `resolveDiscount` above and the coupon `.get()` below both answered "is
+    // there a slot left?" from a plain read, and the webhook incremented the
+    // counter minutes later without ever re-asking. The gap is the whole
+    // Checkout Session lifetime — up to 24 hours — so every shopper who reached
+    // this line while a cap of 100 sat at 99 passed it, and the counter
+    // finished at 99+N. Nothing was lost; nothing was ever CHECKED.
+    //
+    // The AGL-2449 shape, reused: the slot is claimed in a transaction here and
+    // settled in one at the webhook. Both redemption paths hold — the typed
+    // coupon and the automatic discount — because holding one of two doors onto
+    // the same counter fixes neither, and the automatic path is the one a
+    // shopper does not even have to opt into.
+    //
+    // A held slot COUNTS while its session is live and is released when the
+    // session expires, is cancelled, or this handler refuses below. See
+    // `model/commerce-promotions.ts` for why that is the right way round.
+    const slotKey = promotionHoldKey(claim.stripeKey)
     let totalOffCents = 0
     if (resolvedDiscount && resolvedDiscount.discountCents > 0) {
+      const discountRef = hostRef
+        .collection('discounts')
+        .doc(resolvedDiscount.discountId)
+      const slot = await holdPromotionSlot({
+        firestore,
+        ref: discountRef,
+        holdKey: slotKey,
+        label: `discount ${resolvedDiscount.discountId}`,
+      })
+      if (!slot.ok) {
+        // Refused rather than silently dropped, and that is a deliberate
+        // choice for the AUTOMATIC case: this discount was in the price the
+        // storefront showed, so continuing without it would charge more than
+        // the shopper agreed to and tell them nothing. Nothing has been minted
+        // yet, so this is retryable — and the retry prices correctly, because
+        // `resolveDiscount` counts holds too and simply stops offering it.
+        await claim.release()
+        return res.status(409).json({
+          error:
+            couponCode && resolvedDiscount.discount.code
+              ? CommerceModel.PROMOTION_EXHAUSTED_MESSAGE
+              : CommerceModel.PROMOTION_UNAVAILABLE_MESSAGE,
+        })
+      }
+      if (slot.holdKey) heldPromotions.push(slot)
       totalOffCents += resolvedDiscount.discountCents
       params.set('metadata[discountId]', resolvedDiscount.discountId)
+      // Only when a slot was actually reserved. Its ABSENCE is what tells the
+      // webhook to fall back to the unconditional increment, which is right for
+      // an uncapped promotion and for a session minted before this deploy.
+      if (slot.holdKey) {
+        params.set('metadata[discountHoldKey]', slot.holdKey)
+      }
     }
     // Coupons (AGL-96 semantics): percent off the items total.
     if (couponCode && !resolvedDiscount) {
-      const couponSnapshot = await hostRef
-        .collection('coupons')
-        .doc(couponCode)
-        .get()
+      const couponRef = hostRef.collection('coupons').doc(couponCode)
+      const couponSnapshot = await couponRef.get()
       const coupon = couponSnapshot.data() as any
       const percentOff = Number(coupon?.percentOff ?? 0)
       const expired =
         coupon?.expiresAtMs != null && Number(coupon.expiresAtMs) < Date.now()
-      const exhausted =
-        coupon?.maxRedemptions != null &&
-        Number(coupon.redemptions ?? 0) >= Number(coupon.maxRedemptions)
       if (
         !coupon ||
         coupon.enabled === false ||
         expired ||
-        exhausted ||
         !(percentOff > 0 && percentOff <= 100)
       ) {
         // Deterministic and retryable — the shopper fixes the code and
         // presses the same button, so the key survives (AGL-1697).
         await claim.release()
         return res.status(400).json({ error: 'Invalid or expired coupon' })
+      }
+      // The exhaustion test moved INTO a transaction that also writes
+      // (AGL-2453). It used to be a comparison against a plain `.get()` here,
+      // and the webhook incremented the counter minutes later without
+      // re-asking — so the check bounded nothing once two shoppers held
+      // sessions at the same time.
+      const slot = await holdPromotionSlot({
+        firestore,
+        ref: couponRef,
+        holdKey: slotKey,
+        label: `coupon ${couponCode}`,
+      })
+      if (!slot.ok) {
+        await claim.release()
+        return res.status(400).json({
+          error:
+            slot.reason === 'exhausted'
+              ? CommerceModel.PROMOTION_EXHAUSTED_MESSAGE
+              : 'Invalid or expired coupon',
+        })
+      }
+      if (slot.holdKey) {
+        heldPromotions.push(slot)
+        params.set('metadata[couponHoldKey]', slot.holdKey)
       }
       totalOffCents += Math.round((itemsCents * percentOff) / 100)
       params.set('metadata[couponCode]', couponCode)
@@ -604,6 +686,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // BELOW the claim on this path, so release it: the merchant fixes the
       // setting and the shopper retries under the same key (AGL-1697).
       await releaseGiftCardHold()
+      await releasePromotionHolds()
       await claim.release()
       return res
         .status(409)
@@ -618,6 +701,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // the undecided case above.
       // Below the claim here too, so release it for the same reason.
       await releaseGiftCardHold()
+      await releasePromotionHolds()
       await claim.release()
       return res.status(409).json({ error: taxMisconfigured })
     }
@@ -657,6 +741,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           // (AGL-1697); the retry re-derives the same digest, so Stripe
           // replays any rate the first run did mint.
           await releaseGiftCardHold()
+          await releasePromotionHolds()
           await claim.release()
           return res.status(502).json({ error: 'Checkout failed' })
         }
@@ -739,9 +824,16 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // does not lock this cart out. The retry re-derives the same derived
       // keys, so Stripe replays whatever objects the first run did create.
       await releaseGiftCardHold()
+      await releasePromotionHolds()
       await claim.release()
       return res.status(502).json({ error: 'Checkout failed' })
     }
+    // THE SESSION NOW EXISTS, SO THE SLOTS BELONG TO IT (AGL-2453). Past this
+    // line a hold must survive: the shopper can still pay, and the webhook
+    // settles against the reservation. A catch that released one here would
+    // leave a paid order whose redemption is never counted — the same
+    // over-redemption this fix closes, arriving through the release path.
+    heldPromotions.length = 0
     // Recoverable checkout (AGL-296): email captured before the redirect
     // makes abandonment actionable (AGL-323 sends the recovery emails). Written
     // for the native path too, and it matters MORE there: a shopper who
@@ -767,12 +859,14 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       // Line-availability refusals throw from the pricing loop, which sits
       // ABOVE the claim — so there is nothing to release and the key
       // survives, as a deterministic refusal should (AGL-1697).
+      await releasePromotionHolds()
       await claim?.release()
       return res.status(409).json({ error: error.visible })
     }
     console.error(error)
     // Release on the way out so a transient failure does not strand the key
-    // (AGL-1691's rule).
+    // (AGL-1691's rule) — nor a merchant's promotion slot (AGL-2453).
+    await releasePromotionHolds()
     await claim?.release()
     return res.status(500).json({ error: 'Checkout failed' })
   }

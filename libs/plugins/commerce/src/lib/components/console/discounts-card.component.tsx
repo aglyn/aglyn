@@ -164,8 +164,12 @@ export function DiscountsCard(props: DiscountsCardProps) {
       discount.minSubtotalCents
         ? `min $${(discount.minSubtotalCents / 100).toFixed(0)}`
         : '',
+      // Held slots are NAMED, not folded into the used figure (AGL-2453). A
+      // live checkout now consumes a slot for as long as it can still be paid,
+      // so `redemptions` alone would show a cap of 100 sitting at 100 against
+      // 97 orders with nothing to explain the other three.
       discount.maxRedemptions
-        ? `${discount.redemptions ?? 0}/${discount.maxRedemptions} used`
+        ? CommerceModel.promotionUsageLabel(discount, Date.now())
         : '',
     ]
       .filter(Boolean)

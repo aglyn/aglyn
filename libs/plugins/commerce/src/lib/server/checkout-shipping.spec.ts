@@ -40,6 +40,84 @@ import { checkoutHandler } from './checkout'
 
 const docs = new Map<string, Record<string, any>>()
 
+/**
+ * FIRESTORE'S DEEP MERGE AND THE DELETE SENTINEL (AGL-2453).
+ *
+ * `set(…, { merge: true })` merges a nested MAP key by key rather than
+ * replacing it, and only a `FieldValue.delete()` sentinel removes one of its
+ * keys. The promotion hold this handler now places is exactly such a nested
+ * map, so a shallow fake would report a document shape the product never
+ * produces. Modelled here for the same reason `gift-card-hold-race.spec.ts`
+ * models it — that file is the canonical version, including the contention
+ * model this one deliberately omits.
+ */
+const DELETE = Symbol('FieldValue.delete')
+
+function mergeInto(
+  target: Record<string, any>,
+  patch: Record<string, any>,
+): Record<string, any> {
+  const next = { ...target }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === DELETE) {
+      delete next[key]
+    } else if (value && typeof value === 'object' && value.__increment != null) {
+      next[key] = Number(next[key] ?? 0) + Number(value.__increment)
+    } else if (value && typeof value === 'object' && value.__arrayUnion) {
+      next[key] = [...(next[key] ?? []), value.__arrayUnion]
+    } else if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      value.constructor === Object
+    ) {
+      next[key] = mergeInto(
+        (next[key] && typeof next[key] === 'object' ? next[key] : {}) as any,
+        value,
+      )
+    } else {
+      next[key] = value
+    }
+  }
+  return next
+}
+
+function writeDoc(
+  path: string,
+  value: Record<string, any>,
+  merge: boolean,
+): void {
+  docs.set(path, merge ? mergeInto(docs.get(path) ?? {}, value) : value)
+}
+
+/**
+ * Buffered writes applied at commit, and NOTHING ELSE.
+ *
+ * There is no version tracking here on purpose: contention is modelled in
+ * `promotion-hold-race.spec.ts`, which is where two checkouts race for the last
+ * redemption slot. This fake exists only so the handler's transaction can run
+ * at all, and a green in this file is a statement about pricing, never about
+ * concurrency. A fake that quietly pretended to model contention would be worse
+ * than none — it would report green for exactly the bug it could not see.
+ */
+async function runTransaction(
+  body: (transaction: any) => Promise<any>,
+): Promise<any> {
+  const writes: Array<[string, Record<string, any>, boolean]> = []
+  const transaction = {
+    get: async (ref: any) => makeSnapshot(ref.path),
+    set: (ref: any, value: Record<string, any>, options?: any) => {
+      writes.push([ref.path, value, Boolean(options?.merge)])
+    },
+    update: (ref: any, value: Record<string, any>) => {
+      writes.push([ref.path, value, true])
+    },
+  }
+  const result = await body(transaction)
+  for (const [path, value, merge] of writes) writeDoc(path, value, merge)
+  return result
+}
+
 function makeSnapshot(path: string) {
   const data = docs.get(path)
   return {
@@ -55,6 +133,9 @@ function makeDocRef(path: string): any {
     id: path.split('/').pop() as string,
     path,
     get: async () => makeSnapshot(path),
+    set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
+      writeDoc(path, value, Boolean(options?.merge))
+    },
     collection: (name: string) => makeCollectionRef(`${path}/${name}`),
   }
 }
@@ -63,7 +144,10 @@ function makeCollectionRef(path: string): any {
   return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
 }
 
-const fakeFirestore = { collection: (name: string) => makeCollectionRef(name) }
+const fakeFirestore = {
+  collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
+}
 
 const mockOrg: any = {
   org: {
@@ -76,7 +160,16 @@ const mockOrg: any = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
+  firebaseAdmin: {
+    app: () => ({ firestore: () => fakeFirestore }),
+    firestore: {
+      FieldValue: {
+        delete: () => DELETE,
+        increment: (value: number) => ({ __increment: value }),
+        arrayUnion: (value: any) => ({ __arrayUnion: value }),
+      },
+    },
+  },
   getOrgForHost: async () => mockOrg,
 }))
 

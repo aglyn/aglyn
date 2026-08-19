@@ -38,6 +38,10 @@ import { recordContactRefund } from './contact-refund'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
+import {
+  releasePromotionHold,
+  settlePromotionSlot,
+} from './promotion-hold'
 import { flagOrderRestock } from './restock-flag'
 import { recordStorefrontTax } from './storefront-tax-record'
 
@@ -223,6 +227,57 @@ async function recordRedemptionOrphan(
       }),
     })
     .catch(() => undefined)
+}
+
+/**
+ * Count one promotion redemption (AGL-2453), settling the slot it reserved.
+ *
+ * This used to be a bare `redeemExistingOrRecord(ref, { redemptions:
+ * increment(1) }, …)` at three call sites, and it was the counting half of a
+ * cap that nothing re-checked: the increment always landed, minutes after a
+ * plain `.get()` at checkout had already let the shopper through. The counter
+ * told the truth afterwards and the discount was already given.
+ *
+ * Now the checkout HOLDS a slot and this settles it. Two properties matter:
+ *
+ *  - **Idempotent under redelivery.** The redemption is owed by the presence of
+ *    the hold, so a second delivery of the same event finds none and counts
+ *    nothing. `reconcile-stock.ts:52-58` names these counters as sitting behind
+ *    one non-idempotent `created` flag and defers the per-effect sweep — this
+ *    is the per-effect answer for redemptions, not a reliance on that flag.
+ *  - **A session with no hold still counts.** An UNCAPPED promotion reserves
+ *    nothing (there is no slot to reserve), and a session minted before this
+ *    deploy reserved nothing either. Both carry no `holdKey` and both take the
+ *    original unconditional increment — dropping them would under-count real
+ *    redemptions, which is the merchant's own record of their promotion.
+ */
+async function settleRedemption(options: {
+  firestore: FirebaseFirestore.Firestore
+  ref: FirebaseFirestore.DocumentReference
+  holdKey: string
+  orderRef: FirebaseFirestore.DocumentReference
+  label: string
+  detail: string
+}): Promise<void> {
+  const { firestore, ref, holdKey, orderRef, label, detail } = options
+  if (!holdKey) {
+    await redeemExistingOrRecord(
+      ref,
+      { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+      orderRef,
+      detail,
+    )
+    return
+  }
+  const settled = await settlePromotionSlot({ firestore, ref, holdKey, label })
+  // `missing` alone is the orphan: the merchant deleted the promotion between
+  // checkout and payment, so the redemption cannot be recorded anywhere and the
+  // order's own timeline is where that fact belongs. `already-settled` is a
+  // redelivery and is silent by design; `error` is transient — the hold stands,
+  // lapses on its own, and a note claiming the document is gone would be false.
+  if (settled === 'missing') {
+    await recordRedemptionOrphan(orderRef, detail)
+  }
 }
 
 /** gRPC `Status.FAILED_PRECONDITION` — Firestore's "this query needs an index". */
@@ -1292,6 +1347,72 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
   // harmless.
   if (type === 'account.updated') {
     await syncConnectAccountStatus('profiles', object)
+    return
+  }
+
+  // A DEAD SESSION GIVES ITS RESERVATIONS BACK (AGL-2453).
+  //
+  // Stripe expires a Checkout Session 24 hours after creation, and emits this
+  // when the shopper abandons it or cancels out of it — there is no separate
+  // "cancelled" event, because `cancel_url` is a redirect and not a state
+  // change. This is therefore the explicit release path for everything a
+  // checkout reserved before the money moved.
+  //
+  // Holds also carry `expiresAtMs` and every read prunes them, so correctness
+  // does NOT depend on this handler firing (and it will not fire at all unless
+  // the endpoint subscribes to the event). But a merchant watching a cap of 100
+  // sit at 100 for a day after one abandoned cart, with nothing in the product
+  // able to explain why, is the failure the TTL alone leaves standing — an
+  // invisible expiry is not a release anyone can reason about.
+  //
+  // Same early return as `account.updated`: this event carries no order and
+  // shares nothing with the `checkout.session.completed` sections below.
+  if (type === 'checkout.session.expired') {
+    const expiredHostId = String(object?.metadata?.hostId ?? '')
+    if (!expiredHostId) return
+    const expiredHostRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(expiredHostId)
+    const couponHoldKey = String(object?.metadata?.couponHoldKey ?? '')
+    const couponCode = String(object?.metadata?.couponCode ?? '')
+    if (couponHoldKey && couponCode) {
+      await releasePromotionHold(
+        expiredHostRef.collection('coupons').doc(couponCode),
+        couponHoldKey,
+      )
+    }
+    const discountHoldKey = String(object?.metadata?.discountHoldKey ?? '')
+    const discountId = String(object?.metadata?.discountId ?? '')
+    if (discountHoldKey && discountId) {
+      await releasePromotionHold(
+        expiredHostRef.collection('discounts').doc(discountId),
+        discountHoldKey,
+      )
+    }
+    // The gift-card hold rides along, because it is the same act on the same
+    // event and AGL-2449 left it to the TTL alone. A shopper whose abandoned
+    // checkout stands their own balance off for a day cannot be told why
+    // either, and the release is the identical delete sentinel.
+    const giftCardHoldKey = String(object?.metadata?.giftCardHoldKey ?? '')
+    const giftCardCode = String(object?.metadata?.giftCardCode ?? '')
+    if (giftCardHoldKey && giftCardCode) {
+      await expiredHostRef
+        .collection('giftCards')
+        .doc(giftCardCode)
+        .set(
+          {
+            holds: {
+              [giftCardHoldKey]: firebaseAdmin.firestore.FieldValue.delete(),
+            },
+          },
+          { merge: true },
+        )
+        .catch((error: unknown) => {
+          console.error('Gift card hold release failed', giftCardCode, error)
+        })
+    }
     return
   }
 
@@ -2619,13 +2740,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           },
         })
         if (couponCode) {
-          await redeemExistingOrRecord(
-            hostRef.collection('coupons').doc(String(couponCode)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+          await settleRedemption({
+            firestore,
+            ref: hostRef.collection('coupons').doc(String(couponCode)),
+            holdKey: String(object.metadata?.couponHoldKey ?? ''),
             orderRef,
-            `Coupon ${couponCode} was applied to this order but no longer ` +
+            label: `coupon ${couponCode}`,
+            detail:
+              `Coupon ${couponCode} was applied to this order but no longer ` +
               'exists, so the redemption is uncounted against its limit.',
-          )
+          })
         }
         // Gift card balance settlement (AGL-322, made a settlement by AGL-2449).
         if (object.metadata?.giftCardCode) {
@@ -2787,16 +2911,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Discounts engine redemptions (AGL-305).
         if (object.metadata?.discountId) {
-          await redeemExistingOrRecord(
-            hostRef
+          await settleRedemption({
+            firestore,
+            ref: hostRef
               .collection('discounts')
               .doc(String(object.metadata.discountId)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+            holdKey: String(object.metadata?.discountHoldKey ?? ''),
             orderRef,
-            `Discount ${object.metadata.discountId} was applied to this order ` +
-              'but no longer exists, so the redemption is uncounted against ' +
-              'its limit.',
-          )
+            label: `discount ${object.metadata.discountId}`,
+            detail:
+              `Discount ${object.metadata.discountId} was applied to this ` +
+              'order but no longer exists, so the redemption is uncounted ' +
+              'against its limit.',
+          })
         }
       }
     }
@@ -3456,13 +3583,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           }
         }
         if (couponCode) {
-          await redeemExistingOrRecord(
-            hostRef.collection('coupons').doc(String(couponCode)),
-            { redemptions: firebaseAdmin.firestore.FieldValue.increment(1) },
+          await settleRedemption({
+            firestore,
+            ref: hostRef.collection('coupons').doc(String(couponCode)),
+            holdKey: String(object.metadata?.couponHoldKey ?? ''),
             orderRef,
-            `Coupon ${couponCode} was applied to this order but no longer ` +
+            label: `coupon ${couponCode}`,
+            detail:
+              `Coupon ${couponCode} was applied to this order but no longer ` +
               'exists, so the redemption is uncounted against its limit.',
-          )
+          })
         }
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.

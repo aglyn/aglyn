@@ -24,6 +24,12 @@
  * increments.
  */
 
+import {
+  PROMOTION_EXHAUSTED_MESSAGE,
+  type PromotionHold,
+  promotionExhausted,
+} from './commerce-promotions'
+
 export type DiscountKind = 'percent' | 'fixed' | 'free_shipping'
 
 /** `hosts/{hostId}/discounts/{id}` doc. */
@@ -43,6 +49,12 @@ export interface HostDiscount {
   productIds?: string[]
   maxRedemptions?: number
   redemptions?: number
+  /**
+   * In-flight claims on the remaining slots (AGL-2453), keyed by checkout
+   * attempt. Counted as redeemed by {@link applies} for as long as they stand,
+   * which is what stops N concurrent checkouts all passing a cap of one.
+   */
+  holds?: Record<string, PromotionHold>
   startAtMs?: number
   endAtMs?: number
   enabled?: boolean
@@ -78,11 +90,16 @@ function applies(
   if (discount.endAtMs != null && now > discount.endAtMs) {
     return 'This discount has expired'
   }
-  if (
-    discount.maxRedemptions != null &&
-    (discount.redemptions ?? 0) >= discount.maxRedemptions
-  ) {
-    return 'This discount has been fully redeemed'
+  // Holds count (AGL-2453). This read used to be `redemptions` alone, which is
+  // a figure that only moves once the webhook lands — minutes after this
+  // question is asked and answered. Every shopper who reached checkout while
+  // the counter sat one below the cap passed, so the cap bounded nothing but
+  // the paperwork. `promotionExhausted` counts the slots currently held by live
+  // checkouts as taken, which is the same question the in-transaction re-read
+  // asks below in `promotion-hold.ts` — deliberately the same function, so the
+  // pre-filter and the enforcement cannot drift.
+  if (promotionExhausted(discount, now)) {
+    return PROMOTION_EXHAUSTED_MESSAGE
   }
   if (
     discount.minSubtotalCents != null &&
