@@ -584,10 +584,30 @@ export function isPluginRevoked(
   version: string,
 ): boolean {
   if (!revocation) return false
-  if (revocation.versions === 'all') return true
+  if (isListingWideRevocation(revocation)) return true
   return (
     Array.isArray(revocation.versions) && revocation.versions.includes(version)
   )
+}
+
+/**
+ * True when the kill switch is thrown on the WHOLE listing, not one build.
+ *
+ * Split out for the one caller that has no version to ask about: marketplace
+ * checkout (AGL-2288) must refuse to SELL a listing the platform has switched
+ * off, and it decides that before any version is chosen. Written here rather
+ * than as `revocation?.versions === 'all'` at that call site for the reason
+ * the doc comment on `nextRevocationState` gives — what `'all'` means is a
+ * property of this document's shape, and a second reader that spelled it out
+ * itself is how a kill switch silently stops killing.
+ *
+ * A per-version revocation is deliberately NOT listing-wide: it stops one
+ * build while the rest stay installable.
+ */
+export function isListingWideRevocation(
+  revocation: PluginRevocation | null | undefined,
+): boolean {
+  return revocation?.versions === 'all'
 }
 
 /**
