@@ -196,3 +196,85 @@ export function activityHref(
       return undefined
   }
 }
+
+/**
+ * How an automation run ended (AGL-2171).
+ *
+ * `skipped` is a first-class outcome, not an absence. An unmet condition
+ * used to be a bare `continue` that wrote nothing, so "why didn't my
+ * automation fire?" — the most common support question about automations —
+ * had no answer anywhere in the product, while `/product/workflows`
+ * advertises an amber `Skipped` row that answers it.
+ */
+export type ActionRunResult = 'succeeded' | 'failed' | 'skipped'
+
+/** A stored run entry: an activity document with the run fields on it. */
+export interface ActionRunEntryLike extends ActivityEntryLike {
+  result?: string
+  trigger?: string
+  summary?: string
+}
+
+/** Human names for the trigger events an action can start on. */
+const EVENT_LABELS: Record<string, string> = {
+  formSubmission: 'Form submitted',
+  pageView: 'Page viewed',
+  memberSignUp: 'Member signed up',
+  memberSignIn: 'Member signed in',
+  memberSignOut: 'Member signed out',
+  lead: 'New lead',
+  booking: 'New booking',
+}
+
+/**
+ * `formSubmission` → `Form submitted`.
+ *
+ * The console rendered the raw camelCase identifier in the trigger select
+ * and in every run row. A custom event keeps its own name — the author
+ * chose it and it is already the word they think in.
+ */
+export function actionTriggerLabel(event: string | undefined): string {
+  const key = String(event ?? '').trim()
+  if (!key) return 'Event'
+  return EVENT_LABELS[key] ?? key
+}
+
+/**
+ * The run's outcome, tolerating rows written before it was recorded.
+ *
+ * A legacy entry carries only the prose `action` string, so it is read
+ * back: `with errors:` means it failed and `Action ran on` means it
+ * succeeded. Anything else is not a run at all — the activity collection
+ * also holds publishes, media saves and member changes, and calling one of
+ * those `succeeded` would put it in the run history under a verdict that
+ * means nothing for it.
+ */
+export function actionRunResult(
+  entry: ActionRunEntryLike,
+): ActionRunResult | undefined {
+  const stored = String(entry.result ?? '').trim()
+  if (stored === 'succeeded' || stored === 'failed' || stored === 'skipped') {
+    return stored
+  }
+  const action = String(entry.action ?? '')
+  if (!action.startsWith('Action ran on')) return undefined
+  return action.includes('with errors:') ? 'failed' : 'succeeded'
+}
+
+/**
+ * The `What happened` column: `Sent email · saved to Leads · webhook 200`.
+ *
+ * Falls back to the legacy prose, minus its `Action ran on <event>` prefix
+ * — that fact is the Trigger column now, and repeating it in the summary
+ * would make every historic row say the same thing twice.
+ */
+export function actionRunSummary(entry: ActionRunEntryLike): string {
+  const summary = String(entry.summary ?? '').trim()
+  if (summary) return summary
+  const action = String(entry.action ?? '').trim()
+  const errors = action.match(/with errors:\s*(.+)$/)
+  if (errors) return errors[1]
+  // A pre-AGL-2171 success recorded nothing but the fact that it ran.
+  if (action.startsWith('Action ran on')) return 'Ran'
+  return action
+}

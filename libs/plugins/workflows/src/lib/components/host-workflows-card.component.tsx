@@ -51,7 +51,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import HostActivityCard from './host-activity-card.component'
+import HostRunHistoryCard from './host-run-history-card.component'
 import { WhereUsedDialog } from '@aglyn/plugins-logic'
 import {
   fetchWhereUsed,
@@ -726,7 +726,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         <DialogTitle>{`Runs — ${runsFor?.name ?? ''}`}</DialogTitle>
         <DialogContent>
           {runsFor ? (
-            <HostActivityCard
+            <HostRunHistoryCard
               hostId={hostId}
               targetId={runsFor.$id}
               header="Recent runs"

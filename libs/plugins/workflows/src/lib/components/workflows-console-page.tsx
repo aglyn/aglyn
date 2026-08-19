@@ -18,9 +18,11 @@
 
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubTabs } from '@aglyn/shared-ui-next'
+import { Stack } from '@mui/material'
 import HostActionsCard from './host-actions-card.component'
 import HostWebhooksCard from './host-webhooks-card.component'
 import HostWorkflowsCard from './host-workflows-card.component'
+import RunQuotaLine from './run-quota-line.component'
 
 /**
  * Workflows page (AGL-101/148/149 → AGL-395): the automation surface —
@@ -38,12 +40,34 @@ export function WorkflowsConsolePage(props: ConsolePluginPageProps) {
         {
           id: 'workflows',
           label: 'Workflows',
-          content: <HostWorkflowsCard hostId={hostId} org={org} />,
+          content: (
+            /*
+             * `N runs this month · M included` (AGL-2171), which the
+             * run-history mockup puts opposite the heading. The quota
+             * silently stops automations running once it is reached, and
+             * the only place it was reported was the Billing page.
+             */
+            <Stack spacing={1}>
+              <RunQuotaLine
+                hostId={hostId}
+                org={org}
+                counter="workflowRuns"
+              />
+              <HostWorkflowsCard hostId={hostId} org={org} />
+            </Stack>
+          ),
         },
         {
           id: 'actions',
           label: 'Actions',
-          content: <HostActionsCard hostId={hostId} org={org} />,
+          content: (
+            <Stack spacing={1}>
+              {/* `actionRunsPerMonth` had NO customer-facing surface at
+                  all before this — staff panel and usage-alerts only. */}
+              <RunQuotaLine hostId={hostId} org={org} counter="actionRuns" />
+              <HostActionsCard hostId={hostId} org={org} />
+            </Stack>
+          ),
         },
         {
           id: 'webhooks',
