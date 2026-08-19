@@ -135,14 +135,30 @@ export async function runEventWorkflows(
         run.ok === false
           ? `Workflow failed on ${event}: ${run.error}`.slice(0, 300)
           : `Workflow ran on ${event}`
-      // Run history (wave v6): status + duration ride the activity entry
-      // so the workflows card's Runs dialog reads like a run log.
+      /*
+       * The run-history shape, not just `status` + `durationMs` (AGL-2222).
+       *
+       * `actionRunResult()` recognises a run by `result`, falling back to the
+       * prose prefix `Action ran on`. This writer's prose begins
+       * `Workflow ran on`, so every workflow execution was filtered out of the
+       * very table AGL-2171 built — the Runs dialog on the Workflows tab read
+       * "No runs yet" however many times a workflow had run. The `durationMs`
+       * caption in that table could never render either, because the only rows
+       * carrying a duration were the ones being dropped.
+       *
+       * `status` stays: the dashboard activity feed renders it, and removing
+       * it would trade one silent gap for another.
+       */
       await hostRef
         .collection('activity')
         .add({
           actorId: null,
           actorEmail: null,
           action,
+          result: run.ok === false ? 'failed' : 'succeeded',
+          trigger: event,
+          summary:
+            run.ok === false ? String(run.error).slice(0, 300) : 'Ran',
           status: run.ok === false ? 'error' : 'ok',
           durationMs,
           target: { type: 'workflow', id: doc.id, name: workflow.name ?? '' },

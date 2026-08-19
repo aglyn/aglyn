@@ -48,14 +48,14 @@ Each workflow row has a **Runs** button. It opens the run-history table describe
 [Run history](actions-builder.md#run-history) — **Time**, **Trigger**, **Result**,
 **What happened**.
 
-:::caution Workflow executions don't appear in that table yet
-The table reads the records the **actions** runner writes. A workflow execution is
-recorded in an older shape that the table doesn't recognise, so it is filtered out — a
-workflow that has run can still show *"No runs yet"* in its own **Runs** dialog. Read
-workflow executions in the site's activity instead: the dashboard's **Recent Activity**
-card shows each one as *"Workflow ran on formSubmission"*, with how long it took
-appended and failures in red carrying the error, and **Setup → Activity** is the full
-paginated log.
+A workflow row reads **Ran** under *What happened*, or the error when it failed, with
+the time it took beneath.
+
+:::note Runs recorded before this shipped are not in the table
+Workflow executions were written in a shape the table did not recognise, so anything
+that ran before AGL-2222 is filtered out of it. Those runs are not lost — the
+dashboard's **Recent Activity** card and **Setup → Activity** show every one of them,
+as *"Workflow ran on formSubmission"* with the duration appended and failures in red.
 :::
 
 ## Tips

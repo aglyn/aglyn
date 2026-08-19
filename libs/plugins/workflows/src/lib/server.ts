@@ -155,6 +155,13 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
         action: failed
           ? `Inbound webhook run failed: ${run.error}`.slice(0, 300)
           : `Inbound webhook ran "${hook.workflowName}"`,
+        // The run-history shape (AGL-2222) — without `result` this execution
+        // is invisible to the Runs table, which reads a verdict and not prose.
+        result: failed ? 'failed' : 'succeeded',
+        trigger: `hook:${hook.name ?? hookId}`,
+        summary: failed
+          ? String(run.error).slice(0, 300)
+          : `Ran ${hook.workflowName}`,
         target: { type: 'workflow', id: hookId, name: hook.name ?? '' },
         createdAt: FieldValue.serverTimestamp(),
       })
