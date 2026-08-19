@@ -51,6 +51,11 @@
     "test": {
       "executor": "@nx/jest:jest",
       "outputs": ["{workspaceRoot}/coverage/apps/console"],
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/.github/workflows/scheduled-crons.yml"
+      ],
       "options": {
         "jestConfig": "apps/console/jest.config.ts"
       }

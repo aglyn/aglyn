@@ -65,6 +65,24 @@ on:
     # A non-zero plan returns 207, which fails this workflow below. That is
     # the alert (a staff notification is the other half).
     - cron: '30 6 * * 1' # backfill-scope (detect only) — Mondays 06:30 UTC
+    # Scheduled email campaigns (AGL-2134). `/product/marketing` sells
+    # "Schedule campaigns and overlays ahead of time", and the campaign
+    # composer really does write `status: 'scheduled'` with a `sendAtMs` —
+    # but NOTHING EVER CALLED the processor that claims those rows, so a
+    # scheduled campaign sat in the collection until someone opened the
+    # History list and cancelled it. The feature was advertised, sold and
+    # silently inert; the same shape as backfill-scope above.
+    #
+    # Every 15 minutes rather than daily because the composer takes a
+    # `datetime-local` down to the minute: a daily sweep would turn "9:00 AM"
+    # into "some time in the next 24 hours". 15 minutes is the granularity
+    # the UI can honestly promise, and the composer's helper text says so.
+    #
+    # The route claims at most 10 due campaigns per invocation (a
+    # transaction flips scheduled → sending, so overlapping runs cannot
+    # double-send). A backlog therefore drains at 40 campaigns/hour rather
+    # than stalling.
+    - cron: '*/15 * * * *' # campaigns/process-scheduled — every 15 minutes
   workflow_dispatch:
     inputs:
       path:
@@ -81,6 +99,7 @@ on:
           - /api/admin/reverify-plugin-versions
           - /api/admin/backfill-scope
           - /api/admin/firestore-export
+          - /api/campaigns/process-scheduled
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -118,6 +137,7 @@ jobs:
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;
+            '*/15 * * * *') path=/api/campaigns/process-scheduled ;;
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then
