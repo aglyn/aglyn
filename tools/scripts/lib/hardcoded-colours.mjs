@@ -67,7 +67,48 @@
  *
  * Specs are OUT: pinning a rendered colour value is exactly what a spec
  * should do, and 225 of the 518 total occurrences are that.
+ *
+ * ## Why the TypeScript parser, and not a hand-rolled comment stripper (AGL-2354)
+ *
+ * This module used to blank comments with a character-by-character scanner:
+ * skip `//` to the newline, `/* *\/` to its terminator, and skip string
+ * literals whole so a `//` inside `'https://…'` could not open one. Its
+ * sibling `brand-literals.mjs` carried the same shape and produced THREE
+ * false GREENS in a single day (AGL-2278, AGL-2319, AGL-2350) before it was
+ * replaced by the parser.
+ *
+ * This one was audited against a parser-based oracle over all 14,704 swept
+ * files and agreed with it **line for line on every one** — the corpus does
+ * not contain a shape that breaks it today. It is still replaced, because the
+ * scanner *can* be broken and the corpus changes daily. A hand-written lexer
+ * does not know the grammar, and the construct it does not know about is a
+ * REGULAR EXPRESSION:
+ *
+ *     const trailing = /\/*$/          ← `/*` opens a phantom block comment
+ *     path.split(/\/\//)               ← `\/` + `/` reads as `//`
+ *
+ * The first is the AGL-2004 shape exactly: everything from that regex to the
+ * next `*\/` anywhere in the file is blanked, so every hardcoded colour in
+ * between becomes invisible and the gate certifies a file it can no longer
+ * read. Neither regex is exotic — stripping trailing slashes and splitting on
+ * `//` are ordinary lines to write.
+ *
+ * So the text the finder walks is now produced by the parser: every byte that
+ * is not part of a real token is blanked, which removes comments because they
+ * are trivia rather than nodes, and regex literals are blanked as well because
+ * the parser knows what a regex is. A hex inside `/color:\s*#[0-9a-f]{6}/` is
+ * a matcher, not a style.
  */
+
+import { createRequire } from 'node:module'
+
+/**
+ * `typescript` ships CommonJS. A `createRequire` bound to this module resolves
+ * it from the repo's own `node_modules` however the script was invoked, which
+ * a bare `import ts from 'typescript'` does not when the caller runs from
+ * elsewhere. Same reasoning as `brand-literals.mjs`.
+ */
+const ts = createRequire(import.meta.url)('typescript')
 
 /**
  * CSS properties whose value is a colour, in the camelCase form `sx` and
@@ -195,70 +236,88 @@ function valueRegion(text, from) {
 }
 
 /**
- * Strip `//`, `/* *\/` and JSX `{/* *\/}` comments, replacing each with
- * equivalent-length whitespace so byte offsets — and therefore line
- * numbers — survive.
+ * Which dialect to parse as.
  *
- * Written as a tiny scanner rather than a regex because a regex that tries to
- * do this gets string literals wrong, and a `//` inside `'https://…'` would
- * blank the rest of a real line. The AGL-2004 failure was exactly this shape
- * in the other direction: a line comment quoting `datasets/*` opened a
- * 571-line phantom block comment and the guard silently stopped running.
+ * `.ts` must NOT be parsed as `.tsx`: the two disagree about `<T>value`, which
+ * is a type assertion in one and an unclosed JSX element in the other. Getting
+ * that wrong would not throw — the parser recovers — it would quietly reshape
+ * the tree, which is precisely the class of silent misreading this rewrite
+ * exists to end.
+ *
+ * `ScriptKind.JS` parses JSX, so a `.js`/`.mjs`/`.cjs` file carrying JSX is
+ * covered without a separate case.
+ */
+function scriptKindFor(path) {
+  if (path.endsWith('.tsx')) return ts.ScriptKind.TSX
+  if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts'))
+    return ts.ScriptKind.TS
+  if (path.endsWith('.jsx')) return ts.ScriptKind.JSX
+  return ts.ScriptKind.JS
+}
+
+/**
+ * Blank every byte that is not part of a real token, plus every regex literal,
+ * replacing each with equivalent-length whitespace so byte offsets — and
+ * therefore line numbers — survive.
+ *
+ * Comments fall out for free: a comment is trivia, never a token, so nothing
+ * here has to know what a comment looks like. Regex literals are blanked
+ * explicitly because a hex inside `/color:\s*#[0-9a-f]{6}/` is a matcher, not
+ * a style.
+ *
+ * Everything else is KEPT, and that is deliberate. A string literal is not
+ * blanked — `'.badge { color:#0288d1; }'` is emitted CSS and one of the shapes
+ * this detector exists to catch — and neither is JSX text or punctuation, both
+ * of which the finder's key/value regexes need.
+ *
+ * Two subtleties the parser makes you ask for:
+ *
+ *  - **JSDoc is parsed into NODES.** `getChildren()` hands back the `JSDoc`
+ *    subtree of a documented declaration, so a naive token walk keeps
+ *    doc-comment prose — and this repo's doc comments name hexes constantly.
+ *    Verified: without the skip below, three files report occurrences that are
+ *    plainly comments, including `#7A5CF0` in a paragraph about a gradient.
+ *  - **`JsxText` must use `pos`, not `getStart()`.** It has no leading trivia
+ *    and its whitespace is significant; skipping trivia would read a `//` in
+ *    prose as a line comment.
  *
  * @param {string} source
+ * @param {string} [path] file name, which selects the dialect
  * @returns {string} same length as `source`
  */
-export function stripComments(source) {
+export function blankNonCode(source, path = 'source.tsx') {
   const text = String(source ?? '')
-  const out = text.split('')
-  let i = 0
-  const blank = (from, to) => {
-    for (let j = from; j < to && j < out.length; j++)
-      if (out[j] !== '\n') out[j] = ' '
+  const file = ts.createSourceFile(
+    path,
+    text,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ false,
+    scriptKindFor(path),
+  )
+  const keep = new Uint8Array(file.text.length)
+
+  const walk = (node) => {
+    // A doc comment is a comment. Drop the subtree.
+    if (
+      node.kind >= ts.SyntaxKind.FirstJSDocNode &&
+      node.kind <= ts.SyntaxKind.LastJSDocNode
+    )
+      return
+    const children = node.getChildren(file)
+    if (children.length === 0) {
+      if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) return
+      const start =
+        node.kind === ts.SyntaxKind.JsxText ? node.pos : node.getStart(file)
+      for (let i = start; i < node.end && i < keep.length; i++) keep[i] = 1
+      return
+    }
+    for (const child of children) walk(child)
   }
+  walk(file)
 
-  while (i < text.length) {
-    const two = text.slice(i, i + 2)
-
-    if (two === '//') {
-      let end = text.indexOf('\n', i)
-      if (end === -1) end = text.length
-      blank(i, end)
-      i = end
-      continue
-    }
-
-    if (two === '/*') {
-      let end = text.indexOf('*/', i + 2)
-      end = end === -1 ? text.length : end + 2
-      blank(i, end)
-      i = end
-      continue
-    }
-
-    // A string literal: skip it whole so a `//` or `/*` inside cannot open a
-    // comment. Template literals may contain `${…}` but a comment inside an
-    // interpolation is vanishingly rare and blanking it would be harmless.
-    if (two[0] === '"' || two[0] === "'" || two[0] === '`') {
-      const quote = two[0]
-      let j = i + 1
-      while (j < text.length) {
-        if (text[j] === '\\') {
-          j += 2
-          continue
-        }
-        if (text[j] === quote) break
-        // An unterminated single/double-quoted string cannot span lines.
-        if (quote !== '`' && text[j] === '\n') break
-        j++
-      }
-      i = j + 1
-      continue
-    }
-
-    i++
-  }
-
+  const out = file.text.split('')
+  for (let i = 0; i < out.length; i++)
+    if (!keep[i] && out[i] !== '\n') out[i] = ' '
   return out.join('')
 }
 
@@ -266,11 +325,15 @@ export function stripComments(source) {
  * Every hardcoded colour in one file's text.
  *
  * @param {string} source
+ * @param {string} [path] file name, which selects the dialect. Defaults to a
+ *   `.tsx` name: it is the superset that parses JSX, and the callers that omit
+ *   the path are tests passing a fragment. The gate passes the real path,
+ *   because `.ts` parsed as `.tsx` is a silent misread (see `scriptKindFor`).
  * @returns {Array<{ line: number, property: string, hex: string, text: string }>}
  */
-export function findHardcodedColours(source) {
+export function findHardcodedColours(source, path = 'source.tsx') {
   const text = String(source ?? '')
-  const scanned = stripComments(text)
+  const scanned = blankNonCode(text, path)
   const lines = text.split('\n')
   // Offset → line number, computed once.
   const lineAt = (offset) => {

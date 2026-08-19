@@ -77,6 +77,36 @@ const EXEMPT = [
   /^tools\/scripts\/audit-retired-colours-data\.mjs$/,
 ]
 
+/**
+ * Aglyn's own documentation, transcribed verbatim into shipped code by a
+ * generator — the same list, for the same reason, as the brand ratchet's
+ * `GENERATED_DOCS_PROSE` (AGL-2279, applied here by AGL-2354).
+ *
+ * These files contain no style slot at all. What they contain is `apps/docs`
+ * prose, and a sentence of prose can say `hex color: #1a73e8` — the White-label
+ * page does, explaining what the Primary color field accepts. The detector's
+ * key regex cannot tell that sentence from `color:` in emitted CSS, so the
+ * generated index reported a GAINED colour that nobody authored and that no
+ * theme token could replace: rewriting the docs to dodge a linter would make
+ * the documentation worse, and the next docs edit would put it straight back.
+ *
+ * `.md` is already outside `SWEPT` for exactly this reason — prose is not
+ * code. These are that same prose, generated into a `.ts` module. Listing them
+ * applies the existing rule rather than widening it.
+ *
+ * Exact paths, never a directory: AGL-2279 is the record of what a directory
+ * rule costs. `/(^|\/)constants\//` exempted the docs excerpts only because
+ * the generator happened to emit them there, so a new output escaped, and it
+ * silently exempted every hand-written file under any `constants/` directory
+ * as well.
+ */
+const GENERATED_DOCS_PROSE = [
+  'apps/console/constants/assist-docs-index.generated.ts',
+  'apps/console/constants/docs-help.generated.ts',
+  'libs/aglyn/src/lib/app-utils/docs-help.generated.ts',
+  'libs/besigner/feature/designer/src/lib/utils/docs-help.generated.ts',
+]
+
 const args = process.argv.slice(2)
 const asJson = args.includes('--json')
 const write = args.includes('--write')
@@ -111,15 +141,42 @@ function trackedFiles() {
 
 const files = trackedFiles()
 
+const exemptProse = new Set(GENERATED_DOCS_PROSE)
+const proseSeen = new Set()
+
 const counts = {}
 const occurrences = {}
 for (const file of files) {
   const path = relative(REPO_ROOT, file).split(sep).join('/')
+  if (exemptProse.has(path)) {
+    proseSeen.add(path)
+    continue
+  }
   if (EXEMPT.some((pattern) => pattern.test(path))) continue
-  const found = findHardcodedColours(readFileSync(file, 'utf8'))
+  // The path selects the parse dialect — `.ts` and `.tsx` disagree about
+  // `<T>value`, so the detector must be told which it is holding.
+  const found = findHardcodedColours(readFileSync(file, 'utf8'), path)
   if (!found.length) continue
   counts[path] = found.length
   occurrences[path] = found
+}
+
+/**
+ * An exemption that matches nothing is the `stale` row in another costume: the
+ * generator's output moved, the rule kept passing, and nobody read it again.
+ * Checked against what the sweep actually saw, the same way AGL-2279 made the
+ * brand ratchet check its copy of this list.
+ */
+const missingProse = GENERATED_DOCS_PROSE.filter((path) => !proseSeen.has(path))
+if (missingProse.length) {
+  console.error(
+    'FAIL: GENERATED_DOCS_PROSE exempts paths the sweep never reached:\n' +
+      missingProse.map((path) => `  ${path}`).join('\n') +
+      '\n\nThe generator moved or renamed an output. Update the list in ' +
+      'tools/scripts/check-hardcoded-colours.mjs rather than leaving an ' +
+      'exemption that excludes nothing.',
+  )
+  process.exit(1)
 }
 
 const sortedCounts = Object.fromEntries(
