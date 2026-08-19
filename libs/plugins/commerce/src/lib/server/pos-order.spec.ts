@@ -404,6 +404,79 @@ describe('the POS card sale tax witness (AGL-1953)', () => {
  * Forced red by deleting the `application_fee_amount` spread in
  * `pos-order.ts`: the first three expectations below all fail.
  */
+/**
+ * A REGISTER CANNOT COLLECT STRIPE TAX, SO IT MUST NOT PRETEND TO (AGL-2145).
+ *
+ * A POS card sale sends the whole basket as ONE opaque `In-store purchase`
+ * line at `totals.totalCents` and sets no `automatic_tax[enabled]` — it
+ * cannot, there is no customer address at a till — and the cash and folio
+ * tenders never reach Stripe at all. A store that chose "Stripe computes my
+ * tax" therefore got **zero** tax on every in-person sale, on both tenders,
+ * with no refusal and no log. That is the AGL-1999 defect, still open at the
+ * one place a shopper is standing in front of you, and the liability lands on
+ * the merchant.
+ *
+ * Forced red by dropping `{ inPerson: true }` from the call in
+ * `pos-order.ts`: the sale goes through untaxed and all three refusals fail.
+ */
+describe('the register refuses a sale it cannot tax (AGL-2145)', () => {
+  it('refuses a CARD sale at a Stripe-Tax store, before Stripe', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'stripe' } })
+    const result = await post({ payment: 'link' })
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toContain('automatic tax')
+    // Nothing was minted and no order exists — the refusal is complete.
+    expect(stripeCalls).toHaveLength(0)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('refuses a CASH sale too — the tender does not change the liability', async () => {
+    docs.set('hosts/host-1/settings/store', { tax: { mode: 'stripe' } })
+    const result = await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(result.status).toBe(409)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('refuses a manual store with no origin country', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: { mode: 'manual', rates: [{ country: 'US', state: 'TX', pct: 8.25 }] },
+    })
+    const result = await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(result.status).toBe(409)
+    expect(String(result.body.error)).toContain('no store address')
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  /**
+   * POSITIVE CONTROLS. Without these the describe is satisfied by a register
+   * that refuses everything — which would pass every assertion above and
+   * delete the product.
+   */
+  it('POSITIVE CONTROL: a manual store WITH an origin still rings, and taxes', async () => {
+    docs.set('hosts/host-1/settings/store', {
+      tax: {
+        mode: 'manual',
+        origin: { country: 'US', state: 'TX' },
+        rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+      },
+    })
+    const result = await post({ payment: 'cash', cashReceivedCents: 500 })
+    expect(result.status).toBe(200)
+    // 8.25% of $4.00 = 33c, so the refusal is not standing in front of a
+    // register that had stopped taxing anyway.
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(33)
+  })
+
+  it('POSITIVE CONTROL: a store that decided to collect NOTHING still rings', async () => {
+    // `mode: 'none'` is a recorded decision and is honoured silently — the
+    // whole point of `storefrontTaxDecision`'s distinction. It is also the
+    // fixture the rest of this file runs on, so breaking it would be loud.
+    const result = await post({ payment: 'cash', cashReceivedCents: 400 })
+    expect(result.status).toBe(200)
+    expect(orderDocs()[0]?.totals?.taxCents).toBe(0)
+  })
+})
+
 describe('POS card sales carry the platform fee (AGL-2110)', () => {
   /** $4.00 digital at Business's 2% = 8¢. No other figure in this file is 8. */
   const DIGITAL_PRODUCT = {

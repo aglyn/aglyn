@@ -239,6 +239,21 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
     }
+    // `inPerson`, and it is the whole reason this argument exists (AGL-2145):
+    // a store on Stripe Tax is served correctly ONLINE and must not be
+    // refused there, but the register sends the basket as one opaque line and
+    // sets no `automatic_tax` — it cannot, there is no customer address at a
+    // till — and the cash and folio tenders never reach Stripe at all. Every
+    // in-person sale at such a store charged ZERO tax, on both tenders, with
+    // no refusal and no log: the AGL-1999 defect, still open at the one place
+    // a shopper is standing in front of you.
+    const taxMisconfigured = CommerceModel.storefrontTaxMisconfiguration(
+      taxSettings,
+      { inPerson: true },
+    )
+    if (taxMisconfigured) {
+      return res.status(409).json({ error: taxMisconfigured })
+    }
     const rate =
       taxDecision.kind === 'manual'
         ? CommerceModel.resolveTaxRate(taxSettings, taxSettings.origin ?? {})

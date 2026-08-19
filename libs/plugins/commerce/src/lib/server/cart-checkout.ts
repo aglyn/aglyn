@@ -470,6 +470,17 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
     }
+    const taxMisconfigured =
+      CommerceModel.storefrontTaxMisconfiguration(taxSettings)
+    if (taxMisconfigured) {
+      // AGL-2145: the merchant DECIDED to collect and the sale would have
+      // charged zero anyway — an unfinished settings card, not a
+      // jurisdiction miss. Refused in the same words and the same place as
+      // the undecided case above.
+      // Below the claim here too, so release it for the same reason.
+      await claim.release()
+      return res.status(409).json({ error: taxMisconfigured })
+    }
     if (taxDecision.kind === 'stripe-automatic') {
       params.set('automatic_tax[enabled]', 'true')
     } else if (taxSettings.mode === 'manual' && !taxSettings.pricesIncludeTax) {
