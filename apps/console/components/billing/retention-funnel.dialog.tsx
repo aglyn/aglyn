@@ -62,6 +62,19 @@ const REASON_LABELS: Record<ChurnSurveyReason, string> = {
   other: 'Something else',
 }
 
+/**
+ * One GA param, present only when the value is a real finite number
+ * (AGL-1865). Spread into an event so an unusable value becomes an absent
+ * key rather than a `NaN` GA will happily average.
+ */
+function numericParam(
+  key: string,
+  value: unknown,
+): Record<string, number> | Record<string, never> {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? { [key]: parsed } : {}
+}
+
 /** The funnel's steps, in order. */
 type FunnelStep = 'survey' | 'downsell' | 'winback' | 'confirm'
 
@@ -255,9 +268,14 @@ export function RetentionFunnelDialog({
         // read: what was actually minted is the only honest answer, and the
         // margin question ("what did this save cost?") is answered wrong by
         // anything else.
+        // A missing or non-numeric field is OMITTED rather than sent as NaN
+        // (AGL-1865). `sanitizeEventParams` passes numbers through untouched,
+        // so a NaN would land in GA and quietly poison the average discount —
+        // the one number the margin question is asked of. An absent param
+        // shows up as a gap; a NaN shows up as an answer.
         trackEvent('winback_discount_accepted', {
-          percent_off: Number(payload?.percentOff),
-          duration_months: Number(payload?.durationMonths),
+          ...numericParam('percent_off', payload?.percentOff),
+          ...numericParam('duration_months', payload?.durationMonths),
           surface,
           ...(currentPlan ? { plan: currentPlan } : {}),
         })
