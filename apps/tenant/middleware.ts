@@ -228,6 +228,25 @@ export const middleware: NextMiddleware = async (req, event) => {
   const AGLYN_TENANT_DEMO = process.env.AGLYN_TENANT_DEMO
   const VERCEL_ENV = process.env.VERCEL_ENV as EnvVercelEnv
   const IS_VERCEL = process.env.VERCEL
+  /**
+   * A real deployment, as opposed to localhost dev (AGL-2177).
+   *
+   * `IS_VERCEL` was doing two jobs and only one of them was Vercel's. Every
+   * host-resolution branch below was gated on it, including the branch built
+   * for an operator's own apex — so on a self-host container, where
+   * `docker/tenant.Dockerfile` sets `AGLYN_STANDALONE=1` and never sets
+   * `VERCEL`, NOTHING matched, control fell to the `default:` fallback, and
+   * every visitor to every published site was 307'd to `app.aglyn.com`. The
+   * serving half of a self-host install was inert, and its traffic went to us.
+   *
+   * So the two questions are separated. This one is "is this a deployment",
+   * and it gates the branches that are true of ANY deployment: the operator's
+   * configured apex, and the custom-domain fallback. `IS_VERCEL` stays exactly
+   * where the branch is about AGLYN's own infrastructure — `.aglyn.app` and
+   * `.vercel.app` — because those are our hostnames and must not start
+   * matching on somebody else's box.
+   */
+  const IS_DEPLOYED = Boolean(IS_VERCEL) || process.env.AGLYN_STANDALONE === '1'
   const NODE_ENV = process.env.NODE_ENV
   const PROD_NODE_ENV = NODE_ENV === 'production'
   const PROD_VERCEL_ENV = VERCEL_ENV === 'production'
@@ -253,8 +272,8 @@ export const middleware: NextMiddleware = async (req, event) => {
 
   switch (true) {
     // Deployment
-    case IS_VERCEL && reqHost === AGLYN_TENANT_HOST_CNAME:
-    case IS_VERCEL && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
+    case IS_DEPLOYED && reqHost === AGLYN_TENANT_HOST_CNAME:
+    case IS_DEPLOYED && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
       console.debug(
         'Tenant Host Switch',
         'assign',
@@ -320,20 +339,25 @@ export const middleware: NextMiddleware = async (req, event) => {
       // resolves it via host.cname (unknown domains 404 there). Only
       // host-shaped names proceed; garbage still bounces to the console.
       const hostname = reqHost.split(':')[0].toLowerCase()
-      if (IS_VERCEL && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
+      if (IS_DEPLOYED && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
         console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
         tenantHost = `cname--${hostname}`
         break
       }
+      // The CONFIGURED console, not ours (AGL-2176). A visitor who reached a
+      // self-hoster's tenant runtime on a name it cannot resolve was sent to
+      // Aglyn's sign-in page — their user, our domain, mid-session.
+      const consoleOrigin =
+        process.env.NEXT_PUBLIC_CONSOLE_URL?.trim() || 'https://app.aglyn.com'
       console.debug(
         'Tenant Host Switch=',
         'Redirecting',
         'req.nextUrl.pathname=',
         req.nextUrl.pathname,
         'Destination=',
-        'https://app.aglyn.com',
+        consoleOrigin,
       )
-      return NextResponse.redirect('https://app.aglyn.com')
+      return NextResponse.redirect(consoleOrigin)
     }
   }
 
