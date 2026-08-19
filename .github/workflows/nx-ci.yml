@@ -256,4 +256,12 @@ jobs:
       # the build step below would.
       - run: npm run check:app-router-graph
 
+      # The shared-ui-jsx barrel allowlist (AGL-1895). Same class as the graph
+      # check above: a cost that only a bundler can see, and that a green
+      # typecheck and a green test suite both miss by construction. Unlike
+      # AGL-1349's build failure, this one never fails anything — it just makes
+      # every published customer page heavier, forever, until someone measures.
+      # ~1s.
+      - run: npm run check:jsx-barrel
+
       - run: npx nx affected -t lint test build --parallel=3

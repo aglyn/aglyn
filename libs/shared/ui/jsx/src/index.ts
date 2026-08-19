@@ -30,6 +30,16 @@
 // wildcard path already resolves it — same pattern as DataTable/GridList
 // below). Pure modules (hooks, types, const data) are exempt: the bundler
 // proves them pure and drops the unused ones.
+//
+// THIS RULE IS ENFORCED (AGL-1895) — `npm run check:jsx-barrel`, in CI. Every
+// line below is pinned in `tools/scripts/jsx-barrel-baseline.json`, along with
+// every third-party package this barrel transitively reaches, so a heavy
+// import added inside a module ALREADY listed here goes red too. Adding or
+// removing an export fails until the allowlist moves in the same commit,
+// which is what puts the cost in front of a reviewer. Measured with esbuild,
+// minified and GZIPPED: re-exporting data-table.component costs +162,866 B and
+// grid-list +20,386 B on every page of every published customer site.
+// Until then this rule was a comment, and a comment cannot fail.
 export * from './lib/components/app-link'
 // aspect-ratio, background-image, children-function-prop, dialog-confirm +
 // confirmation-provider, ellipsis-pulse, grid-buttons, loading-layout,
