@@ -456,6 +456,27 @@ jobs:
       # reports "no drift", which is indistinguishable from convergence.
       - run: npm run test:legal-drift
 
+      # AGL-2036. The reconciler behind `check:shipped-not-closed`, which lists
+      # open Linear issues whose implementing commits are already live.
+      #
+      # On 2026-08-18 the `awaiting-smoke` label queue was EMPTY while five
+      # issues sat labelled `awaiting-promotion` after they had already
+      # shipped, and ~30 more In Review issues whose commits were in production
+      # carried no blocking label at all — invisible to every label-defined
+      # sweep. A label-defined queue only holds while somebody remembers to
+      # apply the label, so the queue has to be defined by STATE and
+      # re-derived. This is the code that re-derives it.
+      #
+      # Only the SELF-TEST runs here. The check itself needs the list of
+      # started-state issues, which comes from an argument (or LINEAR_API_KEY,
+      # which is set nowhere) — and a guard gated on a credential nobody has
+      # set is a guard that never runs, which is how legal-drift spent its
+      # first day (AGL-2379). The self-test is pure node and pins the four
+      # traps that each produced a wrong answer by hand: attributing a commit
+      # that merely MENTIONS an issue, double-counting a rebase twin, calling a
+      # part-promoted issue shipped, and reading ancestry as deployment.
+      - run: npm run test:shipped-not-closed
+
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
       # sales tax is collected and remitted from Sep 1. It was set by hand in

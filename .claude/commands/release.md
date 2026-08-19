@@ -14,6 +14,20 @@ time** — and keep statuses current.
 3. Linear: project **"Public beta: paying customers on September 1"** is the spine; also sweep the
    `awaiting-smoke` label (~78 remain, 20/agent-pass, method proven on AGL-1501…AGL-1579) and
    `awaiting-decision` (Zach's — surface, don't flip).
+   ⚠️ **A label sweep is NOT the queue.** Labels are applied by memory, so they under-report by
+   construction: on 2026-08-18 `awaiting-smoke` was EMPTY while ~30 In Review issues sat deployed
+   and unlabelled (AGL-2036). **Derive the queue by STATE** — list every `In Review` **and**
+   `In Progress` issue for team **Aglyn** (labels and some filters are TEAM-SCOPED; a
+   workspace-scope query returns nothing and reads as "clean") — then reconcile it against git:
+
+   ```
+   npm run check:shipped-not-closed -- --issues-file=<one AGL-id per line> --deployed
+   ```
+
+   Exit 1 lists open issues whose every implementing commit is live. It attributes by commit
+   SUBJECT (a body mention is not an implementation), collapses rebase twins by patch-id, and
+   refuses to call anything shipped without `--deployed`. Its rows are **candidates**: ancestry
+   proves code shipped, never that the commit finished the issue — read each fix before closing.
 4. `git status --porcelain` — other agents' dirty files tell you where NOT to send a new one.
    ⚠️ This environment auto-stages new files; `.claude/commands/{handoff,queue}.md` sit staged from
    an old session — never sweep them into a commit.
