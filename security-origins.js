@@ -77,6 +77,69 @@ const PRODUCTION_DOMAINS = [
 ]
 
 /**
+ * The hosts THIS DEPLOYMENT serves, beyond Aglyn's own (AGL-2198).
+ *
+ * `PRODUCTION_DOMAINS` above is a list of our hostnames, and it feeds
+ * `frame-ancestors` and `img-src` in BOTH middlewares. On a self-host install
+ * that made the policy exactly backwards: 26 origins Aglyn controls were
+ * permanently allowed, and not one origin the operator controls was — so
+ * their own console could not be framed by their own surfaces, and images
+ * served from their own CDN were reported (and, for frame-ancestors,
+ * refused).
+ *
+ * The merge, not a replacement: our list is harmless on their deployment
+ * because nothing there resolves to it, while dropping it would break ours.
+ * `libs/aglyn/src/lib/app-utils/media-ref.ts` solved the identical problem
+ * with `operatorFirstPartyApexes()`; this is the same shape, kept here in
+ * plain CommonJS because the edge runtime bundles this file and it may not
+ * import.
+ *
+ * A function rather than a spread of constants so an unset or malformed value
+ * contributes NOTHING. An empty string in this list becomes `https://` in a
+ * CSP source list, which is a scheme-only source matching every https origin
+ * on the internet — the one outcome worse than a missing entry.
+ */
+function operatorDomains() {
+  const hostOf = (raw) => {
+    const value = String(raw || '').trim()
+    if (!value) return undefined
+    try {
+      // Accept a bare hostname as well as a URL: NEXT_PUBLIC_CONSOLE_URL
+      // carries a scheme, NEXT_PUBLIC_WORKSPACE_DOMAIN does not.
+      return new URL(value.includes('://') ? value : `https://${value}`)
+        .hostname
+        .toLowerCase()
+    } catch {
+      return undefined
+    }
+  }
+  const candidates = [
+    hostOf(process.env.NEXT_PUBLIC_CONSOLE_URL),
+    hostOf(process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN),
+    hostOf(process.env.NEXT_PUBLIC_TENANT_DOMAIN),
+    hostOf(process.env.NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME),
+  ]
+  // At least two labels, no wildcard, no path — anything else is a value that
+  // would widen the policy rather than extend it.
+  return candidates.filter(
+    (name, index) =>
+      name &&
+      /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+        name,
+      ) &&
+      candidates.indexOf(name) === index,
+  )
+}
+
+/** Our hostnames plus the operator's, de-duplicated. */
+function firstPartyDomains() {
+  const operator = operatorDomains().filter(
+    (name) => !PRODUCTION_DOMAINS.includes(name),
+  )
+  return PRODUCTION_DOMAINS.concat(operator)
+}
+
+/**
  * The non-script half of the policy, unchanged in meaning from what the config
  * used to send: `frame-ancestors` is the clickjacking allowlist, `object-src
  * 'none'` kills `<object>`/`<embed>` plugin-XSS, and `base-uri 'self'` blocks
@@ -86,8 +149,9 @@ const PRODUCTION_DOMAINS = [
  * `http://` forms off production, so local development keeps working.
  */
 function baseCspDirectives(isProduction) {
-  const remote = PRODUCTION_DOMAINS.map((domain) => `https://${domain}`)
-  const local = PRODUCTION_DOMAINS.map((domain) => `http://${domain}`)
+  const domains = firstPartyDomains()
+  const remote = domains.map((domain) => `https://${domain}`)
+  const local = domains.map((domain) => `http://${domain}`)
   const safe = isProduction ? remote : remote.concat(local)
   return `object-src 'none'; base-uri 'self'; frame-ancestors ${safe.join(' ')}`
 }
@@ -220,8 +284,9 @@ const IMAGE_ORIGINS = [
  * `127.0.0.1:9199` (`cloud/firebase.json`), so local development keeps working.
  */
 function imgSrcDirective(isProduction) {
-  const remote = PRODUCTION_DOMAINS.map((domain) => `https://${domain}`)
-  const local = PRODUCTION_DOMAINS.map((domain) => `http://${domain}`)
+  const domains = firstPartyDomains()
+  const remote = domains.map((domain) => `https://${domain}`)
+  const local = domains.map((domain) => `http://${domain}`)
   const firstParty = isProduction ? remote : remote.concat(local)
   const development = isProduction
     ? []
@@ -556,6 +621,7 @@ function isSecureTransport(headers, protocol) {
 
 module.exports = {
   PRODUCTION_DOMAINS,
+  firstPartyDomains,
   IMAGE_ORIGINS,
   SCRIPT_ORIGINS,
   TENANT_IMAGE_ORIGINS,
