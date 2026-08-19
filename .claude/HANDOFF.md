@@ -79,9 +79,15 @@ and were one `/private/tmp` cleanup from being lost.
   ⚠️ Do NOT set the internal-traffic filter Active until both directions are verified via
   `Test data filter name` — an Active filter permanently discards matching data.
   ⚠️ Do NOT pick a Reports-snapshot template; a snapshot already exists behind that chooser.
-- **4 open DOMPurify Dependabot alerts.** Deliberately unpatched — no released `monaco-editor`
-  vendors a newer DOMPurify, and the vendored copy is never imported (call-site evidence on
-  AGL-2051). Decision owed: leave open as a standing prompt, or dismiss as `not_used`.
+- **4 DOMPurify Dependabot alerts, now DISMISSED as `not_used`** (685, 747, 757, 758). Deliberately
+  unpatched — no released `monaco-editor` vendors a newer DOMPurify, so there is nowhere to upgrade.
+  ⚠️ The rationale once written here — "the vendored copy is never imported" — was **FALSE** and has
+  been corrected (AGL-2300). `esm/vs/base/browser/domSanitize.js` imports it, and the `min/vs`
+  bundle we serve inlines DOMPurify 3.4.8 and runs it on every markdown render in the editor. The
+  dismissals rest on something narrower: monaco never passes `IN_PLACE`,
+  `CUSTOM_ELEMENT_HANDLING` or `TRUSTED_TYPES_POLICY`, and never calls `setConfig`/`clearConfig` —
+  the four config surfaces those advisories need. `npm run check:monaco-dompurify` is now the thing
+  that re-measures that on every monaco bump. Do not restate the "never imported" claim.
 
 ## Open agent branches — merge after re-gating
 

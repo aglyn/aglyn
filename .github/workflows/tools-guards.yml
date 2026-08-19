@@ -26,6 +26,13 @@ name: Tools guards
 #                             package-lock.json version agreement (AGL-2108) —
 #                             a drift `npm ci` does not read and the promotion
 #                             gate stayed green over for a whole release
+#  - test:monaco-dompurify    / check:monaco-dompurify  the four DISMISSED
+#                             DOMPurify alerts (AGL-2300). monaco inlines
+#                             DOMPurify 3.4.8 into the bundle we serve from our
+#                             own origin and there is nowhere to upgrade to;
+#                             the dismissals rest on monaco never passing the
+#                             config options those advisories need. This is the
+#                             only thing re-measuring that.
 #  - test:docs-self-host      / check:docs-self-host  apps/docs must not
 #                             compile in our GA id, our error collector or our
 #                             production origins (AGL-2124) — it ships in the
@@ -214,6 +221,17 @@ jobs:
       - run: npm run test:docs-self-host
 
       - run: npm run check:docs-self-host
+
+      # AGL-2300. Same two-step order. Four DOMPurify Dependabot alerts are
+      # DISMISSED on the claim that monaco never turns on the config surfaces
+      # those advisories need — not on the vendored copy being unused, which it
+      # is not. Nothing checked that claim: it was a one-time grep, and monaco
+      # already changed behaviour under us once this week. The unit test proves
+      # the detector can tell the library READING an option from monaco PASSING
+      # one, and only then is the scan of the real bundle worth anything.
+      - run: npm run test:monaco-dompurify
+
+      - run: npm run check:monaco-dompurify
 
       # AGL-2021. Two steps, and the order matters: the self-test proves the
       # comparator can still FAIL (it reconstructs the forbidden Webfile number

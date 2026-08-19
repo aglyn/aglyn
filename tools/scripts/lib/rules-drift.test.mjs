@@ -637,6 +637,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:manifest-versions', // AGL-2108
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
+      'test:monaco-dompurify', // AGL-2300
+      'check:monaco-dompurify', // AGL-2300
       // AGL-2025 — the source-side hardcoded-colour ratchet. Registered here
       // for the same reason as the seven above: its only homes are this
       // workflow and a developer's memory.
@@ -668,6 +670,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'check:manifest-versions', // AGL-2108
       'test:docs-self-host', // AGL-2124
       'check:docs-self-host', // AGL-2124
+      'test:monaco-dompurify', // AGL-2300
+      'check:monaco-dompurify', // AGL-2300
       'test:hardcoded-colours',
       'check:hardcoded-colours',
     ]) {
