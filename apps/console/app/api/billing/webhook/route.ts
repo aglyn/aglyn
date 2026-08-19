@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// `after()`, never a bare `void promise` (AGL-2346). AGL-1133 measured on
+// production that fire-and-forget work scheduled in a route handler simply does
+// not run: the serverless function can be frozen the moment the response is
+// sent. Every GA4 beacon below is revenue reporting, so a silent drop is a
+// wrong number rather than a missing nicety.
+import { after } from 'next/server'
+
 import { buildRoute, Route, runBillingWebhookHandlers } from '@aglyn/aglyn/server'
 import {
   findOrgIdByStripeCustomer,
@@ -551,7 +558,7 @@ async function handler(request: Request): Promise<Response> {
             object?.ended_at ?? object?.canceled_at ?? Math.floor(Date.now() / 1000),
           )
           const interval = planItem?.price?.recurring?.interval
-          void sendGa4SubscriptionCancelled({
+          after(() => sendGa4SubscriptionCancelled({
             plan: String(
               object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'unknown',
             ),
@@ -569,7 +576,7 @@ async function handler(request: Request): Promise<Response> {
             // as a renewal's `purchase` does.
             clientId: object?.metadata?.ga_client_id,
             stripeCustomerId,
-          }).catch(() => undefined)
+          }).catch(() => undefined))
         }
 
         // Back-fill the metered usage item (AGL-1352).
@@ -764,7 +771,7 @@ async function handler(request: Request): Promise<Response> {
             // index 0 purely so the item keeps a name when no line states a
             // cadence — the interval itself stays absent in that case.
             const line = selectSubscriptionLine(object) ?? object?.lines?.data?.[0]
-            void sendGa4Purchase({
+            after(() => sendGa4Purchase({
               transactionId: String(object?.id ?? ''),
               value: paidCents / 100,
               currency: String(object?.currency ?? 'usd'),
@@ -787,7 +794,7 @@ async function handler(request: Request): Promise<Response> {
               // recorded without campaign attribution.
               clientId: object?.subscription_details?.metadata?.ga_client_id,
               stripeCustomerId: customerId,
-            }).catch(() => undefined)
+            }).catch(() => undefined))
           }
           // Billing is org-scoped now (AGL-621/644). Links are frozen at write
           // time, so emit the canonical path; the reader normalizes anything
@@ -817,7 +824,7 @@ async function handler(request: Request): Promise<Response> {
             // Best-effort, exactly like the customer stamping above: a
             // notification webhook must not 500 over a metadata write, or
             // Stripe redelivers and the admins get notified twice.
-            void fetch(`https://api.stripe.com/v1/invoices/${object.id}`, {
+            after(() => fetch(`https://api.stripe.com/v1/invoices/${object.id}`, {
               method: 'POST',
               headers: {
                 Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
@@ -831,9 +838,9 @@ async function handler(request: Request): Promise<Response> {
                 object.id,
                 error,
               ),
-            )
+            ))
           }
-          void notifyOrgAdmins(orgId, {
+          after(() => notifyOrgAdmins(orgId, {
             type:
               type === 'invoice.payment_failed'
                 ? 'billing.paymentFailed'
@@ -846,7 +853,7 @@ async function handler(request: Request): Promise<Response> {
             link: orgSlug
               ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
               : '/org/billing',
-          })
+          }))
         }
       }
     }
@@ -926,7 +933,7 @@ async function handler(request: Request): Promise<Response> {
                       rowGrossCents,
                   )
                 : deltaCents
-            void sendGa4Refund({
+            after(() => sendGa4Refund({
               transactionId: invoiceId,
               value: netDeltaCents / 100,
               currency: String(object?.currency ?? 'usd'),
@@ -936,15 +943,15 @@ async function handler(request: Request): Promise<Response> {
               // reversal on the same synthetic user a renewal's purchase
               // falls back to.
               stripeCustomerId: customerId,
-            }).catch(() => undefined)
+            }).catch(() => undefined))
           } else if (!revenueSnapshot.exists && object?.refunded === true) {
-            void sendGa4Refund({
+            after(() => sendGa4Refund({
               transactionId: invoiceId,
               value: refundedCents / 100,
               currency: String(object?.currency ?? 'usd'),
               items: [],
               stripeCustomerId: customerId,
-            }).catch(() => undefined)
+            }).catch(() => undefined))
           }
         }
       }
@@ -1062,7 +1069,7 @@ async function handler(request: Request): Promise<Response> {
                       rowGrossCents,
                   )
                 : deltaCents
-            void sendGa4Refund({
+            after(() => sendGa4Refund({
               transactionId: revenueDoc.id,
               value: netDeltaCents / 100,
               currency: String(object?.currency ?? 'usd'),
@@ -1070,7 +1077,7 @@ async function handler(request: Request): Promise<Response> {
               stripeCustomerId: String(
                 revenueDoc.get('stripeCustomerId') ?? '',
               ),
-            }).catch(() => undefined)
+            }).catch(() => undefined))
           }
         }
         // Every platform dispute reaches staff, won or lost — `created` is

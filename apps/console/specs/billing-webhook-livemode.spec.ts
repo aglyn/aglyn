@@ -180,6 +180,23 @@ function mockMakeFirestore() {
   }
 }
 
+/**
+ * `after()` from `next/server` is how this route schedules post-response work
+ * (AGL-2346), and outside a real request scope Next's own `after` throws — so
+ * a direct handler invocation needs a double. This one records every scheduled
+ * callback AND runs it inline, leaving every existing assertion (all of which
+ * observe the effect) unchanged, while `mockAfterScheduled` becomes the
+ * evidence that the work was SCHEDULED rather than fired and forgotten. Revert
+ * the route to a bare `void promise` and this array stays empty.
+ */
+const mockAfterScheduled: Array<() => unknown> = []
+jest.mock('next/server', () => ({
+  after: (work: () => unknown) => {
+    mockAfterScheduled.push(work)
+    return work()
+  },
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
