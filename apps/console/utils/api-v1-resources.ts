@@ -24,6 +24,7 @@ import {
   type AttemptClaim,
   checkDatasetQuota,
   checkEntitlement,
+  checkQuota,
   claimAttempt,
   coerceDocumentValues,
   createResourceUid,
@@ -35,6 +36,7 @@ import {
 import {
   apiJson,
   ApiErrors,
+  dataStorageRefusal,
   decodeCursor,
   encodeCursor,
   listResponse,
@@ -596,6 +598,50 @@ async function createRecord(
     })
   }
 
+  /*
+   * THE TWO QUOTAS THIS ROUTE DID NOT HAVE (AGL-2253).
+   *
+   * `POST /v1/datasets/{id}/records` counted rows only to compute `order` and
+   * checked nothing: not `recordsPerDataset`, not `dataStorageMbPerOrg`. The
+   * console route (`/api/orgs/datasets`) enforces both on the same write, and
+   * the tenant form path enforces the rows half — so `/v1` was the one door
+   * into `orgs/{id}/datasets/{id}/records` with no cap on it, and a customer
+   * could blow a limit through the REST API that the UI refuses.
+   *
+   * `createDataset` above already says why they go BEFORE the idempotency
+   * claim, and it applies verbatim: a plan refusal is the most retried failure
+   * there is — it clears when somebody buys an add-on or upgrades — so burning
+   * the key would make the retry that finally should succeed replay the
+   * refusal forever.
+   *
+   * The row count moved up with them and is reused for `order`, so this adds
+   * no read on the rows leg. The bytes leg adds no read either on any plan
+   * that meters the overage; see `dataStorageRefusal`.
+   */
+  const order = (await recordsRef.count().get()).data().count
+  const recordQuota = checkQuota(ctx.org, 'recordsPerDataset', order)
+  if (!recordQuota.allowed) {
+    return ApiErrors.planRequired({
+      message: `Record limit reached (${recordQuota.limit}). Upgrade the plan to add more.`,
+      code: 'record_quota',
+      headers: ctx.headers,
+    })
+  }
+  const storageRefusal = await dataStorageRefusal(
+    ctx.org,
+    ctx.firestore.collection('orgs').doc(ctx.orgId),
+  )
+  if (storageRefusal) {
+    return ApiErrors.planRequired({
+      message:
+        storageRefusal.basis === 'always'
+          ? 'Dataset storage is not included in this organization’s plan'
+          : `Dataset storage limit reached (${storageRefusal.includedMb} MB). Upgrade the plan to add more.`,
+      code: 'data_storage_quota',
+      headers: ctx.headers,
+    })
+  }
+
   // Idempotency: replay a prior create for the same key instead of
   // duplicating. Claimed HERE, below validation, so a deterministic 400 never
   // takes the key at all — an integrator fixes the payload and retries with
@@ -611,7 +657,6 @@ async function createRecord(
   const { claim } = claimed
 
   try {
-    const order = (await recordsRef.count().get()).data().count
     const recordId = createResourceUid()
     await recordsRef.doc(recordId).create({
       values: coerced,

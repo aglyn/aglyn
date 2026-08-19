@@ -21,11 +21,9 @@ import {
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
-  checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
-  dataStorageEnforcementShape,
   coerceDocumentValues,
   createResourceUid,
   effectiveDatasetModel,
@@ -34,6 +32,7 @@ import {
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
+  dataStorageRefusal,
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
@@ -42,68 +41,26 @@ import {
 import { Timestamp } from 'firebase-admin/firestore'
 
 /**
- * Enforce `checkDataStorageQuota(...).allowed` at the record write (AGL-2163).
+ * `dataStorageMbPerOrg` for this route, rendered as the console's 403.
  *
- * The gap this closes: the check existed, was documented as a hard block for
- * plans with no overage rate, was listed in `free-tier-never-billed.spec.ts`
- * as one of free's runtime braces — and had no reader. `report-usage` calls
- * it for `overageMonthlyUsd` and ignores `allowed`. The blast radius was
- * small only by accident (free carries `dataStorageMbPerOrg: 0`,
- * `datasetsPerOrg: 0` and `features.dataStore: false`, so the entitlement gate
- * above usually fires first); a per-org `features.dataStore` override reaches
- * straight past it, and then a free org can store unbounded dataset bytes
- * that nothing refuses and nothing bills.
- *
- * Modelled on the ENFORCED precedent, `checkFormSubmissionQuota` at
- * `apps/tenant/app/api/forms/submit/route.ts`: read the count, ask the check,
- * refuse before the write.
- *
- * COSTS A PAYING CUSTOMER NOTHING. Every plan with an
- * `extraDataGbMonthlyUsd` rate resolves to `'never-blocks'`, so the metered
- * case returns `null` without a single read and without any possibility of a
- * refusal — the overage bills, exactly as `checkDataStorageQuota`'s docblock
- * says it should. Only the two other shapes cost anything.
+ * The VERDICT moved to `utils/server/data-storage-gate` (AGL-2253) — it was
+ * defined here, so `/v1` and the tenant form path, which write dataset bytes
+ * through their own code, enforced nothing. Only the console wording is left
+ * behind, because the other two callers answer different shapes.
  */
 async function refuseIfDataStorageBlocked(
   org: unknown,
   orgRef: FirebaseFirestore.DocumentReference,
 ): Promise<Response | null> {
-  const shape = dataStorageEnforcementShape(org as never)
-  if (shape === 'never-blocks') return null
-  if (shape === 'always-blocks') {
-    // The band is zero and the plan meters nothing — no measurement can
-    // change the answer, so this refuses without reading anything.
-    return Response.json(
-      {
-        error:
-          'Dataset storage is not included on this plan — upgrade in Billing',
-      },
-      { status: 403 },
-    )
-  }
-  // `'measure'` — a finite, non-zero band on a plan with no overage rate.
-  // No plan shipping today has that shape; it exists only where staff have
-  // set an `entitlementOverrides.dataStorageMbPerOrg` on a plan that meters
-  // nothing, which is why paying a read here is affordable.
-  //
-  // Measured from the monthly rollup rather than re-summing the org's
-  // datasets: `report-usage`'s `orgDatasetBytes` is O(datasets) reads with two
-  // aggregate queries EACH, which is not a per-record-write cost. The reading
-  // is therefore up to a month stale, and that is stated rather than hidden —
-  // it can only ever under-refuse, never refuse a write it should have
-  // allowed, and the org this can reach is one staff configured by hand.
-  const usage = await orgRef
-    .collection('usage')
-    .doc(new Date().toISOString().slice(0, 7))
-    .get()
-  const usedMb = Number(usage.get('dataStorageMb') ?? 0)
-  const quota = checkDataStorageQuota(org as never, usedMb)
-  if (quota.allowed) return null
+  const refusal = await dataStorageRefusal(org, orgRef)
+  if (!refusal) return null
   return Response.json(
     {
       error:
-        `Dataset storage limit reached (${quota.includedMb} MB) — ` +
-        'upgrade in Billing',
+        refusal.basis === 'always'
+          ? 'Dataset storage is not included on this plan — upgrade in Billing'
+          : `Dataset storage limit reached (${refusal.includedMb} MB) — ` +
+            'upgrade in Billing',
     },
     { status: 403 },
   )

@@ -111,6 +111,13 @@ const firestore = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The REAL storage gate (AGL-2253). A wholesale mock of this module is a
+  // CLOSED WORLD: `dataStorageRefusal` would be `undefined` and the route
+  // would 500 rather than enforce. Required actual so this suite exercises the
+  // shape logic it is about, not a stub of it.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/data-storage-gate',
+  ),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...a: unknown[]) => mockVerifyIdToken(...a) }),
