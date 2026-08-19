@@ -121,6 +121,16 @@ const ALLOWED = new Map<string, string>([
       'Support naming, not marketplace naming.',
   ],
   [
+    'apps/docs/docs/staff-console/support-triage.md',
+    'The support runbook (AGL-2141), which restates the SAME ladder as ' +
+      'enterprise/support-tiers.md above — weakest tier literally labelled ' +
+      '“Community” in SUPPORT_BY_PLAN — and points Free and Starter at the ' +
+      'forum. Support naming, not marketplace naming. Exempted rather than ' +
+      'reworded for the reason the ladder is quoted at all: a runbook that ' +
+      'renamed the tier would disagree with the code an operator reads it ' +
+      'against, which is the drift the table exists to prevent.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/teams-and-roles/invite-teammates.md',
     'Points at the forum for help.',
   ],

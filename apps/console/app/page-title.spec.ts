@@ -133,6 +133,61 @@ function walkRoutes(
   return acc
 }
 
+/**
+ * Every LITERAL title in the route tree, with the file that declares it.
+ *
+ * Both spellings the console actually uses: `title: segmentTitle('X')`, which
+ * is the dominant form because it applies the brand template, and a bare
+ * `title: 'X'`. Comments are stripped through the same shared bounded stripper
+ * the other walkers use, so prose naming a title cannot enter the corpus.
+ */
+function readdirTitles(
+  dir: string,
+  rel = '',
+  acc: { title: string; rel: string }[] = [],
+): { title: string; rel: string }[] {
+  for (const entry of readdirSync(dir)) {
+    const abs = join(dir, entry)
+    if (statSync(abs).isDirectory()) {
+      readdirTitles(abs, rel ? `${rel}/${entry}` : entry, acc)
+      continue
+    }
+    if (!METADATA_FILES.has(entry)) continue
+    const where = rel ? `${rel}/${entry}` : entry
+    const code = strip(readFileSync(abs, 'utf8'), where, 0)
+    /*
+     * ONLY inside `export const metadata = { … }`. Scoping this to the file
+     * was wrong and the guard caught itself doing it: a confirm dialog's
+     * `title: 'Are you sure?'` in two `page.tsx` files read as two routes
+     * sharing a page title. It is a dialog prop and reaches no `page_title`
+     * at all — a false RED, which is worse than the gap, because the fix a
+     * reader would reach for is renaming a dialog for a reason that is not
+     * true.
+     */
+    const block = /export const metadata[^=]*=\s*\{/.exec(code)
+    if (!block) continue
+    let depth = 0
+    let end = block.index + block[0].length - 1
+    for (let i = end; i < code.length; i += 1) {
+      if (code[i] === '{') depth += 1
+      else if (code[i] === '}') {
+        depth -= 1
+        if (depth === 0) {
+          end = i
+          break
+        }
+      }
+    }
+    const metadata = code.slice(block.index, end + 1)
+    for (const match of metadata.matchAll(
+      /\btitle\s*:\s*(?:segmentTitle\s*\(\s*)?['"]([^'"]+)['"]/g,
+    )) {
+      acc.push({ title: match[1], rel: where })
+    }
+  }
+  return acc
+}
+
 /** Whether `child` is nested strictly below `parent` in the route tree. */
 const isBelow = (parent: string, child: string) =>
   parent === '' ? child !== '' : child.startsWith(`${parent}/`)
@@ -210,6 +265,40 @@ describe('console tab titles keep the brand (AGL-1059)', () => {
     // `metadata: { title: segmentTitle('…') }` — a client-component page
     // cannot export `metadata` itself, which is why titles live in layouts.
     expect(untitled).toEqual([])
+  })
+
+  it('gives no two routes the SAME title (AGL-2164)', () => {
+    // The sibling test above proves every route HAS a title. It cannot see
+    // two routes that both have one and both say the same thing — and in GA4
+    // that is the same defect wearing a different hat, because `page_title` is
+    // the dimension the Pages report groups by. Two routes sharing a string
+    // merge into one row, and the merge is silent: the number looks like a
+    // popular page rather than two pages nobody can tell apart.
+    //
+    // Literal titles only. A route titled from `generateMetadata` resolves at
+    // request time (the marketplace listing takes its title from the listing),
+    // so a static check cannot know its value and must not guess one.
+    const owners = new Map<string, string[]>()
+    for (const entry of readdirTitles(APP_DIR)) {
+      const list = owners.get(entry.title) ?? []
+      list.push(entry.rel)
+      owners.set(entry.title, list)
+    }
+
+    // The corpus must be real, or this passes forever over nothing — the
+    // failure mode this file already guards against twice.
+    expect(owners.size).toBeGreaterThan(25)
+
+    const shared = [...owners.entries()]
+      .filter(([, files]) => files.length > 1)
+      .map(([title, files]) => `${title} — ${files.sort().join(', ')}`)
+      .sort()
+
+    // Fix by making the titles distinct, not by deleting one: a route with no
+    // title of its own falls back to the root default, which is the bug the
+    // test above exists to catch. Rename so a human reading the GA4 Pages
+    // report can tell the two apart.
+    expect(shared).toEqual([])
   })
 
   it('uses one brand template, defined once', () => {

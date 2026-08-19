@@ -84,12 +84,15 @@ function mockMakeDoc(path: string): any {
       exists: mockStoredDocs.has(path) || path === 'orgs/org-1',
       id: path.split('/').pop(),
       ref: mockMakeDoc(path),
-      data: () => mockStoredDocs.get(path) ?? {},
+      // `data()` and `get()` must read the SAME document (AGL-2118). They
+      // did not: `get()` served the seed for `orgs/org-1` while `data()`
+      // returned `{}`, so a caller that reads the whole doc — the margin
+      // guardrail does — saw a planless org and rated every discount `ok`
+      // against a $0 list price. A double that answers two ways about one
+      // document manufactures a false green.
+      data: () => ({ ...mockSeedFor(path), ...(mockStoredDocs.get(path) ?? {}) }),
       get: (field: string) => {
-        const seeded: Record<string, unknown> =
-          path === 'orgs/org-1'
-            ? { plan: 'pro', slug: 'acme', ownerUid: 'u-1' }
-            : {}
+        const seeded = mockSeedFor(path)
         return (mockStoredDocs.get(path) ?? seeded)[field] ?? seeded[field]
       },
     }),
@@ -97,9 +100,49 @@ function mockMakeDoc(path: string): any {
   }
 }
 
+/** The one seed both `data()` and `get()` read (AGL-2118). */
+function mockSeedFor(path: string): Record<string, unknown> {
+  return path === 'orgs/org-1'
+    ? { plan: 'pro', slug: 'acme', ownerUid: 'u-1' }
+    : {}
+}
+
 function mockMakeCollection(path: string): any {
   return {
     doc: (id?: string) => mockMakeDoc(`${path}/${id ?? `auto-${++mockAutoId}`}`),
+    /**
+     * `orderBy(field, 'desc').limit(n).get()` — what `latestMeasuredCogsUsd`
+     * runs against `orgs/{id}/usage` (AGL-2118). Modelled rather than left to
+     * throw: the caller catches, so an unmodelled query would read as "this
+     * org has no usage rollup" and the margin guardrail would silently rate
+     * every org against the flat floor while looking exercised.
+     */
+    orderBy: (field: string, direction?: string) => ({
+      limit: (count: number) => ({
+        get: async () => {
+          const prefix = `${path}/`
+          const docs = [...mockStoredDocs.keys()]
+            .filter(
+              (key) =>
+                key.startsWith(prefix) && !key.slice(prefix.length).includes('/'),
+            )
+            .sort((a, b) => {
+              const av = String(mockStoredDocs.get(a)?.[field] ?? '')
+              const bv = String(mockStoredDocs.get(b)?.[field] ?? '')
+              return direction === 'desc' ? bv.localeCompare(av) : av.localeCompare(bv)
+            })
+            .slice(0, count)
+            .map((key) => ({
+              id: key.split('/').pop(),
+              exists: true,
+              ref: mockMakeDoc(key),
+              data: () => mockStoredDocs.get(key) ?? {},
+              get: (f: string) => (mockStoredDocs.get(key) ?? {})[f],
+            }))
+          return { empty: docs.length === 0, docs }
+        },
+      }),
+    }),
   }
 }
 
@@ -150,6 +193,22 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
   SELF_SERVE_PLANS: jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements')
     .SELF_SERVE_PLANS,
+  // The margin guardrail the winback now runs (AGL-2118), and the two cost
+  // functions behind it. REAL implementations, not stubs: a stub returning a
+  // fixed rating would make every assertion below a test of the stub, and the
+  // whole point of the guardrail is the arithmetic. This is also the reason a
+  // wholesale `jest.mock` of a module is a liability — a route that grows one
+  // import gets `undefined` from it, which here would be swallowed by
+  // `latestMeasuredCogsUsd`'s catch and read as "no rollup".
+  checkDiscountMargin: jest.requireActual(
+    '@aglyn/aglyn/app-utils/plan-entitlements',
+  ).checkDiscountMargin,
+  orgCogsInputFrom: jest.requireActual(
+    '@aglyn/aglyn/app-utils/plan-entitlements',
+  ).orgCogsInputFrom,
+  orgMonthlyCogsUsd: jest.requireActual(
+    '@aglyn/aglyn/app-utils/plan-entitlements',
+  ).orgMonthlyCogsUsd,
   PLAN_PRICING: {},
   POS_REGISTER_ADDON_MONTHLY_USD: 89,
   EVENT_CALENDAR_ADDON_MONTHLY_USD: 9,
@@ -176,6 +235,12 @@ const STRIPE_ENV = {
 
 let capturedCouponBody: URLSearchParams | null = null
 let capturedSubUpdateBody: URLSearchParams | null = null
+
+/**
+ * Extra fields merged onto the live subscription the Stripe double returns —
+ * how a test seeds an already-discounted subscription (AGL-2117).
+ */
+let subscriptionFields: Record<string, unknown> = {}
 
 function loadRoute(path: string) {
   jest.resetModules()
@@ -220,6 +285,7 @@ beforeEach(() => {
   mockAutoId = 0
   capturedCouponBody = null
   capturedSubUpdateBody = null
+  subscriptionFields = {}
   mockVerifyIdToken.mockResolvedValue({ uid: 'u-1', email_verified: true })
   global.fetch = jest.fn(async (url: unknown, init: any) => {
     const href = String(url)
@@ -232,6 +298,7 @@ beforeEach(() => {
             status: 'active',
             current_period_end: 1767225600,
             items: { data: [] },
+            ...subscriptionFields,
           },
         ],
       }
@@ -404,6 +471,91 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
     })
   })
 
+  /**
+   * THE MARGIN GUARDRAIL, which this path did not have (AGL-2118).
+   *
+   * Every other way a discount reaches a live subscription rates it against
+   * the org that will bear it — `api/admin/org-discount` blocks on a `block`
+   * verdict unless staff pass `confirmBelowFloor`. The winback minted a real
+   * coupon onto a real subscription with nobody in the loop, and it was the
+   * ONLY such path. `assertBoundedWinbackCoupon` is not that check: it tests
+   * the SHAPE of two module constants and says nothing about whether the
+   * discounted subscription still covers what the org costs to serve.
+   *
+   * Driven through the REAL `checkDiscountMargin` and the REAL cost model
+   * (both `requireActual` in the module mock above) against a REAL usage
+   * rollup, because a stubbed rating would make this a test of the stub.
+   */
+  describe('the margin guardrail (AGL-2118)', () => {
+    /**
+     * Pro lists at $56; 50% off nets ~$26.89 of processor-fee-adjusted
+     * revenue. 300,000 page views price at $30.00 through
+     * `ORG_COGS_UNIT_RATES_USD.perPageView`, so the discounted subscription
+     * does not cover the month — `underwater`/`cogs`, rating `block`.
+     */
+    const heavyRollup = () =>
+      mockStoredDocs.set('orgs/org-1/usage/2026-08', {
+        month: '2026-08',
+        pageViews: 300_000,
+      })
+
+    it('refuses the offer, before Stripe and before the one-shot is spent', async () => {
+      heavyRollup()
+      const post = loadRoute(ROUTE)
+      capturedCouponBody = null
+      capturedSubUpdateBody = null
+      const response = await call(post, { action: 'winback', funnelId: 'f-1' })
+
+      expect(response.status).toBe(409)
+      const payload = await response.json()
+      expect(payload.code).toBe('margin_floor')
+      expect(payload.rating.rating).toBe('block')
+      // Stripe was never reached, so no coupon exists to be redeemed later.
+      expect(capturedCouponBody).toBeNull()
+      expect(capturedSubUpdateBody).toBeNull()
+      // And the org KEEPS its one winback — a refusal is not a spend.
+      expect(mockStoredDocs.get('orgs/org-1/retention/winback')).toBeUndefined()
+    })
+
+    /**
+     * POSITIVE CONTROL, and the reason it is not optional: without it this
+     * describe is satisfied by a route that refuses every winback, which would
+     * pass here and silently delete the feature.
+     */
+    it('POSITIVE CONTROL: an ordinary org still gets its winback', async () => {
+      mockStoredDocs.set('orgs/org-1/usage/2026-08', {
+        month: '2026-08',
+        pageViews: 1_000,
+      })
+      const post = loadRoute(ROUTE)
+      const response = await call(post, { action: 'winback' })
+      expect(response.status).toBe(200)
+      expect(capturedCouponBody?.get('percent_off')).toBe('50')
+    })
+
+    /**
+     * The rollup has to actually REACH the verdict. The same org with only a
+     * light month is fine (above) and with a heavy one is blocked (below) —
+     * if `latestMeasuredCogsUsd` were silently returning null (an unmodelled
+     * query swallowed by its catch, the shape this spec's fake `orderBy`
+     * exists to prevent) both cases would resolve to the flat $2 floor and
+     * both would pass as `ok`.
+     */
+    it('the verdict moves with the rollup, so the cost read is really wired', async () => {
+      heavyRollup()
+      const blocked = await call(loadRoute(ROUTE), { action: 'winback' })
+      expect(blocked.status).toBe(409)
+
+      mockStoredDocs.clear()
+      mockStoredDocs.set('orgs/org-1/usage/2026-08', {
+        month: '2026-08',
+        pageViews: 1_000,
+      })
+      const allowed = await call(loadRoute(ROUTE), { action: 'winback' })
+      expect(allowed.status).toBe(200)
+    })
+  })
+
   it('is once per org, EVER — the second request loses at the database', async () => {
     const post = loadRoute(ROUTE)
     const first = await call(post, { action: 'winback' })
@@ -470,6 +622,67 @@ describe('/api/billing/retention — winback (AGL-1863 / AGL-1620)', () => {
     const failed = await call(post, { action: 'winback' })
     expect(failed.status).toBe(502)
     expect(mockStoredDocs.has('orgs/org-1/retention/winback')).toBe(false)
+  })
+})
+
+/**
+ * The apply writes `discounts[0][coupon]`, and Stripe's `discounts` parameter
+ * SETS the list rather than appending to it. Checkout sends
+ * `allow_promotion_codes`, so a customer arriving at the funnel with a promo
+ * already on their subscription is an ordinary case, not an exotic one — and
+ * overwriting it takes months they were promised and lands them on full list
+ * price two cycles later.
+ */
+describe('/api/billing/retention — an existing discount is never overwritten (AGL-2117)', () => {
+  const ROUTE = '../app/api/billing/retention/route'
+
+  it('refuses the winback when the subscription already carries a discount', async () => {
+    subscriptionFields = {
+      discounts: [{ id: 'di_promo_1', coupon: { id: 'LAUNCH30' } }],
+    }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toMatch(/already has a discount/i)
+    // Nothing was minted and nothing was written to the subscription — the
+    // customer's promo is still theirs.
+    expect(capturedCouponBody).toBeNull()
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+
+  it('reads the LEGACY singular `discount` too — an old subscription is the likeliest to hold a promo', async () => {
+    subscriptionFields = { discount: { id: 'di_legacy_1' } }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(409)
+    expect(capturedCouponBody).toBeNull()
+  })
+
+  it('the refusal costs the org NOTHING — its one winback is still unspent', async () => {
+    subscriptionFields = { discounts: [{ id: 'di_promo_1' }] }
+    const post = loadRoute(ROUTE)
+    expect((await call(post, { action: 'winback' })).status).toBe(409)
+    // Refused before the reservation, so there is no `winback` doc to release
+    // and no race for a later request to lose.
+    expect(mockStoredDocs.has('orgs/org-1/retention/winback')).toBe(false)
+
+    // Once the discount is gone the same org can still take its offer.
+    subscriptionFields = {}
+    const second = loadRoute(ROUTE)
+    expect((await call(second, { action: 'winback' })).status).toBe(200)
+    expect(capturedSubUpdateBody?.get('discounts[0][coupon]')).toBe(
+      'coupon_winback_1',
+    )
+  })
+
+  it('an EMPTY discounts array is not a discount — a live subscription reports one routinely', async () => {
+    subscriptionFields = { discounts: [] }
+    const post = loadRoute(ROUTE)
+    const response = await call(post, { action: 'winback' })
+    expect(response.status).toBe(200)
+    expect(capturedSubUpdateBody?.get('discounts[0][coupon]')).toBe(
+      'coupon_winback_1',
+    )
   })
 })
 

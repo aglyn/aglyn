@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { storefrontTaxDecision } from './commerce-tax-decision'
+import {
+  storefrontTaxDecision,
+  storefrontTaxMisconfiguration,
+  STOREFRONT_TAX_NO_ORIGIN_MESSAGE,
+  STOREFRONT_TAX_POS_STRIPE_MESSAGE,
+} from './commerce-tax-decision'
 
 /**
  * AGL-1999. The defect was that `undefined` matched neither `'stripe'` nor
@@ -98,5 +103,111 @@ describe('storefrontTaxDecision (AGL-1999)', () => {
     expect(
       storefrontTaxDecision({ settings: undefined, taxExempt: false }).kind,
     ).toBe('undecided')
+  })
+})
+
+/**
+ * THE SECOND REFUSAL (AGL-2145): decisions the path cannot honour.
+ *
+ * `storefrontTaxDecision` answers "did a human decide?", and is deliberately
+ * silent about a store that decided to collect nothing. These two states are
+ * outside that distinction — the merchant decided to COLLECT, and the sale
+ * charged zero anyway, leaving the liability with them and no trace anywhere.
+ */
+describe('storefrontTaxMisconfiguration (AGL-2145)', () => {
+  describe('manual mode with no store origin', () => {
+    it('refuses when the origin has no country', () => {
+      expect(
+        storefrontTaxMisconfiguration({
+          mode: 'manual',
+          rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+        } as never),
+      ).toBe(STOREFRONT_TAX_NO_ORIGIN_MESSAGE)
+      // An origin object that exists but is empty is the same hole.
+      expect(
+        storefrontTaxMisconfiguration({
+          mode: 'manual',
+          origin: { state: 'TX' },
+          rates: [{ country: 'US', state: 'TX', pct: 8.25 }],
+        } as never),
+      ).toBe(STOREFRONT_TAX_NO_ORIGIN_MESSAGE)
+      // …and so is whitespace, which reads as truthy to a bare check.
+      expect(
+        storefrontTaxMisconfiguration({
+          mode: 'manual',
+          origin: { country: '  ' },
+        } as never),
+      ).toBe(STOREFRONT_TAX_NO_ORIGIN_MESSAGE)
+    })
+
+    /**
+     * POSITIVE CONTROL, and the distinction the whole helper turns on. A
+     * manual store WITH an origin and no matching rates still collects
+     * nothing, and that is correct — the merchant answered, and the answer
+     * applies per shopper. Refusing it would make the helper a wall in front
+     * of every legitimately untaxed sale.
+     */
+    it('allows a manual store with an origin, even with no matching rates', () => {
+      expect(
+        storefrontTaxMisconfiguration({
+          mode: 'manual',
+          origin: { country: 'US', state: 'TX' },
+          rates: [],
+        } as never),
+      ).toBeNull()
+    })
+  })
+
+  describe('Stripe Tax at the register', () => {
+    /**
+     * `pos-order.ts` sends the basket as one opaque line and sets no
+     * `automatic_tax` — it cannot, there is no customer address at a till —
+     * and cash and folio never reach Stripe at all. Every in-person sale at a
+     * Stripe-Tax store charged zero.
+     */
+    it('refuses an IN-PERSON sale', () => {
+      expect(
+        storefrontTaxMisconfiguration({ mode: 'stripe' } as never, {
+          inPerson: true,
+        }),
+      ).toBe(STOREFRONT_TAX_POS_STRIPE_MESSAGE)
+    })
+
+    /**
+     * POSITIVE CONTROL. Online Stripe-Tax sales are correct — Stripe computes
+     * them on a session that carries the buyer's address — and refusing them
+     * would break the three paths AGL-1999 already made right.
+     */
+    it('allows the same store ONLINE', () => {
+      expect(
+        storefrontTaxMisconfiguration({ mode: 'stripe' } as never),
+      ).toBeNull()
+      expect(
+        storefrontTaxMisconfiguration({ mode: 'stripe' } as never, {
+          inPerson: false,
+        }),
+      ).toBeNull()
+    })
+  })
+
+  /**
+   * NEGATIVE CONTROLS for everything this helper must NOT touch. `none` is a
+   * recorded decision to collect nothing and is honoured silently; `undecided`
+   * belongs to `storefrontTaxDecision`, whose refusal runs first and says
+   * something different.
+   */
+  it('says nothing about `none`, `undecided`, or a well-formed manual store', () => {
+    expect(storefrontTaxMisconfiguration({ mode: 'none' } as never)).toBeNull()
+    expect(
+      storefrontTaxMisconfiguration({ mode: 'none' } as never, { inPerson: true }),
+    ).toBeNull()
+    expect(storefrontTaxMisconfiguration({} as never)).toBeNull()
+    expect(storefrontTaxMisconfiguration(undefined)).toBeNull()
+    expect(
+      storefrontTaxMisconfiguration(
+        { mode: 'manual', origin: { country: 'US' } } as never,
+        { inPerson: true },
+      ),
+    ).toBeNull()
   })
 })

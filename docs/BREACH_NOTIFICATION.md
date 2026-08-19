@@ -38,8 +38,12 @@ checks and thirteen policies on `aglyn-main`, every one emailing
   project that watches for **silence**, which is what a dead error pipeline
   looks like.
 - CSP violation counters (`cspViolationDaily`, 60-day retention, AGL-1799) —
-  durable, queryable at `/admin/csp-reports`. An injected script that tries to
-  exfiltrate to an unexpected origin leaves a row here.
+  durable, and read on **Staff → Health** (`/admin/health`), under "CSP
+  violations". An injected script that tries to exfiltrate to an unexpected
+  origin leaves a row here. There is no `/admin/csp-reports` page — this doc
+  named one until AGL-2141, sending an operator to a 404 at §0 of a breach.
+  `/api/admin/csp-reports` is the route the Health page reads; it is not a
+  page.
 
 **What is not watched, and it is the largest hole (AGL-1921):** the
 **server-side error rate**. Every check above is a liveness signal on one URL.
@@ -106,6 +110,15 @@ step that gets skipped and cannot be redone.
 vercel logs -S aglyn -p aglyn-console --environment production --since 2h > /tmp/incident-console.log
 vercel logs -S aglyn -p aglyn-tenant  --environment production --since 2h > /tmp/incident-tenant.log
 ```
+
+⚠️ **These flags are version-dependent and `vercel` is not a repo dependency,
+so nothing pins it.** `-p/--project`, `--environment` and `--since` were absent
+from `vercel logs` for several major versions, during which the command took a
+deployment URL and nothing else. Verified present on **CLI 55.0.0**
+(2026-08-18, `vercel logs --help`); the repo's own tooling asserts a floor of
+CLI ≥ 41 (`tools/deploy/verify-production-aliases.mjs`). Run `vercel --version`
+and `vercel logs --help` **now**, not during an incident — this is the one
+command in this runbook whose window closes in an hour.
 
 Then note the wall-clock time. Firestore PITR gives a 7-day window at minute
 granularity, so the pre-incident state is recoverable for reading — but only

@@ -37,7 +37,11 @@
  * every call is asserted by exact URL.
  */
 
-const stripePosts: Array<{ url: string; params: URLSearchParams }> = []
+const stripePosts: Array<{
+  url: string
+  params: URLSearchParams
+  headers: Record<string, string>
+}> = []
 
 jest.mock('@aglyn/aglyn/server', () => ({
   registerPluginApiRoute: () => undefined,
@@ -184,13 +188,14 @@ const makeRes = () => {
   return res
 }
 
-const makeReq = () =>
+const makeReq = (overrides: Record<string, unknown> = {}) =>
   ({
     method: 'POST',
     body: {
       hostId: 'host-1',
       serviceId: 'service-1',
       startsAtMs: nextBookableStart(),
+      ...overrides,
       name: 'Dana',
       email: 'dana@example.com',
     },
@@ -210,6 +215,10 @@ beforeAll(() => {
       stripePosts.push({
         url: address,
         params: new URLSearchParams(String(init?.body ?? '')),
+        // AGL-2147: the money-safety half of this call is a HEADER, so the
+        // capture has to keep the headers or the assertion below could only
+        // ever be written against the body and would pass vacuously.
+        headers: (init?.headers ?? {}) as Record<string, string>,
       })
       return {
         ok: true,
@@ -281,4 +290,34 @@ describe('a paid booking states its tax decision (AGL-2000)', () => {
     expect(params.get('metadata[type]')).toBe('booking-payment')
     expect(params.get('metadata[hostId]')).toBe('host-1')
   })
+})
+
+describe('a paid booking is created idempotently (AGL-2147)', () => {
+  it('sends an Idempotency-Key keyed on the booking', async () => {
+    const res = makeRes()
+    await bookHandler(makeReq(), res)
+    expect(stripePosts).toHaveLength(1)
+    const key = stripePosts[0].headers['Idempotency-Key']
+    // This was the one session-creating path in the repo without a key.
+    // Without it, a retried POST after Stripe created the session but before
+    // its response arrived opens a SECOND payable session against one held
+    // slot, and a guest who pays both is charged twice for one appointment.
+    expect(key).toBeTruthy()
+    // Keyed on the booking the transaction just minted, so it names THIS
+    // attempt. A constant, or a key derived only from the service and the
+    // time, would collide across guests and replay somebody else's session.
+    expect(key).toMatch(/^booking-.+/)
+    // Uniqueness is structural, and this equality is what makes it so: the
+    // transaction mints a fresh `bookingId` per attempt, so a key equal to
+    // `booking-${bookingId}` cannot collide across guests. A constant, or a
+    // key derived from the service and the start time, WOULD collide — and a
+    // colliding key makes the second guest replay the first guest's session,
+    // showing them somebody else's checkout. (Asserted as an equality rather
+    // than by booking twice: a second booking of the same slot is refused by
+    // the overlap check, and the handler rate-limits per IP, so a two-booking
+    // test would go green or red for reasons unrelated to the key.)
+    expect(String(res.body?.bookingId ?? '')).not.toBe('')
+    expect(key).toBe(`booking-${res.body.bookingId}`)
+  })
+
 })

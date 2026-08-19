@@ -148,17 +148,61 @@ async function reverseMarketplaceSellerShare(
     return
   }
 
-  /** Settles the step exactly once, whatever it found. */
+  /**
+   * Settles the step exactly once, whatever it found.
+   *
+   * A settle of ZERO is not the same event as a settle of the full share, and
+   * until AGL-2140 the document could not tell them apart (AGL-2140). Six
+   * paths below abandon the reversal for a DEFINITIVE reason — no charge id,
+   * Stripe refusing the charge read, no transfer on the charge, Stripe
+   * refusing the transfer read, nothing left to reverse, Stripe refusing the
+   * reversal itself — and each wrote `reversedTransferCents: 0`, which the
+   * short-circuit at the top of this function then honours forever. The only
+   * other trace was a `console.error`.
+   *
+   * A Stripe 4xx is one of those definitive reasons: `balance_insufficient` on
+   * a connected account is a **400**, not a 5xx, so it does not throw and does
+   * not redeliver. The publisher's share was therefore forfeited permanently,
+   * silently, and with nothing queryable to find it by afterwards.
+   *
+   * Settling stays — re-running these paths would eventually double-debit a
+   * seller, which is worse. What changes is that an abandoned reversal now
+   * says so ON THE DOCUMENT: `reversalFailedAt`, a machine-readable
+   * `reversalFailedReason`, and `reversalOwedCents` when the amount is known.
+   * `where('reversalFailedAt', '!=', null)` is then the recovery queue.
+   */
   const settle = async (
     reversedTransferCents: number,
     transferReversalId: string | null,
+    /** Why nothing (or less than the cause) was reversed. Omit on success. */
+    failure?: { reason: string; owedCents?: number },
   ): Promise<void> => {
     const fresh = await purchaseRef.get()
     if (!fresh.exists || fresh.get('reversedTransferCents') != null) return
+    if (failure) {
+      console.error('Marketplace seller share NOT reversed — recorded for recovery', {
+        purchaseId: purchaseRef.id,
+        kind: cause.kind,
+        causeId,
+        reason: failure.reason,
+        owedCents: failure.owedCents ?? null,
+      })
+    }
     await purchaseRef.set(
       {
         reversedTransferCents,
         ...(transferReversalId ? { transferReversalId } : {}),
+        ...(failure
+          ? {
+              reversalFailedAt:
+                firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              reversalFailedReason: failure.reason,
+              reversalFailedCause: cause.kind,
+              ...(failure.owedCents != null
+                ? { reversalOwedCents: failure.owedCents }
+                : {}),
+            }
+          : {}),
       },
       { merge: true },
     )
@@ -166,11 +210,7 @@ async function reverseMarketplaceSellerShare(
 
   const chargeId = String(cause?.chargeId ?? '')
   if (!chargeId) {
-    console.error('Marketplace reversal cause carries no charge; share not reversed', {
-      kind: cause.kind,
-      causeId,
-    })
-    await settle(0, null)
+    await settle(0, null, { reason: 'no-charge-on-cause' })
     return
   }
   const charge = await stripeGet(
@@ -183,21 +223,14 @@ async function reverseMarketplaceSellerShare(
         `Stripe charge read failed (${charge.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
-    console.error(
-      'Stripe refused the charge read; marketplace share not reversed',
-      charge.body?.error,
-    )
-    await settle(0, null)
+    console.error('Stripe refused the charge read', charge.body?.error)
+    await settle(0, null, { reason: 'charge-read-refused' })
     return
   }
   const transferId = String(charge.body?.transfer ?? '')
   const chargeAmountCents = Math.round(Number(charge.body?.amount ?? 0))
   if (!transferId || !(chargeAmountCents > 0)) {
-    console.error(
-      'No transfer on the disputed marketplace charge; share not reversed',
-      { kind: cause.kind, causeId, chargeId },
-    )
-    await settle(0, null)
+    await settle(0, null, { reason: 'no-transfer-on-charge' })
     return
   }
   const transfer = await stripeGet(
@@ -210,11 +243,8 @@ async function reverseMarketplaceSellerShare(
         `Stripe transfer read failed (${transfer.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
-    console.error(
-      'Stripe refused the transfer read; marketplace share not reversed',
-      transfer.body?.error,
-    )
-    await settle(0, null)
+    console.error('Stripe refused the transfer read', transfer.body?.error)
+    await settle(0, null, { reason: 'transfer-read-refused' })
     return
   }
   // The crash window's backstop: the POST landed on a previous delivery and
@@ -239,11 +269,11 @@ async function reverseMarketplaceSellerShare(
     remainingCents,
   )
   if (!(shareCents > 0)) {
-    console.error(
-      'Transfer has nothing left to reverse; marketplace share not reversed',
-      { kind: cause.kind, causeId, transferId, transferCents, alreadyReversedCents },
-    )
-    await settle(0, null)
+    // Not necessarily a fault — an earlier cause may already have pulled the
+    // whole transfer back — so `owedCents` is deliberately 0 rather than
+    // absent: nothing is owed, and the row says so instead of leaving the
+    // amount unknown.
+    await settle(0, null, { reason: 'transfer-fully-reversed', owedCents: 0 })
     return
   }
   const params = new URLSearchParams({
@@ -270,11 +300,14 @@ async function reverseMarketplaceSellerShare(
         `Stripe transfer reversal failed (${response.status}) for marketplace ${cause.kind} ${causeId}`,
       )
     }
-    console.error(
-      'Stripe refused the marketplace transfer reversal',
-      reversal?.error,
-    )
-    await settle(0, null)
+    // THE ONE THAT COSTS REAL MONEY. A definitive 4xx here — including a
+    // `balance_insufficient` on the publisher's account, which is a 400 — used
+    // to forfeit the whole share with only a log line.
+    console.error('Stripe refused the marketplace transfer reversal', reversal?.error)
+    await settle(0, null, {
+      reason: 'reversal-refused',
+      owedCents: shareCents,
+    })
     return
   }
   await settle(
@@ -328,11 +361,19 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       const taxCents = Number(object?.total_details?.amount_tax ?? 0)
       const sellerCents = Number(transferCents ?? 0)
       const netCents = grossCents - taxCents - sellerCents
-      await firebaseAdmin
+      const purchaseRef = firebaseAdmin
         .app()
         .firestore()
         .collection('marketplacePurchases')
         .doc(String(object.id))
+      // `createdAt` is stamped ONCE (AGL-2109). Merging the write below fixed
+      // the erasure but introduced its own drift: `serverTimestamp()` on a
+      // redelivery would move a three-day-old sale to today, which is the
+      // field the seller ledger and every revenue period read. One read, on a
+      // path that already makes several Stripe round trips, buys a date that
+      // means what it says.
+      const alreadyRecorded = (await purchaseRef.get()).exists
+      await purchaseRef
         .set({
           listingId,
           buyerUid,
@@ -347,8 +388,37 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
           // payment intent, not the session — without this id a refund
           // could never find the purchase it revokes.
           paymentIntentId: String(object?.payment_intent ?? ''),
-          createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+          ...(alreadyRecorded
+            ? {}
+            : {
+                createdAt:
+                  firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+              }),
+        },
+        // MERGED, like every other write on this path (AGL-2109). This one
+        // was a full document REPLACE, and the document it replaces is not
+        // only the sale: it is the buyer's ENTITLEMENT (`hasLivePurchase`
+        // reads `refundedAt`), the refund trail, the dispute trail, and the
+        // transfer-reversal SETTLE MARKER (`reversedTransferCents`, which
+        // `reverseMarketplaceSellerShare` short-circuits on so a publisher is
+        // never debited twice).
+        //
+        // Stripe redelivers `checkout.session.completed` for up to three days
+        // after any 500, and this endpoint 500s on purpose — for every
+        // transient Stripe failure raised in this file and for any throw from
+        // a sibling plugin handler that runs after this one
+        // (`runBillingWebhookHandlers` awaits them in sequence and lets a
+        // throw propagate). So the redelivery is expected traffic, not an
+        // exotic race. Landing after a refund it erased `refundedAt` — the
+        // refunded buyer silently got their install back — and erased
+        // `reversedTransferCents`, re-opening a second reversal against the
+        // publisher's Connect account.
+        //
+        // Merging is safe in the other direction too: every field written
+        // here is derived from the session event, so a redelivery restamps
+        // identical values.
+        { merge: true },
+      )
       // Marketplace sales are real revenue and belong in the same GA
       // `purchase` stream as subscriptions (AGL-1561), separated by
       // `item_category` so plugin revenue and subscription revenue can be

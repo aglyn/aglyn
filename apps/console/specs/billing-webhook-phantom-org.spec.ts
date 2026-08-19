@@ -559,3 +559,91 @@ describe('a subscription naming a REAL workspace still mirrors (AGL-1763)', () =
     expect(audit).toHaveLength(0)
   })
 })
+
+/**
+ * A scheduled downgrade that has LANDED must stop being pending (AGL-2144).
+ *
+ * `writeOrgBilling` merge-sets, and a merge preserves nested keys it does not
+ * mention — so `subscription.pendingDowngrade` survived the phase flip
+ * verbatim. Nothing else cleared it: the two clears in
+ * `/api/billing/subscription` cover schedule release and "keep my plan", and
+ * no `subscription_schedule.*` event is handled anywhere. The org doc was left
+ * asserting a move it had already made, with an `effectiveAt` receding into
+ * the past, and the billing page rendered that forever as a warning chip plus
+ * a prominent button offering to undo it.
+ *
+ * The detection is a POSITIVE signal — the mirrored plan equalling the pending
+ * target, which phase 1's `metadata[plan]` makes true at the flip. The absence
+ * of a schedule would have been the wrong signal: `subscription.updated`
+ * events are not ordered, so one predating the schedule attach would drop a
+ * downgrade the customer really had scheduled.
+ */
+describe('a completed downgrade stops being pending (AGL-2144)', () => {
+  /** The mirror `writeOrgBilling` was handed, or undefined. */
+  function mirroredSubscription(): Record<string, unknown> | undefined {
+    return mockWriteOrgBilling.mock.calls[0]?.[1]?.subscription
+  }
+
+  it('clears pendingDowngrade once the phase has flipped to the target tier', async () => {
+    const post = loadWebhook()
+    seedOrg('org-real', {
+      plan: 'pro',
+      subscription: {
+        status: 'active',
+        pendingDowngrade: { plan: 'starter', scheduleId: 'sub_sched_1' },
+      },
+    })
+    // Phase 1 stamps metadata.plan with the target tier, so this event IS the
+    // flip: the subscription now reads `starter`, the tier it was scheduled
+    // to move to.
+    const response = await post(
+      signed(subscriptionEvent({ metadata: { orgId: 'org-real', plan: 'starter' } })),
+    )
+    expect(response.status).toBe(200)
+    expect(mirroredSubscription()).toMatchObject({ pendingDowngrade: null })
+  })
+
+  it('LEAVES it alone while the downgrade is still in the future', async () => {
+    // The control that makes the test above mean something: an ordinary
+    // `subscription.updated` before the flip still reports the OLD tier, and
+    // must not drop a downgrade the customer scheduled and is waiting on.
+    const post = loadWebhook()
+    seedOrg('org-real', {
+      plan: 'pro',
+      subscription: {
+        status: 'active',
+        pendingDowngrade: { plan: 'starter', scheduleId: 'sub_sched_1' },
+      },
+    })
+    const response = await post(
+      signed(subscriptionEvent({ metadata: { orgId: 'org-real', plan: 'pro' } })),
+    )
+    expect(response.status).toBe(200)
+    expect(mirroredSubscription()).toBeDefined()
+    expect('pendingDowngrade' in (mirroredSubscription() ?? {})).toBe(false)
+  })
+
+  it('a cancellation clears it too — there is no subscription left to move down', async () => {
+    const post = loadWebhook()
+    seedOrg('org-real', {
+      plan: 'pro',
+      subscription: {
+        status: 'active',
+        pendingDowngrade: { plan: 'starter', scheduleId: 'sub_sched_1' },
+      },
+    })
+    const response = await post(
+      signed(subscriptionEvent({}, 'customer.subscription.deleted')),
+    )
+    expect(response.status).toBe(200)
+    expect(mirroredSubscription()).toMatchObject({ pendingDowngrade: null })
+  })
+
+  it('an org that never scheduled one is not handed a null it never had', async () => {
+    const post = loadWebhook()
+    seedOrg('org-real', { plan: 'starter', subscription: { status: 'active' } })
+    const response = await post(signed(subscriptionEvent()))
+    expect(response.status).toBe(200)
+    expect('pendingDowngrade' in (mirroredSubscription() ?? {})).toBe(false)
+  })
+})

@@ -112,6 +112,49 @@ async function handler(request: Request): Promise<Response> {
       )
     }
     const operation = (await response.json()) as { name?: string }
+    // AGL-2162: this route wrote NO audit entry at all.
+    //
+    // It exports every document in the database — every organization's
+    // content, every contact, every order — to a GCS bucket, and until this
+    // the only record that it had ever run was the GitHub Actions log and the
+    // objects themselves. A staff-authorized copy of the whole dataset with
+    // no entry in the surface staff read for exactly that is the shape
+    // AGL-1763 named in the other direction: real, consequential, and
+    // reconcilable against nothing.
+    //
+    // System actor, the form `reap-plugin-artifacts` and `sso-jit` already
+    // write from non-staff paths — the caller here is the cron secret, not a
+    // person, and claiming a `actorUid` of a human would be a worse record
+    // than admitting the actor is a schedule. The reason states what the
+    // export is FOR, because that is the standing answer and a caller cannot
+    // supply one.
+    //
+    // Best-effort and awaited-then-swallowed: the export has already started
+    // on Google's side by this point, so failing the response over a lost
+    // audit row would report a failure that did not happen.
+    await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('adminAudit')
+      .add({
+        actorUid: 'system:cron',
+        action: 'firestore.export',
+        target: `gs://${bucket}`,
+        reason:
+          'Scheduled full-database export — the restore source for ' +
+          'DISASTER_RECOVERY procedures A–D, and the only backup outside ' +
+          "Firestore's own 7-day PITR window.",
+        before: null,
+        after: {
+          outputUriPrefix,
+          operation: operation.name ?? null,
+          projectId,
+        },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
+      .catch((auditError) => {
+        console.error('firestore-export: audit append failed', auditError)
+      })
     return Response.json(
       {
         started: true,

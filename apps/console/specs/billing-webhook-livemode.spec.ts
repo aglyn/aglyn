@@ -123,6 +123,50 @@ function mockMakeFirestore() {
       return undefined
     },
   })
+  /**
+   * `where(...).limit(n).get()`, filtering over the real stored documents.
+   *
+   * Added with AGL-2120's platform-dispute branch, which resolves the revenue
+   * row by query. Modelled rather than stubbed: the four `charge.dispute.*`
+   * rehearsals below are POSITIVE controls asserting the event processes
+   * FULLY, and a double that answered every query with the same document
+   * would let that pass while the ownership boundary was broken. Returning
+   * `{ docs: [] }` unconditionally would be just as unfaithful in the other
+   * direction. A collection with no `where` at all is what these four
+   * rehearsals actually hit first — a 500, which is the double's defect
+   * surfacing as a route failure.
+   */
+  const query = (
+    name: string,
+    filters: readonly [string, unknown][],
+    max: number | null,
+  ) => ({
+    where: (field: string, op: string, value: unknown) => {
+      if (op !== '==') throw new Error(`unmodelled query operator: ${op}`)
+      return query(name, [...filters, [field, value]], max)
+    },
+    limit: (count: number) => query(name, filters, count),
+    get: async () => {
+      const matches = [...docs.keys()]
+        .filter((path) => path.startsWith(`${name}/`))
+        .filter((path) =>
+          filters.every(
+            ([field, value]) => (docs.get(path) ?? {})[field] === value,
+          ),
+        )
+        .map((path) => ({
+          id: path.split('/').pop() as string,
+          exists: true,
+          data: () => docs.get(path),
+          get: (field: string) => (docs.get(path) ?? {})[field],
+          ref: doc(path),
+        }))
+      return {
+        docs: max == null ? matches : matches.slice(0, max),
+        empty: matches.length === 0,
+      }
+    },
+  })
   return {
     collection: (name: string) => ({
       doc: (id: string) => doc(`${name}/${id}`),
@@ -130,6 +174,8 @@ function mockMakeFirestore() {
         docs.set(`${name}/auto-${docs.size}`, { ...data })
         return { id: `auto-${docs.size}` }
       },
+      where: (field: string, op: string, value: unknown) =>
+        query(name, [], null).where(field, op, value),
     }),
   }
 }

@@ -1,116 +1,99 @@
-# HANDOFF — 2026-08-18 evening. **THE FREEZE IS ON. GATE, THEN PROMOTE.**
+# HANDOFF — 2026-08-18 late evening. **PROMOTED, DEPLOYED, TAGGED. CI GREEN.**
 
-## ⚑ DO THIS FIRST — do not spawn a wave before reading it
+## State
 
-`main` = **`5ec20bb4a`**, **74 commits unpromoted**, version **`1.0.0-beta.1`**, shared checkout clean.
-**60 commits landed on 2026-08-18.** Zach hit 94% weekly usage and switched accounts; this session ended
-mid-freeze.
+- `production` = **`aed088401`**, tagged **`v1.0.0-beta.1`** (the repo's first release tag).
+- 96 commits promoted, 67 Linear issues. All three Vercel projects **Ready**.
+- Firestore rules **deployed from the promoted tree and verified** — `check:rules-drift` clean on
+  all three surfaces, `check:index-drift` clean (44 composites, 23 field overrides).
+- **CI green on `main`**: Tools guards ✅, Emulator guards ✅.
+- Branches: only `main` and `production`. **All 12 `rescue/*` branches merged and deleted.**
+- Worktrees: only the shared checkout and `/private/tmp/aglyn-gate/wt`. 27 stale ones removed.
 
-**Zach chose "freeze main, gate once, promote."** All agents were drained deliberately and no new work
-was spawned. The next action is **one gate on a still tree, then the `main`→`production` PR** —
-batch promotion is PRE-AUTHORIZED for this Sept-1 push. Do not start a new agent wave first: the batch
-holds **AGL-1991, the billing page is broken for EVERY ORG in production right now.**
+## The lesson this promotion paid for — READ BEFORE THE NEXT GATE
 
-Every red found today was cleared (AGL-2094, 2098, 2099, 2100, 2086, 2095, 2077, 1939). Re-derive that
-yourself — it is a claim, not a fact.
+**The nx gate is NOT the whole verification surface.** `nx run-many -t build/test/lint --all` was
+green while CI was red, both honestly:
 
-### The gate recipe changed. Using the old one gives a FALSE RED.
+- `cloud/rules-tests/` has **no `project.json`**, so it is not an nx project and no jest `rootDir`
+  covers it. Its only runner is `npm run test:rules` (emulators + JVM).
+- `tools/` guard scripts run from `tools-guards.yml`, not from nx.
 
-- **A worktree does NOT isolate the nx cache.** It writes into the shared checkout's `.nx/cache`;
-  another process clearing it mid-run **crashes** the run. Today `nx run-many -t test --all` died with
-  `ENOENT …/.nx/cache/terminalOutputs/…`, aborted at **18 of 40 projects**, and `console:test` never
-  ran. **Set `NX_CACHE_DIRECTORY` inside the gate worktree.** A run reporting fewer projects than the
-  graph contains is an ABORT, not a failure.
-- Worktree is staged at `/private/tmp/aglyn-gate/wt` with real `node_modules` and its own `.nx`.
-  **Reset it to the frozen tip first.**
-- **Check machine load before believing a red.** Load hit **318 on 10 cores** today (28 jest processes
-  across four checkouts) and produced 313s suites, a 5000ms `sharp` timeout and SIGTERM'd workers.
-- Gate must run **build AND tests AND lint**, and end with a deliberate `@nx/enforce-module-boundaries`
-  fault injection proving it can go red.
+**Any future gate must also run `npm run test:rules` and the `tools-guards.yml` scripts, or state
+plainly that it did not.** Two real defects reached production-adjacent `main` this way (AGL-2116,
+AGL-2138).
 
-## Zach's decisions this session — act on these, they are not open questions
+Also: **a clean git merge is not a correct one.** AGL-2038's new test referenced a constant AGL-2002
+had replaced. The two edits did not overlap, so git merged them silently and the file was broken.
 
-1. **Pricing LOCKED** (asked with options): Free $0 / Starter $25 / Pro $56 / Business $139 /
-   Scale $249 / Advanced $399 / Agency $799; digital ladder 5/3/2/1/0/0; physical 2/0/0/0/0/0;
-   metered $0.0338/GB-mo · $0.13/1k views · $0.065/1k forms. Verified line-by-line against the Source
-   of Truth. Decision Log entry written (AGL-1885 / AGL-1908). **Visibility may change; the CHARGED
-   price may not.** AGL-1885 still owes the post-republish check **against the live page**.
-2. **First version = `1.0.0-beta.1`** (AGL-2089), committed. **The tag is NOT created** — `v1.0.0-beta.1`
-   lands on the production merge commit AFTER deploy verification.
-3. **Free-tier bandwidth: ship enforcement GATED OFF**, Zach flips it (AGL-2070). Queued as the FIRST
-   item after promotion; it was not started because of the freeze. The lying alert copy ships regardless.
-4. **GA4 internal-traffic filter: deliberately left in TESTING.** Zach said Active; I set it Active, then
-   reverted to Testing because coverage was still expanding and Active **permanently discards** matching
-   data. Coverage has now landed (AGL-2064/2065/2067) but is **NOT DEPLOYED**. After promotion: verify
-   both directions via `Test data filter name`, THEN Active. All three origins are already opted in
-   (`localStorage aglyn_traffic_type=internal` on app./ docs./ aglyn.com).
-5. **Webfile number: NOT rotating.** Zach's call, and correct — the taxpayer number is semi-public via
-   the Comptroller's own search, the permit is inactive until Sept 1, harm is administrative. eSystems
-   claim **verified already done** (Sales & Use Tax + Franchise Tax on his profile). Never re-commit the
-   value; it is env-only (`TX_WEBFILE_NUMBER`) and `check:no-tax-identifiers` enforces it.
+## Merging the parked rescue branches — what it cost, and why it was right
 
-## What is owed to Zach (surface, don't block)
+Zach: *"why do we even have rescue branches with unmerged work, why is it not merged already."*
+Correct. 16 commits were cherry-picked; 4 needed manual conflict resolution. It then broke **8
+things** — 6 caught by the nx gate (AGL-2106), 2 only by CI (AGL-2116, AGL-2138).
 
-- **AGL-2101 — the designed 404 screen is an EMPTY STUB.** `h1: []`, `bodyLen: 111` — nav and footer
-  around nothing. `/401` and `/503` are complete and are the pattern. Until a body exists, do not
-  assign the 404 slot on `aglyn-marketing`. ⚠️ An agent made a production write to that live host and
-  reverted it; assignment is click-work needing his go-ahead.
-- **AGL-2096 — third-party detector submissions** (Wappalyzer/BuiltWith/W3Techs). Code shipped; submission
-  needs his word AND a real corpus. Fleet is 6 hosts. Not retroactive — corpus grows with the launch cohort.
-- Post-promotion GA4 clicks; the AGL-1637 click-list.
+Every one was the same shape: **a branch authored in an isolated worktree against a `main` that had
+moved.** The sharpest was AGL-1993's `staff-claim-pool.spec.ts`, which **asserted the bug as a
+passing test** — it deliberately pinned "project pool wins, so an emailless shadow takes the staff
+grant" so a change in ordering would surface, and AGL-2005 then fixed that ordering. Both branches
+were individually right and jointly contradictory.
 
-## Systemic lessons this session paid for
+⚠️ **Do not let work sit on a side branch again.** Two chains were reachable from **no ref at all**
+and were one `/private/tmp` cleanup from being lost.
 
-- **`vercel env ls` CANNOT see team-shared vars.** `ls` → 117, `pull` → 141. The 24-var gap IS the
-  shared scope. A gate declared a production blocker from `ls` alone and was **wrong**.
-- **The file-and-fix leak is the ESCAPE HATCH, not the instruction.** "if too large, file it" absorbed
-  6 of 11 findings. Never write "where reachable"/"if feasible"/"if too large" into an audit brief.
-- **Guards were found asserting NOTHING** — nine AGL-1358 write guards, a host-field-set guard that had
-  stopped parsing, a revenue guard counting prose. Restoring a guard surfaces real defects; do not suppress.
-- **Prove inherited failure by testing the commit's PARENT.** Reverting a worktree is a no-op once committed.
-- **`git reset --soft` ROTS the shared checkout** — it was 24 commits stale (119 files, 8792 deletions)
-  at session start. Reconcile after any reset; a `--only` commit from a rotted tree reverts shipped work.
+## Verification lore added today
 
-## ⚑ TEN ORPHANED COMMITS RESCUED — pick these up AFTER promotion
+- **A hung suite is worse than a red one.** AGL-2105: a spec looped through passive effects and
+  microtasks, which **starves jest's real-timer `testTimeout`**, so it never failed — it produced no
+  verdict, and "no result" read as "not red". `console:test` could not COMPLETE, so every console
+  guard in the batch was unverified. Consider a jest-level guard that treats a missing summary as a
+  failure.
+- **A wholesale `jest.mock` is a CLOSED WORLD.** Any export the component/route tree reaches must be
+  present. Four instances today: a `TypeError` (AGL-2103), a bogus 403 and a 500 (AGL-2106), and an
+  infinite render loop (AGL-2105). A mock returning `() => ({})` — a NEW object per call — where the
+  real hook returns a stable singleton manufactures a render loop the product cannot have.
+- **Enumerate from `git ls-files`, never a filesystem walk.** AGL-2116: the colour ratchet swept
+  untracked build output, so 21 files "gained" a colour for anyone who had built the docs and zero
+  for anyone who had not, off the same commit. It measured machine state, not the repo.
+- **`git branch --contains <sha>` answers "is this object reachable", NOT "did this work land".**
+  After a cherry-pick those diverge. I wrongly declared AGL-1886 and AGL-2002 stranded on that basis;
+  both were already on `main` under different SHAs. Check with `--grep` against
+  `origin/production..origin/main`, and compare with `git patch-id --stable`.
+- **Confirm every Linear id with `get_issue` BEFORE citing it.** Commit `3ff15f168` cites AGL-2109,
+  which by then belonged to an unrelated marketplace-refund defect an agent had just filed. Correct
+  record: AGL-2116. Ids move fast when agents run in parallel — predict nothing.
 
-Found during the final sweep: **10 commits from the PREVIOUS session's worktrees were never on
-`main`** and had been stranded for a full session. The old handoff said "roughly 13 held commits sit
-across 7 worktrees"; nobody reconciled them, and `/private/tmp` worktrees are one cleanup away from
-gone. **Every one is now pushed to a rescue branch on `origin` — they cannot be lost.**
+## Zach's standing directives added today
 
-| rescue branch | ahead | what it is |
-|---|---|---|
-| `rescue/AGL-2038` | +1 | **`fix(rules)`: screenAnalytics was editor-writable, and the catch-all grants by default** — a SECURITY fix; rules changes go Done only when DEPLOYED |
-| `rescue/AGL-2000` | +4 | **`fix(bookings,commerce)`: a paid booking states its tax decision, and is recorded** — money path |
-| `rescue/AGL-1993` | +1 | `feat(auth)`: a company domain can require SSO, without making staff require it |
-| `rescue/AGL-2014` | +3 | `docs(selfhost)`: the runbook never deployed indexes or TTL, **and hid five live keys** |
-| `rescue/AGL-2025` | +1 | `feat(tools)`: a source-side hardcoded-colour ratchet the census could never be |
-| `rescue/AGL-2026` | +1 | `refactor(tenant)`: one page chrome for both §512 intakes, guarded against drift |
-| `rescue/AGL-2039` | +1 | `fix(tools)`: the webhook audit could not see a delivery that failed then retried |
-| `rescue/AGL-1913` | +2 | `test(console)`: pin WHICH lock the domain-status route refuses |
-| `rescue/AGL-1957` | +1 | `fix(console)`: the storage consent card refuses to ask for consent it cannot price |
-| `rescue/AGL-2005` | +2 | `test(console)`: pin every staff action to the pool the person signs in to |
+- **A PR body must enumerate the FULL contents of the batch** — generate the manifest from
+  `git log`, group by conventional-commit type, keep every `(AGL-xxxx)`, state commit AND issue
+  counts. Highlights never replace the full list. (Memory: `feedback_pr_body_must_list_full_contents`.)
+- **Keep the pipeline fed** — spawn agents continuously as others finish; file AND fix together.
 
-**Deliberately NOT merged into the frozen batch** — they are ungated and would have needed re-gating,
-which is what the freeze exists to avoid. After promotion: cherry-pick each onto `main`, confirm the
-work is not already superseded (check by subject AND content — several were superseded once already),
-gate, and promote in the next batch. Delete the rescue branch once its work is an ancestor of
-`origin/production`.
+## Blocked on Zach
 
-⚠️ **Do not clean `/private/tmp` worktrees until these are merged.** Four also carry uncommitted
-files (`agl-allred`, `agl-verify-backend` ×7, `agl-verify-ga4`, `agl-verify-rev`) that were NOT
-rescued — inspect before removing anything.
+- **GA4 reports.** The Claude-in-Chrome bridge will not connect: `list_connected_browsers` returns
+  `[]` across 7 attempts and two relinks, which means **no extension instance is signed into the same
+  Anthropic account as the Claude Code session** — an account mismatch, not an install problem.
+  The full click-level build spec is on **AGL-1637** and is ready to execute in one pass.
+  ⚠️ Do NOT set the internal-traffic filter Active until both directions are verified via
+  `Test data filter name` — an Active filter permanently discards matching data.
+  ⚠️ Do NOT pick a Reports-snapshot template; a snapshot already exists behind that chooser.
+- **4 open DOMPurify Dependabot alerts.** Deliberately unpatched — no released `monaco-editor`
+  vendors a newer DOMPurify, and the vendored copy is never imported (call-site evidence on
+  AGL-2051). Decision owed: leave open as a standing prompt, or dismiss as `not_used`.
 
-**Dependabot confirmed 18 → 4** on the default branch (GitHub's own push message: "4 vulnerabilities,
-2 moderate, 2 low"), which is exactly what the monaco 0.55.1→0.56.0 bump predicted. The remaining 4 are
-the deliberately-unpatched DOMPurify advisories with call-site evidence on AGL-2051.
+## Open agent branches — merge after re-gating
 
-## After promotion, in order
+`agl/dependabot` (AGL-2107 brace-expansion, AGL-2108 lockfile drift), `agl/capability-surface`
+(AGL-2113/2115/2119), plus money-path, retention, parity, docs-api, selfhost and stripe-staff
+branches as they land. **All were branched off an older `main` — re-gate before promoting**, and
+expect the same authored-against-a-moved-main breakages.
 
-1. Verify **DEPLOYED**, not merged (Vercel CLI prints to STDERR; `gh api` cannot poll it).
-2. Stacked deploys from the **promoted SHA**: rules / indexes / TTL / Remote Config, each verified.
-   `check:legal-drift`'s **8 DIFFERS is known-stale Google Docs (AGL-1647), not a blocker.**
-3. Move every `awaiting-promotion` issue to Done once its commit is an ancestor of `origin/production`.
-4. Tag `v1.0.0-beta.1` on the merge commit.
-5. THEN resume the wave: AGL-2070 gated bandwidth first, then AGL-2079-2084 remainder, GA reports,
-   docs/guides/tooltips, REST API expansion, Assist phases 2+.
+## Still open
+
+- **AGL-2085** — capability sweep recorded 123 routes; a re-derivation counted **130** and could not
+  account for 7. A count that does not reconcile means the next sweep re-derives rather than trusts.
+- **AGL-2131** — `staffRole` **fails open to `super`** in two places while failing closed everywhere
+  else. Decide what `support` means before building the UI.
+- AGL-2013, AGL-2033 bookkeeping; `awaiting-decision` queue is Zach's.

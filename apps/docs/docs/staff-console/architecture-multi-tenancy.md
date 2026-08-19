@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 12
 title: "Architecture: Multi-Tenant Organizations"
 description: How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.
 ---
