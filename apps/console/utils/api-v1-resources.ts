@@ -131,12 +131,19 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
  * paid that cost once.
  *
  * `scopeSuffix` is the object the key is scoped WITHIN — a dataset id for the
- * record operations, and `*` for the two that act on the dataset collection
- * itself (AGL-2126), where there is no dataset id yet (`POST /v1/datasets`) or
- * the dataset is the thing being removed. `*` cannot collide with a dataset id:
- * `createResourceUid()` never emits one, and the `kind` is separate anyway. The
- * suffix is not the whole story — `kind` is hashed in too, which is what keeps
- * a create's key from replaying into a delete.
+ * record operations and for `DELETE /v1/datasets/{id}`, the site for
+ * `DELETE …/form-submissions/{id}`, and `*` only for `POST /v1/datasets`
+ * (AGL-2126), where there is no dataset id yet because the request is what
+ * creates one. `*` cannot collide with a dataset id: `createResourceUid()`
+ * never emits one, and the `kind` is separate anyway. The suffix is not the
+ * whole story — `kind` is hashed in too, which is what keeps a create's key
+ * from replaying into a delete.
+ *
+ * This paragraph used to say `*` covered "the two that act on the dataset
+ * collection itself", which the delete has never done — it passes
+ * `datasetRef.id`. The published contract in `apps/docs/api/conventions.md` was
+ * written from this comment and inherited the error (AGL-2218), which is the
+ * argument for reading the call rather than the docblock above it.
  */
 async function claimWrite(
   ctx: ApiV1Context,
