@@ -18,7 +18,11 @@
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-import { resolveTrackedRestockLines } from './restock-flag'
+import {
+  capRestockLines,
+  resolveTrackedRestockLines,
+  saleReleaseCaps,
+} from './restock-flag'
 
 /**
  * Cancelling an order RELEASES its stock (AGL-1808) — the opposite of what the
@@ -194,16 +198,11 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       // stranded, and what keeps a single swallowed ledger write from turning
       // into a lost restock on an unrelated line of the same order.
       let saleDecremented = true
-      const releaseCap = new Map<string, number>()
-      // The separator is U+0000 written as an ESCAPE, not as a raw byte
-      // (AGL-2355). Emitted literally it made `file(1)` call this source
-      // `data`, so grep skipped the whole file as binary — an AGL-2320 sweep
-      // for `adjustVariantInventory(` missed the call below and drew the wrong
-      // conclusion from it. Same character at runtime; a key already in a live
-      // map is unchanged. NUL is still the right separator: it cannot occur in
-      // a Firestore document id, so no product/variant pair can collide.
-      const capKey = (productId: string, variantId: string) =>
-        `${productId}\u0000${variantId}`
+      // The cap rule itself lives beside the restock flag, which now bounds
+      // the question it ASKS by the same ledger this bounds the stock it
+      // RETURNS (AGL-2325). One implementation, so a prompt naming more units
+      // than a cancellation would put back is not expressible.
+      let releaseCap: ReadonlyMap<string, number> = new Map<string, number>()
       if (order.status === 'paid') {
         const orderAdjustments = await transaction.get(
           hostRef
@@ -221,16 +220,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
         ) {
           saleDecremented = saleRows.length > 0
         }
-        for (const row of saleRows) {
-          const productId = String(row.get('productId') ?? '')
-          const variantId = String(row.get('variantId') ?? '')
-          if (!productId || !variantId) continue
-          const moved = Number(row.get('appliedDelta') ?? row.get('delta') ?? 0)
-          // Sale rows are negative; the cap is how many units left the shelf.
-          const units = Math.max(0, -moved)
-          const key = capKey(productId, variantId)
-          releaseCap.set(key, (releaseCap.get(key) ?? 0) + units)
-        }
+        releaseCap = saleReleaseCaps(saleRows)
       }
 
       // `paid` is the only status reachable here whose sale decremented; see
@@ -251,19 +241,11 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       // them separately would compute both from the same read and land only
       // the last, silently dropping units.
       const byProduct = new Map<string, CommerceModel.OrderRestockLine[]>()
-      for (const line of lines) {
-        // Never more than the sale actually took off the shelf (AGL-2149). The
-        // cap is consumed as it is spent, so two lines of the same
-        // product+variant share one budget rather than each claiming it whole.
-        const key = capKey(line.productId, line.variantId)
-        const budget = releaseCap.get(key)
-        const quantity =
-          budget == null ? line.quantity : Math.min(line.quantity, budget)
-        if (budget != null) releaseCap.set(key, budget - quantity)
-        if (quantity <= 0) continue
+      // Never more than the sale actually took off the shelf (AGL-2149).
+      for (const line of capRestockLines(lines, releaseCap)) {
         byProduct.set(line.productId, [
           ...(byProduct.get(line.productId) ?? []),
-          { ...line, quantity },
+          line,
         ])
       }
       for (const [productId, productLines] of byProduct) {

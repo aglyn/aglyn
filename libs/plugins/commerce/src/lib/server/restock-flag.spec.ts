@@ -128,8 +128,45 @@ function makeDocRef(path: string): any {
   }
 }
 
+/**
+ * A collection reference, and the ONE query shape production runs against it
+ * (AGL-2325): `where('orderId', '==', id)` over `inventoryAdjustments`.
+ *
+ * Modelled rather than stubbed, and modelled to REAL semantics. Before this
+ * the fake offered `doc()` and nothing else, so `readSaleReleaseCaps`'
+ * `.where(...)` threw a `TypeError`, the swallowing `catch` on that path
+ * turned it into "no caps", and every assertion about capped quantities in
+ * this file would have passed against code that never capped anything.
+ *
+ * The scan is prefix-based over the flat document map and excludes deeper
+ * paths, so a subcollection of a document in this collection is not returned
+ * as a member of it. Any operator other than `==` throws rather than matching
+ * everything, because a filter a fake quietly ignores is a fake that reports
+ * a whole-collection scan as a query result.
+ */
 function makeCollectionRef(path: string): any {
-  return { doc: (id: string) => makeDocRef(`${path}/${id}`) }
+  const prefix = `${path}/`
+  const query = (filters: [string, unknown][]): any => ({
+    where: (field: string, op: string, value: unknown) => {
+      if (op !== '==') {
+        throw new Error(`fake firestore: unsupported query operator ${op}`)
+      }
+      return query([...filters, [field, value]])
+    },
+    get: async () => {
+      const matched = [...docs.keys()]
+        .filter(
+          (key) =>
+            key.startsWith(prefix) && !key.slice(prefix.length).includes('/'),
+        )
+        .filter((key) =>
+          filters.every(([field, value]) => docs.get(key)?.[field] === value),
+        )
+        .map((key) => makeSnapshot(key))
+      return { docs: matched, empty: matched.length === 0, size: matched.length }
+    },
+  })
+  return { doc: (id: string) => makeDocRef(`${path}/${id}`), ...query([]) }
 }
 
 /** One transaction body at a time — see the file header. */
@@ -239,6 +276,141 @@ afterEach(() => {
   // This module talks to nothing but Firestore. Asserted every case, not once.
   expect(fetchMock).not.toHaveBeenCalled()
   jest.restoreAllMocks()
+})
+
+// ---------------------------------------------------------------------------
+// What the shelf actually lost (AGL-2325)
+// ---------------------------------------------------------------------------
+
+/**
+ * The prompt's number is bounded by the sale's `appliedDelta` (AGL-2325).
+ *
+ * `line.quantity` is the units the sale SOLD. On a backorder product the
+ * inventory floor absorbs part or all of the decrement — stock 0,
+ * `canPurchase` admits the sale because the policy says to, three units sell,
+ * `Math.max(0, 0 + -3)` leaves the count at 0 — so the units the count gave up
+ * and the units the line sold are different numbers, and only the first one is
+ * missing from the shelf.
+ */
+describe('flagOrderRestock — the prompt counts units the count gave up', () => {
+  function seedSaleRow(
+    id: string,
+    row: Record<string, any>,
+  ): void {
+    docs.set(`hosts/${HOST}/inventoryAdjustments/${id}`, {
+      productId: 'prod-tee',
+      variantId: 'var-large',
+      reason: 'sale',
+      orderId: ORDER,
+      atMs: 1,
+      ...row,
+    })
+  }
+
+  it('asks about the units the floor let go, not the units sold', async () => {
+    // Sold 3, the count could only give up 1. Asking for 3 invites the
+    // merchant to put two units on the shelf that were never taken off it.
+    seedOrder()
+    seedSaleRow('sale-1', { delta: -3, appliedDelta: -1 })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck).toMatchObject({
+      units: 1,
+      lines: [{ productId: 'prod-tee', variantId: 'var-large', quantity: 1 }],
+    })
+    expect(restockEvents()[0].detail).toContain('1 unit may need restocking')
+  })
+
+  it('raises no question at all when the floor absorbed the whole decrement', async () => {
+    // The pure backorder sale: stock was already 0, so nothing left the shelf
+    // and there is nothing to put back. A "3 units may need restocking"
+    // prompt here is not merely over-stated, it is about no units whatsoever.
+    seedOrder()
+    seedSaleRow('sale-1', { delta: -3, appliedDelta: 0 })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck).toBeUndefined()
+    expect(restockEvents()).toEqual([])
+  })
+
+  it('keeps the units sold when the ledger says nothing about the line', async () => {
+    // The under-prompt this fix could have caused, and the reason only pairs
+    // the ledger DESCRIBES are capped. A pre-AGL-1807 draft link decremented
+    // stock with no row at all; zeroing it from a ledger with holes would
+    // strand that stock silently. An absent ledger degrades to the old upper
+    // bound, which is a question the merchant can still answer.
+    seedOrder()
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck).toMatchObject({
+      units: 3,
+      lines: [{ quantity: 3 }],
+    })
+  })
+
+  it('ignores rows belonging to another order, and non-sale rows', async () => {
+    // The cap is only as good as the query behind it. A refund row on THIS
+    // order and a sale row on another one both read as "0 units moved" if
+    // either filter is dropped, which would silence the prompt entirely.
+    seedOrder()
+    seedSaleRow('other-order', { delta: -3, appliedDelta: 0, orderId: 'order-other' })
+    seedSaleRow('refund-row', { delta: 3, reason: 'refund' })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck).toMatchObject({ units: 3 })
+  })
+
+  it('falls back to `delta` on a row written before the floor was recorded', async () => {
+    // `appliedDelta` is only written when something was clamped, so a row
+    // without one moved exactly what it says.
+    seedOrder()
+    seedSaleRow('sale-1', { delta: -2 })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck).toMatchObject({ units: 2 })
+  })
+
+  it('shares one budget between two lines of the same variant', async () => {
+    // Two lines of one product+variant are two claims on ONE cap. Each
+    // claiming it whole would report four units against a shelf that lost two.
+    seedOrder({
+      lineItems: [
+        { productId: 'prod-tee', variantId: 'var-large', quantity: 2 },
+        { productId: 'prod-tee', variantId: 'var-large', quantity: 2 },
+      ],
+    })
+    seedSaleRow('sale-1', { delta: -4, appliedDelta: -2 })
+    await flagOrderRestock({
+      hostId: HOST,
+      orderId: ORDER,
+      kind: 'refund',
+      closedTheOrder: true,
+    })
+    expect(order().restockCheck.units).toBe(2)
+    expect(order().restockCheck.lines).toEqual([
+      expect.objectContaining({ quantity: 2 }),
+    ])
+  })
 })
 
 // ---------------------------------------------------------------------------

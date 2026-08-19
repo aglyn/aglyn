@@ -47,8 +47,9 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * as an AMOUNT (`refund.ts` takes `amountCents` and nothing else) and no
  * reversal anywhere records which lines it covered, so "$17 of a $62 order"
  * selects no line. That is a real blocker for any automatic behaviour and it
- * is recorded rather than papered over: `quantity` is the units the line SOLD,
- * an upper bound, and `fullyReversed` says whether it is a tight one.
+ * is recorded rather than papered over: `quantity` is at most the units the
+ * line sold — capped to what the count actually gave up, see below — and
+ * `fullyReversed` says whether that bound is a tight one.
  *
  * So the merchant is asked. They are the only party who knows whether the
  * goods came back, and by the time they read this they know it.
@@ -78,10 +79,21 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * difference between a signal and noise. It costs a handful of reads on an
  * event as rare as a reversal.
  *
- * The `inventoryAdjustments` ledger was the tempting shortcut here and it is
- * not usable: the buy-now/subscription sale path decrements stock without
- * writing a row (`billing-webhook.ts`, the `productId` branch), so the ledger
- * has holes the order's own line items do not.
+ * The `inventoryAdjustments` ledger was the tempting shortcut for SELECTING the
+ * lines and it is not usable for that: the buy-now/subscription sale path
+ * decrements stock without writing a row (`billing-webhook.ts`, the
+ * `productId` branch), so the ledger has holes the order's own line items do
+ * not. The lines are still chosen from the order.
+ *
+ * IT IS READ TO BOUND THE NUMBER, THOUGH (AGL-2325), and the holes are exactly
+ * why that is safe in this direction. `line.quantity` is the units the line
+ * SOLD, and on a backorder product the inventory floor absorbed part or all of
+ * the decrement, so the prompt named units the count never gave up. The sale
+ * rows' `appliedDelta` says how many it did, and only pairs the ledger
+ * DESCRIBES are capped — a line it is silent about keeps the upper bound, so a
+ * hole costs an over-stated question rather than stock stranded off the shelf.
+ * `saleReleaseCaps` and `capRestockLines` are shared with the cancellation
+ * writer, so what this ASKS and what that RETURNS cannot drift apart.
  *
  * FAILURES ARE SWALLOWED, like `recordContactRefund`'s. The money has already
  * moved and the order already records it; a flag that cannot be written must
@@ -151,11 +163,34 @@ export async function flagOrderRestock(options: {
     // merchant to ignore the ones that matter.
     if (lines.length === 0) return
 
-    const units = lines.reduce((sum, line) => sum + line.quantity, 0)
+    // THE PROMPT COUNTS WHAT THE SHELF ACTUALLY LOST, NOT WHAT THE SALE SOLD
+    // (AGL-2325). `line.quantity` is the units the line sold, and on a
+    // BACKORDER product the inventory floor absorbed part or all of the
+    // decrement — stock 0, three units sell, the count stays 0 — so the
+    // merchant was asked to restock units the count never gave up. The same
+    // `appliedDelta` treatment AGL-2149 gave the cancellation cap, from the
+    // same ledger rows and through the same shared helpers, so the question
+    // this asks and the units a cancellation would return cannot disagree.
+    //
+    // The under-prompt this could have caused is what the cap rule already
+    // rules out: only pairs the ledger DESCRIBES are capped, so a line it says
+    // nothing about keeps the old upper bound rather than being zeroed by a
+    // ledger with holes in it. A read that FAILS degrades the same way, to no
+    // caps at all — an over-stated prompt is a question the merchant can
+    // answer, a missing one is stock left off the shelf for good.
+    const capped = capRestockLines(
+      lines,
+      await readSaleReleaseCaps(hostRef, options.orderId),
+    )
+    // Every tracked line was absorbed by the floor, so nothing is missing from
+    // the shelf and there is no question to ask.
+    if (capped.length === 0) return
+
+    const units = capped.reduce((sum, line) => sum + line.quantity, 0)
     const flaggedAtMs = Date.now()
     const record: CommerceModel.OrderRestockCheck = {
       kind: options.kind,
-      lines,
+      lines: capped,
       units,
       fullyReversed: options.closedTheOrder,
       flaggedAtMs,
@@ -194,6 +229,121 @@ export async function flagOrderRestock(options: {
   } catch (error) {
     console.error('flagOrderRestock failed', error)
   }
+}
+
+/**
+ * This order's sale-release caps, read outside any transaction (AGL-2325).
+ *
+ * SWALLOWS, like everything else on this path: the money has already moved,
+ * and an empty map means "cap nothing", which leaves the prompt at the upper
+ * bound it has always carried. One equality filter, so the automatic
+ * single-field index answers it; the `reason` test runs here, over the handful
+ * of rows one order has — the same query shape the cancellation writer runs
+ * inside its transaction.
+ */
+async function readSaleReleaseCaps(
+  hostRef: FirebaseFirestore.DocumentReference,
+  orderId: string,
+): Promise<Map<string, number>> {
+  try {
+    const rows = await hostRef
+      .collection('inventoryAdjustments')
+      .where('orderId', '==', orderId)
+      .get()
+    return saleReleaseCaps(
+      rows.docs.filter((row) => row.get('reason') === 'sale'),
+    )
+  } catch (error) {
+    console.error('readSaleReleaseCaps failed', error)
+    return new Map()
+  }
+}
+
+/**
+ * Key for one product+variant pair in a release-cap map.
+ *
+ * The separator is U+0000 written as an ESCAPE, not as a raw byte (AGL-2355).
+ * Emitted literally it made `file(1)` call the source `data`, so grep skipped
+ * the whole file as binary and an AGL-2320 sweep missed a call site in it.
+ * Same character at runtime. NUL is still the right separator: it cannot occur
+ * in a Firestore document id, so no pair can collide.
+ */
+export const restockCapKey = (productId: string, variantId: string): string =>
+  `${productId}\u0000${variantId}`
+
+/**
+ * How many units of each product+variant a sale ACTUALLY took off the shelf,
+ * read from that order's `reason: 'sale'` ledger rows (AGL-2149).
+ *
+ * The variant inventory writer floors at zero, and that floor silently absorbs
+ * the overshoot on a BACKORDER product: stock 0, `canPurchase` admits the sale
+ * because the policy says to, three units sell, `Math.max(0, 0 + -3)` leaves
+ * the count at 0. The rows carry both numbers for exactly this — `delta` stays
+ * the units SOLD, which is the merchant's history, and `appliedDelta` says how
+ * many the count could give up.
+ *
+ * The writer is deliberately NOT named here: `stock-decrement-race.spec.ts`
+ * sweeps every server source for that identifier to prove no file outside its
+ * allowlist hand-rolls a stock write, and it matches the bare name, so even a
+ * comment mentioning it would read as a call site. This module writes no stock
+ * at all — it writes the question.
+ *
+ * Shared by the cancellation writer, which uses it to bound how much stock
+ * goes back, and by the restock flag, which uses it to bound what it CLAIMS
+ * went missing (AGL-2325). Extracted rather than copied: the two must not
+ * drift, because a flag that names more units than the cancellation would
+ * return is the double-count both of them exist to avoid.
+ */
+export function saleReleaseCaps(
+  saleRows: readonly { get: (field: string) => unknown }[],
+): Map<string, number> {
+  const caps = new Map<string, number>()
+  for (const row of saleRows) {
+    const productId = String(row.get('productId') ?? '')
+    const variantId = String(row.get('variantId') ?? '')
+    if (!productId || !variantId) continue
+    const moved = Number(row.get('appliedDelta') ?? row.get('delta') ?? 0)
+    // Sale rows are negative; the cap is how many units left the shelf.
+    caps.set(
+      restockCapKey(productId, variantId),
+      (caps.get(restockCapKey(productId, variantId)) ?? 0) +
+        Math.max(0, -moved),
+    )
+  }
+  return caps
+}
+
+/**
+ * Lines narrowed to what the count actually gave up, dropping any that gave up
+ * nothing (AGL-2149, AGL-2325).
+ *
+ * ONLY PAIRS THE LEDGER DESCRIBES ARE CAPPED, and that asymmetry is the whole
+ * safety argument. A pair with no row is left at the units it sold, which is
+ * what keeps the pre-AGL-1807 draft links — decremented with no row at all —
+ * and the buy-now path from being silently zeroed by a ledger that has holes
+ * in it. So an absent ledger degrades to the old upper bound rather than to
+ * saying nothing moved.
+ *
+ * The budget is consumed as it is spent, so two lines of the same
+ * product+variant share one rather than each claiming it whole. Takes a COPY,
+ * so a caller may reuse the map it passed.
+ */
+export function capRestockLines(
+  lines: readonly CommerceModel.OrderRestockLine[],
+  caps: ReadonlyMap<string, number>,
+): CommerceModel.OrderRestockLine[] {
+  const budgets = new Map(caps)
+  const capped: CommerceModel.OrderRestockLine[] = []
+  for (const line of lines) {
+    const key = restockCapKey(line.productId, line.variantId)
+    const budget = budgets.get(key)
+    const quantity =
+      budget == null ? line.quantity : Math.min(line.quantity, budget)
+    if (budget != null) budgets.set(key, budget - quantity)
+    if (quantity <= 0) continue
+    capped.push({ ...line, quantity })
+  }
+  return capped
 }
 
 /** What an order's tracked lines resolved to, with the products behind them. */
