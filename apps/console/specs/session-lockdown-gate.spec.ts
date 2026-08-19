@@ -108,6 +108,26 @@ jest.mock('next/server', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  /*
+   * AGL-2190. `render-system-email` builds its default brand tokens at
+   * MODULE scope, so a missing `brandMergeTokens` in this closed-world
+   * mock is not a failed assertion — the whole suite fails to LOAD, three
+   * requires deep from the route under test.
+   *
+   * Real shape and a real profile: the tokens are substituted into system
+   * emails, and an empty object would leave `{{brand.productName}}` in the
+   * body of every one of them with nothing here to notice.
+   */
+  AGLYN_BRANDING_PROFILE: {
+    productName: 'Aglyn',
+    fromName: 'Aglyn',
+    supportUrl: 'https://aglyn.com/support',
+  },
+  brandMergeTokens: (branding: Record<string, string>) => ({
+    'brand.productName': branding.productName,
+    'brand.fromName': branding.fromName,
+    'brand.supportUrl': branding.supportUrl,
+  }),
   resolveIdpDisplayName: () => null,
   resolveIdpPhotoUrl: () => null,
   resolveIdpPhone: () => null,
