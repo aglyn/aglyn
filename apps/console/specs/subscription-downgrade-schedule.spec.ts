@@ -109,6 +109,8 @@ const STRIPE_ENV = {
   STRIPE_PRICE_STARTER: 'price_starter_monthly',
   STRIPE_PRICE_PRO: 'price_pro_monthly',
   STRIPE_PRICE_METERED: 'price_metered_usage',
+  STRIPE_PRICE_PRO_EXTRA_SEAT: 'price_pro_seat',
+  STRIPE_PRICE_STARTER_EXTRA_SEAT: 'price_starter_seat',
 }
 
 /** 2026-01-01T00:00:00Z — the subscription's current period end. */
@@ -453,5 +455,115 @@ describe('a downgrade preserves the terms it did not change (AGL-2146)', () => {
     expect(update?.get('phases[0][collection_method]')).toBeNull()
     // The move itself still happened.
     expect(update?.get('phases[1][items][0][price]')).toBe('price_starter_monthly')
+  })
+})
+
+
+/**
+ * A schedule phase is an ABSOLUTE item list; the instant switch is a DELTA
+ * (AGL-2150).
+ *
+ * That difference is the whole bug. The instant path names the items it
+ * wants changed and leaves everything else exactly where it is, so an item
+ * `addonKindFromPriceId` cannot classify survives a switch untouched. Phase 1
+ * was built from the recognised kinds alone, so the same item was DELETED —
+ * at the period end, on a timer, with no log line and nothing in the response
+ * naming it. `droppedAddons` carries recognised kinds only, so it read as a
+ * complete account of what was lost while being silent about exactly the
+ * lines it could not name.
+ *
+ * `addonKindFromPriceId` resolves by comparing against the CURRENT env values,
+ * so "cannot classify" is not exotic: a legacy add-on whose `STRIPE_PRICE_*`
+ * was rotated or unset, a price attached by hand in the Stripe dashboard, a
+ * negotiated line item, and the flat POS-register / event-calendar add-ons in
+ * any environment that does not configure those env names all land here. Each
+ * is recurring revenue.
+ */
+describe('a downgrade carries the items it cannot classify (AGL-2150)', () => {
+  /** A price no `STRIPE_PRICE_*` in `STRIPE_ENV` resolves to. */
+  const LEGACY_ADDON_ITEM = {
+    id: 'si_legacy',
+    quantity: 3,
+    price: { id: 'price_legacy_rotated_addon', recurring: { interval: 'month' } },
+  }
+  const PRO_SEAT_ITEM = {
+    id: 'si_seat',
+    quantity: 4,
+    price: { id: 'price_pro_seat', recurring: { interval: 'month' } },
+  }
+
+  function phaseItemPrices(index: number): string[] {
+    const prices: string[] = []
+    for (let i = 0; ; i += 1) {
+      const price = capturedScheduleUpdateBody?.get(
+        `phases[${index}][items][${i}][price]`,
+      )
+      if (!price) return prices
+      prices.push(price)
+    }
+  }
+
+  async function downgrade() {
+    const post = loadSubscription()
+    return call(post, { action: 'switch', plan: 'starter', interval: 'month' })
+  }
+
+  it('passes an unrecognised item through to phase 1, quantity and all', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    expect((await downgrade()).status).toBe(200)
+    const prices = phaseItemPrices(1)
+    expect(prices).toContain('price_legacy_rotated_addon')
+    const index = prices.indexOf('price_legacy_rotated_addon')
+    expect(
+      capturedScheduleUpdateBody?.get(`phases[1][items][${index}][quantity]`),
+    ).toBe('3')
+  })
+
+  it('names it in the response and in a log line — the loss was silent', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const payload = await (await downgrade()).json()
+    expect(payload.unrecognizedItems).toEqual(['price_legacy_rotated_addon'])
+    expect(
+      warn.mock.calls.some(([message]) =>
+        String(message).includes('cannot classify'),
+      ),
+    ).toBe(true)
+  })
+
+  it('the INSTANT path already left it alone — this is the parity', async () => {
+    subscriptionItems = [STARTER_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    const post = loadSubscription()
+    expect(
+      (await call(post, { action: 'switch', plan: 'pro', interval: 'month' }))
+        .status,
+    ).toBe(200)
+    // Nothing in the delta touches it: no `deleted`, no re-price.
+    const body = capturedSubUpdateBody
+    const touched = [...(body?.keys() ?? [])].some(
+      (key) => key.startsWith('items[') && body?.get(key) === 'si_legacy',
+    )
+    expect(touched).toBe(false)
+  })
+
+  it('NEGATIVE CONTROL: a RECOGNISED add-on still re-prices to the target', async () => {
+    // The pass-through must not swallow the AGL-528 re-pricing: a known seat
+    // price has to become the TARGET plan's seat price, not survive verbatim
+    // at the old plan's rate.
+    subscriptionItems = [PRO_ITEM, PRO_SEAT_ITEM, METERED_ITEM]
+    const payload = await (await downgrade()).json()
+    const prices = phaseItemPrices(1)
+    expect(prices).toContain('price_starter_seat')
+    expect(prices).not.toContain('price_pro_seat')
+    expect(payload.unrecognizedItems).toEqual([])
+  })
+
+  it('NEGATIVE CONTROL: the metered item is still attached once, not twice', async () => {
+    subscriptionItems = [PRO_ITEM, LEGACY_ADDON_ITEM, METERED_ITEM]
+    expect((await downgrade()).status).toBe(200)
+    const metered = phaseItemPrices(1).filter(
+      (price) => price === 'price_metered_usage',
+    )
+    expect(metered).toHaveLength(1)
   })
 })

@@ -40,8 +40,12 @@ import {
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
-  type AddonKind,
 } from '../../../../utils/server/billing-addons'
+import {
+  buildTargetItems,
+  preservePhaseTerms,
+  writePhaseItems,
+} from '../../../../utils/server/billing-schedule'
 import { RETENTION_COLLECTION } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
@@ -120,82 +124,6 @@ function isLadderDowngrade(from: OrgPlan | null, to: string): boolean {
   const fromIndex = SELF_SERVE_PLANS.indexOf(from)
   const toIndex = SELF_SERVE_PLANS.indexOf(to as OrgPlan)
   return fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex
-}
-
-/**
- * Restates the terms Stripe put on the schedule's current phase but that a
- * phase-list replacement would otherwise drop (AGL-2146).
- *
- * `subscription_schedules` update REPLACES the whole phase list, so anything
- * not written back is gone. The original restatement covered price, quantity
- * and the phase window — which meant a downgrade silently ended the customer's
- * coupon, their trial, and the tax/collection configuration.
- *
- * The discount is the one that costs money in both directions: an org holding
- * a staff coupon, a checkout promotion code, or the winback the retention
- * funnel just minted lost it at the flip, having been told nothing. An instant
- * UPGRADE never touches subscription discounts, so a downgrade must not
- * either — which is why the discount is restated on the target phase too and a
- * time-boxed coupon keeps running its remaining months across the change.
- *
- * `trial_end` and `automatic_tax` are restated only on the CURRENT phase: a
- * trial must not restart at the flip, and the target phase sets its own tax
- * flag explicitly.
- */
-function preservePhaseTerms(
-  params: URLSearchParams,
-  index: number,
-  phase: any,
-  options: { current: boolean },
-): void {
-  const prefix = `phases[${index}]`
-  // Both shapes: `discounts` is the current list-valued field, `coupon` the
-  // singular legacy one older API versions still return.
-  const discounts: any[] = Array.isArray(phase?.discounts) ? phase.discounts : []
-  let written = 0
-  for (const entry of discounts) {
-    const coupon =
-      typeof entry?.coupon === 'string' ? entry.coupon : entry?.coupon?.id
-    const promotionCode =
-      typeof entry?.promotion_code === 'string'
-        ? entry.promotion_code
-        : entry?.promotion_code?.id
-    if (coupon) {
-      params.set(`${prefix}[discounts][${written}][coupon]`, String(coupon))
-      written += 1
-    } else if (promotionCode) {
-      params.set(
-        `${prefix}[discounts][${written}][promotion_code]`,
-        String(promotionCode),
-      )
-      written += 1
-    }
-  }
-  if (written === 0 && phase?.coupon) {
-    const legacy =
-      typeof phase.coupon === 'string' ? phase.coupon : phase.coupon?.id
-    if (legacy) params.set(`${prefix}[coupon]`, String(legacy))
-  }
-  if (phase?.collection_method) {
-    params.set(`${prefix}[collection_method]`, String(phase.collection_method))
-  }
-  const paymentMethod =
-    typeof phase?.default_payment_method === 'string'
-      ? phase.default_payment_method
-      : phase?.default_payment_method?.id
-  if (paymentMethod) {
-    params.set(`${prefix}[default_payment_method]`, String(paymentMethod))
-  }
-  if (!options.current) return
-  if (phase?.trial_end) {
-    params.set(`${prefix}[trial_end]`, String(phase.trial_end))
-  }
-  if (phase?.automatic_tax?.enabled != null) {
-    params.set(
-      `${prefix}[automatic_tax][enabled]`,
-      phase.automatic_tax.enabled ? 'true' : 'false',
-    )
-  }
 }
 
 /**
@@ -482,14 +410,57 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // The shared metered price (AGL-635), interval-matched to the target
+    // (AGL-1340/1280) — resolved here because BOTH the delta below and the
+    // absolute phase list further down need it.
+    const metered = meteredPriceId(targetInterval)
+
+    // The absolute item list this subscription becomes on the target plan.
+    // ONE derivation (AGL-2150): it is what a schedule phase is written from,
+    // and it is also the single place `droppedAddons` and the unrecognised
+    // items are named, so the delta below and the phase list cannot report
+    // different answers about what a switch costs the customer.
+    const targetItems = buildTargetItems(items, {
+      targetPlan: targetPlan as OrgPlan,
+      targetInterval,
+      targetPlanPrice: targetPrice,
+      meteredPrice: metered,
+    })
+    const dropped = targetItems.droppedAddons
+    // Items neither path can classify. The instant switch leaves them alone
+    // and the schedule now carries them through verbatim — but "carried
+    // through" is a claim, and until AGL-2150 the only report on this
+    // subscription was `droppedAddons`, which lists RECOGNISED kinds only and
+    // therefore read as complete while saying nothing about the line items it
+    // could not name. A legacy add-on whose env var was rotated, a price
+    // attached by hand in the dashboard, a negotiated line, or the flat
+    // POS/event-calendar add-ons in an environment that does not configure
+    // those env names all land here. Said out loud, and returned.
+    const unrecognizedItems = targetItems.unrecognizedPriceIds
+    if (unrecognizedItems.length) {
+      console.warn('[billing/subscription] subscription carries items this route cannot classify', {
+        orgId,
+        subscriptionId: subscription.id,
+        currentPlan,
+        targetPlan,
+        targetInterval,
+        priceIds: unrecognizedItems,
+        note:
+          'carried through unchanged; they are neither the plan item, the ' +
+          'metered item, nor a price any STRIPE_PRICE_*_EXTRA_*/flat add-on ' +
+          'env currently resolves to',
+      })
+    }
+
     // Per-plan add-on items (seats/members/datasets/hosts) re-price to
     // the target plan in the same update (AGL-528); kinds the target
     // doesn't sell are dropped and reported. Flat add-ons re-resolve too
     // so every item follows the target interval (one per subscription).
+    // A DELTA, deliberately: anything not named here is left exactly where
+    // it is, which is the posture the schedule phase now matches.
     const itemChanges: Array<Array<[string, string]>> = [
       [['id', String(itemId)], ['price', targetPrice]],
     ]
-    const dropped: AddonKind[] = []
     for (const item of items) {
       const kind = addonKindFromPriceId(item?.price?.id)
       if (!kind) continue
@@ -499,7 +470,6 @@ async function handler(request: Request): Promise<Response> {
         itemChanges.push([['id', String(item.id)], ['price', target]])
       } else {
         itemChanges.push([['id', String(item.id)], ['deleted', 'true']])
-        dropped.push(kind)
       }
     }
 
@@ -522,7 +492,6 @@ async function handler(request: Request): Promise<Response> {
     // item present recurs on the OTHER interval, and an equality check
     // against the target would miss it, add a second metered item, and make
     // the update mix intervals — the precise crash this is avoiding.
-    const metered = meteredPriceId(targetInterval)
     const meteredItem = items.find((item: any) =>
       isMeteredPriceId(item?.price?.id),
     )
@@ -619,27 +588,12 @@ async function handler(request: Request): Promise<Response> {
       // exactly as an instant switch would (AGL-528); kinds it doesn't sell
       // are dropped and reported. The interval-matched metered item rides
       // along (AGL-635/1340) so overage keeps billing after the flip.
-      const phaseItems: Array<{ price: string; quantity?: number }> = [
-        { price: targetPrice, quantity: 1 },
-      ]
-      for (const item of items) {
-        const kind = addonKindFromPriceId(item?.price?.id)
-        if (!kind) continue
-        const target = addonPriceId(kind, targetPlan as OrgPlan, targetInterval)
-        if (target) {
-          phaseItems.push({ price: target, quantity: item?.quantity ?? 1 })
-        }
-      }
-      if (metered) phaseItems.push({ price: metered })
-      phaseItems.forEach((item, index) => {
-        params.set(`phases[1][items][${index}][price]`, item.price)
-        if (item.quantity != null) {
-          params.set(
-            `phases[1][items][${index}][quantity]`,
-            String(item.quantity),
-          )
-        }
-      })
+      //
+      // Anything else on the subscription is carried through VERBATIM
+      // (AGL-2150). A phase is an ABSOLUTE list, so building it from the
+      // recognised kinds alone deleted every unclassified item at the flip —
+      // at renewal, with no log line and no field in the response naming it.
+      writePhaseItems(params, 1, targetItems.items)
       params.set('phases[1][iterations]', '1')
       // The phase metadata is what the webhook's subscription.updated mirror
       // reads (`object.metadata.plan` first) when the phase flips at period
@@ -676,6 +630,7 @@ async function handler(request: Request): Promise<Response> {
         pendingPlan: targetPlan,
         effectiveAt: periodEndIso,
         droppedAddons: dropped,
+        unrecognizedItems,
       }, { status: 200 })
     }
 
@@ -726,6 +681,7 @@ async function handler(request: Request): Promise<Response> {
         ok: true,
         plan: targetPlan,
         droppedAddons: dropped,
+        unrecognizedItems,
       }, { status: 200 })
     }
 
@@ -739,6 +695,7 @@ async function handler(request: Request): Promise<Response> {
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
+        unrecognizedItems,
         downgrade: true,
       }, { status: 200 })
     }
@@ -770,6 +727,7 @@ async function handler(request: Request): Promise<Response> {
         ? new Date(preview.period_end * 1000).toISOString()
         : null,
       droppedAddons: dropped,
+      unrecognizedItems,
     }, { status: 200 })
   } catch (error) {
     console.error(error)
