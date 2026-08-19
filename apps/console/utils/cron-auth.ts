@@ -48,3 +48,37 @@ export function isCronAuthorized(
   if (safeEqual(headers['x-cron-secret'] ?? '', secret)) return true
   return false
 }
+
+/**
+ * Is this scheduled-route invocation a DRY RUN? (AGL-2084)
+ *
+ * `reap-plugin-artifacts` and `reverify-plugin-versions` each chose this rule
+ * deliberately and each spelled it out again inline, and `audit-archive` — the
+ * route that DELETES Firestore audit rows — was the copy that never got
+ * written. Four transcriptions of four lines is how the guard goes missing, so
+ * it lives here once and the routes call it.
+ *
+ * The rule:
+ *   - An explicit `dryRun` wins, from the body or the query string, in BOTH
+ *     directions: `?dryRun=0` on a GET writes, `{ dryRun: true }` on a POST
+ *     does not. `'0'`, `'false'` and `false` are the only ways to turn it off,
+ *     matching what the two original routes accepted.
+ *   - With no `dryRun` at all the METHOD decides: a GET reports, a POST acts.
+ *
+ * Keying the default on the method rather than on the body being absent is the
+ * load-bearing half. `scheduled-crons.yml` fires every one of these routes with
+ * a bodyless POST, so defaulting an absent `dryRun` to true would silently stop
+ * the archival, the reaping and the re-verification — a worse failure than the
+ * one this guard exists to prevent, and an invisible one.
+ */
+export function isCronDryRun(request: {
+  method: string
+  body?: unknown
+  query?: Record<string, string | string[] | undefined>
+}): boolean {
+  const requested =
+    (request.body as { dryRun?: unknown } | undefined)?.dryRun ??
+    request.query?.['dryRun']
+  if (requested === undefined) return request.method === 'GET'
+  return requested !== '0' && requested !== 'false' && requested !== false
+}

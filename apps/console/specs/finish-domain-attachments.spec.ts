@@ -100,8 +100,16 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
+// Only AUTHORIZATION is faked. `jest.requireActual` keeps the rest of the
+// module real — notably `isCronDryRun` (AGL-2084), the guard that decides
+// whether this route writes at all. A closed-world `{ isCronAuthorized }`
+// mock made the route throw `isCronDryRun is not a function` the moment it
+// started calling it, which is the harmless version of the failure; the
+// harmful one is a stub that answers a security question differently from
+// the code shipping to production.
 jest.mock('../utils/cron-auth', () => ({
   __esModule: true,
+  ...jest.requireActual('../utils/cron-auth'),
   isCronAuthorized: (...args: unknown[]) => mockIsCronAuthorized(...args),
 }))
 

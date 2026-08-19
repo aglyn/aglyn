@@ -41,6 +41,13 @@ name: Scheduled console crons
 on:
   schedule:
     - cron: '0 2 * * *' # report-usage   — daily 02:00 UTC
+    # A POST with no body ARCHIVES AND DELETES; a GET only reports the plan
+    # (AGL-2084). This route moves `adminAudit` rows past the 90-day window
+    # into Storage and then deletes them from Firestore, and until AGL-2084 a
+    # bare GET did all of that too — the same hazard `reap-plugin-artifacts`
+    # below had already been given a guard against. `isCronDryRun` keys the
+    # default on the METHOD precisely so the bodyless POST this job sends is
+    # still a real run.
     - cron: '0 3 * * *' # audit-archive  — daily 03:00 UTC
     - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
     # The IN-PROGRESS month (AGL-2219), an hour ahead of usage-alerts so the
