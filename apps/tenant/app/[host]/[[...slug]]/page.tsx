@@ -366,11 +366,13 @@ function buildJsonLd(props: Props): string[] {
     return []
   }
   const host = props.data?.host as any
-  const canonicalBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : undefined
+  // `hostPublicOrigin`, not a re-derived apex (AGL-2195). This branch was a
+  // hand-copied twin of it with `aglyn.app` written in, so every JSON-LD `@id`
+  // and `url` a self-hosted deployment emitted named OUR apex for a site we do
+  // not serve — published into the structured data search engines read, on a
+  // site the operator owns. The `<link rel="canonical">` above already asks the
+  // shared helper; there is no reason for the same question to have two answers.
+  const canonicalBase = Aglyn.hostPublicOrigin(host)
   const publisher = host?.seo?.entity?.name
     ? {
         '@type':

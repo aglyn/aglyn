@@ -18,6 +18,7 @@
 
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { generateSubdomain, SUBDOMAIN_PATTERN } from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -169,7 +170,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           slotProps={{
             input: {
               endAdornment: (
-                <InputAdornment position="end">{'.aglyn.app'}</InputAdornment>
+                <InputAdornment position="end">{`.${TENANT_APEX}`}</InputAdornment>
               ),
             },
           }}

@@ -1,0 +1,494 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { execFileSync } from 'child_process'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+/**
+ * Self-host ratchet: Aglyn's own hostnames may not appear in runtime code
+ * except where it is written down WHY (AGL-2195).
+ *
+ * Zach's rule: *"the self hosted owner should not have to edit the source to
+ * update aglyn branded items urls or personal identification items, should
+ * move these to env vars"*. `NEXT_PUBLIC_TENANT_DOMAIN` and
+ * `NEXT_PUBLIC_WORKSPACE_DOMAIN` exist and are honoured by `TENANT_APEX` and
+ * `WORKSPACE_DOMAIN` — and were then ignored by four surfaces that re-derived
+ * the apex by hand, including the JSON-LD a published site emits. A
+ * self-hoster who set the variable got a deployment that honoured it in the
+ * revalidation path and printed OUR apex into their sites' structured data.
+ *
+ * ## Why an exact count per file rather than a file allowlist
+ *
+ * A file allowlist is satisfiable by adding a new hard-coding to a file that
+ * is already listed — which is precisely how the fourth copy of the apex got
+ * in. The count is the guard. It is meant to be brittle: changing it is a
+ * decision, and the reason string is where the decision is recorded.
+ *
+ * ## What it reads, and what it deliberately cannot see
+ *
+ * Enumerated from `git ls-files`, never a filesystem walk (AGL-2116): a walk
+ * sweeps `.next/` and `dist/`, which inline every constant and would report a
+ * different repo depending on whether the reader had built. Comments are
+ * stripped first, so the docblocks explaining these decisions — this one
+ * included — cannot themselves trip it. Stripping `//` inside a string
+ * literal can HIDE a match but never invent one, so the guard errs strict.
+ *
+ * Out of scope on purpose:
+ *  - `*.spec.*` / `specs/` — fixtures naming our hosts are fixtures.
+ *  - `assist-docs-index.generated.ts` — a build artefact of `apps/docs`, whose
+ *    prose is Aglyn's own documentation and is regenerated, not edited.
+ *  - `apps/docs/**`, `*.md`, `.env*.example`, `constants/legal/**` — prose and
+ *    published legal snapshots, which are Aglyn's own by construction
+ *    (`feedback_legal_snapshots_are_publication_first`).
+ */
+const REPO_ROOT = resolve(__dirname, '../../../../..')
+
+/** Word-bounded so `this.store.aglyn.components` is not an `aglyn.com`. */
+const AGLYN_HOST = /aglyn\.(app|com|io)\b/g
+
+const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/
+const NOT_A_TEST = /\.spec\.|\.e2e\.|\.test\.|\/specs\//
+const GENERATED = /assist-docs-index\.generated\./
+
+/**
+ * Comments removed, so the prose explaining a decision cannot pass for the
+ * decision.
+ *
+ * The line-comment pass refuses to fire on `://`, and that clause is the whole
+ * guard. Written the obvious way — `/\/\/.*$/gm` — it ate the scheme separator
+ * of every URL literal, so `` `https://${host.subdomain}.aglyn.app` `` stripped
+ * down to `` `https: `` and the hardest-hitting hard-coding in the repo was
+ * invisible. Verified by reverting the AGL-2195 fix in a scratch worktree and
+ * watching this stay GREEN; a guard that cannot see a URL is a guard that
+ * certifies its absence.
+ *
+ * Erring the other way is safe: a `//` inside a string that is NOT a URL now
+ * survives, which can only add matches, never remove them.
+ */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ')
+}
+
+/**
+ * Every remaining occurrence, with the reason it is allowed to stay.
+ *
+ * `count` is the number of surviving occurrences after comments are stripped.
+ * A reason of the form "…must be fixed…" is a debt marker, not an approval:
+ * it names the issue that will remove it.
+ */
+const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
+  {
+    file: 'apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/(app)/[orgSlug]/settings/page.tsx',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
+  },
+  {
+    file: 'apps/console/app/api/_lib/assist-retrieval.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/_lib/auth-action-url.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/_lib/render-system-email.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/_lib/security-alerts.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/_lib/usage-alert-email.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/admin/email-health/route.ts',
+    count: 1,
+    reason:
+      'EXPECTED_FROM_DOMAIN derives from operatorIdentity().supportEmail; the literal is the not-yet-configured fallback.',
+  },
+  {
+    file: 'apps/console/app/api/admin/enterprise-billing/route.ts',
+    count: 1,
+    reason:
+      'Request origin, then NEXT_PUBLIC_APP_URL, then the literal — a third-order fallback.',
+  },
+  {
+    file: 'apps/console/app/api/auth/activity/route.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
+  },
+  {
+    file: 'apps/console/app/api/errors/route.ts',
+    count: 2,
+    reason:
+      'DOCS_ORIGIN reads NEXT_PUBLIC_AGLYN_DOCS_URL / NEXT_PUBLIC_DOCS_ORIGIN; the second literal is the malformed-value fallback.',
+  },
+  {
+    file: 'apps/console/app/api/health/billing/route.ts',
+    count: 1,
+    reason:
+      'Reader of STRIPE_WEBHOOK_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/app/api/screens/revalidate/route.ts',
+    count: 1,
+    reason:
+      'Server-side reader of NEXT_PUBLIC_TENANT_DOMAIN, same default.',
+  },
+  {
+    file: 'apps/console/app/layout.tsx',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/console/components/create-org-dialog.component.tsx',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
+  },
+  {
+    file: 'apps/console/app/(app)/admin/contact-suppressions/page.tsx',
+    count: 1,
+    reason:
+      'AGL-2196 — staff copy naming privacy@aglyn.com. The fix is written and was BACKED OUT unapplied: another agent holds this file dirty in the shared checkout, and `git commit --only` bounds the file list, not the lines, so committing it would carry their in-progress edit into this commit.',
+  },
+  {
+    file: 'apps/console/components/editor-hint-cookie.component.tsx',
+    count: 2,
+    reason:
+      'AGL-2197 — `aglyn.io` stays as an Aglyn alias apex, included ONLY while WORKSPACE_DOMAIN is still ours.',
+  },
+  {
+    file: 'apps/console/components/org-switcher-nav.component.tsx',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
+  },
+  {
+    file: 'apps/console/constants/docs-links.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
+  },
+  {
+    file: 'apps/console/constants/shared.ts',
+    count: 1,
+    reason:
+      'LEGAL_ORIGIN — reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN; ENTERPRISE_CONTACT_URL now builds on it.',
+  },
+  {
+    file: 'apps/console/constants/workspace-domain.ts',
+    count: 1,
+    reason:
+      'WORKSPACE_DOMAIN — the console reader of NEXT_PUBLIC_WORKSPACE_DOMAIN.',
+  },
+  {
+    file: 'apps/console/utils/auth-delegation.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
+  },
+  {
+    file: 'apps/console/utils/realm-plugins.client.ts',
+    count: 1,
+    reason:
+      'AGL-2202 — a dev-console hint naming our plugin origin as the example value for NEXT_PUBLIC_PLUGIN_ORIGIN.',
+  },
+  {
+    file: 'apps/console/utils/server/org-lockdown.ts',
+    count: 1,
+    reason:
+      'Server-side reader of NEXT_PUBLIC_TENANT_DOMAIN, same default.',
+  },
+  {
+    file: 'apps/console/utils/tenant-dns.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME; the literal is its default.',
+  },
+  {
+    file: 'apps/docs/docusaurus.config.ts',
+    count: 1,
+    reason:
+      'Reader of DOCS_URL; the literal is its default (a docs build, not runtime).',
+  },
+  {
+    file: 'apps/tenant/app/[host]/admin-bar/admin-bar-slot.tsx',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/tenant/app/api/edit-context/route.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
+  },
+  {
+    file: 'apps/tenant/app/api/edit-hint/set/route.ts',
+    count: 2,
+    reason:
+      'consoleReturnAllowlist prefers NEXT_PUBLIC_CONSOLE_URL and falls back to our two console origins ONLY when nothing is configured (AGL-2016).',
+  },
+  {
+    file: 'apps/tenant/middleware.ts',
+    count: 10,
+    reason:
+      'Vercel-only host routing gated on IS_VERCEL, plus the NEXT_PUBLIC_CONSOLE_URL default. The edge bundle cannot import TENANT_APEX; a self-host serves its apex through the AGLYN_TENANT_HOST_CNAME branch above it. Widening that to a wildcard is AGL-2202.',
+  },
+  {
+    file: 'apps/tenant/utils/realm-plugins.client.ts',
+    count: 1,
+    reason:
+      'AGL-2202 — the same dev-console hint on the tenant side.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/docs-help.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
+  },
+  {
+    file: 'libs/shared/util/email/src/lib/email-media-src.ts',
+    count: 1,
+    reason:
+      "The email mirror of TENANT_APEX. `shared-util-email` is tagged scope:shared and cannot import @aglyn/aglyn, so the copy is structural; apps/console/specs/email-media-src-drift.spec.ts holds the two to the same answer, including under a configured apex.",
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/host-naming.ts',
+    count: 1,
+    reason:
+      'TENANT_APEX — the one reader of NEXT_PUBLIC_TENANT_DOMAIN; the literal is its default.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/media-ref.ts',
+    count: 3,
+    reason:
+      'First-party media hosts. NOT a bare list: `operatorFirstPartyApexes()` merges the operator TENANT_APEX, console host and workspace domain into it, so an operator\'s own hosts are first-party too. This is the pattern the others should copy.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/platform-brand.ts',
+    count: 1,
+    reason:
+      'PLATFORM_SUPPORT_URL — last fallback after the operator support address.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/published-legal-pages.ts',
+    count: 1,
+    reason:
+      'LEGAL_ORIGIN — the one reader of NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/foundation/constants/_internal.ts',
+    count: 1,
+    reason:
+      'The startup banner Apache-2.0 authorship line, which points at the software itself rather than at the operator. Deliberate — the support line beside it IS operator-driven.',
+  },
+  {
+    file: 'libs/besigner/feature/designer/src/lib/utils/docs-help.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_DOCS_ORIGIN; the literal is its default.',
+  },
+  {
+    file: 'libs/shared/util/email/src/lib/system-email-catalog.ts',
+    count: 10,
+    reason:
+      'AGL-2202 — merge-token SAMPLE values rendered in the staff email designer preview; never sent, but they print our console URL as the example.',
+  },
+  {
+    file: 'libs/shared/util/next/src/lib/use-continue-url.ts',
+    count: 1,
+    reason:
+      'Shared-lib reader of NEXT_PUBLIC_WORKSPACE_DOMAIN; cannot import the console constant.',
+  },
+  {
+    file: 'libs/tenant/data/admin/src/lib/server/console-domains.ts',
+    count: 3,
+    reason:
+      'RESERVED_SUFFIXES — a BLOCKLIST of names nobody may claim as a custom console domain. Naming our own there is correct in both deployment shapes.',
+  },
+  {
+    file: 'libs/tenant/data/admin/src/lib/server/workspace-domains.ts',
+    count: 1,
+    reason:
+      'The server-side twin of WORKSPACE_DOMAIN — same env, same default.',
+  },
+  {
+    file: 'tools/deploy/verify-production-aliases.mjs',
+    count: 4,
+    reason:
+      'Verifies Aglyn own Vercel aliases after a promotion. Meaningless anywhere else and never shipped.',
+  },
+  {
+    file: 'tools/e2e/starter-root-wire.mjs',
+    count: 1,
+    reason:
+      'An e2e assertion message naming the host the tenant must NOT redirect to.',
+  },
+  {
+    file: 'tools/lint-rules/no-remote-image-service.mjs',
+    count: 2,
+    reason:
+      'A lint rule\'s first-party host list. Build-time only, never shipped, and additive.',
+  },
+  {
+    file: 'tools/plugin-loader/origin/api/load.mjs',
+    count: 3,
+    reason:
+      'The CONSOLE_ORIGIN / TENANT_APEX defaults, which PLUGIN_LOADER_CONSOLE_URL and PLUGIN_LOADER_TENANT_DOMAIN override (AGL-2196).',
+  },
+  {
+    file: 'tools/scripts/backfill-subdomain-redirects.mjs',
+    count: 1,
+    reason:
+      'Reader of AGLYN_TENANT_APEX; the literal is its default.',
+  },
+  {
+    file: 'tools/scripts/check-retired-colours.mjs',
+    count: 1,
+    reason:
+      'Reader of a base-URL argument; the literal is its default. Internal tool.',
+  },
+  {
+    file: 'tools/scripts/generate-blog-covers.mjs',
+    count: 1,
+    reason:
+      'Renders Aglyn own marketing blog covers. Internal tool.',
+  },
+  {
+    file: 'tools/scripts/legal-doc-diff.mjs',
+    count: 1,
+    reason:
+      'A path inside Aglyn own Google shared drive, plus our legal origin. Internal tool.',
+  },
+  {
+    file: 'tools/scripts/lib/stripe-webhook-health.mjs',
+    count: 1,
+    reason:
+      'AGL-2202 — the ops lib copy of the platform webhook URL ignores STRIPE_WEBHOOK_URL, which the app route already reads.',
+  },
+  {
+    file: 'tools/scripts/probe-uptime.mjs',
+    count: 2,
+    reason:
+      'Aglyn own uptime probe, overridable on the command line. Internal tool.',
+  },
+  {
+    file: 'tools/scripts/reap-plugin-artifacts.mjs',
+    count: 1,
+    reason:
+      'Reader of CONSOLE_BASE_URL; the literal is its default.',
+  },
+  {
+    file: 'tools/scripts/reconcile-workspace-domains.mjs',
+    count: 2,
+    reason:
+      'Internal ops script against Aglyn production; one occurrence is a reader of NEXT_PUBLIC_WORKSPACE_DOMAIN.',
+  },
+  {
+    file: 'tools/scripts/reverify-plugin-versions.mjs',
+    count: 1,
+    reason:
+      'Reader of CONSOLE_BASE_URL; the literal is its default.',
+  },
+]
+
+function trackedSourceFiles(): string[] {
+  return execFileSync('git', ['ls-files', 'apps', 'libs', 'cloud', 'tools'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((file) => SOURCE.test(file))
+    .filter((file) => !NOT_A_TEST.test(file))
+    .filter((file) => !GENERATED.test(file))
+}
+
+/** file → surviving occurrences, comments removed. */
+function observed(): Map<string, number> {
+  const found = new Map<string, number>()
+  for (const file of trackedSourceFiles()) {
+    let source: string
+    try {
+      source = readFileSync(resolve(REPO_ROOT, file), 'utf8')
+    } catch {
+      continue
+    }
+    const matches = stripComments(source).match(AGLYN_HOST)
+    if (matches?.length) found.set(file, matches.length)
+  }
+  return found
+}
+
+describe("Aglyn's own hostnames in runtime code (self-host ratchet)", () => {
+  const found = observed()
+  const allowed = new Map(ALLOWED.map((entry) => [entry.file, entry.count]))
+
+  it('every allowlist entry states a reason', () => {
+    for (const entry of ALLOWED) {
+      expect(entry.reason.trim().length).toBeGreaterThan(20)
+    }
+  })
+
+  it('no file hard-codes an Aglyn hostname without an allowlist entry', () => {
+    const unlisted = [...found.keys()]
+      .filter((file) => !allowed.has(file))
+      .sort()
+    expect(unlisted).toEqual([])
+  })
+
+  it('no allowlist entry is stale — every listed file still has one', () => {
+    const stale = [...allowed.keys()].filter((file) => !found.has(file)).sort()
+    expect(stale).toEqual([])
+  })
+
+  it('no allowlisted file gained an occurrence', () => {
+    const drifted = [...found]
+      .filter(([file, count]) => allowed.has(file) && allowed.get(file) !== count)
+      .map(([file, count]) => `${file}: allowed ${allowed.get(file)}, found ${count}`)
+      .sort()
+    expect(drifted).toEqual([])
+  })
+})

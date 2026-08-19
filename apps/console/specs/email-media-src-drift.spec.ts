@@ -133,4 +133,50 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
       'https://shop.acme.com',
     )
   })
+
+  /**
+   * The half that was NOT mirrored (AGL-2195).
+   *
+   * `hostPublicOrigin` has read `NEXT_PUBLIC_TENANT_DOMAIN` since AGL-2022;
+   * the email copy wrote `aglyn.app` in flat. Every table above agreed
+   * anyway, because every one of them runs with the variable unset — where
+   * the configured value and the hard-coded literal are the same string. A
+   * drift guard that only ever exercises the default cannot see a missing
+   * default, which is how a self-hosted deployment came to mail absolute
+   * links on Aglyn's apex while this file stayed green.
+   *
+   * Both modules read the variable at MODULE scope, so the only way to
+   * observe the configured branch is to set it and re-require them. That is
+   * what `isolateModules` is for; `resetModules` afterwards puts the shared
+   * registry back for whatever runs next.
+   */
+  it('both follow a configured tenant apex, not only the default', () => {
+    const previous = process.env.NEXT_PUBLIC_TENANT_DOMAIN
+    process.env.NEXT_PUBLIC_TENANT_DOMAIN = 'sites.example.com'
+    try {
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const email = require('@aglyn/shared-util-email')
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const framework = require('@aglyn/aglyn')
+        const host = { subdomain: 'acme' }
+        expect(email.hostEmailOrigin(host)).toBe(
+          'https://acme.sites.example.com',
+        )
+        expect(email.hostEmailOrigin(host)).toBe(
+          framework.hostPublicOrigin(host),
+        )
+        // A custom domain still wins over the configured apex, in both.
+        const custom = { cname: 'shop.acme.com', subdomain: 'acme' }
+        expect(email.hostEmailOrigin(custom)).toBe('https://shop.acme.com')
+        expect(email.hostEmailOrigin(custom)).toBe(
+          framework.hostPublicOrigin(custom),
+        )
+      })
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
+      else process.env.NEXT_PUBLIC_TENANT_DOMAIN = previous
+      jest.resetModules()
+    }
+  })
 })

@@ -213,11 +213,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [user, hostId, enqueueSnackbar],
   )
   // Live-entry links (AGL-123): custom domain first, subdomain fallback.
-  const siteBase = hostDoc?.cname
-    ? `https://${hostDoc.cname}`
-    : hostDoc?.subdomain
-      ? `https://${hostDoc.subdomain}.aglyn.app`
-      : null
+  const siteBase = Aglyn.hostPublicOrigin(hostDoc) ?? null
   // `collections` is shared with commerce's product collections (AGL-954) —
   // list only the content ones, or the catalog's rows show up here and
   // entries published under them are unreachable.

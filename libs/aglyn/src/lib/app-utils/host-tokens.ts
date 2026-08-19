@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { hostPublicOrigin } from './host-naming'
+
 /**
  * Host variables — publisher templates that fill themselves in (AGL-1022).
  *
@@ -126,8 +128,12 @@ const trimmed = (value: unknown): string | undefined => {
 function siteUrl(host: HostTokenSource): string | undefined {
   const custom = trimmed(host.cname)
   if (custom) return `https://${custom.replace(/^https?:\/\//, '')}`
-  const subdomain = trimmed(host.subdomain)
-  return subdomain ? `https://${subdomain}.aglyn.app` : undefined
+  // `hostPublicOrigin`, not a fourth hand-rolled apex (AGL-2195). The cname
+  // branch stays here because this one strips a scheme the token source may
+  // carry; the subdomain branch has no such difference and had none — it was
+  // the same two lines with `aglyn.app` written in, so an operator's own apex
+  // was honoured everywhere except in the tokens a template renders.
+  return hostPublicOrigin({ subdomain: trimmed(host.subdomain) })
 }
 
 function businessName(host: HostTokenSource): string | undefined {

@@ -98,6 +98,7 @@
  */
 
 import { ABUSE_REPORT_CATEGORIES, ABUSE_REPORT_STATUSES } from '@aglyn/aglyn'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -682,7 +683,9 @@ function AdminAbuseReports() {
           <Stack spacing={2}>
             <Alert severity="info">
               {
-                'Reports filed from the public form. Most reporters are not customers — a bank’s fraud team, a browser vendor, an abuse desk — and their alternative to us answering is a block on the whole *.aglyn.app domain. Triage here, then act with Lockdown (a site or a workspace) or Disabled files (one uploaded file). Every status change is audited; nothing on this page can delete a report.'
+                'Reports filed from the public form. Most reporters are not customers — a bank’s fraud team, a browser vendor, an abuse desk — and their alternative to us answering is a block on the whole *.' +
+                TENANT_APEX +
+                ' domain. Triage here, then act with Lockdown (a site or a workspace) or Disabled files (one uploaded file). Every status change is audited; nothing on this page can delete a report.'
               }
             </Alert>
 
@@ -887,7 +890,9 @@ function AdminAbuseReports() {
                       <Alert severity="error">
                         {report.category === 'csam'
                           ? 'CSAM is handled outside this queue: preserve the evidence, report to NCMEC, and follow the runbook. There is deliberately no self-service takedown button for this category, and there must not be one.'
-                          : 'Urgent and still open. The victim of this page is not our customer, and the reporter’s next move if we are silent is a domain-level block on *.aglyn.app.'}
+                          : 'Urgent and still open. The victim of this page is not our customer, and the reporter’s next move if we are silent is a domain-level block on *.' +
+                            TENANT_APEX +
+                            '.'}
                       </Alert>
                     ) : null}
 

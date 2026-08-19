@@ -27,6 +27,7 @@ import { renderEmailHtml, resolveMergeTags, type EmailRenderProduct } from '@agl
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { productPriceRange } from '@aglyn/plugins-commerce/model'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { hostPublicOrigin } from '@aglyn/aglyn/server'
 import {
   campaignEmailSendsForMonth,
   orgDataCollectionForHost,
@@ -422,10 +423,14 @@ export async function performCampaignSend(
     }
   }
 
-  const subdomain = hostSnapshot.get('subdomain')
-  const siteBase = hostSnapshot.get('cname')
-    ? `https://${hostSnapshot.get('cname')}`
-    : `https://${subdomain}.aglyn.app`
+  // `hostPublicOrigin`, not a hand-rolled apex (AGL-2195). Campaign links are
+  // mailed out and clicked days later; a wrong apex sends the operator's whole
+  // audience to a domain the operator does not control.
+  const siteBase =
+    hostPublicOrigin({
+      cname: hostSnapshot.get('cname'),
+      subdomain: hostSnapshot.get('subdomain'),
+    }) ?? ''
 
   // White-label sender identity (White-Label Phase 3): a campaign sent from a
   // white-label store reads as that store's brand. Resolved once for the whole

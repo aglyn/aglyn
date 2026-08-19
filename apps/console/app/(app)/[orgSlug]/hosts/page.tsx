@@ -252,7 +252,7 @@ function HostsContent() {
                       },
                     },
                   }}
-                  subheader={host?.cname || `${host?.subdomain}.aglyn.app`}
+                  subheader={hostDisplayDomain(hostAddress(host))}
                   header={host?.displayName}
                   help={docsHelp('gettingStarted', {
                     anchor: '#what-a-site-contains',

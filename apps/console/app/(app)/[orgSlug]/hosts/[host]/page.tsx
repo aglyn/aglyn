@@ -17,6 +17,7 @@
 'use client'
 
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { AppLink, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
@@ -62,7 +63,7 @@ const Index: NextPageWithLayout<Record<string, never>> = (props) => {
             componentVariant="button"
             variant="contained"
             color="primary"
-            href={`https://${host}.aglyn.app/?aglyn-edit`}
+            href={`https://${host}.${TENANT_APEX}/?aglyn-edit`}
             target="_blank"
             rel="nofollow"
           >

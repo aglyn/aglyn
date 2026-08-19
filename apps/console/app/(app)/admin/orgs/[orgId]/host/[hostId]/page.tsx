@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -46,7 +47,16 @@ import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 
-const TENANT_ROOT = 'aglyn.app'
+/**
+ * The published-site apex, from the ONE shared source (AGL-2195).
+ *
+ * Was a bare `'aglyn.app'` literal, so this staff page printed — and linked —
+ * Aglyn's apex on a self-hosted install for sites Aglyn does not serve, while
+ * `NEXT_PUBLIC_TENANT_DOMAIN` was already honoured by the console's own
+ * `tenant-links.ts` and by `/api/screens/revalidate`. Aliased rather than
+ * renamed at the call sites below so the diff stays about the value.
+ */
+const TENANT_ROOT = TENANT_APEX
 
 /**
  * Staff host detail (AGL-392): a per-site view under an org — live link,

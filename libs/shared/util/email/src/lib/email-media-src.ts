@@ -86,11 +86,38 @@ export function resolveEmailMediaSrc(
   return `${MEDIA_CDN_ROUTE}/${hostQualified(scope, hostId)}/${mediaId}`
 }
 
-/** Mirrors `hostPublicOrigin`. */
+/**
+ * The tenant apex, mirroring `TENANT_APEX` (AGL-2195).
+ *
+ * NOT an import of it, and the reason is a lint rule rather than taste:
+ * `shared-util-email` is tagged `scope:shared`, `@aglyn/aglyn` is not, and
+ * `@nx/enforce-module-boundaries` refuses the edge. So the copy is structural.
+ * What keeps it honest is `apps/console/specs/email-media-src-drift.spec.ts`,
+ * which lives in a project that CAN see both and asserts the two agree —
+ * including under a configured apex.
+ *
+ * The expression is byte-for-byte `TENANT_APEX`'s, trim included: a mirror
+ * that normalised differently would disagree only on the malformed inputs
+ * nobody writes a test for.
+ */
+const TENANT_APEX =
+  (process.env.NEXT_PUBLIC_TENANT_DOMAIN || '').trim() || 'aglyn.app'
+
+/**
+ * Mirrors `hostPublicOrigin` — now including the part that was configurable
+ * (AGL-2195).
+ *
+ * The docblock said "mirrors" while the body wrote `aglyn.app` in flat, so
+ * every absolute link and image `src` in an email a self-hosted deployment
+ * sent pointed at Aglyn's apex. An email is the sharpest place to get this
+ * wrong: the URL leaves the deployment and is clicked days later from an
+ * inbox, where nothing can rewrite it.
+ *
+ */
 export function hostEmailOrigin(
   host: { cname?: string | null; subdomain?: string | null } | null | undefined,
 ): string | undefined {
   if (host?.cname) return `https://${host.cname}`
-  if (host?.subdomain) return `https://${host.subdomain}.aglyn.app`
+  if (host?.subdomain) return `https://${host.subdomain}.${TENANT_APEX}`
   return undefined
 }

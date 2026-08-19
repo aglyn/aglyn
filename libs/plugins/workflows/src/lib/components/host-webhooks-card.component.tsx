@@ -24,6 +24,7 @@ import {
   WEBHOOK_URL_PATTERN,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -105,11 +106,9 @@ export function HostWebhooksCard(props: {
     .filter((workflow: any) => !workflow.deletedAt && workflow.name)
     .map((workflow: any) => workflow.name as string)
     .sort()
-  const siteBase = host?.cname
-    ? `https://${host.cname}`
-    : host?.subdomain
-      ? `https://${host.subdomain}.aglyn.app`
-      : ''
+  // `hostPublicOrigin` (AGL-2195) — this base is printed into the webhook
+  // sample payload an operator copies into a third-party system.
+  const siteBase = hostPublicOrigin(host) ?? ''
 
   const [draft, setDraft] = useState<WebhookDraft | null>(null)
 
