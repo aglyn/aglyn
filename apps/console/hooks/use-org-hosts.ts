@@ -48,6 +48,7 @@ import { useEffect, useState } from 'react'
 const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
   admin: true,
   editor: true,
+  author: true,
   viewer: true,
 }
 const HOST_ACCESS_ROLES = new Set<string>(Object.keys(HOST_ACCESS_ROLE_KEYS))

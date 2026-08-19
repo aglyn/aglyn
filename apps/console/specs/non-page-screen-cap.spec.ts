@@ -177,6 +177,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
+  // The REAL host-role gate (AGL-2334). These routes ask
+  // `hostRoleCanWrite` whether the caller may write at all, and this factory
+  // is a CLOSED WORLD — anything it does not name is `undefined`, so leaving
+  // it out makes the route throw and every assertion below read a 500 as if
+  // the behaviour under test had regressed. Stubbed `() => true` it would be
+  // worse: the suite would pass against a route that admits anybody.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
   createResourceUid: () => 'generated-id',
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({

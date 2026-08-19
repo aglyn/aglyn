@@ -422,6 +422,13 @@ const AN_HOUR = 3_600_000
 
 const OWNER = 'uid-owner'
 const EDITOR = 'uid-editor' // hostAccess: HOST=editor
+// The AGL-2334 role: hostAccess HOST=author — edits content, never publishes.
+// Seeded with the org role `viewer` and `allHosts: false` because that is
+// exactly what `grantHostAccess` writes for a site collaborator; an author
+// can only ever arrive through an explicit `hostAccess` entry, since
+// `hostRoleFor` maps an `allHosts` member to their ORG role and there is no
+// org-level author.
+const AUTHOR = 'uid-author'
 const VIEWER = 'uid-viewer' // allHosts viewer
 const LEGACY = 'uid-legacy' // only in the retired host admins map
 const OUTSIDER = 'uid-outsider'
@@ -492,6 +499,10 @@ beforeEach(async () => {
       role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
       scopeTokens: ['org', `host:${HOST}`],
     })
+    await setDoc(doc(db, 'orgs', ORG, 'members', AUTHOR), {
+      role: 'viewer', allHosts: false, hostAccess: { [HOST]: 'author' },
+      scopeTokens: ['org', `host:${HOST}`],
+    })
     await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER), {
       role: 'viewer', allHosts: true, scopeTokens: ['org'],
     })
@@ -512,9 +523,66 @@ beforeEach(async () => {
     await setDoc(doc(db, 'hosts', HOST), {
       displayName: 'Site A', orgId: ORG,
       admins: { [LEGACY]: true }, // retired map — must NOT authorize
-      memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor', [VIEWER]: 'viewer' },
+      memberRoles: {
+        [OWNER]: 'admin', [EDITOR]: 'editor', [AUTHOR]: 'author',
+        [VIEWER]: 'viewer',
+      },
+      // The routing map, with one page already live. AGL-2334's sharpest
+      // assertion is about THIS key: registering a path here is what makes a
+      // page reachable, so an author must not be able to add, change or
+      // remove an entry — while an editor still must.
+      screens: { 'screen-1': '/home' },
     })
-    await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
+    // `publishedAt` and `publishSchedule` are seeded SET, deliberately: a
+    // `deleteField()` on a field that was never there affects NO keys, so
+    // `diff().affectedKeys().hasAny([...])` is empty and the write is allowed
+    // for reasons that have nothing to do with the rule. Both "the author
+    // clears it" assertions below passed against an unseeded screen and were
+    // asserting nothing at all — found by running this against the emulator.
+    await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), {
+      name: 'Home', slug: 'home', versionId: 'v1',
+      publishedAt: new Date(),
+      publishSchedule: {
+        action: 'publish', versionId: 'v1',
+        publishAt: new Date(Date.now() + 24 * AN_HOUR),
+        status: 'pending', createdAt: new Date(),
+      },
+    })
+    // The other four publish shapes (AGL-2334), seeded so both halves of the
+    // author role can be asserted against real documents: a layout and a
+    // component each carry a live `versionId` pointer, and a collection has
+    // one published entry and one draft.
+    await setDoc(doc(db, 'hosts', HOST, 'layouts', 'layout-1'), {
+      name: 'Main', versionId: 'lv1',
+    })
+    await setDoc(
+      doc(db, 'hosts', HOST, 'layouts', 'layout-1', 'versions', 'lv1'),
+      { nodes: { root: {} } },
+    )
+    await setDoc(doc(db, 'hosts', HOST, 'components', 'comp-1'), {
+      name: 'Hero', versionId: 'cv1',
+    })
+    await setDoc(
+      doc(db, 'hosts', HOST, 'components', 'comp-1', 'versions', 'cv1'),
+      { nodes: { root: {} } },
+    )
+    await setDoc(doc(db, 'hosts', HOST, 'collections', 'col-1'), {
+      slug: 'posts', kind: 'blog',
+    })
+    await setDoc(
+      doc(db, 'hosts', HOST, 'collections', 'col-1', 'entries', 'entry-live'),
+      { title: 'Live post', status: 'published', body: 'x' },
+    )
+    await setDoc(
+      doc(db, 'hosts', HOST, 'collections', 'col-1', 'entries', 'entry-draft'),
+      { title: 'Draft post', status: 'draft', body: 'x' },
+    )
+    // One order, so the PII read gate has a document to refuse rather than
+    // proving only that a missing document is unreadable.
+    await setDoc(doc(db, 'hosts', HOST, 'orders', 'order-1'), {
+      status: 'paid', totals: { grandTotal: 1000 },
+      shipping: { address1: '1 Main St' },
+    })
     // An EXISTING version doc, so the AGL-1369 create/update split can be told
     // apart: creating one more version is the paid `versioning` feature and is
     // API-only, while saving the canvas — a merge-set onto this doc — is an
@@ -5393,6 +5461,441 @@ describe('an order status is Admin-SDK-only — notes and restock answers stay c
     })
     const snapshot = await getDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', ORDER))
     assert.equal(snapshot.data().status, 'fulfilled')
+  })
+})
+
+/**
+ * The `author` host role — "edit content but not publish" (AGL-2334).
+ *
+ * The agency guide's own worked example is *"a client who may edit content
+ * but not publish"*, and until this role existed the narrowest thing the
+ * product could express was `viewer`, which cannot edit at all.
+ *
+ * ⚠️ THE BOTH-HALVES RULE IS THE WHOLE TEST HERE. Every assertion that an
+ * author CANNOT publish would pass just as well for a role that can do
+ * nothing whatsoever — a gate that refuses everyone looks identical to a
+ * correct one from the deny side. So each refusal below is paired: the author
+ * can still make the ordinary content edit on the same document, and the
+ * EDITOR can still perform the very publish the author was refused. A change
+ * that broke either half would leave a role we cannot sell and a publish
+ * button that no longer works for anybody.
+ */
+describe('the author host role edits content and cannot publish (AGL-2334)', () => {
+  const SCREEN = ['hosts', HOST, 'screens', 'screen-1']
+  const LAYOUT = ['hosts', HOST, 'layouts', 'layout-1']
+  const COMPONENT = ['hosts', HOST, 'components', 'comp-1']
+  const ENTRY_DRAFT = [
+    'hosts', HOST, 'collections', 'col-1', 'entries', 'entry-draft',
+  ]
+  const ENTRY_LIVE = [
+    'hosts', HOST, 'collections', 'col-1', 'entries', 'entry-live',
+  ]
+  /** A `publishSchedule` shaped exactly as the console writes one. */
+  const schedule = () => ({
+    action: 'publish',
+    versionId: 'v1',
+    publishAt: new Date(Date.now() + AN_HOUR),
+    status: 'pending',
+    createdAt: new Date(),
+  })
+
+  it('HALF ONE — the author really can edit the content', async () => {
+    // The role is worthless if this half fails, and every refusal in the
+    // tests below would still pass. Asserted FIRST for that reason.
+    await mustAllow(
+      'the author renaming a screen',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), { name: 'Renamed' }),
+    )
+    await mustAllow(
+      'the author reordering a screen in the tree',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), { order: 3, parentId: null }),
+    )
+    // The besigner canvas save: a merge-set onto an EXISTING version doc,
+    // which is a rules UPDATE (the AGL-1369 create/update split). This is
+    // what "edit content" actually means in this product.
+    await mustAllow(
+      'the author saving the canvas',
+      setDoc(
+        doc(authed(AUTHOR), ...SCREEN, 'versions', 'v1'),
+        { nodes: { root: { text: 'edited by the client' } } },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'the author editing a layout version',
+      setDoc(
+        doc(authed(AUTHOR), ...LAYOUT, 'versions', 'lv1'),
+        { nodes: { root: {} } },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'the author editing a component version',
+      setDoc(
+        doc(authed(AUTHOR), ...COMPONENT, 'versions', 'cv1'),
+        { nodes: { root: {} } },
+        { merge: true },
+      ),
+    )
+    // The component DOC itself. This one only passes because `components` was
+    // added to the host catch-all's update exclusion in the same change AND
+    // its dedicated block re-grants — if the exclusion were added without the
+    // re-grant, THIS is the assertion that would catch it.
+    await mustAllow(
+      'the author renaming a component',
+      updateDoc(doc(authed(AUTHOR), ...COMPONENT), { name: 'Hero v2' }),
+    )
+    await mustAllow(
+      'the author renaming a layout',
+      updateDoc(doc(authed(AUTHOR), ...LAYOUT), { name: 'Main v2' }),
+    )
+    await mustAllow(
+      'the author editing a draft entry body',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_DRAFT), { body: 'new words' }),
+    )
+    await mustAllow(
+      'the author editing a LIVE entry body (editing is not publishing)',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_LIVE), { body: 'a correction' }),
+    )
+    await mustAllow(
+      'the author creating a draft entry',
+      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-new'), { title: 'New', status: 'draft' }),
+    )
+    await mustAllow(
+      'the author creating an entry with no status at all',
+      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-statusless'), { title: 'No status' }),
+    )
+    await mustAllow(
+      'the author deleting a draft entry',
+      deleteDoc(doc(authed(AUTHOR), ...ENTRY_DRAFT)),
+    )
+    await mustAllow(
+      'the author editing a site variable',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST, 'variables', 'var-1'),
+        { value: '2' }),
+    )
+    await mustAllow(
+      'the author reading the site',
+      getDoc(doc(authed(AUTHOR), 'hosts', HOST)),
+    )
+    // And a non-publish key on the HOST doc itself, so the routing-map freeze
+    // below is proved to be about `screens` and not about the document.
+    await mustAllow(
+      'the author editing a non-publish key on the host doc',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), { displayName: 'Site A2' }),
+    )
+  })
+
+  it('HALF TWO — the author cannot register a route (the routing map)', async () => {
+    await mustDeny(
+      'the author adding a routing-map entry — the act that makes a page live',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), {
+        'screens.screen-2': '/new-page',
+      }),
+    )
+    await mustDeny(
+      'the author moving an existing route',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), {
+        'screens.screen-1': '/moved',
+      }),
+    )
+    await mustDeny(
+      'the author UNpublishing by clearing a routing-map entry',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), {
+        'screens.screen-1': deleteField(),
+      }),
+    )
+    await mustDeny(
+      'the author replacing the whole routing map',
+      updateDoc(doc(authed(AUTHOR), 'hosts', HOST), { screens: {} }),
+    )
+    // The other half of `publishScreenRoute`: it writes the routing map AND
+    // the screen's own slug + publishedAt. Both must be refused, or the
+    // remaining one leaves the publish half-applied.
+    await mustDeny(
+      'the author stamping a slug and publishedAt',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        slug: 'client-page', publishedAt: new Date(),
+      }),
+    )
+    await mustDeny(
+      'the author clearing publishedAt (unpublish)',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        publishedAt: deleteField(),
+      }),
+    )
+  })
+
+  it('HALF TWO — the author cannot move a live version pointer', async () => {
+    await mustDeny(
+      'the author republishing a screen',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), { versionId: 'v2' }),
+    )
+    await mustDeny(
+      'the author republishing a layout',
+      updateDoc(doc(authed(AUTHOR), ...LAYOUT), { versionId: 'lv2' }),
+    )
+    // The sharpest of the three: a component republish pushes changes to
+    // every page that uses it, with no route touched.
+    await mustDeny(
+      'the author republishing a component',
+      updateDoc(doc(authed(AUTHOR), ...COMPONENT), { versionId: 'cv2' }),
+    )
+    // Smuggling: a pointer move riding along with a legitimate edit is still
+    // a pointer move. `diff().affectedKeys()` reports CHANGED keys, so this
+    // is a real second case and not a restatement of the one above.
+    await mustDeny(
+      'the author smuggling a versionId in with a rename',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        name: 'Innocent rename', versionId: 'v2',
+      }),
+    )
+  })
+
+  it('HALF TWO — publishSchedule is frozen, which is the whole point', async () => {
+    // THE BYPASS. `publishSchedule` is a client write; the cron executor then
+    // flips `versionId` and registers the routing entry with ADMIN-SDK
+    // privileges, subject to no rule at all. Every refusal above is defeated
+    // in one write without this — schedule it for a minute from now and the
+    // platform publishes it for you.
+    await mustDeny(
+      'the author SCHEDULING a screen publish',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        publishSchedule: schedule(),
+      }),
+    )
+    await mustDeny(
+      'the author scheduling a layout publish',
+      updateDoc(doc(authed(AUTHOR), ...LAYOUT), {
+        publishSchedule: schedule(),
+      }),
+    )
+    await mustDeny(
+      'the author scheduling a component publish',
+      updateDoc(doc(authed(AUTHOR), ...COMPONENT), {
+        publishSchedule: schedule(),
+      }),
+    )
+    // `action: 'unpublish'` is the same field taking a live page DOWN on a
+    // timer, which is the same axis and must be refused for the same reason.
+    await mustDeny(
+      'the author scheduling an UNpublish',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        publishSchedule: { ...schedule(), action: 'unpublish' },
+      }),
+    )
+    await mustDeny(
+      'the author cancelling a schedule somebody else set',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), {
+        publishSchedule: deleteField(),
+      }),
+    )
+  })
+
+  it('HALF TWO — the author cannot publish a collection entry', async () => {
+    await mustDeny(
+      'the author publishing an entry',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_DRAFT), {
+        status: 'published', publishedAt: new Date(),
+      }),
+    )
+    await mustDeny(
+      'the author unpublishing a live entry',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_LIVE), { status: 'draft' }),
+    )
+    // The entry scheduler — `publishSchedule` in a different spelling. The
+    // tenant runtime flips a due `scheduled` entry to `published` with the
+    // Admin SDK, so leaving this open is the same bypass one collection over.
+    await mustDeny(
+      'the author SCHEDULING an entry publish',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_DRAFT), {
+        status: 'scheduled', publishAt: new Date(Date.now() + AN_HOUR),
+      }),
+    )
+    await mustDeny(
+      'the author back-dating a live entry',
+      updateDoc(doc(authed(AUTHOR), ...ENTRY_LIVE), {
+        publishedAt: new Date(0),
+      }),
+    )
+    // A create is the update freeze's escape hatch if it is not covered:
+    // delete the draft, re-create it published.
+    await mustDeny(
+      'the author CREATING an entry that is already published',
+      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-born-live'),
+        { title: 'Born live', status: 'published' }),
+    )
+    await mustDeny(
+      'the author creating an entry that is already scheduled',
+      setDoc(doc(authed(AUTHOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-born-scheduled'),
+        { title: 'Born scheduled', status: 'scheduled',
+          publishAt: new Date(Date.now() + AN_HOUR) }),
+    )
+  })
+
+  it('HALF TWO — the author cannot take live content down another way', async () => {
+    await mustDeny(
+      'the author soft-deleting a screen',
+      updateDoc(doc(authed(AUTHOR), ...SCREEN), { deletedAt: new Date() }),
+    )
+    await mustDeny(
+      'the author deleting a screen',
+      deleteDoc(doc(authed(AUTHOR), ...SCREEN)),
+    )
+    await mustDeny(
+      'the author deleting a layout',
+      deleteDoc(doc(authed(AUTHOR), ...LAYOUT)),
+    )
+    await mustDeny(
+      'the author deleting a component',
+      deleteDoc(doc(authed(AUTHOR), ...COMPONENT)),
+    )
+    // The freeze walked around from underneath: the live page serves whatever
+    // `versionId` points at, so deleting that document takes the page down
+    // without touching a single publish field.
+    await mustDeny(
+      'the author deleting the live version document',
+      deleteDoc(doc(authed(AUTHOR), ...SCREEN, 'versions', 'v1')),
+    )
+    await mustDeny(
+      'the author deleting a layout version document',
+      deleteDoc(doc(authed(AUTHOR), ...LAYOUT, 'versions', 'lv1')),
+    )
+    await mustDeny(
+      'the author deleting a component version document',
+      deleteDoc(doc(authed(AUTHOR), ...COMPONENT, 'versions', 'cv1')),
+    )
+  })
+
+  it('HALF TWO — "edit content" does not quietly mean "read the order book"', async () => {
+    // An agency grants this role precisely because it wants to hand a client
+    // LESS. Both reads were `canWriteHostContent`, so admitting `author`
+    // there would have handed over every shopper's address and every webhook
+    // signing secret along with the ability to fix a typo.
+    await mustDeny(
+      'the author reading an order',
+      getDoc(doc(authed(AUTHOR), 'hosts', HOST, 'orders', 'order-1')),
+    )
+    await mustDeny(
+      'the author reading a webhook signing secret',
+      getDoc(doc(authed(AUTHOR), 'hosts', HOST, 'webhooks', 'wh1')),
+    )
+  })
+
+  it('HALF THREE — the EDITOR can still do every one of those things', async () => {
+    // Without this, a gate that refuses everybody passes the whole suite
+    // above. Each assertion here is the exact write the author was refused.
+    await mustAllow(
+      'the editor registering a route',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'screens.screen-2': '/new-page',
+      }),
+    )
+    await mustAllow(
+      'the editor clearing a routing-map entry',
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        'screens.screen-1': deleteField(),
+      }),
+    )
+    await mustAllow(
+      'the editor stamping a slug and publishedAt',
+      updateDoc(doc(authed(EDITOR), ...SCREEN), {
+        slug: 'client-page', publishedAt: new Date(),
+      }),
+    )
+    await mustAllow(
+      'the editor moving the screen version pointer',
+      updateDoc(doc(authed(EDITOR), ...SCREEN), { versionId: 'v2' }),
+    )
+    await mustAllow(
+      'the editor moving the layout version pointer',
+      updateDoc(doc(authed(EDITOR), ...LAYOUT), { versionId: 'lv2' }),
+    )
+    await mustAllow(
+      'the editor moving the component version pointer',
+      updateDoc(doc(authed(EDITOR), ...COMPONENT), { versionId: 'cv2' }),
+    )
+    await mustAllow(
+      'the editor scheduling a publish',
+      updateDoc(doc(authed(EDITOR), ...SCREEN), {
+        publishSchedule: schedule(),
+      }),
+    )
+    await mustAllow(
+      'the editor scheduling a layout publish',
+      updateDoc(doc(authed(EDITOR), ...LAYOUT), {
+        publishSchedule: schedule(),
+      }),
+    )
+    await mustAllow(
+      'the editor scheduling a component publish',
+      updateDoc(doc(authed(EDITOR), ...COMPONENT), {
+        publishSchedule: schedule(),
+      }),
+    )
+    await mustAllow(
+      'the editor publishing an entry',
+      updateDoc(doc(authed(EDITOR), ...ENTRY_DRAFT), {
+        status: 'published', publishedAt: new Date(),
+      }),
+    )
+    await mustAllow(
+      'the editor creating an already-published entry',
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'collections', 'col-1',
+        'entries', 'entry-editor-live'),
+        { title: 'Born live', status: 'published' }),
+    )
+    await mustAllow(
+      'the editor renaming a component (the catch-all exclusion did not break it)',
+      updateDoc(doc(authed(EDITOR), ...COMPONENT), { name: 'Hero v3' }),
+    )
+    await mustAllow(
+      'the editor deleting a version document',
+      deleteDoc(doc(authed(EDITOR), ...SCREEN, 'versions', 'v1')),
+    )
+    await mustAllow(
+      'the editor deleting a component',
+      deleteDoc(doc(authed(EDITOR), ...COMPONENT)),
+    )
+    await mustAllow(
+      'the editor reading an order',
+      getDoc(doc(authed(EDITOR), 'hosts', HOST, 'orders', 'order-1')),
+    )
+  })
+
+  it('the viewer is still refused everything the author may do', async () => {
+    // The floor under the whole role: `author` must be strictly stronger than
+    // `viewer` and strictly weaker than `editor`. If a mistake in the role
+    // list admitted `viewer` to content writes, HALF ONE would go green for
+    // the wrong reason and nothing else in this file would notice.
+    await mustDeny(
+      'the viewer renaming a screen',
+      updateDoc(doc(authed(VIEWER), ...SCREEN), { name: 'No' }),
+    )
+    await mustDeny(
+      'the viewer saving the canvas',
+      setDoc(doc(authed(VIEWER), ...SCREEN, 'versions', 'v1'),
+        { nodes: {} }, { merge: true }),
+    )
+    await mustDeny(
+      'the viewer editing an entry',
+      updateDoc(doc(authed(VIEWER), ...ENTRY_DRAFT), { body: 'no' }),
+    )
+  })
+
+  it('a suspended site freezes the author too', async () => {
+    // `hostWritesFrozen` is ANDed ahead of every branch, so this should hold
+    // for free — which is exactly the kind of claim that turns out to be
+    // false when a new role is threaded through by hand.
+    await mustDeny(
+      'the author editing content on a host-suspended site',
+      updateDoc(doc(authed(AUTHOR), 'hosts', LOCKED_HOST, 'screens', 's1'),
+        { name: 'nope' }),
+    )
   })
 })
 

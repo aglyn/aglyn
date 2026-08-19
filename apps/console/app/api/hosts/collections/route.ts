@@ -33,7 +33,11 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { COLLECTION_TEMPLATE_SCREEN_FIELDS } from '../../../../constants/collection-templates'
 
 /** Roles allowed to write host content — mirrors canWriteHostContent(). */
-const HOST_WRITER_ROLES = new Set(['admin', 'editor'])
+// `author` (AGL-2334) manages the collection's SHAPE — creating one, naming
+// it, assigning its template. What an author cannot do is publish an ENTRY,
+// which is a client-direct write this route never touches and the rules
+// refuse on `status`/`publishedAt`/`publishAt`.
+const HOST_WRITER_ROLES = new Set(['admin', 'editor', 'author'])
 
 /** Keys the client may set; everything else is dropped rather than trusted. */
 const CONTENT_KEYS = new Set(['displayName', 'slug'])

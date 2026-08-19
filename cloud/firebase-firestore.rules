@@ -746,7 +746,75 @@ service cloud.firestore {
     function isHostAdmin(hostId) {
       return isSignedIn() && hostMemberRole(hostId) != null;
     }
+    /**
+     * May this member MUTATE content on the site? (`author` included.)
+     *
+     * `author` (AGL-2334) is the "edit content but not publish" role the
+     * agency guide sells and the product could not express. It is a HOST role
+     * because publishing is a set of client-direct Firestore writes, so THIS
+     * FILE is the enforcement point — there is no route in front of it to
+     * gate. An org-level permission key would have been on the wrong axis
+     * entirely: rules cannot evaluate a custom role without a second
+     * denormalized projection, and `memberRoles` is already read here.
+     */
     function canWriteHostContent(hostId) {
+      return isSignedIn() &&
+        hostMemberRole(hostId) in ['admin', 'editor', 'author'];
+    }
+    /**
+     * May this member make content LIVE? (`author` excluded — that is the
+     * entire role.)
+     *
+     * Every publish surface asks this INSTEAD OF `canWriteHostContent`, and
+     * publishing is five document shapes, not one button:
+     *
+     *  1. `hosts/{hostId}.screens.{screenId}` — the routing map. Registering a
+     *     path is what makes a page reachable at all, so this is the one that
+     *     matters most and it lives on the host doc, not the screen.
+     *  2. `hosts/{hostId}/screens/{screenId}` — `slug`, `publishedAt` and the
+     *     `versionId` live-version pointer.
+     *  3/4. the same `versionId` pointer on `layouts/{layoutId}` and
+     *     `components/{componentId}` — a component republish pushes changes to
+     *     every page that uses it, so it is a publish even though no route
+     *     changes.
+     *  5. `collections/{colId}/entries/{entryId}` — `status`/`publishedAt`/
+     *     `publishAt`, a separate publish path with its own scheduler.
+     *
+     * And `publishSchedule` on shapes 2-4 is a SIXTH surface hiding inside
+     * them. It is a client write; the executor later flips `versionId` and
+     * registers the routing entry with ADMIN-SDK privileges, subject to no
+     * rule at all. A publish gate that does not freeze `publishSchedule` is
+     * defeated in one write — schedule it for a minute from now and the cron
+     * publishes it for you. Every freeze below therefore names
+     * `publishSchedule` beside `versionId`; they are one control.
+     *
+     * Deletion of a screen, layout or component asks this too. Not because
+     * deleting is publishing, but because taking a live page down is the same
+     * act in the other direction — and because the console's screen delete is
+     * a soft-delete PAIRED with a routing-map removal. Letting an author do
+     * half of that pair leaves a deleted screen still routed, which is a worse
+     * outcome than refusing it.
+     */
+    function canPublishHostContent(hostId) {
+      return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
+    }
+    /**
+     * May this member read the site's SENSITIVE documents — the `webhooks`
+     * that carry an HMAC signing secret and a target URL, and the `orders`
+     * that carry a shopper's address and payment data?
+     *
+     * Same membership test as `canPublishHostContent` and deliberately a
+     * SEPARATE function, because it is a different question with a different
+     * reason. Both read gates were `canWriteHostContent`, and widening that
+     * to admit `author` would have handed every customer's PII and every
+     * webhook secret to the narrowest role we sell — a role an agency grants
+     * precisely BECAUSE it wants to hand a client less. "Edit content but not
+     * publish" must not quietly also mean "read the order book".
+     *
+     * Keeping the two apart means a later decision to let authors publish
+     * cannot drag the PII gate along with it by accident.
+     */
+    function canReadHostSensitive(hostId) {
       return isSignedIn() && hostMemberRole(hostId) in ['admin', 'editor'];
     }
     /**
@@ -939,7 +1007,21 @@ service cloud.firestore {
                      'projectId', 'projectNumber']) &&
           (hostMemberRole(hostId) == 'admin' ||
             !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['disabledPlugins'])));
+              .hasAny(['disabledPlugins'])) &&
+          // `screens` is the ROUTING MAP, and registering a path in it is
+          // what makes a page reachable on the live site — see
+          // `publishScreenRoute`, which writes this key and the screen doc's
+          // slug in one act. So it is the publish surface that matters most,
+          // and unlike every other key on this document it cannot simply be
+          // frozen: admins and editors write it on every publish. It is
+          // frozen for an `author` and open to the roles above (AGL-2334).
+          //
+          // Deliberately NOT added to the blanket `hasAny` list above: that
+          // list is the Admin-SDK-only set, and `screens` has a legitimate
+          // client writer. Two different questions, two conditions.
+          (canPublishHostContent(hostId) ||
+            !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['screens'])));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && !hostWritesFrozen(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
@@ -992,6 +1074,23 @@ service cloud.firestore {
       // counting correctly at the moment of create can see. Serve-side refusal
       // and the routing-map count make an excluded screen worthless while it
       // is excluded; this is what stops it being laundered back into a page.
+      //
+      // The publish freeze for `author` (AGL-2334) is the last condition on
+      // update. `slug` and `publishedAt` are written by `publishScreenRoute`
+      // and nothing else; `versionId` is the LIVE-VERSION pointer, moved only
+      // by the Publish action in the versions panel; `publishSchedule` is the
+      // same act deferred, and leaving it out would make the other three
+      // decorative — the cron executor applies it with the Admin SDK.
+      // `deletedAt` joins them because the console's delete soft-deletes the
+      // screen AND removes its routing-map entry in one `Promise.all`, and
+      // the routing-map half is already refused above: allowing this half
+      // alone would leave a deleted screen still serving its old route.
+      //
+      // Everything else on a screen stays open to an author — `name`,
+      // `parentId`, `order`, `visibility`, translations, SEO. That is the
+      // half of this that has to keep working, and a permission test that
+      // only proves the refusals would pass just as well for a role that can
+      // do nothing at all.
       match /screens/{screenId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
@@ -1001,26 +1100,54 @@ service cloud.firestore {
               .hasAny(['kind']) &&
             !(('deletedAt' in resource.data) &&
               request.resource.data.diff(resource.data).affectedKeys()
-                .hasAny(['deletedAt'])));
+                .hasAny(['deletedAt'])) &&
+            (canPublishHostContent(hostId) ||
+              !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['slug', 'publishedAt', 'versionId',
+                         'publishSchedule', 'deletedAt'])));
         allow delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
-          allow update, delete: if isStaff() ||
+          // Saving the canvas is an UPDATE on a version document, and it is
+          // the whole of what an author does — open to every content role.
+          allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          // DELETING a version is not. The live page serves whichever version
+          // `versionId` points at, so deleting that document takes the page
+          // down without ever touching a publish field — the freeze above,
+          // walked around from underneath. Refused for an author across the
+          // whole `versions` subcollection rather than only for the live one,
+          // because telling which is live needs a `get()` of the parent and
+          // pruning version history is a maintenance act, not authoring.
+          allow delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+              (canPublishHostContent(hostId) || sub != 'versions'));
         }
       }
+      // A layout has no route of its own, so its publish surface is just the
+      // `versionId` pointer and the `publishSchedule` that moves it later —
+      // but a layout wraps pages that ARE live, so moving that pointer
+      // changes the live site exactly as a screen publish does (AGL-2334).
       match /layouts/{layoutId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
-        allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            (canPublishHostContent(hostId) ||
+              !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['versionId', 'publishSchedule'])));
+        allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
-          allow update, delete: if isStaff() ||
+          allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          allow delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+              (canPublishHostContent(hostId) || sub != 'versions'));
         }
       }
       // Reusable components (AGL-679) now carry editing history like screens
@@ -1030,16 +1157,36 @@ service cloud.firestore {
       // has to be client-writable, and the catch-all's create exclusion is
       // by collection NAME, so `components/{id}/versions/{v}` was caught by
       // it too. This dedicated block carves the versions back out.
+      //
+      // The `author` publish freeze on the component DOC (AGL-2334) is the
+      // sharpest of the three: a component republish pushes changes to every
+      // page that uses it, with no route touched and nothing to review.
+      //
+      // ⚠️ This freeze only bites because `components` was ADDED to the host
+      // catch-all's UPDATE exclusion list in the same change. It was in none
+      // of the three lists — only `screens` and `layouts` were — so the
+      // catch-all granted an unrestricted update on this very path, and
+      // sibling match blocks are OR'd with the LOOSER one winning. Writing
+      // the freeze here alone would have been theatre. The dedicated block
+      // re-grants what the exclusion takes, exactly as it does for `screens`.
       match /components/{componentId} {
         allow read: if isStaff() || isHostAdmin(hostId);
         allow create: if isStaff();
-        allow update, delete: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            (canPublishHostContent(hostId) ||
+              !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['versionId', 'publishSchedule'])));
+        allow delete: if isStaff() ||
+          (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         match /{sub}/{document=**} {
           allow read: if isStaff() || isHostAdmin(hostId);
           allow create: if isStaff();
-          allow update, delete: if isStaff() ||
+          allow update: if isStaff() ||
             (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
+          allow delete: if isStaff() ||
+            (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+              (canPublishHostContent(hostId) || sub != 'versions'));
         }
       }
       // Templates (AGL-666): saved starting points for pages, components and
@@ -1074,7 +1221,7 @@ service cloud.firestore {
       // stay client-side (delete is a soft delete, and neither consumes a
       // slot the cap has not already granted).
       match /webhooks/{webhookId} {
-        allow read: if isStaff() || canWriteHostContent(hostId);
+        allow read: if isStaff() || canReadHostSensitive(hostId);
       }
       // Order STATUS is server-owned (AGL-1827). Every transition goes
       // through an Admin-SDK route that re-asks ORDER_TRANSITIONS inside the
@@ -1116,7 +1263,7 @@ service cloud.firestore {
       // keys only, so a patch that spells out an unchanged `status` still
       // passes — the AGL-1795/1813/1824 property, unchanged.
       match /orders/{orderId} {
-        allow read: if isStaff() || canWriteHostContent(hostId);
+        allow read: if isStaff() || canReadHostSensitive(hostId);
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
            request.resource.data.diff(resource.data)
@@ -1307,9 +1454,20 @@ service cloud.firestore {
         // stock" writes a row with `addDoc` in the same act as the count, and
         // moving that server-side is a different change. Appending is also the
         // one operation a ledger is supposed to allow.
+        //
+        // `components` joins UPDATE only (AGL-2334), and for the `templates`
+        // reason rather than the AGL-1367 one: its dedicated block above now
+        // freezes `versionId`/`publishSchedule` for an `author`, and leaving
+        // the name here would re-grant the unrestricted update this catch-all
+        // allows — sibling matches are OR'd and the looser one wins, so the
+        // freeze would never have fired. `screens` and `layouts` were already
+        // excluded, which is why only the component publish was open.
+        //
+        // Create and delete are deliberately NOT changed: create is already
+        // API-only via the list above, and the dedicated block owns delete.
         allow update: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
-            !(subcollection in ['screens', 'layouts', 'installs',
+            !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'mediaTombstones', 'inventoryAdjustments']));
@@ -1319,11 +1477,22 @@ service cloud.firestore {
         // The exclusion is by NAME and {document=**} spans deeper paths, so
         // it would take single-entry deletes with it; the block below
         // re-grants those (rules OR, so a dedicated allow still wins).
+        //
+        // `components` joins DELETE for the same reason it joined UPDATE
+        // above (AGL-2334), and it is worth recording that the emulator suite
+        // is what found it: the dedicated block's `allow delete` had already
+        // been narrowed to `canPublishHostContent`, the comment above it said
+        // so, and an author could still delete a component — because this
+        // list did not name it and the looser sibling wins. `screens` and
+        // `layouts` were here already, which is exactly why only the
+        // component came out wrong and why reading the diff would not have
+        // shown it. A rules test against a MOCK of this file would have
+        // agreed with the comment.
         allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
-            !(subcollection in ['screens', 'layouts', 'collections',
-              'datasets', 'orders', 'registers', 'counters', 'analytics',
-              'screenAnalytics', 'members', 'mediaTombstones',
+            !(subcollection in ['screens', 'layouts', 'components',
+              'collections', 'datasets', 'orders', 'registers', 'counters',
+              'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
               'inventoryAdjustments']));
       }
       // Editors keep full client control of a collection doc EXCEPT the two
@@ -1359,8 +1528,37 @@ service cloud.firestore {
       // Entries are a separate resource that merely lives underneath, so the
       // name-based exclusions above must not reach them: create/update/delete
       // stay editor-writable here (rules OR, so a dedicated allow wins).
+      //
+      // Entries are the FIFTH publish surface (AGL-2334) and the one with no
+      // version pointer at all: an entry goes live by having its own `status`
+      // set to `published`, or `scheduled` with a `publishAt` that the tenant
+      // runtime later flips to `published` with the Admin SDK — the same
+      // deferred-publish shape as `publishSchedule`, spelled differently.
+      // `publishedAt` is frozen alongside them because it is what the live
+      // listing sorts and filters on.
+      //
+      // CREATE stays open to an author, with one condition: the console's
+      // entry editor writes `status: 'draft'` on the create and never names
+      // status again, so a draft create is authoring and a create that
+      // arrives already `published` is a publish wearing a create's clothes —
+      // which is the shape the freeze on update would otherwise hand it. An
+      // absent status defaults to draft, so an author writing no status at
+      // all is admitted.
+      //
+      // DELETE stays open to an author, unlike a screen's. There is no paired
+      // routing-map write to leave half-applied, and an entry is the one
+      // content shape where the console offers deletion as ordinary editing.
       match /collections/{collectionId}/entries/{entryId} {
-        allow create, update, delete: if isStaff() ||
+        allow create: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            (canPublishHostContent(hostId) ||
+              request.resource.data.get('status', 'draft') == 'draft'));
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            (canPublishHostContent(hostId) ||
+              !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['status', 'publishedAt', 'publishAt'])));
+        allow delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
     }

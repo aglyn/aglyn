@@ -136,6 +136,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL plan rules. Stubbing `checkEntitlement` would leave the only
   // assertion that matters — Free is refused, Pro is not — proving nothing.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL host-role gate (AGL-2334). These routes ask
+  // `hostRoleCanWrite` whether the caller may write at all, and this factory
+  // is a CLOSED WORLD — anything it does not name is `undefined`, so leaving
+  // it out makes the route throw and every assertion below read a 500 as if
+  // the behaviour under test had regressed. Stubbed `() => true` it would be
+  // worse: the suite would pass against a route that admits anybody.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
   createResourceUid: () => 'generated-id',
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,

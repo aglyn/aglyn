@@ -32,7 +32,7 @@ import fetchSeatCounts from './fetch-seat-counts'
  * hook's own comment is right that this is a small closed set, and keeping the
  * two identical is the point.
  */
-const HOST_ACCESS_ROLES = new Set(['admin', 'editor', 'viewer'])
+const HOST_ACCESS_ROLES = new Set(['admin', 'editor', 'author', 'viewer'])
 
 /**
  * Sites the user holds in this org, counted once from the membership mirror.

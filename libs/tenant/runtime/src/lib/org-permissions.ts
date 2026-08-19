@@ -16,6 +16,7 @@
  */
 
 import {
+  type HostAccessRole,
   hostRoleFor,
   isOrgWideMember,
   type OrgRole,
@@ -47,10 +48,20 @@ export interface ResolvedOrgPermissions {
    * Their role on the host in context, when one was given. Null means they
    * have no access to THAT site even though they are on the org roster.
    */
-  hostRole: 'admin' | 'editor' | 'viewer' | null
+  /**
+   * The caller's role ON the host in context, or null. Spelled as the shared
+   * `HostAccessRole` since AGL-2334 rather than repeated inline: the union
+   * gained `author`, and a hand-copied duplicate is a tripwire that fires as
+   * a type error somewhere unrelated instead of a decision made here.
+   */
+  hostRole: HostAccessRole | null
 }
 
 /** Org roles map onto the built-in permission sets key-for-key. */
+// Which host-role permission set each ORG role resolves to. `author` is
+// deliberately absent as a VALUE here (AGL-2334): it is a per-site grant, so
+// no org role maps onto it and `hostRoleFor` can never produce one for an
+// `allHosts` member. Kept as the narrow union so that stays enforced.
 const ORG_ROLE_PERMISSION_BASE: Record<OrgRole, 'admin' | 'editor' | 'viewer'> =
   {
     owner: 'admin',

@@ -53,7 +53,15 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
-const HOST_ROLES = new Set<HostAccessRole>(['admin', 'editor', 'viewer'])
+// `author` (AGL-2334). An invite carries the pending host grant, so leaving
+// it out here would make the role assignable to an existing account and not
+// to the address an agency actually onboards a client from.
+const HOST_ROLES = new Set<HostAccessRole>([
+  'admin',
+  'editor',
+  'author',
+  'viewer',
+])
 
 /**
  * How fast one person may put invite mail in front of arbitrary addresses,

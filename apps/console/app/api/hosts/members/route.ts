@@ -31,7 +31,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
-const ROLES = new Set(['viewer', 'editor', 'admin'])
+// The site-collaborator door. `author` (AGL-2334) is the role the agency
+// guide's worked example asks for — "a client who may edit content but not
+// publish" — and this is the surface that guide points an agency at.
+const ROLES = new Set(['viewer', 'author', 'editor', 'admin'])
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**

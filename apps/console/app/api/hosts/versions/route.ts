@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { checkEntitlement, createResourceUid, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { checkEntitlement, createResourceUid, hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -154,7 +154,10 @@ async function handler(request: Request): Promise<Response> {
     // Same role model as the rules' canWriteHostContent, and as
     // /api/hosts/resources: host member role admin/editor.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
+    // `author` (AGL-2334): a new version is a DRAFT. Nothing is live until
+    // the parent's `versionId` points at it, and moving that pointer is
+    // exactly what the rules refuse an author.
+    if (!hostRoleCanWrite(memberRole)) {
       return Response.json(
         { error: 'Editing requires the editor role' },
         { status: 403 },

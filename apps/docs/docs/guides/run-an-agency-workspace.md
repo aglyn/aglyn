@@ -109,9 +109,14 @@ Steps:
 
 1. **Organization → Team** to add your own staff as managers.
 2. On each **site**, use its members card to invite that project's collaborators.
-3. Use [custom roles](/workspace-and-billing/teams-and-roles/custom-roles) if you want
-   something narrower than the built-ins — a client who may edit content but not
-   publish, for example.
+3. Give a client who should draft but not go live the **Author** role on their
+   site. It is the site role between Viewer and Editor: it can edit every kind of
+   content — pages, layouts, components and collection entries — and it cannot
+   publish any of it. No route, no live version, no scheduled publish, no
+   published entry. It also cannot read the site's orders.
+4. Use [custom roles](/workspace-and-billing/teams-and-roles/custom-roles) for
+   narrowing at the **organization** level — who may manage members, buy add-ons,
+   or see billing.
 
 Seats are metered and enforced per plan, and both kinds are available as
 [add-ons](/workspace-and-billing/billing-and-plans/add-ons) if you outgrow the
