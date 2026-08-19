@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
+import { escapeHtml } from '../utils/escape-html'
 import { timingSafeEqual } from 'crypto'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
@@ -43,20 +44,6 @@ function tokenMatches(stored: unknown, presented: string): boolean {
   return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 }
 
-/** HTML-escape, for the confirmation page below. */
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[character] as string,
-  )
-}
 
 /**
  * Supplier tracking callback (AGL-289): the routed order carried a

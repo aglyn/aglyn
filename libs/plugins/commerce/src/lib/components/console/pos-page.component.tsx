@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
+import { escapeHtml } from '../../utils/escape-html'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -372,12 +373,17 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
     if (!lastReceipt) return
     const win = window.open('', '_blank', 'width=320,height=600')
     if (!win) return
+    // ESCAPED (AGL-2283), the same construction as the packing slip: a
+    // `document.write` into an `about:blank` popup that inherits the console's
+    // origin. These names are merchant-authored rather than shopper-typed, so
+    // the reach is a merchant's own session — still not a reason to build
+    // markup out of unescaped product text.
     win.document.write(
       `<pre style="font-family:monospace;font-size:12px">` +
         lastReceipt.lines
           .map(
             (line) =>
-              `${line.quantity}x ${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ''}` +
+              `${escapeHtml(line.quantity)}x ${escapeHtml(line.name)}${line.variantLabel ? ` (${escapeHtml(line.variantLabel)})` : ''}` +
               `  ${usd(line.unitAmountCents * line.quantity)}`,
           )
           .join('\n') +
