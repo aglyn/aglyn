@@ -272,9 +272,58 @@ export interface CheckoutShippingPlan {
    *   there is no set of options honest for every address Stripe would accept.
    *   Ask the shopper where they are shipping and plan again.
    * - `destination-unserved` — the merchant ships somewhere, but not there.
+   * - `cart-unpriceable` — the merchant priced shipping, but no rate of theirs
+   *   resolves for THIS cart at ANY destination (AGL-2230). A tier table that
+   *   stops at 2 kg says nothing about a 3 kg parcel, and the honest answer is
+   *   to refuse rather than to ship it for nothing.
    */
-  refusal?: 'destination-required' | 'destination-unserved'
+  refusal?: 'destination-required' | 'destination-unserved' | 'cart-unpriceable'
 }
+
+/**
+ * Whether this merchant prices shipping AT ALL (AGL-2230).
+ *
+ * A pure question about the SETTINGS, deliberately taking no cart, and that is
+ * the whole point of it existing. `planCheckoutShipping` used to ask "does any
+ * rate resolve for any destination?" and pass the live cart into the probe, so
+ * a cart that exhausted every tier made the probe empty too — and an empty
+ * probe reads as "this merchant never set shipping up", the one case that must
+ * complete with no `shipping_options` and nothing charged. A 3 kg order at a
+ * store whose weight tiers stop at 2 kg therefore shipped free, silently, on
+ * every one of the three doors.
+ *
+ * Answered from the stored zones and rates instead: a rate bound to a zone
+ * that exists, or local pickup, means the merchant made a shipping decision
+ * and a cart their table cannot price is a REFUSAL. A merchant with no zones,
+ * no rates and no pickup has made no such decision, and their session stays
+ * byte-identical to the one AGL-1707 shipped.
+ */
+export function merchantPricesShipping(
+  settings: ShippingSettings | undefined,
+): boolean {
+  if (!settings) return false
+  if (settings.localPickup) return true
+  const zoneIds = new Set((settings.zones ?? []).map((zone) => zone.id))
+  // A rate whose `zoneId` names no zone is unreachable by every resolver here,
+  // so it is not evidence of a decision — counting it would refuse carts at a
+  // store with nothing but orphaned rows.
+  return (settings.rates ?? []).some((rate) => zoneIds.has(rate.zoneId))
+}
+
+/**
+ * What a shopper is told when `cart-unpriceable` refuses (AGL-2230).
+ *
+ * One string, shared by all three doors, because the three used to phrase the
+ * two existing refusals identically and drifting here would make the same
+ * store say different things depending on which button was pressed. It names
+ * the cart rather than the destination on purpose — a `Ship to` select cannot
+ * fix a parcel no tier covers, so the refusal deliberately does NOT set
+ * `needsShippingCountry`.
+ */
+export const CART_UNPRICEABLE_SHIPPING_MESSAGE =
+  'This store cannot price shipping for this order — it falls outside every ' +
+  'shipping rate the store has set up. Try removing an item, or contact the ' +
+  'store.'
 
 /** Identity of a resolved list, for comparing two destinations' offers. */
 function optionsKey(options: readonly ResolvedShippingRate[]): string {
@@ -336,8 +385,16 @@ export function planCheckoutShipping(
     // elsewhere but not here is refusing, and saying so is the honest answer:
     // the alternative is shipping a parcel to a destination they priced no
     // rate for, for free.
-    return resolveCheckoutShippingOptions(settings, countries, cart).length > 0
-      ? { countries, options: [], refusal: 'destination-unserved' }
+    if (resolveCheckoutShippingOptions(settings, countries, cart).length > 0) {
+      return { countries, options: [], refusal: 'destination-unserved' }
+    }
+    // NOTHING resolves anywhere for this cart, and the two reasons that can be
+    // true of are opposite (AGL-2230). Asked of the SETTINGS rather than of
+    // this cart, because the probe above cannot tell them apart: a merchant
+    // who priced shipping and whose table simply does not reach this order is
+    // refusing, and used to be handed the "never set shipping up" branch.
+    return merchantPricesShipping(settings)
+      ? { countries, options: [], refusal: 'cart-unpriceable' }
       : { countries, options: [] }
   }
   const offers = new Set(
@@ -351,10 +408,15 @@ export function planCheckoutShipping(
   if (offers.size > 1) {
     return { countries, options: [], refusal: 'destination-required' }
   }
-  return {
-    countries,
-    options: resolveCheckoutShippingOptions(settings, countries, cart),
+  const union = resolveCheckoutShippingOptions(settings, countries, cart)
+  // Every destination agrees, and what they agree on is NOTHING. The same
+  // fork as the declared-destination branch above (AGL-2230): a store with no
+  // shipping settings completes untouched, a store whose rates cannot reach
+  // this cart refuses instead of carrying the parcel for free.
+  if (union.length === 0 && merchantPricesShipping(settings)) {
+    return { countries, options: [], refusal: 'cart-unpriceable' }
   }
+  return { countries, options: union }
 }
 
 /**

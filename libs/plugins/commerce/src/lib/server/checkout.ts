@@ -428,6 +428,15 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
     }
+    // The merchant priced shipping and no rate of theirs reaches this cart
+    // (AGL-2230). Released like every other deterministic refusal on this
+    // path — the shopper can change the basket and retry under the same key.
+    if (shippingPlan.refusal === 'cart-unpriceable') {
+      await claim.release()
+      return res
+        .status(409)
+        .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
 
     // The unit price Stripe actually charges — the coupon is priced INTO it
     // rather than sent as a Stripe discount, which is why `amount_discount` is

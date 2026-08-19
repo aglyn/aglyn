@@ -18,6 +18,7 @@
 import {
   CHECKOUT_SHIPPING_COUNTRIES,
   MAX_CHECKOUT_SHIPPING_OPTIONS,
+  merchantPricesShipping,
   normalizeCheckoutShippingCountry,
   planCheckoutShipping,
   resolveCheckoutShippingOptions,
@@ -553,5 +554,112 @@ describe('summarizeShippingCoverage', () => {
     expect(planCheckoutShipping(settings, cart).refusal).toBe(
       'destination-required',
     )
+  })
+})
+
+/**
+ * AGL-2230. `planCheckoutShipping` decided "this merchant never set shipping
+ * up" by probing every collectable country WITH THE LIVE CART. A cart that
+ * exhausts every tier makes that probe empty too, and an empty probe took the
+ * one branch that must complete with no `shipping_options` and nothing
+ * charged — so a 3 kg order at a store whose weight tiers stop at 2 kg was
+ * carried for free, on all three doors, with no refusal and no log.
+ *
+ * The console coverage card cannot catch it either: it probes with
+ * `{ subtotalCents: 0, totalGrams: 0 }` and is documented as a lower bound, so
+ * it reports full coverage for exactly the store that leaks.
+ */
+describe('a cart no rate can price (AGL-2230)', () => {
+  /** Weight tiers that stop at 2 kg, and nothing else anywhere. */
+  const tiersOnly: ShippingSettings = {
+    zones: [{ id: 'world', name: 'Everywhere', countries: ['*'] }],
+    rates: [
+      {
+        id: 'wt',
+        zoneId: 'world',
+        name: 'By weight',
+        kind: 'weight_tiers',
+        tiers: [
+          { upTo: 500, amountCents: 499 },
+          { upTo: 2000, amountCents: 999 },
+        ],
+      },
+    ],
+  }
+  const heavy = { subtotalCents: 4000, totalGrams: 3000 }
+  const light = { subtotalCents: 4000, totalGrams: 300 }
+
+  it('refuses rather than shipping a 3 kg parcel for nothing', () => {
+    const plan = planCheckoutShipping(tiersOnly, heavy)
+    expect(plan.refusal).toBe('cart-unpriceable')
+    expect(plan.options).toEqual([])
+  })
+
+  it('refuses the same cart when a destination was declared', () => {
+    const plan = planCheckoutShipping(tiersOnly, heavy, 'US')
+    expect(plan.refusal).toBe('cart-unpriceable')
+    expect(plan.options).toEqual([])
+  })
+
+  /**
+   * THE BRANCH THAT MUST NOT MOVE. A merchant who configured nothing charges
+   * no shipping and always has; refusing them would break every storefront
+   * that predates shipping settings.
+   */
+  it('leaves a merchant who configured NO shipping completing untouched', () => {
+    expect(planCheckoutShipping(undefined, heavy).refusal).toBeUndefined()
+    expect(planCheckoutShipping({}, heavy).refusal).toBeUndefined()
+    expect(planCheckoutShipping({ zones: [], rates: [] }, heavy).refusal)
+      .toBeUndefined()
+    // Rates pointing at zones that do not exist are unreachable by every
+    // resolver, so they are not a shipping decision either.
+    expect(
+      planCheckoutShipping(
+        {
+          zones: [],
+          rates: [
+            { id: 'x', zoneId: 'gone', name: 'Ghost', kind: 'flat', amountCents: 500 },
+          ],
+        },
+        heavy,
+      ).refusal,
+    ).toBeUndefined()
+  })
+
+  it('POSITIVE CONTROL: the same store still prices a cart inside its tiers', () => {
+    const plan = planCheckoutShipping(tiersOnly, light)
+    expect(plan.refusal).toBeUndefined()
+    expect(plan.options).toEqual([
+      { rateId: 'wt', name: 'By weight', amountCents: 499 },
+    ])
+  })
+
+  it('POSITIVE CONTROL: a destination the store does not serve still says so', () => {
+    // `destination-unserved` is the more specific answer and must keep
+    // winning when the cart itself IS priceable somewhere.
+    const usOnly: ShippingSettings = {
+      zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+      rates: [
+        { id: 'std', zoneId: 'us', name: 'Standard', kind: 'flat', amountCents: 799 },
+      ],
+    }
+    expect(planCheckoutShipping(usOnly, light, 'FR').refusal).toBe(
+      'destination-unserved',
+    )
+  })
+
+  describe('merchantPricesShipping', () => {
+    it('reads a decision from the settings, never from the cart', () => {
+      expect(merchantPricesShipping(tiersOnly)).toBe(true)
+      expect(merchantPricesShipping({ localPickup: true })).toBe(true)
+      expect(merchantPricesShipping(undefined)).toBe(false)
+      expect(merchantPricesShipping({})).toBe(false)
+      expect(
+        merchantPricesShipping({
+          zones: [{ id: 'us', name: 'US', countries: ['US'] }],
+          rates: [],
+        }),
+      ).toBe(false)
+    })
   })
 })

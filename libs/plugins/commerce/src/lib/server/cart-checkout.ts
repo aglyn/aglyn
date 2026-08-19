@@ -240,6 +240,15 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
     }
+    // The merchant priced shipping and their table cannot reach this cart
+    // (AGL-2230) — a 3 kg basket at a store whose weight tiers stop at 2 kg.
+    // No `needsShippingCountry`: asking where it goes cannot price it, and a
+    // shopper handed the country select would answer it and be refused again.
+    if (shippingPlan.refusal === 'cart-unpriceable') {
+      return res
+        .status(409)
+        .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
 
     // Discounts engine (AGL-305): entered codes and automatic
     // promotions from hosts/{id}/discounts; the AGL-96 coupons remain a

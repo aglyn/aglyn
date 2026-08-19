@@ -274,6 +274,14 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
       })
     }
+    // No rate of the merchant's reaches this order (AGL-2230). Above the
+    // order write and the payment link, like every other refusal here, so a
+    // manager who fixes the tier table and presses Send again strands nothing.
+    if (shippingPlan.refusal === 'cart-unpriceable') {
+      return res
+        .status(409)
+        .json({ error: CommerceModel.CART_UNPRICEABLE_SHIPPING_MESSAGE })
+    }
 
     // Point of no return (AGL-1697): everything past here writes an order and
     // mints a live payment link. Every deterministic refusal — unknown
