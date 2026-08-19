@@ -484,9 +484,47 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       )
                       .map((lead) => (
                         <TableRow key={lead.$id} hover>
-                          <TableCell>{lead.email}</TableCell>
                           <TableCell>
-                            <Chip label="Lead" size="small" variant="outlined" />
+                            {lead.email}
+                            {/*
+                              The name the lead writer now stores (AGL-2303),
+                              same treatment as a member's `displayName` above
+                              — a list of bare addresses is a list nobody
+                              recognises anyone in.
+                            */}
+                            {lead.name ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ ml: 1 }}
+                                component="span"
+                              >
+                                {lead.name}
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            {/*
+                              WHERE THE LEAD CAME FROM (AGL-2338).
+                              `source` has been written by both lead writers —
+                              `'signup'` and `'booking'` — since AGL-109, and
+                              nothing read it: every row rendered the same flat
+                              "Lead" chip, so a site owner could not tell a
+                              membership sign-up from a booking, and the
+                              campaign audience selector treated them alike.
+                              Attribution collected and invisible.
+
+                              Falls back to the bare label rather than printing
+                              an empty suffix for a row written before the
+                              field, or by a future writer that omits it.
+                            */}
+                            <Chip
+                              label={
+                                lead.source ? `Lead · ${lead.source}` : 'Lead'
+                              }
+                              size="small"
+                              variant="outlined"
+                            />
                           </TableCell>
                           <TableCell>
                             {lead.createdAt?.toDate?.().toLocaleString() ??
