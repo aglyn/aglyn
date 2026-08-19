@@ -87,7 +87,10 @@ const PublishPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           : 'Publish a plugin',
         icon: { path: mdiStorefrontOutline.path },
       }}
-      help="plugins"
+      help={{
+        topic: 'publisherHandbook',
+        anchor: '#publishing-a-version',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {!ready ? null : !allowed ? (

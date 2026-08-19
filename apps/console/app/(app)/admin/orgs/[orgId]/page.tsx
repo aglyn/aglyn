@@ -882,6 +882,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Organization Detail',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{ topic: 'staffConsole', anchor: '#entitlement-editor' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>

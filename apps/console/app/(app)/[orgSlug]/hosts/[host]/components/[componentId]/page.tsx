@@ -267,7 +267,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
           }),
         },
       ]}
-      help="components"
+      help={{ topic: 'components', anchor: '#properties' }}
       header={{
         children: definition?.displayName ?? 'Component',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },

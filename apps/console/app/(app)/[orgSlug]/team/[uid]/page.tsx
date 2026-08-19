@@ -256,6 +256,7 @@ const TeamMemberDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: displayName,
         icon: { path: mdiAccountOutline.path },
       }}
+      help={{ topic: 'team', anchor: '#site-membership' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>

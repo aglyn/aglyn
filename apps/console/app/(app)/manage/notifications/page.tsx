@@ -310,10 +310,8 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.MANAGE_NOTIFICATIONS),
         },
       ]}
-      header={{
-        children: 'Notifications',
-        icon: { path: mdiBellOutline.path },
-      }}
+      header={{ children: 'Notifications', icon: { path: mdiBellOutline.path } }}
+      help={{ topic: 'consoleTour', anchor: '#alerts-on-this-device' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <CardDisplay

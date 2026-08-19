@@ -423,6 +423,10 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
         children: 'Organization Settings',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },
       }}
+      help={{
+        topic: 'consoleTour',
+        anchor: '#workspace-settings--notifications',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {!loading && !currentOrg ? (

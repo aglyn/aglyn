@@ -284,7 +284,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
           }),
         },
       ]}
-      help="screens"
+      help={{ topic: 'screens', anchor: '#nested-layouts' }}
       header={{
         children: definition?.displayName ?? 'Layout',
         icon: { path: mdiPageLayoutBody.path },

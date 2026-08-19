@@ -224,7 +224,7 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
           </AppLink>
         )
       }
-      help="plugins"
+      help={{ topic: 'plugins', anchor: '#configure' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>

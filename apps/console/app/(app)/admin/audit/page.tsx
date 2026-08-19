@@ -121,7 +121,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Audit log', href: buildRoute(Route.ADMIN_AUDIT) },
       ]}
-      help="staffConsole"
+      help={{ topic: 'staffConsole', anchor: '#audit-log' }}
       header={{
         children: 'Audit Log',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

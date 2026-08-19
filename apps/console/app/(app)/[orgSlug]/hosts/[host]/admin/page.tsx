@@ -88,7 +88,7 @@ const HostAdmin: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.HOST_ADMIN, { orgSlug, host }),
         },
       ]}
-      help="plugins"
+      help={{ topic: 'plugins', anchor: '#how-plugins-run' }}
       header={{
         children: 'Site Admin',
         icon: { path: ICON_VARIANT_APP_SETTINGS.path },

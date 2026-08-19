@@ -175,6 +175,10 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: host?.displayName ?? 'Host',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{
+        topic: 'architectureMultiTenancy',
+        anchor: '#workspace-subdomains',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>

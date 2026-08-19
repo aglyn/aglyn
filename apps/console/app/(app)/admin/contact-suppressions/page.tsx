@@ -196,7 +196,10 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
           href: buildRoute(Route.ADMIN_CONTACT_SUPPRESSIONS),
         },
       ]}
-      help="staffConsole"
+      help={{
+        topic: 'staffConsole',
+        anchor: '#contact-suppressions',
+      }}
       header={{
         children: 'Do not contact',
         icon: { path: mdiPhoneOff.path },

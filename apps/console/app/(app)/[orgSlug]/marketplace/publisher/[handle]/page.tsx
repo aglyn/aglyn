@@ -130,7 +130,10 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
         children: title,
         icon: { path: mdiStorefrontOutline.path },
       }}
-      help="plugins"
+      help={{
+        topic: 'publishAPlugin',
+        anchor: '#your-publisher-profile',
+      }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={2}>

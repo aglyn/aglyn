@@ -120,7 +120,10 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
         // Support stays ONE section (AGL-1158) — the nav tab lands on whichever
         // channel the tier makes primary, so this is the only way to the other.
         headerRight={<SupportChannelLink to="tickets" orgSlug={orgSlug} />}
-        help="supportAndCommunity"
+        help={{
+          topic: 'supportAndCommunity',
+          anchor: '#community-forum',
+        }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <CardDisplay

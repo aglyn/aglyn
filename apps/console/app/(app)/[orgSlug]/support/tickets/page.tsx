@@ -114,7 +114,10 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
         // whichever channel the tier makes primary, so this is the only way
         // to the other one.
         headerRight={<SupportChannelLink to="forum" orgSlug={orgSlug} />}
-        help="supportAndCommunity"
+        help={{
+          topic: 'supportAndCommunity',
+          anchor: '#support-tickets',
+        }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <CardDisplay

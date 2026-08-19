@@ -248,7 +248,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
         { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
       ]}
-      help="staffConsole"
+      help={{ topic: 'staffConsole', anchor: '#users-admin' }}
       header={{
         children: 'User Management',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },

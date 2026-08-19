@@ -275,7 +275,10 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
           }),
         },
       ]}
-      help="templatesLibrary"
+      help={{
+        topic: 'templatesLibrary',
+        anchor: '#using-a-template',
+      }}
       header={{
         children: template?.displayName ?? 'Template',
         icon: { path: mdiBookmarkOutline.path },

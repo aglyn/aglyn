@@ -86,6 +86,32 @@ export function resolveDocsHelpTopic(
     : fallback
 }
 
+/**
+ * A page header's help destination: a topic, optionally deep-linked to one of
+ * that topic's real headings (AGL-2200).
+ *
+ * Written as a distributive mapped type rather than a generic interface so a
+ * plain props field can carry it — `{ topic: 'billing', anchor: '#seats' }`
+ * type-checks, `{ topic: 'billing', anchor: '#promote' }` does not, and no
+ * component has to become generic to say so.
+ *
+ * It exists because `DashboardLayout` could only name a topic. Every page
+ * under `/admin` therefore landed on the top of one long staff-console page,
+ * and all seven Plugins/Marketplace pages opened the same "Plugins &
+ * Marketplace" tooltip — the AGL-1074 shape, arrived at from the destination
+ * end instead of the route end.
+ */
+export type DocsHelpTarget = {
+  [K in DocsHelpTopicKey]: {
+    topic: K
+    anchor?: DocsHelpAnchor<K>
+    /** Override the tooltip title (defaults to the topic's docs page title). */
+    title?: string
+    /** Override the tooltip excerpt (defaults to the topic's docs excerpt). */
+    excerpt?: string
+  }
+}[DocsHelpTopicKey]
+
 export interface DocsHelpOverrides<
   K extends DocsHelpTopicKey = DocsHelpTopicKey,
 > {

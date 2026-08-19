@@ -26,7 +26,10 @@ import BreadcrumbsComponent, {
   type BreadcrumbsProps,
 } from '../components/breadcrumbs.component'
 import DocsHelpTip from '../components/docs-help-tip.component'
-import type { DocsHelpTopicKey } from '../constants/docs-links'
+import type {
+  DocsHelpTarget,
+  DocsHelpTopicKey,
+} from '../constants/docs-links'
 import { CONTENT_MAX_WIDTH } from '../constants/shared'
 
 export interface DashboardHeaderProps
@@ -38,8 +41,15 @@ export interface DashboardHeaderProps
     icon?: MdiIconProps | JSX.Children
   }
   headerRight?: JSX.Children
-  /** Docs topic for the header's help affordance (AGL-599). */
-  help?: DocsHelpTopicKey
+  /**
+   * Docs destination for the header's help affordance (AGL-599).
+   *
+   * A bare topic key opens the top of that page. `{ topic, anchor }` opens the
+   * heading the reader is actually standing in front of (AGL-2200) — the whole
+   * of `/admin` used to share one destination, so eight staff surfaces offered
+   * the same tooltip and the same link.
+   */
+  help?: DocsHelpTopicKey | DocsHelpTarget
 }
 
 export function DashboardHeaderComponent(props: DashboardHeaderProps) {
@@ -130,7 +140,7 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
                 {headerChildren}
                 {help && (
                   <DocsHelpTip
-                    topic={help}
+                    {...(typeof help === 'string' ? { topic: help } : help)}
                     sx={{ ml: 1, fontSize: '0.55em' }}
                   />
                 )}

@@ -148,7 +148,7 @@ function HostsContent() {
           href: buildRoute(Route.HOST_LIST, { orgSlug }),
         },
       ]}
-      help="gettingStarted"
+      help={{ topic: 'consoleTour', anchor: '#the-sites-list' }}
       header={{
         children: 'All Sites',
         icon: { path: ICON_VARIANT_HOST_GROUP.path },

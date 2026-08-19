@@ -476,7 +476,10 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
           href: buildRoute(Route.ADMIN_PLUGIN_REVIEW, { listingId }),
         },
       ]}
-      help="staffConsole"
+      help={{
+        topic: 'publisherHandbook',
+        anchor: '#review-what-happens-after-you-publish',
+      }}
       header={{
         children: detail?.displayName ?? 'Plugin review',
         icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },

@@ -246,6 +246,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         children: detail?.user.email ?? 'User',
         icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
       }}
+      help={{ topic: 'staffConsole', anchor: '#password-help' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         {/* The detail fetch is staff-gated server-side, so a non-staff
