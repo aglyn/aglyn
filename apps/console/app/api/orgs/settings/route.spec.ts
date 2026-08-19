@@ -20,6 +20,8 @@
  * limitations under the License.
  */
 
+import { hasOrgPermission as mockHasOrgPermission } from '@aglyn/aglyn'
+
 /**
  * Org settings must not MINT the workspace they are asked to change
  * (AGL-1766).
@@ -180,6 +182,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockActivity.push(args)
   },
   readOrgBilling: async () => ({}),
+  /**
+   * Models the REAL function (AGL-2350): it delegates to the same granular
+   * resolver production calls, so a member's role, custom role and overrides
+   * decide the answer rather than a convenient constant. `null` custom role
+   * because this spec stores no `orgs/{id}/roles` docs and its members carry
+   * no `roleId`.
+   */
+  memberHasOrgPermission: async (
+    _orgId: string,
+    member: Record<string, unknown> | null | undefined,
+    permission: string,
+  ) => mockHasOrgPermission(member as never, permission as never, null),
   registerConsoleDomain: async () => ({ claim: true }),
   releasePendingConsoleDomain: async () => true,
   resolveOrgMembership: async (uid: string, orgId: string) => {
@@ -356,5 +370,62 @@ describe('org settings refuse a workspace that does not exist (AGL-1766)', () =>
 
     expect(response.status).toBe(403)
     expect(mockDocs.has(`orgs/${TYPO}`)).toBe(false)
+  })
+})
+
+/**
+ * The gate reads the GRANULAR permission, so a custom role or a per-member
+ * override actually narrows it (AGL-2350).
+ *
+ * This route used to ask `canManageOrg(role)` — the raw org role — which is
+ * the exact narrowing `run-an-agency-workspace.md` sells and could not
+ * deliver: an owner could revoke `org.settings` from an admin in the console,
+ * see the surface disappear there, and the admin could still POST it.
+ *
+ * The pair matters. Swapping a raw-role check for a permission check is
+ * behaviour-preserving for the BUILT-IN roles by construction — `org.settings`
+ * is in `ALL_PERMISSIONS` for owner and admin and absent from the editor and
+ * viewer defaults, which is precisely what `canManageOrg` answered — so a test
+ * of an ordinary admin passes either way and proves nothing about the change.
+ * The override case is the only one that can tell them apart.
+ */
+describe('org settings honour an override, not just the role (AGL-2350)', () => {
+  it('an admin whose override REVOKES org.settings is refused', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}/members/narrowed`, {
+      role: 'admin',
+      allHosts: true,
+      permissions: { 'org.settings': false },
+    })
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'narrowed',
+      email_verified: true,
+    })
+
+    const response = await POST(
+      post({ orgId: ORG, action: 'rename', name: 'Renamed by a narrowed admin' }),
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('PREMISE: the same admin WITHOUT the override still succeeds', async () => {
+    // Without this, the test above would pass for any reason at all — a
+    // broken mock, a missing seed, a typo'd action.
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}/members/narrowed`, {
+      role: 'admin',
+      allHosts: true,
+    })
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'narrowed',
+      email_verified: true,
+    })
+
+    const response = await POST(
+      post({ orgId: ORG, action: 'rename', name: 'Renamed by a plain admin' }),
+    )
+
+    expect(response.status).toBe(200)
   })
 })

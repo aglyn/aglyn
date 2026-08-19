@@ -22,7 +22,6 @@ import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
-  canManageOrg,
   checkEntitlement,
   isValidOrgSlug,
   normalizeAddress,
@@ -38,6 +37,7 @@ import {
   listOrgMembers,
   lockdownRefusal,
   logOrgActivity,
+  memberHasOrgPermission,
   readOrgBilling,
   registerConsoleDomain,
   releasePendingConsoleDomain,
@@ -73,9 +73,12 @@ async function handler(request: Request): Promise<Response> {
       return emailUnverifiedResponse()
     }
     const membership = await resolveOrgMembership(decoded.uid, orgId)
+    // The granular permission, not the raw role (AGL-2350) — same answer for
+    // the built-in roles, and it honours a custom role or override. The staff
+    // bypass is unchanged.
     if (
       decoded['staff'] !== true &&
-      !canManageOrg(membership?.member.role)
+      !(await memberHasOrgPermission(orgId, membership?.member, 'org.settings'))
     ) {
       return Response.json({ error: 'Org settings require the admin role' }, { status: 403 })
     }
