@@ -41,6 +41,18 @@ const mockRealMemberPhoto = jest.requireActual(
   '../../../libs/tenant/data/admin/src/lib/server/member-photo',
 )
 
+/**
+ * And the REAL `isMediaCdnPath`, for the same reason one layer down (AGL-2365).
+ * `normalizeMemberPhotoUrl` calls it (AGL-2286) through `@aglyn/aglyn/server`,
+ * which this file mocks as a closed world — so the allowlist's second shape was
+ * calling `undefined` and every url, valid or hostile, landed in the route's
+ * catch as a 500. Taken from the module that defines it rather than the server
+ * barrel, which would drag firebase-admin into a pure-policy suite.
+ */
+const mockRealMediaRef = jest.requireActual(
+  '../../../libs/aglyn/src/lib/app-utils/media-ref',
+)
+
 const state: { locked: boolean } = { locked: false }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -68,6 +80,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  isMediaCdnPath: (value: unknown) => mockRealMediaRef.isMediaCdnPath(value),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json().catch(() => ({})),
