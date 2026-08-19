@@ -69,6 +69,13 @@ export interface MediaAssetCardProps {
    * the console calling it.
    */
   onCopySignedLink?: () => void
+  /**
+   * Fetch the bytes (AGL-2143). Offered for EVERY asset including private
+   * ones, where the caller mints a signed link first — the "Make private"
+   * confirmation has promised "you will still be able to view and download
+   * it here" since AGL-1051 against no download control anywhere.
+   */
+  onDownload?: () => void
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
@@ -111,6 +118,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onToggleSelect,
     onCopyUrl,
     onCopySignedLink,
+    onDownload,
     onReplace,
     onDetails,
     onDelete,
@@ -377,6 +385,11 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
         {onSetPrivate ? (
           <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>
             {media.private ? 'Publish file' : 'Make private'}
+          </MenuItem>
+        ) : null}
+        {onDownload ? (
+          <MenuItem onClick={runAction(onDownload)}>
+            {'Download file'}
           </MenuItem>
         ) : null}
         {onReplace ? (

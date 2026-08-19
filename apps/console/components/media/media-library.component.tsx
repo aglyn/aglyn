@@ -98,6 +98,13 @@ import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '../../utils/media-src'
 import {
+  addTag,
+  describeMediaDelivery,
+  downloadFileName,
+  parseTagList,
+  removeTag,
+} from '../../utils/media-detail'
+import {
   readAnalyticsDays,
   recentDayIds,
   sumAssetUsage,
@@ -1549,6 +1556,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
      */
     scopeUnset: boolean
   } | null>(null)
+  /**
+   * The in-progress tag being typed (AGL-2143). Deliberately OUTSIDE
+   * `editor`: it is not part of the asset, and folding it in would make an
+   * abandoned half-typed word count as an unsaved change.
+   */
+  const [tagDraft, setTagDraft] = useState('')
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
     const folderId = editor.folderId || null
@@ -2796,6 +2809,73 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [orgId, user, assetOrigin, enqueueSnackbar],
   )
 
+  /**
+   * Download the bytes (AGL-2143).
+   *
+   * `/product/media`'s asset-detail mockup puts DOWNLOAD beside REPLACE as
+   * one of the asset's two primary actions, and the DAM had no download of
+   * any kind. `Copy URL` is a different act, and for a PRIVATE asset it is
+   * not even adjacent — those serve only through short-lived signed URLs,
+   * so the one thing the clipboard cannot get you is the file. The "Make
+   * private" confirmation has been promising "you will still be able to
+   * view and download it here" since AGL-1051 against no download button.
+   *
+   * Fetched to a blob rather than pointed at with `<a download>`: the CDN
+   * path is same-origin but a legacy asset's `url` is on
+   * `firebasestorage.googleapis.com`, where the `download` attribute is
+   * ignored cross-origin and the browser NAVIGATES to the image instead —
+   * silently losing the customer's place in the library.
+   */
+  const handleDownload = useCallback(
+    (media: Aglyn.AglynHostMedia) => async () => {
+      try {
+        let href = mediaSrc(media)
+        if ((media as { private?: boolean }).private) {
+          // Minted per click, never held: it expires in about fifteen
+          // minutes, so a stored one would decay into a dead button.
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/media/sign', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ orgId, mediaId: media.$id }),
+          })
+          const payload = await response.json().catch(() => ({}))
+          if (!response.ok || !payload?.url) {
+            return void enqueueSnackbar(
+              payload?.error ?? 'Could not download this file',
+              { variant: 'error', allowDuplicate: true },
+            )
+          }
+          href = `${assetOrigin}${payload.url}`
+        }
+        if (!href) {
+          return void enqueueSnackbar('This file has no address to fetch', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+        const response = await fetch(href)
+        if (!response.ok) throw new Error(String(response.status))
+        const blob = await response.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = downloadFileName(media as never)
+        anchor.click()
+        URL.revokeObjectURL(objectUrl)
+      } catch {
+        enqueueSnackbar('Could not download this file', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [assetOrigin, enqueueSnackbar, orgId, user],
+  )
+
   const handleDelete = useCallback(
     (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
       const fileName = media.fileName ?? media.$id
@@ -3303,6 +3383,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       ? handleCopySignedLink(media)
                       : undefined
                   }
+                  onDownload={onSelect ? undefined : handleDownload(media)}
                   onReplace={
                     String(media.contentType ?? '').startsWith('image/')
                       ? () => requestCardReplace(media)
@@ -3430,10 +3511,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               .filter(Boolean)
               .join(' · ')}
           </Typography>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             {editor?.media?.url ? (
               <Button size="small" onClick={handleCopyUrl(editor.media)}>
                 {'Copy URL'}
+              </Button>
+            ) : null}
+            {/* Every asset, not just images, and private ones especially —
+                a signed link is minted per click (AGL-2143). */}
+            {editor?.media ? (
+              <Button size="small" onClick={handleDownload(editor.media)}>
+                {'Download file'}
               </Button>
             ) : null}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
@@ -3465,6 +3553,39 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 ? `${usage.serves.toLocaleString()} origin serves / ${formatBytes(usage.bytes)} (30d, cache misses only)`
                 : 'No origin serves in the last 30 days'}
           </Typography>
+          {/*
+            What the mockup's footer says: a status dot and
+            `CDN · variants 320 / 640 / 1280` (AGL-2143). Read off this
+            asset's own `variants` array, never the generator's constant —
+            an SVG has none, and naming three widths a file does not have
+            would be worse than saying nothing, because `?w=` on a missing
+            variant silently serves the original.
+           */}
+          {editor?.media ? (
+            (() => {
+              const delivery = describeMediaDelivery(editor.media as never)
+              return (
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      bgcolor: `${delivery.tone}.main`,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    {delivery.label}
+                  </Typography>
+                </Stack>
+              )
+            })()
+          ) : null}
           <TextField
             select
             size="small"
@@ -3490,17 +3611,67 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            size="small"
-            label="Tags"
-            value={editor?.tags ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, tags: event.target.value } : prev,
-              )
-            }
-            helperText="Comma-separated, e.g. hero, product"
-          />
+          {/*
+            Chips, as the mockup shows them (AGL-2143). The STORED value is
+            still one comma-joined string — the toolbar filter chips, the
+            bulk tag actions and the API all read that shape — so this is a
+            change of editor, not of data. `addTag` drops blanks and
+            case-insensitive duplicates on entry, which is how the free-text
+            field used to grow a trailing empty tag no filter chip matched.
+           */}
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              {'Tags'}
+            </Typography>
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ flexWrap: 'wrap', rowGap: 0.5, mt: 0.5, mb: 1 }}
+            >
+              {parseTagList(editor?.tags).map((tag) => (
+                <Chip
+                  key={tag}
+                  size="small"
+                  label={tag}
+                  onDelete={() =>
+                    setEditor((prev) =>
+                      prev ? { ...prev, tags: removeTag(prev.tags, tag) } : prev,
+                    )
+                  }
+                />
+              ))}
+              {parseTagList(editor?.tags).length === 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  {'None yet'}
+                </Typography>
+              ) : null}
+            </Stack>
+            <TextField
+              size="small"
+              fullWidth
+              label="Add a tag"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter and comma both commit, because both are what a
+                // person types after a tag.
+                if (event.key !== 'Enter' && event.key !== ',') return
+                event.preventDefault()
+                setEditor((prev) =>
+                  prev ? { ...prev, tags: addTag(prev.tags, tagDraft) } : prev,
+                )
+                setTagDraft('')
+              }}
+              onBlur={() => {
+                if (!tagDraft.trim()) return
+                setEditor((prev) =>
+                  prev ? { ...prev, tags: addTag(prev.tags, tagDraft) } : prev,
+                )
+                setTagDraft('')
+              }}
+              helperText="Press Enter to add"
+            />
+          </Box>
           <TextField
             size="small"
             label="Alt text"
