@@ -138,6 +138,11 @@ import {
   type MediaSelectionState,
   nextMediaSelection,
 } from './media-selection'
+import {
+  addMediaTag,
+  describeMediaDelivery,
+  removeMediaTag,
+} from './media-detail-copy'
 import { mediaUndoAction } from './media-undo-action'
 import { useMediaPages } from './use-media-pages'
 import {
@@ -1692,6 +1697,34 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   // it without opening the drawer.
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const [imageEditorOpen, setImageEditorOpen] = useState(false)
+
+  /**
+   * The drawer's tags, parsed the way the SAVE path parses them (AGL-2143).
+   *
+   * `Aglyn.normalizeMediaTags` is the same function `handleSave` runs, so a
+   * chip on screen is exactly a tag that will be stored — whitespace-only and
+   * duplicate entries are dropped on entry rather than being stored and then
+   * silently discarded, which is what made a trailing space look like a tag.
+   */
+  const editorTags = useMemo(
+    () => Aglyn.normalizeMediaTags(editor?.tags ?? ''),
+    [editor?.tags],
+  )
+  const [tagDraft, setTagDraft] = useState('')
+
+  /** The drawer's delivery footer (AGL-2143). See `describeMediaDelivery`. */
+  const delivery = useMemo(
+    () => describeMediaDelivery(editor?.media),
+    [editor?.media],
+  )
+
+  /** Folds the draft into the stored comma-joined string, or drops it. */
+  const commitTagDraft = useCallback(() => {
+    const next = addMediaTag(editor?.tags ?? '', tagDraft)
+    setTagDraft('')
+    if (next === null) return
+    setEditor((prev) => (prev ? { ...prev, tags: next } : prev))
+  }, [editor?.tags, tagDraft])
   const replaceMediaBytes = useCallback(
     async (media: any, base64: string, contentType: string) => {
       if (!media) return
@@ -2796,6 +2829,97 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [orgId, user, assetOrigin, enqueueSnackbar],
   )
 
+  /**
+   * Give the operator the FILE (AGL-2143).
+   *
+   * `/product/media`'s asset-detail mockup puts `DOWNLOAD` beside `REPLACE`
+   * as one of the asset's two primary actions, and no download existed
+   * anywhere in the DAM — `grep -i download` over these components returned
+   * one prose string. The closest affordance was `Copy URL`, which is a
+   * different act, and for a PRIVATE asset is not even close: those serve
+   * only through short-lived signed URLs, so "copy the link" is the one thing
+   * that does not get you the file. A DAM we sell as "a real home for every
+   * asset" could not give the asset back.
+   *
+   * Fetched to a blob and saved through an object URL rather than pointed at
+   * with `<a download>`: `download` is IGNORED cross-origin, so a raw storage
+   * URL would open the image in a tab under a hashed object name instead of
+   * saving it as `hero-bg.jpg`. The blob path is also what makes a private
+   * asset work at all, because the signed URL is minted per click and never
+   * held in state — the same reason `handleCopySignedLink` mints per click,
+   * a URL that expires in fifteen minutes cannot be rendered into a control.
+   *
+   * The signed URL is fetched RELATIVE and only absolutized for the
+   * clipboard elsewhere: relative keeps the request same-origin, which is
+   * what lets `fetch` read the bytes without a CORS grant.
+   *
+   * A fetch that fails falls back to opening the URL, which still gets the
+   * user their file — just under the server's own filename. Silently doing
+   * nothing would be the worse half of a half-built feature.
+   */
+  const handleDownload = useCallback(
+    (media: Aglyn.AglynHostMedia) => async () => {
+      // `fileName` is the DISPLAY name, which is the point: the mockup
+      // promises the asset back, and a save named by the storage object's
+      // hash is a file the operator then has to rename by hand.
+      const fileName = String(media.fileName ?? '').trim() || 'download'
+      let href: string | undefined
+      try {
+        if (media.private) {
+          const mediaId = media.$id as string
+          if (!orgId || !mediaId) return
+          const idToken = await (user as any)?.getIdToken?.()
+          const response = await fetch('/api/media/sign', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify({ orgId, mediaId }),
+          })
+          const payload = await response.json().catch(() => ({}))
+          if (!response.ok || !payload?.url) {
+            return void enqueueSnackbar(
+              payload?.error ?? 'Could not download this file',
+              { variant: 'error', allowDuplicate: true },
+            )
+          }
+          href = String(payload.url)
+        } else {
+          href = mediaSrc(media)
+        }
+        if (!href) return
+        const bytes = await fetch(href)
+        if (!bytes.ok) throw new Error(String(bytes.status))
+        const blob = await bytes.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        // Freed on the next tick, not immediately: revoking before the
+        // browser has started reading the blob cancels the save.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000)
+      } catch {
+        if (href) {
+          window.open(href, '_blank', 'noopener')
+          return void enqueueSnackbar(
+            'Opened the file in a new tab — your browser blocked the direct ' +
+              'download',
+            { variant: 'info', persist: false },
+          )
+        }
+        enqueueSnackbar('Could not download this file', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [orgId, user, enqueueSnackbar],
+  )
+
   const handleDelete = useCallback(
     (media: Aglyn.AglynHostMedia) => async (): Promise<boolean> => {
       const fileName = media.fileName ?? media.$id
@@ -3295,6 +3419,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                     )
                   }
                   onCopyUrl={handleCopyUrl(media)}
+                  // AGL-2143. Not gated on `viewerOrgWide` like the signed
+                  // link is: a public asset needs no route at all, and the
+                  // private branch inside the handler carries the same orgId
+                  // guard the sign route enforces anyway.
+                  onDownload={onSelect ? undefined : handleDownload(media)}
                   // Same gate as `onSetPrivate` below — the route signs an
                   // `org:` scope only, and the card hides the item unless
                   // the asset is actually private (AGL-2055).
@@ -3430,10 +3559,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               .filter(Boolean)
               .join(' · ')}
           </Typography>
-          <Stack direction="row" spacing={1}>
-            {editor?.media?.url ? (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {editor?.media?.url && !editor.media.private ? (
               <Button size="small" onClick={handleCopyUrl(editor.media)}>
                 {'Copy URL'}
+              </Button>
+            ) : null}
+            {/* AGL-2143: the mockup's second primary action. Works for a
+                private asset too, which is where `Copy URL` cannot help. */}
+            {editor?.media ? (
+              <Button
+                size="small"
+                onClick={() => void handleDownload(editor.media)()}
+              >
+                {'Download file'}
               </Button>
             ) : null}
             {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
@@ -3458,6 +3597,40 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             onChange={handleReplaceFile}
             sx={{ display: 'none' }}
           />
+          {/* DELIVERY (AGL-2143). The mockup's footer names `CDN · variants
+              320 / 640 / 1280` with a status dot, and those are exactly the
+              widths `media-variants.ts` generates — and never surfaced. An
+              org WITHOUT `mediaCdn` is told plenty (the "No CDN · URLs change
+              on move" chip in the toolbar and its tooltip); an org that has
+              PAID for it was told nothing at all, which is the wrong way
+              round for an upgrade we want renewed.
+
+              Driven by the asset's own `variants` array, not by
+              `MEDIA_CDN_VARIANT_WIDTHS`. The constant says what the generator
+              SHOULD produce; the array says what this file actually has. A
+              non-image, or an image whose generation failed or has not run,
+              therefore says so instead of claiming three widths that do not
+              exist — and `media-variants.ts` is explicit that an empty array
+              means either "nothing eligible" or "generation failed", so the
+              honest word for both is that there are none. */}
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                flexShrink: 0,
+                bgcolor: delivery.onCdn ? 'success.main' : 'action.disabled',
+              }}
+            />
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+            >
+              {delivery.label}
+            </Typography>
+          </Stack>
           <Typography variant="caption" color="text.secondary" component="div">
             {usage === null
               ? 'Checking delivery stats…'
@@ -3490,17 +3663,72 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            size="small"
-            label="Tags"
-            value={editor?.tags ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, tags: event.target.value } : prev,
-              )
-            }
-            helperText="Comma-separated, e.g. hero, product"
-          />
+          {/* TAG CHIPS (AGL-2143). The mockup shows `brand` / `hero` /
+              `homepage` as chips, and this drawer was the one place tags were
+              raw text — the library toolbar has rendered them as filter chips
+              all along. Reading back `brand,hero,homepage` from a free-text
+              field is also how a trailing space becomes a distinct tag no
+              filter chip will ever match.
+
+              The STORED value is unchanged: still the comma-joined string on
+              `editor.tags`, normalised by the same `Aglyn.normalizeMediaTags`
+              the save path already runs, so nothing downstream changes and a
+              tag typed here is byte-identical to one typed before. */}
+          <Box>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+              sx={{ mb: 0.5 }}
+            >
+              {'Tags'}
+            </Typography>
+            <Stack
+              direction="row"
+              sx={{ flexWrap: 'wrap', gap: 0.5, mb: 1 }}
+            >
+              {editorTags.length ? (
+                editorTags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    size="small"
+                    label={tag}
+                    onDelete={() =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              tags: removeMediaTag(prev.tags, tag),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                ))
+              ) : (
+                <Typography variant="caption" color="text.disabled">
+                  {'No tags yet'}
+                </Typography>
+              )}
+            </Stack>
+            <TextField
+              size="small"
+              fullWidth
+              label="Add a tag"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                commitTagDraft()
+              }}
+              // Also on blur, because the commonest way to lose a typed tag
+              // is to click Save without pressing Enter first — the same
+              // shape as the besigner attribute that commits on blur.
+              onBlur={commitTagDraft}
+              helperText="Press Enter to add"
+            />
+          </Box>
           <TextField
             size="small"
             label="Alt text"

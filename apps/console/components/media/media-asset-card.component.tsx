@@ -69,6 +69,12 @@ export interface MediaAssetCardProps {
    * the console calling it.
    */
   onCopySignedLink?: () => void
+  /**
+   * Save the file itself (AGL-2143). Distinct from both link items above:
+   * `Copy URL` hands over an address, and for a private asset there is no
+   * permanent one — the DAM offered no way to get the BYTES back at all.
+   */
+  onDownload?: () => void
   onReplace?: () => void
   onDetails?: () => void
   onDelete?: () => void
@@ -111,6 +117,7 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
     onToggleSelect,
     onCopyUrl,
     onCopySignedLink,
+    onDownload,
     onReplace,
     onDetails,
     onDelete,
@@ -377,6 +384,14 @@ export function MediaAssetCard(props: MediaAssetCardProps) {
         {onSetPrivate ? (
           <MenuItem onClick={runAction(() => onSetPrivate(!media.private))}>
             {media.private ? 'Publish file' : 'Make private'}
+          </MenuItem>
+        ) : null}
+        {/* Offered for public AND private assets, unlike the two link items:
+            the handler mints a signed URL for a private file, which is the
+            case `Copy URL` cannot serve (AGL-2143). */}
+        {onDownload ? (
+          <MenuItem onClick={runAction(onDownload)}>
+            {'Download file'}
           </MenuItem>
         ) : null}
         {onReplace ? (
