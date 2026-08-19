@@ -19,6 +19,7 @@ import {
   buildRoute,
   checkEntitlement,
   findScreenIdByRoutePath,
+  hostCollectionKind,
   parseCollectionRoute,
   resolveHostEnabledPlugins,
   resolveMediaSrc,
@@ -142,6 +143,15 @@ export async function POST(request: Request): Promise<Response> {
     // editor-only), then the same template-screen fields the compose
     // pipeline picks (`compose-collection-page.ts`). Best-effort — a
     // failure here just leaves the honest miss the bar showed before.
+    //
+    // "The same way the loader does" is load-bearing and was not true:
+    // a bare `limit(1)` here is the AGL-954 bug `findContentCollection`
+    // (`get-collection-content.ts`) exists to prevent. Commerce catalog
+    // collections share `hosts/{hostId}/collections` and a slug is only
+    // unique WITHIN a kind, so a catalog doc could be returned for a blog
+    // URL and the bar would name the wrong collection and deep-link "Edit
+    // this page" at the wrong template screen. Same window, same
+    // content-kind filter as the loader (AGL-1845).
     let collectionName: string | undefined
     let collectionEntry = false
     if (!screenId && normalized !== SCREEN_ROOT_PATH) {
@@ -153,15 +163,16 @@ export async function POST(request: Request): Promise<Response> {
             .doc(claims.hostId)
             .collection('collections')
             .where('slug', '==', collectionRoute.collectionSlug)
-            .limit(1)
+            .limit(5)
             .get()
-          const collectionDoc = collectionQuery.docs[0]
+          const collectionDoc = collectionQuery.docs.find(
+            (docSnapshot) =>
+              hostCollectionKind(docSnapshot.data()) === 'content',
+          )
           if (collectionDoc) {
             const templateScreenId = collectionRoute.entrySlug
               ? ((collectionDoc.get('entryScreenId') ||
-                  collectionDoc.get('templateScreenId')) as
-                  | string
-                  | undefined)
+                  collectionDoc.get('templateScreenId')) as string | undefined)
               : // A list template is published AT the collection root
                 // (AGL-1387), so prefer the routed screen there; the
                 // stored pointer is the fallback.
@@ -405,6 +416,9 @@ export async function POST(request: Request): Promise<Response> {
     )
   } catch (error) {
     console.error(error)
-    return Response.json({ error: 'Could not resolve context' }, { status: 500 })
+    return Response.json(
+      { error: 'Could not resolve context' },
+      { status: 500 },
+    )
   }
 }
