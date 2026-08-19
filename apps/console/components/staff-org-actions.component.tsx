@@ -51,6 +51,10 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
+import {
+  StaffRoleOnly,
+  SuperStaffOnly,
+} from './staff-super-only.component'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
 /**
@@ -630,27 +634,38 @@ const StaffOrgActions = ({ org, onChanged }: StaffOrgActionsProps) => {
 
   return (
     <>
-      <Button size="small" disabled={!org} onClick={handleOverrideOpen}>
-        {'Override'}
-      </Button>
-      <Button
-        size="small"
-        disabled={!org}
-        color={org?.suspendedAt ? 'success' : 'error'}
-        onClick={() =>
-          org &&
-          setSuspender({
-            id: org.$id,
-            suspended: Boolean(org.suspendedAt),
-            reason: isLockdownReasonCode(org.suspendedReasonCode)
-              ? org.suspendedReasonCode
-              : 'manual',
-            message: org.suspendedMessage ?? '',
-          })
-        }
-      >
-        {org?.suspendedAt ? 'Unsuspend' : 'Suspend'}
-      </Button>
+      {/* AGL-2131. Gated at the TRIGGER, not at the dialog's confirm button:
+          a support engineer who can open the override editor, pick a plan,
+          write a reason and only then find Save dead has done the work twice
+          for nothing. The role sets mirror the routes exactly —
+          /api/admin/org-override admits billing for plan and quota writes
+          (releaseFlags stay super-only and are refused there), while
+          /api/admin/lockdown is super-only for every scope. */}
+      <StaffRoleOnly roles={['super', 'billing']}>
+        <Button size="small" disabled={!org} onClick={handleOverrideOpen}>
+          {'Override'}
+        </Button>
+      </StaffRoleOnly>
+      <SuperStaffOnly>
+        <Button
+          size="small"
+          disabled={!org}
+          color={org?.suspendedAt ? 'success' : 'error'}
+          onClick={() =>
+            org &&
+            setSuspender({
+              id: org.$id,
+              suspended: Boolean(org.suspendedAt),
+              reason: isLockdownReasonCode(org.suspendedReasonCode)
+                ? org.suspendedReasonCode
+                : 'manual',
+              message: org.suspendedMessage ?? '',
+            })
+          }
+        >
+          {org?.suspendedAt ? 'Unsuspend' : 'Suspend'}
+        </Button>
+      </SuperStaffOnly>
       <Button
         size="small"
         disabled={!org}

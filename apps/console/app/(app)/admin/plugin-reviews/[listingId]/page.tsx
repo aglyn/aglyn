@@ -44,6 +44,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import { MarkdownLiteView } from '@aglyn/aglyn-markdown-editor'
 import StaffOnly from '../../../../../components/staff-only.component'
+import { SuperStaffOnly } from '../../../../../components/staff-super-only.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { PLUGIN_REVIEW_CHECKLIST } from '../../../../../constants/plugin-review-checklist'
 import {
@@ -1596,21 +1597,26 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           ? ` · ${entry.activeInstalls} pinned here`
                           : ''}
                       </Typography>
-                      <Button
-                        size="small"
-                        color={entry.trust === 'realm' ? 'error' : 'success'}
-                        disabled={busy}
-                        onClick={() =>
-                          void signRealm(
-                            entry.version,
-                            entry.trust === 'realm' ? 'revoke' : 'grant',
-                          )
-                        }
-                      >
-                        {entry.trust === 'realm'
-                          ? 'Revoke realm trust'
-                          : 'Grant realm trust'}
-                      </Button>
+                      {/* Realm trust bypasses the plugin sandbox's CSP, so
+                          /api/admin/sign-plugin is super-only. The button was
+                          live for support staff (AGL-2131). */}
+                      <SuperStaffOnly>
+                        <Button
+                          size="small"
+                          color={entry.trust === 'realm' ? 'error' : 'success'}
+                          disabled={busy}
+                          onClick={() =>
+                            void signRealm(
+                              entry.version,
+                              entry.trust === 'realm' ? 'revoke' : 'grant',
+                            )
+                          }
+                        >
+                          {entry.trust === 'realm'
+                            ? 'Revoke realm trust'
+                            : 'Grant realm trust'}
+                        </Button>
+                      </SuperStaffOnly>
                       {/* The kill switch for THESE bytes (AGL-1085) —
                           narrower than the takedown below, which stops every
                           version including the one customers are happily
