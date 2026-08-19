@@ -49,6 +49,10 @@
  * assertion: the downgrade DOES go through once the customer confirms.
  */
 
+import {
+  PLATFORM_BRAND_NAME,
+  PLATFORM_SUPPORT_URL,
+} from '@aglyn/aglyn/app-utils/platform-brand'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -126,6 +130,38 @@ jest.mock('firebase/firestore', () => ({
   }),
   getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
   getDocsFromServer: async () => ({ docs: [], size: 0 }),
+}))
+
+/**
+ * `useBranding` (AGL-2319 gave this surface its brand-aware copy). Mocked
+ * NARROWLY — the module's one default export and one named export — for the
+ * reason `white-label-tab-title.spec.tsx` states: the real hook reaches
+ * `use-secondary-nav`, which pulls in the console plugin gate, the Firebase
+ * services provider and `next/navigation`, a module graph a card's unit test
+ * has no business loading. The value is `PLATFORM_BRANDING_PROFILE` rebuilt
+ * from its own two constants — literally what `resolveBrandingProfile` returns
+ * for an org that is not white-label — and it is a module-level singleton, so
+ * a consumer memoizing on the object cannot be made to loop (AGL-2365).
+ */
+const mockBranding = {
+  branding: {
+    productName: PLATFORM_BRAND_NAME,
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: null,
+    supportUrl: PLATFORM_SUPPORT_URL,
+    fromName: PLATFORM_BRAND_NAME,
+    emailLogoUrl: null,
+    customConsoleDomain: null,
+  },
+  whiteLabel: false,
+  ready: true,
+}
+
+jest.mock('../hooks/use-branding', () => ({
+  __esModule: true,
+  useBranding: () => mockBranding,
+  default: () => mockBranding,
 }))
 
 jest.mock('next/navigation', () => ({

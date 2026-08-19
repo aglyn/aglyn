@@ -32,10 +32,47 @@
  * halves — collapsed by default, and reachable in one click.
  */
 
+import {
+  PLATFORM_BRAND_NAME,
+  PLATFORM_SUPPORT_URL,
+} from '@aglyn/aglyn/app-utils/platform-brand'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { BillingPlanCardsComponent } from './billing-plan-cards.component'
+
+/**
+ * `useBranding` (AGL-2319 gave this surface its brand-aware copy). Mocked
+ * NARROWLY — the module's one default export and one named export — for the
+ * reason `white-label-tab-title.spec.tsx` states: the real hook reaches
+ * `use-secondary-nav`, which pulls in the console plugin gate, the Firebase
+ * services provider and `next/navigation`, a module graph a card's unit test
+ * has no business loading. The value is `PLATFORM_BRANDING_PROFILE` rebuilt
+ * from its own two constants — literally what `resolveBrandingProfile` returns
+ * for an org that is not white-label — and it is a module-level singleton, so
+ * a consumer memoizing on the object cannot be made to loop (AGL-2365).
+ */
+const mockBranding = {
+  branding: {
+    productName: PLATFORM_BRAND_NAME,
+    logoUrl: null,
+    faviconUrl: null,
+    primaryColor: null,
+    supportUrl: PLATFORM_SUPPORT_URL,
+    fromName: PLATFORM_BRAND_NAME,
+    emailLogoUrl: null,
+    customConsoleDomain: null,
+  },
+  whiteLabel: false,
+  ready: true,
+}
+
+jest.mock('../../hooks/use-branding', () => ({
+  __esModule: true,
+  useBranding: () => mockBranding,
+  default: () => mockBranding,
+}))
+
 
 function renderCards(
   overrides: Partial<
