@@ -23,6 +23,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Button,
   Chip,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -61,21 +62,69 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   const [filter, setFilter] = useState('')
+  /*==========================================
+   * THE SCOPE FACET (AGL-2287).
+   *
+   * `scope` has been written top-level by five call sites — the five lockdown
+   * branches, media quarantine, abuse reports and DMCA counter-notices — since
+   * it was added, and `admin/lockdown/route.ts` says why in as many words:
+   *
+   *   "Stored top-level so the audit log filters by scope on an equality
+   *    match. It is derivable from `target`, but only by prefix-matching a
+   *    path — and `lockdowns/` alone covers three different scopes."
+   *
+   * The audit log had no scope filter, did not display the field, and left it
+   * out of the compliance export. Five writers, zero readers: the one field
+   * put there expressly to be filtered on was the one field nothing could
+   * reach.
+   *
+   * DERIVED FROM THE ROWS IN VIEW rather than a hardcoded list. A fixed
+   * vocabulary here would drift the first time a route audits a new scope, and
+   * would offer facets that match nothing — the phantom-filter half of the
+   * same defect. What is offered is exactly what is present.
+   *=========================================*/
+  const scopes = useMemo(
+    () =>
+      [
+        ...new Set(
+          (entryDocs ?? [])
+            .map((entry: any) => entry.scope)
+            .filter((scope: unknown): scope is string => typeof scope === 'string' && !!scope),
+        ),
+      ].sort(),
+    [entryDocs],
+  )
+  const [scope, setScope] = useState('')
   const entries = useMemo(() => {
     const term = filter.trim().toLowerCase()
-    const all = entryDocs ?? []
+    const all = (entryDocs ?? []).filter(
+      (entry: any) => !scope || entry.scope === scope,
+    )
     if (!term) return all
     // The reason and its note are searchable too (AGL-1652) — "why did we
     // give them the enterprise rate" is a question asked by the reason, not
     // by an actor or a target anyone remembers.
+    //
+    // `actorEmail` joined the haystack with AGL-2287. Nine routes wrote it and
+    // nothing read it: a staff reviewer searching for a colleague by the only
+    // identifier they know — an email address — got no rows, off a log that
+    // had been storing exactly that string all along.
     return all.filter((entry: any) =>
-      [entry.actorUid, entry.action, entry.target, entry.reason, entry.note]
+      [
+        entry.actorUid,
+        entry.actorEmail,
+        entry.action,
+        entry.scope,
+        entry.target,
+        entry.reason,
+        entry.note,
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .includes(term),
     )
-  }, [entryDocs, filter])
+  }, [entryDocs, filter, scope])
 
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -91,14 +140,32 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     // `reason`/`note` are columns of their own (AGL-1652) rather than being
     // left inside a JSON blob: the compliance export is read in a
     // spreadsheet, and a why nobody can filter on is a why nobody reads.
+    // `scope` and `actorEmail` are columns too (AGL-2287), for the same reason
+    // `reason`/`note` were given columns in AGL-1652: the compliance export is
+    // read in a spreadsheet, and a field nobody can filter or sort on is a
+    // field nobody reads. `actorEmail` in particular is the only column an
+    // auditor outside engineering can act on — a bare uid names nobody.
     const rows = [
-      ['at', 'actorUid', 'action', 'target', 'reason', 'note', 'before', 'after'],
+      [
+        'at',
+        'actorUid',
+        'actorEmail',
+        'action',
+        'scope',
+        'target',
+        'reason',
+        'note',
+        'before',
+        'after',
+      ],
       ...entries.map((entry: any) => [
         entry.at?.seconds
           ? new Date(entry.at.seconds * 1000).toISOString()
           : '',
         entry.actorUid,
+        entry.actorEmail ?? '',
         entry.action,
+        entry.scope ?? '',
         entry.target,
         entry.reason ?? '',
         entry.note ?? '',
@@ -143,11 +210,33 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <TextField
                   size="small"
-                  label="Filter (actor, action, target)"
+                  label="Filter (actor, email, action, target)"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   sx={{ width: 360 }}
                 />
+                {/*
+                  Rendered only when the window actually contains scoped rows.
+                  An always-present select whose only option is "All scopes"
+                  advertises a facet that answers nothing.
+                */}
+                {scopes.length > 0 ? (
+                  <TextField
+                    select
+                    size="small"
+                    label="Scope"
+                    value={scope}
+                    onChange={(event) => setScope(event.target.value)}
+                    sx={{ width: 200 }}
+                  >
+                    <MenuItem value="">{'All scopes'}</MenuItem>
+                    {scopes.map((option: string) => (
+                      <MenuItem key={option} value={option}>
+                        {option}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
                 <Button
                   size="small"
                   onClick={handleExport}
@@ -196,6 +285,20 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                     >
                       <Chip label={entry.action} size="small" />
+                      {/*
+                        AGL-2287. `lockdowns/` alone covers platform, feature,
+                        user, org and host locks, so the target path cannot be
+                        read as a scope — which is why the writers store it
+                        separately, and why leaving it off the row made five
+                        different kinds of lock look like one kind.
+                      */}
+                      {entry.scope ? (
+                        <Chip
+                          label={entry.scope}
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : null}
                       <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                         {entry.target}
                       </Typography>
@@ -204,7 +307,11 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                         color="text.secondary"
                         sx={{ ml: 'auto' }}
                       >
-                        {`${entry.actorUid} · ${
+                        {`${
+                          entry.actorEmail
+                            ? `${entry.actorEmail} (${entry.actorUid})`
+                            : entry.actorUid
+                        } · ${
                           entry.at?.seconds
                             ? new Date(
                                 entry.at.seconds * 1000,
