@@ -35,6 +35,8 @@ import {
 import {
   Alert,
   AlertTitle,
+  Avatar,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -48,6 +50,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -58,6 +61,12 @@ import {
   query,
   updateDoc,
 } from 'firebase/firestore'
+import {
+  relativeTime,
+  routingChips,
+  senderHue,
+  submissionSender,
+} from '../model/submission-presenter'
 import { useCallback, useState } from 'react'
 
 /**
@@ -259,7 +268,7 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>{'Form'}</TableCell>
+                  <TableCell>{'From'}</TableCell>
                   <TableCell>{'Message'}</TableCell>
                   <TableCell>{'Received'}</TableCell>
                   <TableCell align="right">{'Actions'}</TableCell>
@@ -279,16 +288,61 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                     }}
                   >
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ alignItems: 'center' }}
-                      >
-                        <span>{submission.formName ?? 'Form'}</span>
-                        {!submission.read ? (
-                          <Chip label="New" color="primary" size="small" />
-                        ) : null}
-                      </Stack>
+                      {/*
+                        The mockup's list is people, not forms (AGL-2168):
+                        an initials avatar, the sender, and the form name
+                        beneath it. The unread DOT replaces the `New` chip
+                        — the row is already bold, and a chip that says
+                        "New" beside bold text is the same fact twice.
+                       */}
+                      {(() => {
+                        const sender = submissionSender(submission.fields)
+                        const hue = senderHue(sender.label)
+                        return (
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center' }}
+                          >
+                            {!submission.read ? (
+                              <Box
+                                aria-label="Unread"
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  bgcolor: 'primary.main',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            ) : (
+                              <Box sx={{ width: 8, flexShrink: 0 }} />
+                            )}
+                            <Avatar
+                              sx={{
+                                width: 28,
+                                height: 28,
+                                fontSize: 13,
+                                bgcolor: `hsl(${hue} 55% 45%)`,
+                              }}
+                            >
+                              {sender.initials}
+                            </Avatar>
+                            <Stack sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" noWrap>
+                                {sender.label}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                noWrap
+                              >
+                                {submission.formName ?? 'Form'}
+                              </Typography>
+                            </Stack>
+                          </Stack>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Typography
@@ -307,8 +361,25 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {submission.createdAt?.toDate?.().toLocaleString() ??
-                        '--'}
+                      {/*
+                        Relative, as the mockup shows it — an inbox is
+                        scanned for recency and a locale timestamp makes
+                        the reader do the subtraction. The absolute time
+                        stays on the detail dialog, where it is the fact
+                        you actually want.
+                       */}
+                      <Tooltip
+                        title={
+                          submission.createdAt?.toDate?.().toLocaleString() ??
+                          ''
+                        }
+                      >
+                        <span>
+                          {relativeTime(
+                            submission.createdAt?.toDate?.().getTime(),
+                          )}
+                        </span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell
                       align="right"
@@ -455,6 +526,31 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
                   {String(value)}
                 </Typography>
               </Stack>
+            ))}
+          </Stack>
+          {/*
+            What happened to this submission (AGL-2168). The mockup puts
+            these under the fields: `Saved to Inbox` and `Added to "Leads"
+            dataset`. The second is stamped by the submit route only when a
+            record was really appended — a form bound to a deleted dataset,
+            or one whose record quota is full, shows no chip rather than a
+            chip for a row that does not exist. Both are failures the route
+            already swallows silently, and a chip that lied about them
+            would be worse than the silence.
+           */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}
+          >
+            {routingChips(reader?.routing).map((chip) => (
+              <Chip
+                key={chip.label}
+                size="small"
+                label={chip.label}
+                color={chip.color}
+                variant="outlined"
+              />
             ))}
           </Stack>
         </DialogContent>
