@@ -468,6 +468,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Relations',
     excerpt: 'Link records together with reference fields, including many-to-many.',
   },
+  reportAnIssue: {
+    path: '/workspace-and-billing/report-an-issue',
+    title: 'Report an issue',
+    excerpt: 'File a bug, an idea, or a question from any page in the console — on every plan, including Free.',
+  },
   responsiveStyling: {
     path: '/building-sites/besigner/responsive-styling',
     title: 'Responsive styling & custom CSS',
@@ -659,7 +664,7 @@ export const DOCS_HELP_ANCHORS = {
   elementCatalog: ['#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#tabs-that-go-to-another-screen', '#pagination', '#text', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
   emailCampaigns: ['#send-a-campaign', '#personalize-with-merge-tags', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
   enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
-  errorScreens: ['#the-error-screens', '#design-one', '#error-screens-are-free', '#tips', '#related'],
+  errorScreens: ['#the-error-screens', '#design-one', '#what-the-built-in-fallback-gives-you', '#error-screens-are-free', '#tips', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],
   featureFlags: ['#how-a-flag-is-evaluated', '#how-gating-behaves', '#managing-flags', '#under-the-hood', '#a-flag-is-not-always-sufficient-on-its-own'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
@@ -700,6 +705,7 @@ export const DOCS_HELP_ANCHORS = {
   realmBundles: ['#build-against-the-host-abi', '#the-chain-that-runs-before-a-byte-executes', '#granting-trust-staff', '#where-realm-bundles-load', '#key-rotation', '#troubleshooting'],
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
+  reportAnIssue: ['#what-to-write', '#what-gets-attached-for-you', '#being-contacted', '#where-it-goes', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#gradient-backgrounds', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   runAnAgencyWorkspace: ['#the-model', '#step-1-plan', '#step-2-templates', '#step-3-access', '#step-4-domains', '#step-5-backups', '#step-6-billing', '#step-7-automate', '#checklist', '#related'],
   salesTaxReturn: ['#choosing-the-period', '#rows-that-need-attention', '#the-figures', '#refunds', '#all-jurisdictions', '#exporting-the-working-papers', '#related'],

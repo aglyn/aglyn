@@ -261,6 +261,7 @@ Every key here is optional and independent. A missing key disables its feature
 | Transactional & campaign email | `RESEND_API_KEY`, `USAGE_EMAIL_FROM` |
 | Aglyn Assist + "Rewrite with AI" | `ANTHROPIC_API_KEY` (your own key; the console panel is additionally behind the `release_assist` flag, off by default) |
 | Scheduled jobs (audit archival, erasure, retention sweeps) | `CRON_SECRET` — the job routes stay dormant without it |
+| Customer issue reports → your tracker | `LINEAR_API_KEY`, `LINEAR_CUSTOMER_REPORTS_TEAM_ID` — both required; unset, the console's "Report an issue" dialog answers 501 and files nowhere |
 
 ## Honest limits
 
@@ -271,6 +272,7 @@ Every key here is optional and independent. A missing key disables its feature
 | Stripe | Optional. Without `STRIPE_SECRET_KEY`, commerce checkout and paid platform plans are unavailable; the rest of the platform runs. |
 | Resend | Optional. Without `RESEND_API_KEY`, app email (invites, receipts, campaigns) is an inert no-op. |
 | AI assist | Degrades gracefully without an Anthropic key. |
+| Issue reporting | Optional, and **off by default**. The console's "Report an issue" dialog needs a tracker of your own: set `LINEAR_API_KEY` and `LINEAR_CUSTOMER_REPORTS_TEAM_ID` to *your* Linear workspace and a team dedicated to inbound reports. Nothing about Aglyn's workspace is compiled in — unset, the route answers 501 and says so, and your customers' reports are never sent to Aglyn (AGL-2185). Both are **server-only**; never prefix either with `NEXT_PUBLIC_`, which would inline a key that can read and write your whole workspace into the browser bundle. |
 | Texas sales-tax report | Optional, and blank by default. The staff `/admin/tax-return` report is built around a single US-TX registration. Set `TX_WEBFILE_NUMBER` / `TX_TAXPAYER_NUMBER` to *your own* Comptroller identifiers to have them appear on the page and in the exported working papers; leave them unset and both surfaces say "not configured" rather than printing anything. They are **server-only** — never prefix either with `NEXT_PUBLIC_`, which would inline them into a client bundle served without authentication. Aglyn LLC's own values are not in this repository (AGL-2021). |
 | Operator identity | **Set it.** `NEXT_PUBLIC_OPERATOR_NAME` / `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` name you on the public abuse and §512 counter-notice intakes, the lockdown 503, the quarantine notice and the sanctions 451. No fallback to Aglyn's addresses exists; unset renders an explicit "not configured" state. Baked in at image **build** time. |
 | DMCA designated agent | Not configured, and not inherited. Aglyn's Copyright Office registration does not cover your deployment; §512(c)(2) makes your own filing a precondition of the safe harbour. `NEXT_PUBLIC_OPERATOR_DMCA_AGENT_REGISTERED=true` is the only thing that makes the product state one, and nothing infers it. |

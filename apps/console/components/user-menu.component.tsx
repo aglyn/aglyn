@@ -27,6 +27,7 @@ import {
 import {
   mdiAccountGroupOutline,
   mdiBookOpenVariant,
+  mdiBugOutline,
   mdiCreditCardOutline,
   mdiLifebuoy,
   mdiOpenInNew,
@@ -50,6 +51,7 @@ import {
 } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import { type ReactNode, useState } from 'react'
+import ReportIssueDialog from './report-issue-dialog.component'
 import { buildDocsUrl } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -107,6 +109,9 @@ export function UserMenu() {
   const showOrgLinks = namesOrg && (!reachReady || orgWide)
   const { mode, setMode } = useColorScheme()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+  // The dialog is rendered OUTSIDE the Popover (below), so closing the menu on
+  // click does not unmount the form the person is typing into (AGL-2185).
+  const [reporting, setReporting] = useState(false)
 
   const close = () => setAnchorEl(null)
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
@@ -157,6 +162,29 @@ export function UserMenu() {
         : {})}
       sx={{ gap: 2, py: 0.75 }}
     >
+      <ListItemText
+        slotProps={{ primary: { variant: 'body2' } }}
+        sx={{ my: 0 }}
+      >
+        {label}
+      </ListItemText>
+      <MdiIcon path={iconPath} fontSize="small" sx={{ color: 'text.secondary' }} />
+    </ListItemButton>
+  )
+
+  /**
+   * The same row, but it runs something instead of going somewhere (AGL-2185).
+   * `row` only builds links; "Report an issue" opens a dialog, and rebuilding
+   * it as a link to a page would put a form behind a navigation the reporter
+   * has to come back from — losing the page they were on, which is the single
+   * most useful thing the report carries.
+   */
+  const actionRow = (
+    onClick: () => void,
+    label: string,
+    iconPath: string,
+  ): ReactNode => (
+    <ListItemButton onClick={onClick} sx={{ gap: 2, py: 0.75 }}>
       <ListItemText
         slotProps={{ primary: { variant: 'body2' } }}
         sx={{ my: 0 }}
@@ -272,6 +300,20 @@ export function UserMenu() {
           : null}
         {row(buildDocsUrl(), 'Documentation', mdiOpenInNew.path, { external: true })}
 
+        {/* Account-scoped like Manage account and Documentation, so it needs
+            neither the org gate nor the collaborator gate: anyone signed in
+            can hit a bug, on any page, including the org-less ones. Placed
+            under Documentation because "the docs did not answer it" is the
+            step immediately before reporting it. */}
+        {actionRow(
+          () => {
+            close()
+            setReporting(true)
+          },
+          'Report an issue',
+          mdiBugOutline.path,
+        )}
+
         {/* Inline theme toggle (moved out of the top bar). */}
         <Box
           sx={{
@@ -347,6 +389,14 @@ export function UserMenu() {
           </Box>
         ) : null}
       </Popover>
+
+      {/* Outside the Popover on purpose (AGL-2185): the menu closes the moment
+          the row is clicked, and a dialog mounted inside it would be torn down
+          with it — taking a half-written report along. */}
+      <ReportIssueDialog
+        open={reporting}
+        onClose={() => setReporting(false)}
+      />
     </>
   )
 }
