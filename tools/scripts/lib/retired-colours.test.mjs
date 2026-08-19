@@ -36,8 +36,9 @@
  */
 
 import { strict as assert } from 'node:assert'
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, sep } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -330,45 +331,49 @@ const REPO_ROOT = join(
  */
 const SWEEP_ROOTS = ['apps', 'libs', 'tools']
 
-const SKIP_DIRS = new Set([
-  'node_modules',
-  'dist',
-  '.next',
-  'coverage',
-  '.nx',
-  'tmp',
-  '.turbo',
-])
-
 /** Code, config, content and instructions. The last one is not optional. */
 const SWEPT = /\.(?:tsx?|jsx?|mjs|cjs|json|css|scss|html|md)$/
 
-function sweptFiles(dir) {
-  const found = []
-  let entries
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return found
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue
-      found.push(...sweptFiles(full))
-      continue
-    }
-    if (SWEPT.test(entry.name)) found.push(full)
-  }
-  return found
+/**
+ * TRACKED files only, via `git ls-files` — never a filesystem walk (AGL-2375).
+ *
+ * The `readdirSync` walk this replaces used a directory skip-list, so the
+ * corpus was "whatever is on this disk". That made the sweep measure MACHINE
+ * STATE rather than the repo: on the shared checkout it reached 730 untracked
+ * files — the vendored `apps/console/public/monaco/` bundles that
+ * `next.config.js` copies out of `node_modules`, plus `apps/docs/build/` and
+ * `apps/docs/.docusaurus/`. Minified Monaco writes `#4fc3f7` down, so anyone
+ * who had ever built the console went red on a hex nobody authored, and a
+ * fresh CI runner went green off the same commit. The green did not mean the
+ * repo was clean; it meant Monaco was absent from the runner.
+ *
+ * This is AGL-2116 exactly, in a second file: the colour RATCHET
+ * (`check-hardcoded-colours.mjs`) was corrected then, this test was not.
+ * `apps/console/eslint.config.mjs` carries a `public/monaco` ignore glob for
+ * the same reason (AGL-1779). Enumerating what git tracks makes the corpus
+ * identical on every machine and means generated output can never trip it.
+ *
+ * A skip-list is no longer needed: git does not track build output. It is not
+ * merely redundant but wrong to keep one — a tracked file under a directory
+ * happening to be named `tmp/` or `dist/` would be silently dropped from the
+ * corpus, and an unswept file is the blind spot this sweep exists to deny.
+ */
+function trackedCorpus() {
+  const out = execFileSync('git', ['ls-files', '-z', '--', ...SWEEP_ROOTS], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  return out
+    .split('\0')
+    .filter((path) => path && SWEPT.test(path))
+    .map((path) => ({
+      path,
+      text: readFileSync(join(REPO_ROOT, ...path.split('/')), 'utf8'),
+    }))
 }
 
-const sourceCorpus = SWEEP_ROOTS.flatMap((root) =>
-  sweptFiles(join(REPO_ROOT, root)),
-).map((file) => ({
-  path: relative(REPO_ROOT, file).split(sep).join('/'),
-  text: readFileSync(file, 'utf8'),
-}))
+const sourceCorpus = trackedCorpus()
 
 /**
  * Files allowed to write a retired hex, and why. A reason is mandatory and is
@@ -398,6 +403,45 @@ test('the source sweep reads the corpus, not a hand-listed set of files', () => 
   const paths = new Set(sourceCorpus.map((file) => file.path))
   for (const path of Object.keys(EXEMPT))
     assert.ok(paths.has(path), `sweep missed an exempt file: ${path}`)
+})
+
+test('the corpus is the repo, not whatever is on this disk', () => {
+  // The floor above is satisfied by a filesystem walk too — it was, for the
+  // whole time the sweep was measuring machine state. What separates the two
+  // is UNTRACKED files, so assert on those directly (AGL-2375).
+  //
+  // Stated as CONTAINMENT — every corpus path is tracked — rather than as
+  // "the corpus contains no untracked file". The first draft of this test did
+  // the latter via `git ls-files --others --exclude-standard`, and it PASSED
+  // with a planted `public/monaco` file sitting in the corpus: that flag
+  // omits IGNORED files, and build output is ignored by definition, so it
+  // enumerated the empty set and compared it against everything. It could not
+  // have failed. Containment has no such hole — a path either appears in
+  // `ls-files` or it does not.
+  //
+  // Tautological while the corpus builder is `trackedCorpus`, and that is the
+  // point: it stops being tautological the moment someone reverts it to a
+  // walk, which is the regression being guarded.
+  const tracked = new Set(
+    execFileSync('git', ['ls-files', '-z', '--', ...SWEEP_ROOTS], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split('\0')
+      .filter(Boolean),
+  )
+
+  const leaked = sourceCorpus
+    .map((file) => file.path)
+    .filter((path) => !tracked.has(path))
+  assert.deepEqual(
+    leaked.slice(0, 5),
+    [],
+    `the corpus reached ${leaked.length} untracked file(s) — it is enumerating ` +
+      'the disk, not the repo, so it reports a different verdict per machine:\n  ' +
+      `${leaked.slice(0, 5).join('\n  ')}`,
+  )
 })
 
 test('no source file writes a retired colour down', () => {
