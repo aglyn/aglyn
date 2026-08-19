@@ -557,3 +557,103 @@ describe('a lost dispute arriving before its purchase (AGL-2148)', () => {
     expect(orphan()).toBeUndefined()
   })
 })
+
+/**
+ * The same window, for a PARTIAL refund (AGL-2299).
+ *
+ * A partial refund now pulls the publisher's proportional share back, so it
+ * has the same problem the full refund had before AGL-2148: issued inside the
+ * `checkout.session.completed` retry window it joins on the payment intent,
+ * finds nothing, and the money is gone with the seller keeping their share.
+ * It parks under its own `kind`, because the drain must apply the partial
+ * effects — the share, and nothing else — rather than revoking a purchase
+ * whose buyer was only partly refunded.
+ */
+describe('a partial refund arriving before its purchase (AGL-2299)', () => {
+  const partial = (over: Record<string, unknown> = {}) =>
+    refundEvent({ refunded: false, amount_refunded: 5000, ...over }) as any
+
+  it('parks under its own kind', async () => {
+    await marketplaceBillingWebhookHandler(partial())
+    expect(orphan()).toMatchObject({
+      kind: 'partial-refund',
+      id: 'ch_1',
+      chargeId: 'ch_1',
+      amountCents: 5000,
+    })
+  })
+
+  it('parks nothing without the marketplace stamp', async () => {
+    // A storefront or subscription partial refund shares this endpoint.
+    await marketplaceBillingWebhookHandler(partial({ metadata: {} }))
+    expect(orphan()).toBeUndefined()
+  })
+
+  it('the session landing reverses the share and does NOT revoke', async () => {
+    await marketplaceBillingWebhookHandler(partial())
+    stubStripe({
+      charge: { body: chargeBody({ amount_refunded: 5000 }) },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_p1', amount: 3695 } },
+    })
+
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(posts).toHaveLength(1)
+    expect(String(posts[0].init.body)).toContain('amount=3695')
+    expect(purchase()).toMatchObject({ partialReversedTransferCents: 3695 })
+    // The three effects a FULL refund applies must all be absent.
+    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['reversedTransferCents']).toBeUndefined()
+    expect(adminMock.__ga4Refunds).toHaveLength(0)
+    expect(orphan()).toBeUndefined()
+  })
+
+  it('drains against what is TRUE NOW, not what was parked', async () => {
+    // The reason the drain re-reads the charge. A second refund landed after
+    // the first was parked, so the cumulative `amount_refunded` is 7500 and
+    // the target is floor(7500 × 8000 ÷ 10825) = 5542 — not the 3695 the
+    // parked document's amount would have replayed.
+    await marketplaceBillingWebhookHandler(partial())
+    stubStripe({
+      charge: { body: chargeBody({ amount_refunded: 7500 }) },
+      transfer: { body: transferBody() },
+      reversalPost: { body: { id: 'trr_p2', amount: 5542 } },
+    })
+
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+
+    expect(String(posts[0].init.body)).toContain('amount=5542')
+  })
+
+  it('a FULL refund landing in the same window REPLACES the parked partial', async () => {
+    // First cause wins is the rule, and this is its one exception. A partial
+    // is strictly weaker: if the drain applied it and stopped, the buyer would
+    // keep an entitlement to content they had been refunded for in full.
+    await marketplaceBillingWebhookHandler(partial())
+    expect(orphan()).toMatchObject({ kind: 'partial-refund' })
+
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+
+    expect(orphan()).toMatchObject({ kind: 'refund', amountCents: 10825 })
+  })
+
+  it('a parked FULL refund is never downgraded by a later partial', async () => {
+    // The other direction, which must NOT swap: a fully refunded charge
+    // cannot take a further refund, so this only ever arrives as a
+    // redelivery, and letting it win would un-revoke the purchase.
+    await marketplaceBillingWebhookHandler(refundEvent() as any)
+    await marketplaceBillingWebhookHandler(partial())
+    expect(orphan()).toMatchObject({ kind: 'refund', amountCents: 10825 })
+  })
+
+  it('a transient failure during the drain leaves the orphan for the redelivery', async () => {
+    await marketplaceBillingWebhookHandler(partial())
+    stubStripe({ charge: { ok: false, status: 503, body: {} } })
+
+    await expect(
+      marketplaceBillingWebhookHandler(completedSession() as any),
+    ).rejects.toThrow(/charge read failed/i)
+    expect(orphan()).toMatchObject({ kind: 'partial-refund' })
+  })
+})

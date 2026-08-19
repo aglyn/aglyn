@@ -56,6 +56,16 @@ export interface SellerLedgerSale {
   refundedAt?: unknown
   /** What the transfer reversal actually pulled back (AGL-1554/1995/2140). */
   reversedTransferCents?: number
+  /**
+   * What PARTIAL refunds have pulled back so far (AGL-2299).
+   *
+   * A separate field because it accumulates: there can be several partial
+   * refunds on one sale, while `reversedTransferCents` is the one-shot settle
+   * marker for a full refund or a lost dispute. The two never both apply to
+   * the same cents — the one-shot path caps itself at what the transfer has
+   * LEFT — so the publisher's real payout is the transfer minus both.
+   */
+  partialReversedTransferCents?: number
 }
 
 export interface SellerLedgerTotals {
@@ -107,17 +117,29 @@ export function summarizeSellerLedger(
     // and a reversal Stripe REFUSED (AGL-2140 records `reversalFailedAt` and
     // the money stays with the publisher pending recovery) leaves them all of
     // it. Summing the reversal that actually happened is true in every case.
+    //
+    // `partialReversedTransferCents` (AGL-2299) subtracts on the SAME rows,
+    // and it is the reason this line reads two fields rather than one: a
+    // partial refund takes the seller's proportional share back WITHOUT
+    // revoking, so the sale is still standing and still counts as paid. Left
+    // out, the panel would overstate the payout by exactly what came back.
     netPaidCents: sum(
       paid,
-      (sale) => transferOf(sale) - Number(sale.reversedTransferCents ?? 0),
+      (sale) =>
+        transferOf(sale) -
+        Number(sale.reversedTransferCents ?? 0) -
+        Number(sale.partialReversedTransferCents ?? 0),
     ),
     buyersPaidCents: sum(paid, (sale) => Number(sale.amountCents ?? 0)),
     salesTaxCents: sum(paid, (sale) => Number(sale.taxCents ?? 0)),
     platformFeeCents: sum(paid, (sale) => Number(sale.feeCents ?? 0)),
     // What came back out of the PUBLISHER's account — not what the buyer got
     // back, which also contains Aglyn's fee and Aglyn's tax.
-    returnedCents: sum(refunded, (sale) =>
-      Number(sale.reversedTransferCents ?? 0),
+    returnedCents: sum(
+      refunded,
+      (sale) =>
+        Number(sale.reversedTransferCents ?? 0) +
+        Number(sale.partialReversedTransferCents ?? 0),
     ),
   }
 }

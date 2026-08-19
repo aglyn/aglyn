@@ -166,3 +166,53 @@ describe('the Sales card renders the payout, not the old expression (AGL-2158)',
     expect(source).toContain('marketplace-provider')
   })
 })
+
+/**
+ * A partial refund's pull-back reaches the payout total (AGL-2299).
+ *
+ * The row stays PAID — a partial refund does not revoke — so it is counted in
+ * `buyersPaidCents`, `salesTaxCents` and `platformFeeCents` exactly as before.
+ * What changed is that the seller no longer keeps the whole transfer on it.
+ */
+describe('partial-refund reversals (AGL-2299)', () => {
+  const sale = {
+    amountCents: 10825,
+    feeCents: 2000,
+    taxCents: 825,
+    transferCents: 8000,
+  }
+
+  it('subtracts what a partial refund pulled back from a STANDING sale', () => {
+    const totals = summarizeSellerLedger([
+      { ...sale, partialReversedTransferCents: 3695 },
+    ])
+    expect(totals.paidCount).toBe(1)
+    expect(totals.refundedCount).toBe(0)
+    expect(totals.netPaidCents).toBe(8000 - 3695)
+    // The sale still happened: the buyer paid, the tax is still owed, and the
+    // platform still earned its fee.
+    expect(totals.buyersPaidCents).toBe(10825)
+    expect(totals.salesTaxCents).toBe(825)
+    expect(totals.platformFeeCents).toBe(2000)
+  })
+
+  it('leaves a sale with no partial reversal exactly as it was', () => {
+    expect(summarizeSellerLedger([sale]).netPaidCents).toBe(8000)
+  })
+
+  it('adds both pull-backs on a sale that was partly refunded and then fully', () => {
+    // The composition the webhook produces: 3695 on the partial, then the
+    // remaining 4305 when the full refund lands.
+    const totals = summarizeSellerLedger([
+      {
+        ...sale,
+        refundedAt: 'THEN',
+        partialReversedTransferCents: 3695,
+        reversedTransferCents: 4305,
+      },
+    ])
+    expect(totals.refundedCount).toBe(1)
+    expect(totals.returnedCents).toBe(8000)
+    expect(totals.netPaidCents).toBe(0)
+  })
+})

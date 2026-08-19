@@ -317,6 +317,215 @@ async function reverseMarketplaceSellerShare(
 }
 
 /**
+ * THE PUBLISHER'S SHARE OF A *PARTIAL* REFUND, PULLED BACK (AGL-2299).
+ *
+ * WHAT WAS WRONG. `charge.refunded` fires on EVERY refund; `object.refunded`
+ * is true only once the whole charge is gone. Everything above this function
+ * is gated on that flag, so a partial refund did nothing at all — no
+ * reversal, no record, not even a log line — and the note beside the branch
+ * said so deliberately: "a partial refund is a concession the ledger's split
+ * cannot decompose".
+ *
+ * That premise is false, and it is expensive. `reverseMarketplaceSellerShare`
+ * decomposes exactly this, proportionally, and has since AGL-1554. What the
+ * old branch actually did was hand the entire concession to Aglyn: on a $100
+ * sale at a 20% take rate the platform holds $20 plus the tax it owes the
+ * state, and a $50 goodwill refund is paid out of the PLATFORM's balance —
+ * the publisher's $80 already left on the destination transfer. Aglyn is
+ * $30 down and the publisher is untouched. Any partial refund larger than the
+ * take rate loses money, which is most of them.
+ *
+ * The publisher agreement §8.4 is not ambiguous about this: *"You are
+ * responsible for refunds, chargebacks, and disputes on your sales. Aglyn may
+ * reverse or withhold amounts corresponding to refunded, disputed, or
+ * fraudulent transactions."* A partial refund is a refunded amount.
+ *
+ * THE ENTITLEMENT IS NOT TOUCHED, and that part of the old comment stands: a
+ * partial refund is a concession, not an un-buy. No `refundedAt`, so
+ * `hasLivePurchase` still says the buyer owns it, and no GA4 `refund` — that
+ * event nets the WHOLE transaction out of the platform-net accounting
+ * (AGL-1850), which a partial refund did not do. Only the money moves.
+ *
+ * WHY THIS IS A SECOND FUNCTION RATHER THAN A FLAG ON THE FIRST.
+ * `reverseMarketplaceSellerShare` is ONE-SHOT by design — `reversedTransferCents`
+ * present means "this purchase's pull-back has settled", and that marker is
+ * what stops a refund following a lost dispute from debiting a publisher
+ * twice. Partial refunds are the opposite shape: there can be several, and
+ * each must add to what came back. Teaching one function both disciplines is
+ * how the settle marker stops meaning anything.
+ *
+ * IDEMPOTENT WITHOUT A MARKER, because Stripe already keeps the ledger.
+ * The target is derived from the charge's CUMULATIVE `amount_refunded`, and
+ * what has already come back is `transfer.amount_reversed` — Stripe's own
+ * number, not ours:
+ *
+ *     target    = floor(amount_refunded × transfer.amount ÷ charge.amount)
+ *     toReverse = clamp(target, 0, transfer.amount) − transfer.amount_reversed
+ *
+ * A redelivery recomputes the same target, finds `amount_reversed` already
+ * there, and reverses nothing. Three partial refunds converge on the right
+ * total whatever order they arrive in. And it composes with the one-shot path
+ * in both directions: a later FULL refund computes
+ * `min(transfer.amount, remaining)` and takes only the remainder, while a
+ * dispute takes its own proportional slice of what is left.
+ *
+ * FAILURES DO NOT SETTLE ANYTHING. Transient (429/5xx/network) throws so the
+ * redelivery is the retry, exactly as the one-shot path does. A definitive
+ * 4xx — `balance_insufficient` on a publisher's account is a 400 — records
+ * itself in AGL-2140's existing recovery queue (`reversalFailedAt`,
+ * `reversalFailedReason`, `reversalOwedCents`) and returns 200 so the endpoint
+ * does not redeliver forever. Nothing is permanently forfeited by that: the
+ * next partial refund on the same charge recomputes the target from scratch
+ * and picks the shortfall back up.
+ */
+async function reverseMarketplacePartialRefundShare(
+  purchaseRef: FirebaseFirestore.DocumentReference,
+  chargeId: string,
+): Promise<void> {
+  if (!chargeId) return
+  const snapshot = await purchaseRef.get()
+  if (!snapshot.exists) return
+  // The one-shot path already settled this purchase — a lost dispute, or a
+  // full refund that landed first. Its marker means the pull-back is closed.
+  if (snapshot.get('reversedTransferCents') != null) return
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    console.error(
+      'Marketplace partial-refund reversal skipped: STRIPE_SECRET_KEY is not set (AGL-2299)',
+    )
+    return
+  }
+  // The charge is RE-READ rather than taken from the event, for the same
+  // reason the one-shot path re-reads it: the event is a snapshot, and the
+  // number that decides this reversal is the charge's CUMULATIVE
+  // `amount_refunded`. A redelivery days later, or a drain of a parked
+  // partial, must converge on what is true now — not on what was true when
+  // the event was minted. It also means an API version that trims `transfer`
+  // out of the webhook payload cannot silently turn this into a no-op.
+  const charge = await stripeGet(
+    `https://api.stripe.com/v1/charges/${chargeId}`,
+    stripeKey,
+  )
+  if (!charge.ok) {
+    if (isTransientStripeStatus(charge.status)) {
+      throw new Error(
+        `Stripe charge read failed (${charge.status}) for marketplace partial refund on ${chargeId}`,
+      )
+    }
+    console.error('Stripe refused the charge read', charge.body?.error)
+    return
+  }
+  const chargeAmountCents = Math.round(Number(charge.body?.amount ?? 0))
+  const refundedCents = Math.round(Number(charge.body?.amount_refunded ?? 0))
+  if (!(chargeAmountCents > 0) || !(refundedCents > 0)) return
+  const transferId = String(charge.body?.transfer ?? '')
+  if (!transferId) {
+    // No destination transfer means no seller share to pull back — a
+    // marketplace charge always has one, so this is a charge we do not own.
+    return
+  }
+  const transfer = await stripeGet(
+    `https://api.stripe.com/v1/transfers/${transferId}`,
+    stripeKey,
+  )
+  if (!transfer.ok) {
+    if (isTransientStripeStatus(transfer.status)) {
+      throw new Error(
+        `Stripe transfer read failed (${transfer.status}) for marketplace partial refund on ${chargeId}`,
+      )
+    }
+    console.error('Stripe refused the transfer read', transfer.body?.error)
+    await purchaseRef.set(
+      {
+        partialRefundedCents: refundedCents,
+        reversalFailedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        reversalFailedReason: 'transfer-read-refused',
+        reversalFailedCause: 'partial-refund',
+      },
+      { merge: true },
+    )
+    return
+  }
+  const transferCents = Math.round(Number(transfer.body?.amount ?? 0))
+  const alreadyReversedCents = Math.round(
+    Number(transfer.body?.amount_reversed ?? 0),
+  )
+  const targetCents = Math.min(
+    transferCents,
+    Math.floor((refundedCents * transferCents) / chargeAmountCents),
+  )
+  const toReverseCents = targetCents - alreadyReversedCents
+  if (!(toReverseCents > 0)) {
+    // Already square — a redelivery, or an earlier cause that took more than
+    // this refund's proportional slice. Record what the buyer has had back so
+    // the seller panel and the ledger agree with Stripe.
+    await purchaseRef.set(
+      {
+        partialRefundedCents: refundedCents,
+        partialReversedTransferCents: alreadyReversedCents,
+      },
+      { merge: true },
+    )
+    return
+  }
+  const response = await fetch(
+    `https://api.stripe.com/v1/transfers/${transferId}/reversals`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        // Derived from the charge AND the cumulative target, so a redelivery
+        // of the same event replays Stripe's stored response while a genuinely
+        // larger second refund gets its own call. Belt and braces: the
+        // `amount_reversed` read above already turns a redelivery into a
+        // no-op, and this closes the window where the POST landed and our
+        // record did not.
+        'Idempotency-Key': `partial-reversal-${chargeId}-${targetCents}`,
+      },
+      body: new URLSearchParams({
+        amount: String(toReverseCents),
+        'metadata[partialRefundOfCharge]': chargeId,
+        'metadata[purchaseId]': purchaseRef.id,
+      }).toString(),
+    },
+  )
+  const reversal = await response.json().catch(() => null)
+  if (!response.ok) {
+    if (isTransientStripeStatus(response.status)) {
+      throw new Error(
+        `Stripe partial transfer reversal failed (${response.status}) on ${chargeId}`,
+      )
+    }
+    console.error(
+      'Marketplace partial-refund seller share NOT reversed — recorded for recovery (AGL-2299)',
+      { purchaseId: purchaseRef.id, chargeId, owedCents: toReverseCents },
+    )
+    await purchaseRef.set(
+      {
+        partialRefundedCents: refundedCents,
+        partialReversedTransferCents: alreadyReversedCents,
+        reversalFailedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        reversalFailedReason: 'reversal-refused',
+        reversalFailedCause: 'partial-refund',
+        reversalOwedCents: toReverseCents,
+      },
+      { merge: true },
+    )
+    return
+  }
+  await purchaseRef.set(
+    {
+      partialRefundedCents: refundedCents,
+      partialReversedTransferCents:
+        alreadyReversedCents + Math.round(Number(reversal?.amount ?? toReverseCents)),
+      ...(reversal?.id ? { partialTransferReversalId: String(reversal.id) } : {}),
+    },
+    { merge: true },
+  )
+}
+
+/**
  * WHERE A REFUND THAT ARRIVED TOO EARLY WAITS (AGL-2148).
  *
  * THE WINDOW IS REAL, not exotic. `checkout.session.completed` is what writes
@@ -358,6 +567,18 @@ interface RefundOutcomeCause extends SellerShareReversalCause {
   currency: string
   /** Stripe customer for the GA hit; falls back to the buyer uid. */
   stripeCustomerId: string
+}
+
+/**
+ * What may be parked when the purchase document does not exist yet.
+ *
+ * `partial-refund` (AGL-2299) is deliberately NOT a `SellerShareReversalCause`
+ * kind: it never revokes, never reports to GA, and settles cumulatively
+ * against Stripe's own `amount_reversed` rather than through the one-shot
+ * marker. It shares only the store and the drain trigger.
+ */
+type ParkedCause = Omit<RefundOutcomeCause, 'kind'> & {
+  kind: RefundOutcomeCause['kind'] | 'partial-refund'
 }
 
 /**
@@ -441,13 +662,25 @@ async function applyMarketplaceRefundOutcome(
  */
 async function recordRefundOrphan(
   firestore: FirebaseFirestore.Firestore,
-  cause: RefundOutcomeCause,
+  cause: ParkedCause,
 ): Promise<void> {
   if (!cause.paymentIntentId || !cause.id) return
   const orphanRef = firestore
     .collection(REFUND_ORPHAN_COLLECTION)
     .doc(cause.paymentIntentId)
-  if ((await orphanRef.get()).exists) return
+  const parked = await orphanRef.get()
+  // FIRST CAUSE WINS — with one exception (AGL-2299). A parked
+  // `partial-refund` is strictly weaker than a full refund or a lost dispute:
+  // it moves a slice of the seller's share and nothing else. If the same
+  // charge is then refunded in full inside the same window, the stronger
+  // cause must replace it, or the drain would pull back a slice and leave the
+  // buyer entitled to content they have been fully refunded for. The reverse
+  // never happens: a fully refunded charge cannot take a partial afterwards.
+  if (parked.exists && !(
+    parked.get('kind') === 'partial-refund' && cause.kind !== 'partial-refund'
+  )) {
+    return
+  }
   await orphanRef.set(
     {
       kind: cause.kind,
@@ -504,7 +737,25 @@ async function drainMarketplaceRefundOrphan(
   const orphan = await orphanRef.get()
   if (!orphan.exists) return
   const causeId = String(orphan.get('id') ?? '')
-  const kind = orphan.get('kind') === 'dispute' ? 'dispute' : 'refund'
+  const parkedKind = String(orphan.get('kind') ?? '')
+  if (parkedKind === 'partial-refund') {
+    // A partial refund never revokes and never reports, so it does not go
+    // through `applyMarketplaceRefundOutcome` (AGL-2299). The charge is RE-READ
+    // from Stripe rather than replayed from the parked amount: the target is
+    // computed from the charge's cumulative `amount_refunded`, and by the time
+    // this drains there may have been a second refund the parked document
+    // never saw.
+    // Throws on a transient Stripe failure, which leaves the orphan in place
+    // for the redelivery — the delete below is exactly what must not happen
+    // in that case, and it is why it is AFTER this await rather than before.
+    await reverseMarketplacePartialRefundShare(
+      purchaseRef,
+      String(orphan.get('chargeId') ?? ''),
+    )
+    await orphanRef.delete()
+    return
+  }
+  const kind = parkedKind === 'dispute' ? 'dispute' : 'refund'
   if (causeId) {
     await applyMarketplaceRefundOutcome(
       purchaseRef,
@@ -784,9 +1035,9 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         // revoked (AGL-1546) and GA nets the sale out (AGL-1850) — see
         // `applyMarketplaceRefundOutcome`. FULL refunds only, matching the
         // revocation and GA gates: the branch is already inside
-        // `object?.refunded === true`. A partial refund is a concession the
-        // ledger's split cannot decompose, so it stays one — the seller keeps
-        // their share, exactly as the entitlement survives. There is no
+        // `object?.refunded === true`. The seller's share of a PARTIAL refund
+        // now comes back too, without any of the other three effects — see
+        // `reverseMarketplacePartialRefundShare` below. There is no
         // marketplace refund UI, so every refund is issued from the Stripe
         // Dashboard and this webhook is the only code that sees one.
         await applyMarketplaceRefundOutcome(purchases.docs[0].ref, cause)
@@ -801,6 +1052,56 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
         // nothing. A charge predating that stamp is not parked either — its
         // purchase document has long existed, so the join above finds it.
         await recordRefundOrphan(firestore, cause)
+      }
+    }
+  }
+
+  // A PARTIAL refund pulls the publisher's share back too (AGL-2299) — and
+  // nothing else. The branch above is gated on `refunded === true`, which is
+  // "the whole charge is gone"; every smaller refund fell through it and the
+  // platform paid the entire concession out of a 20% cut. The entitlement is
+  // untouched on purpose: a partial refund is a concession, not an un-buy.
+  //
+  // Same marketplace discriminator the orphan store uses, for the same
+  // reason: `charge.refunded` arrives here for storefront orders and
+  // subscription charges too, and this must not read a transfer belonging to
+  // one of those.
+  //
+  // The discriminator is required only on the ORPHAN side, exactly as the
+  // full-refund branch requires it: when the payment-intent join FINDS a
+  // marketplace purchase, that join is already the proof, and demanding the
+  // metadata as well would skip every charge predating the AGL-2148 stamp.
+  if (
+    type === 'charge.refunded' &&
+    object?.refunded !== true &&
+    Math.round(Number(object?.amount_refunded ?? 0)) > 0
+  ) {
+    const paymentIntentId = String(object?.payment_intent ?? '')
+    if (paymentIntentId) {
+      const firestore = firebaseAdmin.app().firestore()
+      const purchases = await firestore
+        .collection('marketplacePurchases')
+        .where('paymentIntentId', '==', paymentIntentId)
+        .limit(1)
+        .get()
+      if (!purchases.empty) {
+        await reverseMarketplacePartialRefundShare(
+          purchases.docs[0].ref,
+          String(object?.id ?? ''),
+        )
+      } else if (object?.metadata?.type === 'marketplace-purchase') {
+        // The AGL-2148 window, for partials. Parked with the charge on it so
+        // the drain can recompute the target from Stripe rather than trusting
+        // a number this event carried; the amount rides along for forensics.
+        await recordRefundOrphan(firestore, {
+          kind: 'partial-refund',
+          id: String(object?.id ?? ''),
+          paymentIntentId,
+          amountCents: Math.round(Number(object?.amount_refunded ?? 0)),
+          chargeId: String(object?.id ?? ''),
+          currency: String(object?.currency ?? 'usd'),
+          stripeCustomerId: String(object?.customer ?? ''),
+        })
       }
     }
   }
