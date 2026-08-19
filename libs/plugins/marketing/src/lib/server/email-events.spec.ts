@@ -248,7 +248,44 @@ function makeCollectionRef(path: string): any {
   }
 }
 
-const fakeFirestore = { collection: (name: string) => makeCollectionRef(name) }
+/**
+ * `runTransaction`, modelled on the two behaviours the suppression write
+ * depends on: a `tx.get` sees COMMITTED state, and `tx.set` buffers until the
+ * callback resolves, so a throw part-way leaves nothing behind.
+ *
+ * Contention and retry are NOT modelled — the callback runs exactly once.
+ * That is faithful to the uncontended path every caller in this file takes,
+ * and stated here rather than assumed, because a double that silently ran the
+ * callback twice (or committed reads eagerly) would fabricate results in both
+ * directions.
+ */
+async function runTransaction<T>(body: (tx: any) => Promise<T>): Promise<T> {
+  const pending: Array<() => void> = []
+  const tx = {
+    get: (ref: any) => ref.get(),
+    set: (
+      ref: any,
+      value: Record<string, unknown>,
+      options?: { merge?: boolean },
+    ) => {
+      pending.push(() => {
+        docs.set(
+          ref.path,
+          options?.merge ? mergeInto(docs.get(ref.path) ?? {}, value) : { ...value },
+        )
+      })
+      return tx
+    },
+  }
+  const result = await body(tx)
+  for (const write of pending) write()
+  return result
+}
+
+const fakeFirestore = {
+  collection: (name: string) => makeCollectionRef(name),
+  runTransaction,
+}
 
 // `updateExisting` is the REAL one, reached through its secondary entry point
 // so that mocking the barrel (whose graph pulls the admin SDK, which does not
@@ -642,5 +679,147 @@ describe('the pre-existing gates', () => {
 
     expect(result.body).toEqual({ ignored: true })
     expect([...docs.keys()]).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Bounces and complaints suppress the address (AGL-1918)
+// ---------------------------------------------------------------------------
+
+/**
+ * The reason these are asserted against the SUPPRESSION path and not against
+ * a counter: `campaign-send.ts` filters its audience by reading
+ * `hosts/{hostId}/suppressions` and testing `suppressionId(email)` membership.
+ * That collection is the only thing in the product that can stop a bounced or
+ * complaining address being mailed again, and before this change nothing but
+ * an unsubscribe CLICK ever wrote to it — the webhook answered
+ * `200 {ignored:true}` and dropped the event.
+ *
+ * So the key is imported from `campaign-send` rather than recomputed here. A
+ * local `sha256(email)` would pass while writing to a document the reader
+ * never looks at, which is the failure this whole block exists to rule out.
+ */
+import { suppressionId } from './campaign-send'
+
+const SUPPRESSION_PATH = `hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`
+
+/** A Resend delivery-failure payload, tagged as Aglyn tags a campaign send. */
+const failure = (
+  type: 'email.bounced' | 'email.complained',
+  extra: Record<string, unknown> = {},
+  tags: Record<string, string> = TAGS,
+) => ({ type, data: { to: [RECIPIENT], tags, ...extra } })
+
+describe('a complaint', () => {
+  it('suppresses the address, on the list campaign-send reads', async () => {
+    const result = await deliver(failure('email.complained'))
+
+    expect(result.status).toBe(200)
+    expect(docs.get(SUPPRESSION_PATH)).toEqual({
+      email: RECIPIENT,
+      reason: 'complaint',
+      suppressedAt: SERVER_TIME,
+      createdAt: SERVER_TIME,
+    })
+  })
+
+  it('does not need a campaign tag — a suppression outlives the campaign', async () => {
+    await deliver(failure('email.complained', {}, { hostId: HOST }))
+
+    expect(docs.get(SUPPRESSION_PATH)?.reason).toBe('complaint')
+  })
+})
+
+describe('a bounce', () => {
+  it('suppresses when the bounce is permanent', async () => {
+    await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Permanent', subType: 'General', message: 'no such user' },
+      }),
+    )
+
+    expect(docs.get(SUPPRESSION_PATH)).toEqual({
+      email: RECIPIENT,
+      reason: 'bounce',
+      suppressedAt: SERVER_TIME,
+      createdAt: SERVER_TIME,
+    })
+  })
+
+  it('does NOT suppress a transient bounce', async () => {
+    // A full mailbox or a greylisting server. Suppressing here would
+    // unsubscribe a real subscriber over a temporary condition at their
+    // provider — a customer's list destroyed by our error handling.
+    const result = await deliver(
+      failure('email.bounced', {
+        bounce: { type: 'Transient', subType: 'MailboxFull' },
+      }),
+    )
+
+    expect(result.body).toEqual({ ok: true, suppressed: false })
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+
+  it('does NOT suppress when the payload carries no bounce type', async () => {
+    // Guessing in the suppressing direction is the destructive guess. This
+    // assertion is also the tripwire on the payload shape: if Resend renames
+    // `data.bounce.type`, the permanent-bounce test above goes red rather
+    // than this one silently becoming the only behaviour.
+    await deliver(failure('email.bounced'))
+
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+})
+
+describe('a delivery failure that cannot be placed', () => {
+  it('ignores an event with no host tag', async () => {
+    const result = await deliver(
+      failure('email.complained', {}, { campaignId: CAMPAIGN }),
+    )
+
+    expect(result.body).toEqual({ ignored: true })
+    expect([...docs.keys()]).toEqual([])
+  })
+
+  it('ignores an event with no recipient', async () => {
+    const result = await deliver({
+      type: 'email.complained',
+      data: { tags: TAGS },
+    })
+
+    expect(result.body).toEqual({ ignored: true })
+    expect([...docs.keys()]).toEqual([])
+  })
+})
+
+describe('a bounce arriving after an unsubscribe', () => {
+  it('keeps the date the person actually unsubscribed', async () => {
+    // The unsubscribe handler's shape, written first.
+    docs.set(SUPPRESSION_PATH, {
+      email: RECIPIENT,
+      createdAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    await deliver(
+      failure('email.bounced', { bounce: { type: 'Permanent' } }),
+    )
+
+    const entry = docs.get(SUPPRESSION_PATH)
+    expect(entry?.createdAt).toBe('2026-08-01T00:00:00.000Z')
+    expect(entry?.reason).toBe('bounce')
+    expect(entry?.suppressedAt).toBe(SERVER_TIME)
+  })
+})
+
+describe('the open and click path is unchanged', () => {
+  // Anti-vacuity for the block above: the new branch must not have swallowed
+  // the events this handler already served.
+  it('still counts an open against a live campaign', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+
+    expect(docs.get(CAMPAIGN_PATH)?.stats).toEqual({ opens: 3, clicks: 5 })
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
   })
 })
