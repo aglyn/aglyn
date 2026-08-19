@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { isDeployedRuntime, isProductionDeployment } from './deployment-shape'
@@ -99,4 +100,102 @@ describe('self-host container runtime environment (AGL-2221)', () => {
     // And the negative control: the state every shipped image was actually in.
     expect(isDeployedRuntime({ NODE_ENV: 'production' })).toBe(false)
   })
+})
+
+/**
+ * The `deps` stage must copy everything `npm ci` reads, not only the manifest
+ * and the lockfile (AGL-2423).
+ *
+ * The repo's tracked `.npmrc` carries `legacy-peer-deps=true`. Without it npm
+ * resolves a peer-inclusive ideal tree that `package-lock.json` — generated
+ * WITH the flag — does not encode, and `npm ci` refuses with EUSAGE. Both
+ * Dockerfiles copied only `package.json package-lock.json`, so every
+ * `docker compose up --build` died 20 seconds in, before a line of application
+ * code was compiled. The build stage's `COPY . .` does bring `.npmrc`, two
+ * stages too late.
+ *
+ * A workstation never shows it: `npm ci` there reads the repo `.npmrc` out of
+ * the working directory. The container was the one environment nobody ran, and
+ * the failure looks like lockfile drift — pinning the workstation's exact npm
+ * version inside the image still fails, which is how the file was identified.
+ *
+ * The required set is DERIVED from `git ls-files`, not written down here, so a
+ * sibling config file added later is covered by construction.
+ */
+const NPM_CONFIG_AT_ROOT = /^(\.npmrc|npm-shrinkwrap\.json)$/
+
+function trackedRootFiles(): string[] {
+  return execFileSync('git', ['ls-files', '--', ':(top,glob)*'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 8 * 1024 * 1024,
+  })
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((file) => !file.includes('/'))
+}
+
+/** Every tracked root file `npm ci` consults, manifest and lockfile included. */
+function npmInstallInputs(): string[] {
+  return trackedRootFiles()
+    .filter(
+      (file) =>
+        NPM_CONFIG_AT_ROOT.test(file) ||
+        file === 'package.json' ||
+        file === 'package-lock.json',
+    )
+    .sort()
+}
+
+/**
+ * The paths named by the last `COPY … ./` before `RUN npm ci`, which is the
+ * only material that install can see.
+ */
+function depsStageCopySources(dockerfile: string): string[] {
+  const source = readFileSync(join(REPO_ROOT, dockerfile), 'utf8')
+  const install = source.search(/^RUN npm ci\b/m)
+  if (install < 0) {
+    throw new Error(
+      `${dockerfile} no longer runs \`npm ci\`. If the install changed shape, re-point this guard — it is checking that the install can see the repo's npm configuration.`,
+    )
+  }
+  const copies = [...source.slice(0, install).matchAll(/^COPY ([^\n]+)$/gm)]
+  const last = copies.at(-1)
+  if (!last) {
+    throw new Error(
+      `${dockerfile} has no COPY before \`RUN npm ci\`, so the install runs against an empty context.`,
+    )
+  }
+  // `COPY a b c ./` — the final token is the destination.
+  return last[1].trim().split(/\s+/).slice(0, -1)
+}
+
+describe('self-host image build inputs (AGL-2423)', () => {
+  const required = npmInstallInputs()
+
+  // Anti-vacuity: if `git ls-files` ever returns nothing — a moved REPO_ROOT,
+  // a pathspec that stops matching — every assertion below would pass over an
+  // empty list and certify an install that copies nothing.
+  it('the derived input set is real', () => {
+    expect(required).toContain('package.json')
+    expect(required).toContain('package-lock.json')
+    expect(required).toContain('.npmrc')
+  })
+
+  it.each(IMAGES)(
+    '%s copies every npm config file into the deps stage before `npm ci`',
+    (dockerfile) => {
+      const copied = depsStageCopySources(dockerfile)
+      const missing = required.filter((file) => !copied.includes(file))
+      if (missing.length) {
+        throw new Error(
+          `${dockerfile}'s deps stage runs \`npm ci\` without ${missing.join(', ')}. ` +
+            `It copies: ${copied.join(', ')}. ` +
+            `npm reads .npmrc from the working directory, and this repo's sets legacy-peer-deps=true; ` +
+            `without it \`npm ci\` rejects the lockfile as out of sync (EUSAGE) and the image cannot build at all.`,
+        )
+      }
+    },
+  )
 })

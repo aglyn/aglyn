@@ -19,7 +19,13 @@ FROM node:24-slim AS deps
 WORKDIR /workspace
 # husky's prepare hook needs a git repo; HUSKY=0 turns it into a no-op.
 ENV HUSKY=0
-COPY package.json package-lock.json ./
+# .npmrc carries `legacy-peer-deps=true`, and WITHOUT it `npm ci` resolves a
+# peer-inclusive ideal tree that the lockfile does not encode and exits
+# EUSAGE ("can only install packages when your package.json and
+# package-lock.json ... are in sync"). Omitting it here failed EVERY
+# `docker compose up --build` at the first build step (AGL-2423). The build
+# stage's `COPY . .` brings it, but that is after this install.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # ── build: nx production build with standalone output ────────────────────────
