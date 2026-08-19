@@ -35,6 +35,16 @@
  * maps.
  */
 
+// STATIC import, never `require` (AGL-2413): a dynamic require of a workspace
+// library adds a lazy edge to the nx graph, and `tenant:lint` then rejects
+// EVERY static import of that library across the app — 20+ errors in files
+// this spec never touched.
+import {
+  PLAN_ENTITLEMENTS,
+  bandwidthCapEngaged,
+  pageViewsFromBandwidthGb,
+} from '@aglyn/aglyn/server'
+
 const HOST_ID = 'host-1'
 const DAY = new Date().toISOString().slice(0, 10)
 
@@ -575,12 +585,19 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
    */
   const spread = (i: number) => ({ ip: `203.0.113.${(i % 200) + 10}` })
 
-  it('CONTROL: ordinary traffic leaves no flag and notifies nobody', async () => {
+  it('CONTROL: traffic short of the CEILING raises no ceiling flag', async () => {
     plantMonthViews(9_000) // past free's 5 GB band, nowhere near the ceiling
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
     expect(mockStaffNotices).toHaveLength(0)
-    expect(mockManagerNotices).toHaveLength(0)
+    // The ONE notice here is the plan cap, not the ceiling (AGL-2413): 9,000
+    // views IS past free's ~8,738-view band, and since the cap moved to this
+    // beacon that is now a refusal rather than a number in a cron's report.
+    // Asserted by TYPE rather than by count so this stays a statement about
+    // which mechanism fired.
+    expect(mockManagerNotices.map((n) => n['type'])).toEqual([
+      'system.bandwidthCapEngaged',
+    ])
     // …and the pageview itself was still counted. A "containment" that
     // quietly stopped counting would pass every assertion above.
     expect(dayDoc().total).toBe(1)
@@ -599,7 +616,14 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // Staff AND the site's managers — the incident and the customer.
     expect(mockStaffNotices).toHaveLength(1)
     expect(mockStaffNotices[0]['type']).toBe('system.bandwidthCeilingTripped')
-    expect(mockManagerNotices).toHaveLength(1)
+    // BOTH manager notices, because 150,000 views crosses both limits and the
+    // two say different things: the cap explains a paused site and points at
+    // Billing, the ceiling asks whether this is the customer's traffic at all.
+    // The cap is first — the band is crossed first, and it is evaluated first.
+    expect(mockManagerNotices.map((n) => n['type'])).toEqual([
+      'system.bandwidthCapEngaged',
+      'system.bandwidthCeilingTripped',
+    ])
   })
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
@@ -671,5 +695,258 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
       await route.POST(beacon({ hostId: HOST_ID, path: '/' }, spread(i)))
     }
     expect(mockStaffNotices).toHaveLength(1)
+  })
+})
+
+/**
+ * THE FREE PLAN'S BANDWIDTH CAP, ENGAGED AT THE BEACON (AGL-2413).
+ *
+ * ## What was broken
+ *
+ * `orgs/{id}.bandwidthCap` — the marker the whole cap reads — had exactly one
+ * writer: the daily `api/billing/usage-alerts` sweep. That sweep opens its
+ * per-org loop with `if (!orgData['plan']) continue`, a guard written for
+ * *alerting* that the cap block inherited ~650 lines further down the same
+ * body. `createOrganization` writes no `plan` field, and nothing else does
+ * except the Stripe webhook and a staff override. So for every org that had
+ * never held a subscription — the entire organic free tier — the cap had
+ * never engaged once, and bandwidth was again the one billable dimension with
+ * no runtime refusal.
+ *
+ * ## What these prove
+ *
+ * That the refusal now happens where the counter is written, on the org shape
+ * `createOrganization` ACTUALLY produces: **no `plan` key at all**. The
+ * console-side suite (`bandwidth-cap-engages.spec.ts`) only ever fixtures
+ * `plan: 'free'` — the *downgrade* shape, which a never-subscribed org never
+ * has — which is precisely why it could be green throughout.
+ *
+ * Both halves are driven end to end: the real `bandwidthCapShouldEngage`
+ * writes the marker through the route, and the real `bandwidthCapEngaged`
+ * then reads that same marker back and answers true. Neither is stubbed, so
+ * neither can be made to agree with a mock instead of with the other.
+ */
+describe('the free-plan bandwidth cap engages at the beacon (AGL-2413)', () => {
+  const MONTH = new Date().toISOString().slice(0, 7)
+  const PLANTED_DAY = DAY.endsWith('-01') ? '02' : '01'
+
+  // The shipped constants, never a transcribed number: a band edited in
+  // `PLAN_ENTITLEMENTS` must move these fixtures with it or the suite is
+  // asserting against a price that no longer exists.
+  const FREE_BAND_VIEWS = pageViewsFromBandwidthGb(
+    PLAN_ENTITLEMENTS.free.bandwidthGb,
+  )
+  const OVER = Math.ceil(FREE_BAND_VIEWS) + 1_000
+  const UNDER = Math.floor(FREE_BAND_VIEWS) - 1_000
+
+  /**
+   * The org document `createOrganization` actually writes — name, slug,
+   * ownerUid, hosts, timestamps. **No `plan`.** Every field here is load
+   * bearing: the merge assertion below proves the cap write leaves them alone.
+   */
+  const neverSubscribedOrg = () => ({
+    $id: 'org-1',
+    name: 'Acme',
+    slug: 'acme',
+    ownerUid: 'uid-1',
+    hosts: {},
+    createdAt: 'created',
+    updatedAt: 'updated',
+  })
+
+  const plantMonthViews = (total: number) => {
+    mockStore[`hosts/${HOST_ID}/analytics/${MONTH}-${PLANTED_DAY}`] = { total }
+  }
+  const marker = () => mockStore['orgs/org-1']?.['bandwidthCap']
+  const capNotices = () =>
+    mockManagerNotices.filter((n) => n['type'] === 'system.bandwidthCapEngaged')
+
+  beforeEach(() => {
+    mockOrgForHost = neverSubscribedOrg()
+    mockStore['orgs/org-1'] = neverSubscribedOrg()
+  })
+
+  it('THE WHOLE POINT: an org with NO plan field is capped past the band', async () => {
+    plantMonthViews(OVER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toMatchObject({
+      month: MONTH,
+      includedPageViews: Math.round(FREE_BAND_VIEWS),
+    })
+    expect(marker().pageViews).toBe(OVER + 1) // planted + this very beacon
+    expect(marker().engagedAt).toBeGreaterThan(0)
+    // The owner is told, because the sweep that would have emailed them is
+    // exactly the thing that never ran for this org.
+    expect(capNotices()).toHaveLength(1)
+    expect(capNotices()[0]['hostId']).toBe(HOST_ID)
+  })
+
+  it('…and the REAL reader agrees, on that same plan-less doc', async () => {
+    // Writer and reader closed into one loop. `bandwidthCapEngaged` is the
+    // function the middleware, the loader and /api/locked all call; if it
+    // answered false on the marker this route just wrote, the site would
+    // still be serving and every assertion above would still be green.
+    plantMonthViews(OVER)
+    expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(false)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(true)
+  })
+
+  it('NEGATIVE CONTROL: inside the band, nothing is written', async () => {
+    plantMonthViews(UNDER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toBeUndefined()
+    expect(capNotices()).toHaveLength(0)
+    expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(false)
+    // The band is what decides, not the absence of a plan.
+    expect(dayDoc().total).toBe(1)
+  })
+
+  it('NEGATIVE CONTROL: a PAYING org at identical traffic is never capped', async () => {
+    // The promise that is older than this cap: a metered plan BILLS bandwidth
+    // past its band and is not cut off. Same traffic, same route, one field
+    // different.
+    mockOrgForHost = {
+      ...neverSubscribedOrg(),
+      plan: 'starter',
+      subscription: { status: 'active' },
+    }
+    plantMonthViews(OVER * 100)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toBeUndefined()
+    expect(capNotices()).toHaveLength(0)
+  })
+
+  it('NEGATIVE CONTROL: enterprise has no finite band and is never capped', async () => {
+    // Enterprise also answers false to `planMetersInfraOverage`, so the finite
+    // -band guard is the only thing standing between it and a refusal.
+    mockOrgForHost = { ...neverSubscribedOrg(), plan: 'enterprise' }
+    plantMonthViews(OVER * 1_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toBeUndefined()
+  })
+
+  it('the write MERGES: plan, slug, owner and hosts all survive', async () => {
+    // The partial-write hazard, asserted rather than assumed. A non-merging
+    // `set` here would delete the org document down to one field — and the
+    // console suite's own Firestore double drops the options argument, so it
+    // could not have caught this.
+    plantMonthViews(OVER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(mockStore['orgs/org-1']).toMatchObject(neverSubscribedOrg())
+    expect(marker().month).toBe(MONTH)
+  })
+
+  it('engages ONCE: a marker already stamped this month is not rewritten', async () => {
+    // The cross-instance guard — the sweep may have engaged it, or another
+    // instance. Re-stamping would replace the moment the site was paused with
+    // the moment it was last sampled, and re-notify the owner for it.
+    mockOrgForHost = {
+      ...neverSubscribedOrg(),
+      bandwidthCap: { month: MONTH, engagedAt: 111, pageViews: 1 },
+    }
+    mockStore['orgs/org-1'] = { ...mockOrgForHost }
+    plantMonthViews(OVER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toEqual({ month: MONTH, engagedAt: 111, pageViews: 1 })
+    expect(capNotices()).toHaveLength(0)
+  })
+
+  it('re-engages over LAST month’s marker', async () => {
+    // Nothing ever clears the marker; a new month simply stops matching. A
+    // guard that compared on presence rather than on month would cap a site
+    // for exactly one month, ever.
+    mockOrgForHost = {
+      ...neverSubscribedOrg(),
+      bandwidthCap: { month: '2020-01', engagedAt: 111 },
+    }
+    mockStore['orgs/org-1'] = { ...mockOrgForHost }
+    plantMonthViews(OVER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker().month).toBe(MONTH)
+    expect(marker().engagedAt).toBeGreaterThan(111)
+  })
+
+  it('does not re-notify on every later sample', async () => {
+    // Per-instance memo. Without it a capped site still receiving beacons from
+    // cached pages re-runs the month query and re-mails its owner every 200
+    // views — and the doc-level guard above cannot help, because the org doc
+    // this instance reads is only as fresh as the read that fetched it.
+    const route = loadRoute()
+    plantMonthViews(OVER)
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(capNotices()).toHaveLength(1)
+    for (let i = 0; i < 400; i++) {
+      await route.POST(
+        beacon({ hostId: HOST_ID, path: '/' }, { ip: `203.0.113.${(i % 200) + 10}` }),
+      )
+    }
+    expect(capNotices()).toHaveLength(1)
+  })
+
+  it('FAILS OPEN on an org it cannot read', async () => {
+    // The deliberate asymmetry `bandwidth-cap.ts` argues for: an unreadable
+    // org doc is an outage, and taking a customer's website down over one is
+    // not a cap, it is the incident. The abuse ceiling still contains it.
+    mockOrgForHost = undefined // getOrgForHost returns null
+    plantMonthViews(OVER * 100)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(mockStore['orgs/org-1']?.['bandwidthCap']).toBeUndefined()
+    expect(capNotices()).toHaveLength(0)
+  })
+
+  it('LAST month’s traffic does not engage THIS month', async () => {
+    const lastMonth = new Date()
+    lastMonth.setUTCDate(1)
+    lastMonth.setUTCMonth(lastMonth.getUTCMonth() - 1)
+    mockStore[
+      `hosts/${HOST_ID}/analytics/${lastMonth.toISOString().slice(0, 7)}-15`
+    ] = { total: OVER * 100 }
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(marker()).toBeUndefined()
+  })
+
+  it('the cap and the CEILING are independent evaluations', async () => {
+    // The bug this whole change closes was one mechanism silently gating
+    // another, so the two must not share a memo either.
+    //
+    // Driven as the real sequence that exposes it, on ONE route instance: a
+    // PAYING site trips its own abuse ceiling (which sets the ceiling's
+    // in-process memo and writes no cap, because a metered plan is never
+    // capped), its subscription then lapses mid-month, and a later SAMPLED
+    // beacon has to engage the cap on what is now a free org. A single shared
+    // memo makes that second evaluation never happen — and every other
+    // assertion in this file still passes, which is exactly how the original
+    // defect survived.
+    const route = loadRoute()
+    mockOrgForHost = {
+      ...neverSubscribedOrg(),
+      plan: 'starter',
+      subscription: { status: 'active' },
+    }
+    plantMonthViews(1_000_000)
+    await route.POST(beacon({ hostId: HOST_ID, path: '/' }))
+    expect(mockStore[`hosts/${HOST_ID}`]['bandwidthCeiling']).toMatchObject({
+      month: MONTH,
+      degraded: false,
+    })
+    expect(marker()).toBeUndefined() // paid: contained, never capped
+
+    // The subscription dies. `resolveEffectivePlan` answers free from here on.
+    mockOrgForHost = {
+      ...neverSubscribedOrg(),
+      plan: 'starter',
+      subscription: { status: 'canceled' },
+    }
+    // Beacon 201 is the next sample (first, then every 200th).
+    for (let i = 0; i < 200; i++) {
+      await route.POST(
+        beacon(
+          { hostId: HOST_ID, path: '/' },
+          { ip: `203.0.113.${(i % 200) + 10}` },
+        ),
+      )
+    }
+    expect(marker()).toMatchObject({ month: MONTH })
   })
 })

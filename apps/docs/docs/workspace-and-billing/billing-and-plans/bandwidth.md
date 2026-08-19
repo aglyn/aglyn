@@ -76,12 +76,17 @@ rankings.
 
 ## Why a site can go over before it is paused {#timing}
 
-Usage is totalled by a daily job, so a Free site can pass its band and keep serving for
-up to about a day before the pause takes hold. That is deliberate — the alternative is
-metering every single request — but it means the allowance is a monthly budget, not a
-per-second valve.
+Usage is totalled where page views are already counted — the analytics beacon, on a
+sampled cadence — so a Free site can pass its band and keep serving for a few hundred
+more views before the pause takes hold. That is deliberate: the alternative is metering
+every single request, which would put a database read on every page of every site on the
+platform to answer a question only Free organizations can ever fail. The allowance is a
+monthly budget, not a per-second valve.
 
-The reverse is much faster: an upgrade releases within roughly a minute.
+A daily job re-checks the same thing organization-wide, so an organization running more
+than one site is still totalled across all of them.
+
+The reverse is much faster still: an upgrade releases within roughly a minute.
 
 ## Reducing bandwidth
 
@@ -122,10 +127,10 @@ mentions only one of them is incomplete.
 |---|---|---|
 | Applies to | Free organizations only | Any plan |
 | Trips at | 1× the plan's band | 10× the plan's band (minimum 100,000 page views) |
-| Decided by | The daily usage job | The analytics beacon, sampled |
+| Decided by | The analytics beacon, sampled — plus the daily usage job organization-wide | The analytics beacon, sampled |
 | Recorded on | `orgs/{orgId}.bandwidthCap` | `hosts/{hostId}.bandwidthCeiling` |
 | Enforced at | Edge middleware **and** the page loader | The page loader |
-| Latency | Up to ~24 hours | Minutes |
+| Latency | Minutes | Minutes |
 | Visitor sees | The "Over the monthly traffic limit" notice | The "This site is temporarily unavailable" notice, **on Free only** |
 
 The abuse ceiling exists for runaway traffic — a scraper, a hotlinked asset, a loop. On a
@@ -165,8 +170,11 @@ opposite.
 
 ### Self-hosting
 
-The cap is driven by the daily usage job at `/api/billing/usage-alerts`, which is gated on
-`CRON_SECRET`. A deployment that never invokes it never caps anything — see
+The cap is engaged by the analytics beacon at `/api/analytics/collect`, which needs no
+scheduled job and no secret — a deployment that serves pages caps them. The daily usage
+job at `/api/billing/usage-alerts` (gated on `CRON_SECRET`) engages the same cap
+organization-wide and sends the usage emails; a deployment that never invokes it still
+caps, but loses the alerts and the multi-site total — see
 [Self-hosting](../../developers/self-hosting.md).
 
 `USAGE_ALERT_APPROACH_PCT` sets the first alert threshold (default `80`; a value outside

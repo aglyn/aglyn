@@ -41,23 +41,40 @@
  * only free orgs can ever fail. That is the exact cost the whole ISR/cache
  * design exists to avoid.
  *
- * So the decision is made ONCE A DAY, where the arithmetic already happens —
- * `api/billing/usage-alerts` already sums the org's page views for the
- * current month and already writes back to the org doc — and its verdict is
- * denormalized onto the org document as {@link OrgBandwidthCap}. The serving
- * path then reads it from `getOrgBilling`, the org doc it ALREADY loads and
- * caches for 60 seconds as "the suspension gate and every entitlement input
- * for the render". **The cap costs zero additional reads.**
+ * So the decision is made where the arithmetic already happens, and its
+ * verdict is denormalized onto the org document as {@link OrgBandwidthCap}.
+ * The serving path then reads it from `getOrgBilling`, the org doc it ALREADY
+ * loads and caches for 60 seconds as "the suspension gate and every
+ * entitlement input for the render". **The cap costs zero additional reads.**
+ *
+ * ### TWO writers, and neither is on the render path (AGL-2413)
+ *
+ * 1. `apps/tenant/app/api/analytics/collect` — the beacon that WRITES the
+ *    page-view counter, on its existing 1-in-200 sample. It already sums this
+ *    month with this query and already loads this org doc for the abuse
+ *    ceiling, so the cap rides both for free.
+ * 2. `api/billing/usage-alerts` — the daily sweep, which sums page views
+ *    ORG-WIDE across up to 100 hosts and is therefore the backstop for any
+ *    org running more than one site.
+ *
+ * The beacon is the one that matters, and it exists because the sweep alone
+ * was not a cap at all: it skips every org with no `plan` field, and
+ * `createOrganization` writes none — so for the whole never-subscribed free
+ * tier the marker had never once been written. ZACH's rule, and the general
+ * lesson: **a cap that lives only in a scheduled sweep stops existing the
+ * moment the sweep does not run.** Every other free dimension refuses at the
+ * point of use; this one now does too.
  *
  * ### The latency, stated plainly
  *
- * The cap therefore ENGAGES within one sweep of the daily cron — worst case
- * ~24 hours after the band is crossed, and typically less because the 80%
- * alert has already fired a day earlier. It is a real ceiling on the month,
- * not a real-time throttle, and the honest way to describe it is "a free site
- * cannot run away for a month", not "a free site cannot exceed 5 GB". Do not
- * close that window by adding a read to the render path; the place to close
- * it is the CDN, which is Vercel configuration and not a repo change.
+ * The beacon closes the window to the sampling slop — at most
+ * (200 x instances) page views past the band, against a free band of ~8,700 —
+ * so on the common single-site free org the cap engages within a couple of
+ * hundred views. It is still not a per-request throttle, and the honest way to
+ * describe it is "a free site cannot run away", not "a free site cannot serve
+ * byte 5,368,709,121". Do not close the remaining slop by adding a read to the
+ * RENDER path; the place to close it is the CDN, which is Vercel configuration
+ * and not a repo change.
  *
  * ### It RELEASES immediately, though
  *
