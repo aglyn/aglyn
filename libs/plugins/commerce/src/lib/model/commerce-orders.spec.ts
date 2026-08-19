@@ -88,6 +88,66 @@ describe('computeOrderTotals', () => {
     expect(totals.discountCents).toBe(9000)
     expect(totals.totalCents).toBe(0)
   })
+
+  /**
+   * AGL-2229. `Math.max(0, Math.round(x))` reads like a sanitiser and is not
+   * one: `Math.max`/`Math.min` PROPAGATE `NaN`. One non-finite part therefore
+   * made every field `NaN`, including `totalCents` — and `NaN` does not fail a
+   * comparison, it defeats it, so `cashReceivedCents < totals.totalCents` in
+   * the POS handler read `false` and rang up a sale that took no money.
+   *
+   * Asserted per FIELD rather than on the total alone: a total that survives
+   * while `discountCents` is `NaN` still poisons every merchant report that
+   * sums the decomposition.
+   */
+  describe('non-finite parts (AGL-2229)', () => {
+    it('discards a NaN part instead of spreading it through every field', () => {
+      const totals = computeOrderTotals(lines, {
+        shippingCents: NaN,
+        taxCents: Number('eight'),
+        discountCents: NaN,
+        feeCents: Infinity,
+      })
+      expect(totals.itemsCents).toBe(9000)
+      expect(totals.shippingCents).toBe(0)
+      expect(totals.taxCents).toBe(0)
+      expect(totals.discountCents).toBe(0)
+      expect(totals.feeCents).toBe(0)
+      expect(totals.totalCents).toBe(9000)
+      // The property the POS guard actually depends on. `NaN` is a number by
+      // `typeof`, so this is the test that would have caught it.
+      expect(Number.isFinite(totals.totalCents)).toBe(true)
+    })
+
+    it('drops a line whose own price is not a number', () => {
+      const totals = computeOrderTotals([
+        { productId: 'a', name: 'Priced', quantity: 2, unitAmountCents: 2500 },
+        {
+          productId: 'b',
+          name: 'Unpriced',
+          quantity: 1,
+          unitAmountCents: undefined as unknown as number,
+        },
+      ])
+      expect(totals.itemsCents).toBe(5000)
+      expect(totals.totalCents).toBe(5000)
+    })
+
+    /**
+     * POSITIVE CONTROL. Without it every assertion above is satisfied by a
+     * helper that answers zero for everything.
+     */
+    it('POSITIVE CONTROL: finite parts still fold in unchanged', () => {
+      const totals = computeOrderTotals(lines, {
+        shippingCents: 799,
+        taxCents: 450,
+        discountCents: 1000,
+        feeCents: 180,
+      })
+      expect(totals.totalCents).toBe(9000 + 799 + 450 - 1000)
+      expect(totals.feeCents).toBe(180)
+    })
+  })
 })
 
 /**

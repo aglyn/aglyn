@@ -346,20 +346,44 @@ export function canTransitionOrder(
   return (ORDER_TRANSITIONS[from] ?? []).includes(to)
 }
 
+/**
+ * One money part, coerced to a whole non-negative number of cents (AGL-2224).
+ *
+ * `Math.max(0, Math.round(x))` is NOT this guard, and the difference is the
+ * whole defect: `Math.max` and `Math.min` PROPAGATE `NaN` rather than
+ * discarding it, so a single non-finite input made every field below `NaN` and
+ * `totalCents` with them. That is not a cosmetic wrong number — it is a number
+ * that defeats comparison. `cashReceivedCents < NaN` is `false`, so the POS
+ * "cash received is short" guard passed a sale that had taken no money; and a
+ * `NaN` written to Firestore (a legal double there) poisons every downstream
+ * sum, so ONE bad order renders a merchant's whole revenue figure `NaN`
+ * forever after.
+ *
+ * The inputs that can be non-finite are real, not theoretical: a POS
+ * `discountPct` that is not a number, a product whose `priceUsd` is a string
+ * or absent (`Number(undefined) * 100`), a `taxCents` derived from either. So
+ * this coerces at the boundary every order in the product passes through,
+ * rather than at each of the five callers, and answers 0 — the only value that
+ * cannot silently overstate what the shopper owes.
+ */
+const wholeCents = (value: unknown): number => {
+  const cents = Math.round(Number(value ?? 0))
+  return Number.isFinite(cents) && cents > 0 ? cents : 0
+}
+
 /** Sums line items and folds in shipping/tax/discount/fee, all cents. */
 export function computeOrderTotals(
   lineItems: OrderLineItem[],
   parts?: Partial<Pick<OrderTotals, 'shippingCents' | 'taxCents' | 'discountCents' | 'feeCents'>>,
 ): OrderTotals {
-  const itemsCents = lineItems.reduce(
-    (sum, line) =>
-      sum + Math.max(0, Math.round(line.unitAmountCents * line.quantity)),
+  const itemsCents = (lineItems ?? []).reduce(
+    (sum, line) => sum + wholeCents(line?.unitAmountCents * line?.quantity),
     0,
   )
-  const shippingCents = Math.max(0, Math.round(parts?.shippingCents ?? 0))
-  const taxCents = Math.max(0, Math.round(parts?.taxCents ?? 0))
+  const shippingCents = wholeCents(parts?.shippingCents)
+  const taxCents = wholeCents(parts?.taxCents)
   const discountCents = Math.min(
-    Math.max(0, Math.round(parts?.discountCents ?? 0)),
+    wholeCents(parts?.discountCents),
     itemsCents + shippingCents,
   )
   return {
@@ -367,7 +391,7 @@ export function computeOrderTotals(
     shippingCents,
     taxCents,
     discountCents,
-    feeCents: Math.max(0, Math.round(parts?.feeCents ?? 0)),
+    feeCents: wholeCents(parts?.feeCents),
     totalCents: itemsCents + shippingCents + taxCents - discountCents,
   }
 }

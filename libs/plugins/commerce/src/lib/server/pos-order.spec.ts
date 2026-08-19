@@ -477,6 +477,62 @@ describe('the register refuses a sale it cannot tax (AGL-2145)', () => {
   })
 })
 
+/**
+ * AGL-2229. The cashier's discount arrived as `Math.min(100, Math.max(0,
+ * Number(body.discountPct ?? 0)))`, which looks like a clamp and is not one:
+ * both `Math.min` and `Math.max` PROPAGATE `NaN`. A register that posted a
+ * non-numeric percentage therefore produced `discountCents: NaN`, and from
+ * there every figure on the sale — the platform fee, the origin tax and
+ * `totals.totalCents` — was `NaN` too.
+ *
+ * The money consequence is not the wrong number, it is the DEFEATED
+ * COMPARISON: `cashReceivedCents < NaN` is `false`, so the "cash received is
+ * short" guard let the sale through with nothing in the drawer, and the order
+ * was written `paid`.
+ */
+describe('POS discount percent that is not a number (AGL-2229)', () => {
+  it('refuses the sale rather than taking no cash for it', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 0,
+      discountPct: 'half',
+    })
+    expect(result.status).toBe(400)
+    expect(String(result.body.error)).toContain('Cash received is short')
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('stores a finite total when the cash does cover it', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      discountPct: 'half',
+    })
+    expect(result.status).toBe(200)
+    // The unusable percentage reads as NO discount — never as a discount of
+    // an unknown size, and never as a total nothing can compare against.
+    const totals = orderDocs()[0]?.totals as any
+    expect(totals.discountCents).toBe(0)
+    expect(totals.totalCents).toBe(400)
+    expect(Number.isFinite(totals.totalCents)).toBe(true)
+  })
+
+  /**
+   * POSITIVE CONTROL: a real percentage still discounts, so the two
+   * assertions above are not satisfied by a register that ignores the field.
+   */
+  it('POSITIVE CONTROL: a numeric 25% still comes off the basket', async () => {
+    const result = await post({
+      payment: 'cash',
+      cashReceivedCents: 500,
+      discountPct: 25,
+    })
+    expect(result.status).toBe(200)
+    expect((orderDocs()[0]?.totals as any).discountCents).toBe(100)
+    expect((orderDocs()[0]?.totals as any).totalCents).toBe(300)
+  })
+})
+
 describe('POS card sales carry the platform fee (AGL-2110)', () => {
   /** $4.00 digital at Business's 2% = 8¢. No other figure in this file is 8. */
   const DIGITAL_PRODUCT = {

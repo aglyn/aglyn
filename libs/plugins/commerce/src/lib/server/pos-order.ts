@@ -68,7 +68,17 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
   const reservationId = String(body.reservationId ?? '')
   const registerId = String(body.registerId ?? '')
   const locationId = String(body.locationId ?? '')
-  const discountPct = Math.min(100, Math.max(0, Number(body.discountPct ?? 0)))
+  // Clamped through a FINITENESS test, not by `Math.min`/`Math.max` alone
+  // (AGL-2224): both propagate `NaN`, so `discountPct: 'half'` from a register
+  // used to survive the clamp and turn every figure below it — the discount,
+  // the platform fee, the tax and `totals.totalCents` — into `NaN`. `NaN`
+  // defeats comparison rather than failing it, so the "cash received is short"
+  // guard below (`cashReceivedCents < totals.totalCents`) read false and rang
+  // up a sale that had taken no money.
+  const rawDiscountPct = Number(body.discountPct ?? 0)
+  const discountPct = Number.isFinite(rawDiscountPct)
+    ? Math.min(100, Math.max(0, rawDiscountPct))
+    : 0
   const rawLines = Array.isArray(body.lines) ? body.lines : []
   // One settlement attempt, minted by the register (AGL-1691). Node lowercases
   // incoming headers, but read both spellings — the plugin API request type
