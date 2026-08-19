@@ -29,6 +29,32 @@ import {
 export interface PhaseItem {
   price: string
   quantity?: number
+  /**
+   * Manually applied tax rate ids on this item (AGL-2146). A phase item is
+   * restated in full or not at all, so an item written back with only its
+   * price and quantity loses its `tax_rates` — the customer's line is then
+   * taxed differently after the flip than it was before it, which is the same
+   * silent, unannounced money change the discount loss was.
+   */
+  taxRates?: string[]
+}
+
+/**
+ * The tax rate ids on a subscription item or a phase item.
+ *
+ * Stripe returns `tax_rates` expanded (objects) or as bare ids depending on
+ * the call, exactly like `discounts[].coupon` — both shapes are read here so a
+ * restatement never depends on which one came back.
+ */
+function taxRateIdsOf(item: any): string[] | undefined {
+  const rates = item?.tax_rates
+  if (!Array.isArray(rates) || rates.length === 0) return undefined
+  const ids: string[] = []
+  for (const rate of rates) {
+    const id = typeof rate === 'string' ? rate : rate?.id
+    if (id) ids.push(String(id))
+  }
+  return ids.length > 0 ? ids : undefined
 }
 
 export interface TargetItemPlan {
@@ -96,9 +122,18 @@ export function buildTargetItems(
     // the phase. Reported, never invented.
     if (!priceId) continue
     unrecognizedPriceIds.push(String(priceId))
+    // Verbatim means verbatim, `tax_rates` included (AGL-2146). This branch is
+    // the one the caller has decided it cannot reason about — a negotiated
+    // line, a hand-attached dashboard price — so re-taxing it by omission is
+    // exactly the change the carry-through exists to avoid. The RECOGNISED
+    // items above are deliberately not given rates: they are re-priced onto
+    // the target plan's own prices and the target phase sets `automatic_tax`
+    // for itself, so a rate that applied to the old price is not this item's.
+    const taxRates = taxRateIdsOf(item)
     result.push({
       price: String(priceId),
       ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
     })
   }
   if (options.meteredPrice) result.push({ price: options.meteredPrice })
@@ -113,9 +148,11 @@ export function subscriptionItemsAsPhaseItems(
   for (const item of items ?? []) {
     const priceId = item?.price?.id
     if (!priceId) continue
+    const taxRates = taxRateIdsOf(item)
     phaseItems.push({
       price: String(priceId),
       ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
     })
   }
   return phaseItems
@@ -128,9 +165,11 @@ export function phaseItemsOf(phase: any): PhaseItem[] {
     const priceId =
       typeof item?.price === 'string' ? item.price : item?.price?.id
     if (!priceId) continue
+    const taxRates = taxRateIdsOf(item)
     phaseItems.push({
       price: String(priceId),
       ...(item?.quantity != null ? { quantity: Number(item.quantity) } : {}),
+      ...(taxRates ? { taxRates } : {}),
     })
   }
   return phaseItems
@@ -143,13 +182,18 @@ export function writePhaseItems(
   items: readonly PhaseItem[],
 ): void {
   items.forEach((item, itemIndex) => {
-    params.set(`phases[${index}][items][${itemIndex}][price]`, item.price)
+    const prefix = `phases[${index}][items][${itemIndex}]`
+    params.set(`${prefix}[price]`, item.price)
     if (item.quantity != null) {
-      params.set(
-        `phases[${index}][items][${itemIndex}][quantity]`,
-        String(item.quantity),
-      )
+      params.set(`${prefix}[quantity]`, String(item.quantity))
     }
+    // Only written when the item actually carries rates: an EMPTY `tax_rates`
+    // is not a no-op to Stripe, it is an instruction to clear them, so an
+    // unconditional write would turn "preserve" into the very deletion this
+    // restatement exists to prevent (AGL-2146).
+    item.taxRates?.forEach((rate, rateIndex) => {
+      params.set(`${prefix}[tax_rates][${rateIndex}]`, rate)
+    })
   })
 }
 
