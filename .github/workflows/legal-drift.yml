@@ -1,0 +1,132 @@
+name: Legal drift
+
+# Compares the LIVE `/legal/*` pages against their Google Doc masters
+# (AGL-1611), on a schedule, and reports which documents disagree.
+#
+# ## Why this is a schedule and not a gate — read before "fixing" that
+#
+# This check is RED TODAY, and has been for weeks: 0 in sync, 9 differ, 2
+# skipped by design. Wiring a check that is already red onto `push` or
+# `pull_request` would turn every merge in the repo red for a reason no
+# engineer can fix — the remedy is publishing legal text, which is a decision
+# for Zach and counsel, not a code change. So this workflow deliberately has
+# NO push and NO pull_request trigger. It gates nothing and blocks nobody. It
+# is loud (a failed scheduled run shows a red badge and mails the actor) and
+# that is the entire job: the drift was invisible, not unfixable.
+#
+# ⚠️ Do NOT make it green by relaxing the comparison, and do NOT add
+# `continue-on-error`. A red that means something is the deliverable here. The
+# day the nine are reconciled this goes green on its own.
+#
+# ## Why the drift is expected to point ONE way
+#
+# Legal snapshots are publication-first: the besigner page is the artifact of
+# record and the Doc is the drafting surface, so the LIVE page being ahead is
+# normal. What is not normal is nobody being told. The Docs still carry
+# `[EFFECTIVE DATE]` placeholders and `*.md` cross-references from before
+# publication, and two of them disagree with the live pages about something
+# substantive rather than cosmetic (who is the merchant of record on a
+# marketplace sale; what the privacy page says about the AI provider).
+#
+# ## --summary is not optional here
+#
+# THIS REPOSITORY IS PUBLIC, and Actions logs on a public repo are readable by
+# anyone. The unified diff body is the text of an UNPUBLISHED legal draft. The
+# `--summary` flag prints the per-document verdict and line counts and omits
+# the body; the exit code is byte-identical either way. Anyone who needs the
+# actual diff runs `npm run check:legal-drift` locally, against the Drive
+# mount. Do not remove the flag to make the log more useful.
+#
+# ## Configuration this workflow needs
+#
+# - secrets FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY — already set for
+#   rules-drift.yml; the script signs its own Drive-scoped JWT with them
+#   because firebase-admin's token carries no `drive.readonly` scope.
+# - variable LEGAL_DRIVE_FOLDER_ID — the Drive id of `Platform Docs/Legal`.
+#   A repo VARIABLE rather than a literal, because AGL-2029 already removed a
+#   Drive path from this public repo once for exactly this reason. Repo
+#   variables also survive domain/org migrations (AGL-786).
+#   Set it once:  gh variable set LEGAL_DRIVE_FOLDER_ID --body '<folder id>'
+#
+# The service account must be able to SEE the Docs. Drive answers 404, not
+# 403, for a file a caller cannot see, so "file not found" almost always means
+# "not shared yet": share `Platform Docs` (or its `Legal` folder) with
+# firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com as Viewer.
+#
+# Exit codes: 0 every compared document in sync; 1 at least one differs;
+# 2 nothing differs but something could not be checked.
+
+on:
+  schedule:
+    # Daily, 08:11 UTC — after rules-drift (07:23), index-drift (07:41) and
+    # tools-guards (07:53), so the four do not contend for the npm cache.
+    # (GitHub schedules are best-effort and pause on 60-day-quiet repos; a
+    # green history is not proof of continuous coverage.)
+    - cron: '11 8 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Nothing here is push-scoped, so a single group is right: only the newest
+  # verdict about the live site matters, and a delayed scheduled run must not
+  # pile up behind one that is already reading the same pages.
+  group: legal-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # The self-test FIRST, and it is not a formality. A comparator that has
+      # stopped comparing reports "no drift", which is indistinguishable from
+      # convergence — the AGL-1778 lesson. This suite is pure node and also
+      # runs in tools-guards.yml, so it is not the thing that would be missed;
+      # it is here so a broken comparator fails the job before its verdict is
+      # printed.
+      - run: npm run test:legal-drift
+
+      # Refuse to no-op. A missing credential must FAIL the job, never skip
+      # the step — a skipped check that renders green is the failure mode this
+      # whole family of guards exists to prevent (rules-drift.yml precedent).
+      - name: Refuse to no-op without credentials
+        env:
+          CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FOLDER: ${{ vars.LEGAL_DRIVE_FOLDER_ID }}
+        run: |
+          missing=0
+          if [ -z "$CLIENT_EMAIL" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY repo secrets are not set." >&2
+            echo "Create them once, from the service-account JSON:" >&2
+            echo "  gh secret set FIREBASE_CLIENT_EMAIL" >&2
+            echo "  gh secret set FIREBASE_PRIVATE_KEY" >&2
+            missing=1
+          fi
+          if [ -z "$FOLDER" ]; then
+            echo "LEGAL_DRIVE_FOLDER_ID repo variable is not set." >&2
+            echo "It is the Drive id of the 'Platform Docs/Legal' folder. A" >&2
+            echo "variable, not a literal in this file: the repo is public." >&2
+            echo "  gh variable set LEGAL_DRIVE_FOLDER_ID --body '<folder id>'" >&2
+            missing=1
+          fi
+          [ "$missing" -eq 0 ] || exit 2
+
+      # --summary: verdicts only. See the note at the top — the diff body is
+      # unpublished legal text and this log is world-readable.
+      - name: Diff the live legal pages against their Google Doc masters
+        env:
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        run: npm run check:legal-drift -- --summary --folder="${{ vars.LEGAL_DRIVE_FOLDER_ID }}"

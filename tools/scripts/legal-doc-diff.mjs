@@ -34,6 +34,12 @@
 //   --folder=ID       resolve Doc ids by listing this Drive folder via the
 //                     API instead of reading local pointer files — for
 //                     machines without the Drive File Stream mount.
+//   --summary         print the per-document VERDICT without the unified diff
+//                     body. For legal-drift.yml, which runs in a PUBLIC repo
+//                     whose Actions logs anyone can read: the diff body is the
+//                     text of an unpublished legal draft. Exit codes are
+//                     identical either way — this changes what is printed,
+//                     never what is compared (AGL-2379).
 //   --paste           ALSO emit, per checked document, the ready-to-paste
 //                     markdown-lite content block (exported from the Doc as
 //                     `text/markdown` and folded to the besigner dialect)
@@ -70,10 +76,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSign } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import {
-  loadLocalEnv,
-  readServiceAccount,
-} from './lib/firebase-rules-api.mjs'
+import { loadLocalEnv, readServiceAccount } from './lib/firebase-rules-api.mjs'
 import { renderUnifiedDiff } from './lib/rules-drift.mjs'
 import {
   collectTocFromMarkdownLite,
@@ -87,7 +90,8 @@ import {
 } from './lib/legal-doc-diff.mjs'
 
 const LEGAL_ORIGIN = 'https://aglyn.com'
-const SA_EMAIL_HINT = 'firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com'
+const SA_EMAIL_HINT =
+  'firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com'
 /**
  * Where the local copies of the legal documents live.
  *
@@ -112,10 +116,20 @@ const DEFAULT_LEGAL_DIR =
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 function parseArgs(argv) {
-  const args = { slugs: [], legalDir: null, folder: null, paste: false, out: null }
+  const args = {
+    slugs: [],
+    legalDir: null,
+    folder: null,
+    paste: false,
+    out: null,
+    summary: false,
+  }
   for (const raw of argv) {
-    if (raw.startsWith('--legal-dir=')) args.legalDir = raw.slice('--legal-dir='.length)
-    else if (raw.startsWith('--folder=')) args.folder = raw.slice('--folder='.length)
+    if (raw.startsWith('--legal-dir='))
+      args.legalDir = raw.slice('--legal-dir='.length)
+    else if (raw.startsWith('--folder='))
+      args.folder = raw.slice('--folder='.length)
+    else if (raw === '--summary') args.summary = true
     else if (raw === '--paste') args.paste = true
     else if (raw.startsWith('--out=')) args.out = raw.slice('--out='.length)
     else if (raw.startsWith('--')) {
@@ -126,7 +140,11 @@ function parseArgs(argv) {
 }
 
 const b64url = (buf) =>
-  Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  Buffer.from(buf)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 
 /**
  * Mint a Drive-scoped access token from the service account. Hand-signed
@@ -201,9 +219,13 @@ async function resolveFromDriveFolder(folderId, token) {
   url.searchParams.set('supportsAllDrives', 'true')
   url.searchParams.set('includeItemsFromAllDrives', 'true')
   url.searchParams.set('corpora', 'allDrives')
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
   if (!res.ok) {
-    throw new Error(`Drive folder listing failed (HTTP ${res.status}): ${await res.text()}`)
+    throw new Error(
+      `Drive folder listing failed (HTTP ${res.status}): ${await res.text()}`,
+    )
   }
   const { files = [] } = await res.json()
   const docs = []
@@ -211,7 +233,9 @@ async function resolveFromDriveFolder(folderId, token) {
     if (file.mimeType !== 'application/vnd.google-apps.document') continue
     const { name, slug, known } = slugForPointerName(`${file.name}.gdoc`)
     if (!known) {
-      console.warn(`WARN  Drive doc "${file.name}": not in DOC_TO_SLUG — skipped`)
+      console.warn(
+        `WARN  Drive doc "${file.name}": not in DOC_TO_SLUG — skipped`,
+      )
       continue
     }
     docs.push({ name, docId: file.id, slug })
@@ -225,7 +249,9 @@ async function resolveFromDriveFolder(folderId, token) {
  */
 async function exportDocAsText(docId, token, mimeType = 'text/plain') {
   const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(docId)}/export?mimeType=${encodeURIComponent(mimeType)}`
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
   if (!res.ok) {
     const raw = await res.text()
     let detail = raw.slice(0, 400)
@@ -312,12 +338,16 @@ async function emitPasteBlock({ slug, docId, token, liveHtml, outDir }) {
   }
   const block = docMarkdownToMarkdownLite(mdSide.text)
   if (!block.text) {
-    console.log(`PASTE       /legal/${slug} — markdown export produced no content block`)
+    console.log(
+      `PASTE       /legal/${slug} — markdown export produced no content block`,
+    )
     return
   }
   const flags = []
-  if (!block.foundStart) flags.push('no "Last updated:" line — block starts at top of Doc')
-  if (!block.foundEnd) flags.push('no closing "©" line — block runs to end of Doc')
+  if (!block.foundStart)
+    flags.push('no "Last updated:" line — block starts at top of Doc')
+  if (!block.foundEnd)
+    flags.push('no closing "©" line — block runs to end of Doc')
   mkdirSync(outDir, { recursive: true })
   const outPath = join(outDir, `${slug}.markdown-lite.md`)
   writeFileSync(outPath, block.text)
@@ -327,11 +357,16 @@ async function emitPasteBlock({ slug, docId, token, liveHtml, outDir }) {
   )
   const toc = collectTocFromMarkdownLite(block.text)
   if (!toc.length) {
-    console.log('  TOC: the block has no ## / ### headings — the aside will render empty')
+    console.log(
+      '  TOC: the block has no ## / ### headings — the aside will render empty',
+    )
     return
   }
   console.log(`  TOC the page will derive (${toc.length} headings):`)
-  for (const line of renderTocPreview(toc, extractLiveTocAnchors(liveHtml ?? ''))) {
+  for (const line of renderTocPreview(
+    toc,
+    extractLiveTocAnchors(liveHtml ?? ''),
+  )) {
     console.log(`  ${line}`)
   }
 }
@@ -355,7 +390,8 @@ async function main() {
     return 2
   }
 
-  const legalDir = args.legalDir || process.env.LEGAL_DOCS_DIR || DEFAULT_LEGAL_DIR
+  const legalDir =
+    args.legalDir || process.env.LEGAL_DOCS_DIR || DEFAULT_LEGAL_DIR
   let docs
   try {
     docs = args.folder
@@ -370,7 +406,8 @@ async function main() {
     docs = docs.filter((d) => d.slug && wanted.has(d.slug))
     const found = new Set(docs.map((d) => d.slug))
     for (const slug of wanted) {
-      if (!found.has(slug)) console.warn(`WARN  no legal Doc maps to slug "${slug}"`)
+      if (!found.has(slug))
+        console.warn(`WARN  no legal Doc maps to slug "${slug}"`)
     }
   }
   if (!docs.length) {
@@ -384,7 +421,9 @@ async function main() {
   let apiDisabled = false
   for (const { name, docId, slug } of docs) {
     if (!slug) {
-      console.log(`SKIPPED     ${name} — internal document, no published page by design`)
+      console.log(
+        `SKIPPED     ${name} — internal document, no published page by design`,
+      )
       verdicts.push({ slug: name, status: 'skipped' })
       continue
     }
@@ -394,7 +433,8 @@ async function main() {
     ])
     if (!docSide.ok) {
       if (docSide.apiDisabled) apiDisabled = true
-      else if (docSide.status === 404 || docSide.status === 403) unsharedCount += 1
+      else if (docSide.status === 404 || docSide.status === 403)
+        unsharedCount += 1
       console.log(
         `UNREADABLE  /legal/${slug} — Doc export failed (HTTP ${docSide.status}): ${docSide.detail}`,
       )
@@ -402,34 +442,61 @@ async function main() {
       continue
     }
     if (!liveSide.ok) {
-      console.log(`UNREADABLE  /legal/${slug} — live page returned HTTP ${liveSide.status}`)
+      console.log(
+        `UNREADABLE  /legal/${slug} — live page returned HTTP ${liveSide.status}`,
+      )
       verdicts.push({ slug, status: 'unreadable' })
       continue
     }
     const result = compareLegalDocument(liveSide.html, docSide.text)
-    const caveats = result.caveats.length ? `  [${result.caveats.join('; ')}]` : ''
+    const caveats = result.caveats.length
+      ? `  [${result.caveats.join('; ')}]`
+      : ''
     if (result.inSync) {
       console.log(`IN SYNC     /legal/${slug}${caveats}`)
       verdicts.push({ slug, status: 'in-sync' })
     } else {
       console.log(`DIFFERS     /legal/${slug}${caveats}`)
-      console.log(
-        renderUnifiedDiff(result.live.text, result.doc.text, {
-          fileName: `${slug}.txt`,
-          baselineLabel: 'google-doc',
-        }),
-      )
+      if (args.summary) {
+        // Verdict only. The diff body is the TEXT OF AN UNPUBLISHED LEGAL
+        // DRAFT, and the workflow that runs this on a schedule writes its log
+        // into a PUBLIC repository, where Actions logs are world-readable.
+        // Printing counts instead publishes nothing that is not already on
+        // aglyn.com. The exit code is untouched — this changes what is shown,
+        // never what is asserted. Run without --summary locally for the diff.
+        const live = result.live.text.split('\n')
+        const doc = result.doc.text.split('\n')
+        console.log(
+          `            live ${live.length} line(s) vs doc ${doc.length} line(s)` +
+            ` — run \`npm run check:legal-drift -- ${slug}\` locally for the diff`,
+        )
+      } else {
+        console.log(
+          renderUnifiedDiff(result.live.text, result.doc.text, {
+            fileName: `${slug}.txt`,
+            baselineLabel: 'google-doc',
+          }),
+        )
+      }
       verdicts.push({ slug, status: 'differs' })
     }
     if (args.paste) {
-      await emitPasteBlock({ slug, docId, token, liveHtml: liveSide.html, outDir })
+      await emitPasteBlock({
+        slug,
+        docId,
+        token,
+        liveHtml: liveSide.html,
+        outDir,
+      })
     }
   }
 
   if (apiDisabled) {
     console.error(apiDisabledHelp())
   } else if (unsharedCount > 0) {
-    console.error(sharingHelp(args.folder ? `Drive folder ${args.folder}` : legalDir))
+    console.error(
+      sharingHelp(args.folder ? `Drive folder ${args.folder}` : legalDir),
+    )
   }
   const code = overallExitCode(verdicts)
   const counts = ['in-sync', 'differs', 'unreadable', 'skipped']
