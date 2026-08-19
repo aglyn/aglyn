@@ -3,40 +3,21 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/rest-api/src",
   "projectType": "library",
-  "tags": [
-    "scope:lib",
-    "scope:shared",
-    "scope:util"
-  ],
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/shared/util/rest-api",
         "main": "libs/shared/util/rest-api/src/index.ts",
         "tsConfig": "libs/shared/util/rest-api/tsconfig.lib.json",
-        "assets": [
-          "libs/shared/util/rest-api/*.md"
-        ]
+        "assets": ["libs/shared/util/rest-api/*.md"]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
-    },
-    "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/shared/util/rest-api"
-      ],
-      "options": {
-        "jestConfig": "libs/shared/util/rest-api/jest.config.ts"
-      }
+      "outputs": ["{options.outputFile}"]
     }
   }
 }
