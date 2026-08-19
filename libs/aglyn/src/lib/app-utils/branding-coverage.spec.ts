@@ -50,10 +50,68 @@ function read(relativePath: string): string {
  * Block comments first, then line comments. A `//` inside a string literal
  * loses its tail, which is imprecise in one direction only: it can HIDE a
  * match, never invent one, so the guard errs strict.
+ *
+ * ## Two blind spots this used to have, and the one line that closes them
+ *
+ * Erring strict is the right direction, but it is not free — it costs a FALSE
+ * RED, which is indistinguishable from a real finding until someone spends an
+ * hour on it. AGL-2286 paid that hour. Both blind spots are the same shape: a
+ * `//` that is not a comment.
+ *
+ *  - **An escaped-slash regex.** `/^https:\/\//i` ends in `\/` `\/` `/`, whose
+ *    last two characters are adjacent slashes — so the rest of that line
+ *    vanished. A predicate call sitting beside an https test became invisible.
+ *  - **A URL in a string.** `'https://aglyn.com/support'` truncates at the
+ *    scheme, which is exactly the kind of line a BRANDING guard is looking at.
+ *
+ * The fix is to require the character before `//` to be neither a backslash
+ * (an escaped slash) nor a colon (a URL scheme). Still not a JS parser, and
+ * still strict in the same direction for everything else — but it no longer
+ * blinds itself to the two constructs this repo's guards read most.
  */
 function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*$/gm, ' ')
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^\\:])\/\/.*$/gm, '$1 ')
 }
+
+/**
+ * The instrument, before anything is measured with it.
+ *
+ * Every check in this file reads `stripComments` output, so a stripper that
+ * ate too much would produce findings that are not there — and did, until
+ * AGL-2286. These four cases pin both directions: comments really are removed,
+ * and the two `//` constructs that are NOT comments really are not.
+ */
+describe('the comment stripper itself', () => {
+  it('removes a line comment', () => {
+    expect(stripComments('const a = 1 // productName lives here')).not.toContain(
+      'productName',
+    )
+  })
+
+  it('removes a block comment', () => {
+    expect(stripComments('/* productName */ const a = 1')).not.toContain(
+      'productName',
+    )
+  })
+
+  it('KEEPS code after an escaped-slash regex on the same line', () => {
+    // `/^https:\/\//i` ends in two adjacent slashes. Treating them as a
+    // comment hid the call beside them and produced a false red (AGL-2286).
+    const line = String.raw`if (!/^https:\/\//i.test(v) && !isMediaCdnPath(v)) {`
+    expect(stripComments(line)).toContain('isMediaCdnPath')
+  })
+
+  it('KEEPS code after a URL in a string on the same line', () => {
+    // Exactly the line a BRANDING guard reads most.
+    const line = `const supportUrl = 'https://aglyn.com/support' // note`
+    const stripped = stripComments(line)
+    expect(stripped).toContain('supportUrl')
+    expect(stripped).toContain('aglyn.com/support')
+    expect(stripped).not.toContain('note')
+  })
+})
 
 describe('white-label branding coverage (Phase 2/3)', () => {
   // Surfaces that render the brand (chrome, site badge, settings, metadata).
@@ -82,9 +140,21 @@ describe('white-label branding coverage (Phase 2/3)', () => {
       mustContain: ['useBranding'],
     },
     {
-      // Favicon + primary-color effects via useBranding.
+      // Favicon, primary-color AND TAB TITLE effects via useBranding.
+      //
+      // The title was the surface this list did not know about (AGL-2270).
+      // `page-title.ts` builds the tab from `PLATFORM_BRAND_NAME` — the
+      // DEPLOYMENT brand — which AGL-2170 correctly made an env var for
+      // self-hosters and which can never carry a PER-ORG brand. So every tab
+      // in a white-label org's console read "· Aglyn" while the favicon two
+      // lines above here had already been replaced, and this guard was green
+      // throughout: a file-level check is satisfied by any one surface.
+      //
+      // `document.title` is named rather than just `useBranding` because that
+      // is the wire. The component reached `useBranding` for the favicon alone
+      // and would go on doing so with the title effect deleted.
       file: 'apps/console/components/console-branding-effects.component.tsx',
-      mustContain: ['useBranding'],
+      mustContain: ['useBranding', 'document.title', 'MutationObserver'],
     },
     {
       // Brand-settings editor, gated on the whiteLabel entitlement.
