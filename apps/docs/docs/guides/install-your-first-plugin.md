@@ -39,6 +39,8 @@ It's at the organization level on purpose. What you install is available to ever
 you choose, so it isn't a per-site setting, and you don't repeat the work for each
 site you run — the thing agencies and multi-site teams notice first.
 
+<!-- screenshot: marketplace/org-nav-marketplace-and-plugins.png per SCREENSHOT_PLAN.md -->
+
 Its own navigation panel lists:
 
 - **Browse All** — the catalogue.
@@ -58,6 +60,8 @@ one, you're in the wrong section. [More on the split](../developers/plugins/over
 **Browse All** is a grid of listing cards you can search, filter and sort. Cards are a
 catalogue only — clicking one takes you to its **detail page**, which is the only
 place an install can happen. You cannot install by accident from the grid.
+
+<!-- screenshot: marketplace/listing-detail-header.png per SCREENSHOT_PLAN.md -->
 
 On the detail page, read three things before anything else:
 
@@ -88,6 +92,8 @@ On the detail page you'll find an **Install to** dropdown with two options:
 | **All sites** | Everything in the organization. For a plugin, that includes **sites you add later**. |
 | **Selected sites** | Only the sites you tick. A **Sites** checklist appears underneath — tick at least one. |
 
+<!-- screenshot: marketplace/install-to-selected-sites.png per SCREENSHOT_PLAN.md -->
+
 The helper text under the dropdown tells you exactly what will happen for *this*
 listing, because it isn't the same for every kind:
 
@@ -114,6 +120,8 @@ type, its **version**, and — in bold — exactly where it's going:
 
 > Install **Bookings Pro** (plugin, v2.1).
 > This will be installed to **all sites**.
+
+<!-- screenshot: marketplace/install-confirm-dialog.png per SCREENSHOT_PLAN.md -->
 
 Read that bold phrase. It is the last chance to catch a mis-set target, and it is why
 the dialog exists.
@@ -149,6 +157,8 @@ Three different actions, often confused:
 | Stop it running, keep it | **Plugins** → its switch | Off everywhere in the workspace. Flip it back any time. |
 | Remove it from your sites | **Marketplace → Installed** → **Uninstall**, or **Uninstall org-wide** on an org-wide install. The listing's own detail page carries the same button. | The pin and the switchboard entry go. |
 | Update it | **Marketplace → Installed**, or the detail page's **Update to v2.2** button | You move to the new version, deliberately. |
+
+<!-- screenshot: plugins/plugins-switchboard-cards.png per SCREENSHOT_PLAN.md -->
 
 **Uninstalling never deletes the data a plugin created.** Reinstall it and it picks up
 where it left off. That is deliberate — an accidental uninstall shouldn't cost you a
