@@ -43,6 +43,8 @@ const mockVerifyIdToken = jest.fn()
 const mockSignalsGet = jest.fn()
 const mockLimit = jest.fn(() => ({ get: () => mockSignalsGet() }))
 const mockCollectionGroup = jest.fn(() => ({ limit: mockLimit }))
+/** `orgs/{org}/assistExchanges/{id}` — the prose half (AGL-2314). */
+const mockExchanges: Record<string, Record<string, unknown>> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -53,6 +55,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => ({
         collectionGroup: (...args: unknown[]) => mockCollectionGroup(...(args as [])),
+        // The prose join (AGL-2314). Modelled rather than stubbed away: the
+        // route builds a ref per failing turn and zips the results by index,
+        // and a double that answered nothing would let a reordering bug —
+        // every question paired with the wrong turn — pass this file.
+        collection: (name: string) => ({
+          doc: (orgId: string) => ({
+            collection: (child: string) => ({
+              doc: (id: string) => `${name}/${orgId}/${child}/${id}`,
+            }),
+          }),
+        }),
+        getAll: async (...refs: string[]) =>
+          refs.map((path) => ({
+            exists: mockExchanges[path] !== undefined,
+            data: () => mockExchanges[path],
+          })),
       }),
     }),
   },
@@ -87,6 +105,9 @@ import {
 
 const signal = (over: Partial<AssistSignalRow> = {}): AssistSignalRow => ({
   orgId: 'org-1',
+  // The signal id IS the exchange id (AGL-2314) — the join that lets the
+  // prose panel read the words behind a failing turn.
+  exchangeId: 'ex-1',
   route: '/acme/hosts',
   model: 'claude-sonnet-5',
   tier: 'entitled',
@@ -256,9 +277,10 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
   it('normalizes a signal written by an older build rather than dropping it', () => {
     // Evidence is evidence. Dropping under-specified documents would bias
     // every ranking toward whatever shipped most recently.
-    const row = assistSignalRow('org-9', {})
+    const row = assistSignalRow('org-9', 'ex-9', {})
     expect(row).toMatchObject({
       orgId: 'org-9',
+      exchangeId: 'ex-9',
       route: '',
       model: 'unknown',
       tier: 'unknown',
@@ -269,7 +291,9 @@ describe('mineAssistSignals — the docs-gap ranking (AGL-2252)', () => {
     })
     // And a rating that is neither literal reads as unrated, not as a third
     // kind of rating that would silently skew `downRate`.
-    expect(assistSignalRow('org-9', { feedback: 'meh' }).feedback).toBeNull()
+    expect(
+      assistSignalRow('org-9', 'ex-9', { feedback: 'meh' }).feedback,
+    ).toBeNull()
   })
 })
 
@@ -282,12 +306,22 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
       ),
     )
 
-  const doc = (orgId: string, data: Record<string, unknown>) => ({
+  const doc = (
+    orgId: string,
+    data: Record<string, unknown>,
+    id = 'ex-1',
+  ) => ({
+    // The signal's id IS the exchange's id (AGL-2314). Carried by the double
+    // because the route now uses it to join the words back on.
+    id,
     ref: { parent: { parent: { id: orgId } } },
     data: () => data,
   })
 
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    for (const key of Object.keys(mockExchanges)) delete mockExchanges[key]
+  })
 
   it('401s an unauthenticated caller', async () => {
     expect((await get()).status).toBe(401)
@@ -313,34 +347,52 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
     mockSignalsGet.mockResolvedValueOnce({
       size: 2,
       docs: [
-        doc('org-a', {
-          route: '/a/hosts',
-          model: 'claude-sonnet-5',
-          tier: 'entitled',
-          inputTokens: 100,
-          outputTokens: 40,
-          cacheReadTokens: 900,
-          cacheWriteTokens: 0,
-          estCostUsd: 0.01,
-          docsPaths: ['/publish#steps'],
-          stopReason: 'end_turn',
-          feedback: 'down',
-        }),
-        doc('org-b', {
-          route: '/b/billing',
-          model: 'claude-sonnet-5',
-          tier: 'free',
-          inputTokens: 50,
-          outputTokens: 10,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          estCostUsd: 0.002,
-          docsPaths: [],
-          stopReason: 'end_turn',
-          feedback: null,
-        }),
+        doc(
+          'org-a',
+          {
+            route: '/a/hosts',
+            model: 'claude-sonnet-5',
+            tier: 'entitled',
+            inputTokens: 100,
+            outputTokens: 40,
+            cacheReadTokens: 900,
+            cacheWriteTokens: 0,
+            estCostUsd: 0.01,
+            docsPaths: ['/publish#steps'],
+            stopReason: 'end_turn',
+            feedback: 'down',
+          },
+          'ex-a',
+        ),
+        doc(
+          'org-b',
+          {
+            route: '/b/billing',
+            model: 'claude-sonnet-5',
+            tier: 'free',
+            inputTokens: 50,
+            outputTokens: 10,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            estCostUsd: 0.002,
+            docsPaths: [],
+            stopReason: 'end_turn',
+            feedback: null,
+          },
+          'ex-b',
+        ),
       ],
     })
+    // Both turns FAILED — one rated down, one grounded in nothing — so both
+    // are on the prose shortlist, and each has its own words (AGL-2314).
+    mockExchanges['orgs/org-a/assistExchanges/ex-a'] = {
+      question: 'Why did publish do nothing?',
+      answer: 'Try again.',
+    }
+    mockExchanges['orgs/org-b/assistExchanges/ex-b'] = {
+      question: 'How is bandwidth billed?',
+      answer: 'Per GB above the band.',
+    }
     const response = await get({ token: 'tok' })
     expect(response.status).toBe(200)
     const payload = await response.json()
@@ -352,6 +404,14 @@ describe('/api/admin/assist-signals authorization (AGL-2252)', () => {
       'org-a',
       'org-b',
     ])
+    // …and each failing turn came back with ITS OWN question, joined by the
+    // shared id (AGL-2314). Two different sentences, so a route that paired
+    // every candidate with the first exchange it read passes only one.
+    const byId = Object.fromEntries(
+      payload.prose.map((row: { exchangeId: string }) => [row.exchangeId, row]),
+    )
+    expect(byId['ex-a'].question).toBe('Why did publish do nothing?')
+    expect(byId['ex-b'].question).toBe('How is bandwidth billed?')
     expect(payload.docsGaps).toEqual([
       expect.objectContaining({ path: '/publish#steps', down: 1, orgs: 1 }),
     ])

@@ -52,6 +52,17 @@
 /** One `assistSignals` document, as the route projects it. */
 export interface AssistSignalRow {
   orgId: string
+  /**
+   * The signal's document id, which IS the exchange's id (AGL-2314).
+   *
+   * `recordAssistExchange` mints one id and writes both halves under it —
+   * `assistExchanges/{id}` for the prose that expires and `assistSignals/{id}`
+   * for the analytics that do not — deliberately, "so an exchange and its
+   * signal are joinable for as long as both exist, without storing a second
+   * pointer that could rot". Nothing ever made the join. This is the field
+   * that lets the corpus be read.
+   */
+  exchangeId: string
   route: string
   model: string
   tier: 'free' | 'entitled' | string
@@ -84,6 +95,31 @@ export interface UngroundedRoute {
   down: number
 }
 
+/**
+ * A turn whose PROSE is worth reading (AGL-2314).
+ *
+ * `assistExchanges` holds the verbatim half — the question a customer typed
+ * and the answer we gave — for 180 days, and the module header calls it "the
+ * data loop's corpus". No corpus consumer existed: nothing in the repo read
+ * the collection, so we were retaining customers' words, and publicly
+ * promising to, for zero product value.
+ *
+ * The shortlist is deliberately NOT every turn. Prose is fetched only for
+ * turns that FAILED — rated thumbs-down, or grounded in no documentation at
+ * all — because those are the ones where the counts cannot say what went
+ * wrong and the words can. Reading the successful ones would be surveillance
+ * with a dashboard on it.
+ */
+export interface ProseCandidate {
+  orgId: string
+  exchangeId: string
+  /** The console screen the question was asked from. */
+  route: string
+  feedback: 'up' | 'down' | null
+  /** False when retrieval cited no documentation at all. */
+  grounded: boolean
+}
+
 export interface OrgCostRow {
   orgId: string
   messages: number
@@ -114,6 +150,8 @@ export interface AssistMiningReport {
     feedback: { up: number; down: number; none: number }
   }
   docsGaps: DocsGapRow[]
+  /** Turns whose words are worth reading — see {@link ProseCandidate}. */
+  proseCandidates: ProseCandidate[]
   ungrounded: {
     questions: number
     down: number
@@ -134,12 +172,14 @@ const number = (value: unknown) => {
  */
 export function assistSignalRow(
   orgId: string,
+  exchangeId: string,
   data: Record<string, unknown>,
 ): AssistSignalRow {
   const rawPaths = Array.isArray(data['docsPaths']) ? data['docsPaths'] : []
   const feedback = data['feedback']
   return {
     orgId,
+    exchangeId,
     route: String(data['route'] ?? ''),
     model: String(data['model'] ?? 'unknown'),
     tier: String(data['tier'] ?? 'unknown'),
@@ -188,6 +228,7 @@ export function mineAssistSignals(
   >()
   const ungroundedRoutes = new Map<string, UngroundedRoute>()
   const orgs = new Map<string, OrgCostRow>()
+  const proseCandidates: ProseCandidate[] = []
   let ungroundedQuestions = 0
   let ungroundedDown = 0
 
@@ -224,6 +265,23 @@ export function mineAssistSignals(
     org.estCostUsd += row.estCostUsd
     if (row.feedback === 'down') org.down += 1
     orgs.set(row.orgId, org)
+
+    /**
+     * A FAILING turn. Thumbs-down, or nothing retrieved at all (AGL-2314).
+     *
+     * Collected before the `continue` below, so an ungrounded turn — the case
+     * that leaves the loop early — is not silently excluded from the very
+     * shortlist it most belongs on.
+     */
+    if (row.feedback === 'down' || !row.docsPaths.length) {
+      proseCandidates.push({
+        orgId: row.orgId,
+        exchangeId: row.exchangeId,
+        route: row.route || '(unknown)',
+        feedback: row.feedback,
+        grounded: row.docsPaths.length > 0,
+      })
+    }
 
     if (!row.docsPaths.length) {
       // Retrieval matched nothing. Counted here and NOT in `docsGaps` — a
@@ -262,6 +320,19 @@ export function mineAssistSignals(
     }
   }
 
+  /**
+   * Thumbs-down first, then the ungrounded ones.
+   *
+   * A rated failure is somebody telling us the answer was wrong; an
+   * ungrounded turn is us telling ourselves we had nothing to answer with.
+   * Both are worth reading, and the first is worth reading first.
+   */
+  proseCandidates.sort((a, b) => {
+    const rank = (candidate: ProseCandidate) =>
+      candidate.feedback === 'down' ? 0 : 1
+    return rank(a) - rank(b)
+  })
+
   const billablePrompt = totals.inputTokens + totals.cacheReadTokens
   totals.cacheReadRate = billablePrompt
     ? totals.cacheReadTokens / billablePrompt
@@ -288,6 +359,7 @@ export function mineAssistSignals(
     truncated: Boolean(options.truncated),
     totals,
     docsGaps,
+    proseCandidates: proseCandidates.slice(0, limit),
     ungrounded: {
       questions: ungroundedQuestions,
       down: ungroundedDown,

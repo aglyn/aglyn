@@ -21,6 +21,9 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Chip,
   LinearProgress,
@@ -119,6 +122,9 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
   }, [isStaff, user])
 
   const totals = report?.totals
+  // The route serves the prose beside the report (AGL-2314) — it is not part
+  // of the pure miner's output, because the miner never touches Firestore.
+  const prose = ((report as any)?.prose ?? []) as Array<Record<string, unknown>>
 
   return (
     <DashboardLayout
@@ -290,6 +296,104 @@ const AdminAssistSignals: NextPageWithLayout<Record<string, never>> = () => {
                   )}
                 </TableBody>
               </Table>
+            </CardDisplay>
+
+            {/*
+              * THE WORDS THEMSELVES (AGL-2314).
+              *
+              * `assistExchanges` held the question a customer typed and the
+              * answer we gave, for 180 days, and `assist-usage.ts` called it
+              * "the data loop's corpus". Nothing read it — so we retained
+              * customers' words, and committed publicly in the privacy policy
+              * to retaining them, for zero product value. The two panels above
+              * can say a page fails and cannot say what people were trying to
+              * do; only this can.
+              *
+              * Behind a disclosure, and only for turns that FAILED — the shape
+              * AGL-2294 used for churn free text. The route fetches nothing
+              * else, so the panel being closed is not the privacy control; the
+              * shortlist is.
+              */}
+            <CardDisplay
+              header={'What people actually asked'}
+              contentGutterX
+              contentGutterY
+            >
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                {'The verbatim question behind each failing turn — rated down, ' +
+                  'or grounded in nothing. Kept for 180 days and then deleted, ' +
+                  'so an older failure shows its counts with the words gone. ' +
+                  'Who asked is deliberately not shown: the question is what ' +
+                  'this is for.'}
+              </Typography>
+              {!prose.length ? (
+                <Typography variant="body2" color="text.secondary">
+                  {loading
+                    ? 'Reading exchanges…'
+                    : 'No failing turns in this sample — nothing to read.'}
+                </Typography>
+              ) : (
+                <Accordion>
+                  <AccordionSummary expandIcon={<span aria-hidden>{'▾'}</span>}>
+                    <Typography variant="body2">
+                      {`Show ${prose.length} question${prose.length === 1 ? '' : 's'}`}
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      {prose.map((row: any) => (
+                        <Stack key={`${row.orgId}:${row.exchangeId}`} spacing={0.5}>
+                          <Stack
+                            direction="row"
+                            sx={{ flexWrap: 'wrap', gap: 1, alignItems: 'center' }}
+                          >
+                            <Chip
+                              size="small"
+                              color={row.feedback === 'down' ? 'error' : 'default'}
+                              label={
+                                row.feedback === 'down'
+                                  ? 'rated down'
+                                  : 'no documentation matched'
+                              }
+                            />
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontFamily: 'monospace' }}
+                            >
+                              {`${row.route} · ${row.orgId}`}
+                            </Typography>
+                          </Stack>
+                          {row.expired ? (
+                            // Said out loud. A shortlist quietly shorter than
+                            // the failure count it came from would read as
+                            // "these are all the failures".
+                            <Typography variant="body2" color="text.secondary">
+                              {'The words are past their 180-day retention and ' +
+                                'have been deleted. The counts above still ' +
+                                'include this turn.'}
+                            </Typography>
+                          ) : (
+                            <>
+                              <Typography variant="body2">
+                                {row.question || '(no question recorded)'}
+                              </Typography>
+                              {row.answer ? (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {`We said: ${row.answer}${row.answerTruncated ? '…' : ''}`}
+                                </Typography>
+                              ) : null}
+                            </>
+                          )}
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              )}
             </CardDisplay>
 
             <CardDisplay

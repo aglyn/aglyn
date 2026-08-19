@@ -65,6 +65,14 @@ import {
  */
 const SCAN_CEILING = 20000
 
+/**
+ * How much of an answer the prose panel shows.
+ *
+ * Enough to judge whether the answer was wrong, short enough that twenty-five
+ * of them are still a page somebody reads.
+ */
+const ANSWER_PREVIEW_CHARS = 600
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -104,11 +112,83 @@ async function handler(request: Request): Promise<Response> {
     const truncated = snapshot.size > SCAN_CEILING
     const docs = truncated ? snapshot.docs.slice(0, SCAN_CEILING) : snapshot.docs
     const rows = docs.map((doc) =>
-      assistSignalRow(doc.ref.parent.parent?.id ?? '(unknown)', doc.data()),
+      assistSignalRow(
+        doc.ref.parent.parent?.id ?? '(unknown)',
+        // The signal id IS the exchange id (AGL-2314) — one id, two halves,
+        // minted together by `recordAssistExchange` precisely so the join is
+        // possible. Until now nothing carried it this far.
+        doc.id,
+        doc.data(),
+      ),
     )
 
+    const report = mineAssistSignals(rows, { truncated, limit })
+
+    /*==========================================
+     * THE VERBATIM HALF (AGL-2314).
+     *
+     * `assistExchanges` stores the question a customer typed and the answer
+     * we gave, for 180 days, and `assist-usage.ts` calls it "the data loop's
+     * corpus". NOTHING read it — one write, no reader, no collection group.
+     * So we retained customers' words, and committed publicly in the privacy
+     * policy to retaining them, for zero product value.
+     *
+     * Read here rather than in the miner because the miner is pure: it does
+     * the arithmetic, the route does the reading.
+     *
+     * ## Only the turns that FAILED
+     *
+     * The shortlist is thumbs-down and ungrounded turns only, capped by the
+     * same `limit` as every other panel. That is a privacy decision as much
+     * as a cost one: the counts already answer "how often", and the words are
+     * fetched only where the counts CANNOT say what went wrong. Pulling every
+     * exchange would be surveillance with a dashboard on it.
+     *
+     * `uid` is deliberately not projected. The corpus question is what people
+     * asked, never who asked it — and the exchange is the only document that
+     * still carries an identifier at all.
+     *
+     * ## An expired exchange is an ANSWER
+     *
+     * The 180-day TTL means a signal can outlive its prose, and it is meant
+     * to. A missing document therefore reports `expired: true` rather than
+     * being dropped: a shortlist silently shorter than the failure count it
+     * came from would read as "these are all the failures", which is the
+     * AGL-2220 shape.
+     *=========================================*/
+    const firestore = firebaseAdmin.app().firestore()
+    const exchanges = report.proseCandidates.length
+      ? await firestore.getAll(
+          ...report.proseCandidates.map((candidate) =>
+            firestore
+              .collection('orgs')
+              .doc(candidate.orgId)
+              .collection('assistExchanges')
+              .doc(candidate.exchangeId),
+          ),
+        )
+      : []
+    const prose = report.proseCandidates.map((candidate, index) => {
+      const snapshot = exchanges[index]
+      const data = (snapshot?.exists ? snapshot.data() : null) ?? {}
+      return {
+        ...candidate,
+        expired: !snapshot?.exists,
+        question: typeof data['question'] === 'string' ? data['question'] : null,
+        // Trimmed, not omitted: judging whether an answer was wrong needs to
+        // see it, and a whole answer per row would make the panel unreadable.
+        answer:
+          typeof data['answer'] === 'string'
+            ? data['answer'].slice(0, ANSWER_PREVIEW_CHARS)
+            : null,
+        answerTruncated:
+          typeof data['answer'] === 'string' &&
+          data['answer'].length > ANSWER_PREVIEW_CHARS,
+      }
+    })
+
     return Response.json(
-      { ...mineAssistSignals(rows, { truncated, limit }), ceiling: SCAN_CEILING },
+      { ...report, prose, ceiling: SCAN_CEILING },
       { status: 200 },
     )
   } catch (error) {
