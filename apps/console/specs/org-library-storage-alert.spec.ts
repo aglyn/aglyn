@@ -193,6 +193,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // The REAL entitlements — a stubbed allowance would make the threshold
   // arithmetic below unfalsifiable.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The route stamps and reads the free-plan bandwidth cap through the same
+  // barrel (AGL-2155); a stubbed export here would fail as "not a function"
+  // rather than as anything to do with this suite's subject.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
   buildRoute: () => '/org/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   pluginRequestFromWeb: async (request: Request) => ({

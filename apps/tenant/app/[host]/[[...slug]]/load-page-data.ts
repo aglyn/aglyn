@@ -285,6 +285,49 @@ const loadPageDataCached = cache(
       }
     }
 
+    // THE FREE PLAN'S BANDWIDTH CAP (AGL-1967/2070/2155), and it is defence
+    // in depth exactly as the lockdown branch above is: the middleware's
+    // request-level verdict is the gate that matters, because it runs before
+    // the ISR cache and a capped site's remaining traffic is served FROM that
+    // cache. This branch is what keeps a freshly-regenerated page honest and
+    // covers any path that reaches the loader without the middleware.
+    //
+    // ZERO ADDED READS. `orgRes.org` is already in hand — loaded once above
+    // for the lockdown branch and reused by branding, entitlements and the
+    // overlay branches below — so the cap is a pure predicate over a document
+    // this render was always going to fetch. That is the whole reason the
+    // verdict is denormalized onto the org doc rather than derived from the
+    // page-view counters, which would be a Firestore read on the hot path of
+    // every public page on the platform, paid by paying customers too.
+    //
+    // Short revalidate, matching the lockdown branch: an org that upgrades
+    // must get its site back in seconds, not at the end of a 60s window.
+    if (Aglyn.bandwidthCapEngaged(orgRes.org)) {
+      const notice = Aglyn.bandwidthCapNotice()
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            maintenanceFallback: true,
+            // Carried in the `lockdown` prop because that is the shape the
+            // fallback UI already renders (title/message, noindex, no JSON-LD)
+            // — the RENDERING channel, reused. The WORDS are the cap's own and
+            // deliberately not `lockdownNotice`'s: nobody took this site down
+            // and support cannot lift it, so "contact support" would send a
+            // customer to a door that does not open. `reason` names the cap so
+            // the two are distinguishable in the payload.
+            lockdown: {
+              reason: Aglyn.BANDWIDTH_CAP_CODE,
+              title: notice.title,
+              message: notice.body,
+            },
+          }),
+        ),
+        revalidate: 30,
+      }
+    }
+
     // Maintenance mode (AGL-131): every path renders the assigned 503
     // screen (noindex) or a built-in notice; short revalidate so flipping
     // the toggle recovers quickly.

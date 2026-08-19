@@ -68,6 +68,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // parsers below: with no suspension fields in these fixtures it answers
   // null, and faking it would re-implement the precedence table here.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
+  // …and the REAL bandwidth cap beside it (AGL-2155), for the same reason:
+  // with no `bandwidthCap` marker on these fixtures it answers false, and a
+  // stub would be one more copy of a rule that lives in one place.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/bandwidth-cap'),
   SCREEN_ROOT_PATH: '/',
   COLLECTION_LIST_PAGE_SIZE: 10,
   // The REAL parser (AGL-1321), reached by file path so the stub stays light.

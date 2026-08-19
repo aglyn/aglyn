@@ -150,7 +150,7 @@ const PLATFORM_GENERATOR_NAME = 'Aglyn'
 const LOCKDOWN_VERDICT_TTL_MS = 30_000
 const lockdownVerdicts = new Map<
   string,
-  { at: number; blocked: boolean; attribution: boolean }
+  { at: number; blocked: boolean; attribution: boolean; overQuota: boolean }
 >()
 
 /**
@@ -170,10 +170,14 @@ const lockdownVerdicts = new Map<
 async function hostVerdict(
   origin: string,
   tenantHost: string,
-): Promise<{ blocked: boolean; attribution: boolean }> {
+): Promise<{ blocked: boolean; attribution: boolean; overQuota: boolean }> {
   const cached = lockdownVerdicts.get(tenantHost)
   if (cached && Date.now() - cached.at < LOCKDOWN_VERDICT_TTL_MS) {
-    return { blocked: cached.blocked, attribution: cached.attribution }
+    return {
+      blocked: cached.blocked,
+      attribution: cached.attribution,
+      overQuota: cached.overQuota,
+    }
   }
   let blocked = false
   // Platform attribution (AGL-2088) rides on the SAME verdict — the route
@@ -188,6 +192,20 @@ async function hostVerdict(
   // older deployment that has no `attribution` field at all must never be read
   // as "this site is not white-labelled". Only an explicit `true` emits.
   let attribution = false
+  // THE FREE PLAN'S BANDWIDTH CAP (AGL-1967/2070/2155), and it starts FALSE
+  // with `blocked` rather than with `attribution`, because it fails in the
+  // same direction: an unreachable verdict, a non-200, unparseable JSON, or a
+  // response from an older deployment that has no `overQuota` field at all
+  // must all keep the site serving. A cap is a cost control; an outage that
+  // reads as a cap would take every free site on the platform down at once,
+  // which is a far worse day than the egress bill it was protecting.
+  //
+  // ⚠️ ENFORCING HERE IS THE POINT, exactly as it is for the lock. Only the
+  // middleware runs before the ISR cache, and a capped site's remaining
+  // egress is served from that cache — a gate in the loader alone would let a
+  // viral free site keep serving its hot pages indefinitely while the cap
+  // "engaged" against pages nobody was requesting.
+  let overQuota = false
   try {
     const response = await fetch(
       `${origin}/api/lockdown-verdict?host=${encodeURIComponent(tenantHost)}`,
@@ -198,15 +216,22 @@ async function hostVerdict(
         locked?: boolean
         mode?: string
         attribution?: boolean
+        overQuota?: boolean
       } | null
       blocked = data?.locked === true && data?.mode !== 'read-only'
       attribution = data?.attribution === true
+      overQuota = data?.overQuota === true
     }
   } catch {
-    // Fail open on the lock, closed on the attribution.
+    // Fail open on the lock and the cap, closed on the attribution.
   }
-  lockdownVerdicts.set(tenantHost, { at: Date.now(), blocked, attribution })
-  return { blocked, attribution }
+  lockdownVerdicts.set(tenantHost, {
+    at: Date.now(),
+    blocked,
+    attribution,
+    overQuota,
+  })
+  return { blocked, attribution, overQuota }
 }
 
 export const middleware: NextMiddleware = async (req, event) => {
@@ -345,7 +370,11 @@ export const middleware: NextMiddleware = async (req, event) => {
   // cached HTML can answer. Checked ahead of the SEO rewrites on purpose so
   // a taken-down site stops advertising its content too.
   const verdict = await hostVerdict(req.nextUrl.origin, tenantHost)
-  if (verdict.blocked) {
+  // The bandwidth cap (AGL-2155) rewrites to the SAME notice route, which
+  // re-derives which of the two it is and words itself accordingly. A lock
+  // OUTRANKS a cap by falling first: both serve a 503, but a staff takedown
+  // must not be described to a visitor as a traffic limit.
+  if (verdict.blocked || verdict.overQuota) {
     const lockedUrl = req.nextUrl.clone()
     lockedUrl.pathname = '/api/locked'
     lockedUrl.search = ''
