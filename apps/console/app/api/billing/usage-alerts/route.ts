@@ -93,6 +93,93 @@ import {
 export const USAGE_ALERT_ORG_CHUNK = 100
 
 /**
+ * Hosts read per page inside one org (AGL-2421).
+ *
+ * This inner query was `.limit(100).get()` with no order and no cursor, and
+ * everything the sweep totals per org — page views (and therefore
+ * `bandwidthGb`, and therefore whether the free-plan cap engages), email
+ * sends, workflow and action runs, media bytes — was summed over that one
+ * page. An org with more than 100 sites was undercounted SILENTLY: no flag,
+ * no log, and `hosts.size` reported 100 as the site count for the `hosts`
+ * quota alert as well. The outer orgs query was made resumable in AGL-2220;
+ * this one was left behind.
+ */
+const USAGE_ALERT_HOST_PAGE = 100
+
+/**
+ * Hard ceiling on hosts summed for one org, after which the sweep stops and
+ * SAYS SO.
+ *
+ * A cursor alone would make the inner loop unbounded, and this route has
+ * `maxDuration = 60` with six counter reads plus an analytics range per host
+ * — an org with tens of thousands of sites would time out, and a chunk that
+ * times out never advances the outer cursor, so one such org would wedge the
+ * whole platform sweep instead of undercounting one org.
+ *
+ * So the ceiling stays, and what changes is that it is 100× higher than the
+ * old one and no longer invisible: `hostsTruncated` rides in the response and
+ * a `console.warn` names the org. The defect this closes is the SILENCE, not
+ * the existence of a bound.
+ */
+export const USAGE_ALERT_HOST_CEILING = 10_000
+
+/**
+ * Every host owned by an org, paged by document id (AGL-2421).
+ *
+ * Ordered by `__name__` for the same reason the orgs sweep is: Firestore's
+ * default iteration order is not a promise, and "everything after the cursor"
+ * only means something against a total order. An equality filter plus
+ * `orderBy(__name__)` is served by the automatic single-field index on
+ * `orgId`, so this needs no composite index.
+ *
+ * Returns `truncated` rather than throwing or logging alone, so the caller
+ * can put it in the response body where the workflow that drives this cron
+ * can see it.
+ */
+export async function hostsForOrg(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  /**
+   * Injectable so the truncation branch is REACHABLE in a test. Proving it
+   * against the shipped 10,000 would mean seeding ten thousand fixtures and
+   * sixty thousand counter reads for one boolean; the default keeps the
+   * production value in one place and the call site passes nothing.
+   */
+  ceiling: number = USAGE_ALERT_HOST_CEILING,
+): Promise<{
+  docs: FirebaseFirestore.QueryDocumentSnapshot[]
+  truncated: boolean
+}> {
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  let cursor: string | null = null
+  for (;;) {
+    let query = firestore
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+      .limit(USAGE_ALERT_HOST_PAGE)
+    if (cursor) {
+      // A DocumentReference, not the bare id: with `__name__` ordering the
+      // cursor value is a document PATH. Same shape as the orgs cursor.
+      query = query.startAfter(firestore.collection('hosts').doc(cursor))
+    }
+    const page = await query.get()
+    for (const doc of page.docs) docs.push(doc)
+    // A short page is the last page. Checked before the ceiling so an org
+    // sitting exactly on a page boundary does not report itself truncated.
+    if (page.docs.length < USAGE_ALERT_HOST_PAGE) return { docs, truncated: false }
+    if (docs.length >= ceiling) {
+      console.warn(
+        `usage-alerts: org ${orgId} has more than ${ceiling} hosts — usage ` +
+          'totals for this org are undercounted',
+      )
+      return { docs, truncated: true }
+    }
+    cursor = page.docs[page.docs.length - 1].id
+  }
+}
+
+/**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
  * quota banner only helps people who are looking — this cron pushes a
  * `billing.usage` notification to org admins when a quota crosses the
@@ -193,6 +280,12 @@ async function handler(request: Request): Promise<Response> {
     const alerted: Array<Record<string, unknown>> = []
     /** Orgs whose free-plan bandwidth cap engaged on THIS run (AGL-2155). */
     const capped: Array<Record<string, unknown>> = []
+    /**
+     * Orgs whose host list hit `USAGE_ALERT_HOST_CEILING` (AGL-2421), so
+     * their totals are an undercount. Reported rather than merely logged:
+     * the whole defect was that the truncation had no reader.
+     */
+    const truncatedOrgs: string[] = []
 
     for (const org of orgs.docs) {
       const orgData = org.data()
@@ -208,11 +301,9 @@ async function handler(request: Request): Promise<Response> {
       // that is counted and never blocked. Alerting on the first tells an
       // owner why a campaign was refused; alerting on the second tells them
       // about an overage before the invoice does.
-      const hosts = await firestore
-        .collection('hosts')
-        .where('orgId', '==', org.id)
-        .limit(100)
-        .get()
+      // Paged, ordered and cursor-resumed (AGL-2421) — see `hostsForOrg`.
+      const hosts = await hostsForOrg(firestore, org.id)
+      if (hosts.truncated) truncatedOrgs.push(org.id)
       let emailSends = 0
       let campaignEmailSends = 0
       // Run caps (AGL-477): the runtime silently stops workflow/action
@@ -290,7 +381,7 @@ async function handler(request: Request): Promise<Response> {
       )
       mediaBytes += orgLibraryBytes
 
-      const hostCount = hosts.size
+      const hostCount = hosts.docs.length
       const mediaMb = mediaBytes / (1024 * 1024)
       // Org-wide: the loop above summed every host's page views, and
       // `bandwidthGb` is an org-wide band. Shared with the console meter and
@@ -971,6 +1062,12 @@ async function handler(request: Request): Promise<Response> {
         swept: orgDocs.length,
         nextCursor: hasMore ? (orgDocs[orgDocs.length - 1]?.id ?? null) : null,
         done: !hasMore,
+        // The INNER extent (AGL-2421). `done: true` says every org was
+        // looked at; it says nothing about whether each org's own sites were
+        // all summed, and until now nothing did. An org listed here has its
+        // page views, email sends, run counts and media bytes UNDERCOUNTED
+        // for this run.
+        hostsTruncated: truncatedOrgs,
       },
       { status: 200 },
     )
