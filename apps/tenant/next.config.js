@@ -35,6 +35,13 @@ module.exports = withAglyn({
     // Which deployment this build IS, in the CLIENT bundle (AGL-2067). See
     // `apps/console/next.config.js` for why `VERCEL_ENV` has to be mapped
     // explicitly rather than read directly or assumed to be auto-exposed.
+    // The request-geo header names, so an operator's own proxy can supply the
+    // signal Vercel's edge supplies for us (AGL-2436). Mapped here because
+    // `apps/console/middleware.ts` pulls the sanctions gate — and through it
+    // `request-geo` — into the EDGE bundle, where nothing reads process.env at
+    // request time. Fixed at image-build time, like AGLYN_TENANT_HOST_CNAME.
+    AGLYN_GEO_COUNTRY_HEADER: process.env.AGLYN_GEO_COUNTRY_HEADER,
+    AGLYN_GEO_REGION_HEADER: process.env.AGLYN_GEO_REGION_HEADER,
     NEXT_PUBLIC_DEPLOY_ENV: process.env.VERCEL_ENV,
   },
 })

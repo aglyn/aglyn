@@ -25,9 +25,40 @@
  * `apps/console/constants/sanctions-geo.ts`; this is only the signal.
  */
 
-/** Vercel's edge geo headers, the only geo signal this deployment has. */
-export const GEO_COUNTRY_HEADER = 'x-vercel-ip-country'
-export const GEO_REGION_HEADER = 'x-vercel-ip-country-region'
+/**
+ * The headers carrying the request's country and subdivision, named by
+ * configuration with Vercel's own as the default (AGL-2436).
+ *
+ * These were bare `x-vercel-*` literals, under a comment calling them "the
+ * only geo signal this deployment has" — true of Aglyn's cloud and false of
+ * every self-host install, where no edge sets them. Nothing else supplies the
+ * signal, so on a container `readRequestGeo` returned `null` for every request
+ * and the two things built on it were off in production:
+ *
+ *  - the sanctions gate FAILED OPEN on every request, logging it once per
+ *    instance — an embargo control that is silently not running,
+ *  - the tenant's consent-region endpoint had no region to answer with.
+ *
+ * An operator's proxy has the signal under its own name: Cloudflare sends
+ * `cf-ipcountry`, and Caddy/nginx/Traefik can set whatever they are told to.
+ * Naming the header is all that was missing.
+ *
+ * ⚠️ Read with DOT notation and mapped through the `env` block of both
+ * `next.config.js` files, because `apps/console/middleware.ts` imports the
+ * sanctions gate and therefore this module into the EDGE bundle. Next inlines
+ * `process.env.NAME` there at build time and never the bracket form (AGL-2037)
+ * — so these are fixed when the image is built, not when it starts, exactly
+ * like `AGLYN_TENANT_HOST_CNAME`.
+ *
+ * Lower-cased because the value is used as a `Vary` header, where it is echoed
+ * verbatim rather than matched case-insensitively.
+ */
+export const GEO_COUNTRY_HEADER = (
+  process.env.AGLYN_GEO_COUNTRY_HEADER || 'x-vercel-ip-country'
+).toLowerCase()
+export const GEO_REGION_HEADER = (
+  process.env.AGLYN_GEO_REGION_HEADER || 'x-vercel-ip-country-region'
+).toLowerCase()
 
 export interface RequestGeo {
   /** ISO 3166-1 alpha-2, uppercased. `null` when the edge sent no signal. */

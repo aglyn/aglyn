@@ -51,6 +51,7 @@ import {
   probeMediaVariantSupport,
 } from '@aglyn/tenant-data-admin'
 import {
+  deploymentEnvironmentLabel,
   healthBody,
   healthHeaders,
   healthHttpStatus,
@@ -136,7 +137,10 @@ export async function GET(): Promise<Response> {
     // Which build answered. Without it a probe cannot tell a recovered
     // deploy from a rolled-back one, and an incident timeline has no anchor.
     commit: process.env['VERCEL_GIT_COMMIT_SHA']?.slice(0, 7) ?? null,
-    environment: process.env['VERCEL_ENV'] ?? 'development',
+    // Not `VERCEL_ENV ?? 'development'`: off Vercel that reported a
+    // self-hoster's production container as "development" — to them and to
+    // whatever monitoring reads this (AGL-2436).
+    environment: deploymentEnvironmentLabel(),
     region: process.env['VERCEL_REGION'] ?? null,
   })
   return Response.json(
