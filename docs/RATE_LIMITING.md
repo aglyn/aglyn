@@ -149,6 +149,42 @@ would lock legitimate visitors out of a customer's site over an unrelated
 Firestore blip. Degrading to the per-instance cap keeps some protection, keeps
 sites usable, and reports which happened.
 
+### Contention is a THIRD outcome, and it fails closed (AGL-2404)
+
+"Firestore is unreachable" and "this one counter document is contended" are
+not the same event, and until AGL-2404 they were handled as if they were —
+badly, because contention did not raise an error at all. `runTransaction` on a
+hot document retries with backoff, so a contended key made `consumeRateLimit`
+*hang* rather than fail. It ran past the platform's function ceiling and the
+caller's cheap 429 came back to the client as a bodyless **504 with no
+`Retry-After`**. Measured on production: two concurrent requests on one key
+were enough, dying at ~10.3 s.
+
+The transaction now has a wall-clock budget
+(`RATE_LIMIT_TRANSACTION_BUDGET_MS`, 2.5 s) and `maxAttempts: 3`, and the two
+failures are told apart:
+
+| Condition | Signal | Posture | Result flag |
+| --- | --- | --- | --- |
+| Store unreachable | fast error (`UNAVAILABLE`, no app, bad creds) | fail **soft** — per-instance cap | `degraded: true` |
+| Key contended | `ABORTED` (10), `DEADLINE_EXCEEDED` (4), or budget elapsed | fail **closed** — refuse | `contended: true` |
+
+Contention must not degrade. The fallback counter is a per-instance Map that
+starts empty, so degrading on contention would let a caller widen its own cap
+just by going concurrent — the exact AGL-794 defect, re-entered backwards.
+
+**A contention refusal is deliberately not recorded as a degradation.**
+`/api/health/rate-limits` asks one question — did the durable store stop
+answering? — and a contended document is the store working. Putting contention
+markers in that feed would answer it wrongly and mask a real outage.
+
+Callers need no change: `contended` surfaces as `allowed: false`, which every
+call site already turns into its usual 429 + `Retry-After`.
+
+This bounds the symptom, not the cause. The counter is still one document per
+(key, window), so the contention *threshold* is unchanged — raising it is
+AGL-2416, and it needs a load rehearsal on the emulator rather than a guess.
+
 ### …but only if someone finds out it fired (AGL-1679)
 
 `degraded: true` used to exist in one `console.error` and nothing else. A
