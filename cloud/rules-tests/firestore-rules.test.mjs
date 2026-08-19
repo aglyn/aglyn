@@ -1381,7 +1381,7 @@ describe('hosts', () => {
       // Absent from every exclusion list, so the catch-all is the only thing
       // granting these. If a future narrowing takes one out, this names it.
       assert.ok(
-        !HOST_SERVER_ONLY_SUBCOLLECTIONS.includes(name),
+        !hostServerOnlySubcollections().includes(name),
         `\`${name}\` is now denied outright under hosts/{hostId}, but it is ` +
           `authored CLIENT-SIDE by a console or plugin surface. Denying it ` +
           `breaks that surface for every customer with no build failure to ` +
