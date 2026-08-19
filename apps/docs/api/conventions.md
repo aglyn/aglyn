@@ -214,12 +214,12 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
   upgrades, a `409 dataset_not_empty` goes away when the records are deleted, and a
   `409 contact_exists` goes away when the duplicate is removed. A key burned on any of
   them would mean the retry that should finally succeed replays the refusal forever.
-- The mirror of that rule matters just as much on
-  [`POST /v1/contacts`](resources/contacts.md#plan-gates): a create that **succeeds**
-  is remembered, so a retry replays it *even when that create consumed the last slot
-  in the audience band*. Otherwise the retry after a lost response would be refused by
-  the quota it had itself just filled, and you would have no way to tell whether the
-  contact exists.
+- The mirror of that rule matters just as much: a create that **succeeds** is
+  remembered, so a retry replays it *even when that create consumed the last slot in a
+  plan's band*. This holds on every create that takes a key — datasets, records, and
+  contacts — and it is what makes a bulk import safe to resume. Without it, the retry
+  after a lost response would be refused by the quota it had itself just filled, and
+  you would have no way to tell whether the object exists.
 
 ### Deletes
 

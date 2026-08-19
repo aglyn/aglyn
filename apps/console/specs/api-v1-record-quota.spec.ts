@@ -314,6 +314,26 @@ describe('recordsPerDataset (the rows half)', () => {
     expect(recordCount()).toBe(3)
   })
 
+  it('replays a create that consumed the LAST included row (AGL-2296)', async () => {
+    // The other half of the ordering question, and the one the original
+    // quota-then-claim arrangement got wrong. The refusal case below proves a
+    // refusal RELEASES the key; this proves a SUCCESS still replays at the
+    // same band. Under quota-then-claim the retry re-counts, is now at 3 of
+    // 3, and is refused before the claim is consulted — so a response lost to
+    // a timeout leaves the integrator unable to tell whether the row exists,
+    // which is exactly what the key is for.
+    seedRecords(2)
+    const first = await postRecord('k-band')
+    expect(first.status).toBe(201)
+    const created = await first.json()
+    expect(recordCount()).toBe(3)
+
+    const retried = await postRecord('k-band')
+    expect(retried.status).toBe(200)
+    expect(await retried.json()).toEqual(created)
+    expect(recordCount()).toBe(3)
+  })
+
   it('does not BURN the idempotency key on a refusal', async () => {
     // `createDataset` states the rule and this is the same one: a plan
     // refusal is the most retried failure there is, so the retry that finally
@@ -361,6 +381,33 @@ describe('dataStorageMbPerOrg (the bytes half)', () => {
     const refused = await postRecord()
     expect(refused.status).toBe(403)
     expect((await refused.json()).error.code).toBe('data_storage_quota')
+    expect(recordCount()).toBe(1)
+  })
+
+  it('replays a create that crossed the BYTES band (AGL-2296)', async () => {
+    // The likeliest way this bites in production: a bulk import crosses the
+    // storage band mid-run. Under quota-then-claim every retry from that
+    // point on is refused rather than replayed, so the importer cannot tell
+    // which of its rows landed.
+    mockOrg = overriddenOrg({ dataStorageMbPerOrg: 100, recordsPerDataset: 1_000 })
+    mockDocs.set(`orgs/org-1/usage/${mockMonth}`, { dataStorageMb: 40 })
+    const first = await postRecord('k-bytes')
+    expect(first.status).toBe(201)
+    const created = await first.json()
+
+    // The sweep catches up and the org is now over its band — the state the
+    // retry actually arrives in.
+    mockDocs.set(`orgs/org-1/usage/${mockMonth}`, { dataStorageMb: 100 })
+    const retried = await postRecord('k-bytes')
+    expect(retried.status).toBe(200)
+    expect(await retried.json()).toEqual(created)
+    expect(recordCount()).toBe(1)
+
+    // A FRESH key is still refused: the replay is scoped to the attempt, not
+    // a hole in the cap.
+    const fresh = await postRecord('k-other')
+    expect(fresh.status).toBe(403)
+    expect((await fresh.json()).error.code).toBe('data_storage_quota')
     expect(recordCount()).toBe(1)
   })
 

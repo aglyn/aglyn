@@ -333,26 +333,25 @@ async function createDataset(
     })
   }
 
-  // Quota BEFORE the claim, for the reason `createRecord` validates before
-  // claiming: a refusal an integrator can act on must not consume their key.
-  // A plan refusal is the most retried failure there is — it clears when
-  // somebody buys an add-on — and burning the key would mean the retry that
-  // finally should succeed replays the refusal instead.
+  /*
+   * CLAIM ABOVE THE QUOTA (AGL-2296), and release on the refusal.
+   *
+   * This used to check the quota first and claim after, so that a refusal an
+   * integrator can act on never consumed their key — a plan refusal is the
+   * most retried failure there is, and it clears when somebody buys an
+   * add-on. That reasoning is right and is preserved by the `release()`
+   * below; the ORDERING it produced was not. A create that consumed the LAST
+   * included slot could not be retried at all: the retry re-counts, is now AT
+   * the band, and is refused before the claim is ever consulted — so the
+   * replay never happens and the integrator cannot tell whether the dataset
+   * exists. `conventions.md` publishes the opposite promise.
+   *
+   * Claiming first and releasing on each refusal gets both properties at
+   * once, which is the trade `deleteRecord` already argues for and
+   * `createContact` follows. Validation stays above: a deterministic 400 must
+   * never take a key at all.
+   */
   const collection = datasetsCollection(ctx)
-  const datasetCount = (await collection.count().get()).data().count
-  const quota = checkDatasetQuota(ctx.org, datasetCount)
-  if (!quota.allowed) {
-    return ApiErrors.planRequired({
-      message:
-        `Dataset limit reached (${quota.limit}). ` +
-        (quota.upgradeRequired
-          ? 'Upgrade the plan to add more.'
-          : `Buy extra datasets for $${quota.addonPriceUsd}/mo each, or upgrade.`),
-      code: 'dataset_quota',
-      headers: ctx.headers,
-    })
-  }
-
   const claimed = await claimWrite(
     ctx,
     '*',
@@ -363,6 +362,21 @@ async function createDataset(
   const { claim } = claimed
 
   try {
+    const datasetCount = (await collection.count().get()).data().count
+    const quota = checkDatasetQuota(ctx.org, datasetCount)
+    if (!quota.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message:
+          `Dataset limit reached (${quota.limit}). ` +
+          (quota.upgradeRequired
+            ? 'Upgrade the plan to add more.'
+            : `Buy extra datasets for $${quota.addonPriceUsd}/mo each, or upgrade.`),
+        code: 'dataset_quota',
+        headers: ctx.headers,
+      })
+    }
+
     const id = createResourceUid()
     await collection.doc(id).create({
       displayName: parsed.values.name,
@@ -618,45 +632,23 @@ async function createRecord(
    * into `orgs/{id}/datasets/{id}/records` with no cap on it, and a customer
    * could blow a limit through the REST API that the UI refuses.
    *
-   * `createDataset` above already says why they go BEFORE the idempotency
-   * claim, and it applies verbatim: a plan refusal is the most retried failure
-   * there is — it clears when somebody buys an add-on or upgrades — so burning
-   * the key would make the retry that finally should succeed replay the
-   * refusal forever.
+   * They sit BELOW the idempotency claim (AGL-2296), which is a change from
+   * how they shipped. Checking them first protected the key on a refusal —
+   * right, and kept by the `release()` calls below — but it made a create
+   * that consumed the LAST included row impossible to retry: the retry
+   * re-counts, is now AT the band, and is refused before the claim is
+   * consulted, so the replay never happens. The bytes leg is worse in
+   * practice, because a bulk import crosses the storage band mid-run and
+   * every retry from that point on is refused rather than replayed.
    *
-   * The row count moved up with them and is reused for `order`, so this adds
-   * no read on the rows leg. The bytes leg adds no read either on any plan
-   * that meters the overage; see `dataStorageRefusal`.
+   * The row count is reused for `order`, so this adds no read on the rows
+   * leg. The bytes leg adds no read either on any plan that meters the
+   * overage; see `dataStorageRefusal`.
    */
-  const order = (await recordsRef.count().get()).data().count
-  const recordQuota = checkQuota(ctx.org, 'recordsPerDataset', order)
-  if (!recordQuota.allowed) {
-    return ApiErrors.planRequired({
-      message: `Record limit reached (${recordQuota.limit}). Upgrade the plan to add more.`,
-      code: 'record_quota',
-      headers: ctx.headers,
-    })
-  }
-  const storageRefusal = await dataStorageRefusal(
-    ctx.org,
-    ctx.firestore.collection('orgs').doc(ctx.orgId),
-  )
-  if (storageRefusal) {
-    return ApiErrors.planRequired({
-      message:
-        storageRefusal.basis === 'always'
-          ? 'Dataset storage is not included in this organization’s plan'
-          : `Dataset storage limit reached (${storageRefusal.includedMb} MB). Upgrade the plan to add more.`,
-      code: 'data_storage_quota',
-      headers: ctx.headers,
-    })
-  }
-
   // Idempotency: replay a prior create for the same key instead of
   // duplicating. Claimed HERE, below validation, so a deterministic 400 never
   // takes the key at all — an integrator fixes the payload and retries with
-  // the same key, exactly as the POS cashier does (AGL-1691). Cheaper than
-  // taking-and-releasing, and it cannot leak a claim on a rejection path.
+  // the same key, exactly as the POS cashier does (AGL-1691).
   const claimed = await claimWrite(
     ctx,
     datasetSnap.id,
@@ -667,6 +659,32 @@ async function createRecord(
   const { claim } = claimed
 
   try {
+    const order = (await recordsRef.count().get()).data().count
+    const recordQuota = checkQuota(ctx.org, 'recordsPerDataset', order)
+    if (!recordQuota.allowed) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message: `Record limit reached (${recordQuota.limit}). Upgrade the plan to add more.`,
+        code: 'record_quota',
+        headers: ctx.headers,
+      })
+    }
+    const storageRefusal = await dataStorageRefusal(
+      ctx.org,
+      ctx.firestore.collection('orgs').doc(ctx.orgId),
+    )
+    if (storageRefusal) {
+      await claim.release()
+      return ApiErrors.planRequired({
+        message:
+          storageRefusal.basis === 'always'
+            ? 'Dataset storage is not included in this organization’s plan'
+            : `Dataset storage limit reached (${storageRefusal.includedMb} MB). Upgrade the plan to add more.`,
+        code: 'data_storage_quota',
+        headers: ctx.headers,
+      })
+    }
+
     const recordId = createResourceUid()
     await recordsRef.doc(recordId).create({
       values: coerced,

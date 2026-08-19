@@ -368,6 +368,34 @@ describe('POST /v1/datasets (AGL-2126)', () => {
     expect(storedDatasets()).toHaveLength(3)
   })
 
+  it('replays a create that consumed the LAST included slot (AGL-2296)', async () => {
+    // The hole the old quota-then-claim ordering left. The first call takes
+    // the last slot; the retry re-counts, is now AT the band, and under that
+    // ordering was refused before the claim was ever consulted — so the
+    // replay never happened and the integrator could not tell whether the
+    // dataset exists. `conventions.md` promises the opposite.
+    //
+    // Deliberately distinct from the refusal case above: that one proves a
+    // refusal RELEASES the key, this one proves a success still REPLAYS at
+    // the same band. Either ordering passes one of them; only claiming above
+    // the quota passes both.
+    mockOrg = {
+      plan: 'business',
+      entitlements: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
+    }
+    await createDataset(VALID)
+    const first = await createDataset(VALID, 'key-band')
+    expect(first.status).toBe(201)
+    const created = await first.json()
+    expect(storedDatasets()).toHaveLength(2)
+
+    const retried = await createDataset(VALID, 'key-band')
+    expect(retried.status).toBe(200)
+    expect(await retried.json()).toEqual(created)
+    // And no third dataset squeezed past the band on the way.
+    expect(storedDatasets()).toHaveLength(2)
+  })
+
   it('replays a retried create instead of making a second dataset', async () => {
     const first = await createDataset(VALID, 'key-b')
     const replay = await createDataset(VALID, 'key-b')
