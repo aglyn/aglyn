@@ -21,10 +21,24 @@ import * as logger from 'firebase-functions/logger'
  */
 const PLUGIN_JOBS_SECRET = defineSecret('PLUGIN_JOBS_SECRET')
 
-/** Tenant origin to poke. Any host works — the runner is not host-scoped. */
-const JOB_RUNNER_URL =
-  process.env.AGLYN_JOB_RUNNER_URL ??
-  'https://northwind-coffee.aglyn.app/api/plugins/run-jobs'
+/**
+ * Tenant origin to poke. Any host on THIS deployment works — the runner is not
+ * host-scoped — but it must be a host on this deployment (AGL-2176).
+ *
+ * The default used to be `https://northwind-coffee.aglyn.app/...`: not merely
+ * Aglyn's domain but one specific customer's published site. `cloud/functions`
+ * ships in the open-source distribution, so an operator who deployed it and
+ * missed this variable got a function POSTing to that stranger's site every
+ * minute forever, carrying THEIR `PLUGIN_JOBS_SECRET` — while none of their own
+ * scheduled publishing or booking-hold expiry ran, and nothing said so, because
+ * the beat logged a perfectly healthy status from a server that was not theirs.
+ *
+ * So there is no default. Unset means the beat does not fire and says why, once
+ * per tick, naming the variable. A job that visibly never runs is a bug the
+ * operator can find; a request landing on someone else's server is one they
+ * cannot see at all.
+ */
+const JOB_RUNNER_URL = process.env.AGLYN_JOB_RUNNER_URL?.trim()
 
 /**
  * The platform's job beat (AGL-1159).
@@ -56,6 +70,19 @@ export const pluginJobsBeat = onSchedule(
     timeoutSeconds: 120,
   },
   async () => {
+    if (!JOB_RUNNER_URL) {
+      // Deliberately an error rather than a silent return: a scheduled job
+      // that does nothing is indistinguishable from one that is working until
+      // somebody notices a post that never published (AGL-2176).
+      logger.error(
+        'plugin job beat skipped — set AGLYN_JOB_RUNNER_URL to a tenant ' +
+          'origin on THIS deployment, e.g. ' +
+          'https://sites.example.com/api/plugins/run-jobs. Until it is set, ' +
+          'no scheduled publishing and no booking-hold expiry will run.',
+      )
+      return
+    }
+
     const response = await fetch(JOB_RUNNER_URL, {
       method: 'POST',
       headers: {
