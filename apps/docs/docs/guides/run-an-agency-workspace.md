@@ -177,28 +177,43 @@ Sales tax is added on top of your plan price where applicable, calculated from y
 ## Step 7 — Automate the repetitive part {#step-7-automate}
 
 Once you're running several sites, the console stops being the fastest way to do
-routine things. The [REST API](/api/) reads across your organization with one key:
+routine things. The [REST API](/api/) reads across **one organization** with one key:
 
-- **[Sites](/api/resources/sites)** — enumerate every site and its domain, which is
-  the basis of any status dashboard you build.
-- **[Form submissions](/api/resources/form-submissions)** — pull every client's leads
-  into one place, or into their CRM, and **mark each one read** as you go so the next
-  run doesn't send it twice.
+- **[Sites](/api/resources/sites)** — enumerate every site in that organization and
+  its domain, which is the basis of any status dashboard you build.
+- **[Form submissions](/api/resources/form-submissions)** — pull the leads from every
+  site in the organization into one place, or into a CRM, and **mark each one read**
+  as you go so the next run doesn't send it twice.
 - **[Orders](/api/resources/orders)** and
   [Products](/api/resources/products) — for clients who sell.
-- **[Media](/api/resources/media)** — audit alt text across every site, or find what's
-  filling your storage quota.
+- **[Media](/api/resources/media)** — audit alt text across the organization's sites,
+  or find what's filling your storage quota.
 
 Start with [Your first API call](./your-first-api-call.md), which walks through
 creating a key and making a request from scratch.
 
+:::caution A key never spans organizations
+API keys are minted **per organization**, and every endpoint is scoped to the
+organization the key belongs to. There is no key that reads across several.
+
+So this step is only a single request if you took the **one organization** side of
+the choice in [the mental model](#the-model) — clients as sites in your
+workspace. If you took the other side and each client owns their own organization,
+you need one key per client organization and your script loops over them. That is a
+real difference in effort, and it is the trade for the clean exit a separate
+organization gives you.
+:::
+
 :::tip One key per purpose
 Create a separate key for each integration, scoped to the least it needs. A key that
-only reads form submissions can't be turned into a data breach across every client's
-store, and revoking one doesn't take the others down.
+only reads form submissions can't be turned into a data breach across every site in
+the organization, and revoking one doesn't take the others down.
 :::
 
 ## A checklist you can reuse per project {#checklist}
+
+This is a list to keep yourself — in your own tracker, or pasted into a project
+brief. The console does not track it for you.
 
 - [ ] Site created from your house template
 - [ ] Client added as a **site collaborator**, not a manager
