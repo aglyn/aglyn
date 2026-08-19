@@ -2006,6 +2006,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Success manager'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'The named human an Enterprise org is promised. Set here by staff; the customer sees their name and they are copied by email on every ticket.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >
