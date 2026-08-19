@@ -61,7 +61,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
 }))
 
-jest.mock('../constants/docs-links', () => ({ docsHelp: () => undefined }))
+// A closed world: this mock replaces the WHOLE module, so the card's new
+// `buildDocsUrl` call threw "is not a function" until it was added (AGL-2186).
+// The real implementation, not a stub — the card renders the returned string
+// into an href, and a double that ignored configuration would let a hardcoded
+// origin come back without any assertion here noticing.
+jest.mock('../constants/docs-links', () => ({
+  docsHelp: () => undefined,
+  buildDocsUrl: (
+    jest.requireActual('../constants/docs-links') as {
+      buildDocsUrl: (path?: string) => string
+    }
+  ).buildDocsUrl,
+}))
 
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,

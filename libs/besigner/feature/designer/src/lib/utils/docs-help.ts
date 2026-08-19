@@ -37,7 +37,12 @@ const DOCS_BASE_URL = (
   // Dot notation (AGL-2037): this is a designer lib that ships in the client
   // bundle, and the bracket form is never substituted there — so every help
   // link pointed at Aglyn's docs regardless of what an operator configured.
-  process.env.NEXT_PUBLIC_AGLYN_DOCS_URL || 'https://docs.aglyn.com'
+  //
+  // Canonical name first, older name as a fallback (AGL-2186) — see
+  // apps/console/constants/docs-links.ts for why there were two.
+  process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
+  process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
+  'https://docs.aglyn.com'
 ).replace(/\/+$/, '')
 
 /** Absolute docs URL for a besigner docs page, with an optional heading anchor
