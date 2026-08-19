@@ -48,6 +48,7 @@ import {
   AppBar as MuiAppBar,
   Box,
   Button,
+  Chip,
   Stack,
   Tab as MuiTab,
   Typography,
@@ -241,6 +242,58 @@ const ElementInfo = function ElementInfo({
   )
 }
 
+/**
+ * `Hero · Section` with a `SELECTED` tag — the inspector header the
+ * `/product` hero mockup shows (AGL-2175).
+ *
+ * The right panel had no header at all: three tabs of controls with
+ * nothing naming what they act on. On a canvas where clicking a child
+ * moves the selection under you, that is the difference between editing
+ * the section and editing the heading inside it — and the panel looked
+ * identical either way.
+ *
+ * The second half is the COMPONENT, not a category: `labelShort` is the
+ * preset's name (`Hero`) and the schema's is what it actually is
+ * (`Section`). They are the same word often enough that it is dropped
+ * when it would only repeat itself.
+ */
+const SelectedNodeHeader = observer(
+  ({ node }: { node: Besigner.LastSelectedNode }) => {
+    const name = node?.labelShort ?? ''
+    const component = (node as { componentSchema?: { displayName?: string } })
+      ?.componentSchema?.displayName
+    const subtitle =
+      component && component.toLowerCase() !== name.toLowerCase()
+        ? `${name} · ${component}`
+        : name
+    return (
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: 'center',
+          px: 2,
+          py: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="subtitle2" noWrap sx={{ flex: 1, minWidth: 0 }}>
+          {subtitle || 'Element'}
+        </Typography>
+        <Chip
+          size="small"
+          variant="outlined"
+          color="secondary"
+          label="SELECTED"
+          sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10 } }}
+        />
+      </Stack>
+    )
+  },
+)
+SelectedNodeHeader.displayName = 'SelectedNodeHeader'
+
 function withLastSelectedNode<P>(
   WrappedComponent: JSX.ComponentType<P & { node: Besigner.LastSelectedNode }>,
 ) {
@@ -255,7 +308,12 @@ function withLastSelectedNode<P>(
         {!lastSelected ? (
           emptyView
         ) : (
-          <WrappedComponent node={lastSelected} {...rest} />
+          <>
+            {/* One header for all three right-panel tabs, so Attributes,
+                Styles and Info cannot disagree about what is selected. */}
+            <SelectedNodeHeader node={lastSelected} />
+            <WrappedComponent node={lastSelected} {...rest} />
+          </>
         )}
       </>
     )
