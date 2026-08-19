@@ -210,25 +210,69 @@ either of two topic boxes is ticked.
 
 - **Inbox** — every submission is captured; open it in the console's mail reader dialog.
 - **Datasets** — bind a form to a dataset (**Write to dataset** on the Form element)
-  and each submission is also appended as a record. The inbox always gets its copy.
+  and each submission is also appended as a record. The inbox always gets its copy, and
+  each submission's own detail dialog carries
+  [chips saying where it went](#where-this-one-went) — including saying nothing about a
+  dataset when the record wasn't created.
 - **Contacts** — form submissions are one of the [ingestion sources](../contacts/overview.md)
   that build your contacts list.
 
 ### The inbox
 
 The site's **Inbox** page collects everything visitors send, in three tabs —
-**Submissions**, **Members & leads**, and **Campaigns**. On the **Form Submissions**
-table:
+**Submissions**, **Members & leads**, and **Campaigns**. The **Form Submissions** table
+reads as a list of people, not of forms: **From**, **Message**, **Received**, and the
+row actions.
 
-- Unread submissions are bold with a **New** chip; site managers also get an in-app
-  notification per submission.
+- **From** shows the sender — a coloured initials avatar and their name, with the
+  **form name** as a caption underneath (the Form element's **Form name** attribute, so
+  name your forms distinctly: "Contact", "Newsletter", "Survey"). The avatar's colour is
+  derived from the name, so one sender keeps one colour on every machine.
+- Unread submissions are **bold with a dot** at the left of the row. There is no "New"
+  chip — bold text and a chip saying *New* are the same fact twice. Site managers also
+  get an in-app notification per submission.
+- **Received** is relative — `now`, `18m`, `3h`, `2d`, `4w`, `7mo`. Hover it for the
+  absolute date and time; the detail dialog carries the absolute time too. An inbox is
+  scanned for recency, and a locale timestamp makes you do the subtraction.
 - Click a row to read it — every field the visitor filled, labeled — and it's marked
   read; **Mark unread** puts it back.
 - **Delete** removes a submission permanently (it asks first).
 
-Each row shows which **Form** it came from — that's the Form element's **Form name**
-attribute, so name your forms distinctly ("Contact", "Newsletter", "Survey") and the
-inbox stays sorted at a glance.
+#### Who a submission is "from" {#who-a-submission-is-from}
+
+A form is yours to define, so there is no guaranteed name field. The sender is resolved
+from the submitted values by convention, in this order:
+
+1. A **name** field — `name`, `fullname`, `yourname`, `firstname` or `contactname`.
+2. An **email** field — `email` or `emailaddress`.
+3. The literal **Someone**.
+
+Matching ignores case, spaces, underscores and hyphens, so `Full Name`, `full_name` and
+`fullname` are all the same field. Empty values don't count, and where a form has two
+spellings of the same name the first one submitted wins.
+
+A form whose fields are named something else entirely — `q1`, `who`, `sender` — shows
+**Someone** on every row. That is the design, not a fault: an avatar with no letters in
+it is worse than a generic one, and the console will not guess which of your fields is a
+person. Rename the field to one of the conventional names if you want the sender on the
+row; the submission itself is unaffected, and every field is still in the detail dialog.
+
+#### Where this one went {#where-this-one-went}
+
+Open a submission and, under its fields, chips report what actually happened to it:
+
+- **Saved to Inbox** — always, on every submission. It's reassurance rather than a
+  status: a submission you're looking at is, by definition, in the inbox.
+- **Added to "Leads" dataset** — only when this submission really did become a record in
+  that dataset, named as the dataset is named today.
+
+The rule behind the second chip is worth knowing, because its **absence** is
+informative. It is stamped at submit time, only when a record was genuinely created. If
+the bound dataset had been deleted, or its record quota was full, or none of the
+submitted fields map onto the dataset's fields, the submission is still kept in full —
+it's the record that didn't happen. In that case **no dataset chip appears at all**,
+rather than a chip pointing at a row that doesn't exist. A submission with only **Saved
+to Inbox** on a form you bound to a dataset is the signal to go and check the dataset.
 
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 

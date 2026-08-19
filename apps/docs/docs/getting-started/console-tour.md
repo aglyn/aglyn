@@ -32,13 +32,22 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   **Inbox** tab (unread) and an **Archive** tab (already read). **Mark all read** clears
   the inbox, the gear opens your notification preferences, and **View all** opens the
   full paginated feed.
-- **Account menu** — your avatar opens it. The header shows your name and email, with a
-  gear to [Manage Account](../workspace-and-billing/manage-account.md); below that are
-  **Manage Team**, **Billing**, **Support**, **Staff console** (Aglyn staff only), and a
-  **Documentation** link that opens this docs site in a new tab. It also holds the
-  **theme toggle** (light / system / dark), an **Upgrade plan** button — shown only when
-  your workspace has a higher plan to move to, and only to members who can open Billing —
-  **Sign out**, and a footer naming your current workspace and plan.
+- **Account menu** — your avatar opens it. The header shows your name and email with a
+  gear to [Manage Account](../workspace-and-billing/manage-account.md), and the first row
+  below repeats that destination as a labelled **Manage account** — a gear is not
+  discoverable as a name. Then come **Manage Team**, **Billing** and **Support**, which
+  appear only on a page that names a workspace and only for members whose role can reach
+  those pages; **Staff console** (Aglyn staff only); a **Documentation** link that opens
+  this docs site in a new tab; and **Report an issue**, directly under Documentation
+  because "the docs didn't answer it" is the step before reporting it. **Report an
+  issue** opens a form *over* the page you're on rather than navigating away — the page
+  you were looking at is the most useful thing the report carries — and unlike the rows
+  above it, it needs no particular role, no resolved workspace, and no paid plan: every
+  signed-in member has it on every page. See
+  [Report an issue](../workspace-and-billing/report-an-issue.md). Below that the menu
+  holds the **theme toggle** (light / system / dark), an **Upgrade plan** button — shown
+  only when your workspace has a higher plan to move to, and only to members who can open
+  Billing — **Sign out**, and a footer naming your current workspace and plan.
 
 ## In-context help
 
@@ -94,6 +103,72 @@ You can manage a screen (rename, schedule, view raw JSON) from its **detail page
 without opening the editor. When you want to design it, open the
 **[Besigner](../building-sites/besigner/overview.md)**.
 
+## The Sites list {#the-sites-list}
+
+**All Sites** is the front door of a workspace: one card per site, for the workspace
+currently selected in the switcher. A site you can reach in another organization isn't
+missing — it's behind the workspace switcher.
+
+Each card carries:
+
+- The site's **display name** as the title, with its **hostname** underneath as the
+  subheader — the custom domain when the site has one, otherwise its `name.aglyn.app`
+  address. Both are also listed inside the card, as **Aglyn Domain** and **Custom
+  Domain**.
+- A **status pill** (below).
+- **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
+  site's dashboard in the console.
+
+### The status pill {#the-status-pill}
+
+| Pill | Hover tells you |
+| --- | --- |
+| **Live** (green) | How many pages are published — "12 published pages." |
+| **Draft** (grey outline) | "Nothing published yet — visitors see the placeholder." |
+| **Maintenance** (amber) | "Every path serves the maintenance screen." |
+| **Suspended** (red) | "This site is serving a lockdown notice instead of content." |
+
+**Live** means exactly one thing: the site has at least one published page. Publishing
+writes the routing map the site is served from, and the pill is read off that map — so
+it costs no extra lookup on a list of a hundred sites, and it is not a health check. A
+site with a misconfigured domain still reads **Live** if it has published pages.
+
+### How the pill is decided {#how-the-pill-is-decided}
+
+Reference detail, and the reason the pill is worth reading rather than glancing at: a
+site can be in several of these states at once, and the pill reports the first that
+applies, in this order.
+
+1. **Suspended** — the site record carries a suspension that hasn't ended.
+2. **Maintenance** — maintenance mode is on.
+3. **Live** — at least one published page.
+4. **Draft** — everything else.
+
+So a suspended or maintenance site is **never** shown as **Live**, however much it has
+published. The order is the point: reporting either as Live would be the console
+agreeing with someone who thinks their site is up while every request is being served a
+lockdown or maintenance screen.
+
+A **timed** suspension whose end has already passed is treated as over, even though the
+suspension fields are still on the record, and the site falls through to whatever it
+would otherwise be. The published site applies the same rule, so the two agree.
+
+### Your site allowance {#your-site-allowance}
+
+Opposite the **All Sites** heading, beside **Create site**, a line reads
+`6 of 10 sites · Business plan` — how many sites this workspace has, against how many
+its plan includes, and which plan that is. **Create site** sits next to it, and appears
+only if your role can create sites.
+
+The line stays **blank** until both the workspace and its plan have resolved, rather
+than filling in a partial answer. An unresolved organization reads as Free, and a
+Business customer told for a moment that they're at "1 of 1 site" has been handed a
+false upgrade prompt by a page that was only loading. No line at all is the better
+answer while it waits.
+
+Raising the limit is a billing change — see
+[Billing & plans](../workspace-and-billing/billing-and-plans/overview.md).
+
 ## A site's dashboard
 
 Opening a site lands you on its dashboard. It's a place to *glance* at the site, not to
@@ -115,6 +190,11 @@ A brand-new site shows the same cards with empty states — "No pageviews record
 
 Two things people expect here and won't find: **role management** lives under **Users**,
 and the **announcement bar** and **promotional popup** live under **Marketing**.
+
+**Visit site**, in the dashboard header, opens the published site in a new tab with the
+[admin bar](../building-sites/besigner/edit-from-the-live-site.md) armed — the route
+from a site's own dashboard to the site itself, without going back out to the Sites list
+and in through a card action.
 
 ![The site dashboard: a Traffic card with its 14-day range picker, a Newest site users card, a Last campaign card counting sends, opens and clicks, and the Recent Activity feed across the bottom](/img/getting-started/console-dashboard.png)
 

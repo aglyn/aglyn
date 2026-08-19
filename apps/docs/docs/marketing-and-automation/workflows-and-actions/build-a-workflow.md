@@ -39,9 +39,24 @@ and repeatable. You can:
 Save the workflow. When the trigger fires, the workflow runs and each run counts toward your
 tier's metered allowance.
 
-Each workflow row has a **Runs** log: every execution with its outcome (failed runs show
-in red with the error) and how long it took — so a misbehaving workflow is diagnosed
-from the console, not from visitor reports.
+At the top of the **Workflows** tab, `12 workflow runs this month · 5,000 included`
+reports the metered allowance you're spending. When the month's runs reach the limit,
+triggered workflows stop running — silently, without queueing and without billing on —
+so it's a number worth glancing at before you wonder why an automation went quiet.
+
+Each workflow row has a **Runs** button. It opens the run-history table described under
+[Run history](actions-builder.md#run-history) — **Time**, **Trigger**, **Result**,
+**What happened**.
+
+:::caution Workflow executions don't appear in that table yet
+The table reads the records the **actions** runner writes. A workflow execution is
+recorded in an older shape that the table doesn't recognise, so it is filtered out — a
+workflow that has run can still show *"No runs yet"* in its own **Runs** dialog. Read
+workflow executions in the site's activity instead: the dashboard's **Recent Activity**
+card shows each one as *"Workflow ran on formSubmission"*, with how long it took
+appended and failures in red carrying the error, and **Setup → Activity** is the full
+paginated log.
+:::
 
 ## Tips
 
