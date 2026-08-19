@@ -32,6 +32,28 @@ your plan.
 2. Compose the campaign from the **Marketing** page.
 3. Send — subject to your plan's **send cap**.
 
+### Your monthly send cap {#monthly-send-cap}
+
+Every plan includes a number of **campaign** emails per calendar month. The count resets
+on the 1st; it does not roll over.
+
+**Only campaigns count against it.** Transactional mail — order confirmations, booking
+reminders, password resets, teammate invites, workflow notifications — is never refused
+by this cap on any plan. A busy month of orders cannot use up your campaign allowance,
+and reaching the cap never stops a receipt from reaching a buyer.
+
+You can see where you stand in two places, without having to be refused first:
+
+- **In the composer**, under the recipient count: `340/500 campaign emails this month`.
+- **On the Billing page**, as the **Campaign emails (this month)** meter, per site.
+
+The cap is counted **per site**, so each site in your organization has its own allowance.
+One recipient is one email: a campaign to 200 people spends 200.
+
+When a send would take you past the cap, the composer says so while you are still writing
+rather than after you press Send. [Upgrade your plan](../../workspace-and-billing/billing-and-plans/overview.md)
+or shrink the audience.
+
 ### Personalize with merge tags
 
 Use `{{name}}`, `{{firstName}}`, or `{{email}}` anywhere in the subject or body — they
