@@ -200,6 +200,14 @@ const fetchMock = jest.fn(async (url: any) => {
       }),
     }
   }
+  // The renewal branch re-prices a subscription's `application_fee_percent`
+  // when it disagrees with the merchant's current plan (AGL-2289). This suite
+  // is about the TAX ledger and delivers a subscription invoice to reach it, so
+  // it passes through that write; a double that threw here would fail the tax
+  // case for a reason that has nothing to do with tax.
+  if (href.includes('/v1/subscriptions/')) {
+    return { ok: true, status: 200, json: async () => ({ id: 'sub_1' }) }
+  }
   throw new Error(`Unexpected fetch to ${href}`)
 })
 
