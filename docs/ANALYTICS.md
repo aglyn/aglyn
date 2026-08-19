@@ -13,11 +13,11 @@ plugin gate), AGL-1559 (the property consolidation).
 
 ## The properties
 
-| Property | Measurement id | Surface |
-| --- | --- | --- |
-| **Aglyn — Platform** (302497406) | `G-YW5PG16YTM` | **the canonical property.** All three first-party domains — `app.aglyn.com`, `aglyn.com` and `docs.aglyn.com` (AGL-1579) — via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation. |
-| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`**. Deleting it would sever that link. Its "Prod" tag and its "traffic in past 48 hours" flag both read as more alive than they are: year to date it has **30 views / 6 users**, ~24 of them `/signin` on Vercel *preview* URLs of the console, plus one view of `/` on `aglyn.com`. `aglyn-app` is the retired marketing site's backend — see AGL-1590. |
-| ~~aglyn-f375b (284263481)~~ | — | **trashed 2026-08-14** (AGL-1581). Stray property, zero data streams, no measurement id, no traffic, no Firebase project of that name, unreferenced in the monorepo. Recoverable from the GA Trash Can until **2026-09-18**; permanently gone after that. |
+| Property                                                               | Measurement id                    | Surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Aglyn — Platform** (302497406)                                       | `G-YW5PG16YTM`                    | **the canonical property.** All three first-party domains — `app.aglyn.com`, `aglyn.com` and `docs.aglyn.com` (AGL-1579) — via one web stream, **ID 3230351080**. Linked to Firebase project `aglyn-main` (app "Aglyn - App Console"). Live since AGL-118. Renamed from "Aglyn — Console" on consolidation.                                                                                                                                                                                                |
+| Aglyn — Marketing (archived 2026-08-14, pre-consolidation) (257010770) | `G-BQ49X14QCD`, stream 2220379072 | retired 2026-08-14. **Do not delete** — it holds the only copy of its own history **and is the Analytics link for the Firebase project `aglyn-app`**. Deleting it would sever that link. Its "Prod" tag and its "traffic in past 48 hours" flag both read as more alive than they are: year to date it has **30 views / 6 users**, ~24 of them `/signin` on Vercel _preview_ URLs of the console, plus one view of `/` on `aglyn.com`. `aglyn-app` is the retired marketing site's backend — see AGL-1590. |
+| ~~aglyn-f375b (284263481)~~                                            | —                                 | **trashed 2026-08-14** (AGL-1581). Stray property, zero data streams, no measurement id, no traffic, no Firebase project of that name, unreferenced in the monorepo. Recoverable from the GA Trash Can until **2026-09-18**; permanently gone after that.                                                                                                                                                                                                                                                  |
 
 `GA4_MEASUREMENT_ID` / `GA4_API_SECRET` and any Measurement Protocol secret
 belong to **stream 3230351080 on property 302497406** — secrets are per-stream
@@ -68,13 +68,13 @@ both worth knowing before reading the funnel:
 - **The tag only starts after hydration.** AGL-1538 recorded a tenant hydration
   stall of 30s+ on some pages; a CTA clicked before gtag exists is undecorated
   even for a consenting visitor. That makes hydration performance an
-  *attribution* problem, not only a speed one.
+  _attribution_ problem, not only a speed one.
 
 **`docs.aglyn.com` needed no GA admin change, and that was verified rather than
 assumed** (AGL-1579, 2026-08-14). Both halves are substring conditions that a
 subdomain already satisfies: cross-domain linking is `Contains aglyn.com`, and
 the unwanted-referral list is a single `Referral domain contains aglyn.com`.
-Checking mattered more than it sounds — the *second* half is the one that gets
+Checking mattered more than it sounds — the _second_ half is the one that gets
 skipped, and skipping it is silent: a visitor going console → docs → console
 would post a self-referral that overwrites the real acquisition source on
 exactly the journeys the docs instrumentation exists to measure. Adding a
@@ -94,32 +94,32 @@ the consolidation. Only genuinely external destinations (`github.com`) raise
 `Reserved` = a GA4 recommended event, spelled exactly as GA expects so the
 built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 
-| Event | Kind | Surface | Params | GTM §6 metric it serves |
-| --- | --- | --- | --- | --- |
-| `sign_up` | Reserved | Console | `method` | Acquisition — signups |
-| `login` | Reserved | Console | `method` | engagement / returning users |
-| `generate_lead` | Reserved | Marketing | `form_name`, `form_location` | Acquisition — cost/lead, demo bookings |
-| `select_content` | Reserved | Marketing | `content_type`, `content_id`, `surface` | Acquisition — CTA funnel |
-| `click` | Reserved | Marketing | `link_domain`, `link_id`, `surface` | Acquisition — outbound to docs/GitHub |
-| `org_created` | Custom | Console | `plan?` | Activation |
-| `host_created` | Custom | Console | — | Activation |
-| **`site_published`** | Custom | Console + **Server** (tenant) | `first_publish?` | **Activation — "% who publish a site"** |
-| `stripe_connected` | Custom | Console | — | **Activation — "% who connect Stripe"** |
-| `begin_checkout` | Reserved | Console + Tenant | `currency`, `value`, `items`, `billing_interval?` | Revenue — checkout funnel |
-| `purchase` | Reserved | **Server** (ours) + Tenant storefront (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?` | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce revenue |
-| `view_item` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
-| `add_to_cart` | Reserved | Tenant (storefront) | `items` | Merchant's own product funnel |
-| `aglyn_overlay` | Custom | Tenant (marketing) | `overlay_action`, `overlay_id?` | Engagement — announcement bars and popups |
-| `aglyn_experiment` | Custom | Tenant (marketing) | `experiment_id`, `variant_id`, `experiment_action` | Engagement — experiment exposures/conversions |
-| `refund` | Reserved | **Server** (AGL-1850) | `transaction_id` (the ORIGINAL purchase's), `currency`, `value` | Revenue — nets refunded revenue against `purchase`; without it GA can only ever drift UP from Stripe |
-| `subscription_cancelled` | Custom | **Server** (AGL-1851) | `plan` (the tier being LEFT), `billing_interval?`, `tenure_days?` | Churn rate, plan-tier churn mix, tenure at cancellation |
-| `churn_survey_submitted` | Custom | Console (AGL-1865) | `reason` (closed set), `surface`, `plan?` | **Retention — why people leave, broken down by tier** |
-| `downsell_accepted` | Custom | Console (AGL-1865) | `from_plan`, `to_plan`, `surface` | Retention — saves by downgrade, and what they cost |
-| `winback_discount_accepted` | Custom | Console (AGL-1865) | `percent_off`, `duration_months`, `surface`, `plan?` | Retention — saves by discount, and what they cost |
-| `cancellation_completed` | Custom | Console (AGL-1865) | `surface`, `funnel_completed`, `plan?` | Retention — the funnel's denominator |
-| `plan_downgrade_scheduled` | Custom | Console (AGL-2235) | `from_plan`, `to_plan`, `interval`, `effective_at?` | Retention — downgrades taken from the plan grid, and the gap between decision and effect |
-| `plan_upgraded` | Custom | Console (AGL-2235) | `from_plan`, `to_plan`, `interval` | Revenue — expansion from EXISTING subscribers, which `purchase` never saw |
-| `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642) | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question |
+| Event                          | Kind            | Surface                                                | Params                                                                                    | GTM §6 metric it serves                                                                              |
+| ------------------------------ | --------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `sign_up`                      | Reserved        | Console                                                | `method`                                                                                  | Acquisition — signups                                                                                |
+| `login`                        | Reserved        | Console                                                | `method`                                                                                  | engagement / returning users                                                                         |
+| `generate_lead`                | Reserved        | Marketing                                              | `form_name`, `form_location`                                                              | Acquisition — cost/lead, demo bookings                                                               |
+| `select_content`               | Reserved        | Marketing                                              | `content_type`, `content_id`, `surface`                                                   | Acquisition — CTA funnel                                                                             |
+| `click`                        | Reserved        | Marketing                                              | `link_domain`, `link_id`, `surface`                                                       | Acquisition — outbound to docs/GitHub                                                                |
+| `org_created`                  | Custom          | Console                                                | `plan?`                                                                                   | Activation                                                                                           |
+| `host_created`                 | Custom          | Console                                                | —                                                                                         | Activation                                                                                           |
+| **`site_published`**           | Custom          | Console + **Server** (tenant)                          | `first_publish?`                                                                          | **Activation — "% who publish a site"**                                                              |
+| `stripe_connected`             | Custom          | Console                                                | —                                                                                         | **Activation — "% who connect Stripe"**                                                              |
+| `begin_checkout`               | Reserved        | Console + Tenant                                       | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                            |
+| `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront (the merchant's) | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`                       | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce revenue               |
+| `view_item`                    | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
+| `add_to_cart`                  | Reserved        | Tenant (storefront)                                    | `items`                                                                                   | Merchant's own product funnel                                                                        |
+| `aglyn_overlay`                | Custom          | Tenant (marketing)                                     | `overlay_action`, `overlay_id?`                                                           | Engagement — announcement bars and popups                                                            |
+| `aglyn_experiment`             | Custom          | Tenant (marketing)                                     | `experiment_id`, `variant_id`, `experiment_action`                                        | Engagement — experiment exposures/conversions                                                        |
+| `refund`                       | Reserved        | **Server** (AGL-1850)                                  | `transaction_id` (the ORIGINAL purchase's), `currency`, `value`                           | Revenue — nets refunded revenue against `purchase`; without it GA can only ever drift UP from Stripe |
+| `subscription_cancelled`       | Custom          | **Server** (AGL-1851)                                  | `plan` (the tier being LEFT), `billing_interval?`, `tenure_days?`                         | Churn rate, plan-tier churn mix, tenure at cancellation                                              |
+| `churn_survey_submitted`       | Custom          | Console (AGL-1865)                                     | `reason` (closed set), `surface`, `plan?`                                                 | **Retention — why people leave, broken down by tier**                                                |
+| `downsell_accepted`            | Custom          | Console (AGL-1865)                                     | `from_plan`, `to_plan`, `surface`                                                         | Retention — saves by downgrade, and what they cost                                                   |
+| `winback_discount_accepted`    | Custom          | Console (AGL-1865)                                     | `percent_off`, `duration_months`, `surface`, `plan?`                                      | Retention — saves by discount, and what they cost                                                    |
+| `cancellation_completed`       | Custom          | Console (AGL-1865)                                     | `surface`, `funnel_completed`, `plan?`                                                    | Retention — the funnel's denominator                                                                 |
+| `plan_downgrade_scheduled`     | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`, `effective_at?`                                       | Retention — downgrades taken from the plan grid, and the gap between decision and effect             |
+| `plan_upgraded`                | Custom          | Console (AGL-2235)                                     | `from_plan`, `to_plan`, `interval`                                                        | Revenue — expansion from EXISTING subscribers, which `purchase` never saw                            |
+| `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642)                            | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question                                      |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
 (the AGL-1497 door where "Sign in with Google" created the account and bounced
@@ -171,23 +171,23 @@ a tenant site pointed at our own property.
 
 ### Where each one fires
 
-| Event | Call site |
-| --- | --- |
-| `sign_up` | `apps/console/app/(auth)/signup/page.tsx` (password + Google popup + the `?consent=required` bounce); `apps/console/hooks/use-google-redirect-result.tsx` (mobile redirect) |
-| `login` | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect); `apps/console/app/(auth)/sso/page.tsx` (`method: 'sso'`, both the desktop popup and the mobile redirect return — AGL-1562) |
-| `select_content` | `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`, installed by `apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx` (AGL-1562) |
-| `click` | the same listener |
-| `generate_lead` | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe) |
-| `org_created` | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page |
-| `host_created` | `apps/console/components/create-host-dialog.component.tsx` |
-| `site_published` | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589) |
-| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx` |
-| `begin_checkout` | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout — AGL-1591) |
-| `view_item` | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves |
-| `add_to_cart` | the same file, on a successful add |
-| `aglyn_overlay` | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`) |
-| `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon |
-| `purchase` | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler. **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx` — the two pages Stripe returns a shopper to (AGL-1641) |
+| Event              | Call site                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sign_up`          | `apps/console/app/(auth)/signup/page.tsx` (password + Google popup + the `?consent=required` bounce); `apps/console/hooks/use-google-redirect-result.tsx` (mobile redirect)                                                                                                                                                                                                         |
+| `login`            | `apps/console/app/(auth)/signin/page.tsx` (password, Google popup, passkey); `use-google-redirect-result.tsx` (mobile redirect); `apps/console/app/(auth)/sso/page.tsx` (`method: 'sso'`, both the desktop popup and the mobile redirect return — AGL-1562)                                                                                                                         |
+| `select_content`   | `libs/aglyn/src/lib/app-utils/analytics-link-clicks.ts`, installed by `apps/tenant/app/[host]/[[...slug]]/site-analytics.tsx` (AGL-1562)                                                                                                                                                                                                                                            |
+| `click`            | the same listener                                                                                                                                                                                                                                                                                                                                                                   |
+| `generate_lead`    | `libs/plugins/mui/src/lib/components/form.tsx` (the generic lead form — `/contact`); `libs/plugins/commerce/src/lib/components/newsletter-signup.tsx` (AGL-301 subscribe)                                                                                                                                                                                                           |
+| `org_created`      | `apps/console/components/create-org-dialog.component.tsx`; `provisionSignUpOrg` in the signup page                                                                                                                                                                                                                                                                                  |
+| `host_created`     | `apps/console/components/create-host-dialog.component.tsx`                                                                                                                                                                                                                                                                                                                          |
+| `site_published`   | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589)                                                                  |
+| `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`                                                                                                                                                                                                                                                          |
+| `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout — AGL-1591)                                                                                                                                                                                                                      |
+| `view_item`        | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves                                                                                                                                                                                                                                                                                    |
+| `add_to_cart`      | the same file, on a successful add                                                                                                                                                                                                                                                                                                                                                  |
+| `aglyn_overlay`    | `libs/plugins/marketing/src/lib/components/site-runtime.tsx` (`sendOverlayBeacon`)                                                                                                                                                                                                                                                                                                  |
+| `aglyn_experiment` | the same file, from the experiments runner's exposure/conversion beacon                                                                                                                                                                                                                                                                                                             |
+| `purchase`         | **Ours:** `libs/tenant/data/admin/src/lib/server/ga4-measurement-protocol.ts`, called from the platform webhook's `invoice.paid` branch and from the marketplace webhook handler. **The merchant's:** `libs/plugins/commerce/src/lib/utils/use-storefront-purchase-event.ts`, mounted by `cart.tsx` and `product-detail.tsx` — the two pages Stripe returns a shopper to (AGL-1641) |
 
 ### `first_publish`, and what all four senders mean by it (AGL-1588)
 
@@ -212,11 +212,11 @@ the event.
 Every sender reads the routing map BEFORE writing to it, since a moment later
 it is never empty:
 
-| Sender | Where the map comes from |
-| --- | --- |
-| `publishScreenRoute` | one `getDoc` on the host, paid for deliberately — see below |
+| Sender                      | Where the map comes from                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `publishScreenRoute`        | one `getDoc` on the host, paid for deliberately — see below                            |
 | the besigner's two handlers | the live-subscribed `routingMap`, captured at the top of the handler before the writes |
-| `apply-publish-schedule.ts` | the `hostRef.get()` it already makes to decide whether to register an entry |
+| `apply-publish-schedule.ts` | the `hostRef.get()` it already makes to decide whether to register an entry            |
 
 **Why `publishScreenRoute` pays for a read.** The alternative was threading
 the map through six call sites as an optional argument, where a publish
@@ -357,9 +357,9 @@ be alarmed on if it becomes common.
 
 > 🚨 **`purchase` reaches nothing today, and the reason changed.** AGL-1551 —
 > the platform webhook rejecting every Stripe delivery with `400 Invalid
-> signature` — is **fixed and closed** (2026-08-14), so deliveries now arrive
+signature` — is **fixed and closed** (2026-08-14), so deliveries now arrive
 > and the `invoice.paid` branch does call the sender. The remaining blocker is
-> entirely the environment: see *The env-var verdict* below. The sender returns
+> entirely the environment: see _The env-var verdict_ below. The sender returns
 > `{ sent: false, reason: 'not-configured' }` without logging, so this failure
 > is completely silent from the application side.
 
@@ -369,12 +369,12 @@ Worth settling before the tap opens, because GA revenue that disagrees with
 Stripe is worse than no GA revenue — it gets quoted. Four known divergences,
 none of them yet observable since nothing has sent:
 
-| # | Behaviour | Effect on the number |
-| --- | --- | --- |
-| 1 | Subscription `value` is `amount_paid / 100` off `invoice.paid`, keyed on the **invoice id** | Correct, and includes **renewals** — GA "revenue" is billings, not new-business MRR. Do not read it as either without splitting on `billing_interval` and first-vs-repeat |
-| 2 | Marketplace `value` is `amount_total / 100` — the **tax-inclusive gross** | Overstates our revenue: the ledger doc written two lines above splits `taxCents` and `transferCents`, and the seller's share is not ours. GA will not match the Stripe balance |
-| 3 | `billing_interval` falls back to `'monthly'` whenever the price interval is absent or unrecognised | An annual plan whose line item does not expose `recurring.interval` reports as monthly, quietly biasing the §6 annual-mix metric toward monthly |
-| 4 | Marketplace `clientId` reads `metadata.ga_client_id`, which **nothing ever writes** | Dead read. Marketplace purchases always fall back to a synthesized client id, so marketplace revenue is permanently unattributable to a session or channel |
+| #   | Behaviour                                                                                          | Effect on the number                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Subscription `value` is `amount_paid / 100` off `invoice.paid`, keyed on the **invoice id**        | Correct, and includes **renewals** — GA "revenue" is billings, not new-business MRR. Do not read it as either without splitting on `billing_interval` and first-vs-repeat      |
+| 2   | Marketplace `value` is `amount_total / 100` — the **tax-inclusive gross**                          | Overstates our revenue: the ledger doc written two lines above splits `taxCents` and `transferCents`, and the seller's share is not ours. GA will not match the Stripe balance |
+| 3   | `billing_interval` falls back to `'monthly'` whenever the price interval is absent or unrecognised | An annual plan whose line item does not expose `recurring.interval` reports as monthly, quietly biasing the §6 annual-mix metric toward monthly                                |
+| 4   | Marketplace `clientId` reads `metadata.ga_client_id`, which **nothing ever writes**                | Dead read. Marketplace purchases always fall back to a synthesized client id, so marketplace revenue is permanently unattributable to a session or channel                     |
 
 (1) is a reporting instruction, not a defect. (2), (3) and (4) are defects and
 are filed separately — see AGL-1637's child issues. (4) in particular is the
@@ -401,13 +401,13 @@ hits go to **their** property (`host.analytics.gaMeasurementId`), not ours.
 The two objections decision 1 raises against a client `purchase` are answered
 rather than ignored:
 
-* *"the return URL carries no amount and no session id"* — it does now.
+- _"the return URL carries no amount and no session id"_ — it does now.
   `success_url` gained `session_id={CHECKOUT_SESSION_ID}`, and
   `/api/commerce/order-analytics` returns a PII-free projection of the order
   the webhook wrote. The Stripe session id is the bearer credential: it is
   unguessable, it is handed only to the buyer, and the lookup is scoped to the
   host that owns the order.
-* *"it would re-fire on a refresh"* — `transaction_id` is a deterministic id
+- _"it would re-fire on a refresh"_ — `transaction_id` is a deterministic id
   for the money that moved (that same session id for a one-time order; the
   opening **invoice** id for a subscription, see below), and GA4 de-duplicates
   purchases on it. A `sessionStorage` guard is the cheap second layer, not the
@@ -609,7 +609,7 @@ alter that posture.**
 > through to `window.gtag` and lands in the right property, merely without
 > `user_id` — an unattributed hit, not a dropped one.
 
-A consequence worth stating: `generate_lead` fires on *every* tenant site, not
+A consequence worth stating: `generate_lead` fires on _every_ tenant site, not
 only `aglyn.com`, and reports into whatever measurement id **that host**
 configured. A customer's contact form reports to the customer's property;
 `aglyn.com`'s reports to ours. That is the intended behaviour.
@@ -617,7 +617,7 @@ configured. A customer's contact form reports to the customer's property;
 #### What the consent tool declares to Google (AGL-1606/1608/1622)
 
 The gate above decides whether the tag LOADS. Three commits then settled what
-a loaded tag is *told*, and the posture they implement, stated as the decision
+a loaded tag is _told_, and the posture they implement, stated as the decision
 was made (Zach, 2026-08-14): **load-then-restrict is approved for the United
 States**, where the implied-consent posture already permits the load and the
 restriction signals act on a tag that is legitimately resident.
@@ -689,7 +689,7 @@ Every payload passes `sanitizeEventParams` before reaching a transport:
 - an exact-key denylist drops `email`, `org_name`, `first_name`, `phone`, … —
   exact-key, because substring matching would wrongly drop the legitimate
   `form_name` / `item_name` / `link_domain`;
-- any value that merely *looks like* an email drops its key entirely;
+- any value that merely _looks like_ an email drops its key entirely;
 - URLs are reduced to origin + pathname, so a query string cannot smuggle a
   token or an address. The reduction runs **before** the email test, so a page
   URL with `?email=…` keeps its useful path instead of being thrown away whole;
@@ -805,7 +805,7 @@ escape hatch, and it is deliberately the only one:
   never validated;
 - **collisions are refused, not rewritten.** Any name in the taxonomy, any GA4
   reserved name, and the `firebase_`/`google_`/`ga_` prefixes. On a tenant site
-  the authored events and ours land in the *same* property — `generate_lead`
+  the authored events and ours land in the _same_ property — `generate_lead`
   from the form element, `select_content`/`click` from the link listener — so
   an authored `purchase` would mix hand-authored hits into a real revenue
   number.
@@ -817,23 +817,23 @@ customers' properties and broken every report and key-event conversion built on
 the old name.
 
 **A refused event is not silently dropped where it counts.** The runtime cannot
-tell the author anything — it is executing for a *visitor* of their site, and
+tell the author anything — it is executing for a _visitor_ of their site, and
 turning an author's config mistake into something a visitor sees would be worse
 than the missing metric — so it drops the event and warns once per name in the
 browser console. The author-facing half is `validateHostAction`, which refuses
 to **save** a name the runtime would refuse to send. A silent drop is therefore
 only possible for a step authored before AGL-1587.
 
-Not done, and why: no cap on the *number* of authored params (GA4 ignores past
+Not done, and why: no cap on the _number_ of authored params (GA4 ignores past
 25 and there is no privacy or pollution consequence), and no normalization of
-param *keys* (an invalid key costs that one param, again with no safety
+param _keys_ (an invalid key costs that one param, again with no safety
 consequence). Both are formatting nits on a path whose real risk was PII.
 
 ### 7. The docs site buys its instrumentation from the tag, not from our code (AGL-1579)
 
 `docs.aglyn.com` had no analytics at all, which mattered more than a coverage
 gap: there is no in-product onboarding, tour or checklist anywhere in the
-console (verified in the AGL-1576 audit), so the getting-started guides *are*
+console (verified in the AGL-1576 audit), so the getting-started guides _are_
 the activation path. Docs drop-off **is** activation drop-off. And
 `/developers/self-hosting` is quoted verbatim in the founding-customer offer,
 with no way to know whether anyone read it.
@@ -938,7 +938,7 @@ leaving the previous value standing.
 **Known gap, accepted:** the first `page_view` of a cold load races the token
 read and goes out unstamped — the same window in which `user_id` is also still
 unset, so it is an existing condition rather than a new one. Every later hit in
-the session carries the stamp. The *override* path below closes this for a
+the session carries the stamp. The _override_ path below closes this for a
 browser that has opted in, because a localStorage read is synchronous and a
 token read is not.
 
@@ -959,7 +959,7 @@ populations it cannot reach, and could not be widened to reach:
   point of the drill.
 
 So there is a second, **opt-in** mechanism that asks a different question —
-*is this BROWSER ours* — and never consults the account:
+_is this BROWSER ours_ — and never consults the account:
 
 > Visit any surface with **`?aglyn_internal=1`**. Take it back off with
 > `?aglyn_internal=0`.
@@ -968,12 +968,12 @@ It is remembered in `localStorage` under `aglyn_traffic_type` and survives
 reloads, client-side navigations, sign-outs and re-auth. `localStorage` is
 **origin-scoped**, so the opt-in must be done **once per surface**:
 
-| Surface | Where to do it |
-| --- | --- |
-| Console | `https://app.aglyn.com/?aglyn_internal=1` |
-| Marketing / tenant | `https://aglyn.com/?aglyn_internal=1` |
-| Docs | `https://docs.aglyn.com/?aglyn_internal=1` |
-| Local dev | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
+| Surface            | Where to do it                                                                |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Console            | `https://app.aglyn.com/?aglyn_internal=1`                                     |
+| Marketing / tenant | `https://aglyn.com/?aglyn_internal=1`                                         |
+| Docs               | `https://docs.aglyn.com/?aglyn_internal=1`                                    |
+| Local dev          | once per `localhost:PORT` — though local builds now emit nothing at all (§8c) |
 
 Being per-origin is a feature as much as a cost: it is what makes it
 impossible for an opt-in on our console to leak a stamp into a CUSTOMER's
@@ -986,10 +986,10 @@ property while we click through their published site.
 - The **console** calls `readInternalTrafficOverride()` and ORs it into the
   claims predicate, inside the one `setDefaultEventParameters` call.
 - The **tenant runtime** inlines `INTERNAL_TRAFFIC_GTAG_SNIPPET` — a
-  *constant* string of JavaScript — into its `ga-init` block, between the
+  _constant_ string of JavaScript — into its `ga-init` block, between the
   `dataLayer` shim and `gtag('config', …)`. Constant because these pages are
   ISR-cached and the served bytes must not vary by visitor; positioned there
-  because `gtag('set', …)` applies to hits processed *after* it, and the hits
+  because `gtag('set', …)` applies to hits processed _after_ it, and the hits
   that leak are the automatic ones.
 - **`apps/docs`** carries a verbatim copy of the same string in its
   `headTags`, because a Docusaurus app cannot import from `libs/` (AGL-1595).
@@ -1007,16 +1007,16 @@ expensive direction.
 The stamp only helps once the filter is Active, and a filter is not
 retroactive. So localhost and preview traffic is handled by not emitting:
 
-| Environment | Emits? |
-| --- | --- |
-| `NODE_ENV !== 'production'` (any dev server, jest, local e2e) | **no** |
-| Vercel **preview** (`NODE_ENV` *is* `production` there) | **no** |
-| Vercel production | yes |
+| Environment                                                      | Emits?                |
+| ---------------------------------------------------------------- | --------------------- |
+| `NODE_ENV !== 'production'` (any dev server, jest, local e2e)    | **no**                |
+| Vercel **preview** (`NODE_ENV` _is_ `production` there)          | **no**                |
+| Vercel production                                                | yes                   |
 | Unknown deploy env + `NODE_ENV === 'production'` — **self-host** | **yes**, deliberately |
 
 `libs/aglyn/src/lib/app-utils/analytics-environment.ts` holds the predicate.
 The console's `FirebaseServicesProvider` skips `initializeAnalytics` outright
-and the tenant runtime drops the tag from its render condition — *not*
+and the tenant runtime drops the tag from its render condition — _not_
 initialized rather than initialized-and-suppressed, because a resident tag
 reports on its own (the AGL-1608 lesson).
 
@@ -1032,12 +1032,12 @@ our leak is the worse failure.
 **Escape hatch.** `NEXT_PUBLIC_ANALYTICS_ALLOW_NONPROD=1` re-enables a
 silenced build for DebugView work, and such a build stamps
 `traffic_type: 'internal'` on **every** hit unconditionally — it emits only
-because someone asked it to. A *production* build with the flag set never
+because someone asked it to. A _production_ build with the flag set never
 blanket-stamps; that would delete every paying customer from every report.
 
 **This is why the archived Marketing property reads the way it does.** Its
 whole year-to-date history is 30 views / 6 users, ~24 of them `/signin` on
-Vercel *preview* URLs of the console. Preview traffic reaching a production
+Vercel _preview_ URLs of the console. Preview traffic reaching a production
 property was not a risk — it was most of what that property ever recorded.
 
 ### 8d. What is left for Zach to click
@@ -1050,7 +1050,7 @@ while it was on.
 Remaining, and all of it is his click — nothing in this repo can do it:
 
 1. **Verify in Testing mode.** With the filter in Testing, `Test data filter
-   name` is available as a dimension in reports and DebugView. Confirm it
+name` is available as a dimension in reports and DebugView. Confirm it
    matches a staff session, an impersonation session and an opted-in
    logged-out marketing session, and that an ordinary customer session is
    **not** matched. Both directions — a filter verified in one direction only
@@ -1115,8 +1115,8 @@ prefilled invite and signup links put one in the query.
 **The first pageview of every load was counted twice, and this was verified
 rather than inferred.** Booting Firebase Analytics issues
 `gtag('config', <id>, configProperties)`, and the vendored SDK's own comment on
-that call reads: *"This will trigger a page_view event unless 'send_page_view'
-is set to false in configProperties"*. `getAnalytics(app)` cannot pass
+that call reads: _"This will trigger a page_view event unless 'send_page_view'
+is set to false in configProperties"_. `getAnalytics(app)` cannot pass
 `configProperties` at all — it forwards `options?.config ?? {}` — so the key was
 never present, on top of the layout's own effect firing for the same page.
 
@@ -1184,11 +1184,11 @@ the ambient `page_title`, closed by AGL-2087 in §11.
 Zach read the Firebase overview report on 2026-08-18 and found one console
 page reported as three rows:
 
-| Page title and screen class | Views |
-| -- | -- |
-| Secure Platform Console – Aglyn | 6.2K |
-| **(4)** Secure Platform Console – Aglyn | 2.2K |
-| **(5)** Secure Platform Console – Aglyn | 1.7K |
+| Page title and screen class             | Views |
+| --------------------------------------- | ----- |
+| Secure Platform Console – Aglyn         | 6.2K  |
+| **(4)** Secure Platform Console – Aglyn | 2.2K  |
+| **(5)** Secure Platform Console – Aglyn | 1.7K  |
 
 Two separate defects, one dimension.
 
@@ -1207,7 +1207,7 @@ the reporter cannot drift on the `\d+\+?` shape (the badge caps at `(99+)`, and
 a pattern without the `\+?` would leave it on exactly the busiest accounts).
 The badge itself is untouched: only its reflection in analytics goes away.
 
-**The generic row.** The 6.2K is mostly *history*, not a live bug. Until
+**The generic row.** The 6.2K is mostly _history_, not a live bug. Until
 2026-07-28 the console had exactly ONE titled layout — the root — because
 pages titled themselves through `NextPageTitle`, which renders via `next/head`
 and **is inert in the App Router**. Every console route therefore reported the
@@ -1223,17 +1223,17 @@ the bug, so the root is deliberately excluded as a provider.
 
 **The rest of the hits, and the one owner that closes them (AGL-2087).** An
 explicit param fixes `page_view` and nothing else: gtag attaches `page_title`
-from `document.title` to *every* hit it assembles, so the badge still reached
+from `document.title` to _every_ hit it assembles, so the badge still reached
 the two raw `screen_view` calls and the SDK's automatic `session_start` /
 `first_visit` / `user_engagement`, which no call site writes at all.
 
 The only mechanism that rides those is `setDefaultEventParameters` — the same
-one the `traffic_type` stamp uses (§8), and *not* safe to call twice:
+one the `traffic_type` stamp uses (§8), and _not_ safe to call twice:
 
 ```js
 function setDefaultEventParameters(customParams) {
   if (wrappedGtagFunction) wrappedGtagFunction('set', customParams)
-  else _setDefaultEventParametersForInit(customParams)   // bare ASSIGNMENT
+  else _setDefaultEventParametersForInit(customParams) // bare ASSIGNMENT
 }
 ```
 
@@ -1259,7 +1259,7 @@ default, so the `page_view` hit is unchanged.
 carries `traffic_type` **and** a stripped `page_title` at once, that neither
 survives at the other's expense across an update or a clear, and — the part
 that keeps the design true for a contributor who has read none of this — that
-this module is the only place in `apps/console` whose *code* names
+this module is the only place in `apps/console` whose _code_ names
 `setDefaultEventParameters` at all. Prose about the API is exempt; the guard
 strips comments first.
 
@@ -1306,13 +1306,13 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    appears as a breakdown — which reads exactly like the event not carrying
    it:
 
-   | Dimension name | Event parameter | Why |
-   | --- | --- | --- |
-   | Content type | `content_type` | Always `cta` today; the axis that keeps `select_content` separable if anything else is ever selected |
-   | Content id | `content_id` | `section:label` — **the CTA metric**, "which part of the page sells" |
-   | Link domain | `link_domain` | Outbound destination — the GitHub/docs leading indicator |
-   | Link id | `link_id` | Which outbound link, by label |
-   | Surface | `surface` | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one |
+   | Dimension name | Event parameter | Why                                                                                                  |
+   | -------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
+   | Content type   | `content_type`  | Always `cta` today; the axis that keeps `select_content` separable if anything else is ever selected |
+   | Content id     | `content_id`    | `section:label` — **the CTA metric**, "which part of the page sells"                                 |
+   | Link domain    | `link_domain`   | Outbound destination — the GitHub/docs leading indicator                                             |
+   | Link id        | `link_id`       | Which outbound link, by label                                                                        |
+   | Surface        | `surface`       | `site` vs `docs` (AGL-1579); Hostname covers the domains, this covers surfaces sharing one           |
 
    **AGL-1579 adds nothing to this list.** Docs pageviews use only built-in
    dimensions, and the `click` events it produces come from GA4's enhanced
@@ -1324,30 +1324,30 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    new VALUE of it, not a new dimension.
 
 0b. **Register three more for the site-runtime events** (AGL-1591), all
-   **event-scoped**:
+**event-scoped**:
 
-   | Dimension name | Event parameter | Why |
-   | --- | --- | --- |
-   | Experiment id | `experiment_id` | Which experiment — without it every exposure is one undifferentiated count |
-   | Variant id | `variant_id` | **The axis the whole event exists for**: exposures and conversions are only meaningful split by variant |
-   | Experiment action | `experiment_action` | `exposure` vs `conversion` — the numerator and the denominator |
+| Dimension name    | Event parameter     | Why                                                                                                     |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| Experiment id     | `experiment_id`     | Which experiment — without it every exposure is one undifferentiated count                              |
+| Variant id        | `variant_id`        | **The axis the whole event exists for**: exposures and conversions are only meaningful split by variant |
+| Experiment action | `experiment_action` | `exposure` vs `conversion` — the numerator and the denominator                                          |
 
-   `overlay_action` and `overlay_id` are deliberately NOT on that list. Overlay
-   stats are already reported by the first-party collector
-   (`/api/analytics/collect`, which increments each overlay's own counters), so
-   the GA copy is a courtesy mirror for hosts running their own property; two
-   registered dimensions on ours would buy a breakdown nobody reads against a
-   quota of 50. Register them if the mirror ever becomes the source.
+`overlay_action` and `overlay_id` are deliberately NOT on that list. Overlay
+stats are already reported by the first-party collector
+(`/api/analytics/collect`, which increments each overlay's own counters), so
+the GA copy is a courtesy mirror for hosts running their own property; two
+registered dimensions on ours would buy a breakdown nobody reads against a
+quota of 50. Register them if the mirror ever becomes the source.
 
-   **The commerce events need nothing.** `view_item`, `add_to_cart` and the
-   storefront `begin_checkout` carry only `items`, and `item_id` / `item_name` /
-   `price` / `quantity` are GA4 BUILT-IN ecommerce dimensions — they report
-   without registration, which is a large part of why these use GA's reserved
-   names and its exact `items` spelling. They also land in the merchant's
-   property rather than ours (see the event map), so the registration decision
-   there is the merchant's to make, not one we can make for them.
+**The commerce events need nothing.** `view_item`, `add_to_cart` and the
+storefront `begin_checkout` carry only `items`, and `item_id` / `item_name` /
+`price` / `quantity` are GA4 BUILT-IN ecommerce dimensions — they report
+without registration, which is a large part of why these use GA's reserved
+names and its exact `items` spelling. They also land in the merchant's
+property rather than ours (see the event map), so the registration decision
+there is the merchant's to make, not one we can make for them.
 
-1. **Mark the remaining key events.** Admin → Events → *Mark as key event*.
+1. **Mark the remaining key events.** Admin → Events → _Mark as key event_.
    `sign_up` is marked; `purchase` is a key event by GA default. GA will not let
    an event be marked **until it has been seen at least once**, so
    `generate_lead`, `site_published`, `begin_checkout` and `stripe_connected`
@@ -1361,8 +1361,9 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    micro-conversion), `click` is engagement and is better left ordinary.
    `login` is not new to GA, but `method: 'sso'` is a new VALUE and only
    appears in the `method` breakdown after the first enterprise sign-in.
-2. **Create `GA4_API_SECRET`** — Admin → Data streams → the stream → *Measurement
-   Protocol API secrets* → Create. Then set it, plus `GA4_MEASUREMENT_ID`
+
+2. **Create `GA4_API_SECRET`** — Admin → Data streams → the stream → _Measurement
+   Protocol API secrets_ → Create. Then set it, plus `GA4_MEASUREMENT_ID`
    (`G-YW5PG16YTM`), in the Vercel production environment (marked sensitive).
    Without both, the server-side `purchase` is a silent no-op — which is the
    correct behaviour on self-hosted deployments and in development.
@@ -1378,10 +1379,10 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    point, because the CLI listing does not show team-level shared variables and
    would have let either of the facts below pass as "absent".
 
-   | Variable | Actually exists? | Reaches a deployment? |
-   | --- | --- | --- |
-   | `GA4_API_SECRET` | **Yes** — a team-level *shared* variable, created 2026-08-14T06:25:59Z, all three targets | **No.** Its `projectId` array is **empty**, so it is linked to zero projects |
-   | `GA4_MEASUREMENT_ID` | **No** — absent from the shared set and from both projects' own environments | No |
+   | Variable             | Actually exists?                                                                          | Reaches a deployment?                                                        |
+   | -------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+   | `GA4_API_SECRET`     | **Yes** — a team-level _shared_ variable, created 2026-08-14T06:25:59Z, all three targets | **No.** Its `projectId` array is **empty**, so it is linked to zero projects |
+   | `GA4_MEASUREMENT_ID` | **No** — absent from the shared set and from both projects' own environments              | No                                                                           |
 
    A shared variable is only injected into the projects it is explicitly linked
    to, and the contrast is visible in the same API response: `STRIPE_SECRET_KEY`
@@ -1396,9 +1397,54 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    scheduled `site_published`. Not degraded: never sent, and silently, because
    `ga4Credentials()` returns null before any log line. The fix is two console
    actions, both Zach's, in the click-list on AGL-1637.
+
+   #### ✅ RESOLVED 2026-08-17 — everything above this line is HISTORY
+
+   > ⚠️ **Read this before quoting the table above.** The 2026-08-14 verdict is
+   > kept for the lesson (a shared variable linked to zero projects reads as
+   > present and reaches nothing), **not as current state**. It has since been
+   > fixed, and the stale table has already manufactured one false finding — a
+   > 2026-08-19 smoke pass concluded "every server-side event is dead in
+   > production" off these lines alone, four days after the flip landed.
+   >
+   > **Verified 2026-08-19 against `GET /v13/deployments/{id}`**, which returns
+   > the env KEY list actually baked into a deployment. `GA4_API_SECRET` **and**
+   > `GA4_MEASUREMENT_ID` are present on the current production deployment of
+   > **all three** projects — `aglyn-console`, `aglyn-tenant` and `aglyn-docs`.
+   >
+   > Negative control, same method, same project (`aglyn-console`):
+   >
+   > | Deployment                    | Created (UTC)    | GA4 keys                               |
+   > | ----------------------------- | ---------------- | -------------------------------------- |
+   > | `dpl_BFaD8SRzhx…` (#848)      | 2026-08-14 07:03 | **none**                               |
+   > | `dpl_Cw6WY8Esd…` (#853)       | 2026-08-17 12:15 | `GA4_API_SECRET`, `GA4_MEASUREMENT_ID` |
+   > | `dpl_HxSv1gGEt…` (#859)       | 2026-08-18 06:39 | both                                   |
+   > | `dpl_DQW8oCPkR…` (#862, live) | 2026-08-19 01:03 | both                                   |
+   >
+   > So the transport is LIVE and the flip is dated: **2026-08-17 12:15 UTC**.
+   > A server-side event that does not appear in GA4 today is no longer
+   > explained by credentials, and must not be written off as "the transport is
+   > dead" — look at dimension registration (AGL-1637 item 3) instead.
+   >
+   > **`vercel env ls` still cannot answer this question, and neither can the
+   > project's env list** — only the deployment's own key list proves what a
+   > running lambda actually has. Ask the deployment, and always diff against an
+   > older one as a negative control.
+
+   #### Still genuinely missing: `DOCS_GA_TRACKING_ID`
+
+   Verified the same way, 2026-08-19: the live `aglyn-docs` production
+   deployment (`dpl_DEMJtAphsh…`) carries `GA4_API_SECRET` and
+   `GA4_MEASUREMENT_ID` but **not** `DOCS_GA_TRACKING_ID`. Since AGL-2124 the
+   docs gtag preset is `docsGaTrackingId ? {…} : undefined`
+   (`apps/docs/docusaurus.config.ts:218-220`), so **docs.aglyn.com currently
+   loads no GA tag at all**. The AGL-1857 `content_group` head snippet still
+   pushes to `dataLayer`, but nothing consumes it. This is an ops action of the
+   same class as items 1–2 above, and it is not on the AGL-1637 click-list.
+
 3. 🚨 **The published privacy policy says we run no third-party analytics.**
-   `apps/console/constants/legal/v4/privacy.txt`, under *"Sale"/"sharing" under
-   U.S. state laws*: "We use no advertising technology and no third-party
+   `apps/console/constants/legal/v4/privacy.txt`, under _"Sale"/"sharing" under
+   U.S. state laws_: "We use no advertising technology and no third-party
    analytics on our websites or the console" — identical wording in v2, v3 and
    v4. GA4 is third-party analytics, and it has been live on `app.aglyn.com`
    and `aglyn.com` since AGL-118, so **the sentence is already inaccurate for
@@ -1419,15 +1465,15 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    with a named, accurate description of the one analytics provider we run.
    **Not yet published** — the privacy page and the Cookie Policy are besigner
    content on the live marketing site, so the correction is a publication step,
-   and the hashed v4 snapshot must be re-captured *after* it, never before: a
+   and the hashed v4 snapshot must be re-captured _after_ it, never before: a
    snapshot is evidence of what a user was shown, so writing one for text that
    is not live would be its own false record. v4 is still unpromoted, so this
    folds into the existing v4 snapshot rather than forcing a v5 and a global
    clickwrap re-acceptance.
 
    **The Cookie Policy contradicts itself the same way, and worse.** Live at
-   `aglyn.com/legal/cookies`: §2 *Analytics / performance* correctly discloses
-   Google Analytics, while §4 *Your choices* states "we do not set analytics or
+   `aglyn.com/legal/cookies`: §2 _Analytics / performance_ correctly discloses
+   Google Analytics, while §4 _Your choices_ states "we do not set analytics or
    marketing cookies, so there is no non-essential category to consent to, and
    we do not show a cookie banner" — with `_ga` and `_ga_YW5PG16YTM` listed in
    that same document's own cookie table two sections above. §2 also scopes GA
@@ -1439,6 +1485,7 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
    `apps/docs/src/pages/trust.md` now lists Google Analytics in its
    subprocessor table with the configuration above (2026-08-14); it made no
    analytics claim before, so it was an omission rather than a contradiction.
+
 4. **Enhanced measurement's Site search on docs is unverified.** Docusaurus's
    local search navigates to `/search?q=…`, and `q` is one of the query keys
    enhanced measurement watches, so `view_search_results` may already be
@@ -1448,11 +1495,17 @@ Done 2026-08-14 (AGL-1559) on property 302497406:
 
 ### Environment variables
 
-| Var | Where | Purpose | State (2026-08-14) |
-| --- | --- | --- | --- |
-| `GA4_MEASUREMENT_ID` | Vercel production (console **and tenant**) | Target property for server-side `purchase` and `site_published`; value is `G-YW5PG16YTM` | ❌ **does not exist** anywhere |
-| `GA4_API_SECRET` | Vercel production (console **and tenant**), **sensitive** | Measurement Protocol auth | ⚠️ **exists as a shared variable, linked to ZERO projects** — reaches nothing |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set | Console's client-side GA + `client_id` capture | ✅ set on both projects, `G-YW5PG16YTM` |
+| Var                                   | Where                            | Purpose                                                                                                                      | State (**2026-08-19**, read off the live deployments)                                                             |
+| ------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `GA4_MEASUREMENT_ID`                  | Vercel production                | Target property for server-side `purchase`, `refund`, `subscription_cancelled` and `site_published`; value is `G-YW5PG16YTM` | ✅ **present on `aglyn-console`, `aglyn-tenant` and `aglyn-docs`** since 2026-08-17 12:15 UTC                     |
+| `GA4_API_SECRET`                      | Vercel production, **sensitive** | Measurement Protocol auth                                                                                                    | ✅ **present on all three** since 2026-08-17 12:15 UTC (was a shared variable linked to zero projects until then) |
+| `DOCS_GA_TRACKING_ID`                 | Vercel production (`aglyn-docs`) | Loads the docs gtag at all — `undefined` means **no tag** (AGL-2124)                                                         | ❌ **absent** — docs.aglyn.com reports nothing to GA4                                                             |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | already set                      | Console's client-side GA + `client_id` capture                                                                               | ✅ set, `G-YW5PG16YTM`                                                                                            |
+
+> The dated 2026-08-14 verdict earlier in this file describes the **pre-flip**
+> state and is kept only for its lesson. Do not quote it as current — it has
+> already caused one smoke pass to declare the transport dead four days after
+> it was fixed.
 
 **`vercel env ls` cannot answer this question.** It lists a project's own
 variables and omits team-level shared ones, so `GA4_API_SECRET` reads as absent
