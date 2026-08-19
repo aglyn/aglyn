@@ -642,6 +642,95 @@ async function stripeGet(
 }
 
 /**
+ * Re-price a storefront subscription's platform fee to the merchant's CURRENT
+ * plan (AGL-2289).
+ *
+ * `checkout.ts` sets `subscription_data[application_fee_percent]` ONCE, at the
+ * sale, and nothing has ever revisited it. `application_fee_percent` lives on
+ * the Stripe subscription and applies to every invoice it ever raises, so the
+ * rate a merchant was on the day a shopper subscribed is the rate they pay
+ * forever — in both directions, and both are wrong:
+ *
+ *  - Sold on Starter (5% digital) then upgraded to Advanced (0%): Aglyn keeps
+ *    taking 5% of every cycle from a merchant whose plan says it takes none.
+ *    That is an over-charge to find and refund.
+ *  - Sold on Advanced (the param omitted entirely) then downgraded to Starter:
+ *    Aglyn keeps taking nothing, on a DESTINATION charge whose processing fee
+ *    it pays out of its own balance. Every cycle is a loss.
+ *
+ * The renewal is the only place this can be corrected, because a renewal is
+ * the only event a subscription raises — there is no door for the merchant to
+ * walk through. It runs beside the AGL-2071 lapse stop for that reason.
+ *
+ * IDEMPOTENT BY A STORED VALUE, not by a Stripe read. `appliedFeePct` on our
+ * own `subscriptions/{id}` document records what was last SENT, so an ordinary
+ * renewal compares two numbers and makes no network call at all. A
+ * subscription from before this shipped carries no such field, which reads as
+ * "unknown" and re-prices once — the self-healing pass, and the reason this
+ * does not need a backfill.
+ *
+ * The value is written only AFTER Stripe accepts, so a failure re-tries on the
+ * next cycle rather than recording a rate that was never applied. A transient
+ * refusal throws so Stripe redelivers (the ledger write is keyed on the
+ * invoice id, so a redelivery re-runs this and nothing else); a definitive one
+ * is logged and let go, because no redelivery fixes it and a throw would have
+ * Stripe retry the whole invoice forever — the AGL-1743 lesson.
+ *
+ * A rate of 0 UNSETS the parameter rather than sending `0`: Stripe rejects a
+ * zero `application_fee_percent`, and an empty value is how its API clears an
+ * optional field. That is also what `checkout.ts` does by omitting the key.
+ */
+async function repriceStorefrontSubscriptionFee(
+  subscriptionRef: FirebaseFirestore.DocumentReference,
+  subscriptionId: string,
+  desiredFeePct: number,
+): Promise<void> {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey || !subscriptionId) return
+  const snapshot = await subscriptionRef.get().catch(() => null)
+  if (!snapshot?.exists) return
+  const stored = snapshot.get('appliedFeePct')
+  // `Number.isFinite` and not `!= null`: a malformed stored value must read as
+  // unknown and re-price, never as agreement with whatever it happens to be.
+  if (Number.isFinite(stored) && Number(stored) === desiredFeePct) return
+  const response = await fetch(
+    `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(
+      subscriptionId,
+    )}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        // Keyed on the RATE as well as the subscription, so a later change
+        // back is a new request rather than a replay of the old one.
+        'Idempotency-Key': `fee-reprice-${subscriptionId}-${desiredFeePct}`,
+      },
+      body: new URLSearchParams({
+        application_fee_percent:
+          desiredFeePct > 0 ? String(desiredFeePct) : '',
+      }).toString(),
+    },
+  ).catch(() => null)
+  if (!response || !response.ok) {
+    if (!response || isTransientStripeStatus(response.status)) {
+      throw new Error(
+        `Stripe refused to re-price subscription ${subscriptionId} ` +
+          `(${response ? response.status : 'network'})`,
+      )
+    }
+    console.error(
+      `Stripe refused the fee re-price for ${subscriptionId} (AGL-2289)`,
+      await response.json().catch(() => null),
+    )
+    return
+  }
+  await subscriptionRef
+    .set({ appliedFeePct: desiredFeePct }, { merge: true })
+    .catch(() => undefined)
+}
+
+/**
  * The seller's share of a LOST dispute, pulled back from the connected
  * account (AGL-1794).
  *
@@ -1619,6 +1708,29 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             invoiceHostId,
             subscriptionId,
             subscriptionRef,
+          )
+        } else if (renewalEntitled) {
+          // RE-PRICE THE PLATFORM FEE (AGL-2289). `application_fee_percent` was
+          // set once at the sale and never revisited, and it lives on the
+          // Stripe subscription — so the rate the merchant was on the day a
+          // shopper subscribed was the rate they paid forever. A renewal is
+          // the only event a subscription raises, so it is the only place this
+          // can be corrected. Skipped entirely for a lapsed org (the stop
+          // above is the answer there) and for an unreadable one, which knows
+          // nothing about the plan to re-price against.
+          //
+          // `snapshot.productType` is the sale's own recorded type, never a
+          // default — the same field `shipsPhysically` refuses to guess.
+          await repriceStorefrontSubscriptionFee(
+            subscriptionRef,
+            subscriptionId,
+            Aglyn.resolveTransactionFeePct(
+              renewalOrg as any,
+              (snapshot.productType ?? 'physical') as
+                | 'physical'
+                | 'digital'
+                | 'service',
+            ),
           )
         }
         if (!recorded) return

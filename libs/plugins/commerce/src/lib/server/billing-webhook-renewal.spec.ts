@@ -177,11 +177,42 @@ jest.mock('@aglyn/shared-util-email', () => ({
  * `mock.calls[n] as [string, any]` a non-overlapping cast (AGL-2098). The
  * shape here is `fetch`'s: a url and an optional init.
  */
-const fetchMock = jest.fn(
-  async (url: any, _init?: any): Promise<any> => {
-    throw new Error(`Unexpected fetch to ${String(url)}`)
-  },
-)
+/**
+ * Stripe, as far as this suite is concerned.
+ *
+ * `POST /v1/subscriptions/{id}` succeeds by default (AGL-2289). Two different
+ * writes now land there — the AGL-2071 lapse stop and the fee re-price — and a
+ * mock that threw for both made every ordinary renewal fixture fail for a
+ * reason that had nothing to do with what it was testing. The two are told
+ * apart by BODY rather than by URL, which is the only thing that distinguishes
+ * them in the wire shape too.
+ */
+const defaultFetch = async (url: any, _init?: any): Promise<any> => {
+  if (String(url).includes('/v1/subscriptions/')) {
+    return { ok: true, status: 200, json: async () => ({ id: 'sub_1' }) } as any
+  }
+  throw new Error(`Unexpected fetch to ${String(url)}`)
+}
+
+const fetchMock = jest.fn(defaultFetch)
+
+/** Stripe calls that CANCEL at period end — the AGL-2071 lapse stop. */
+function stopCalls() {
+  return fetchMock.mock.calls.filter(
+    (call) =>
+      String(call[0]).includes('/v1/subscriptions/') &&
+      String((call[1] as any)?.body ?? '').includes('cancel_at_period_end'),
+  )
+}
+
+/** Stripe calls that RE-PRICE the platform fee (AGL-2289). */
+function feeRepriceCalls() {
+  return fetchMock.mock.calls.filter(
+    (call) =>
+      String(call[0]).includes('/v1/subscriptions/') &&
+      String((call[1] as any)?.body ?? '').includes('application_fee_percent'),
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -324,7 +355,11 @@ beforeEach(() => {
   notifications.length = 0
   contactUpserts.length = 0
   autoIdCounter = 0
-  fetchMock.mockClear()
+  // `mockReset`, not `mockClear`: a case that installed a 503 or a network
+  // reject leaves that implementation behind, and the next case then fails for
+  // the previous one's reason. Only the call log is cleared by `mockClear`.
+  fetchMock.mockReset()
+  fetchMock.mockImplementation(defaultFetch)
 
   docs.set('hosts/host-1', { displayName: 'Acme Boxes' })
   docs.set('hosts/host-1/products/product-1', {
@@ -959,9 +994,26 @@ describe('storefront subscription renewals (AGL-1743)', () => {
     expect([...docs.keys()].some((key) => key.includes('undefined'))).toBe(false)
   })
 
-  it('never calls Stripe', async () => {
+  it('calls Stripe for the fee re-price and nothing else', async () => {
+    // This used to assert `not.toHaveBeenCalled()`. AGL-2289 gave the renewal
+    // one legitimate write — `application_fee_percent`, which lives on the
+    // Stripe subscription and is the only place a stale take rate can be
+    // corrected — so the honest assertion is that it makes THAT call and no
+    // other. No lapse stop, in particular: this storefront is entitled.
     await deliver(RENEWAL_INVOICE)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(stopCalls()).toHaveLength(0)
+    expect(feeRepriceCalls()).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-prices ONCE, then leaves the subscription alone', async () => {
+    await deliver(RENEWAL_INVOICE)
+    expect(feeRepriceCalls()).toHaveLength(1)
+    // The rate is recorded, so the next cycle compares two numbers and makes
+    // no network call at all.
+    expect(storedSubscription().appliedFeePct).toBe(0)
+    await deliver({ ...RENEWAL_INVOICE, id: 'in_second' })
+    expect(feeRepriceCalls()).toHaveLength(1)
   })
 })
 
@@ -1121,9 +1173,12 @@ describe('a renewal whose subscription was never recorded (AGL-1763)', () => {
     expect(order.lineItems[0].productType).toBe('physical')
   })
 
-  it('never calls Stripe', async () => {
+  it('does not stop or re-price a subscription it has no record of', async () => {
+    // Both writes read the subscription document first, and there is none
+    // worth speaking of here — re-pricing a record we did not make would be
+    // asserting a rate against a sale we cannot describe.
     await deliver(RENEWAL_INVOICE)
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(stopCalls()).toHaveLength(0)
   })
 })
 
@@ -1152,13 +1207,14 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
     subscription: { status: 'canceled' },
   }
 
-  function stripeStopCalls() {
-    return fetchMock.mock.calls.filter((call) =>
-      String(call[0]).includes('/v1/subscriptions/'),
-    )
-  }
+  // Filtered by BODY (AGL-2289): the fee re-price POSTs to the same URL, and a
+  // URL-only filter counted it as a stop.
+  const stripeStopCalls = stopCalls
 
-  /** Stripe accepting the cancel-at-period-end write. */
+  /**
+   * Stripe accepting the cancel-at-period-end write. The default mock already
+   * does; this survives as the explicit opt-in the cases below read as intent.
+   */
   function acceptStop() {
     fetchMock.mockImplementation(async (url: any) => {
       if (String(url).includes('/v1/subscriptions/')) {
@@ -1362,3 +1418,145 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
     expect(invoiceDocs()).toHaveLength(1)
   })
 })
+
+/**
+ * AGL-2289. `checkout.ts` sets `subscription_data[application_fee_percent]`
+ * ONCE, at the sale, and nothing has ever revisited it. That parameter lives on
+ * the Stripe SUBSCRIPTION and applies to every invoice it will ever raise, so
+ * the rate a merchant was on the day a shopper subscribed is the rate they pay
+ * forever — wrong in both directions:
+ *
+ *  - Sold on Starter (5% digital), merchant now on Advanced (0%): Aglyn keeps
+ *    taking 5% of every cycle from a merchant whose plan takes none. An
+ *    over-charge to find and refund.
+ *  - Sold on Advanced (the parameter omitted), merchant now on Starter: Aglyn
+ *    keeps taking nothing, on a destination charge whose processing fee it pays
+ *    out of its own balance. Every cycle is a loss.
+ *
+ * A renewal is the only event a subscription raises, so it is the only place
+ * this can be corrected.
+ */
+describe('the platform fee follows the plan (AGL-2289)', () => {
+  const DIGITAL_SOLD = {
+    ...SOLD_SUBSCRIPTION,
+    lineItems: [
+      { ...SOLD_SUBSCRIPTION.lineItems[0], productType: 'digital' },
+    ],
+  }
+
+  function sellDigital(appliedFeePct?: number) {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly zine',
+      type: 'digital',
+      subscription: { interval: 'month' },
+      variants: [{ id: 'large', priceUsd: 50, inventory: null }],
+    })
+    docs.set('hosts/host-1/subscriptions/sub_1', {
+      ...DIGITAL_SOLD,
+      ...(appliedFeePct === undefined ? {} : { appliedFeePct }),
+    })
+  }
+
+  function repriceBody() {
+    return String((feeRepriceCalls()[0]?.[1] as any)?.body ?? '')
+  }
+
+  it('lowers a stale 5% to the merchant’s current 0%', async () => {
+    // Sold on Starter, merchant is now on Advanced.
+    sellDigital(5)
+    orgFixture = { id: 'org-1', plan: 'advanced', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(feeRepriceCalls()).toHaveLength(1)
+    // UNSET, not `0`: Stripe rejects a zero `application_fee_percent`, and an
+    // empty value is how its API clears an optional field.
+    expect(repriceBody()).toBe('application_fee_percent=')
+    expect(storedSubscription().appliedFeePct).toBe(0)
+  })
+
+  it('raises a stale 0% to the merchant’s current rate', async () => {
+    // Sold on Advanced (nothing was ever sent), merchant is now on Business.
+    sellDigital(0)
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(feeRepriceCalls()).toHaveLength(1)
+    expect(repriceBody()).toBe('application_fee_percent=2')
+    expect(storedSubscription().appliedFeePct).toBe(2)
+  })
+
+  it('re-prices a subscription sold before this shipped', async () => {
+    // No `appliedFeePct` at all reads as UNKNOWN, never as agreement — which
+    // is what makes this self-healing rather than needing a backfill.
+    sellDigital(undefined)
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(repriceBody()).toBe('application_fee_percent=2')
+  })
+
+  it('treats a malformed stored rate as unknown', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Monthly zine',
+      type: 'digital',
+      subscription: { interval: 'month' },
+      variants: [{ id: 'large', priceUsd: 50, inventory: null }],
+    })
+    docs.set('hosts/host-1/subscriptions/sub_1', {
+      ...DIGITAL_SOLD,
+      appliedFeePct: 'two',
+    })
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(repriceBody()).toBe('application_fee_percent=2')
+  })
+
+  /**
+   * THE NOT-CHARGED BRANCH, and the one an "it re-prices" test alone leaves
+   * unproven: a rate that already agrees makes NO Stripe call. Without this the
+   * feature would be satisfied by a handler that POSTs on every single cycle.
+   */
+  it('POSITIVE CONTROL: an agreeing rate makes no Stripe call at all', async () => {
+    sellDigital(2)
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(feeRepriceCalls()).toHaveLength(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not re-price a LAPSED org — it stops it instead', async () => {
+    sellDigital(5)
+    orgFixture = {
+      id: 'org-1',
+      plan: 'business',
+      ownerUid: 'owner-1',
+      subscription: { status: 'canceled' },
+    }
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stopCalls()).toHaveLength(1)
+    expect(feeRepriceCalls()).toHaveLength(0)
+  })
+
+  it('does not re-price against an org it could not READ', async () => {
+    // The AGL-2258 asymmetry, held here too: an unreadable org resolves to the
+    // free plan, and re-pricing against it would take Starter's rate off a
+    // merchant on Advanced.
+    sellDigital(5)
+    orgReadError = new Error('DEADLINE_EXCEEDED')
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(feeRepriceCalls()).toHaveLength(0)
+    expect(stopCalls()).toHaveLength(0)
+  })
+})
+
