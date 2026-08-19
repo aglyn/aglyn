@@ -65,7 +65,7 @@ describe('AGL-2254 · the console owns SSO enforcement', () => {
     // The flag alone is a promise. Existing accounts keep their password and
     // Google logins until `enforceSsoSignInMethods` strips them, so an
     // "enforced" org that never swept is not enforcing anything.
-    const block = /if \(action === 'enforce-apply'\)[\s\S]*?\n    \}/.exec(ROUTE)
+    const block = /if \(action === 'enforce-apply'\)[\s\S]*?\n {4}\}/.exec(ROUTE)
     expect(block).not.toBeNull()
     expect(block?.[0]).toContain('enforced: true')
     expect(block?.[0]).toContain('enforceSsoSignInMethods(')
@@ -75,7 +75,7 @@ describe('AGL-2254 · the console owns SSO enforcement', () => {
     // Unlinking is not reversible — `enforce-off` restores nothing, because
     // no credential was stored to put back. The preview is what makes the
     // apply an informed click.
-    const block = /if \(action === 'enforce-preview'\)[\s\S]*?\n    \}/.exec(ROUTE)
+    const block = /if \(action === 'enforce-preview'\)[\s\S]*?\n {4}\}/.exec(ROUTE)
     expect(block?.[0]).toContain('dryRun: true')
   })
 
