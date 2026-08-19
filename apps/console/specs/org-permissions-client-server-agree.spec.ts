@@ -133,6 +133,27 @@ describe('the console and the server resolve one permission model', () => {
     )
   })
 
+  it('no org-management route gates on the RAW role any more', () => {
+    // Three routes asked `canManageOrg(role)`, which cannot see a custom role
+    // or an override and so defeated the narrowing `run-an-agency-workspace.md`
+    // sells. Behaviour-identical for the built-in roles, which is exactly why
+    // a behavioural test of an ordinary admin could not have caught them —
+    // this is the mechanical half, and the override case in
+    // `app/api/orgs/settings/route.spec.ts` is the behavioural one.
+    const ROUTES = [
+      'apps/console/app/api/hosts/create/route.ts',
+      'apps/console/app/api/orgs/settings/route.ts',
+      'apps/console/app/api/orgs/sso/route.ts',
+    ]
+    const offenders = ROUTES.filter((route) => {
+      const code = read(route)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+      return code.includes('canManageOrg(') || !code.includes('memberHasOrgPermission(')
+    })
+    expect(offenders).toEqual([])
+  })
+
   it('a REVOKED permission is revoked in the legacy map the gates read', () => {
     const granted = resolveOrgPermissions(REVOKED, null)
     expect(granted['plugins.install']).toBe(false)

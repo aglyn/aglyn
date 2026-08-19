@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { canManageOrg, checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   enforceSsoSignInMethods,
@@ -24,6 +24,7 @@ import {
   issueDomainClaim,
   lockdownRefusal,
   logOrgActivity,
+  memberHasOrgPermission,
   provisionSsoPool,
   publishSsoDomains,
   resolveOrgMembership,
@@ -77,7 +78,16 @@ async function handler(request: Request): Promise<Response> {
     }
     const isStaff = decoded['staff'] === true
     const membership = await resolveOrgMembership(decoded.uid, orgId)
-    if (!isStaff && !canManageOrg(membership?.member.role)) {
+    // The granular permission, not the raw role (AGL-2350) — the third and
+    // last gate of this shape. Same answer for the built-in roles
+    // (`org.settings` is in ALL_PERMISSIONS for owner/admin and absent from
+    // the editor and viewer defaults, exactly what `canManageOrg` returned),
+    // and it now honours a custom role or a per-member override. SSO config
+    // is org settings: it decides how the whole workspace signs in.
+    if (
+      !isStaff &&
+      !(await memberHasOrgPermission(orgId, membership?.member, 'org.settings'))
+    ) {
       return Response.json(
         { error: 'Single sign-on requires the admin role' },
         { status: 403 },
