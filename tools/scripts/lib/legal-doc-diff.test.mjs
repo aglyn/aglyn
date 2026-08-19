@@ -51,6 +51,13 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 
 // The real served shape, shrunk: chrome, TOC, title, then the content block,
 // then footer chrome with its own © line.
+//
+// The content block's closing line carries the `Aglyn LLC · aglyn.com · `
+// PREFIX that `/legal/terms` actually serves — the shape that walked the old
+// `/^©/` end-marker straight past it and into the footer below. The footer
+// here is the real one, shrunk: tagline, then the Product/Company link lists.
+// If the slice ever regresses, those lines land in the LIVE side and this
+// fixture stops matching the Doc.
 const LIVE_HTML = `
 <html><head><style>.x{color:red}</style><script>self.__next_f.push([1,"**Last updated: bait**"])</script></head>
 <body>
@@ -63,12 +70,29 @@ const LIVE_HTML = `
   <p>It applies to  every&nbsp;site.</p>
   <h2>2. Fees &amp; Taxes</h2>
   <table><tr><th>Name</th><th>Fee</th></tr><tr><td>Basic</td><td>$5</td></tr></table>
-  <p>&#169; 2026 Aglyn LLC. All rights reserved.</p>
-  <footer><p>Contact</p><p>&#169; 2026 Aglyn LLC. All rights reserved.</p><p>Privacy</p></footer>
+  <h2>3. Plans</h2>
+  <table><tr><th>Plan</th><th>Seats</th></tr><tr><td>Team</td><td>10</td></tr></table>
+  <p>Aglyn LLC · aglyn.com · &#169; 2026 Aglyn LLC. All rights reserved.</p>
+  <footer>
+    <p>The visual builder with a real platform underneath.</p>
+    <div>Product</div><ul><li>Besigner</li><li>Console</li></ul>
+    <div>Company</div><ul><li>About</li><li>Pricing</li></ul>
+    <p>&#169; 2026 Aglyn LLC. All rights reserved.</p>
+  </footer>
 </body></html>`
 
-// The same document as a Docs plain-text export: BOM, CRLF, typographic
-// punctuation, a heading with no markdown marker, table cells one per line.
+// The same document as a Docs plain-text export, in the shapes Google really
+// emits (measured against the eleven Legal Docs, 2026-08-19):
+//
+//   - BOM, CRLF, typographic punctuation, a heading with no markdown marker;
+//   - a TABLE as one ROW per line with TAB-separated cells — NOT one cell per
+//     line, which is what this fixture used to claim and no export produces;
+//   - a Doc that still holds a LITERAL markdown table, pipe-delimited with a
+//     separator row (the Cookie Policy was imported that way and never
+//     converted);
+//   - a page-break divider rendered as a run of underscores;
+//   - the closing copyright line italicised AND prefixed, as the Terms Doc
+//     has it.
 const DOC_PLAIN =
   '﻿' +
   [
@@ -79,12 +103,15 @@ const DOC_PLAIN =
     'This Example Policy (“Policy”) governs your use of Aglyn’s services.',
     '1. Scope',
     'It applies to every site.',
+    '________________',
     '2. Fees & Taxes',
-    'Name',
-    'Fee',
-    'Basic',
-    '$5',
-    '© 2026 Aglyn LLC. All rights reserved.',
+    'Name\tFee',
+    'Basic\t$5',
+    '3. Plans',
+    '| Plan | Seats |',
+    '| --- | --- |',
+    '| Team | 10 |',
+    '*Aglyn LLC · aglyn.com · © 2026 Aglyn LLC. All rights reserved.*',
   ].join('\r\n')
 
 describe('parseGdocPointer', () => {
@@ -171,6 +198,31 @@ describe('htmlToBlockLines', () => {
     // Table cells become their own lines, matching the Docs plain export.
     assert.ok(lines.includes('Basic') && lines.includes('$5'))
   })
+
+  it('restores the ordinals an <ol> renders with CSS counters', () => {
+    // The DMCA takedown-notice list, shrunk. The digits exist on screen and
+    // in the Doc export, but not in the markup.
+    assert.deepEqual(
+      htmlToBlockLines(
+        '<ol start="1"><li>a signature;</li><li>the work;</li></ol>',
+      ),
+      ['1. a signature;', '2. the work;'],
+    )
+  })
+
+  it('honours a list that does not start at one', () => {
+    assert.deepEqual(
+      htmlToBlockLines('<ol start="4"><li>your name;</li></ol>'),
+      ['4. your name;'],
+    )
+  })
+
+  it('leaves unordered items unnumbered — the page shows no digit', () => {
+    assert.deepEqual(htmlToBlockLines('<ul><li>one</li><li>two</li></ul>'), [
+      'one',
+      'two',
+    ])
+  })
 })
 
 describe('docToBlockLines', () => {
@@ -178,6 +230,33 @@ describe('docToBlockLines', () => {
     const lines = docToBlockLines(DOC_PLAIN)
     assert.equal(lines[0], 'Example Policy')
     assert.ok(lines.every((l) => !l.includes('\r') && l.trim() === l && l !== ''))
+  })
+
+  it('splits a tab-separated Docs table ROW into one line per CELL', () => {
+    // What Drive actually exports for a real Docs table (Subprocessors).
+    assert.deepEqual(docToBlockLines('Name\tFee\nBasic\t$5\n'), [
+      'Name',
+      'Fee',
+      'Basic',
+      '$5',
+    ])
+  })
+
+  it('splits a literal markdown table row the same way', () => {
+    // What the Cookie Policy Doc holds — imported as markdown, never
+    // converted to a Docs table.
+    assert.deepEqual(docToBlockLines('| Plan | Seats |\n| Team | 10 |\n'), [
+      'Plan',
+      'Seats',
+      'Team',
+      '10',
+    ])
+  })
+
+  it('leaves prose alone, pipes and all', () => {
+    assert.deepEqual(docToBlockLines('Fees apply | see Section 4.3\n'), [
+      'Fees apply | see Section 4.3',
+    ])
   })
 })
 
@@ -203,6 +282,13 @@ describe('normalizeLegalLine', () => {
     assert.equal(normalizeLegalLine('opt-out'), 'opt-out')
   })
 
+  it('erases a Docs page-break divider but not underscored words', () => {
+    assert.equal(normalizeLegalLine('________________'), '')
+    assert.equal(normalizeLegalLine('___'), '')
+    assert.equal(normalizeLegalLine('site_id'), 'site_id')
+    assert.equal(normalizeLegalLine('__session'), '__session')
+  })
+
   it('collapses whitespace runs and NBSP', () => {
     assert.equal(normalizeLegalLine('It applies to  every site.'), 'It applies to every site.')
   })
@@ -225,6 +311,44 @@ describe('sliceContentBlock', () => {
     assert.equal(lines[0], 'Last updated: August 5, 2026')
     assert.equal(lines.at(-1), '© 2026 Aglyn LLC. All rights reserved.')
     assert.equal(lines.length, 3, 'TOC/title before and footer after must be excluded')
+  })
+
+  it('ends at a PREFIXED copyright line, not at the footer below it', () => {
+    // The `/legal/terms` shape. A `/^©/` end-marker skipped this line and
+    // stopped at the footer's, dragging seventeen lines of site chrome into
+    // the LIVE side of every terms diff.
+    const { lines, foundEnd } = sliceContentBlock([
+      'Last updated: August 5, 2026',
+      'Body text',
+      'Aglyn LLC · aglyn.com · © 2026 Aglyn LLC. All rights reserved.',
+      'The visual builder with a real platform underneath.',
+      'Product',
+      '© 2026 Aglyn LLC. All rights reserved.',
+    ])
+    assert.ok(foundEnd)
+    assert.equal(lines.length, 3)
+    assert.ok(!lines.some((l) => l.includes('visual builder')))
+  })
+
+  it('ends at an ITALICISED copyright line — three Docs export it that way', () => {
+    const { lines, foundEnd } = sliceContentBlock([
+      'Last updated: August 5, 2026',
+      'Body text',
+      '*© 2026 Aglyn LLC. All rights reserved.*',
+      'Counsel notes that are not published.',
+    ])
+    assert.ok(foundEnd, 'a real Doc was reported as having no closing © line')
+    assert.equal(lines.length, 3)
+  })
+
+  it('does not truncate on a body line that merely mentions copyright', () => {
+    const { lines } = sliceContentBlock([
+      'Last updated: August 5, 2026',
+      'Copyright complaints: see the Copyright and DMCA Policy. The © symbol',
+      'is not itself a notice.',
+      '© 2026 Aglyn LLC. All rights reserved.',
+    ])
+    assert.equal(lines.length, 4, 'the block was cut short at a prose ©')
   })
 
   it('accepts a bolded (markdown) Last updated line as the start', () => {
@@ -274,6 +398,81 @@ describe('compareLegalDocument', () => {
     const { caveats } = compareLegalDocument(LIVE_HTML, 'just some text')
     assert.ok(caveats.some((c) => c.includes('Doc has no "Last updated:"')))
     assert.ok(caveats.some((c) => c.includes('Doc has no closing')))
+  })
+})
+
+// The comparator's whole value is that DIFFERS means "the words changed".
+// Page furniture must not read as drift, and — the half that is easy to lose
+// — folding the furniture away must not fold away anything that matters. Each
+// case below is paired: the chrome edit stays IN SYNC, the neighbouring
+// substantive edit still DIFFERS.
+describe('compareLegalDocument: chrome is not drift, and drift is not chrome', () => {
+  const inSyncAfter = (html) => compareLegalDocument(html, DOC_PLAIN).inSync
+
+  it('ignores the site footer entirely — it sits past the copyright line', () => {
+    // The real footer, rewritten wholesale. Nothing here is legal text.
+    const rebranded = LIVE_HTML.replace(
+      '<p>The visual builder with a real platform underneath.</p>',
+      '<p>Ship faster with Aglyn.</p><div>Solutions</div><ul><li>Agencies</li></ul>',
+    )
+    assert.ok(rebranded !== LIVE_HTML, 'fixture footer no longer matches')
+    assert.ok(inSyncAfter(rebranded), 'footer chrome was counted as drift')
+  })
+
+  it('ignores nav and the "On this page" aside — both sit above the block', () => {
+    const renav = LIVE_HTML.replace(
+      '<nav><a href="/">Aglyn</a><a href="/legal">Legal</a></nav>',
+      '<nav><a href="/">Home</a><a href="/pricing">Pricing</a><a href="/docs">Docs</a></nav>',
+    ).replace('<p>On this page</p>', '<p>Contents</p>')
+    assert.ok(renav !== LIVE_HTML, 'fixture nav no longer matches')
+    assert.ok(inSyncAfter(renav), 'nav/TOC chrome was counted as drift')
+  })
+
+  it('still flags an edit to the closing copyright line itself', () => {
+    const relicensed = LIVE_HTML.replace(
+      'Aglyn LLC · aglyn.com · &#169; 2026 Aglyn LLC. All rights reserved.',
+      'Aglyn LLC · aglyn.com · &#169; 2026 Aglyn Holdings Inc. All rights reserved.',
+    )
+    assert.equal(inSyncAfter(relicensed), false, 'entity change went unseen')
+  })
+
+  it('still flags a changed CELL inside a tab-separated Docs table', () => {
+    const repriced = DOC_PLAIN.replace('Basic\t$5', 'Basic\t$9')
+    assert.equal(
+      compareLegalDocument(LIVE_HTML, repriced).inSync,
+      false,
+      'splitting rows into cells swallowed a price change',
+    )
+  })
+
+  it('still flags a changed CELL inside a literal markdown table', () => {
+    const reseated = DOC_PLAIN.replace('| Team | 10 |', '| Team | 25 |')
+    assert.equal(
+      compareLegalDocument(LIVE_HTML, reseated).inSync,
+      false,
+      'splitting pipe rows into cells swallowed a seat-count change',
+    )
+  })
+
+  it('still flags a dropped table ROW — a whole cookie or subprocessor', () => {
+    const shortened = DOC_PLAIN.replace('Basic\t$5\r\n', '')
+    assert.equal(
+      compareLegalDocument(LIVE_HTML, shortened).inSync,
+      false,
+      'a removed row read as in sync',
+    )
+  })
+
+  it('still flags a sentence added between the divider and the block end', () => {
+    const padded = DOC_PLAIN.replace(
+      '________________',
+      '________________\r\nAglyn may terminate at will.',
+    )
+    assert.equal(
+      compareLegalDocument(LIVE_HTML, padded).inSync,
+      false,
+      'text next to a page-break divider was folded away with it',
+    )
   })
 })
 

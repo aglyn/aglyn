@@ -5,8 +5,17 @@ name: Legal drift
 #
 # ## Why this is a schedule and not a gate — read before "fixing" that
 #
-# This check is RED TODAY, and has been for weeks: 0 in sync, 9 differ, 2
-# skipped by design. Wiring a check that is already red onto `push` or
+# This check is RED TODAY: `0 in-sync, 9 differs, 0 unreadable, 2 skipped`,
+# measured on 2026-08-19 — the first run that could actually happen, because
+# LEGAL_DRIVE_FOLDER_ID was unset until then. `0 unreadable` is the load-
+# bearing half: the service account can genuinely read every Doc, so the nine
+# are drift and not an access artefact. AGL-2467 then removed four rendering
+# artefacts from the comparator (a footer leak on /legal/terms, table rows
+# diffed against table cells, Docs page-break dividers, and `<ol>` ordinals
+# present on one side only) — 39% of the printed delta, and none of the nine
+# verdicts. Every remaining hunk is words.
+#
+# Wiring a check that is already red onto `push` or
 # `pull_request` would turn every merge in the repo red for a reason no
 # engineer can fix — the remedy is publishing legal text, which is a decision
 # for Zach and counsel, not a code change. So this workflow deliberately has
@@ -24,9 +33,14 @@ name: Legal drift
 # record and the Doc is the drafting surface, so the LIVE page being ahead is
 # normal. What is not normal is nobody being told. The Docs still carry
 # `[EFFECTIVE DATE]` placeholders and `*.md` cross-references from before
-# publication, and two of them disagree with the live pages about something
-# substantive rather than cosmetic (who is the merchant of record on a
-# marketplace sale; what the privacy page says about the AI provider).
+# publication, and several disagree with the live pages about something
+# substantive rather than cosmetic. Confirmed on 2026-08-19: LIVE is ahead on
+# all nine, and no Doc is ahead on anything. The Docs would, if pasted back,
+# reinstate a home mailing address as the DMCA designated agent, "community
+# marketplace" (the AGL-975 rename, AGL-1840), "you are the seller of record"
+# against the destination-charge model the platform actually runs, and a DPA
+# whose SCCs are `[ANNEX - SCCs TO BE ATTACHED]` with no Annex A or B.
+# AGL-1647 tracks writing live back into the Docs.
 #
 # ## --summary is not optional here
 #
