@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { expandSxAliases } from '@aglyn/shared-data-enums'
 import isEqual from 'lodash-es/isEqual'
 import { action, toJS } from 'mobx'
 
@@ -159,8 +160,19 @@ function writeComposedNodeSx(
     return
   }
   const nextSx = (next ?? {}) as Record<string, any>
-  const currentSx = isPlainRecord(current) ? toJS(current) : {}
-  const propsRecord = toJS(propsSx)
+  // Both stored records are read in the panel's spelling (AGL-2207). The
+  // composed baseline the panel edits comes through `mergeNodeSx`, which
+  // canonicalizes MUI's system-prop aliases, so diffing against the RAW
+  // records would read every `p`/`bgcolor` as a key the author had just
+  // cleared and migrate the positioning on the first unrelated edit — the
+  // exact thing this function exists to prevent. Expanded, the byte-
+  // identical invariant holds; `props.sx` is only ever REWRITTEN below,
+  // when the author genuinely cleared one of its values.
+  const currentSx = expandSxAliases(
+    isPlainRecord(current) ? toJS(current) : {},
+    { deep: true },
+  )
+  const propsRecord = expandSxAliases(toJS(propsSx), { deep: true })
 
   const sx: Record<string, any> = {}
   for (const key of Object.keys(currentSx)) {

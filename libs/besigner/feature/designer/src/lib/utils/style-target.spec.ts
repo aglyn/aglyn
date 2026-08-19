@@ -188,15 +188,23 @@ describe('a node carrying props.sx as well as sx (AGL-1346)', () => {
 
     expect(node.props.sx['marginInline']).toBeUndefined()
     expect(getNodeStyleTarget(node).sx?.['marginInline']).toBeUndefined()
-    // Everything the dropdown's positioning depends on survives.
+    // Everything the dropdown's positioning depends on survives — in the
+    // panel's spelling (AGL-2207). `props.sx` is only ever rewritten when
+    // the author genuinely cleared one of its values, which is this case;
+    // an unrelated edit above leaves it byte-identical, aliases and all.
     expect(node.props.sx).toMatchObject({
       position: 'absolute',
       top: '100%',
       left: 0,
       zIndex: 1300,
-      p: 3,
-      bgcolor: 'background.paper',
+      paddingTop: 3,
+      paddingRight: 3,
+      paddingBottom: 3,
+      paddingLeft: 3,
+      backgroundColor: 'background.paper',
     })
+    expect(node.props.sx).not.toHaveProperty('p')
+    expect(node.props.sx).not.toHaveProperty('bgcolor')
   })
 
   it('clearing a SHADOWED key clears both records, not just the winner', () => {
@@ -239,8 +247,15 @@ describe('a node carrying props.sx as well as sx (AGL-1346)', () => {
       },
       sx: { p: { md: 6 }, '@scheme dark': { backgroundColor: '#101828' } },
     } as any
+    // Read in the panel's spelling (AGL-2207): `p` is MUI's alias for the
+    // four sides, and the Padding control is named for them, so the
+    // composed reading resolves it — cascade semantics untouched.
+    const responsive = { xs: 1, md: 6 }
     expect(getNodeStyleTarget(node).sx).toEqual({
-      p: { xs: 1, md: 6 },
+      paddingTop: responsive,
+      paddingRight: responsive,
+      paddingBottom: responsive,
+      paddingLeft: responsive,
       '@scheme dark': { color: '#fff', backgroundColor: '#101828' },
     })
   })
@@ -500,9 +515,13 @@ describe('panel leaf target → save → reload → render (AGL-1332)', () => {
       { cta },
     )
 
+    // The definition's `py` reads back as the two sides the panel owns
+    // (AGL-2207) — `mergeNodeSx` canonicalizes before merging, so an
+    // override REPLACES the alias instead of landing beside it.
     expect(composed['cmp__inst__root'].sx).toEqual({
       backgroundColor: '#fff',
-      py: 8,
+      paddingTop: 8,
+      paddingBottom: 8,
     })
     expect(composed['cmp__inst__headline'].sx).toEqual({
       fontSize: 32,
@@ -576,7 +595,8 @@ describe('panel → save → reload → render round trip (AGL-1306)', () => {
     )
     expect(composed['cmp__inst__root'].sx).toEqual({
       backgroundColor: '#0b4a6f',
-      py: 8,
+      paddingTop: 8,
+      paddingBottom: 8,
       '@scheme dark': { backgroundColor: '#101828', color: '#fff' },
     })
   })

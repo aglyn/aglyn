@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { expandSxAliases } from '@aglyn/shared-data-enums'
 import {
   isResponsiveSxObject,
   mergeSchemeValue,
@@ -95,9 +96,18 @@ export function mergeNodeSx(base: unknown, override: unknown): unknown {
   if (!isPlainObject(base) || !isPlainObject(override)) {
     return [base, override].flat()
   }
-  const merged: Record<string, unknown> = { ...base }
-  for (const [key, value] of Object.entries(override)) {
-    const next = mergeSxProperty(base[key], value)
+  // Both sides speak ONE spelling before the key-level merge (AGL-2209).
+  // `py` and `paddingTop` are different keys, so without this an instance
+  // override never REPLACES an aliased definition value — it lands beside
+  // it, and a Padding Top override on a node whose definition says `py: 8`
+  // moves the top edge while the bottom silently keeps the component's 8.
+  // Semantics-preserving and identity-returning: an sx with no alias is the
+  // same object, so a corpus that never used one pays a key scan.
+  const canonicalBase = expandSxAliases(base, { deep: true })
+  const canonicalOverride = expandSxAliases(override, { deep: true })
+  const merged: Record<string, unknown> = { ...canonicalBase }
+  for (const [key, value] of Object.entries(canonicalOverride)) {
+    const next = mergeSxProperty(canonicalBase[key], value)
     if (next === undefined) delete merged[key]
     else merged[key] = next
   }

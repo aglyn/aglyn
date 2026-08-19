@@ -503,7 +503,7 @@ describe('root style overrides (AGL-1306)', () => {
       root: {
         $id: 'root',
         componentId: 'muiStack',
-        sx: { backgroundColor: '#101828', py: 8 },
+        sx: { backgroundColor: '#101828', paddingTop: 8 },
         nodes: ['label'],
       },
       label: {
@@ -535,14 +535,14 @@ describe('root style overrides (AGL-1306)', () => {
     // subtree's own styles are untouched.
     expect(composed['cmp__a__root'].sx).toEqual({
       backgroundColor: '#0b4a6f',
-      py: 8,
+      paddingTop: 8,
     })
     expect(composed['cmp__a__label'].sx).toEqual({ color: '#fff' })
     // The definition itself is never mutated — the next instance grafts
     // the original.
     expect(definition.nodes.root.sx).toEqual({
       backgroundColor: '#101828',
-      py: 8,
+      paddingTop: 8,
     })
   })
 
@@ -581,7 +581,7 @@ describe('root style overrides (AGL-1306)', () => {
         root: {
           $id: 'root',
           componentId: 'muiStack',
-          sx: { backgroundColor: '#14532d', px: 4 },
+          sx: { backgroundColor: '#14532d', paddingLeft: 4 },
           nodes: [],
         },
       },
@@ -592,7 +592,7 @@ describe('root style overrides (AGL-1306)', () => {
     )
     expect(composed['cmp__a__root'].sx).toEqual({
       backgroundColor: '#0b4a6f',
-      px: 4,
+      paddingLeft: 4,
     })
   })
 
@@ -629,14 +629,14 @@ describe('root style overrides (AGL-1306)', () => {
   it('getInstanceRootStyleOverride answers only for instances with a real record', () => {
     expect(
       getInstanceRootStyleOverride(
-        overriddenInstance('a', { py: 2 }) as any,
+        overriddenInstance('a', { paddingTop: 2 }) as any,
       ),
-    ).toEqual({ py: 2 })
+    ).toEqual({ paddingTop: 2 })
     // Not an instance: styleOverrides on an ordinary node is inert here.
     expect(
       getInstanceRootStyleOverride({
         componentId: 'muiStack',
-        styleOverrides: { [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 } },
+        styleOverrides: { [STYLE_OVERRIDES_ROOT_KEY]: { paddingTop: 2 } },
       } as any),
     ).toBeUndefined()
     expect(getInstanceRootStyleOverride(undefined)).toBeUndefined()
@@ -663,7 +663,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
       root: {
         $id: 'root',
         componentId: 'muiStack',
-        sx: { backgroundColor: '#101828', py: 8 },
+        sx: { backgroundColor: '#101828', paddingTop: 8 },
         nodes: ['headline', 'lede'],
       },
       headline: {
@@ -702,7 +702,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
     )
     expect(composed['cmp__a__root'].sx).toEqual({
       backgroundColor: '#fff',
-      py: 8,
+      paddingTop: 8,
     })
     // The half root overrides could never reach: the leaf's own colour is
     // replaced, and everything else it declares survives.
@@ -888,7 +888,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
     expect(
       getInstanceStyleOverrides(
         instanceWith('a', {
-          [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 },
+          [STYLE_OVERRIDES_ROOT_KEY]: { paddingTop: 2 },
           headline: { color: '#000' },
           cleared: {},
           bogus: 'nope',
@@ -897,7 +897,7 @@ describe('per-leaf style overrides (AGL-1332)', () => {
         }) as any,
       ),
     ).toEqual({
-      [STYLE_OVERRIDES_ROOT_KEY]: { py: 2 },
+      [STYLE_OVERRIDES_ROOT_KEY]: { paddingTop: 2 },
       headline: { color: '#000' },
     })
     expect(
@@ -1041,7 +1041,7 @@ describe('background fill overrides (AGL-1338)', () => {
       root: {
         $id: 'root',
         componentId: 'muiStack',
-        sx: { backgroundColor: '#101828', backgroundImage: GRADIENT, py: 8 },
+        sx: { backgroundColor: '#101828', backgroundImage: GRADIENT, paddingTop: 8 },
         nodes: ['headline'],
       },
       headline: {
@@ -1079,7 +1079,7 @@ describe('background fill overrides (AGL-1338)', () => {
     expect(composed['cmp__a__root'].sx).toEqual({
       backgroundColor: '#161C21',
       backgroundImage: 'none',
-      py: 8,
+      paddingTop: 8,
     })
     // Everything else the component says is untouched.
     expect(composed['cmp__a__headline'].sx).toEqual({ color: 'common.white' })
@@ -1140,7 +1140,7 @@ describe('background fill overrides (AGL-1338)', () => {
           componentId: 'muiStack',
           sx: {
             backgroundImage: GRADIENT,
-            py: 8,
+            paddingTop: 8,
             '@scheme dark': { backgroundImage: TERMINAL, color: '#fff' },
           },
           nodes: [],
@@ -1163,7 +1163,7 @@ describe('background fill overrides (AGL-1338)', () => {
     // Dark goes flat; light keeps the gradient and the slice's siblings.
     expect(composed['cmp__a__root'].sx).toEqual({
       backgroundImage: GRADIENT,
-      py: 8,
+      paddingTop: 8,
       '@scheme dark': { backgroundImage: 'none', color: '#fff' },
     })
     // A partial breakpoint override keeps the narrower widths.
@@ -1187,7 +1187,7 @@ describe('background fill overrides (AGL-1338)', () => {
     expect(detached['a'].sx).toEqual({
       backgroundColor: '#161C21',
       backgroundImage: 'none',
-      py: 8,
+      paddingTop: 8,
     })
     expect((detached['a'] as any).styleOverrides).toBeUndefined()
   })
@@ -1396,7 +1396,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
       root: {
         $id: 'root',
         componentId: 'muiStack',
-        sx: { backgroundColor: '#101828', py: 8 },
+        sx: { backgroundColor: '#101828', paddingTop: 8 },
         nodes: ['eyebrow', 'h', 'img'],
       },
       eyebrow: {
@@ -1530,7 +1530,7 @@ describe('detachInstanceSubtree (AGL-1314)', () => {
 
     // The copy forks the look the page was showing, leaf-wise merged —
     // and it is the SAME sx the graft was rendering.
-    expect(detached['a'].sx).toEqual({ backgroundColor: '#0b4a6f', py: 8 })
+    expect(detached['a'].sx).toEqual({ backgroundColor: '#0b4a6f', paddingTop: 8 })
     expect(detached['a'].sx).toEqual((composed['cmp__a__root'] as any).sx)
     // The instance's own instance-ness is gone with it.
     expect(detached['a'].componentId).toBe('muiStack')
