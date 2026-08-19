@@ -68,12 +68,32 @@ import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import MemberAvatar from './member-avatar.component'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
+/**
+ * Per-site access options, weakest first. `author` (AGL-2334) sits between
+ * viewer and editor: it edits every content document on the site and cannot
+ * publish any of it — the agency guide's worked example, "a client who may
+ * edit content but not publish".
+ *
+ * A capability is not a feature until it is assignable. The rules enforce
+ * this role; this picker and the site-collaborator one are the only two
+ * places a human can hand it out, so leaving either unchanged would have
+ * shipped a permission nobody could grant.
+ */
 const HOST_ROLE_OPTIONS: Array<HostAccessRole | 'none'> = [
   'none',
   'viewer',
+  'author',
   'editor',
   'admin',
 ]
+/** What each per-site option means, for the picker's helper line. */
+const HOST_ROLE_HINTS: Record<HostAccessRole | 'none', string> = {
+  none: 'No access to this site',
+  viewer: 'Can look, cannot change anything',
+  author: 'Can edit content, cannot publish it',
+  editor: 'Can edit content and publish it',
+  admin: 'Full control of the site, including its people',
+}
 
 interface AccessDraft {
   uid: string
@@ -793,6 +813,18 @@ export function OrgMembersCard() {
                       </MenuItem>
                     ))}
                   </TextField>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ width: 200 }}
+                  >
+                    {
+                      HOST_ROLE_HINTS[
+                        (accessDraft?.hostAccess[host.$id] ??
+                          'none') as HostAccessRole | 'none'
+                      ]
+                    }
+                  </Typography>
                 </Stack>
               ))}
         </DialogContent>

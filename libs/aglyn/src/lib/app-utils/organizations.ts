@@ -112,13 +112,87 @@ export function hostRoleFor(
   return member?.allHosts ? role : null
 }
 
-/** Whether the member may mutate a host's content (admin or editor on it). */
+/**
+ * Host roles that may MUTATE content — the axis `canWriteHostContent()` in
+ * the security rules asks (AGL-2334).
+ *
+ * `author` is here and absent from `HOST_PUBLISH_ROLES` below: that single
+ * difference IS the "edit content but not publish" role. Kept as two named
+ * sets rather than two inline comparisons because they are read in three
+ * places that must not drift — this module, the ~20 server gates, and the
+ * rules — and because a new host role added to the union has to be a
+ * deliberate decision on BOTH lists rather than an omission from one.
+ */
+export const HOST_CONTENT_WRITE_ROLES: readonly HostAccessRole[] = [
+  'admin',
+  'editor',
+  'author',
+]
+
+/**
+ * Host roles that may make content LIVE. Everything that registers a route,
+ * moves a live-version pointer, schedules either of those for later, or
+ * flips a collection entry to `published` asks this and not the set above.
+ *
+ * The list is short and it is the whole product decision: `author` is not on
+ * it. If a role is ever added here, the rules' `canPublishHostContent()` and
+ * the publish-surface field freezes below it must be updated in the same
+ * change — they are the enforcement, this is the server-side echo of it.
+ */
+export const HOST_PUBLISH_ROLES: readonly HostAccessRole[] = ['admin', 'editor']
+
+/**
+ * Whether the member may mutate a host's content — admin, editor **or
+ * author** on it.
+ *
+ * An author is a content editor in every respect this predicate covers; what
+ * it deliberately does NOT cover is publication. Any caller that is really
+ * asking "may this person make something live" must call `canPublishHost`
+ * instead — this one answering `true` for an author is the point of the role,
+ * not a gap in it.
+ */
 export function canWriteHost(
   member: Partial<AglynOrgMember> | null | undefined,
   hostId: HostUid,
 ): boolean {
   const role = hostRoleFor(member, hostId)
-  return role === 'admin' || role === 'editor'
+  return !!role && HOST_CONTENT_WRITE_ROLES.includes(role)
+}
+
+/**
+ * Whether the member may PUBLISH on a host — register a route, move a live
+ * version pointer, schedule either for later, or publish a collection entry.
+ *
+ * Strictly narrower than `canWriteHost`: `author` edits and does not publish.
+ * This is the server-side echo of the rules, not the enforcement — publishing
+ * is a set of client-direct Firestore writes across five document shapes, so
+ * `cloud/firebase-firestore.rules` is where it is actually refused. Server
+ * routes that schedule or trigger a publish ask this so the console can say
+ * no with a message instead of surfacing a bare permission-denied.
+ */
+export function canPublishHost(
+  member: Partial<AglynOrgMember> | null | undefined,
+  hostId: HostUid,
+): boolean {
+  const role = hostRoleFor(member, hostId)
+  return !!role && HOST_PUBLISH_ROLES.includes(role)
+}
+
+/**
+ * The same question asked of a bare `memberRoles` value rather than a member
+ * document — the shape every Admin-SDK route already has in hand after its
+ * `hosts/{hostId}` read, so it does not have to re-load the org membership.
+ *
+ * `String(role)` at the call sites keeps `undefined` out; an unknown value
+ * is simply not in the set, which fails CLOSED.
+ */
+export function hostRoleCanWrite(role: unknown): boolean {
+  return HOST_CONTENT_WRITE_ROLES.includes(role as HostAccessRole)
+}
+
+/** Publish-axis twin of `hostRoleCanWrite`; `author` is excluded. */
+export function hostRoleCanPublish(role: unknown): boolean {
+  return HOST_PUBLISH_ROLES.includes(role as HostAccessRole)
 }
 
 /**

@@ -60,10 +60,30 @@ import useOrgPermissions from '../hooks/use-org-permissions'
 /** Site collaborators shown per page before "Load more" (AGL-1124). */
 const MEMBER_PAGE_SIZE = 25
 
+/**
+ * Site-collaborator roles, weakest first.
+ *
+ * `Author` (AGL-2334) is the one the agency guide's worked example asks for —
+ * *"a client who may edit content but not publish"*. It is `Editor` minus
+ * publication: it edits screens, layouts, components and collection entries,
+ * and it cannot register a route, move a live version pointer, schedule
+ * either for later, or publish an entry. Enforced in the Firestore security
+ * rules, which is where publishing actually happens (the console writes those
+ * documents directly from the browser), not in a route.
+ */
 const ROLE_OPTIONS = [
-  { value: 'viewer', label: 'Viewer' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'admin', label: 'Admin' },
+  { value: 'viewer', label: 'Viewer', hint: 'Can look, cannot change anything' },
+  {
+    value: 'author',
+    label: 'Author',
+    hint: 'Can edit content, cannot publish it',
+  },
+  {
+    value: 'editor',
+    label: 'Editor',
+    hint: 'Can edit content and publish it',
+  },
+  { value: 'admin', label: 'Admin', hint: 'Full control, including people' },
 ]
 
 export interface HostMembersCardProps {
@@ -362,7 +382,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
             label="Site access"
             value={role}
             onChange={(event) => setRole(event.target.value)}
-            sx={{ minWidth: 130 }}
+            // The role names alone do not say what an Author cannot do, and
+            // "edit content but not publish" is the whole reason to pick it.
+            helperText={
+              ROLE_OPTIONS.find((option) => option.value === role)?.hint ?? ' '
+            }
+            sx={{ minWidth: 150 }}
           >
             {ROLE_OPTIONS.map((option) => (
               <MenuItem key={option.value} value={option.value}>
@@ -528,9 +553,11 @@ export function HostMembersCard(props: HostMembersCardProps) {
           </Button>
         ) : null}
         <Typography variant="caption" color="text.secondary">
-          {'Admins get full console access to this host today; per-role ' +
-            'restrictions for editors and viewers are recorded and roll ' +
-            'out with granular permissions.'}
+          {'Admins get full console access to this site. An Author can edit ' +
+            'every kind of content and cannot publish any of it — no route, ' +
+            'no live version, no schedule, no published entry. Remaining ' +
+            'per-role restrictions for editors and viewers roll out with ' +
+            'granular permissions.'}
         </Typography>
       </Stack>
     </CardDisplay>

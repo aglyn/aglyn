@@ -17,9 +17,15 @@
 
 import {
   canManageOrg,
+  canPublishHost,
   canWriteHost,
   generateOrgSlug,
+  hostRoleCanPublish,
+  hostRoleCanWrite,
   hostRoleFor,
+  isOrgRole,
+  HOST_CONTENT_WRITE_ROLES,
+  HOST_PUBLISH_ROLES,
   canLinkSocialProvider,
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
@@ -34,6 +40,7 @@ import {
   projectHostMemberRoles,
   projectMemberScopeTokens,
 } from './organizations'
+import { HOST_ACCESS_ROLES } from '../foundation/definitions/organization.types'
 
 describe('organizations (AGL-233)', () => {
   it('validates slugs with the shared policy plus org-only reservations', () => {
@@ -95,6 +102,85 @@ describe('organizations (AGL-233)', () => {
       owner: 'admin',
       watcher: 'viewer',
     })
+  })
+})
+
+describe("the author host role — edits, never publishes (AGL-2334)", () => {
+  /** A site collaborator granted `author` on one site, as grantHostAccess writes it. */
+  const author = {
+    $id: 'u-author',
+    role: 'viewer' as const,
+    allHosts: false,
+    hostAccess: { 'host-a': 'author' as const },
+  }
+
+  it('is a content writer and NOT a publisher', () => {
+    // Both halves, on one member. Asserting only the refusal would pass
+    // identically for a role that can do nothing at all.
+    expect(hostRoleFor(author, 'host-a')).toBe('author')
+    expect(canWriteHost(author, 'host-a')).toBe(true)
+    expect(canPublishHost(author, 'host-a')).toBe(false)
+  })
+
+  it('reaches only the site it was granted on', () => {
+    expect(hostRoleFor(author, 'host-b')).toBeNull()
+    expect(canWriteHost(author, 'host-b')).toBe(false)
+    expect(canPublishHost(author, 'host-b')).toBe(false)
+  })
+
+  it('leaves editor and admin able to publish, and viewer able to do neither', () => {
+    // The gate must refuse the author and nobody else. A publish permission
+    // that refuses everyone passes every "cannot publish" assertion there is.
+    const editor = {
+      $id: 'u-e', role: 'viewer' as const, allHosts: false,
+      hostAccess: { 'host-a': 'editor' as const },
+    }
+    const siteAdmin = {
+      $id: 'u-a', role: 'viewer' as const, allHosts: false,
+      hostAccess: { 'host-a': 'admin' as const },
+    }
+    const viewer = {
+      $id: 'u-v', role: 'viewer' as const, allHosts: false,
+      hostAccess: { 'host-a': 'viewer' as const },
+    }
+    const orgOwner = { $id: 'u-o', role: 'owner' as const, allHosts: true }
+    for (const member of [editor, siteAdmin, orgOwner]) {
+      expect([member.$id, canWriteHost(member, 'host-a')]).toEqual([member.$id, true])
+      expect([member.$id, canPublishHost(member, 'host-a')]).toEqual([member.$id, true])
+    }
+    expect(canWriteHost(viewer, 'host-a')).toBe(false)
+    expect(canPublishHost(viewer, 'host-a')).toBe(false)
+  })
+
+  it('cannot be reached through allHosts — an author is always site-scoped', () => {
+    // `hostRoleFor` maps an `allHosts` member to their ORG role, and there is
+    // no org-level author. If one ever appears, this is where the assumption
+    // the rules rest on stops holding.
+    const orgWide = { $id: 'u-w', role: 'editor' as const, allHosts: true }
+    expect(hostRoleFor(orgWide, 'anything')).toBe('editor')
+    expect(HOST_ACCESS_ROLES).toContain('author')
+    expect(isOrgRole('author')).toBe(false)
+  })
+
+  it('keeps the two role lists in the relationship the rules assume', () => {
+    // `HOST_PUBLISH_ROLES` must be a strict subset of the write roles, and
+    // the ONE difference must be `author`. Anything else means the two lists
+    // have drifted and the rules — which spell the same two lists in their
+    // own language — no longer describe this file.
+    for (const role of HOST_PUBLISH_ROLES) {
+      expect([role, HOST_CONTENT_WRITE_ROLES.includes(role)]).toEqual([role, true])
+    }
+    expect(
+      HOST_CONTENT_WRITE_ROLES.filter((r) => !HOST_PUBLISH_ROLES.includes(r)),
+    ).toEqual(['author'])
+  })
+
+  it('fails CLOSED on an unknown or absent role value', () => {
+    expect(hostRoleCanWrite(undefined)).toBe(false)
+    expect(hostRoleCanWrite('publisher')).toBe(false)
+    expect(hostRoleCanPublish(undefined)).toBe(false)
+    expect(hostRoleCanPublish('author')).toBe(false)
+    expect(hostRoleCanWrite('author')).toBe(true)
   })
 })
 

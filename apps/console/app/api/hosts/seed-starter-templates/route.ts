@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -78,7 +78,8 @@ async function handler(request: Request): Promise<Response> {
     // Same role model as every other content write (canWriteHostContent):
     // seeding adds library documents to somebody's site.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
+    // `author` (AGL-2334): starter templates land as unpublished drafts.
+    if (!hostRoleCanWrite(memberRole)) {
       return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
     }
 

@@ -314,11 +314,21 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'Title, description, favicon, social card and the AGL-1263 ' +
     '`discourageSearchEngines` switch. All of it is authoring: the values ' +
     'end up in the page the editor is already free to write.',
-  screens:
-    'The screen-id → slug directory. The screen DOCS are quota-governed and ' +
-    'API-create-only (AGL-473); this map is the routing index maintained ' +
-    'alongside them, and an editor who may add a screen may name it.',
-  layouts: 'The shared-layout directory. Same reasoning as `screens`.',
+  // `screens` LEFT this map in AGL-2334 and is now classified as denied,
+  // following the `disabledPlugins` precedent: it is TIERED, not freely
+  // client-writable. The reason it used to carry — "an editor who may add a
+  // screen may name it" — is still true of an editor and false of an
+  // `author`, and a field one role may write and another may not belongs on
+  // the denied side of this partition, where the tier is visible. Registering
+  // a path in this map is what makes a page reachable on the live site, so it
+  // is the publish surface an author is refused; see `canPublishHostContent`
+  // in cloud/firebase-firestore.rules.
+  layouts:
+    'The shared-layout directory. A layout has no route of its own, so unlike ' +
+    '`screens` this map decides nothing about reachability — it is an index ' +
+    'maintained alongside API-created layout docs. What publishing a layout ' +
+    'moves is the `versionId` pointer on the layout document, which the rules ' +
+    'freeze for an `author` there (AGL-2334), not here.',
   redirects:
     'The redirect directory. The redirect DOCS are API-create-only so the ' +
     '`redirectsPerHost` quota has somewhere to be enforced; this is the index.',

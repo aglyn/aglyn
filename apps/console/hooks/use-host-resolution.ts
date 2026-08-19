@@ -44,6 +44,7 @@ import { useCallback, useEffect, useState } from 'react'
 const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
   admin: true,
   editor: true,
+  author: true,
   viewer: true,
 }
 const HOST_ACCESS_ROLES = Object.keys(HOST_ACCESS_ROLE_KEYS) as HostAccessRole[]

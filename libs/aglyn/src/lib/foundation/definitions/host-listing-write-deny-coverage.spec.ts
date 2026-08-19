@@ -222,6 +222,14 @@ describe('every server-owned host field is denied to client writes (AGL-1361)', 
           // The second, ADMIN-ONLY hasAny list. A naive branch split loses
           // this, and the guard would have believed it unprotected.
           'disabledPlugins',
+          // The THIRD tier (AGL-2334): the routing map, frozen for an
+          // `author` and open to the roles that may publish. Same shape as
+          // `disabledPlugins` — a field one site role may write and another
+          // may not — so it is classified here rather than in
+          // HOST_CLIENT_WRITABLE_FIELDS, and this entry is what proves the
+          // parser still sees a hasAny list guarded by a role condition
+          // rather than by `isStaff`.
+          'screens',
         ]),
       )
       expect(rule.denied.length).toBeGreaterThanOrEqual(12)

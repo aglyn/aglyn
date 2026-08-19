@@ -45,8 +45,30 @@ export type OrgSlug = string
 /** Org-wide roles, strongest to weakest. */
 export type OrgRole = 'owner' | 'admin' | 'editor' | 'viewer'
 
-/** Per-host refinement for editor/viewer members ("3 of 15 sites"). */
-export type HostAccessRole = 'admin' | 'editor' | 'viewer'
+/**
+ * Per-host refinement for editor/viewer members ("3 of 15 sites").
+ *
+ * `author` (AGL-2334) is `editor` MINUS publish: it may create and edit
+ * every content document on the site, and it may not make any of it live.
+ * It exists because the agency guide sells exactly that role — "a client who
+ * may edit content but not publish" — and until now the narrowest thing we
+ * could offer was `viewer`, which cannot edit at all.
+ *
+ * It is a HOST role rather than a twelfth org permission key deliberately.
+ * Publishing is a set of client-direct Firestore writes, so it is enforced
+ * in the security rules, and the rules resolve a host request from the
+ * `memberRoles` projection with the one `get()` they already do. An org
+ * permission key is on the wrong axis: rules cannot evaluate a custom role
+ * without a second denormalized projection, and every publish surface would
+ * need a server route it does not have.
+ *
+ * Ordered between `editor` and `viewer` because that is its strength, but
+ * NOTHING may treat this union as ordered — `ORG_ROLE_WEIGHT` exists for the
+ * org axis and has no counterpart here on purpose. Host roles are compared by
+ * membership in a set (`HOST_CONTENT_WRITE_ROLES`, `HOST_PUBLISH_ROLES`), and
+ * an author is not "a weaker editor" in a way any single number can express.
+ */
+export type HostAccessRole = 'admin' | 'editor' | 'author' | 'viewer'
 
 /**
  * Every host role, as a value — for `where('memberRoles.{uid}', 'in', …)`.
@@ -64,6 +86,7 @@ export type HostAccessRole = 'admin' | 'editor' | 'viewer'
 const HOST_ACCESS_ROLE_KEYS: Record<HostAccessRole, true> = {
   admin: true,
   editor: true,
+  author: true,
   viewer: true,
 }
 export const HOST_ACCESS_ROLES = Object.keys(
