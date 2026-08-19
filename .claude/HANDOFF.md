@@ -1,10 +1,49 @@
-# HANDOFF — 2026-08-19. **`main` is 289 ahead of production and NOT yet promoted.**
+# HANDOFF — 2026-08-19. **v1.0.0-beta.3 IS PROMOTED, DEPLOYED AND TAGGED.**
 
 ## State
 
-- `production` = **`4773992d6`**, tag `v1.0.0-beta.2`. Unchanged today.
-- `main` = **289 commits ahead**, ~200 Linear issues. Nothing promoted this session.
+- `production` = **`cbf8125a3`**, tag **`v1.0.0-beta.3`** (annotated, pushed, on the
+  production merge commit). 291 commits / 236 issues promoted from `4773992d6`.
+- **All four Vercel projects verified serving `cbf8125`** — console, tenant, docs,
+  plugins. `node tools/deploy/verify-production-aliases.mjs` returns clean.
+- **Firestore rules DEPLOYED** (ruleset `664da337-…`). Drift clean on all three
+  surfaces. This shipped the `staffRole` fail-open→fail-closed fix (AGL-2380) and
+  made `refundedCents` non-client-writable.
+- **Firestore indexes DEPLOYED and READY** — 45/45 composites, 24/24 field
+  overrides, zero `NOT READY`. Includes the `orders.createdAtMs` override
+  (AGL-1793/AGL-1802 shape) and the `reservations` composite.
+- `main` is **1 ahead**: `138375af4` AGL-2334 author host role — deliberately NOT
+  in beta.3, and **its rules enforcement is inert until the next rules deploy**.
 - Feature freeze **Aug 25**, launch **Sept 1**.
+
+## ⚑ THE ONE THAT ALMOST SHIPPED WRONG — a per-project missing build
+
+`aglyn-tenant` produced **no deployment at all** for the production merge while
+console, docs and plugins all built. It stayed on the PREVIOUS release. Not a
+path-scoped skip — the batch changed 48 files under `apps/tenant` (+5,643).
+Tenant serves `aglyn.com` and every `*.aglyn.app` storefront.
+
+Every hand-check was green on console and proves NOTHING about tenant: `curl -I`
+200 (the old deployment serves throughout), the real page `<title>` (the old
+build has it too), Vercel API `READY` (only for the deployment you asked about).
+
+**Only `tools/deploy/verify-production-aliases.mjs` catches this**, because it
+compares each project's newest READY deployment commit against production HEAD.
+`--fix` cannot repair a missing build; trigger one with
+`POST /v13/deployments` + explicit `gitSource.sha`, then re-verify.
+
+**Treat that verifier as a REQUIRED gate before `release:tag`**, not the
+suggestion `release:tag` prints. Recorded on AGL-566.
+
+## Still owed (NOT shipped by beta.3)
+
+- Docker (AGL-2221), plugin-loader (AGL-2196), edge/CSP (AGL-2217, AGL-2198).
+- A **second rules deploy** once AGL-2334 is promoted — until then an `author`
+  IS an editor at the database, while console and docs claim otherwise.
+- The nx-ci `main` job was still running when the merge landed. Local coverage
+  was strictly broader (35 projects / 13,267 tests, lint 49 projects, typecheck
+  138/138, real prod build), and the CI-only checks — rules matrix, emulator
+  specs, guards — all passed first. But it was not waited for.
 
 ## The promotion blocker is CLEARED — and it was an absence, not a red
 
