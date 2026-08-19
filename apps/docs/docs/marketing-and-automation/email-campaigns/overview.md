@@ -145,8 +145,34 @@ experiment results table fills in by itself.
 
 ## Compliance
 
-- Every send includes an **unsubscribe** link.
+- Every send includes an **unsubscribe** link, and the header mailbox
+  providers look for — Gmail and Yahoo's one-click `List-Unsubscribe`.
+- Clicking it opens a confirmation page; only confirming actually
+  unsubscribes. That matters because corporate mail scanners open every link
+  in a message before the recipient sees it, and a link that unsubscribed on
+  open would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
+
+### Suppressions
+
+**Emails ▸ Suppressions** lists every address your campaigns skip, with the
+reason and the date:
+
+| Reason | What happened |
+| --- | --- |
+| **Unsubscribed** | They clicked the unsubscribe link. |
+| **Bounced** | The mailbox does not exist. Recorded only for a *permanent* bounce — a full mailbox or a temporary server problem never suppresses anybody. |
+| **Marked as spam** | They reported a message. |
+
+This is where the gap between a campaign's recipient count and what it
+actually sent comes from, and a rising **Bounced** count is the earliest sign
+a list is going stale.
+
+**Remove** puts an address back on your list — use it when somebody asks to
+be re-added, or when a suppression was recorded by mistake. Removing a
+*bounced* address means your next campaign will try a mailbox that has
+already said it does not exist, which mailbox providers hold against your
+sending reputation, so the confirmation names the reason before you do it.
 
 ## Related
 

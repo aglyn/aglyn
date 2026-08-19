@@ -21,13 +21,16 @@ import { HubTabs } from '@aglyn/shared-ui-next'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'
 import ListsCard from './lists-card'
+import SuppressionsCard from './suppressions-card'
 
 /**
  * Emails page (AGL-395): the console surface owned by the email plugin,
  * rendered by the shell's generic plugin route. Uses the host-setup
  * vertical-tab pattern (shared `HubTabs`) — Campaigns composer/history,
  * the designed-email list (which no longer clutters the main Screens
- * list), and audience lists — the marketing "Email" section, relocated.
+ * list), audience lists — the marketing "Email" section, relocated — and,
+ * since AGL-2410, the suppression list, which had been written by two paths
+ * and displayed by none.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
   const { hostId } = props
@@ -48,6 +51,14 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
           id: 'audiences',
           label: 'Audiences',
           content: <ListsCard hostId={hostId} />,
+        },
+        {
+          // Beside the audiences rather than inside them (AGL-2410): a
+          // suppression is not a list you build, it is the reason a list you
+          // built did not all get mailed.
+          id: 'suppressions',
+          label: 'Suppressions',
+          content: <SuppressionsCard hostId={hostId} />,
         },
       ]}
     />

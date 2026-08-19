@@ -673,7 +673,7 @@ export const DOCS_HELP_ANCHORS = {
   editFromTheLiveSite: ['#call-it-up', '#connect-your-access', '#the-bar', '#good-to-know', '#related'],
   editYourTheme: ['#open-the-editor', '#set-colors-and-fonts', '#it-follows-you-into-the-besigner', '#tips', '#related'],
   elementCatalog: ['#layout', '#grid', '#surface', '#accordion', '#navigation', '#tabs', '#tabs-that-go-to-another-screen', '#pagination', '#text', '#data-display', '#media', '#image-list', '#forms-input-commerce-members', '#related'],
-  emailCampaigns: ['#send-a-campaign', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#related'],
+  emailCampaigns: ['#send-a-campaign', '#monthly-send-cap', '#personalize-with-merge-tags', '#recipient-count', '#schedule-a-send', '#email-lists', '#experiments', '#opens--clicks', '#compliance', '#suppressions', '#related'],
   enterprise: ['#what-enterprise-does-not-change', '#getting-enterprise'],
   errorScreens: ['#the-error-screens', '#design-one', '#what-the-built-in-fallback-gives-you', '#error-screens-are-free', '#tips', '#related'],
   events: ['#manage-events', '#show-events-on-a-screen', '#search-engines', '#related'],

@@ -381,6 +381,16 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
     'update and delete stay open because the inbox marks a submission read ' +
     'and deletes it client-side.',
+  suppressions:
+    'Unsubscribes, permanent bounces and spam complaints. CREATE and UPDATE ' +
+    'are server-only in practice — the unsubscribe handler and the Resend ' +
+    'webhook — but DELETE is now client-side: the Suppressions tab on the ' +
+    'Emails console page removes an entry (AGL-2410), which is the only way ' +
+    'to undo a suppression a link prescanner caused (AGL-2408). Moved here ' +
+    'from SERVER_WRITTEN_NOT_YET_DENIED, whose whole premise is that no ' +
+    'client-SDK writer exists; that stopped being true on this commit. ' +
+    'Nothing here is a billing input and a removal only makes an address ' +
+    'targetable again, so the AGL-1367 test does not bite.',
 }
 
 /**
@@ -417,9 +427,6 @@ const SERVER_WRITTEN_NOT_YET_DENIED: Record<string, string> = {
   restockAlerts:
     'Shopper emails captured by an unauthenticated storefront endpoint ' +
     '(notify-restock.ts, Admin SDK). AGL-2042.',
-  suppressions:
-    'Email suppression list, read by campaign-send.ts and written ' +
-    'server-side. AGL-2042.',
 }
 
 const hostSubcollectionsInRepo = (() => {
