@@ -32,6 +32,33 @@ env:
 jobs:
   main:
     runs-on: ubuntu-latest
+
+    # AGL-2378. This was the only verdict-producing workflow with no timeout,
+    # so a stuck run fell through to GitHub's 6-HOUR default and every later
+    # push sat behind it. That is not hypothetical: until 947100c2c a
+    # `console:test` spec looped through microtasks forever, which jest's
+    # `testTimeout` structurally cannot catch — it is a real timer and the loop
+    # never yields to the macrotask queue. On 2026-08-19, 25 runs reached
+    # `nx affected` and took a median of 54.4m and a maximum of 75.8m, with the
+    # `nx affected` step alone measured at 34.6m in one of them. That, not a
+    # missing concurrency group, is most of what put 23 NX CI runs in flight at
+    # once and made the workflow read as "constantly failing" when many of
+    # those runs simply never got to answer.
+    #
+    # 30 is 3x the slowest run that has ever COMPLETED this pipeline (9.9m, on
+    # 947100c2c, immediately after the hang was fixed; the all-time fastest
+    # green is 1.7m and the slowest green 8.6m). It is the same headroom
+    # multiple emulator-guards.yml allows its heavy job, and the same ceiling —
+    # 30 is already the largest timeout in this repo, which is right for what
+    # is by far its largest job.
+    #
+    # The hang is fixed, so this is a backstop against the NEXT one rather than
+    # a live fire. If a legitimately wide commit — one touching tsconfig.base
+    # or the root package.json, where `nx affected` approaches all 40 projects
+    # — ever trips this, RAISE the number. Do not remove it: unbounded is how
+    # one stuck spec starves the branch for six hours.
+    timeout-minutes: 30
+
     steps:
       - uses: actions/checkout@v5
         with:
