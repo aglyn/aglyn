@@ -748,7 +748,12 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     // saving merges — so a blank field deletes the real value.
     if (schema.id === 'basic' && profileUnreadableAndEmpty) {
       return (
-        <CardDisplay header="Basic info" contentGutterX contentGutterY>
+        <CardDisplay header="Basic info"
+          help={docsHelp('manageAccount', {
+            excerpt:
+              'Your name and contact details, as they appear to teammates across ' +
+              'every organization you belong to.',
+          })} contentGutterX contentGutterY>
           <Alert severity="error" sx={{ maxWidth: 560 }}>
             {'We could not load your profile, so it is not shown here — the ' +
               'form is hidden rather than blank, because saving a blank form ' +

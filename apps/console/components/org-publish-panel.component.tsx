@@ -287,7 +287,21 @@ export function OrgPublishPanel({
   // user there rather than letting the publish 412.
   if (profile !== undefined && !profile?.handle) {
     return (
-      <CardDisplay header={'Publish to the marketplace'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Publish to the marketplace'}
+        // The SAME card, in the branch where it cannot be used — and until
+        // AGL-2130 the only branch with no help. A reader who arrives here is
+        // by definition the one who does not yet know how publishing works,
+        // so this is the branch that can least afford to drop the link.
+        help={docsHelp('publisherHandbook', {
+          anchor: '#where-to-publish-from',
+          excerpt:
+            'Publishing needs an organization publisher profile with a handle. ' +
+            'Set one up on the Profile tab first.',
+        })}
+        contentGutterX
+        contentGutterY
+      >
         <Alert severity="info">
           {'Set up your organization’s publisher profile in the Profile tab ' +
             'before publishing.'}

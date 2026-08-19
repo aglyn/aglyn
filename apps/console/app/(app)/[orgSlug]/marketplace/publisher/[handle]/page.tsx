@@ -40,6 +40,7 @@ import {
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useOrgHosts } from '../../../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../../../hooks/use-org-scope'
@@ -133,7 +134,12 @@ const OrgMarketplacePublisher: NextPageWithLayout<Record<string, never>> = () =>
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={2}>
-          <CardDisplay header={title} contentGutterX contentGutterY>
+          <CardDisplay header={title}
+            help={docsHelp('publisherHandbook', {
+              excerpt:
+                'The public face of a publisher — the profile customers read before ' +
+                'deciding to trust a listing.',
+            })} contentGutterX contentGutterY>
             <Stack direction="row" spacing={2}>
               {/* Logo (AGL-1009) — only an https URL is ever emitted; a
                   profile without one falls back to the initial. */}
