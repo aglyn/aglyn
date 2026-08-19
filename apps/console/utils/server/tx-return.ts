@@ -53,6 +53,24 @@
  * it the period's rows; the spec feeds it fixtures.
  */
 
+/**
+ * One tax line, as both collections write it.
+ *
+ * `platformRevenue` and `storefrontTaxCollected` write the same shape; three
+ * of these fields carry the comment "for the working papers" at the writer
+ * and had no reader anywhere until AGL-2329.
+ */
+export interface TaxLineInput {
+  amountCents?: unknown
+  taxableAmountCents?: unknown
+  taxabilityReason?: unknown
+  taxRateId?: unknown
+  /** Storefront lines only: the rate's percentage and its own jurisdiction. */
+  percentage?: unknown
+  rateState?: unknown
+  jurisdiction?: unknown
+}
+
 /** The subset of a `platformRevenue/{invoiceId}` row this module reads. */
 export interface TaxReturnRowInput {
   invoiceId: string
@@ -66,16 +84,63 @@ export interface TaxReturnRowInput {
     country?: unknown
     state?: unknown
   } | null
-  taxLines?: Array<{
-    amountCents?: unknown
-    taxabilityReason?: unknown
-    taxRateId?: unknown
-    taxableAmountCents?: unknown
-  }> | null
+  taxLines?: TaxLineInput[] | null
   /** JS Date, or anything with `.toDate()` (a Firestore Timestamp). */
   paidAt?: unknown
   refundedCents?: unknown
   refundRecordedAt?: unknown
+  /**
+   * Money reversed by the BANK rather than by us (AGL-2329).
+   *
+   * `billing/webhook` has maintained this since chargebacks were handled and
+   * only the webhook itself read it back, as a converging accumulator. The
+   * return read `refundedCents` alone, so it could not tell a refund we chose
+   * to give from a payment a bank clawed back — the exact distinction the
+   * field was created to make, and one that matters to a return because the
+   * two are not always adjusted the same way.
+   */
+  chargedBackCents?: unknown
+}
+
+/**
+ * One rate that touched a jurisdiction (AGL-2329).
+ *
+ * `taxRateId`, `percentage`, `rateState` and `jurisdiction` are written on
+ * every tax line by `storefront-tax.ts`, three of them annotated *"for the
+ * working papers"* — and no reader projected any of them. A return that
+ * states a jurisdiction's total and cannot state WHICH RATE produced it
+ * cannot be checked against a rate table, which is the first thing an
+ * examiner does.
+ */
+export interface TaxReturnRate {
+  /** Stripe's rate id, or `unknown` for a line that states none. */
+  taxRateId: string
+  /** The rate as a percentage, when the line states one. */
+  percentage: number | null
+  /** The rate's own state, which can differ from the customer's. */
+  rateState: string | null
+  /** The rate's own jurisdiction label, as Stripe worded it. */
+  jurisdiction: string | null
+  lines: number
+  taxableAmountCents: number
+  taxCollectedCents: number
+}
+
+/**
+ * Why tax came out the way it did, for one jurisdiction (AGL-2329).
+ *
+ * Keyed by Stripe's `taxability_reason` — `standard_rated`,
+ * `not_collecting`, `product_exempt`, `reverse_charge`, and the rest. These
+ * are the fields that explain why a jurisdiction was NOT collected, which is
+ * the working-paper detail an audit asks for first and the one figure a
+ * total can never carry: $0 of tax in a state reads identically whether we
+ * are unregistered there, the product is exempt, or the rate is genuinely
+ * zero, and those have three different answers.
+ */
+export interface TaxReturnTaxability {
+  lines: number
+  taxableAmountCents: number
+  taxCollectedCents: number
 }
 
 export interface TaxReturnJurisdiction {
@@ -85,6 +150,10 @@ export interface TaxReturnJurisdiction {
   /** Stripe's `taxable_amount` summed — the 80% base for TX rows. */
   taxableSalesCents: number
   taxCollectedCents: number
+  /** THE WORKING PAPERS (AGL-2329) — see {@link TaxReturnTaxability}. */
+  taxabilityReasons: Record<string, TaxReturnTaxability>
+  /** Every rate that touched this jurisdiction, dearest first. */
+  rates: TaxReturnRate[]
 }
 
 export interface TaxReturnSummary {
@@ -107,6 +176,23 @@ export interface TaxReturnSummary {
     refundedGrossCents: number
     /** The tax share of that gross, proportioned by each row's own ratio. */
     estimatedRefundedTaxCents: number
+    /**
+     * The part of the above that a BANK reversed, not us (AGL-2329).
+     *
+     * Stated as its own figure rather than netted in, because a chargeback
+     * and a refund we chose to give are the same money and different facts:
+     * one is a decision, the other is a dispute lost, and the return's reader
+     * is entitled to know which they are looking at. `chargedBackCents` was
+     * maintained for exactly this distinction and read only by the webhook
+     * that wrote it.
+     *
+     * Counted over the SAME rows as `refundedGrossCents` — the rows whose
+     * refund stamp lands in the period — so it is a subset of that figure
+     * and never an addition to it.
+     */
+    chargedBackCents: number
+    /** Rows where any of the reversal was a chargeback. */
+    rowsChargedBack: number
   }
   attention: {
     /** `automaticTax: false` — billed before its subscription gained tax. */
@@ -118,6 +204,21 @@ export interface TaxReturnSummary {
     nonUsdRows: number
     /** No `paidAt` — period assignment fell back to the query's bounds. */
     rowsMissingPaidAt: number
+    /**
+     * Rows whose STORED `netCents` disagrees with `gross − tax` (AGL-2329).
+     *
+     * The summary recomputes net rather than trusting the stored field, and
+     * says so — which left `netCents` a stored value its only consumer
+     * refused, a second source of truth waiting to drift unobserved. It is
+     * not deleted, because the disagreement is itself information: a row
+     * where the two differ was hand-edited or written by a build whose
+     * arithmetic differed, and a filing record is exactly the place that
+     * should be said out loud rather than quietly corrected.
+     *
+     * Rows storing no `netCents` at all are NOT counted here — an absent
+     * field is not a contradiction.
+     */
+    rowsWithNetMismatch: number
   }
 }
 
@@ -171,6 +272,101 @@ export function taxPeriodRange(
   return null
 }
 
+/** An empty jurisdiction bucket, working papers included. */
+function emptyJurisdiction(): TaxReturnJurisdiction {
+  return {
+    transactionCount: 0,
+    totalSalesCents: 0,
+    taxableSalesCents: 0,
+    taxCollectedCents: 0,
+    taxabilityReasons: {},
+    rates: [],
+  }
+}
+
+/**
+ * Fold one row's tax lines into a jurisdiction's working papers (AGL-2329).
+ *
+ * Shared by both halves of the return deliberately. `platformRevenue` and
+ * `storefrontTaxCollected` write the same line shape for the same reason,
+ * and two implementations of "which rate produced this" is how the two
+ * halves of one filing come to disagree.
+ *
+ * A line stating no reason is filed under `unstated` rather than dropped or
+ * folded into `standard_rated`. Dropping it would make the reasons fail to
+ * sum to the jurisdiction's tax — a working paper that does not reconcile is
+ * worse than none — and guessing `standard_rated` would assert a fact about
+ * a filing that nobody recorded.
+ */
+function accumulateWorkingPapers(
+  bucket: TaxReturnJurisdiction,
+  lines: readonly (TaxLineInput | undefined)[],
+): void {
+  for (const line of lines) {
+    if (!line) continue
+    const taxable = Math.round(Number(line.taxableAmountCents ?? 0)) || 0
+    const collected = Math.round(Number(line.amountCents ?? 0)) || 0
+
+    const reason =
+      typeof line.taxabilityReason === 'string' && line.taxabilityReason
+        ? line.taxabilityReason
+        : 'unstated'
+    const entry = (bucket.taxabilityReasons[reason] ??= {
+      lines: 0,
+      taxableAmountCents: 0,
+      taxCollectedCents: 0,
+    })
+    entry.lines += 1
+    entry.taxableAmountCents += taxable
+    entry.taxCollectedCents += collected
+
+    const taxRateId =
+      typeof line.taxRateId === 'string' && line.taxRateId
+        ? line.taxRateId
+        : 'unknown'
+    const percentage = Number.isFinite(Number(line.percentage))
+      ? Number(line.percentage)
+      : null
+    const rateState =
+      typeof line.rateState === 'string' && line.rateState
+        ? line.rateState
+        : null
+    const jurisdictionLabel =
+      typeof line.jurisdiction === 'string' && line.jurisdiction
+        ? line.jurisdiction
+        : null
+    // Keyed by rate id AND percentage: a rate id whose percentage changed
+    // mid-period is two different rates on a return, and merging them would
+    // hide exactly the change an examiner is checking for.
+    let rate = bucket.rates.find(
+      (existing) =>
+        existing.taxRateId === taxRateId && existing.percentage === percentage,
+    )
+    if (!rate) {
+      rate = {
+        taxRateId,
+        percentage,
+        rateState,
+        jurisdiction: jurisdictionLabel,
+        lines: 0,
+        taxableAmountCents: 0,
+        taxCollectedCents: 0,
+      }
+      bucket.rates.push(rate)
+    }
+    rate.lines += 1
+    rate.taxableAmountCents += taxable
+    rate.taxCollectedCents += collected
+  }
+  // Dearest first: the rate carrying the most money is the one a reviewer
+  // checks, and it belongs at the top rather than wherever it was first seen.
+  bucket.rates.sort(
+    (a, b) =>
+      b.taxCollectedCents - a.taxCollectedCents ||
+      a.taxRateId.localeCompare(b.taxRateId),
+  )
+}
+
 /** The return's figures from one period's rows. See the module note. */
 export function taxReturnSummary(
   rows: readonly TaxReturnRowInput[],
@@ -188,6 +384,8 @@ export function taxReturnSummary(
       rowsRefundedInPeriod: 0,
       refundedGrossCents: 0,
       estimatedRefundedTaxCents: 0,
+      chargedBackCents: 0,
+      rowsChargedBack: 0,
     },
     attention: {
       untaxedRows: 0,
@@ -195,6 +393,7 @@ export function taxReturnSummary(
       rowsMissingAddress: 0,
       nonUsdRows: 0,
       rowsMissingPaidAt: 0,
+      rowsWithNetMismatch: 0,
     },
   }
 
@@ -205,6 +404,18 @@ export function taxReturnSummary(
     // by construction, and re-deriving keeps a hand-edited row from making
     // the three headline figures internally inconsistent.
     const net = gross - tax
+    // …and REPORT the disagreement rather than swallowing it (AGL-2329). A
+    // stored figure the consumer silently refuses is a second source of truth
+    // nobody is watching; a stored figure whose disagreement is counted is a
+    // checksum. Absent is not a contradiction, so only stated values count.
+    if (
+      row.netCents !== null &&
+      row.netCents !== undefined &&
+      Number.isFinite(Number(row.netCents)) &&
+      Math.round(Number(row.netCents)) !== net
+    ) {
+      summary.attention.rowsWithNetMismatch += 1
+    }
     const lines = Array.isArray(row.taxLines) ? row.taxLines : []
     const statedBases = lines
       .map((line) => line?.taxableAmountCents)
@@ -234,16 +445,12 @@ export function taxReturnSummary(
     summary.totalSalesCents += net
     summary.taxableSalesCents += taxableBase
     summary.taxCollectedCents += tax
-    const bucket = (summary.byJurisdiction[jurisdiction] ??= {
-      transactionCount: 0,
-      totalSalesCents: 0,
-      taxableSalesCents: 0,
-      taxCollectedCents: 0,
-    })
+    const bucket = (summary.byJurisdiction[jurisdiction] ??= emptyJurisdiction())
     bucket.transactionCount += 1
     bucket.totalSalesCents += net
     bucket.taxableSalesCents += taxableBase
     bucket.taxCollectedCents += tax
+    accumulateWorkingPapers(bucket, lines)
 
     const refunded = cents(row.refundedCents)
     const refundStamp = asRowDate(row.refundRecordedAt)
@@ -255,6 +462,13 @@ export function taxReturnSummary(
     ) {
       summary.refunds.rowsRefundedInPeriod += 1
       summary.refunds.refundedGrossCents += refunded
+      // A SUBSET of the line above, never an addition to it: the bank's
+      // share of the same reversed money.
+      const chargedBack = Math.min(cents(row.chargedBackCents), refunded)
+      if (chargedBack > 0) {
+        summary.refunds.chargedBackCents += chargedBack
+        summary.refunds.rowsChargedBack += 1
+      }
       // The refund moves tax and revenue in the row's own proportion — the
       // same ratio the GA reversal uses. A row with no gross cannot state a
       // ratio; its tax share stays out of the estimate rather than guessed.
@@ -334,10 +548,7 @@ export interface StorefrontTaxReturnRowInput {
     country?: unknown
     state?: unknown
   } | null
-  taxLines?: Array<{
-    amountCents?: unknown
-    taxableAmountCents?: unknown
-  }> | null
+  taxLines?: TaxLineInput[] | null
   paidAt?: unknown
 }
 
@@ -464,16 +675,16 @@ export function storefrontTaxSummary(
     bucket.grossCents += gross
     bucket.taxableSalesCents += taxableBase
     bucket.taxCollectedCents += tax
-    const jurisdictionBucket = (bucket.byJurisdiction[jurisdiction] ??= {
-      transactionCount: 0,
-      totalSalesCents: 0,
-      taxableSalesCents: 0,
-      taxCollectedCents: 0,
-    })
+    const jurisdictionBucket = (bucket.byJurisdiction[jurisdiction] ??=
+      emptyJurisdiction())
     jurisdictionBucket.transactionCount += 1
     jurisdictionBucket.totalSalesCents += gross - tax
     jurisdictionBucket.taxableSalesCents += taxableBase
     jurisdictionBucket.taxCollectedCents += tax
+    // The storefront half's working papers (AGL-2329). Its lines carry the
+    // richer detail — `percentage`, `rateState`, `jurisdiction` — three
+    // fields the writer annotates "for the working papers" and nothing read.
+    accumulateWorkingPapers(jurisdictionBucket, lines)
   }
 
   return summary

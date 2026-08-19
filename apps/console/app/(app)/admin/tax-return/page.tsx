@@ -780,6 +780,54 @@ const AdminTaxReturn: NextPageWithLayout<Record<string, never>> = () => {
                               />
                             ) : null}
                           </Stack>
+                          {/*
+                            THE WORKING PAPERS (AGL-2329).
+
+                            `taxabilityReason`, `taxRateId`, `percentage`,
+                            `rateState` and `jurisdiction` are written on
+                            every tax line — three of them annotated "for the
+                            working papers" at the writer — and nothing read
+                            any of them. A jurisdiction row that states a
+                            total and cannot say WHY is the figure without
+                            the paper behind it: $0 of tax reads identically
+                            whether we are unregistered, the product is
+                            exempt, or the rate is genuinely zero, and an
+                            examiner asks which one first.
+
+                            Rendered under the jurisdiction rather than in a
+                            column of its own because there are several per
+                            row and they belong to it, not beside it.
+                          */}
+                          {row.taxabilityReasons.length ? (
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              sx={{ flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+                            >
+                              {row.taxabilityReasons.map((paper) => (
+                                <Chip
+                                  key={paper.key}
+                                  size="small"
+                                  variant="outlined"
+                                  label={`${paper.label}: $${paper.taxCollectedDollars} on $${paper.taxableSalesDollars}`}
+                                />
+                              ))}
+                            </Stack>
+                          ) : null}
+                          {row.rates.length ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block', mt: 0.5 }}
+                            >
+                              {`Rates: ${row.rates
+                                .map(
+                                  (rate) =>
+                                    `${rate.label} — $${rate.taxCollectedDollars}`,
+                                )
+                                .join(' · ')}`}
+                            </Typography>
+                          ) : null}
                         </TableCell>
                         <TableCell align="right">
                           {row.transactionCount}
