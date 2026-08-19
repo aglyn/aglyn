@@ -206,10 +206,21 @@ describe('a campaign recipient preview', () => {
     // Starter's emailSendsPerMonth is finite; a month already at the cap
     // refuses, and the composer shows that message under the picker.
     seed(2)
+    // `jest.requireMock`, not a deferred `require('@aglyn/tenant-data-admin')`.
+    // A literal first-party specifier passed to `require` inside a callback
+    // registers a DYNAMIC nx graph edge on plugins-marketing, and nx then
+    // forbids every STATIC import of that library in every project that
+    // reaches it — hundreds of errors in another app, on files that did not
+    // change (AGL-2313). `requireMock` reads jest's mock registry rather than
+    // loading a module, so nx records nothing and the spy still lands on the
+    // very object the factory above returned. A namespace import would NOT:
+    // the interop wrapper copies the properties, and the copy is not what
+    // `campaign-send` calls.
     const withUsage = jest
       .spyOn(
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        require('@aglyn/tenant-data-admin'),
+        jest.requireMock('@aglyn/tenant-data-admin') as {
+          campaignEmailSendsForMonth: (...args: any[]) => Promise<number>
+        },
         'campaignEmailSendsForMonth',
       )
       .mockResolvedValue(1_000_000)

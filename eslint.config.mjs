@@ -9,6 +9,7 @@ import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
 import noCrossGraphImport from './tools/lint-rules/no-cross-graph-import.mjs'
+import noDynamicFirstPartyImport from './tools/lint-rules/no-dynamic-first-party-import.mjs'
 import noLinkElementSwitch from './tools/lint-rules/no-link-element-switch.mjs'
 import noListenerRowSpreadIntoWrite from './tools/lint-rules/no-listener-row-spread-into-write.mjs'
 import noPlanGatedEntitlement from './tools/lint-rules/no-plan-gated-entitlement.mjs'
@@ -20,6 +21,7 @@ import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook
 const aglynPlugin = {
   rules: {
     'no-cross-graph-import': noCrossGraphImport,
+    'no-dynamic-first-party-import': noDynamicFirstPartyImport,
     'no-link-element-switch': noLinkElementSwitch,
     'no-listener-row-spread-into-write': noListenerRowSpreadIntoWrite,
     'no-plan-gated-entitlement': noPlanGatedEntitlement,
@@ -106,6 +108,16 @@ export default [
       // typechecks clean and passes every unit test, so it surfaces only at
       // `nx build` — i.e. at promotion time (AGL-1349, which took main down).
       'aglyn/no-cross-graph-import': 'error',
+      // A deferred `@aglyn/*` import in a SPEC registers a dynamic nx graph
+      // edge, which makes `@nx/enforce-module-boundaries` forbid every static
+      // import of that library in every project that reaches it. Four times
+      // now the blast has landed in a different project on files that did not
+      // change, under a message whose file list is EMPTY: AGL-949 (100
+      // errors), AGL-1329 (14), email-media-src-drift (~20), and
+      // AGL-2282/AGL-2313 — 441 errors across 364 console files, promotion
+      // blocked. Which positions nx counts as dynamic is an internal heuristic
+      // no reviewer can see in a diff, so the rule refuses the whole shape.
+      'aglyn/no-dynamic-first-party-import': 'error',
       // An element type chosen from the screens map is a hydration mismatch:
       // the map behind the ISR render is not the map behind the render that
       // hydrates it (AGL-1268). Three components shipped this, one of them a

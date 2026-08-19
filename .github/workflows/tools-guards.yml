@@ -7,7 +7,7 @@ name: Tools guards
 # and seconds each; this workflow is their one cheap ACTIVE home.
 #
 # What each guards:
-#  - test:eslint-rules        the seven local ESLint guard rules' RuleTester
+#  - test:eslint-rules        the eight local ESLint guard rules' RuleTester
 #                             suites (the RULES run at every `nx lint`; their
 #                             self-tests otherwise run nowhere)
 #  - test:plugin-loader       the sandbox CSP the plugin origin serves (AGL-1092)
