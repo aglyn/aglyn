@@ -633,6 +633,80 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(indexDrift, /npm run test:rules-drift/)
   })
 
+  it('legal-drift.yml refuses to no-op, and says which variable is missing (AGL-2379)', () => {
+    // `check:legal-drift` needs the live site AND a Drive credential, so it
+    // cannot be a secretless gate; it is scheduled instead. That shape has one
+    // failure mode, and it is the worst one: a scheduled job that cannot run
+    // still REPORTS AS COVERAGE. On 2026-08-19 this workflow was registered,
+    // active, and had executed zero times — `LEGAL_DRIVE_FOLDER_ID` was unset,
+    // and a repo-variables read returned `total_count: 0` as the negative
+    // control. A dispatched run then failed at the guard below with exit 2,
+    // which is the designed behaviour, not a bug: cannot-check is NOT clean.
+    //
+    // Asserted HERE rather than inside legal-drift.yml because that would be
+    // circular — deleting the guard would delete the check on the deletion —
+    // and because legal-drift.yml runs at most once a day while this suite
+    // runs in three workflows on every push.
+    const workflow = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'legal-drift.yml'),
+      'utf8',
+    )
+    assert.match(workflow, /npm run check:legal-drift/)
+    assert.match(workflow, /schedule:/)
+    // The guard, and the message it owes the reader: the variable BY NAME and
+    // the command that sets it. A bare non-zero exit here is a mystery — the
+    // person who sees the red badge is not the person who wrote the workflow.
+    assert.match(workflow, /LEGAL_DRIVE_FOLDER_ID repo variable is not set/)
+    assert.match(
+      workflow,
+      /gh variable set LEGAL_DRIVE_FOLDER_ID/,
+      'the failure must name the command that fixes it',
+    )
+    assert.match(workflow, /secrets\.FIREBASE_CLIENT_EMAIL/)
+    assert.match(
+      workflow,
+      /exit 2/,
+      'a missing credential must FAIL the job, never skip the step',
+    )
+    // Same AGL-1778 ordering as rules-drift: a comparator that has stopped
+    // comparing reports "no drift", which is indistinguishable from
+    // convergence, so its self-test runs BEFORE its verdict is printed.
+    //
+    // Matched as STEPS (`- run:` / `run:`), not as bare script names: this
+    // file's header comment tells the reader to run `npm run check:legal-drift`
+    // locally, so a substring search finds the prose 90 lines above the step
+    // and "the self-test runs first" passes or fails on a comment. That is the
+    // shape of a check that reads the wrong thing and reports on it anyway.
+    const selfTest = workflow.indexOf('- run: npm run test:legal-drift')
+    const check = workflow.indexOf('run: npm run check:legal-drift -- --summary')
+    assert.ok(
+      selfTest !== -1,
+      'legal-drift.yml must have a `- run: npm run test:legal-drift` STEP',
+    )
+    assert.ok(check !== -1, 'legal-drift.yml must have a check:legal-drift STEP')
+    assert.ok(selfTest < check, 'the self-test must run BEFORE the comparison')
+    // THIS REPOSITORY IS PUBLIC and Actions logs on a public repo are readable
+    // by anyone. The unified diff body is the text of an UNPUBLISHED legal
+    // draft; `--summary` prints per-document verdicts and line counts and
+    // omits the body. The exit code is byte-identical either way, so dropping
+    // the flag to make the log "more useful" costs nothing and leaks
+    // everything.
+    assert.match(
+      workflow,
+      /check:legal-drift -- --summary/,
+      'the public Actions log must never carry the diff body',
+    )
+    // It gates nothing on purpose: the check is RED today for a reason no
+    // engineer can fix (publishing legal text is Zach's and counsel's call),
+    // so a push or pull_request trigger would redden every merge in the repo
+    // and teach everyone to ignore it.
+    const triggers = workflow.slice(workflow.indexOf('\non:'), workflow.indexOf('\njobs:'))
+    assert.ok(
+      !/^\s*(push|pull_request):/m.test(triggers),
+      'legal-drift must gate nothing — no push / pull_request trigger',
+    )
+  })
+
   it('the homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
     // These suites' only other home is nx-ci.yml. It is ACTIVE and does run
     // them — the `disabled_manually` claim here was false (AGL-2381) — but it
