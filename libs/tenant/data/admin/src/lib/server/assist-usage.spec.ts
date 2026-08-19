@@ -178,6 +178,7 @@ const {
   assistEntitledMonthlyLimit,
   assistExchangeExpiry,
   assistFreeDailyLimit,
+  assistOrgMonthlyCostLimitUsd,
   assistUsageDay,
   assistUsageMonth,
   assistRatesForModel,
@@ -200,6 +201,7 @@ beforeEach(() => {
   mockAutoId = 0
   delete process.env.ASSIST_FREE_DAILY_LIMIT
   delete process.env.ASSIST_ENTITLED_MONTHLY_LIMIT
+  delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
 })
 
 describe('period keys and limits', () => {
@@ -458,6 +460,142 @@ describe('reserveAssistMessage — the cap must be spent BEFORE the tokens', () 
     const store = firestore()
     expect((await reserveAssistMessage(store, ORG, false, NOW)).allowed).toBe(true)
     expect((await reserveAssistMessage(store, ORG, false, NOW)).allowed).toBe(false)
+  })
+})
+
+/**
+ * The DOLLAR half of the cap (AGL-2264).
+ *
+ * A message cap bounds money only through an assumed cost per message, and
+ * every input to that assumption is mutable at runtime: `ASSIST_MODEL`, the
+ * prompt's length, and how much history a client chooses to post. So these
+ * assert against the MEASURED figure the meters already write.
+ *
+ * The ceiling ships UNSET, and that is a decision rather than an oversight —
+ * see `assistOrgMonthlyCostLimitUsd`. Which means the load-bearing test in
+ * this block is the last one: the default posture has to be pinned, or a
+ * later change could turn a shipped plan into a refusal and nothing here
+ * would notice.
+ */
+describe('the monthly SPEND ceiling — a message cap is not a dollar cap', () => {
+  const dailyPath = `orgs/${ORG}/counters/assistMessagesDaily`
+  const monthPath = `orgs/${ORG}/assistUsage/2026-08`
+
+  it('is unset by default, and junk reads as unset rather than as zero', () => {
+    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    expect(assistOrgMonthlyCostLimitUsd()).toBe(40)
+    // A typo must not become a ceiling of $0, which would refuse every
+    // workspace on the deployment. Nor must an empty string: `Number('')`
+    // is 0, the same outage by a different route.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = 'forty dollars'
+    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = ''
+    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '-5'
+    expect(assistOrgMonthlyCostLimitUsd()).toBeNull()
+  })
+
+  it('REFUSES an entitled org over the ceiling, and moves no counter', async () => {
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    // Note what is NOT wrong here: 12 messages against a 1,000-message
+    // guard. The org has 988 messages in hand and is refused anyway, which
+    // is the entire point — the messages were dear, not many.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      costUsd: 41.5,
+      costLimitUsd: 40,
+    })
+    // And it says so honestly: messages remain, so a surface that renders
+    // "N of M left" cannot claim the org ran out of messages.
+    expect(reservation.remaining).toBeGreaterThan(0)
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+    expect(mockDocs.get(dailyPath)).toBeUndefined()
+  })
+
+  it('THE NEGATIVE CONTROL: the same fixture with NO ceiling set reserves', async () => {
+    // Without this the test above passes for a build that refuses any org
+    // carrying a cost at all, or one that refuses entitled orgs outright.
+    // The only difference between the two fixtures is the env var.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({
+      allowed: true,
+      refusedBy: null,
+      // Reported because the entitled gate opens this document anyway.
+      costUsd: 41.5,
+      costLimitUsd: null,
+    })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('reports costUsd as NULL when nothing consulted it, never as zero', async () => {
+    // The free tier gates on the daily counter, so with no ceiling
+    // configured there is no reason to open the monthly document — and a
+    // reservation that answered `costUsd: 0` there would be reporting a
+    // constant under a measurement's name. The org below has spent $41.50.
+    mockDocs.set(dailyPath, { '2026-08-17': 1 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 41.5 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({ allowed: true, costUsd: null })
+    // And with a ceiling configured the same call DOES look, so the null
+    // above means "not consulted" rather than "never reads this field".
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '999'
+    const looked = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(looked).toMatchObject({ allowed: true, costUsd: 41.5 })
+  })
+
+  it('THE SECOND NEGATIVE CONTROL: a dollar under the ceiling still reserves', async () => {
+    // And this one stops a build that merely refuses whenever a ceiling is
+    // configured, which would pass both tests above.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 39 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
+  })
+
+  it('binds the FREE tier too, whose gate is a different document', async () => {
+    // The free tier gates on `counters/assistMessagesDaily`, so the spend
+    // figure is in a document the reservation would otherwise never open.
+    // A build that reads the ceiling off the gate document passes every
+    // entitled test above and leaves the free tier unbounded.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    mockDocs.set(dailyPath, { '2026-08-17': 0 })
+    mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'budget',
+      period: 'day',
+    })
+    expect(mockDocs.get(dailyPath)).toMatchObject({ '2026-08-17': 0 })
+  })
+
+  it('the MESSAGE cap still wins when both apply, so the words stay true', async () => {
+    // Ordering is not cosmetic. "You are out of messages today" is a claim
+    // the user can check and a wait they can measure; a spend refusal is
+    // neither. When both ceilings are crossed the checkable one is the
+    // honest thing to say.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    mockDocs.set(dailyPath, { '2026-08-17': 10 })
+    mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW)
+    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'messages' })
+  })
+
+  it('SHIPS INERT: unset, no measured cost however large refuses anything', async () => {
+    // The pinned default posture. Pricing is locked for Sept 1, so the
+    // ceiling that ships must change no plan's behaviour; a later edit that
+    // gave it a default number would turn a paid workspace into a refusal,
+    // and this is the test that would stop it.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    mockDocs.set(monthPath, { messages: 3, estCostUsd: 100_000 })
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW)
+    expect(reservation).toMatchObject({ allowed: true, costLimitUsd: null })
   })
 })
 

@@ -155,6 +155,44 @@ export function assistEntitledMonthlyLimit(): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1000
 }
 
+/**
+ * Optional per-org monthly PROVIDER-SPEND ceiling in USD — the dollar half
+ * of the cap (AGL-2264). Returns `null` when unset, and unset is the
+ * shipped default.
+ *
+ * The message caps above bound spend only through an assumed cost per
+ * message, and that assumption is exactly what drifts: `ASSIST_MODEL` is an
+ * env override, prompts grow, and a client controls how much history it
+ * posts. This reads the measured figure instead: the running `estCostUsd`
+ * on the month's assist usage document, which `writeSignalAndRollup`
+ * already increments at the SERVING model's rates. So it bounds the actual
+ * bill rather than a forecast of it.
+ *
+ * ⚠️ **Default null on purpose, and the number is Zach's, not ours.** What
+ * dollar figure an entitled workspace may reach, and what should happen when
+ * it does — refuse, degrade to a cheaper model, or keep serving and eat it —
+ * are pricing calls on a plan that is LOCKED for Sept 1. Choosing one here
+ * would re-price a shipped plan. So the mechanism ships wired and inert, and
+ * turning it on is one environment variable rather than a release: set
+ * `ASSIST_ORG_MONTHLY_COGS_LIMIT_USD` and every assist entrypoint that
+ * reserves — the console chat route and the besigner copy assistant alike —
+ * starts refusing above it in the same transaction that counts messages.
+ *
+ * The refusal is deliberately the same shape as the message refusal (a
+ * reservation that did not move the counter), so an org at the ceiling
+ * spends nothing at all rather than spending less.
+ *
+ * Fails to NO ceiling on an unparseable value rather than to zero: a typo
+ * that silently disabled every workspace's assistant would be a worse
+ * outage than the overspend it guards, and the $25 staff alert
+ * (`ASSIST_ORG_MONTHLY_COGS_ALERT_USD`) still fires either way.
+ */
+export function assistOrgMonthlyCostLimitUsd(): number | null {
+  const raw = process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+  const parsed = raw ? Number(raw) : Number.NaN
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
 export interface AssistTokenRates {
   inputPerToken: number
   outputPerToken: number
@@ -247,6 +285,31 @@ export interface AssistReservation extends AssistQuotaVerdict {
   dayKey: string
   /** Month the `assistUsage` doc was incremented for (`YYYY-MM`). */
   monthKey: string
+  /**
+   * Which ceiling refused, or `null` when the message was reserved. The two
+   * refusals need different words at the surface: a message cap resets on a
+   * clock the user can be told about, and a spend ceiling does not.
+   *
+   * Only on the reservation, not on `AssistQuotaVerdict` — `checkAssistQuota`
+   * is a reporting read that never consults the spend ceiling, and widening
+   * the shared type would let a caller believe it had.
+   */
+  refusedBy: 'messages' | 'budget' | null
+  /**
+   * Measured provider spend for `monthKey` in USD as read inside the
+   * transaction, or `null` when the transaction did not consult it.
+   *
+   * Nullable rather than defaulted to 0, and the difference is the whole
+   * point: an entitled reservation reads the monthly document anyway (it is
+   * the gate), but a free one gates on the daily counter and only opens the
+   * monthly document when a ceiling is configured — so there is a path with
+   * no figure to report. Reporting `0` there would be a constant wearing a
+   * measurement's name, and a caller could not tell "this org has spent
+   * nothing" from "nobody looked".
+   */
+  costUsd: number | null
+  /** The configured ceiling, or `null` when none is set (the default). */
+  costLimitUsd: number | null
 }
 
 /**
@@ -296,20 +359,54 @@ export async function reserveAssistMessage(
   const gateRef = entitled ? monthlyRef : dailyRef
   const gateField = entitled ? 'messages' : day
 
+  const costLimitUsd = assistOrgMonthlyCostLimitUsd()
+
   return firestore.runTransaction(async (tx) => {
-    // The one read, before any write — Firestore requires that ordering, and
-    // it is also what makes check-and-increment a single atomic step.
+    // Every read before any write — Firestore requires that ordering, and it
+    // is also what makes check-and-increment a single atomic step.
     const snapshot = await tx.get(gateRef)
+    // The spend ceiling reads the SAME monthly document the entitled gate
+    // already read, so an entitled reservation costs no extra read at all
+    // and a free one costs a second read only when a ceiling is configured.
+    const monthlySnapshot = entitled
+      ? snapshot
+      : costLimitUsd === null
+        ? null
+        : await tx.get(monthlyRef)
     const used = Number(snapshot.get(gateField) ?? 0)
+    const costUsd = monthlySnapshot
+      ? Number(monthlySnapshot.get('estCostUsd') ?? 0)
+      : null
     if (!(used < limit)) {
       return {
         allowed: false,
+        refusedBy: 'messages' as const,
         period,
         dayKey: day,
         monthKey: month,
         used,
         limit,
         remaining: 0,
+        costUsd,
+        costLimitUsd,
+      }
+    }
+    // The dollar ceiling, checked AFTER the message cap so the cheaper and
+    // more explicable refusal wins when both apply. Refusing here leaves both
+    // counters untouched, exactly like the message refusal above: the point
+    // of a spend ceiling is that the org above it spends nothing more.
+    if (costLimitUsd !== null && costUsd !== null && !(costUsd < costLimitUsd)) {
+      return {
+        allowed: false,
+        refusedBy: 'budget' as const,
+        period,
+        dayKey: day,
+        monthKey: month,
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+        costUsd,
+        costLimitUsd,
       }
     }
     // `set(…, { merge: true })` and never `update()`: the counter document
@@ -323,12 +420,15 @@ export async function reserveAssistMessage(
     )
     return {
       allowed: true,
+      refusedBy: null,
       period,
       dayKey: day,
       monthKey: month,
       used: used + 1,
       limit,
       remaining: Math.max(0, limit - (used + 1)),
+      costUsd,
+      costLimitUsd,
     }
   })
 }
