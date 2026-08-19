@@ -114,31 +114,47 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
     const file = product.digitalFiles?.[fileIndex]
     if (!file?.url) return res.status(404).send('No file available')
 
-    // Attempt accounting per order+product.
+    // ATTEMPT ACCOUNTING, IN ONE TRANSACTION (AGL-2275).
+    //
+    // This was a read-then-write across an await, from a snapshot fetched
+    // before the check, with the failure swallowed — so N parallel requests
+    // all read the same count, all passed the limit, and all wrote
+    // `attempts + 1`. The counter advanced by one for N downloads, which
+    // makes `downloadLimit` unenforceable rather than merely approximate: a
+    // buyer who fans out ten requests takes ten copies against a limit of one.
+    // For a paid digital product that is the merchant's goods given away.
+    //
+    // It also wrote the WHOLE `downloadAttempts` map back from that stale
+    // snapshot, so a concurrent download of a DIFFERENT product in the same
+    // order had its increment erased.
+    //
+    // The half-finished conversion was visible in the file: `attemptsKey`
+    // built the dotted path `downloadAttempts.{productId}` and the next line
+    // threw it away with `void attemptsKey`. The dotted path is the right
+    // instrument and needs `update()` — which merges only that nested key, and
+    // whose "document must exist" precondition the transaction's own read has
+    // just satisfied. `set(..., { merge: true })` cannot express it: a dotted
+    // key there is a literal field name with a dot in it.
     const attemptsKey = `downloadAttempts.${productId}`
-    const attempts = Number(
-      (orderSnapshot.get('downloadAttempts') ?? {})[productId] ?? 0,
-    )
-    if (
-      product.downloadLimit != null &&
-      attempts >= Math.max(1, product.downloadLimit)
-    ) {
+    const limit =
+      product.downloadLimit != null
+        ? Math.max(1, product.downloadLimit)
+        : null
+    const withinLimit = await firestore.runTransaction(async (transaction) => {
+      const fresh = await transaction.get(orderRef)
+      if (!fresh.exists) return false
+      const attempts = Number(
+        (fresh.get('downloadAttempts') ?? {})[productId] ?? 0,
+      )
+      if (limit != null && attempts >= limit) return false
+      transaction.update(orderRef, { [attemptsKey]: attempts + 1 })
+      return true
+    })
+    if (!withinLimit) {
       return res
         .status(429)
         .send('Download limit reached — contact the seller for help')
     }
-    await orderRef
-      .set(
-        {
-          downloadAttempts: {
-            ...((orderSnapshot.get('downloadAttempts') as any) ?? {}),
-            [productId]: attempts + 1,
-          },
-        },
-        { merge: true },
-      )
-      .catch(() => undefined)
-    void attemptsKey
     res.setHeader('Cache-Control', 'no-store')
     return res.redirect(302, file.url)
   } catch (error) {
