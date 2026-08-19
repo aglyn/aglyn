@@ -24,6 +24,7 @@ import {
   resolveMediaSrc,
   Route,
   SCREEN_ROOT_PATH,
+  TENANT_APEX,
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
@@ -109,7 +110,11 @@ export async function POST(request: Request): Promise<Response> {
       .toLowerCase()
     const isProductionAlias =
       hostname === hostDoc.cname ||
-      (hostDoc.subdomain && hostname === `${hostDoc.subdomain}.aglyn.app`)
+      // AGL-2121: the configured apex, not our literal. On a self-host
+      // install NODE_ENV is 'production' so the carve-out below is false, and
+      // a pinned `aglyn.app` made this 403 'Wrong site' for every in-place
+      // edit on every operator's deployment.
+      (hostDoc.subdomain && hostname === `${hostDoc.subdomain}.${TENANT_APEX}`)
     const isDevOrPreview =
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||

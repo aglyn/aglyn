@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   EDIT_HINT_COOKIE,
   EDIT_HINT_COOKIE_TTL_MS,
@@ -110,7 +111,11 @@ export async function GET(request: Request): Promise<Response> {
   const hostname = (request.headers.get('host') ?? '')
     .split(':')[0]
     .toLowerCase()
-  const onTenantApex = hostname === 'aglyn.app' || hostname.endsWith('.aglyn.app')
+  // AGL-2121: the configured apex. Pinned to ours, a self-host install both
+  // failed this test AND planted `Domain=.aglyn.app` — a domain the operator's
+  // browser would reject anyway.
+  const onTenantApex =
+    hostname === TENANT_APEX || hostname.endsWith(`.${TENANT_APEX}`)
   const onDevHost =
     process.env.NODE_ENV !== 'production' &&
     (hostname === 'localhost' || hostname.endsWith('.localhost'))
@@ -125,7 +130,7 @@ export async function GET(request: Request): Promise<Response> {
     // production pins the registrable domain so every tenant subdomain sees
     // the hint.
     const attributes = onTenantApex
-      ? `Domain=.aglyn.app; Path=/; Secure; SameSite=Lax; Max-Age=${maxAge}`
+      ? `Domain=.${TENANT_APEX}; Path=/; Secure; SameSite=Lax; Max-Age=${maxAge}`
       : `Path=/; SameSite=Lax; Max-Age=${maxAge}`
     headers.append(
       'Set-Cookie',
