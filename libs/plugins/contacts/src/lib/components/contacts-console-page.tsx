@@ -82,6 +82,21 @@ type ContactDoc = HostContact & {
   updatedAt?: any
 }
 
+/**
+ * Why a refund found no contact to record itself against (AGL-2329).
+ *
+ * The three reasons `recordContactRefund` distinguishes, in the operator's
+ * language rather than the writer's enum. They are not interchangeable: two
+ * of them are things the merchant can act on and one is a deletion nothing
+ * should undo, and collapsing them into "unmatched" would turn an actionable
+ * fact into a statistic.
+ */
+const UNMATCHED_REFUND_REASON: Record<string, string> = {
+  'no-email': 'the order carried no email address',
+  'no-contact': 'no contact record matched the buyer',
+  'contact-deleted': 'the contact was deleted between the sale and the refund',
+}
+
 const csvEscape = (value: unknown) => {
   const text = String(value ?? '')
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
@@ -224,6 +239,31 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
     [firestore, hostId],
   )
   const droppedTotal = Number(droppedCounter?.['total'] ?? 0)
+
+  /*==========================================
+   * REFUNDS THAT REACHED NO CONTACT (AGL-2329).
+   *
+   * `recordContactRefund` refuses to create a contact for a refund — a
+   * contact holding a refund and no purchase is a phantom record with
+   * negative lifetime value — and increments
+   * `hosts/{hostId}/counters/contactRefundsUnmatched` instead. Its own
+   * comment says the shape mirrors `contactsDropped` "so an operator…", and
+   * there the sentence stops: `contactsDropped` had this reader and the
+   * refund counter had none, so a refund that reached no contact record
+   * incremented a number nobody could see.
+   *
+   * It sits beside the dropped-signup alert because they are the same kind
+   * of fact — something that happened to this host's CRM and left no row —
+   * and an operator reconciling their contact list needs both or neither.
+   *=========================================*/
+  const { data: unmatchedRefundCounter } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'contactRefundsUnmatched'),
+    [firestore, hostId],
+  )
+  const unmatchedRefundTotal = Number(unmatchedRefundCounter?.['total'] ?? 0)
+  const unmatchedRefundReason = String(
+    unmatchedRefundCounter?.['lastReason'] ?? '',
+  )
 
   // Saved segments (AGL-199): reusable audience filters.
   const { data: segmentDocs } = useFirestoreCollection<any>(
@@ -624,6 +664,23 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
               {`${droppedTotal.toLocaleString()} earlier visitor${
                 droppedTotal === 1 ? ' was' : 's were'
               } not captured while your contact band was full.`}
+            </Alert>
+          ) : null}
+          {/*
+            Unlike the band alert above, this one is NOT exclusive with the
+            others: a host can be over its band AND have refunds that landed
+            nowhere, and the two have different remedies. Chaining it into the
+            same ternary would hide whichever fact came second.
+          */}
+          {unmatchedRefundTotal > 0 ? (
+            <Alert severity="warning">
+              {`${unmatchedRefundTotal.toLocaleString()} refund${
+                unmatchedRefundTotal === 1 ? '' : 's'
+              } could not be recorded against a contact${
+                UNMATCHED_REFUND_REASON[unmatchedRefundReason]
+                  ? ` — most recently because ${UNMATCHED_REFUND_REASON[unmatchedRefundReason]}`
+                  : ''
+              }. The money moved; the customer's timeline does not show it.`}
             </Alert>
           ) : null}
           {contacts.length === 0 ? (
