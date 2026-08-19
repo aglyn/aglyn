@@ -108,6 +108,10 @@ jest.mock('../constants/route-links', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({}),
+  // AGL-2324's archive card reads the staff id token off the user. A
+  // wholesale module mock is a CLOSED WORLD — an export the tree reaches and
+  // the mock omits is a TypeError, not a missing feature.
+  useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -116,6 +120,10 @@ jest.mock('firebase/firestore', () => ({
   query: () => ({}),
   orderBy: () => ({}),
   limit: () => ({}),
+  // The date-range constraints AGL-2324 added. Same closed-world rule: the
+  // page calls both, so both must exist here or the render throws.
+  where: () => ({}),
+  Timestamp: { fromDate: (date: Date) => ({ seconds: date.getTime() / 1000 }) },
 }))
 
 /**
@@ -276,6 +284,8 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
         'action',
         'scope',
         'target',
+        // AGL-2324 gave the staff-access review its column.
+        'targetTenantId',
         'reason',
         'note',
         'before',
