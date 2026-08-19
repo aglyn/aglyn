@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  planMetersInfraOverage,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -171,6 +174,22 @@ async function handler(request: Request): Promise<Response> {
           month,
           spend,
           lastAlert,
+          /*
+            WHETHER THIS PLAN HAS METERED USAGE AT ALL (AGL-2250).
+
+            AGL-2135 made the free tier a hard cap that never bills, so a Free
+            org's `billedCents` is 0 every month and a budget it sets can
+            never fire. The card said none of that.
+
+            `planMetersInfraOverage` is the predicate the cron and the invoice
+            already use — a second opinion computed here is the AGL-1371
+            mistake, and this one would be worse than a wrong figure: it would
+            be a wrong statement about whether the customer can be charged.
+          */
+          // The ORG, not `org.plan`: `resolvePlan` also weighs the
+          // subscription, so a plan string alone would answer a narrower
+          // question than the invoice asks.
+          metered: planMetersInfraOverage(org),
           defaultThresholdPcts: [...DEFAULT_BUDGET_THRESHOLD_PCTS],
           minAmountUsd: BUDGET_MIN_USD,
           maxAmountUsd: BUDGET_MAX_USD,

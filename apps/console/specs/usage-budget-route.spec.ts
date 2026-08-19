@@ -153,6 +153,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // THE REAL PREDICATE (AGL-2250). A stub would make "is this plan metered"
+  // a claim about the fixture rather than about the plan table the cron and
+  // the invoice read — and this card's whole job is saying true things about
+  // whether the customer can be charged.
+  planMetersInfraOverage: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).planMetersInfraOverage,
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -238,6 +245,20 @@ describe('get', () => {
     expect(payload.thresholdPcts).toEqual([25, 100])
     expect(payload.spend.meteredUsd).toBeCloseTo(12.5, 5)
     expect(payload.spend.meteredFresh).toBe(true)
+  })
+
+  it('says whether the plan has metered usage at all', async () => {
+    // A Free org's `billedCents` is 0 every month (AGL-2135), so a budget it
+    // sets can never fire. The same predicate the cron and the invoice use —
+    // a second opinion computed here would be a wrong statement about whether
+    // the customer can be charged.
+    org.data.plan = 'free'
+    const free = await call({ action: 'get' })
+    expect(free.payload.metered).toBe(false)
+
+    org.data.plan = 'pro'
+    const pro = await call({ action: 'get' })
+    expect(pro.payload.metered).toBe(true)
   })
 
   it('reports which rule last fired this month', async () => {

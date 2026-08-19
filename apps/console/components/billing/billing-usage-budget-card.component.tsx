@@ -51,6 +51,8 @@ interface UsageBudgetState {
    * event about this one.
    */
   lastAlert: { month: string; threshold: number } | null
+  /** Whether this plan has metered usage a budget could ever count (AGL-2250). */
+  metered: boolean
   defaultThresholdPcts: number[]
   minAmountUsd: number
   maxAmountUsd: number
@@ -279,7 +281,8 @@ export default function BillingUsageBudgetCardComponent({
     )
   }
 
-  const { budgetSet, amountUsd, thresholdPcts, spend, maxAmountUsd } = state
+  const { budgetSet, amountUsd, thresholdPcts, spend, maxAmountUsd, metered } =
+    state
   const usedPct =
     budgetSet && amountUsd
       ? Math.min(100, Math.round((spend.totalUsd / amountUsd) * 100))
@@ -343,6 +346,22 @@ export default function BillingUsageBudgetCardComponent({
       )}
 
       {/*
+        A PLAN WITH NOTHING TO METER (AGL-2250).
+
+        The free tier is a hard cap that never bills, so a budget set here can
+        never fire. Said once, plainly, rather than left for the customer to
+        infer from a meter that reads $0.00 forever — and the control stays
+        usable, because an org planning an upgrade may reasonably set the
+        budget first.
+      */}
+      {!metered ? (
+        <Alert severity="info">
+          Your current plan has no metered usage, so nothing counts against a
+          budget yet. Set one now and it applies the moment you upgrade.
+        </Alert>
+      ) : null}
+
+      {/*
         WHETHER IT HAS ACTUALLY ALERTED (AGL-2239).
 
         The ladder above says what we intend to do; this says what we did. It
@@ -354,7 +373,7 @@ export default function BillingUsageBudgetCardComponent({
         Three outcomes, not two: no budget, a budget that has not alerted, and
         a budget that has.
       */}
-      {budgetSet ? (
+      {budgetSet && metered ? (
         <Typography variant="body2" color="text.secondary">
           {state.lastAlert
             ? `We alerted your owners and admins at ${state.lastAlert.threshold}% of this month's budget.`

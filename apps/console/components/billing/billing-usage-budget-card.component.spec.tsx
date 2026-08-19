@@ -90,6 +90,7 @@ const BUDGET_SET = {
     meteredFresh: true,
   },
   lastAlert: null,
+  metered: true,
   defaultThresholdPcts: [50, 90, 100],
   minAmountUsd: 1,
   maxAmountUsd: 100_000,
@@ -149,6 +150,45 @@ describe('the alert history (AGL-2239)', () => {
     await waitFor(() => expect(screen.getByText(/No budget set/i)).toBeTruthy())
     expect(screen.queryByText(/No budget alert yet this month/i)).toBeNull()
     expect(screen.queryByText(/alerted your owners and admins/i)).toBeNull()
+  })
+})
+
+describe('a plan with nothing to meter (AGL-2250)', () => {
+  it('says so, and stops promising an email that cannot be sent', async () => {
+    // The free tier is a hard cap that never bills (AGL-2135), so
+    // `billedCents` is 0 every month and a budget set here can never fire.
+    // The card used to render the ladder and the "we'll email you at 50%,
+    // 90%, 100%" promise identically for a Free org and a metered one.
+    //
+    // Forced red by hardcoding `metered` to true in the card: the notice never
+    // rendered and the promise came back.
+    renderCard({ ...BUDGET_SET, metered: false })
+    await waitFor(() =>
+      expect(screen.getByText(/no metered usage/i)).toBeTruthy(),
+    )
+    expect(screen.queryByText(/No budget alert yet this month/i)).toBeNull()
+  })
+
+  it('still lets the org set one ahead of an upgrade', async () => {
+    // Removing the control would be a worse answer than an honest sentence:
+    // an org about to upgrade may reasonably set its budget first.
+    renderCard({ ...BUDGET_SET, metered: false })
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Monthly budget \(USD\)/i)).toBeTruthy(),
+    )
+    expect(
+      (screen.getByLabelText(/Monthly budget \(USD\)/i) as HTMLInputElement)
+        .disabled,
+    ).toBe(false)
+  })
+
+  it('does NOT show the notice on a metered plan', async () => {
+    // The negative control: a notice that renders for everyone says nothing.
+    renderCard(BUDGET_SET)
+    await waitFor(() =>
+      expect(screen.getByText(/No budget alert yet this month/i)).toBeTruthy(),
+    )
+    expect(screen.queryByText(/no metered usage/i)).toBeNull()
   })
 })
 
