@@ -286,6 +286,18 @@ async function handler(request: Request): Promise<Response> {
       if (!Number.isFinite(numeric) || numeric < 0) {
         return refuse(`quotas.${key} must be a number >= 0`, 400)
       }
+      // A PERCENTAGE HAS A CEILING (AGL-2293), and these ones are money.
+      // `transactionFee*Pct` becomes Stripe's `application_fee_amount` at
+      // checkout, so a typed `200` produces a fee larger than the charge;
+      // Stripe refuses the session and EVERY sale on that storefront dies
+      // until someone connects a 400 at a shopper's checkout to a number typed
+      // into the staff dialog weeks earlier. `resolveMarketplaceFeePct` has
+      // clamped its own read at `<= 100` since AGL-1543 — this is the same
+      // rule at the write, where it can still be reported to the person
+      // making the mistake.
+      if (key.endsWith('Pct') && numeric > 100) {
+        return refuse(`quotas.${key} is a percentage and must be <= 100`, 400)
+      }
       quotas[key] = numeric
     }
 

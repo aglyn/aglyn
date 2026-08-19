@@ -810,3 +810,50 @@ describe('the staff gate and the rules’ role split (AGL-206/1635)', () => {
     expect(mockOrgWrites).toEqual([])
   })
 })
+
+/**
+ * AGL-2293. `quotas` validated `Number.isFinite(n) && n >= 0` and nothing more,
+ * so a percentage had no ceiling — and three of these keys are money.
+ *
+ * `transactionFeePhysicalPct` / `transactionFeeDigitalPct` become Stripe's
+ * `application_fee_amount` at checkout. A typed `200` produces a fee larger
+ * than the charge, Stripe refuses the session, and EVERY sale on that
+ * storefront dies — with nobody able to connect a 400 at a shopper's checkout
+ * to a number typed into the staff dialog weeks earlier.
+ *
+ * `resolveMarketplaceFeePct` has clamped its own READ at `<= 100` since
+ * AGL-1543. This is the same rule at the WRITE, where it can still be reported
+ * to the person making the mistake.
+ */
+describe('a percentage quota has a ceiling (AGL-2293)', () => {
+  it('refuses a fee percentage above 100, and writes nothing', async () => {
+    for (const key of [
+      'transactionFeePhysicalPct',
+      'transactionFeeDigitalPct',
+      'marketplaceFeePct',
+    ]) {
+      const response = await post(validBody({ quotas: { [key]: 200 } }))
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ written: false })
+    }
+    expect(mockOrgWrites).toEqual([])
+  })
+
+  /**
+   * POSITIVE CONTROL, and the branch a ceiling test alone leaves unproven:
+   * 100 is a legal rate, 0 is a legal rate, and a NON-percentage quota is not
+   * bounded by 100 at all — `hostLimit: 250` must still write.
+   */
+  it('POSITIVE CONTROL: 0, 100 and a non-percentage quota still write', async () => {
+    for (const quotas of [
+      { transactionFeeDigitalPct: 0 },
+      { transactionFeePhysicalPct: 100 },
+      { hostLimit: 250 },
+    ]) {
+      const response = await post(validBody({ quotas }))
+      expect(response.status).toBe(200)
+    }
+    expect(mockOrgWrites.length).toBe(3)
+  })
+})
+
