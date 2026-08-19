@@ -425,6 +425,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         .collection('leads')
         .add({
           email,
+          // AGL-2303 — `campaign-send` reads `leads.name` and nothing wrote
+          // it, so the leads audience was addressed by nobody's name.
+          ...(name ? { name } : {}),
           source: 'booking',
           createdAt: FieldValue.serverTimestamp(),
         })
@@ -439,6 +442,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       .collection('leads')
       .add({
         email,
+        // AGL-2303, same as the checkout branch above.
+        ...(name ? { name } : {}),
         source: 'booking',
         createdAt: FieldValue.serverTimestamp(),
       })

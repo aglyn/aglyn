@@ -256,7 +256,15 @@ export async function performCampaignSend(
     throw new CampaignSendError('Unknown site', 404)
   }
 
-  // Audience resolution. Names ride along for merge tags (AGL-272).
+  /*
+    Audience resolution. Names ride along for merge tags (AGL-272).
+
+    ⚠️ THE FIELD NAME IS PER COLLECTION AND THEY DO NOT AGREE (AGL-2303).
+    `contacts` and `leads` store `name`; `siteMembers` stores `displayName`.
+    A merge tag whose source field does not exist does not error — it
+    substitutes an empty string into mail that has already been sent. Whenever
+    an audience is added here, check what its collection actually writes.
+  */
   let recipients: string[] = []
   const names = new Map<string, string>()
   const collectName = (email: string, name: unknown) => {
@@ -276,7 +284,21 @@ export async function performCampaignSend(
     const members = await hostRef.collection('siteMembers').limit(1000).get()
     recipients = members.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
-      collectName(email, doc.get('name'))
+      /*==========================================
+       * `displayName`, NOT `name` (AGL-2303).
+       *
+       * `siteMembers` has never had a `name` field — sign-up, the account
+       * page and the admin password route all write `displayName`. So this
+       * read matched nothing on every member campaign ever sent, `names` was
+       * empty for the whole audience, and `{{contact.name}}` and
+       * `{{contact.firstName}}` rendered as EMPTY STRINGS in mail that went
+       * out to real people. `resolveMergeTags` substitutes rather than
+       * failing, so nothing errored and nothing looked wrong here.
+       *
+       * `name` is kept as a fallback and read second: a lead promoted to a
+       * member, or a future writer, may carry either.
+       *=========================================*/
+      collectName(email, doc.get('displayName') ?? doc.get('name'))
       return email
     })
   } else if (audience === 'segment') {
