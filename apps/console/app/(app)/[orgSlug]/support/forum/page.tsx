@@ -35,6 +35,7 @@ import { useCallback, useEffect, useState } from 'react'
 import SupportChannelLink from '../../../../../components/support/support-channel-link.component'
 import SupportMessages from '../../../../../components/support/support-messages.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import useBranding from '../../../../../hooks/use-branding'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -56,6 +57,9 @@ import useSupportApi from '../../../../../hooks/use-support-api'
  */
 const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Support copy names the brand the org's members know (AGL-2319); on a
+  // non-white-label org this resolves to the deployment brand.
+  const { branding } = useBranding()
   const { request, canLoad } = useSupportApi()
 
   const [forum, setForum] = useState<{
@@ -132,15 +136,16 @@ const SupportForum: NextPageWithLayout<Record<string, never>> = () => {
               anchor: '#community-forum',
               excerpt:
                 'The subscriber forum — ask questions and share tips with ' +
-                'other Aglyn builders.',
+                `other ${branding.productName} builders.`,
             })}
             contentGutterX
             contentGutterY
           >
             <Stack spacing={1.5}>
               <Typography variant="body2" color="text.secondary">
-                {'Ask other Aglyn builders — on every plan, including Free. ' +
-                  'Aglyn staff read along and reply here too.'}
+                {`Ask other ${branding.productName} builders — on every plan, ` +
+                  `including Free. ${branding.productName} staff read along ` +
+                  'and reply here too.'}
               </Typography>
 
               <Stack

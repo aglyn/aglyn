@@ -180,7 +180,7 @@ export function SuppliersCard(props: SuppliersCardProps) {
       upsell={
         'Dropship routing forwards each paid order to the right supplier ' +
         'by email or signed webhook, and takes tracking numbers back ' +
-        'without the supplier needing an Aglyn account.'
+        `without the supplier needing an ${Aglyn.PLATFORM_BRAND_NAME} account.`
       }
     >
     <CardDisplay

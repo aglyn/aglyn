@@ -22,7 +22,7 @@ import {
   pluginDocsHelp,
   Route,
 } from '@aglyn/aglyn'
-import { type ConsolePluginPageProps } from '@aglyn/aglyn'
+import { type ConsolePluginPageProps, PLATFORM_BRAND_NAME } from '@aglyn/aglyn'
 import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -298,8 +298,8 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
           }
         >
           {'The Event Calendar is a paid add-on ($9/mo for your whole ' +
-            'workspace, supported directly by Aglyn). Enable it from ' +
-            'Billing → Add-ons.'}
+            `workspace, supported directly by ${PLATFORM_BRAND_NAME}). ` +
+            'Enable it from Billing → Add-ons.'}
         </Alert>
       ) : (
         <Stack spacing={1}>

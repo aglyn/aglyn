@@ -36,6 +36,7 @@ import { useCallback, useEffect, useState } from 'react'
 import SupportChannelLink from '../../../../../components/support/support-channel-link.component'
 import SupportMessages from '../../../../../components/support/support-messages.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import useBranding from '../../../../../hooks/use-branding'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -57,6 +58,9 @@ import useSupportApi from '../../../../../hooks/use-support-api'
  */
 const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Support copy names the brand the org's members know (AGL-2319); on a
+  // non-white-label org this resolves to the deployment brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { request, canLoad, ready, commitment, responseWindow, canOpenTickets } =
     useSupportApi()
@@ -125,14 +129,15 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
             help={docsHelp('supportAndCommunity', {
               anchor: '#support-tickets',
               excerpt:
-                'Private ticket threads with the Aglyn team — from Pro upward.',
+                `Private ticket threads with the ${branding.productName} team ` +
+                '— from Pro upward.',
             })}
             contentGutterX
             contentGutterY
           >
             <Stack spacing={1.5}>
               <Typography variant="body2" color="text.secondary">
-                {'Direct line to the Aglyn team.'}
+                {`Direct line to the ${branding.productName} team.`}
               </Typography>
 
               {/*
@@ -162,7 +167,8 @@ const SupportTickets: NextPageWithLayout<Record<string, never>> = () => {
                   <Typography variant="body2">
                     {'Ticket support starts on Pro. Your plan’s support ' +
                       'channel is the community forum, which is open to every ' +
-                      'plan — ask there and the Aglyn team reads it too.'}
+                      `plan — ask there and the ${branding.productName} team ` +
+                      'reads it too.'}
                   </Typography>
                   <SupportChannelLink to="forum" orgSlug={orgSlug} />
                 </Stack>

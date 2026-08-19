@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Stack, Typography } from '@mui/material'
 import { docsHelp } from '../constants/docs-links'
+import useBranding from '../hooks/use-branding'
 import { useCurrentOrg } from '../hooks/use-current-org'
 import { useOrgSlug } from '../hooks/use-org-scope'
 
@@ -44,17 +45,21 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 export function SiteBrandingBadgeCard() {
   const orgSlug = useOrgSlug()
   const { org, ready: orgReady } = useCurrentOrg()
+  // The published badge renders `Made with ${brand.productName}`
+  // (`catch-all-client.tsx:709`). This card describes that badge, so it reads
+  // the SAME resolver or it misdescribes a white-label site (AGL-2319).
+  const { branding } = useBranding()
   const removesBranding = Aglyn.checkEntitlement(org as never, 'removeBranding')
   const planLabel =
     Aglyn.planLabelGrantingFeature('removeBranding') ?? 'a paid plan'
 
   return (
     <CardDisplay
-      header={'Aglyn badge'}
+      header={`${branding.productName} badge`}
       help={docsHelp('billing', {
         anchor: '#tiers--entitlements',
         excerpt:
-          'Published sites on the Free plan carry a small "Made with Aglyn" badge; paid plans drop it.',
+          `Published sites on the Free plan carry a small "Made with ${branding.productName}" badge; paid plans drop it.`,
       })}
       contentGutterX
       contentGutterY
@@ -66,7 +71,7 @@ export function SiteBrandingBadgeCard() {
       ) : removesBranding ? (
         <Stack spacing={0.5}>
           <Typography variant="body2">
-            {'Your published pages do not show the “Made with Aglyn” badge.'}
+            {`Your published pages do not show the “Made with ${branding.productName}” badge.`}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Included on your plan. Nothing to switch on.'}
@@ -88,7 +93,7 @@ export function SiteBrandingBadgeCard() {
             ) : undefined
           }
         >
-          {'Your published pages show a small “Made with Aglyn” badge. ' +
+          {`Your published pages show a small “Made with ${branding.productName}” badge. ` +
             `${planLabel} and above remove it.`}
         </Alert>
       )}

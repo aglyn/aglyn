@@ -23,6 +23,7 @@ import {
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_ADDRESS_CITY,
@@ -489,7 +490,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         code === 'auth/credential-already-in-use' ||
           code === 'auth/email-already-in-use' ||
           code === 'auth/provider-already-linked'
-          ? 'That Google account is already linked to an Aglyn account.'
+          ? `That Google account is already linked to an ${PLATFORM_BRAND_NAME} account.`
           : 'Connecting Google failed',
         { variant: 'warning' },
       )
@@ -560,8 +561,8 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           <Typography variant="subtitle2">{'Sign-in methods'}</Typography>
           <Typography variant="caption" color="text.secondary">
             {ssoGoverned
-              ? 'How you sign in to Aglyn, managed by your organization.'
-              : 'How you sign in to Aglyn. Connect another for a backup way in.'}
+              ? `How you sign in to ${PLATFORM_BRAND_NAME}, managed by your organization.`
+              : `How you sign in to ${PLATFORM_BRAND_NAME}. Connect another for a backup way in.`}
           </Typography>
         </Box>
         {providerIds.length === 0 ? (

@@ -53,6 +53,7 @@ import DashboardLayout from '../../../../../../../components/layouts/dashboard.l
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import { docsHelp } from '../../../../../../../constants/docs-links'
+import useBranding from '../../../../../../../hooks/use-branding'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
@@ -102,6 +103,8 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   const templateId = params?.templateId as string
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const host = useHostSubdomain()
   const firestore = useFirestore()
   const router = useRouter()
@@ -328,7 +331,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
             anchor: '#where-a-template-came-from',
             excerpt:
               'Where this template came from — saved here, installed from ' +
-              'the marketplace, or one of Aglyn’s starters.',
+              `the marketplace, or one of ${branding.productName}’s starters.`,
           })}
           contentGutterX
           contentGutterY

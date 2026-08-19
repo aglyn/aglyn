@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin'
 import { renderSystemEmail } from './render-system-email'
@@ -183,8 +184,8 @@ export async function sendNewDeviceAlert(
   }
   // Mirrors the catalog's defaultBody, so designed and undesigned agree.
   const fallbackText =
-    'Your Aglyn account was just signed in to from a device it has not ' +
-    'used before.\n\n' +
+    `Your ${PLATFORM_BRAND_NAME} account was just signed in to from a device ` +
+    'it has not used before.\n\n' +
     `Device: ${details.deviceName}\n` +
     `Location: ${details.location}\n` +
     `IP address: ${details.ip}\n` +
@@ -198,7 +199,8 @@ export async function sendNewDeviceAlert(
   return meterSent(
     sendEmail({
     to: details.to,
-    subject: designed?.subject ?? 'New sign-in to your Aglyn account',
+    subject:
+      designed?.subject ?? `New sign-in to your ${PLATFORM_BRAND_NAME} account`,
     text: designed?.text || fallbackText,
     ...(designed?.html ? { html: designed.html } : {}),
     context: 'security-new-device',
@@ -232,7 +234,8 @@ export async function sendPasskeyAddedAlert(
     accountSecurityUrl: securityUrl,
   }
   const fallbackText =
-    `A passkey ("${details.label}") was just added to your Aglyn account. ` +
+    `A passkey ("${details.label}") was just added to your ` +
+    `${PLATFORM_BRAND_NAME} account. ` +
     'It can be used to sign in without your password.\n\n' +
     `When: ${details.time}\n\n` +
     `Review account security: ${securityUrl}\n\n` +
@@ -243,7 +246,9 @@ export async function sendPasskeyAddedAlert(
   return meterSent(
     sendEmail({
     to: details.to,
-    subject: designed?.subject ?? 'A passkey was added to your Aglyn account',
+    subject:
+      designed?.subject ??
+      `A passkey was added to your ${PLATFORM_BRAND_NAME} account`,
     text: designed?.text || fallbackText,
     ...(designed?.html ? { html: designed.html } : {}),
     context: 'security-passkey-added',

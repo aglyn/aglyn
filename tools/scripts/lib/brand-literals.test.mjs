@@ -118,6 +118,19 @@ test('a hostname is a different problem with a different fix', () => {
   assert.equal(findBrandLiterals("const a = 'Aglyn.app'").length, 0)
 })
 
+test('a full stop after the brand is a sentence, not a hostname (AGL-2319)', () => {
+  // The dot exclusion is for `Aglyn.app`. A dot followed by a space, a quote
+  // or the end of the string is punctuation, and the sentence it ends is copy.
+  // Six real occurrences were hidden by the looser rule, two of them in files
+  // the baseline never listed — a ratchet cannot ratchet what it cannot see.
+  assert.equal(findBrandLiterals("const a = 'The plugins ship with Aglyn.'").length, 1)
+  assert.equal(findBrandLiterals("const a = 'How you sign in to Aglyn. Connect another.'").length, 1)
+  assert.equal(findBrandLiterals('const a = `part of Aglyn.`').length, 1)
+  // …and the hostnames the rule was written for stay excluded.
+  assert.equal(findBrandLiterals("const a = 'Aglyn.app'").length, 0)
+  assert.equal(findBrandLiterals("const a = 'Aglyn.com is ours'").length, 0)
+})
+
 test('a type or symbol name is an identifier', () => {
   assert.equal(findBrandLiterals("const a = 'AglynHost'").length, 0)
   assert.equal(findBrandLiterals("const a = 'aglyn-tenant-host'").length, 0)

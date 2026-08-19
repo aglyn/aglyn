@@ -38,6 +38,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -92,6 +93,9 @@ export function OrgApiKeysCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
+  // Org-scoped chrome reads the org's RESOLVED product name, never a
+  // literal (AGL-2319): a white-label org's admins see their own brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
@@ -260,7 +264,7 @@ export function OrgApiKeysCard() {
           <Typography variant="body2" color="text.secondary">
             {'Create keys to call the '}
             <Link href={buildDocsUrl('/api')} target="_blank" rel="noopener noreferrer">
-              {'Aglyn REST API'}
+              {`${branding.productName} REST API`}
             </Link>
             {'. A key is shown once at creation — store it somewhere safe. Each key is scoped to exactly what it needs.'}
           </Typography>

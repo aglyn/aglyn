@@ -173,9 +173,9 @@ export function OrgBrandingCard() {
       ) : (
         <Stack spacing={2} sx={{ maxWidth: 520 }}>
           <Typography variant="body2" color="text.secondary">
-            {'These replace the Aglyn brand everywhere your organization and ' +
-              'its sites are shown. Leave a field blank to keep the Aglyn ' +
-              'default for it.'}
+            {`These replace the ${defaults.productName} brand everywhere your ` +
+              'organization and its sites are shown. Leave a field blank to ' +
+              `keep the ${defaults.productName} default for it.`}
           </Typography>
 
           <TextField

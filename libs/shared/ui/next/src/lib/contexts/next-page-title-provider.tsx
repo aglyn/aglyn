@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { BRAND } from '@aglyn/shared-data-enums'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import {
   $pageTitle,
@@ -38,7 +39,7 @@ export interface NextPageTitleContextValue {
 }
 
 export const NextPageTitleContext = createContext<NextPageTitleContextValue>({
-  title: 'Aglyn App',
+  title: `${BRAND.ORG_NAME} App`,
   setScreenName,
   setScreenSeparator,
   setScreenSuffix,

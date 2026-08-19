@@ -61,6 +61,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -118,6 +119,9 @@ export function OrgMembersCard() {
   // `members.length` read "8 of 5 manager seats used" to an org with three
   // managers and five collaborators.
   const { org, ready: orgReady } = useCurrentOrg()
+  // Org-scoped chrome reads the org's RESOLVED product name, never a
+  // literal (AGL-2319): a white-label org's admins see their own brand.
+  const { branding } = useBranding()
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
@@ -350,8 +354,9 @@ export function OrgMembersCard() {
               </Button>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              {'Already on Aglyn? They join right away. New to Aglyn? We email ' +
-                'them an invite they accept when they first sign in.'}
+              {`Already on ${branding.productName}? They join right away. ` +
+                `New to ${branding.productName}? We email them an invite they ` +
+                'accept when they first sign in.'}
             </Typography>
           </Stack>
         ) : null}

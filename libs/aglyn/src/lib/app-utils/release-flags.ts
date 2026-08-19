@@ -25,6 +25,8 @@
  */
 
 /** Remote Config parameter keys for release-gated features. */
+import { PLATFORM_BRAND_NAME } from './platform-brand'
+
 export type ReleaseFlagKey =
   | 'release_contacts'
   | 'release_bookings'
@@ -200,7 +202,7 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
   },
   {
     key: 'release_assist',
-    label: 'Aglyn Assist',
+    label: `${PLATFORM_BRAND_NAME} Assist`,
     description:
       'The in-console AI chat helper on every page (AGL-1860): docs-' +
       'grounded answers with deep links, page-context guidance on Pro+. ' +

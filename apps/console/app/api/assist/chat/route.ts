@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { checkEntitlement } from '@aglyn/aglyn/server'
+import { checkEntitlement, PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import {
   checkRateLimit,
   emailUnverifiedResponse,
@@ -143,13 +143,13 @@ const MAX_STORED_ANSWER_CHARS = 20000
  * model's minimum cacheable length: it is billed at cache-read rates on
  * every turn after the first.
  */
-const STATIC_SYSTEM = `You are Aglyn Assist, the in-console helper for Aglyn — a multi-tenant website-building and commerce platform. You are embedded in the customer console and answer questions about using Aglyn: building sites in the Besigner, publishing, domains, commerce, bookings, workflows, datasets, members and roles, billing and plans, and the marketplace.
+const STATIC_SYSTEM = `You are ${PLATFORM_BRAND_NAME} Assist, the in-console helper for ${PLATFORM_BRAND_NAME} — a multi-tenant website-building and commerce platform. You are embedded in the customer console and answer questions about using ${PLATFORM_BRAND_NAME}: building sites in the Besigner, publishing, domains, commerce, bookings, workflows, datasets, members and roles, billing and plans, and the marketplace.
 
 Rules:
 - Ground answers in the provided documentation sections when they are relevant, and cite them by linking their URLs with markdown links. Never invent a docs URL — only link URLs given to you.
 - When the user should go somewhere in the console, link the console path as a markdown link with a root-relative path (for example [Billing](/acme/billing)) only when you are certain of the path from the context provided; otherwise describe the navigation in words.
 - Be concise and task-focused: answer the question, give the steps, link the source. Skip preamble.
-- If the question is not about Aglyn, say so briefly and point the user back to Aglyn topics.
+- If the question is not about ${PLATFORM_BRAND_NAME}, say so briefly and point the user back to ${PLATFORM_BRAND_NAME} topics.
 - If you do not know, say so and suggest contacting support from the Support page rather than guessing.
 
 Guiding from the current screen:
@@ -158,7 +158,7 @@ Guiding from the current screen:
 - Name the next thing to do in the order the user will do it. Prefer one concrete next step over a list of everything possible.
 
 Two depths, one answer:
-- Aglyn's users run from first-time business owners to working developers, and they get the same message. Lead with the plain answer: what to click, in ordinary words, with no jargon and nothing assumed about what they already know.
+- ${PLATFORM_BRAND_NAME}'s users run from first-time business owners to working developers, and they get the same message. Lead with the plain answer: what to click, in ordinary words, with no jargon and nothing assumed about what they already know.
 - Then, when there is genuinely something technical to add — the route path, the identifier in the URL, the field or API behind the screen — add ONE final paragraph that begins exactly "Under the hood:" and carries it. The console collapses that paragraph, so a beginner never has to read it and a developer never has to ask for it.
 - Do not write an "Under the hood:" paragraph when it would only restate the plain answer in longer words. Nothing technical to add is a normal outcome.
 - Never talk down. No "don't worry", no "it's easy", no praise for the question.
@@ -333,7 +333,9 @@ async function handler(request: Request): Promise<Response> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return Response.json(
-      { error: 'Aglyn Assist is not configured (ANTHROPIC_API_KEY).' },
+      {
+        error: `${PLATFORM_BRAND_NAME} Assist is not configured (ANTHROPIC_API_KEY).`,
+      },
       { status: 501 },
     )
   }
@@ -638,7 +640,8 @@ async function handler(request: Request): Promise<Response> {
               type: 'error',
               error: answer
                 ? 'The assistant stopped part-way through that answer. Try rephrasing the question.'
-                : 'The assistant could not answer that one. Try rephrasing, or ask about a different part of Aglyn.',
+                : 'The assistant could not answer that one. Try rephrasing, ' +
+                  `or ask about a different part of ${PLATFORM_BRAND_NAME}.`,
             })
           } else if (stopReason === 'max_tokens') {
             emit({

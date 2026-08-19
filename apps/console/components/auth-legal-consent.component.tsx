@@ -24,6 +24,7 @@ import {
   Link,
   Typography,
 } from '@mui/material'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { LEGAL_URLS } from '../constants/shared'
 
 /**
@@ -68,7 +69,7 @@ export function AuthLegalNotice() {
       color="text.secondary"
       sx={{ display: 'block', mt: 2, textAlign: 'center' }}
     >
-      {'By continuing, you agree to Aglyn’s '}
+      {`By continuing, you agree to ${PLATFORM_BRAND_NAME}’s `}
       <LegalLinks />
       {'.'}
     </Typography>
@@ -113,7 +114,7 @@ export function AuthConsentCheckbox({
         }
         label={
           <Typography variant="body2" sx={{ mt: 0.25 }}>
-            {'I agree to Aglyn’s '}
+            {`I agree to ${PLATFORM_BRAND_NAME}’s `}
             <LegalLinks />
             {'.'}
           </Typography>

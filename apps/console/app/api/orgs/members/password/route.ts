@@ -16,6 +16,7 @@
  */
 
 import {
+  PLATFORM_BRAND_NAME,
   pluginRequestFromWeb,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
@@ -154,7 +155,7 @@ async function handler(request: Request): Promise<Response> {
     if (tenantId) {
       const ssoBlock =
         'This person signs in through your organization’s identity ' +
-        'provider. Passwords are managed there, not in Aglyn.'
+        `provider. Passwords are managed there, not in ${PLATFORM_BRAND_NAME}.`
       if (method === 'GET') {
         return Response.json(
           { email: target.email ?? null, canSetPassword: false, blockedReason: ssoBlock },

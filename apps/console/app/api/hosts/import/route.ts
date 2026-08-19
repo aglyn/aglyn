@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkDatasetQuota,
   checkEntitlement,
@@ -541,7 +541,7 @@ async function handler(request: Request): Promise<Response> {
     Number(bundle.version) > SITE_EXPORT_VERSION
   ) {
     return Response.json({
-      error: 'Not an Aglyn site export (or a newer format than this build)',
+      error: `Not a ${PLATFORM_BRAND_NAME} site export (or a newer format than this build)`,
     }, { status: 422 })
   }
 

@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
+import useBranding from '../hooks/use-branding'
 import { useCurrentOrg } from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -73,6 +74,8 @@ export function SiteEmailsCard() {
   const { enqueueSnackbar } = useSnackbar()
   const hostId = useHostId()
   const orgSlug = useOrgSlug()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const host = useHostSubdomain()
   // EXEMPT from `no-unguarded-loading-hook` (AGL-1422) for the PLUGIN read
   // only. `enabledPlugins` fails OPEN — an org with no explicit list shows
@@ -310,9 +313,9 @@ export function SiteEmailsCard() {
           )
         })}
         <Alert severity="info">
-          {'These are sent by your site, on your behalf. The account emails ' +
-            'Aglyn itself sends you — invites, receipts, security — are ' +
-            'managed by Aglyn, not here.'}
+          {'These are sent by your site, on your behalf. The account ' +
+            `emails ${branding.productName} itself sends you — invites, ` +
+            'receipts, security — are managed there, not here.'}
         </Alert>
       </Stack>
     </CardDisplay>

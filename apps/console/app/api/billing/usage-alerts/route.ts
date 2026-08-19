@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
+import {
+  buildRoute,
+  PLATFORM_BRAND_NAME,
+  pluginRequestFromWeb,
+  Route,
+} from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import {
   bandwidthCapMonthKey,
@@ -742,7 +747,8 @@ async function handler(request: Request): Promise<Response> {
           `Assist token spend is $${spend.assistUsd.toFixed(2)} for one org this month`
         const marginBody =
           `${org.get('slug') ?? org.id} has run about ` +
-          `$${spend.assistUsd.toFixed(2)} of Aglyn Assist tokens in ` +
+          `$${spend.assistUsd.toFixed(2)} of ${PLATFORM_BRAND_NAME} Assist ` +
+          `tokens in ` +
           `${month}, past the $${assistCogsThreshold.toFixed(0)} review ` +
           'threshold. Assist is a plan entitlement with no per-token ' +
           'price, so this is margin, not revenue.'

@@ -36,6 +36,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -137,6 +138,9 @@ export function OrgSsoCard() {
   const { data: user } = useUser()
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
+  // Org-scoped chrome reads the org's RESOLVED product name, never a
+  // literal (AGL-2319): a white-label org's admins see their own brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const orgId = currentOrg?.$id
@@ -514,8 +518,8 @@ export function OrgSsoCard() {
           {metadata ? (
             <>
               <Typography variant="body2" color="text.secondary">
-                {'Give these to your identity provider when you create the ' +
-                  'Aglyn application.'}
+                {'Give these to your identity provider when you create ' +
+                  `the ${branding.productName} application.`}
               </Typography>
               <CopyField label="Reply / ACS URL" value={metadata.acsUrl} />
               <CopyField label="Entity ID / Audience" value={metadata.entityId} />

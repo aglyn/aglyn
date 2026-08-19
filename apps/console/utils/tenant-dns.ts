@@ -168,9 +168,14 @@ export interface DnsInstruction {
 /**
  * The intro that precedes the records. Lives here rather than in the card so
  * the docs pages which quote it verbatim have one string to be checked against.
+ *
+ * Takes the brand rather than naming it (AGL-2319): the card renders this to
+ * an org's admins, and a white-label org's admins must see their own product
+ * name. The caller passes `useBranding().branding.productName`, which is the
+ * deployment brand for every org that has not white-labeled.
  */
-export const DNS_INSTRUCTIONS_INTRO =
-  'Point your domain at Aglyn, then verify. A subdomain like www uses a ' +
+export const dnsInstructionsIntro = (brand: string) =>
+  `Point your domain at ${brand}, then verify. A subdomain like www uses a ` +
   'CNAME. A bare apex cannot carry a CNAME, so point it at the same hostname ' +
   'with an ALIAS — or use the A record if your registrar has no ALIAS. Any ' +
   'one of these verifies:'

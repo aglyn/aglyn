@@ -22,6 +22,7 @@
  * rate limit, error envelope); resource handlers are wired in AGL-618.
  */
 import { buildDocsUrl } from '../../../../constants/docs-links'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
 import { dispatchResource, handleUsage } from '../../../../utils/api-v1-resources'
@@ -59,7 +60,7 @@ async function dispatch(
     return apiJson(
       {
         object: 'api',
-        name: 'Aglyn REST API',
+        name: `${PLATFORM_BRAND_NAME} REST API`,
         version: 'v1',
         // The operator's OWN docs, not ours (AGL-2186) — this is returned in
         // the body of THEIR public API's responses.

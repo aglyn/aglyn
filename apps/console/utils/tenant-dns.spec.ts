@@ -17,7 +17,7 @@
 
 import {
   CNAME_TARGET,
-  DNS_INSTRUCTIONS_INTRO,
+  dnsInstructionsIntro,
   dnsInstructionsFor,
   formatDnsInstruction,
   HOST_APEX_ADDRESSES,
@@ -164,9 +164,15 @@ describe('dnsInstructionsFor (AGL-1327)', () => {
   })
 
   it('says ALIAS before it says A in the intro the docs quote', () => {
-    expect(DNS_INSTRUCTIONS_INTRO.indexOf('ALIAS')).toBeLessThan(
-      DNS_INSTRUCTIONS_INTRO.indexOf('A record'),
+    const intro = dnsInstructionsIntro('Aglyn')
+    expect(intro.indexOf('ALIAS')).toBeLessThan(intro.indexOf('A record'))
+  })
+
+  it('names the brand it is handed, not a hardcoded one (AGL-2319)', () => {
+    expect(dnsInstructionsIntro('Northwind')).toContain(
+      'Point your domain at Northwind,',
     )
+    expect(dnsInstructionsIntro('Northwind')).not.toContain('Aglyn')
   })
 })
 

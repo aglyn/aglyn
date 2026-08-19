@@ -408,7 +408,7 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     name: 'Member password reset',
     description:
       "Resets a site member's password — a store-member account, separate " +
-      'from an Aglyn login.',
+      'from a console login.',
     pluginId: 'commerce',
     plugin: 'Commerce',
     control: 'fixed',

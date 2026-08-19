@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   consumeRateLimit,
@@ -100,9 +100,11 @@ async function handler(request: Request): Promise<Response> {
     )
 
     const fallbackText =
-      'Confirm this address to finish setting up your Aglyn account:\n\n' +
+      'Confirm this address to finish setting up your ' +
+      `${PLATFORM_BRAND_NAME} account:\n\n` +
       `${verifyUrl}\n\n` +
-      'If you did not create an Aglyn account, you can ignore this email.'
+      `If you did not create an ${PLATFORM_BRAND_NAME} account, you can ` +
+      'ignore this email.'
     const designed = await renderSystemEmail('email-verification', { verifyUrl })
     const result = await sendEmail({
       to: email,

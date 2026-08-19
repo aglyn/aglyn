@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { isMediaCdnPath, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  isMediaCdnPath,
+  PLATFORM_BRAND_NAME,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   authForPool,
   consumePasswordResetSend,
@@ -238,7 +242,7 @@ async function handler(request: Request): Promise<Response> {
         }, { status: 400 })
       }
       const origin = originFromHeaders(headers)
-      const actorName = 'Aglyn support'
+      const actorName = `${PLATFORM_BRAND_NAME} support`
 
       if (action === 'sendPasswordReset') {
         // Throttled per recipient and per actor (AGL-920). Staff are trusted,

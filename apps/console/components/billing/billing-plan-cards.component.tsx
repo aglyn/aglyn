@@ -22,6 +22,7 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
+  PLATFORM_BRAND_NAME,
   resolveOrgEntitlements,
   resolveTransactionFeePct,
   SELF_SERVE_PLANS,
@@ -44,6 +45,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
+import useBranding from '../../hooks/use-branding'
 import { ENTERPRISE_CONTACT_URL } from '../../constants/shared'
 import { DocsHelpTip } from '../docs-help-tip.component'
 
@@ -56,8 +58,8 @@ export const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
 export { PLAN_LABELS }
 
-const PLAN_TAGLINES: Record<OrgPlan, string> = {
-  free: 'Try Aglyn and publish your first site.',
+const planTaglines = (brand: string): Record<OrgPlan, string> => ({
+  free: `Try ${brand} and publish your first site.`,
   starter: 'Everything a single production site needs.',
   pro: 'For growing teams shipping several sites.',
   business: 'Subscriptions, scheduling, and priority limits.',
@@ -65,7 +67,7 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   advanced: 'High-volume commerce with zero platform fees.',
   agency: 'Run many sites under one org at agency scale.',
   enterprise: 'Unlimited everything, SSO, and a dedicated agreement.',
-}
+})
 
 /**
  * What the Enterprise card promises over Agency (the top self-serve tier) —
@@ -203,10 +205,12 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
  * most consequential purchase decisions in the product were missing from the
  * one surface whose job is answering "does my plan include this".
  */
-const FEATURE_GROUPS: Array<{
+const featureGroups = (
+  brand: string,
+): Array<{
   title: string
   rows: Array<{ key: FeatureKey; label: string }>
-}> = [
+}> => [
   {
     title: 'Build & publish',
     rows: [
@@ -214,7 +218,7 @@ const FEATURE_GROUPS: Array<{
       { key: 'versioning', label: 'Screen versioning' },
       { key: 'scheduledPublishing', label: 'Scheduled publishing' },
       { key: 'customDomain', label: 'Custom domain' },
-      { key: 'removeBranding', label: 'Remove Aglyn branding' },
+      { key: 'removeBranding', label: `Remove ${brand} branding` },
       { key: 'multilingual', label: 'Multilingual sites' },
       { key: 'redirects', label: 'URL redirects' },
       { key: 'siteExport', label: 'Site backup & restore' },
@@ -261,9 +265,16 @@ const FEATURE_GROUPS: Array<{
   },
 ]
 
-/** Flat row list, for the guard and for anything that wants the whole set. */
+/**
+ * Flat row list, for the guard and for anything that wants the whole set.
+ *
+ * Built against the DEPLOYMENT brand rather than any org's, because it has no
+ * org: its only consumer is `billing-plan-feature-rows.spec.ts`, which asserts
+ * key coverage and non-empty labels. The rendered grid calls `featureGroups`
+ * with the org's resolved `productName` instead (AGL-2319).
+ */
 export const FEATURE_ROWS: Array<{ key: FeatureKey; label: string }> =
-  FEATURE_GROUPS.flatMap((group) => group.rows)
+  featureGroups(PLATFORM_BRAND_NAME).flatMap((group) => group.rows)
 
 
 export interface BillingPlanCardsProps {
@@ -404,6 +415,12 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     highlight,
     onSelect,
   } = props
+  // Copy that names the product reads the org's RESOLVED brand, not a literal
+  // and not the deployment default (AGL-2319): a white-label org's admins see
+  // their own product name on the grid that sells them the tier.
+  const { branding } = useBranding()
+  const taglines = planTaglines(branding.productName)
+  const groups = featureGroups(branding.productName)
   // An enterprise org sits above the ladder: nothing in the grid is its
   // "current" plan, and nothing there is an upgrade for it either.
   const currentIndex = enterprise || !plan ? -1 : PLAN_ORDER.indexOf(plan)
@@ -516,7 +533,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   color="text.secondary"
                   sx={{ mb: 1.5, minHeight: 40 }}
                 >
-                  {PLAN_TAGLINES[tier]}
+                  {taglines[tier]}
                 </Typography>
                 {enterprise ? (
                   // An enterprise agreement is not swapped for a list-price
@@ -693,7 +710,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       to the full flag set, and 32 undifferentiated ticks is a
                       wall nobody reads. The headings are the difference
                       between a longer list and a legible one. */}
-                  {FEATURE_GROUPS.map((group) => (
+                  {groups.map((group) => (
                   <Stack key={group.title} spacing={0.5}>
                   <Typography
                     variant="overline"
@@ -775,7 +792,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   {'Custom pricing'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {PLAN_TAGLINES.enterprise}
+                  {taglines.enterprise}
                 </Typography>
               </Stack>
               <Stack spacing={0.5} sx={{ flex: 2 }}>

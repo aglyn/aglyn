@@ -31,6 +31,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
+import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 // The target, the apex address, and the instruction copy come from the SAME
@@ -41,7 +42,7 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 // printed an address the route rejects.
 import {
   CNAME_TARGET,
-  DNS_INSTRUCTIONS_INTRO,
+  dnsInstructionsIntro,
   dnsInstructionsFor,
   formatDnsInstruction,
 } from '../utils/tenant-dns'
@@ -158,6 +159,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { org, ready: orgReady } = useCurrentOrg()
+  // The org's RESOLVED product name, never a literal (AGL-2319) — this card is
+  // org-scoped chrome, so a white-label org's admins must read their brand.
+  const { branding } = useBranding()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { data: host } = useFirestoreDoc<any>(
@@ -231,9 +235,9 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
             ? `Domain points at ${verify.records.join(', ')} — expected ${
                 verify.expected ?? CNAME_TARGET
               }. DNS changes can take a while to propagate.`
-            : 'No CNAME found, and the domain does not resolve to Aglyn ' +
-                'yet — add one of the records above. DNS changes can take a ' +
-                'while to propagate.',
+            : 'No CNAME found, and the domain does not resolve to ' +
+                `${branding.productName} yet — add one of the records above. ` +
+                'DNS changes can take a while to propagate.',
           { variant: 'warning', persist: false },
         )
       }
@@ -535,7 +539,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
         ) : (
           <>
             <Typography variant="body2" color="text.secondary">
-              {DNS_INSTRUCTIONS_INTRO}
+              {dnsInstructionsIntro(branding.productName)}
             </Typography>
             {records.map((record) => (
               <Stack key={record.type} spacing={0.5}>

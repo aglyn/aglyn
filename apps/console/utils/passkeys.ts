@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { AuthAppErrorCodes, type AuthAppCode } from '@aglyn/shared-data-enums'
 import {
   browserSupportsWebAuthn,
@@ -154,7 +155,8 @@ const SERVER_REFUSALS: Record<string, string> = {
   // shared vocabulary, and because the options leg forwards its own reason.
   // Do not cite any of these as evidence that a case is covered.
   'credential-unknown':
-    'That passkey is not registered to an Aglyn account. It may have been ' +
+    `That passkey is not registered to an ${PLATFORM_BRAND_NAME} account. ` +
+    'It may have been ' +
     'removed.',
   'credential-cloned':
     'That passkey was refused for security reasons. Sign in another way and ' +

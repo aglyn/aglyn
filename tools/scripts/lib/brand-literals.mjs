@@ -83,15 +83,31 @@ export const BRAND_WORD = 'Aglyn'
  *
  *  - preceded by `@`, `/`, `.`, `-`, or a word character → part of a longer
  *    name (`@aglyn/`, `x/aglyn`, `foo.Aglyn`, `sub-aglyn`, `MyAglyn`)
- *  - followed by `.`, `/`, `-`, `_`, or an uppercase/lowercase letter →
- *    `Aglyn.app`, `AglynHost`, `Aglynish`
+ *  - followed by `/`, `-`, `_`, or a letter → `AglynHost`, `Aglynish`
+ *  - followed by a DOT AND THEN a letter or digit → `Aglyn.app`, `Aglyn.com`
  *
  * A trailing lowercase letter is deliberately excluded too: `Aglyn` as copy is
  * a proper noun and is followed by a space, punctuation or the end of the
  * string, never by more letters.
+ *
+ * ## Why the dot needs the character after it (AGL-2319)
+ *
+ * This rule was a bare `.` in the follow set, on the reasoning that `Aglyn.`
+ * is the start of a hostname. It is that only when a label follows. A dot with
+ * a SPACE, a QUOTE or the end of the string after it is a full stop, and
+ * `'The plugins that ship with Aglyn.'` is the single commonest shape a
+ * sentence naming a product takes — so the exclusion written for `Aglyn.app`
+ * was silently swallowing brand copy at the end of every sentence.
+ *
+ * Six occurrences in five files were hidden this way, two of them in files the
+ * baseline did not list at all, which is the worse half: a ratchet cannot
+ * ratchet what it cannot see, and those files were free to gain more. It is
+ * the same failure class as the regex desync (AGL-2278) — an exclusion written
+ * for one real shape, applied wider than that shape — and it manufactures
+ * false GREENS rather than false reds, which is the direction nobody checks.
  */
 const IDENTIFIER_BEFORE = /[@/.\-\w]$/
-const IDENTIFIER_AFTER = /^[./\-_A-Za-z]/
+const IDENTIFIER_AFTER = /^(?:[/\-_A-Za-z]|\.[A-Za-z0-9])/
 
 /**
  * ## Regex literals, and why both walkers below have to know about them
@@ -333,7 +349,9 @@ export function findBrandLiterals(source) {
       if (at === -1) break
       offset = at + BRAND_WORD.length
       const before = span.slice(Math.max(0, at - 1), at)
-      const after = span.slice(offset, offset + 1)
+      // TWO characters, so `Aglyn.app` stays an identifier while `Aglyn.` at
+      // the end of a sentence is the copy it plainly is.
+      const after = span.slice(offset, offset + 2)
       if (IDENTIFIER_BEFORE.test(before)) continue
       if (IDENTIFIER_AFTER.test(after)) continue
       found.push({

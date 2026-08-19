@@ -36,6 +36,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import useBranding from '../../../../hooks/use-branding'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
@@ -56,6 +57,8 @@ import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
  */
 const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
+  // Org-scoped copy names the org's RESOLVED product name (AGL-2319).
+  const { branding } = useBranding()
   const { currentOrg } = useOrgScope()
   const { org, ready: orgReady } = useCurrentOrg()
   const { data: user } = useUser()
@@ -383,7 +386,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
             header={'Built in'}
             help={docsHelp('plugins', {
               excerpt:
-                'Aglyn’s own plugins. Switching one off removes it from every site in this organization — its navigation, the editor, published pages and the API.',
+                `${branding.productName}’s own plugins. Switching one off removes it from every site in this organization — its navigation, the editor, published pages and the API.`,
             })}
             contentGutterX
             contentGutterY
@@ -393,9 +396,9 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
               color="text.secondary"
               sx={{ display: 'block', mb: 1 }}
             >
-              {'The plugins that ship with Aglyn. Turning one off removes ' +
-                'it from navigation, the editor, published sites and the ' +
-                'API for every site in this organization.'}
+              {`The plugins that ship with ${branding.productName}. Turning ` +
+                'one off removes it from navigation, the editor, published ' +
+                'sites and the API for every site in this organization.'}
             </Typography>
             <Stack>
               {FIRST_PARTY_PLUGINS.map((plugin) =>

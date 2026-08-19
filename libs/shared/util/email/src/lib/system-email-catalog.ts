@@ -45,6 +45,7 @@ const SAMPLE_SUPPORT_URL: string =
     ? `mailto:${(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()}`
     : 'https://aglyn.com/support')
 
+import { BRAND } from '@aglyn/shared-data-enums'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 
 /**
@@ -153,19 +154,21 @@ export interface SystemEmailTemplateDefinition {
  * copy, and the editor renders this list as the palette a designer picks
  * from — a token missing here is a token nobody knows exists.
  *
- * The samples are Aglyn's own values, because that is what an unbranded org
- * genuinely renders.
+ * The samples are the DEPLOYMENT's own values (`BRAND.ORG_NAME`, AGL-2319),
+ * because that is what an unbranded org genuinely renders — on a self-host
+ * install a hardcoded "Aglyn" would preview a brand that appears nowhere in
+ * the mail the designer is editing.
  */
 export const BRAND_MERGE_TOKENS: readonly SystemEmailMergeToken[] = [
   {
     name: 'brand.productName',
     description: "The sender's product name — the org's own on white-label",
-    sample: 'Aglyn',
+    sample: BRAND.ORG_NAME,
   },
   {
     name: 'brand.fromName',
     description: 'Sender display name the mail is delivered under',
-    sample: 'Aglyn',
+    sample: BRAND.ORG_NAME,
   },
   {
     name: 'brand.supportUrl',
@@ -345,8 +348,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       key: 'member-added',
       name: 'Added to an organization',
       description:
-        'Sent when an existing Aglyn account is added directly to an ' +
-        'organization. People who do not have an account yet get the ' +
+        `Sent when an existing ${BRAND.ORG_NAME} account is added directly ` +
+        'to an organization. People who do not have an account yet get the ' +
         'organization invite email instead.',
       deliveredBy: 'resend',
       defaultSubject: "You've been added to {{org.name}}",
@@ -753,7 +756,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Receipt for a successful subscription or invoice payment. Sent by ' +
         'Stripe if "Successful payments" is enabled under Customer emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your receipt from Aglyn',
+      defaultSubject: `Your receipt from ${BRAND.ORG_NAME}`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
@@ -765,7 +768,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'it. Sent by Stripe if failed-payment emails are enabled under ' +
         'Subscriptions and emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn payment could not be processed',
+      defaultSubject: `Your ${BRAND.ORG_NAME} payment could not be processed`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Subscriptions and emails',
     },
@@ -776,7 +779,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Confirms a refund back to the customer. Sent by Stripe if ' +
         '"Refunds" is enabled under Customer emails.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn refund',
+      defaultSubject: `Your ${BRAND.ORG_NAME} refund`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
@@ -799,7 +802,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'A finalized invoice emailed to the organization. Sent by Stripe ' +
         'when invoice emails are enabled for the billing configuration.',
       deliveredBy: 'stripe',
-      defaultSubject: 'Your Aglyn invoice',
+      defaultSubject: `Your ${BRAND.ORG_NAME} invoice`,
       mergeTokens: [],
       source: 'Stripe Dashboard → Settings → Customer emails',
     },
