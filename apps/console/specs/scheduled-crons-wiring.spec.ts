@@ -44,10 +44,24 @@ describe('scheduled-crons.yml wiring', () => {
   const scheduled = [...workflow.matchAll(/^\s*- cron: '([^']+)'/gm)].map(
     (match) => match[1],
   )
+  /**
+   * A shell word, with one layer of quoting removed.
+   *
+   * A route carrying a query string has to be quoted in the `case` arm —
+   * `?` is a pathname-expansion metacharacter, so `path=/api/x?month=current`
+   * is a glob the shell is entitled to rewrite. The quotes are part of the
+   * SHELL syntax, not part of the route, and a parser that keeps them
+   * compares `'/api/x?month=current'` against `/api/x?month=current` and
+   * reports a correctly wired cron as missing (AGL-2219 added the first such
+   * route).
+   */
+  const unquote = (word: string) =>
+    /^'.*'$/.test(word) || /^".*"$/.test(word) ? word.slice(1, -1) : word
+
   /** Every `'<expr>') path=<route> ;;` arm in the resolver. */
   const caseArms = new Map(
     [...workflow.matchAll(/^\s*'([^']+)'\)\s*path=(\S+)\s*;;/gm)].map(
-      (match) => [match[1], match[2]] as const,
+      (match) => [match[1], unquote(match[2])] as const,
     ),
   )
   /** Every `- /api/...` line in the `workflow_dispatch` choice list. */
@@ -61,6 +75,14 @@ describe('scheduled-crons.yml wiring', () => {
     expect(scheduled.length).toBeGreaterThanOrEqual(10)
     expect(caseArms.size).toBeGreaterThanOrEqual(10)
     expect(dispatchOptions.size).toBeGreaterThanOrEqual(10)
+    // And every route parsed out of a `case` arm is a ROUTE, not a shell
+    // word that still has its quoting on. A leftover quote makes the arm
+    // compare unequal to its `workflow_dispatch` twin, which reads as a
+    // half-wired cron rather than as a parser that stopped one step short.
+    for (const route of caseArms.values()) {
+      expect(route).toMatch(/^\/api\//)
+      expect(route).not.toMatch(/['"]/)
+    }
   })
 
   it('resolves EVERY schedule to a route', () => {
