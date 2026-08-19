@@ -118,8 +118,24 @@ export interface HostPopup {
   trigger?: 'delay' | 'scroll' | 'exit'
   /** Seconds (delay trigger) or percent 0-100 (scroll trigger). */
   triggerValue?: number
-  /** Re-show after this many days once dismissed (localStorage). */
+  /**
+   * Re-show after this many days once dismissed (localStorage).
+   *
+   * Ignored when {@link oncePerSession} is set — the two are alternative
+   * answers to the same question, and honouring both would mean a popup
+   * suppressed for the session AND for seven days after it.
+   */
   frequencyDays?: number
+  /**
+   * Show at most once per browser SESSION (AGL-2174).
+   *
+   * `/product/marketing` sells "per-session frequency caps" in as many
+   * words, and the only cap the product had was day-based — a visitor who
+   * dismissed a popup did not see it again for a week, which is a
+   * different promise. Backed by `sessionStorage`, which is exactly the
+   * lifetime the copy describes: it clears when the tab closes.
+   */
+  oncePerSession?: boolean
   /** Optional showing window (epoch millis; simple to serialize). */
   startAtMs?: number
   endAtMs?: number

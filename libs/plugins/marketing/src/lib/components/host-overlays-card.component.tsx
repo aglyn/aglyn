@@ -588,17 +588,45 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
                         })
                       }
                     />
+                    {/*
+                      `Once per session` (AGL-2174). `/product/marketing`
+                      sells "per-session frequency caps" in as many words
+                      and the only cap that existed was day-based — a
+                      visitor who dismissed a popup did not see it again
+                      for a week, which is a different promise. The two are
+                      alternatives, so the day field goes away when the
+                      session cap is on rather than sitting there ignored.
+                     */}
                     <TextField
+                      select
                       size="small"
-                      type="number"
-                      label="Re-show after (days)"
-                      value={editor.popup?.frequencyDays ?? 7}
+                      label="Frequency"
+                      value={editor.popup?.oncePerSession ? 'session' : 'days'}
                       onChange={(event) =>
                         patchPopup({
-                          frequencyDays: Number(event.target.value),
+                          oncePerSession: event.target.value === 'session',
                         })
                       }
-                    />
+                      sx={{ minWidth: 170 }}
+                    >
+                      <MenuItem value="session">
+                        {'Once per session'}
+                      </MenuItem>
+                      <MenuItem value="days">{'Re-show after a while'}</MenuItem>
+                    </TextField>
+                    {editor.popup?.oncePerSession ? null : (
+                      <TextField
+                        size="small"
+                        type="number"
+                        label="Re-show after (days)"
+                        value={editor.popup?.frequencyDays ?? 7}
+                        onChange={(event) =>
+                          patchPopup({
+                            frequencyDays: Number(event.target.value),
+                          })
+                        }
+                      />
+                    )}
                   </Stack>
                 </>
               )}

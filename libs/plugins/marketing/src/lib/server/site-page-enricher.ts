@@ -113,6 +113,10 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
       trigger: popupConfig.trigger ?? 'delay',
       triggerValue: Number(popupConfig.triggerValue ?? 3),
       frequencyDays: Math.max(1, Number(popupConfig.frequencyDays ?? 7)),
+      // AGL-2174. Passed through only when set: the site contract is
+      // serialised into every page, and an explicit `false` on every
+      // popup that never asked for it is bytes on every request.
+      ...(popupConfig.oncePerSession ? { oncePerSession: true } : {}),
       ...(popupConfig.collectEmail ? { collectEmail: true } : {}),
       ...(popupConfig.startAtMs ? { startAtMs: popupConfig.startAtMs } : {}),
       ...(popupConfig.endAtMs ? { endAtMs: popupConfig.endAtMs } : {}),
