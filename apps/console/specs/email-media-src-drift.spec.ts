@@ -155,9 +155,7 @@ describe('email media resolution does not drift from @aglyn/aglyn', () => {
     process.env.NEXT_PUBLIC_TENANT_DOMAIN = 'sites.example.com'
     try {
       jest.isolateModules(() => {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const email = require('@aglyn/shared-util-email')
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const framework = require('@aglyn/aglyn')
         const host = { subdomain: 'acme' }
         expect(email.hostEmailOrigin(host)).toBe(

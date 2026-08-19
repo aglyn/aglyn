@@ -36,6 +36,7 @@ import {
   ssoDomainRefusal,
   ssoRequiredDomains,
   SSO_DOMAIN_ENFORCEMENT_ENV,
+  SSO_DOMAIN_REFUSAL_MESSAGE,
   SSO_REQUIRED_DOMAINS_ENV,
 } from './sso-domain-policy'
 
@@ -203,6 +204,43 @@ describe('the policy never reads the staff claim', () => {
     expect(
       ssoDomainRefusal({ email: 'zachary.w.gover@gmail.com', tenantId: null }, AGLYN_ON),
     ).toBeNull()
+  })
+})
+
+/**
+ * The refusal COPY is configuration too (AGL-2214).
+ *
+ * Every case above proves the RULE never fires on an unconfigured install.
+ * None of them read the sentence a refused person is shown, and that sentence
+ * named Aglyn — so the one deployment where this rule DOES fire on a
+ * self-host, the one where the operator deliberately governs their own
+ * domain, turned their own staff away in our name.
+ */
+describe('the refusal message follows the platform brand', () => {
+  it("names Aglyn on a deployment that has not renamed itself", () => {
+    expect(SSO_DOMAIN_REFUSAL_MESSAGE).toContain('your Aglyn Workspace account')
+  })
+
+  it('names the operator brand once one is configured', () => {
+    const previous = process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME
+    process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME = 'Northwind'
+    try {
+      jest.isolateModules(() => {
+        const message =
+          require('./sso-domain-policy').SSO_DOMAIN_REFUSAL_MESSAGE as string
+        expect(message).toContain('your Northwind Workspace account')
+        // Ours is GONE, not merely joined — a refused user must not be sent
+        // looking for a Workspace tenancy at a company they never heard of.
+        expect(message).not.toContain('Aglyn')
+      })
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME
+      } else {
+        process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME = previous
+      }
+      jest.resetModules()
+    }
   })
 })
 

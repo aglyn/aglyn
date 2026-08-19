@@ -112,7 +112,6 @@ describe('EditorHintCookie (AGL-1829)', () => {
     try {
       jest.isolateModules(() => {
         const scoped =
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
           require('../components/editor-hint-cookie.component')
             .editorHintCookieDomain as typeof editorHintCookieDomain
         expect(scoped('console.example.com')).toBe('.example.com')

@@ -87,6 +87,8 @@
  * naming WHOSE SSO: the point is IdP lifecycle control, which only the tenant
  * wired to that domain's SAML provider delivers.
  */
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+
 export const SSO_REQUIRED_DOMAINS_ENV = 'AGLYN_SSO_REQUIRED_DOMAINS'
 
 export type SsoRequiredDomains = Readonly<Record<string, string>>
@@ -285,10 +287,21 @@ export function ssoDomainEnforcementEnabled(
   return env[SSO_DOMAIN_ENFORCEMENT_ENV] === 'on'
 }
 
-/** What the refused person is told. Names the fix, not the mechanism. */
+/**
+ * What the refused person is told. Names the fix, not the mechanism.
+ *
+ * `PLATFORM_BRAND_NAME`, not a literal (AGL-2214). Everything else in this
+ * module is careful that the RULE is configuration rather than a compiled-in
+ * assumption about Aglyn — and then the one string a refused person actually
+ * reads named us anyway. A self-hoster who governs their own domain would
+ * have turned their own staff away in our name.
+ *
+ * Byte-identical for a deployment that has not renamed itself.
+ */
 export const SSO_DOMAIN_REFUSAL_MESSAGE =
-  'Sign in with your Aglyn Workspace account (Single sign-on). ' +
-  'Accounts on this domain cannot use a password or personal Google sign-in.'
+  `Sign in with your ${PLATFORM_BRAND_NAME} Workspace account ` +
+  '(Single sign-on). Accounts on this domain cannot use a password or ' +
+  'personal Google sign-in.'
 
 /**
  * The refusal a caller should return, or null to carry on.

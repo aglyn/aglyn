@@ -36,7 +36,6 @@
  * becomes a bare `https:`, a scheme-only source matching every https origin
  * on the internet — strictly worse than the missing entry it came from.
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const securityOrigins = require('../../../security-origins.js')
 
 const {
