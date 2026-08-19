@@ -204,3 +204,52 @@ export function hasOrgPermission(
 ): boolean {
   return resolveOrgPermissions(member, customRole)[permission]
 }
+
+/**
+ * The granular (dotted) set projected onto the legacy boolean map
+ * (AGL-2350).
+ *
+ * ## Why this lives here rather than in the console hook
+ *
+ * It was a private function in `apps/console/hooks/use-org-permissions.ts`,
+ * which meant the CLIENT translated the stored permission model into the
+ * legacy flags and the SERVER did not translate at all — it derived the
+ * legacy flags straight from the built-in role tier and dropped custom roles
+ * and per-member overrides on the floor. The two disagreed exactly on the
+ * feature `custom-roles.md` sells, in both directions: a permission granted
+ * by a custom role showed in the UI and 403'd on POST, and one revoked by an
+ * override was hidden in the UI and still succeeded on POST.
+ *
+ * One exported copy is what stops them drifting again.
+ *
+ * ## The key spaces are NOT interchangeable, and that is the trap
+ *
+ * Two permission vocabularies exist. The stored one is DOTTED
+ * (`plugins.install`) — `apps/console/app/api/orgs/roles/route.ts` sanitizes
+ * against `ORG_PERMISSION_KEYS` before writing, and `AglynOrgMember`
+ * `permissions` is typed to it. The legacy one is camelCase
+ * (`installPlugins`).
+ *
+ * `resolveRolePermissions` in `org-roles.ts` accepts `overrides` and
+ * `customRoles` arguments keyed by the CAMELCASE space. Feeding it the real
+ * stored documents therefore matches no key and changes nothing — it looks
+ * like wiring the feature up while doing precisely nothing. Those two
+ * parameters are used by nothing but that module's own spec. Translate
+ * through here instead.
+ *
+ * `editHosts` is derived from the ROLE, not from a dotted key: it has no
+ * counterpart in the granular catalog and never had one.
+ */
+export function toLegacyPermissions(
+  granted: Record<OrgPermission, boolean>,
+  role: OrgRole | null | undefined,
+): OrgPermissions {
+  return {
+    createHosts: granted['hosts.create'],
+    editHosts: role !== 'viewer',
+    editBilling: granted['billing.manage'],
+    publishToMarketplace: granted['marketplace.publish'],
+    installPlugins: granted['plugins.install'],
+    manageMembers: granted['members.manage'],
+  }
+}

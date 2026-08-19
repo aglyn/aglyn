@@ -27,7 +27,7 @@ import {
   countCollaboratorSeats,
   createResourceUid,
   generateOrgSlug,
-  hasOrgPermission,
+  resolveOrgPermissions,
   isOrgWideMember,
   isValidOrgSlug,
   projectHostMemberRoles,
@@ -583,14 +583,29 @@ export async function orgDataQueryForHost(
  * refined by their custom role doc (one read, only when assigned). API
  * routes call this before privileged mutations.
  */
-export async function memberHasOrgPermission(
+/**
+ * The member's FULL granular permission set, custom role and per-member
+ * overrides applied (AGL-2350).
+ *
+ * `memberHasOrgPermission` below is the single-permission form and now
+ * delegates here, so the two cannot answer differently. Split out because
+ * `resolveOrgPermissions` in `libs/tenant/runtime` needs the whole set to
+ * project onto the legacy flag map that the marketplace install and publish
+ * gates read — it previously derived those flags from the built-in role tier
+ * alone, which silently ignored both refinements.
+ *
+ * One conditional read, only when a custom role is actually assigned. A
+ * dangling `roleId` resolves to `null` and falls back to the role defaults
+ * rather than denying, matching what the console hook does with the same
+ * dangling id — a deleted role must not lock a member out of surfaces their
+ * base role allows.
+ */
+export async function resolveMemberOrgPermissions(
   orgId: string,
   member: Partial<AglynOrgMember> | null | undefined,
-  permission: OrgPermission,
-): Promise<boolean> {
-  if (!member) return false
+): Promise<Record<OrgPermission, boolean>> {
   let customRole: AglynOrgCustomRole | null = null
-  if (member.roleId) {
+  if (member?.roleId) {
     const snapshot = await firestore()
       .collection('orgs')
       .doc(orgId)
@@ -601,7 +616,16 @@ export async function memberHasOrgPermission(
       ? (snapshot.data() as AglynOrgCustomRole)
       : null
   }
-  return hasOrgPermission(member, permission, customRole)
+  return resolveOrgPermissions(member, customRole)
+}
+
+export async function memberHasOrgPermission(
+  orgId: string,
+  member: Partial<AglynOrgMember> | null | undefined,
+  permission: OrgPermission,
+): Promise<boolean> {
+  if (!member) return false
+  return (await resolveMemberOrgPermissions(orgId, member))[permission]
 }
 
 export async function listOrgMembers(
