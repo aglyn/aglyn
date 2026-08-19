@@ -19,6 +19,12 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { DEVICES_COLLECTION } from '../../_lib/security-alerts'
 
+// lockdown-423: exempt — a read-only view of the caller's OWN sign-in history,
+// and the one page somebody is sent to BY a security email. A lockdown that
+// hid it would take the review surface away at exactly the moment an incident
+// makes it worth reading, while granting nobody any new capability: there is
+// no write here, and the answer is already scoped to the caller's own uid.
+
 /**
  * The second half of the new-device email (AGL-2318).
  *

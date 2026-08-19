@@ -191,7 +191,13 @@ const AdminMarketplaceReports: NextPageWithLayout<Record<string, never>> = () =>
       // The abuse-queue topic, deliberately: this is the same triage job on a
       // different surface, and a second docs page describing the same four
       // statuses is a second page to forget to update.
-      help="abuseReports"
+      //
+      // ANCHORED, though. The abuse queue's own page opens the same topic
+      // bare, and two help icons that land in exactly the same place are
+      // interchangeable — which is the thing `docs-help-destinations` exists
+      // to catch. `#statuses` is what a reader arriving from HERE needs: the
+      // four states and what closing one means.
+      help={{ topic: 'abuseReports', anchor: '#statuses' }}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
