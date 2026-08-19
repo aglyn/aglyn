@@ -29,6 +29,34 @@ import {
 
 const NAV_MENU = 'muiNavMenu'
 
+/** Dispatches a real, cancellable Escape keydown from `target`. */
+function pressEscape(target: EventTarget): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Escape',
+    bubbles: true,
+    cancelable: true,
+  })
+  target.dispatchEvent(event)
+  return event
+}
+
+/**
+ * The DOM Monaco renders for `Edit -> Raw JSON` under the EditContext API
+ * (monaco-editor 0.56 defaults `editor.editContext` to true): the focusable
+ * node is a bare DIV inside `.monaco-editor` — no textarea, no
+ * contenteditable, no role.
+ */
+function mountRawJsonEditor(): HTMLElement {
+  const editor = document.createElement('div')
+  editor.className = 'monaco-editor'
+  const input = document.createElement('div')
+  input.className = 'native-edit-context'
+  input.setAttribute('tabindex', '0')
+  editor.appendChild(input)
+  document.body.appendChild(editor)
+  return input
+}
+
 describe('pick-manager — canvas element picker (AGL-574)', () => {
   beforeAll(() => {
     Aglyn.components.registerComponent((() => null) as any, {
@@ -71,6 +99,7 @@ describe('pick-manager — canvas element picker (AGL-574)', () => {
   afterEach(() => {
     // Abandon any pick a failing test left armed.
     cancelPick()
+    document.body.innerHTML = ''
   })
 
   it('captures the clicked node id + label and exits pick mode', () => {
@@ -112,11 +141,61 @@ describe('pick-manager — canvas element picker (AGL-574)', () => {
     const onCancel = jest.fn()
 
     startPick(onPicked, { onCancel })
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    const event = pressEscape(window)
 
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onPicked).not.toHaveBeenCalled()
     expect(isPicking()).toBe(false)
+    // The picker owns the keystroke when nothing is being typed into.
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  // AGL-2212 — pick mode only MINIMIZES the interaction builder; the whole
+  // besigner stays live underneath, so this capture-phase window listener
+  // fires while the author is typing in a panel field or the raw JSON
+  // editor. Both halves are asserted together: a test that only checked
+  // "Escape does not cancel in a field" would pass just as well if Escape
+  // had stopped cancelling the pick at all.
+  describe('Escape and text entry (AGL-2212)', () => {
+    it.each([
+      ['a panel text field', () => document.createElement('input')],
+      ['a multiline field', () => document.createElement('textarea')],
+      ['the raw JSON editor (Monaco)', mountRawJsonEditor],
+    ])('does NOT cancel the pick from %s', (_label, make) => {
+      const onCancel = jest.fn()
+      startPick(jest.fn(), { onCancel })
+
+      const field = make()
+      // MUST be attached: a keydown dispatched on a detached element never
+      // reaches the window listener at all, which would make this test pass
+      // without ever exercising the guard.
+      if (!field.isConnected) document.body.appendChild(field)
+      field.focus()
+      const event = pressEscape(field)
+
+      expect(onCancel).not.toHaveBeenCalled()
+      expect(isPicking()).toBe(true)
+      // The field's own Escape (close the popper, revert the edit) must
+      // still reach it.
+      expect(event.defaultPrevented).toBe(false)
+    })
+
+    it('still cancels once focus leaves the field', () => {
+      const onCancel = jest.fn()
+      startPick(jest.fn(), { onCancel })
+
+      const field = mountRawJsonEditor()
+      field.focus()
+      pressEscape(field)
+      expect(isPicking()).toBe(true)
+
+      field.blur()
+      const event = pressEscape(document.body)
+
+      expect(onCancel).toHaveBeenCalledTimes(1)
+      expect(isPicking()).toBe(false)
+      expect(event.defaultPrevented).toBe(true)
+    })
   })
 
   it('ignores clicks when not picking', () => {

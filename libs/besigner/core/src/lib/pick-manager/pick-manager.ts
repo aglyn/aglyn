@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
+import { isTextEntryElement, isTextEntryFocused } from '../text-entry'
 
 /**
  * Canvas element-picker (AGL-574): the bridge that lets the console's
@@ -86,11 +87,19 @@ export function startPick(
   })
   if (typeof window !== 'undefined') {
     escapeListener = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        event.stopPropagation()
-        cancelPick()
-      }
+      if (event.key !== 'Escape') return
+      // Pick mode only MINIMIZES the interaction builder — the whole
+      // besigner (attributes panel, custom-CSS field, raw JSON editor,
+      // inline editors) stays live underneath. A capture-phase Escape that
+      // ignores focus therefore steals the keystroke a field owns: closing
+      // a Select/Autocomplete popper, reverting an inline text edit, or
+      // dismissing Monaco's find widget. Text entry wins; the banner's
+      // Cancel button, and Escape once focus leaves the field, still abort
+      // the pick (AGL-2212).
+      if (isTextEntryElement(event.target) || isTextEntryFocused()) return
+      event.preventDefault()
+      event.stopPropagation()
+      cancelPick()
     }
     // Capture phase so the canvas/dialog can't swallow the abort first.
     window.addEventListener('keydown', escapeListener, true)
