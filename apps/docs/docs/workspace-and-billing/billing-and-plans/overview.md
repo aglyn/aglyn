@@ -33,6 +33,11 @@ and **Agency** unlock progressively more, and **Enterprise** sits above them all
 Transaction fees are Aglyn platform fees on storefront sales, separate from
 Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
+Every plan also includes an amount of monthly **traffic** — 5 GB on Free, rising to
+unlimited on Enterprise. Passing it is metered and billed on a paid plan, and pauses the
+site until the start of next month on Free. See [Bandwidth](bandwidth.md) for the table and
+for what a paused site shows a visitor.
+
 ### Enterprise
 
 **Enterprise** is the one tier you cannot buy from the Billing page. It has no list
@@ -86,9 +91,11 @@ Nothing here guarantees that a price or feature set will remain the same.
 - The **billing page** shows meters for every quota — storage, bandwidth, datasets, seats,
   sends, and more — with redesigned plan cards.
 - A **usage-cap banner** appears site-wide at 80% and 100% of a quota, with an upgrade link.
-- Org admins also get an in-app **notification** when email sends, dataset count, or data
-  storage crosses 80% or 100% — once per threshold per month, so nobody has to be watching
-  the console to find out.
+- Org admins also get an in-app **notification** when email sends, dataset count, data
+  storage, or [bandwidth](bandwidth.md) crosses 80% or 100% — once per threshold per month,
+  so nobody has to be watching the console to find out. The bandwidth message differs by
+  plan, because what happens next differs by plan: paid organizations are told the extra is
+  billed, Free organizations are told the site will be paused.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
   counted toward your usage but is never blocked by the cap, at any plan. Going over shows

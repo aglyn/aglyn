@@ -78,6 +78,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Architecture: Multi-Tenant Organizations',
     excerpt: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',
   },
+  bandwidth: {
+    path: '/workspace-and-billing/billing-and-plans/bandwidth',
+    title: 'Bandwidth',
+    excerpt: 'How much traffic each plan includes, what happens when a site goes past it, and why a Free site can be paused until the start of next month.',
+  },
   besigner: {
     path: '/building-sites/besigner/overview',
     title: 'The Besigner',
@@ -630,6 +635,7 @@ export const DOCS_HELP_ANCHORS = {
   aiAssist: ['#copy-assist', '#ai-generate-section', '#limits', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
+  bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#usage-budget', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],

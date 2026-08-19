@@ -24,6 +24,7 @@ import {
   resolveOrgEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
 import {
   collection,
@@ -36,6 +37,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useReleaseFlag } from '../../hooks/use-release-flags'
 import fetchSeatCounts from '../../utils/fetch-seat-counts'
 import { orgBandwidthGb } from '../../utils/usage-metering'
+import { docsHelp } from '../../constants/docs-links'
 
 export interface BillingUsageProps {
   org: Partial<AglynOrgBilling> | null | undefined
@@ -80,8 +82,16 @@ export function UsageMeter(props: {
   used: number | null
   limit: number
   unit?: string
+  /**
+   * Optional help affordance beside the label (AGL-2201).
+   *
+   * A meter is a number against a limit and says nothing about what happens
+   * when the two meet — which for bandwidth is the whole question, and is
+   * different on Free (the site pauses) than on a paid plan (the extra bills).
+   */
+  help?: HelpTipContent
 }) {
-  const { label, used, limit, unit } = props
+  const { label, used, limit, unit, help } = props
   const unlimited = limit === UNLIMITED
   const unmetered = used == null
   const pct =
@@ -92,7 +102,10 @@ export function UsageMeter(props: {
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="body2">{label}</Typography>
+        <Stack direction="row" sx={{ alignItems: 'center' }}>
+          <Typography variant="body2">{label}</Typography>
+          {help ? <HelpTip {...help} sx={{ ml: 0.5, fontSize: '0.8em' }} /> : null}
+        </Stack>
         <Typography variant="body2" color="text.secondary">
           {unmetered
             ? `not yet metered · limit ${formatLimit(limit, unit)}`
@@ -516,6 +529,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         used={bandwidthGb}
         limit={entitlements.bandwidthGb}
         unit="GB"
+        help={docsHelp('bandwidth', { anchor: '#where-to-see-it' })}
       />
       {hosts.map((host) => (
         <HostUsageMeters
