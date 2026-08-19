@@ -133,7 +133,9 @@ const MarketplacePlugin = forwardRef<HTMLElement, MarketplacePluginProps>(
     }
     const pluginOrigin =
       typeof process !== 'undefined'
-        ? process.env['NEXT_PUBLIC_PLUGIN_ORIGIN']
+        ? // Dot notation (AGL-2037) — a client component; the bracket
+          // form reads undefined in the browser.
+          process.env.NEXT_PUBLIC_PLUGIN_ORIGIN
         : undefined
     // Host id for host-mediated fetch (AGL-191); empty in the editor.
     const { hostId } = Aglyn.useSite()

@@ -1,5 +1,4 @@
 {
-  "apps/console/app/(app)/[orgSlug]/hosts/page.tsx": 1,
   "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts": 1,
   "apps/console/app/(app)/[orgSlug]/support/forum/page.tsx": 3,
   "apps/console/app/(app)/[orgSlug]/support/tickets/page.tsx": 3,

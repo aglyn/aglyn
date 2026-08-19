@@ -89,6 +89,7 @@
     "check:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs",
     "test:no-tax-identifiers": "node tools/scripts/check-no-tax-identifiers.mjs --selftest",
     "check:brand-literals": "node tools/scripts/check-brand-literals.mjs",
+    "check:next-public-access": "node tools/scripts/check-next-public-access.mjs",
     "check:hardcoded-colours": "node tools/scripts/check-hardcoded-colours.mjs",
     "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
     "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { TENANT_APEX, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   editAccessMintRefusal,
   emailUnverifiedResponse,
@@ -100,7 +100,12 @@ async function handler(request: Request): Promise<Response> {
     const subdomain = host.get('subdomain') as string | undefined
     const origins: string[] = []
     if (cname) origins.push(`https://${cname}`)
-    if (subdomain) origins.push(`https://${subdomain}.aglyn.app`)
+    // The CONFIGURED apex, not ours (AGL-2172). This list is an auth-token
+    // audience allowlist: pinned to `aglyn.app`, the token named an origin a
+    // self-hoster's own site can never match, so the popup could not deliver
+    // it and in-place editing failed even after AGL-2121 fixed the tenant's
+    // half of the same check.
+    if (subdomain) origins.push(`https://${subdomain}.${TENANT_APEX}`)
     if (process.env.NODE_ENV !== 'production') {
       origins.push('http://localhost:4500')
       if (subdomain) origins.push(`http://${subdomain}.localhost:4500`)

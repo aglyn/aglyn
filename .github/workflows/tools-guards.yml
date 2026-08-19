@@ -207,3 +207,13 @@ jobs:
       # detector is wrong is a number nobody can act on.
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
+
+      # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
+      # dot form, so a bracket read in a client-reachable module is `undefined`
+      # in the browser and the value silently falls back to Aglyn's default —
+      # which is how a self-hoster's custom-domain wizard came to print OUR
+      # CNAME target and Vercel's IPs to their customer. Deliberately NOT a
+      # jest guard: in Node both access forms are the same property read, so a
+      # spec cannot see this class at all, and one written to try would be
+      # green for an unrelated reason.
+      - run: npm run check:next-public-access

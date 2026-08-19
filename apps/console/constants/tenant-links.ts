@@ -78,6 +78,26 @@ export function hostDisplayDomain(
   )
 }
 
+/**
+ * The site's address on the PLATFORM apex specifically, ignoring any custom
+ * domain — `{subdomain}.{apex}` (AGL-2172).
+ *
+ * Distinct from {@link hostDisplayDomain}, which answers "what does this site
+ * call itself" and prefers the custom domain. The Sites list shows both as
+ * separate rows, so it needs the platform address even when a custom domain
+ * exists, and it was re-deriving the `sub.aglyn.app` form by hand to get it —
+ * printing our apex on a self-hoster's own console. Exported as a function
+ * rather than exporting `TENANT_PRODUCTION_ROOT` so the apex stays owned by
+ * this module and call sites cannot start concatenating it again.
+ */
+export function hostPlatformDomain(
+  host: { subdomain?: string } | undefined,
+): string | undefined {
+  return host?.subdomain
+    ? `${host.subdomain}.${TENANT_PRODUCTION_ROOT}`
+    : undefined
+}
+
 export function isPreviewConsole(hostname: string): boolean {
   return (
     hostname.endsWith('.vercel.app') ||

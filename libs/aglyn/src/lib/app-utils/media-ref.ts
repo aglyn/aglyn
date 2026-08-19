@@ -71,6 +71,8 @@
  * next to the handler because the handler lives in a server-only lib that a
  * plugin component cannot import.
  */
+import { TENANT_APEX } from './host-naming'
+
 export const MEDIA_CDN_ROUTE = '/api/media/cdn'
 
 /**
@@ -283,7 +285,40 @@ const FIRST_PARTY_APEXES = [
   'aglyn.io',
   'aglyn.dev',
   'localhost',
+  // The operator's own names on a self-host install (AGL-2172). Pinned to our
+  // five, this said a self-hoster's OWN media and CDN hostnames were
+  // third-party — so their authors got off-site warnings about their own
+  // assets, and the Styles panel's url() hint fired on every image they
+  // uploaded. Derived from the same variables the rest of the runtime reads,
+  // never a sixth list: `TENANT_APEX` is imported rather than restated, and a
+  // console URL arrives as an origin so it is reduced to a hostname here.
+  ...operatorFirstPartyApexes(),
 ]
+
+/**
+ * The apexes this DEPLOYMENT serves, beyond Aglyn's own.
+ *
+ * Empty on Aglyn's cloud, where the five above are the whole answer. A
+ * function rather than a spread of constants so an unset or malformed value
+ * contributes nothing instead of an empty string — `''` in this list would
+ * make `endsWith('.')` true for every hostname on earth.
+ */
+function operatorFirstPartyApexes(): string[] {
+  const consoleHost = (() => {
+    const raw = process.env.NEXT_PUBLIC_CONSOLE_URL?.trim()
+    if (!raw) return undefined
+    try {
+      return new URL(raw).hostname.toLowerCase()
+    } catch {
+      return undefined
+    }
+  })()
+  return [
+    TENANT_APEX,
+    consoleHost,
+    process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN?.trim().toLowerCase(),
+  ].filter((name): name is string => Boolean(name && name.includes('.')))
+}
 
 // The parameter is `hostname`, not `host`, on purpose (AGL-1718/AGL-1719). In
 // this repo `host` names the `hosts/{hostId}` SITE DOCUMENT, and the AGL-1361

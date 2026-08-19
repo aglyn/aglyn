@@ -17,7 +17,27 @@
 
 'use client'
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
+import {
+  hostDisplayDomain,
+  hostPlatformDomain,
+} from '../../../../constants/tenant-links'
+
+/**
+ * `OrgHost` extends Firestore's `DocumentData`, whose index signature shares
+ * no DECLARED property with the address helpers' parameter type — so TypeScript
+ * rejects the call as a weak-type mismatch even though the fields are there at
+ * runtime. Narrowing once here beats a cast at each call site, and it names the
+ * two fields these helpers actually read.
+ */
+const hostAddress = (
+  host: Record<string, unknown> | undefined,
+): { cname?: string; subdomain?: string } | undefined =>
+  host && {
+    cname: typeof host.cname === 'string' ? host.cname : undefined,
+    subdomain: typeof host.subdomain === 'string' ? host.subdomain : undefined,
+  }
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
@@ -219,9 +239,12 @@ function HostsContent() {
                         // link is the chord-free path there. Harmless
                         // everywhere else (same arming the param always
                         // did).
-                        href={`https://${
-                          host?.cname || `${host?.subdomain}.aglyn.app`
-                        }/?aglyn-edit`}
+                        // hostDisplayDomain, not a re-derived apex
+                        // (AGL-2172): tenant-links.ts exists so this does not
+                        // have to know the apex, and re-deriving it here meant
+                        // a self-hoster's Sites list linked every one of their
+                        // sites at OUR domain.
+                        href={`https://${hostDisplayDomain(hostAddress(host))}/?aglyn-edit`}
                         target={'_blank'}
                         rel={'nofollow'}
                       >
@@ -241,8 +264,8 @@ function HostsContent() {
                 >
                   <Typography color="textSecondary" component="div">
                     <HostInfoItem
-                      label={'Aglyn Domain'}
-                      value={`${host?.subdomain}.aglyn.app`}
+                      label={`${PLATFORM_BRAND_NAME} Domain`}
+                      value={hostPlatformDomain(hostAddress(host))}
                     />
                     <HostInfoItem
                       label={'Custom Domain'}
