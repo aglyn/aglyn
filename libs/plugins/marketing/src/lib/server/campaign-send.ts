@@ -563,7 +563,16 @@ export async function performCampaignSend(
       text: rendered
         ? `${rendered.text}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
         : `${recipientBody}\n\n—\nUnsubscribe: ${unsubscribeUrl}`,
-      headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+      // RFC 8058 one-click (AGL-2408). `List-Unsubscribe` alone does NOT
+      // satisfy Gmail's and Yahoo's bulk-sender rules — the pair does, and
+      // Gmail is where most of a merchant's list lives. A client honouring
+      // the pair POSTs `List-Unsubscribe=One-Click` to the URL, which is
+      // why the handler had to accept POST first: advertising one-click
+      // against a GET-only handler would promise a verb nothing served.
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
       fromName: branding.fromName,
       // Event attribution (AGL-268): the opens/clicks webhook maps
       // deliveries back to the campaign (and experiment) via tags.

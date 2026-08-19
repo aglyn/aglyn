@@ -256,7 +256,15 @@ What matters more than a ramp, and is tracked separately:
 
 - Bounces and complaints on **campaign** mail now suppress the address
   (AGL-1918); the same on **transactional** mail is AGL-2407.
-- One-click `List-Unsubscribe` — AGL-2408.
+- One-click `List-Unsubscribe` is **shipped** (AGL-2408): campaign mail
+  carries the RFC 8058 pair — `List-Unsubscribe: <https://…>` plus
+  `List-Unsubscribe-Post: List-Unsubscribe=One-Click` — and
+  `/api/email/unsubscribe` writes only on POST. The GET is a
+  confirmation page, so a Safe Links / Proofpoint prescanner following
+  the link no longer unsubscribes the recipient. Still open: no
+  `mailto:` fallback in the header, because it needs a monitored
+  inbox (see "Later hardening" below), and nothing outside campaigns
+  carries an unsubscribe at all.
 - There is no send-rate governor anywhere, so if volume ever does need a ramp
   there is nothing to turn — AGL-2409.
 

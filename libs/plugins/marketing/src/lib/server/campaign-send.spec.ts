@@ -273,6 +273,31 @@ describe('a designed campaign whose version is stored compressed (AGL-1394)', ()
   })
 
   /**
+   * RFC 8058 one-click (AGL-2408). Gmail's and Yahoo's bulk-sender rules ask
+   * for the PAIR; `List-Unsubscribe` on its own — which is all this sender
+   * set until now — does not satisfy them, and Gmail is where most of a
+   * merchant's list lives.
+   *
+   * Asserted on the delivered message rather than on a constant, because a
+   * header the sender computes but never attaches is exactly the shape this
+   * bug had: the URL was built, signed, and put in one header while the
+   * companion that makes it actionable was absent.
+   */
+  it('sends the RFC 8058 one-click header pair', async () => {
+    seed(pooledBuffer())
+    await send()
+
+    const [message] = mockState.sent
+    const headers = message['headers'] as Record<string, string>
+    expect(headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+    // The URL half must still be there and must still be angle-bracketed —
+    // a bare URL is not a valid header value.
+    expect(headers['List-Unsubscribe']).toMatch(
+      /^<https:\/\/acme\.aglyn\.app\/api\/email\/unsubscribe\?[^>]+>$/,
+    )
+  })
+
+  /**
    * The renderer defaults `rootId` to `'root'` for ad-hoc callers, and a
    * besigner map is rooted at `'_@_'` — so a decode that is correct still
    * renders NOTHING unless the root is named (AGL-765). Both other send
