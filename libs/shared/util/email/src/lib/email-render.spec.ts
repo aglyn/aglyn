@@ -224,3 +224,55 @@ describe('renderEmailHtml', () => {
     expect(html).toContain('inside')
   })
 })
+
+/**
+ * The white-label email logo (AGL-2139).
+ *
+ * `emailLogoUrl` was resolvable, storable, editable — and rendered by nothing.
+ * These assert the rendering half in both directions, because a test that only
+ * exercises the with-a-logo case passes on a renderer that emits an `<img>`
+ * unconditionally, which is the failure that matters: a broken-image box at
+ * the top of every transactional email a non-white-label org sends.
+ */
+describe('brand logo header (AGL-2139)', () => {
+  const BODY = {
+    root: { componentId: 'div', nodes: ['t'] },
+    t: { componentId: 'emailText', props: { children: 'hello' } },
+  } as any
+
+  it('renders an absolute logo above the body when the org has one', () => {
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: 'https://cdn.example.com/acme.png',
+      merge: { 'brand.productName': 'Acme' },
+    })
+    expect(html).toContain('https://cdn.example.com/acme.png')
+    // Alt text carries the brand, so a client with images off still reads it.
+    expect(html).toContain('alt="Acme"')
+    // Above the body, not appended after it.
+    expect(html.indexOf('acme.png')).toBeLessThan(html.indexOf('hello'))
+  })
+
+  it('emits NO img at all when the org has no logo', () => {
+    const { html } = renderEmailHtml({ nodes: BODY })
+    expect(html).not.toContain('<img')
+    expect(html).toContain('hello')
+  })
+
+  it('resolves a media: reference against the media origin', () => {
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: 'media:h1/med9',
+      mediaOrigin: 'https://console.example.com',
+      mediaHostId: 'h1',
+    })
+    expect(html).toContain('https://console.example.com/api/media/cdn/')
+  })
+
+  it('DROPS a relative logo rather than emitting a broken src', () => {
+    // Same rule as every other image (AGL-1224): an inbox has no page to
+    // resolve `/api/media/cdn/…` against, so a gap beats a broken-image box.
+    const { html } = renderEmailHtml({ nodes: BODY, brandLogoUrl: 'media:h1/med9' })
+    expect(html).not.toContain('<img')
+  })
+})

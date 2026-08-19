@@ -58,6 +58,49 @@ export interface SystemEmailMergeToken {
 }
 
 /**
+ * The sending org's brand, available to every ORG-CONTEXT template (AGL-2139).
+ *
+ * Spread into `mergeTokens` rather than repeated, because the catalog spec
+ * refuses any `{{token}}` a template does not declare — a real guard, and the
+ * one that caught these the moment the copy below stopped saying "Aglyn".
+ *
+ * ⚠️ Add these ONLY to a template whose send site passes a
+ * `ResolvedBrandingProfile` to `renderSystemEmail`. An undeclared token is
+ * rejected here, but a DECLARED token the sender never supplies is *blanked*
+ * by `blankUnresolvedTokens` — so putting them on a user-level template
+ * (password reset, email verification, new-device alert) would replace the
+ * product name with a gap in the sentence. Those emails have no single org
+ * context by construction: a person can belong to many orgs, and there is no
+ * defensible answer to "whose brand" on a password reset. They keep the
+ * platform brand deliberately.
+ *
+ * `sample` values feed the staff test-send drawer, which renders with the
+ * Aglyn profile — so the preview reads as it does for our own deployment.
+ */
+const BRAND_MERGE_TOKENS: readonly SystemEmailMergeToken[] = [
+  {
+    name: 'brand.productName',
+    description:
+      "Sending organization's product name — its own on a white-label plan, " +
+      'otherwise the platform name',
+    sample: 'Aglyn',
+  },
+  {
+    name: 'brand.supportUrl',
+    description: "Sending organization's support URL",
+    sample: 'https://aglyn.com/support',
+  },
+]
+
+// `brand.logoUrl` is deliberately NOT declared here. `brandMergeTokens` still
+// supplies it, so a staff-authored template that references it resolves — but
+// the renderer already places the org's logo above the body from
+// `brandLogoUrl`, so advertising a token for a second placement would be a
+// declared capability with no use, which is the exact shape of the defect this
+// issue exists to fix. The catalog spec also requires a non-empty `sample`,
+// and the honest sample for an org with no logo is empty.
+
+/**
  * One block of a template's starting content (AGL-764). Declarative on
  * purpose: the catalog stays a dependency-free data module, and the console
  * turns these into email-plugin nodes (`emailSection` → `emailText`/
@@ -116,8 +159,10 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent when an admin invites someone to an organization from the ' +
         'Team page.',
       deliveredBy: 'resend',
-      defaultSubject: "You've been invited to {{org.name}} on Aglyn",
+      defaultSubject:
+        "You've been invited to {{org.name}} on {{brand.productName}}",
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'org.name',
           description: 'Name of the inviting organization',
@@ -159,8 +204,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Monthly per-organization usage and metered-cost summary, sent by ' +
         'the scheduled job.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your Aglyn usage summary for {{month}}',
+      defaultSubject: 'Your {{brand.productName}} usage summary for {{month}}',
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'month',
           description: 'Billing month as YYYY-MM',
@@ -182,7 +228,8 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
         {
           block: 'text',
-          text: 'Here is your Aglyn usage summary for {{month}}.',
+          text:
+            'Here is your {{brand.productName}} usage summary for {{month}}.',
           variant: 'body',
         },
         { block: 'text', text: '{{usage.summary}}', variant: 'body' },
@@ -229,8 +276,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent to a new owner the first time they create an organization ' +
         '(not on every organization they later create).',
       deliveredBy: 'resend',
-      defaultSubject: 'Welcome to Aglyn',
+      defaultSubject: 'Welcome to {{brand.productName}}',
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'name',
           description: "The new owner's display name",
@@ -249,7 +297,11 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in orgs/create/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Welcome to Aglyn', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Welcome to {{brand.productName}}',
+          variant: 'heading',
+        },
         {
           block: 'text',
           text:
@@ -278,6 +330,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       deliveredBy: 'resend',
       defaultSubject: "You've been added to {{org.name}}",
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'org.name',
           description: 'The organization they were added to',
@@ -306,7 +359,11 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           text: 'Sign in to switch to it from your dashboard.',
           variant: 'body',
         },
-        { block: 'button', label: 'Open Aglyn', href: '{{signInUrl}}' },
+        {
+          block: 'button',
+          label: 'Open {{brand.productName}}',
+          href: '{{signInUrl}}',
+        },
       ],
       source: 'apps/console/app/api/orgs/members/route.ts',
     },
@@ -317,8 +374,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'Sent to an organization owner once its data has been permanently ' +
         'erased under a GDPR request.',
       deliveredBy: 'resend',
-      defaultSubject: 'Your Aglyn data has been erased',
+      defaultSubject: 'Your {{brand.productName}} data has been erased',
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'org.name',
           description: 'The organization that was erased',
@@ -332,7 +390,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           block: 'text',
           text:
             '{{org.name}} and all of its data have been permanently erased ' +
-            'from Aglyn, as requested.',
+            'from {{brand.productName}}, as requested.',
           variant: 'body',
         },
         {
@@ -352,6 +410,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       deliveredBy: 'resend',
       defaultSubject: 'We received your erasure request',
       mergeTokens: [
+        ...BRAND_MERGE_TOKENS,
         {
           name: 'org.name',
           description: 'The organization to be erased',
@@ -365,7 +424,7 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           block: 'text',
           text:
             'We have recorded a request to erase {{org.name}} and all of ' +
-            'its data from Aglyn.',
+            'its data from {{brand.productName}}.',
           variant: 'body',
         },
         {

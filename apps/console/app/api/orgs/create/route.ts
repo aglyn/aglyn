@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { AGLYN_BRANDING_PROFILE, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   generateOrgSlug,
   isValidOrgSlug,
@@ -186,14 +186,27 @@ async function handler(request: Request): Promise<Response> {
           const fallbackText =
             `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
             `is ready.\n\nOpen your dashboard at ${origin}.`
-          const designed = await renderSystemEmail('welcome', {
-            name: ownerName,
-            'org.name': name,
-            consoleUrl: origin,
-          })
+          const designed = await renderSystemEmail(
+            'welcome',
+            {
+              name: ownerName,
+              'org.name': name,
+              consoleUrl: origin,
+            },
+            // The platform brand explicitly, not a resolved profile: the org
+            // was created seconds ago, so it carries no plan and no
+            // `whiteLabel` entitlement, and `resolveBrandingProfile` would
+            // return exactly this. Passing it is not optional though — the
+            // welcome copy now carries `{{brand.productName}}`, and a template
+            // rendered with no brand tokens has them BLANKED rather than left
+            // visible, so the greeting would read "Welcome to " (AGL-2139).
+            AGLYN_BRANDING_PROFILE,
+          )
           await sendEmail({
             to: decoded.email,
-            subject: designed?.subject ?? 'Welcome to Aglyn',
+            subject:
+              designed?.subject ??
+              `Welcome to ${AGLYN_BRANDING_PROFILE.productName}`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             context: 'welcome',

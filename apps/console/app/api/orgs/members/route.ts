@@ -342,11 +342,15 @@ async function handler(request: Request): Promise<Response> {
           const fallbackText =
             `You were added to ${orgName} as ${role}.\n\n` +
             `Sign in at ${origin} to switch to it from your dashboard.`
-          const designed = await renderSystemEmail('member-added', {
-            'org.name': String(orgName),
-            'member.role': role,
-            signInUrl: origin,
-          })
+          const designed = await renderSystemEmail(
+            'member-added',
+            {
+              'org.name': String(orgName),
+              'member.role': role,
+              signInUrl: origin,
+            },
+            branding,
+          )
           await sendEmail({
             to: email,
             subject: designed?.subject ?? `You've been added to ${orgName}`,

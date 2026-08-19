@@ -18,6 +18,8 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
+import { AGLYN_BRANDING_PROFILE } from './plan-entitlements'
+
 /**
  * White-Label Phase 2/3 coverage guard.
  *
@@ -122,4 +124,119 @@ describe('white-label branding coverage (Phase 2/3)', () => {
       expect(source).toContain('fromName')
     },
   )
+
+  /**
+   * FIELD-level coverage (AGL-2139) — the half the suite above cannot do.
+   *
+   * Every assertion before this one is about a FILE: does this surface still
+   * route through the resolver. None of them can notice a field that the
+   * resolver resolves and nothing renders, and that is not hypothetical —
+   * `emailLogoUrl` was collected in the branding editor, https-validated,
+   * persisted, and resolved, with this guard fully green, while being read at
+   * ZERO render sites. An agency admin on the most expensive tier filled it
+   * in, the console confirmed the save, and it appeared in no email ever sent.
+   *
+   * So: every key of `ResolvedBrandingProfile` must be READ somewhere that is
+   * not the resolver, the editor, or the persist path. Those three are where a
+   * dead field looks alive — they are how it gets collected, stored and
+   * resolved — so they are exactly what must not count as a consumer.
+   *
+   * A miss here means one of two things, and both are bugs: either the field
+   * renders nowhere (delete it, or wire it), or its consumer lives in a file
+   * not listed below, in which case add the file. Deleting the field from this
+   * list is never the fix — that is how the guard stops guarding.
+   */
+  describe('every resolved branding field has a consumer (AGL-2139)', () => {
+    // Files that RENDER the brand. Deliberately excludes plan-entitlements.ts
+    // (the resolver + Aglyn default), org-branding-card (the editor) and
+    // orgs/settings/route.ts (the persist path).
+    const CONSUMERS: string[] = [
+      'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+      'apps/tenant/app/[host]/[[...slug]]/page.tsx',
+      'apps/console/components/layouts/main.layout.tsx',
+      'apps/console/components/console-branding-effects.component.tsx',
+      'apps/console/hooks/use-branding.ts',
+      'libs/tenant/data/admin/src/lib/server/console-domains.ts',
+      'libs/shared/util/email/src/lib/email-render.ts',
+      'libs/shared/util/email/src/lib/send-email.ts',
+      'apps/console/app/api/_lib/render-system-email.ts',
+    ]
+
+    /**
+     * Comments stripped, because a MENTION is not a consumer.
+     *
+     * The first draft of this guard used a plain substring test and stayed
+     * green when the real consumer was renamed away — the doc comment that
+     * explains `emailLogoUrl` was enough to satisfy it. A guard that a
+     * paragraph of prose can satisfy is the same class of thing as the
+     * file-level guard it was written to reinforce, so it is stripped and
+     * then matched as an identifier: `.emailLogoUrl`, `emailLogoUrl:` or a
+     * destructured binding, never the word inside a sentence.
+     */
+    const stripComments = (source: string): string =>
+      source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+
+    // The org-context senders are brand consumers too — `fromName` is read
+    // nowhere else — so the corpus is the render surfaces plus every sender
+    // the suite above already pins.
+    const corpus = [...CONSUMERS, ...ORG_EMAIL_SENDERS]
+      .map((file) => stripComments(read(file)))
+      .join('\n')
+
+    // Read off the resolver's own default so a field added to the interface
+    // cannot be silently omitted from this list — the keys ARE the contract.
+    const ALL_FIELDS = Object.keys(AGLYN_BRANDING_PROFILE)
+
+    /**
+     * The ONE field this rule does not apply to, and why.
+     *
+     * `customConsoleDomain` is routing state, not a rendered brand value. Its
+     * authoritative copy is the `consoleDomains` reservation collection, which
+     * is keyed BY domain so an incoming request can resolve host → org in one
+     * read; `resolveConsoleDomain` and the console middleware serve from
+     * there, and the settings route writes both. The copy on the resolved
+     * profile is therefore never rendered by anything, which is correct rather
+     * than broken — a per-org profile cannot answer "which org owns this
+     * hostname" without a scan.
+     *
+     * Named explicitly, one entry, so the exemption stays a decision rather
+     * than a hole: a second name appearing here should be argued for, not
+     * added to make a red go away.
+     */
+    const NOT_A_RENDERED_FIELD = ['customConsoleDomain']
+    const FIELDS = ALL_FIELDS.filter(
+      (field) => !NOT_A_RENDERED_FIELD.includes(field),
+    )
+
+    it('covers every field the interface declares', () => {
+      // Guards the guard: an empty or truncated key list would make every
+      // assertion below vacuous.
+      expect(ALL_FIELDS.length).toBeGreaterThanOrEqual(8)
+      expect(FIELDS).toContain('emailLogoUrl')
+      // The exemption stays narrow, and every name in it is really a field —
+      // a typo there would silently exempt nothing while looking deliberate.
+      expect(NOT_A_RENDERED_FIELD).toHaveLength(1)
+      for (const field of NOT_A_RENDERED_FIELD) {
+        expect(ALL_FIELDS).toContain(field)
+      }
+    })
+
+    it.each(FIELDS)('a surface outside the resolver reads: %s', (field) => {
+      // Property access, object key, or destructured binding — code, not prose.
+      expect(corpus).toMatch(new RegExp(`\\b${field}\\b`))
+    })
+
+    it('a comment alone does not satisfy the guard', () => {
+      // The guard-on-the-guard: proves `stripComments` is load-bearing, so a
+      // future edit that drops it fails here rather than silently restoring
+      // the substring test this replaced.
+      expect(
+        stripComments('/** mentions emailLogoUrl */\nconst x = 1'),
+      ).not.toMatch(/\bemailLogoUrl\b/)
+      expect(stripComments('// emailLogoUrl\nconst x = 1')).not.toMatch(
+        /\bemailLogoUrl\b/,
+      )
+      expect(stripComments('a.emailLogoUrl')).toMatch(/\bemailLogoUrl\b/)
+    })
+  })
 })

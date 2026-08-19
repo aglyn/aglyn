@@ -78,6 +78,29 @@ export interface EmailRenderOptions {
    * through the qualified form.
    */
   mediaHostId?: string
+  /**
+   * The sending org's white-label email logo, or absent (AGL-2139).
+   *
+   * `emailLogoUrl` has been a first-class field of `OrgBrandingProfile` since
+   * White-Label Phase 1 — collected in the branding editor, https-validated,
+   * persisted, and resolved by `resolveBrandingProfile` — and it was read at
+   * ZERO render sites. An agency admin on the most expensive tier filled the
+   * field in, the console confirmed the save, and the value appeared in no
+   * email ever sent. This option is what makes it a capability rather than a
+   * stored string.
+   *
+   * Rendered as a header row inside the 600px table, ABOVE the template body,
+   * so it applies to a staff-designed template and a catalog default alike
+   * without either having to wire anything. Absent — which is the resolved
+   * value for every non-white-label org — emits nothing at all rather than an
+   * empty `<img>`, because a zero-height broken-image box at the top of a
+   * transactional email reads as a broken email.
+   *
+   * Goes through `imageSrc` like any other image, so a `media:` reference or
+   * a relative CDN path is absolutized against `mediaOrigin` and DROPPED
+   * rather than emitted relative when there is no origin (AGL-1224).
+   */
+  brandLogoUrl?: string
 }
 
 export interface RenderedEmail {
@@ -138,6 +161,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     sanitize = (html: string) => html,
     mediaOrigin,
     mediaHostId,
+    brandLogoUrl,
   } = options
 
   const textParts: string[] = []
@@ -321,6 +345,21 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
   }
 
   const body = renderNode(rootId) || renderChildren(nodes[rootId]?.nodes)
+
+  // White-label email logo (AGL-2139). Emitted only when the org actually has
+  // one — `resolveBrandingProfile` returns null here for every org without the
+  // `whiteLabel` entitlement, and an empty src would render as a broken-image
+  // box rather than as nothing. Capped at 180px wide and given the org's brand
+  // as alt text so a client with images off still reads the brand.
+  const logoSrc = brandLogoUrl ? imageSrc(brandLogoUrl) : undefined
+  const brandLogoHtml = logoSrc
+    ? row(
+        `<img src="${escapeEmailHtml(logoSrc)}" alt="${escapeEmailHtml(
+          sub(merge?.['brand.productName'] ?? ''),
+        )}" width="180" style="display:block;max-width:180px;width:100%;height:auto;border:0;margin:0 auto;" />`,
+        'padding:0 0 20px;text-align:center;',
+      )
+    : ''
   const preheaderHtml = preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">` +
       escapeEmailHtml(sub(preheader)) +
@@ -336,6 +375,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">` +
     row(
       `<table role="presentation" width="600" cellpadding="0" cellspacing="0" align="center" style="max-width:600px;width:100%;margin:0 auto;">` +
+        brandLogoHtml +
         body +
         `</table>`,
       'padding:24px 8px;',

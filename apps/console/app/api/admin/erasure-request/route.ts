@@ -101,9 +101,11 @@ async function handler(request: Request): Promise<Response> {
       `from ${branding.productName}. Deletion is permanent and happens after ` +
       'a 7-day hold. If this was not intended, contact support before then ' +
       'to cancel.'
-    const designed = await renderSystemEmail('erasure-requested', {
-      'org.name': String(orgName),
-    })
+    const designed = await renderSystemEmail(
+      'erasure-requested',
+      { 'org.name': String(orgName) },
+      branding,
+    )
     const result = await sendEmail({
       to: ownerEmail,
       subject: designed?.subject ?? 'We received your erasure request',

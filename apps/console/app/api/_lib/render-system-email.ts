@@ -25,6 +25,11 @@ import {
   substituteMergeTokens,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
+import {
+  AGLYN_BRANDING_PROFILE,
+  brandMergeTokens,
+  type ResolvedBrandingProfile,
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -141,16 +146,25 @@ export async function loadSystemEmail(
 export function renderLoadedSystemEmail(
   loaded: LoadedSystemEmail,
   merge: Record<string, string> = {},
+  branding?: ResolvedBrandingProfile,
 ): RenderedSystemEmail | null {
+  // The org's brand, as tokens a designed template can be written against and
+  // as the logo row the renderer prepends (AGL-2139). Caller-supplied merge
+  // values still win on a key collision — a send site that computes something
+  // more specific is not overridden by a generic brand default.
+  const effectiveMerge = branding
+    ? { ...brandMergeTokens(branding), ...merge }
+    : merge
   const rendered = renderEmailHtml({
     nodes: loaded.nodes as never,
+    brandLogoUrl: branding?.emailLogoUrl ?? undefined,
     // Besigner maps are rooted at '_@_', not renderEmailHtml's default
     // 'root' — without this a designed template rendered empty and the send
     // fell back to built-in copy, so designing did nothing (AGL-765).
     rootId: EMAIL_NODE_ROOT_ID,
-    subject: substituteMergeTokens(loaded.subjectTemplate, merge),
-    preheader: substituteMergeTokens(loaded.preheaderTemplate, merge),
-    merge,
+    subject: substituteMergeTokens(loaded.subjectTemplate, effectiveMerge),
+    preheader: substituteMergeTokens(loaded.preheaderTemplate, effectiveMerge),
+    merge: effectiveMerge,
     // Without this a staff-picked image resolves to a site-relative CDN path,
     // which is a broken-image box in the recipient's inbox (AGL-1224).
     mediaOrigin: CONSOLE_ORIGIN,
@@ -158,7 +172,7 @@ export function renderLoadedSystemEmail(
   if (!rendered?.html) return null
   return {
     subject: blankUnresolvedTokens(
-      substituteMergeTokens(loaded.subjectTemplate, merge),
+      substituteMergeTokens(loaded.subjectTemplate, effectiveMerge),
     ),
     html: blankUnresolvedTokens(rendered.html),
     text: blankUnresolvedTokens(rendered.text ?? ''),
@@ -182,9 +196,10 @@ export function renderLoadedSystemEmail(
 export async function renderSystemEmail(
   templateKey: string,
   merge: Record<string, string> = {},
+  branding?: ResolvedBrandingProfile,
 ): Promise<RenderedSystemEmail | null> {
   const loaded = await loadSystemEmail(templateKey)
-  return loaded ? renderLoadedSystemEmail(loaded, merge) : null
+  return loaded ? renderLoadedSystemEmail(loaded, merge, branding) : null
 }
 
 /**
@@ -201,25 +216,32 @@ export async function renderSystemEmail(
 export async function renderEffectiveSystemEmail(
   templateKey: string,
   merge: Record<string, string> = {},
+  branding: ResolvedBrandingProfile = AGLYN_BRANDING_PROFILE,
 ): Promise<RenderedSystemEmail | null> {
   const definition = getSystemEmailTemplate(templateKey)
   if (!definition || !isSystemEmailEditable(definition)) return null
 
-  const designed = await renderSystemEmail(templateKey, merge)
+  const designed = await renderSystemEmail(templateKey, merge, branding)
   if (designed) return designed
 
   // Nothing published — render the catalog default the editor would seed.
+  // The default carries `{{brand.*}}` tokens now (AGL-2139), so it needs the
+  // same token set the designed path gets or the copy renders with holes
+  // where the brand should be — `blankUnresolvedTokens` does not leave a
+  // token visible, it deletes it.
+  const effectiveMerge = { ...brandMergeTokens(branding), ...merge }
   const nodes = buildDefaultEmailNodeMap(definition)
   const rendered = renderEmailHtml({
     nodes: nodes as never,
     rootId: EMAIL_NODE_ROOT_ID,
-    subject: substituteMergeTokens(definition.defaultSubject, merge),
-    merge,
+    subject: substituteMergeTokens(definition.defaultSubject, effectiveMerge),
+    merge: effectiveMerge,
     mediaOrigin: CONSOLE_ORIGIN,
+    brandLogoUrl: branding.emailLogoUrl ?? undefined,
   })
   return {
     subject: blankUnresolvedTokens(
-      substituteMergeTokens(definition.defaultSubject, merge),
+      substituteMergeTokens(definition.defaultSubject, effectiveMerge),
     ),
     html: blankUnresolvedTokens(rendered.html),
     text: blankUnresolvedTokens(rendered.text ?? ''),

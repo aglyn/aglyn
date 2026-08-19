@@ -271,11 +271,15 @@ async function handler(request: Request): Promise<Response> {
         'the invite from your dashboard.'
       // Staff-designed template when one is published (AGL-750); null
       // whenever it is missing or unusable, so this copy still goes out.
-      const designed = await renderSystemEmail('org-invite', {
-        'org.name': String(orgName),
-        'invite.role': role,
-        signInUrl: origin,
-      })
+      const designed = await renderSystemEmail(
+        'org-invite',
+        {
+          'org.name': String(orgName),
+          'invite.role': role,
+          signInUrl: origin,
+        },
+        branding,
+      )
       const result = await sendEmail({
         to: email,
         subject:

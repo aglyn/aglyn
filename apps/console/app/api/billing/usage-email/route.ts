@@ -162,11 +162,17 @@ async function handler(request: Request): Promise<Response> {
       // Render the batch-resolved template for this org's values (AGL-768);
       // null falls back to the built-in copy above.
       const designed = template
-        ? renderLoadedSystemEmail(template, {
-            month,
-            'org.name': String(orgName),
-            'usage.summary': usageSummary,
-          })
+        ? renderLoadedSystemEmail(
+            template,
+            {
+              month,
+              'org.name': String(orgName),
+              'usage.summary': usageSummary,
+            },
+            // The org's brand, so a designed template renders THEIR name and
+            // logo instead of reverting this org to Aglyn (AGL-2139).
+            branding,
+          )
         : null
       const result = await sendEmail({
         to: email,

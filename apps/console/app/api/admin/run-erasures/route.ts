@@ -115,12 +115,18 @@ async function handler(request: Request): Promise<Response> {
             `${orgName} and all of its data have been permanently erased ` +
             `from ${branding.productName}, as requested. This is complete and ` +
             'cannot be undone.'
-          const designed = await renderSystemEmail('erasure-confirmation', {
-            'org.name': String(orgName),
-          })
+          const designed = await renderSystemEmail(
+            'erasure-confirmation',
+            { 'org.name': String(orgName) },
+            branding,
+          )
           await sendEmail({
             to: ownerEmail,
-            subject: designed?.subject ?? 'Your Aglyn data has been erased',
+            // Was the literal 'Your Aglyn data has been erased', two lines
+            // below a body that already used branding.productName (AGL-2139).
+            subject:
+              designed?.subject ??
+              `Your ${branding.productName} data has been erased`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: branding.fromName,

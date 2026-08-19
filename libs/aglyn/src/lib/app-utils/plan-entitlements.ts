@@ -1958,6 +1958,51 @@ export function resolveBrandingProfile(
 }
 
 /**
+ * The org's brand as `{{merge}}` tokens for a designed email (AGL-2139).
+ *
+ * ## The failure this closes
+ *
+ * Every org-context sender has the shape
+ * `subject: designed?.subject ?? <branded fallback>`. The staff-designed
+ * template WINS, and the catalog copy it renders hardcoded "Aglyn" — "Reset
+ * your Aglyn password", "…invited to {{org.name}} on Aglyn". So a white-label
+ * org's mail read as its own brand only while no template was published, and
+ * reverted to ours the moment staff designed one. That is the steady state of
+ * the template feature, so the concealment we sell Agency and Enterprise
+ * inverted exactly when the other feature got used.
+ *
+ * A designer could not have fixed it by hand either: the merge maps carried
+ * only `org.name`, `invite.role`, `signInUrl` and friends, and
+ * `blankUnresolvedTokens` BLANKS any token the caller did not supply — so
+ * typing `{{brand.productName}}` into a template would have shipped an email
+ * with a hole in the sentence rather than a brand.
+ *
+ * ## Why every value is a token, not just the name
+ *
+ * `brand.logoUrl` is here so the catalog and a designed template can both
+ * reference the org's mark, and `brand.supportUrl` so a "contact us" line
+ * points at the agency rather than at `aglyn.com/support`. Threading only the
+ * product name would have left two more fields resolvable and unrenderable —
+ * which is the exact defect `emailLogoUrl` already was.
+ *
+ * Nullable fields become `''` rather than being omitted. An omitted token is
+ * blanked by the resolver anyway, but an EXPLICIT empty string means the
+ * field-level coverage guard can see a consumer for it, and it keeps the
+ * token set the same shape for every org so a template written against one
+ * org cannot render differently against another.
+ */
+export function brandMergeTokens(
+  branding: ResolvedBrandingProfile,
+): Record<string, string> {
+  return {
+    'brand.productName': branding.productName,
+    'brand.fromName': branding.fromName,
+    'brand.supportUrl': branding.supportUrl,
+    'brand.logoUrl': branding.emailLogoUrl ?? '',
+  }
+}
+
+/**
  * The value of the `<meta name="generator">` tag and of the `x-powered-by`
  * header on published sites (AGL-2088) — the canonical CMS signal WordPress,
  * Squarespace, Drupal and Ghost all ship, and the thing tech-stack detectors
