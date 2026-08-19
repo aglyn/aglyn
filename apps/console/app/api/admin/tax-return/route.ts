@@ -23,9 +23,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   asRowDate,
+  marketplaceTaxSummary,
   storefrontTaxSummary,
   taxPeriodRange,
   taxReturnSummary,
+  type MarketplaceTaxReturnRowInput,
   type StorefrontTaxReturnRowInput,
   type TaxReturnRowInput,
 } from '../../../../utils/server/tx-return'
@@ -125,8 +127,26 @@ async function handler(request: Request): Promise<Response> {
     // would put other companies' receipts into this return's total sales —
     // which is why they never meet in one query.
     const storefront = firestore.collection('storefrontTaxCollected')
-    const [inPeriod, undatedProbe, storefrontInPeriod, storefrontUndated] =
-      await Promise.all([
+    // Marketplace sales tax (AGL-2137): a THIRD source, and it was missing
+    // entirely. Marketplace checkout enables `automatic_tax` on the PLATFORM's
+    // own charge with the tax added `exclusive` on top and kept platform-side
+    // — the publisher's transfer is a fixed amount computed from the PRE-tax
+    // price — so under the marketplace-provider registration that tax is
+    // Aglyn's to remit, in full. Nothing read `marketplacePurchases.taxCents`:
+    // every dollar of it was collected and then absent from the return.
+    //
+    // Ranged on `createdAt`, which is a SINGLE-FIELD inequality and therefore
+    // served by Firestore's automatic index — deliberately, so this cannot be
+    // the query that 500s the staff page in production over a composite index
+    // nobody deployed.
+    const marketplace = firestore.collection('marketplacePurchases')
+    const [
+      inPeriod,
+      undatedProbe,
+      storefrontInPeriod,
+      storefrontUndated,
+      marketplaceInPeriod,
+    ] = await Promise.all([
         revenue
           .where('paidAt', '>=', range.start)
           .where('paidAt', '<', range.end)
@@ -140,6 +160,11 @@ async function handler(request: Request): Promise<Response> {
           .limit(ROW_CAP + 1)
           .get(),
         storefront.where('paidAt', '==', null).limit(50).get(),
+        marketplace
+          .where('createdAt', '>=', range.start)
+          .where('createdAt', '<', range.end)
+          .limit(ROW_CAP + 1)
+          .get(),
       ])
     const truncated = inPeriod.size > ROW_CAP
     const docs = inPeriod.docs.slice(0, ROW_CAP)
@@ -156,10 +181,38 @@ async function handler(request: Request): Promise<Response> {
         ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
       }),
     )
+    const marketplaceRows: MarketplaceTaxReturnRowInput[] =
+      marketplaceInPeriod.docs.slice(0, ROW_CAP).map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<MarketplaceTaxReturnRowInput, 'id'>),
+      }))
     return Response.json({
       period,
       summary,
       truncated,
+      /**
+       * Marketplace sales tax (AGL-2137) — ADDITIVE and separate, for the
+       * same reason `storefront` below is: a marketplace row's gross is mostly
+       * the PUBLISHER's money, so summing it into `summary` would put someone
+       * else's receipts into this return's sales figure. Unlike either
+       * sibling it has ONE liability arm — the platform's — and its tax is
+       * reported NET of refunds, with the charged and refunded halves stated
+       * separately so a reader is never handed a single number that could be
+       * either.
+       */
+      marketplace: {
+        summary: marketplaceTaxSummary(marketplaceRows, range),
+        truncated: marketplaceInPeriod.size > ROW_CAP,
+        rows: marketplaceRows.map((row) => ({
+          id: row.id,
+          sellerOrgId:
+            typeof row.sellerOrgId === 'string' ? row.sellerOrgId : null,
+          createdAt: asRowDate(row.createdAt)?.toISOString() ?? null,
+          grossCents: Number(row.amountCents ?? 0),
+          taxCents: Number(row.taxCents ?? 0),
+          refundedCents: Number(row.refundedCents ?? 0),
+        })),
+      },
       /** AGL-2021 — operator config, not source. Null when unconfigured. */
       registration: taxRegistrationFromEnv(),
       /**

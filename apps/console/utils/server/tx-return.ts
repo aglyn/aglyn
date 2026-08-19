@@ -478,3 +478,118 @@ export function storefrontTaxSummary(
 
   return summary
 }
+
+// ---------------------------------------------------------------------------
+// Marketplace sales tax (AGL-2137)
+// ---------------------------------------------------------------------------
+
+export interface MarketplaceTaxReturnRowInput {
+  id: string
+  sellerOrgId?: unknown
+  /** Tax-INCLUSIVE gross the buyer paid (`amount_total`). */
+  amountCents?: unknown
+  taxCents?: unknown
+  /** The seller's Connect transfer. Never Aglyn's revenue and never taxed. */
+  transferCents?: unknown
+  /** Stripe's CUMULATIVE refund total on the charge, when one has happened. */
+  refundedCents?: unknown
+  createdAt?: unknown
+}
+
+export interface MarketplaceTaxSummary {
+  periodStart: string
+  periodEnd: string
+  transactionCount: number
+  /** What buyers paid, tax included. Mostly the publisher's. */
+  grossCents: number
+  /** Gross − tax, i.e. the taxable base. */
+  taxableSalesCents: number
+  /** Tax collected, NET of refunds — this is the remittable figure. */
+  taxCollectedCents: number
+  /** Tax charged before refunds, so the two are legible apart. */
+  taxChargedCents: number
+  /** Tax handed back with refunds. Never remitted. */
+  taxRefundedCents: number
+  attention: {
+    /**
+     * Rows with no stored buyer address, so no jurisdiction can be stated.
+     * `marketplacePurchases` records none today — see the module note in the
+     * route — so this is expected to equal `transactionCount` until it does.
+     */
+    rowsMissingJurisdiction: number
+    rowsMissingCreatedAt: number
+    /** A refund larger than the charge — data fault, never netted below zero. */
+    rowsOverRefunded: number
+  }
+}
+
+/**
+ * Marketplace sales tax for one period (AGL-2137).
+ *
+ * A THIRD bucket, kept apart from both `taxReturnSummary` (Aglyn's own
+ * subscription invoices) and `storefrontTaxSummary` (merchant storefronts) for
+ * the same reason those two are apart: a marketplace row's gross is mostly the
+ * PUBLISHER's money, so summing it into either total would put someone else's
+ * receipts into this return's sales figure.
+ *
+ * The tax itself is different from a storefront row's, and that is why it
+ * belongs on the return at all: marketplace checkout sets
+ * `automatic_tax[enabled]` on the PLATFORM's own charge with the tax added
+ * `exclusive` on top and kept platform-side (`marketplace/checkout.ts` — the
+ * transfer to the publisher is a fixed `transfer_data[amount]` computed from
+ * the PRE-tax price). Under the marketplace-provider registration that tax is
+ * Aglyn's to remit, in full. There is no merchant-liable arm to bucket.
+ *
+ * NET OF REFUNDS, unlike either sibling. `refundedCents` is Stripe's
+ * cumulative figure for the charge, so the refunded tax is its pro-rata share
+ * of the row's own gross; a fully refunded sale nets to exactly zero tax. Both
+ * halves are also reported separately, because "we charged X and gave back Y"
+ * is the sentence a return needs, not a single number that could be either.
+ */
+export function marketplaceTaxSummary(
+  rows: readonly MarketplaceTaxReturnRowInput[],
+  period: { start: Date; end: Date },
+): MarketplaceTaxSummary {
+  const summary: MarketplaceTaxSummary = {
+    periodStart: period.start.toISOString(),
+    periodEnd: period.end.toISOString(),
+    transactionCount: 0,
+    grossCents: 0,
+    taxableSalesCents: 0,
+    taxCollectedCents: 0,
+    taxChargedCents: 0,
+    taxRefundedCents: 0,
+    attention: {
+      rowsMissingJurisdiction: 0,
+      rowsMissingCreatedAt: 0,
+      rowsOverRefunded: 0,
+    },
+  }
+  for (const row of rows ?? []) {
+    const gross = cents(row.amountCents)
+    const tax = cents(row.taxCents)
+    const refunded = cents(row.refundedCents)
+    // Pro rata against the row's OWN gross, so a partial refund gives back
+    // exactly its share of the tax. Clamped to the row's tax: a refund larger
+    // than the charge is a data fault, and netting past zero would understate
+    // what is owed — the one direction with a filing consequence.
+    const overRefunded = refunded > gross
+    if (overRefunded) summary.attention.rowsOverRefunded += 1
+    const refundedTax =
+      gross > 0 && refunded > 0
+        ? Math.min(tax, Math.round((tax * Math.min(refunded, gross)) / gross))
+        : 0
+    // No buyer address is stored on a purchase row, so no jurisdiction can be
+    // stated. Counted rather than guessed.
+    summary.attention.rowsMissingJurisdiction += 1
+    if (!asRowDate(row.createdAt)) summary.attention.rowsMissingCreatedAt += 1
+
+    summary.transactionCount += 1
+    summary.grossCents += gross
+    summary.taxableSalesCents += Math.max(0, gross - tax)
+    summary.taxChargedCents += tax
+    summary.taxRefundedCents += refundedTax
+    summary.taxCollectedCents += tax - refundedTax
+  }
+  return summary
+}

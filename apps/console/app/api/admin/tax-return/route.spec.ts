@@ -244,4 +244,98 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
     expect(body.storefront.summary.merchantManual.taxCollectedCents).toBe(800)
     expect(body.storefront.rows).toHaveLength(2)
   })
+
+  /**
+   * AGL-2137. Marketplace sales tax is a THIRD collection and a third query,
+   * and it was missing entirely.
+   *
+   * Marketplace checkout enables `automatic_tax` on the PLATFORM's own charge,
+   * adds the tax `exclusive` on top, and transfers the publisher a FIXED
+   * amount computed from the pre-tax price — so the tax stays platform-side
+   * and is Aglyn's to remit in full. Nothing anywhere read
+   * `marketplacePurchases.taxCents`: every dollar of it was collected and then
+   * absent from the return.
+   *
+   * Forced red by removing the third query from the route: `body.marketplace`
+   * is undefined and all four expectations fail.
+   */
+  it('serves marketplace tax as its own section, net of refunds', async () => {
+    seedRow('in_q3')
+    docs.set('marketplacePurchases/cs_mkt_1', {
+      listingId: 'listing-1',
+      buyerUid: 'buyer-1',
+      sellerOrgId: 'seller-org',
+      amountCents: 10825,
+      taxCents: 825,
+      feeCents: 2000,
+      transferCents: 8000,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    // Half refunded: half the tax goes back and is not remittable.
+    docs.set('marketplacePurchases/cs_mkt_2', {
+      listingId: 'listing-2',
+      buyerUid: 'buyer-2',
+      sellerOrgId: 'seller-org',
+      amountCents: 2165,
+      taxCents: 165,
+      transferCents: 1600,
+      refundedCents: 1083,
+      createdAt: new Date('2026-09-19T12:00:00Z'),
+    })
+    const body = await (await GET(get('2026-Q3'))).json()
+
+    // Aglyn's own subscription figures are untouched — three sources, three
+    // totals, never summed.
+    expect(body.summary.taxCollectedCents).toBe(660)
+    expect(body.storefront.summary.transactionCount).toBe(0)
+
+    expect(body.marketplace.summary.transactionCount).toBe(2)
+    // Charged 825 + 165 = 990.
+    expect(body.marketplace.summary.taxChargedCents).toBe(990)
+    // Refunded: 165 × 1083/2165 = 82.5 → 83 (Math.round).
+    expect(body.marketplace.summary.taxRefundedCents).toBe(83)
+    // Remittable is charged − refunded, and it is the headline figure.
+    expect(body.marketplace.summary.taxCollectedCents).toBe(907)
+    expect(body.marketplace.rows).toHaveLength(2)
+  })
+
+  /**
+   * A FULLY refunded marketplace sale nets to exactly zero tax — the case a
+   * pro-rata calculation gets wrong by a cent if it is written carelessly, and
+   * the one where "we collected this" would be plainly false.
+   */
+  it('a fully refunded marketplace sale remits no tax at all', async () => {
+    docs.set('marketplacePurchases/cs_mkt_full', {
+      sellerOrgId: 'seller-org',
+      amountCents: 10825,
+      taxCents: 825,
+      refundedCents: 10825,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    const body = await (await GET(get('2026-Q3'))).json()
+    expect(body.marketplace.summary.taxChargedCents).toBe(825)
+    expect(body.marketplace.summary.taxRefundedCents).toBe(825)
+    expect(body.marketplace.summary.taxCollectedCents).toBe(0)
+    // And the row is still REPORTED — a refunded sale that vanished from the
+    // return would be indistinguishable from one that never happened.
+    expect(body.marketplace.rows).toHaveLength(1)
+  })
+
+  /**
+   * A refund LARGER than the charge is a data fault. It must not net the
+   * remittable figure below zero, because understating what is owed is the
+   * one direction with a filing consequence — it is clamped and counted.
+   */
+  it('never nets marketplace tax below zero on an over-refunded row', async () => {
+    docs.set('marketplacePurchases/cs_mkt_bad', {
+      sellerOrgId: 'seller-org',
+      amountCents: 1000,
+      taxCents: 80,
+      refundedCents: 5000,
+      createdAt: new Date('2026-09-18T12:00:00Z'),
+    })
+    const body = await (await GET(get('2026-Q3'))).json()
+    expect(body.marketplace.summary.taxCollectedCents).toBe(0)
+    expect(body.marketplace.summary.attention.rowsOverRefunded).toBe(1)
+  })
 })
