@@ -84,6 +84,21 @@ export interface RetentionFunnelDialogProps {
    */
   impact?: string[]
   /**
+   * The over-limit summary (AGL-483) for a plan the funnel has not switched to
+   * yet — resolved once the survey response names a `downsellPlan` (AGL-2154).
+   *
+   * A downgrade from the plan GRID builds a deliberate confirm carrying this
+   * summary. A downgrade from the funnel fired immediately on one button, so
+   * the identical plan change warned from one surface and said nothing on the
+   * other — the path where the customer is least attached and most likely to
+   * be surprised later. Stated on the downsell STEP, where the decision is
+   * made, rather than by stacking a confirm dialog on top of an open dialog.
+   *
+   * Optional and non-blocking: a caller that cannot compute it, or a
+   * computation that fails, must never stop somebody who is trying to leave.
+   */
+  downsellImpact?(targetPlan: OrgPlan): Promise<string[]>
+  /**
    * The plan being left. GA-only: it is what turns "someone churned" into
    * "churn at THIS tier", which is the breakdown that decides whether the
    * funnel is working. Never sent to the retention route — the server reads
@@ -131,6 +146,7 @@ export function RetentionFunnelDialog({
   orgId,
   subscriptionActive = false,
   impact = [],
+  downsellImpact,
   currentPlan = null,
   onClose,
   onDownsell,
@@ -144,6 +160,7 @@ export function RetentionFunnelDialog({
   const [busy, setBusy] = useState(false)
   const [funnelId, setFunnelId] = useState<string | null>(null)
   const [downsellPlan, setDownsellPlan] = useState<OrgPlan | null>(null)
+  const [downsellOverLimit, setDownsellOverLimit] = useState<string[]>([])
   const [winback, setWinback] = useState<{
     percentOff: number
     months: number
@@ -159,6 +176,7 @@ export function RetentionFunnelDialog({
     setDetail('')
     setFunnelId(null)
     setDownsellPlan(null)
+    setDownsellOverLimit([])
     setWinback(null)
     setBusy(false)
   }, [open])
@@ -207,6 +225,15 @@ export function RetentionFunnelDialog({
       })
       const target = ok ? (payload?.downsellPlan as OrgPlan | null) : null
       setDownsellPlan(target)
+      // Computed here, not on the step, so the warning is on screen the first
+      // time the customer sees the offer rather than appearing under their
+      // cursor a moment later. Failure is swallowed: a funnel is not a trap,
+      // and an unreadable count must not block the exit.
+      if (target && downsellImpact) {
+        setDownsellOverLimit(
+          await downsellImpact(target).catch(() => [] as string[]),
+        )
+      }
       if (ok && payload?.winbackAvailable) {
         setWinback({
           percentOff: Number(payload.winbackPercentOff),
@@ -220,7 +247,15 @@ export function RetentionFunnelDialog({
     } finally {
       setBusy(false)
     }
-  }, [reason, detail, surface, subscriptionActive, retentionRequest, currentPlan])
+  }, [
+    reason,
+    detail,
+    surface,
+    subscriptionActive,
+    retentionRequest,
+    currentPlan,
+    downsellImpact,
+  ])
 
   const acceptDownsell = useCallback(async () => {
     if (!downsellPlan) return
@@ -387,6 +422,19 @@ export function RetentionFunnelDialog({
                 period — you keep everything you have already paid for until
                 then.
               </Alert>
+              {/* The same warning the plan grid's confirm carries (AGL-483),
+                  on the step where this decision is actually made (AGL-2154).
+                  Nothing is deleted by a downgrade — that sentence is the
+                  point of showing it rather than hiding it. */}
+              {downsellOverLimit.length ? (
+                <Alert severity="warning">
+                  {`You'll be over the ${
+                    PLAN_LABELS?.[downsellPlan] ?? downsellPlan
+                  } plan on: ${downsellOverLimit.join('; ')}. Nothing is ` +
+                    'deleted and these keep working, but you won\'t be able ' +
+                    "to add more until you're back under the limit."}
+                </Alert>
+              ) : null}
             </Stack>
           </DialogContent>
           <DialogActions>

@@ -30,7 +30,6 @@ import {
   ORG_BILLING_SUBCOLLECTION,
   parseLockdownRefusal,
   parseOnboardingPlanIntent,
-  PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -65,11 +64,10 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { collection, getCountFromServer } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import fetchSeatCounts from '../../../../utils/fetch-seat-counts'
+import { overLimitSummary as computeOverLimitSummary } from '../../../../utils/over-limit-summary'
 import BillingAddonsCardComponent, {
   ADDON_LABELS,
 } from '../../../../components/billing/billing-addons-card.component'
@@ -242,60 +240,23 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
 
   // Pre-downgrade check (AGL-483): resources that would exceed the target
   // plan. Downgrades never delete anything, but the user should know what
-  // they'll be over before confirming. Counts sites (already loaded),
-  // team members, and datasets (cheap org-scoped counts).
+  // they'll be over before confirming.
+  //
+  // The computation moved to `utils/over-limit-summary` (AGL-2154) so the
+  // retention funnel's downsell and the org-deletion downsell can state the
+  // same thing. It already took the target plan as a parameter — the funnel
+  // simply never called it. `siteCount` is passed explicitly here because this
+  // page already has the host list loaded; the shared helper counts it itself
+  // for callers that do not.
   const overLimitSummary = useCallback(
-    async (targetPlan: OrgPlan): Promise<string[]> => {
-      const target = PLAN_ENTITLEMENTS[targetPlan]
-      if (!target || !orgId) return []
-      // Seats from the server (AGL-1255). Two things were wrong here.
-      //
-      // The read was an unconstrained `orgs/{orgId}/members` list, denied for
-      // any reader the RULES do not call org-wide — and `.catch(() => 0)`
-      // turned that denial into "0 team members", which is under every plan's
-      // limit, so the warning that this downgrade would strand the org simply
-      // did not appear. The reassuring direction is the dangerous one here.
-      //
-      // It also counted EVERY member against `managersPerOrg`. Site-scoped
-      // collaborators meter per host against `membersPerHost` (AGL-1113), so
-      // this over-reported the number that decides whether you are warned.
-      const [seatCounts, datasetCount] = await Promise.all([
-        fetchSeatCounts(user, orgId),
-        getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
-          .then((snapshot) => snapshot.data().count)
-          .catch(() => null),
-      ])
-      const over: string[] = []
-      const siteCount = hosts?.length ?? 0
-      if (siteCount > target.hostLimit) {
-        over.push(`${siteCount} sites (${targetPlan} includes ${target.hostLimit})`)
-      }
-      // An unanswerable count is NOT "you are under the limit" — say so
-      // rather than omit the row, so the confirmation cannot read as a
-      // clean bill of health it never earned.
-      if (seatCounts == null) {
-        over.push(
-          `team seats — could not be checked (${targetPlan} includes ` +
-            `${target.managersPerOrg})`,
-        )
-      } else if (seatCounts.managerSeats > target.managersPerOrg) {
-        over.push(
-          `${seatCounts.managerSeats} team members (${targetPlan} includes ${target.managersPerOrg})`,
-        )
-      }
-      // Same rule for datasets, now that its failure is `null` too.
-      if (datasetCount == null) {
-        over.push(
-          `datasets — could not be checked (${targetPlan} includes ` +
-            `${target.maxDatasetsPerOrg})`,
-        )
-      } else if (datasetCount > target.maxDatasetsPerOrg) {
-        over.push(
-          `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
-        )
-      }
-      return over
-    },
+    (targetPlan: OrgPlan): Promise<string[]> =>
+      computeOverLimitSummary({
+        firestore,
+        user: user as never,
+        orgId,
+        targetPlan,
+        siteCount: hosts?.length ?? 0,
+      }),
     [firestore, orgId, hosts, user],
   )
 
@@ -1336,6 +1297,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           orgId={orgId ?? ''}
           subscriptionActive={subscriptionActive}
           impact={funnelImpact}
+          // The downsell warns about the TARGET tier the same way the plan
+          // grid's confirm does (AGL-2154) — the server names the plan, so the
+          // summary has to be computed for it on the spot.
+          downsellImpact={overLimitSummary}
           currentPlan={org?.plan as OrgPlan | undefined}
           onClose={() => setFunnelOpen(false)}
           onDownsell={handleFunnelDownsell}
