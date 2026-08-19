@@ -21,29 +21,41 @@
  */
 
 /**
- * The environment gate (AGL-2040): an event is processed only when its
- * `livemode` matches the deployment's own.
+ * THE IDEMPOTENCY CLAIM IS RELEASED ONLY WHEN NOTHING CAN HAVE LANDED
+ * (AGL-2157).
  *
- * The fixtures are the FIVE REAL EVENT IDS that reached the production
- * webhook on 2026-08-18T12:32:59–12:33:12Z, not synthesised ones. That is
- * deliberate and it is the point of the issue: the rehearsal that caused this
- * proved a handler runs while proving nothing about which environment it ran
- * in, so this file is pinned to the deliveries that actually happened.
+ * The bug: the route's outer `catch` deleted the `stripeEvents/{id}` marker on
+ * EVERY throw. That marker is the one thing standing between a Stripe
+ * redelivery and a second application of a NON-IDEMPOTENT side effect —
+ * inventory decrements, gift-card balances, coupon redemption counters — and
+ * it was being dropped precisely when it was doing its job. A handler that
+ * decremented stock and then threw un-claimed its own event, and the
+ * redelivery decremented the stock again.
  *
- * Four claims, and two of them are POSITIVE controls — a gate that refused
- * everything would satisfy the first claim alone, and would be a worse bug
- * than the one it fixes:
+ * The distinction now drawn, and BOTH halves are asserted here because a fix
+ * that never released would be a different bug — a genuine pre-dispatch
+ * failure would stop being retried at all:
  *
- * 1. A test-mode event on a LIVE deployment is ignored and writes NOTHING.
- * 2. A LIVE event on a live deployment still processes fully.
- * 3. A test-mode event on a TEST deployment still processes fully — the
- *    AGL-1951 rehearsal capability survives.
- * 4. Nothing is written BEFORE the decision: no `stripeEvents` claim exists
- *    on the ignored path, which is what makes the gate's position (after
- *    JSON.parse, before the claim) observable rather than asserted.
+ *   nothing happened  → marker DELETED, 500, Stripe redelivers and re-runs.
+ *   something MAY have → marker HELD, 500, recorded on the marker and
+ *                        escalated to staff. Stripe's redelivery
+ *                        short-circuits; a human reconciles.
  *
- * NO STRIPE PATH IS EXERCISED: `global.fetch` is a jest mock and every
- * Firestore and GA4 dependency is captured in-process.
+ * ⚠️ THE REGISTRY'S PROPAGATION SEMANTICS ARE NOT TOUCHED, and that is
+ * deliberate. `billing-webhook-hooks.ts` runs handlers sequentially with no
+ * error isolation, which is documented behaviour ("Handler errors propagate to
+ * a 500 so Stripe redelivers; make handlers idempotent"). Per-handler
+ * isolation would trade a DUPLICATED side effect for a DROPPED one, which is
+ * the worse trade on a money path. The real remaining fix is per-effect
+ * idempotency inside the plugins' own writes; this is the half that could
+ * land alone without making anything worse.
+ *
+ * Harness lifted from `billing-webhook-livemode.spec.ts` — same signed
+ * requests, same in-memory Firestore whose `create()` REJECTS on an existing
+ * document, which is the dedupe primitive the whole claim rests on. A fake
+ * that overwrote would make every assertion below green and meaningless.
+ *
+ * NO STRIPE PATH IS EXERCISED: `global.fetch` is a jest mock.
  */
 
 // A module, not a script — the const declarations below would otherwise
@@ -90,6 +102,12 @@ const mockGa4Refunds: Ga4PurchaseInput[] = []
 const mockDispatched: { type: string }[] = []
 /** Every in-app notification the route attempted. */
 const mockNotified: string[] = []
+/** Every staff escalation the route attempted (AGL-2157). */
+const mockStaffNotices: Array<Record<string, unknown>> = []
+/** Flipped per test to make a specific stage throw. */
+let mockFailPluginLoad = false
+let mockFailDispatch = false
+let mockFailOrgLookup = false
 
 /** Every document, keyed by `collection/id`. */
 let docs = new Map<string, Record<string, unknown>>()
@@ -183,11 +201,15 @@ function mockMakeFirestore() {
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   buildRoute: () => '/acme/manage/billing',
-  Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
+  Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },
   // Captured, not stubbed: this IS the money-reversal dispatch — the
   // marketplace refund and both dispute legs self-select inside it.
   runBillingWebhookHandlers: async (input: { type: string }) => {
     mockDispatched.push({ type: input.type })
+    // A plugin handler throwing AFTER it has begun — the case the claim
+    // exists for. Recorded before throwing, so the assertion that it ran is
+    // independent of the assertion that it failed.
+    if (mockFailDispatch) throw new Error('a plugin handler blew up mid-effect')
     return undefined
   },
   SELF_SERVE_PLANS: [
@@ -215,17 +237,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       },
     },
   },
-  findOrgIdByStripeCustomer: async (customerId: string) =>
-    customerId === 'cus_own_1' ? 'org-real' : null,
+  findOrgIdByStripeCustomer: async (customerId: string) => {
+    if (mockFailOrgLookup) throw new Error('firestore unavailable mid-branch')
+    return customerId === 'cus_own_1' ? 'org-real' : null
+  },
   notifyOrgAdmins: async (orgId: string) => {
     mockNotified.push(orgId)
     return undefined
   },
-  // AGL-2157: the route escalates to staff when a dispatch fails after its
-  // handlers began. Present because the route CALLS it — a wholesale mock is
-  // a closed world, and an omission here would surface as a TypeError inside
-  // the catch rather than as a missing export.
-  notifyStaff: async () => undefined,
+  // Present because the route CALLS it (AGL-2157). A wholesale mock is a
+  // closed world: omitting it would make the escalation a TypeError thrown
+  // inside the catch block, i.e. an unhandled rejection standing in for a
+  // guard, and every assertion here would still be about a 500.
+  notifyStaff: async (payload: Record<string, unknown>) => {
+    mockStaffNotices.push(payload)
+    return undefined
+  },
   sendGa4Purchase: async (): Promise<Ga4SendResult> => ({
     sent: true,
     synthesizedClientId: true,
@@ -244,7 +271,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('../utils/server-plugin-loader', () => ({
   __esModule: true,
-  serverPluginLoader: { ensureAll: async () => undefined },
+  serverPluginLoader: {
+    ensureAll: async () => {
+      // The canonical PRE-DISPATCH failure: the console API surfaces could
+      // not be loaded, so no handler of any kind ran and nothing landed.
+      if (mockFailPluginLoad) throw new Error('plugin surfaces failed to load')
+      return undefined
+    },
+  },
 }))
 
 function signed(body: unknown, secret: string) {
@@ -306,23 +340,17 @@ const REVERSAL_CHARGE = {
 function event(
   id: string,
   type: string,
-  livemode: boolean | undefined,
   object: Record<string, unknown> = REVERSAL_CHARGE,
 ) {
-  return {
-    id,
-    type,
-    ...(livemode === undefined ? {} : { livemode }),
-    data: { object },
-  }
+  return { id, type, livemode: true, data: { object } }
 }
 
-describe('the billing webhook refuses events from the other Stripe environment (AGL-2040)', () => {
+const claim = (id: string) => docs.get(`stripeEvents/${id}`)
+
+describe('the billing webhook holds its claim only when an effect may have landed (AGL-2157)', () => {
   beforeEach(() => {
     docs = new Map()
     docs.set('orgs/org-real', { name: 'Acme Ltd', slug: 'acme', plan: 'pro' })
-    // The AGL-1811 tax row — present so a refund that got past the gate would
-    // visibly stamp it. Its absence of a `refundedCents` key is the assertion.
     docs.set('platformRevenue/in_ga_annual', {
       grossCents: 28900,
       orgId: 'org-real',
@@ -330,7 +358,12 @@ describe('the billing webhook refuses events from the other Stripe environment (
     mockGa4Refunds.length = 0
     mockDispatched.length = 0
     mockNotified.length = 0
+    mockStaffNotices.length = 0
+    mockFailPluginLoad = false
+    mockFailDispatch = false
+    mockFailOrgLookup = false
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({}),
@@ -342,165 +375,115 @@ describe('the billing webhook refuses events from the other Stripe environment (
     jest.restoreAllMocks()
   })
 
-  describe('a TEST-mode event on the LIVE deployment — the 2026-08-18 delivery', () => {
-    it.each(REAL_TEST_MODE_EVENTS)(
-      '$id ($type) is ignored, and writes nothing at all',
-      async ({ id, type }) => {
-        const post = loadWebhook(LIVE_DEPLOYMENT)
-        const before = new Map(docs)
-
-        // Signed with the TEST secret, exactly as the real delivery was: the
-        // signature is VALID and AGL-547's fallback accepts it. Verification
-        // is not the control and this asserts it is not being borrowed as one.
-        const response = await post(
-          signed(event(id, type, false), 'whsec_test_fake'),
-        )
-
-        // 200, not 4xx — `livemode` never changes, so a retry would re-reach
-        // this refusal for days and then leave the destination looking dead.
-        expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({
-          received: true,
-          ignored: 'livemode-mismatch',
-        })
-
-        // The money-reversal fan-out never ran.
-        expect(mockDispatched).toHaveLength(0)
-        // Nor did any of the route's own reversal consumers.
-        expect(mockGa4Refunds).toHaveLength(0)
-        expect(mockNotified).toHaveLength(0)
-        expect(docs.get('platformRevenue/in_ga_annual')).not.toHaveProperty(
-          'refundedCents',
-        )
-
-        // NOTHING WAS WRITTEN BEFORE THE DECISION. This is the assertion that
-        // pins the gate's POSITION rather than its verdict: the idempotency
-        // claim sits a few lines below it, so a gate placed even one step
-        // later would leave this document behind.
-        expect(docs.has(`stripeEvents/${id}`)).toBe(false)
-        expect(docs.has(`stripeEventsTest/${id}`)).toBe(false)
-        // And no other document moved either.
-        expect([...docs.keys()].sort()).toEqual([...before.keys()].sort())
-        expect([...docs.entries()]).toEqual([...before.entries()])
-      },
+  it('THE NEGATIVE CONTROL: a clean event claims once and stays claimed', async () => {
+    const post = loadWebhook(LIVE_DEPLOYMENT)
+    const first = await post(
+      signed(event('evt_clean', 'charge.refunded'), 'whsec_live_fake'),
     )
+    expect(first.status).toBe(200)
+    expect(claim('evt_clean')).toBeTruthy()
+    expect(claim('evt_clean')?.['failedAfterEffects']).toBeUndefined()
+    expect(mockStaffNotices).toHaveLength(0)
+    expect(mockDispatched).toHaveLength(1)
 
-    it('an event that OMITS livemode is refused too — the hand-built-replay shape', async () => {
-      const post = loadWebhook(LIVE_DEPLOYMENT)
-      // A fixture assembled by hand around a copied payment-intent id is
-      // exactly what would not carry the field. Strict `=== true` means this
-      // needs no special branch to get right.
-      const response = await post(
-        signed(
-          event('evt_3U5mCXDYHP4psn7h1WQjR3B3', 'charge.refunded', undefined),
-          'whsec_test_fake',
-        ),
-      )
-      expect(await response.json()).toEqual({
-        received: true,
-        ignored: 'livemode-mismatch',
-      })
-      expect(mockDispatched).toHaveLength(0)
-      expect(docs.has('stripeEvents/evt_3U5mCXDYHP4psn7h1WQjR3B3')).toBe(false)
-    })
-  })
-
-  describe('POSITIVE CONTROL — a LIVE event on the LIVE deployment still processes fully', () => {
-    it('claims the event, runs the reversal dispatch, and stamps the tax record', async () => {
-      const post = loadWebhook(LIVE_DEPLOYMENT)
-      const response = await post(
-        signed(
-          event('evt_live_refund_1', 'charge.refunded', true),
-          'whsec_live_fake',
-        ),
-      )
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ received: true })
-
-      // The claim landed, in the LIVE collection.
-      expect(docs.get('stripeEvents/evt_live_refund_1')).toMatchObject({
-        type: 'charge.refunded',
-      })
-      expect(docs.has('stripeEventsTest/evt_live_refund_1')).toBe(false)
-
-      // The money-reversal fan-out ran.
-      expect(mockDispatched).toEqual([{ type: 'charge.refunded' }])
-      // And so did the route's own AGL-1811 / AGL-1850 consumers, which is
-      // what makes this a control on the FULL path rather than on the claim.
-      expect(docs.get('platformRevenue/in_ga_annual')).toMatchObject({
-        refundedCents: 28900,
-        refundRecordedAt: '__now__',
-      })
-      expect(mockGa4Refunds).toHaveLength(1)
-      expect(mockGa4Refunds[0].transactionId).toBe('in_ga_annual')
-    })
-  })
-
-  describe('POSITIVE CONTROL — the AGL-1951 rehearsal survives on a TEST deployment', () => {
-    it.each(REAL_TEST_MODE_EVENTS)(
-      '$id ($type) processes fully, claiming into stripeEventsTest',
-      async ({ id, type }) => {
-        const post = loadWebhook(TEST_DEPLOYMENT)
-        const response = await post(
-          signed(event(id, type, false), 'whsec_test_fake'),
-        )
-        expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ received: true })
-
-        // The three money-reversal handlers AGL-1951 subscribed are reached:
-        // the rehearsal capability is intact, which is the whole reason this
-        // is a mode GATE and not a blanket refusal of test-mode events.
-        expect(mockDispatched).toEqual([{ type }])
-
-        // Claimed in the segregated collection, so `stripeEvents` stays a
-        // pure record of live traffic (AGL-2040 §6).
-        expect(docs.get(`stripeEventsTest/${id}`)).toMatchObject({ type })
-        expect(docs.has(`stripeEvents/${id}`)).toBe(false)
-      },
+    // A redelivery is an ordinary duplicate — no `held`, no second dispatch.
+    const second = await post(
+      signed(event('evt_clean', 'charge.refunded'), 'whsec_live_fake'),
     )
-
-    it('a LIVE event on a TEST deployment is refused — the mirror hazard', async () => {
-      // A laptop or preview build holding the live webhook secret must not
-      // act on real money, nor write real outcomes into a test data set.
-      const post = loadWebhook(TEST_DEPLOYMENT)
-      const response = await post(
-        signed(
-          event('evt_live_refund_1', 'charge.refunded', true),
-          'whsec_live_fake',
-        ),
-      )
-      expect(await response.json()).toEqual({
-        received: true,
-        ignored: 'livemode-mismatch',
-      })
-      expect(mockDispatched).toHaveLength(0)
-      expect(docs.has('stripeEvents/evt_live_refund_1')).toBe(false)
-      expect(docs.has('stripeEventsTest/evt_live_refund_1')).toBe(false)
-    })
+    expect(await second.json()).toEqual({ received: true, duplicate: true })
+    expect(mockDispatched).toHaveLength(1)
   })
 
-  describe('the deployment mode comes from CONFIGURATION, not from the secret that verified', () => {
-    it('a test-mode event refused by the live deployment is accepted by the test one — same bytes, same signature', async () => {
-      // The ONE difference between these two runs is STRIPE_SECRET_KEY. Both
-      // deployments carry BOTH webhook secrets, as production does, and the
-      // delivery verifies against the test secret in both. If the route were
-      // deciding from "which secret matched", both would behave identically.
-      const delivery = () =>
-        signed(
-          event('evt_1U5mCMDYHP4psn7hVrKiWDDZ', 'charge.dispute.created', false),
-          'whsec_test_fake',
-        )
+  it('NOTHING HAPPENED: a pre-dispatch failure RELEASES the claim, and the redelivery re-runs', async () => {
+    // `ensureAll` throws, so no plugin handler ran — and the event type below
+    // matches no built-in branch either, so nothing at all was applied. This
+    // is the AGL-498 behaviour that must survive the fix: releasing here is
+    // correct, and never releasing would silently drop a retryable event.
+    const post = loadWebhook(LIVE_DEPLOYMENT)
+    mockFailPluginLoad = true
+    const failed = await post(
+      signed(event('evt_pre', 'invoice.upcoming', {}), 'whsec_live_fake'),
+    )
+    expect(failed.status).toBe(500)
+    expect(claim('evt_pre')).toBeUndefined() // released
+    expect(mockDispatched).toHaveLength(0) // and nothing ever dispatched
+    expect(mockStaffNotices).toHaveLength(0) // not an incident
 
-      const onLive = await loadWebhook(LIVE_DEPLOYMENT)(delivery())
-      expect(await onLive.json()).toEqual({
-        received: true,
-        ignored: 'livemode-mismatch',
-      })
+    // Stripe redelivers, the claim is free, and the event actually processes.
+    mockFailPluginLoad = false
+    const retried = await post(
+      signed(event('evt_pre', 'invoice.upcoming', {}), 'whsec_live_fake'),
+    )
+    expect(retried.status).toBe(200)
+    expect(mockDispatched).toHaveLength(1)
+  })
 
-      mockDispatched.length = 0
-      const onTest = await loadWebhook(TEST_DEPLOYMENT)(delivery())
-      expect(await onTest.json()).toEqual({ received: true })
-      expect(mockDispatched).toEqual([{ type: 'charge.dispute.created' }])
+  it('SOMETHING HAPPENED: a handler failing mid-dispatch HOLDS the claim', async () => {
+    const post = loadWebhook(LIVE_DEPLOYMENT)
+    mockFailDispatch = true
+    const failed = await post(
+      signed(event('evt_mid', 'charge.refunded'), 'whsec_live_fake'),
+    )
+    expect(failed.status).toBe(500)
+    // The dispatch DID begin — this is what separates this case from the one
+    // above, and it is asserted rather than assumed.
+    expect(mockDispatched).toEqual([{ type: 'charge.refunded' }])
+    // The claim survives, carrying why.
+    const held = claim('evt_mid')
+    expect(held).toBeTruthy()
+    expect(held?.['failedAfterEffects']).toBe(true)
+    expect(held?.['failedType']).toBe('charge.refunded')
+    expect(String(held?.['failedMessage'])).toContain('mid-effect')
+    // …and it is never silent: a half-applied event needs a human.
+    expect(mockStaffNotices).toHaveLength(1)
+    expect(mockStaffNotices[0]['type']).toBe('system.billingWebhookHalfApplied')
+    expect(String(mockStaffNotices[0]['body'])).toContain('evt_mid')
+  })
+
+  it('…and the redelivery of a held event does NOT re-run the handlers', async () => {
+    // The whole point. Under the old catch this second delivery found no
+    // marker, re-entered the dispatch and re-applied every non-idempotent
+    // effect the first one had already committed.
+    const post = loadWebhook(LIVE_DEPLOYMENT)
+    mockFailDispatch = true
+    await post(signed(event('evt_twice', 'charge.refunded'), 'whsec_live_fake'))
+    expect(mockDispatched).toHaveLength(1)
+
+    mockFailDispatch = false
+    const redelivery = await post(
+      signed(event('evt_twice', 'charge.refunded'), 'whsec_live_fake'),
+    )
+    expect(redelivery.status).toBe(200)
+    expect(await redelivery.json()).toEqual({
+      received: true,
+      duplicate: true,
+      held: true,
     })
+    // NOT two. This number is the bug.
+    expect(mockDispatched).toHaveLength(1)
+  })
+
+  it('a BUILT-IN branch failing holds the claim too, not just the plugin dispatch', async () => {
+    // The flag is set at the top of each branch, not only before
+    // `runBillingWebhookHandlers` — a subscription or invoice branch can write
+    // and then throw just as a plugin handler can. Without this the fix would
+    // cover a third of the route and read as covering all of it.
+    const post = loadWebhook(LIVE_DEPLOYMENT)
+    mockFailOrgLookup = true
+    const failed = await post(
+      signed(
+        event('evt_builtin', 'invoice.paid', {
+          id: 'in_ga_annual',
+          customer: 'cus_own_1',
+        }),
+        'whsec_live_fake',
+      ),
+    )
+    expect(failed.status).toBe(500)
+    expect(claim('evt_builtin')?.['failedAfterEffects']).toBe(true)
+    // The plugin dispatch never ran, so the hold came from the built-in
+    // branch alone — the discriminator that makes this case distinct.
+    expect(mockDispatched).toHaveLength(0)
+    expect(mockStaffNotices).toHaveLength(1)
   })
 })

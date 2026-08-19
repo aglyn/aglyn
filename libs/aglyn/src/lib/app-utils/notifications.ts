@@ -106,6 +106,12 @@ export type AglynNotificationType =
   // one category where the message is literally never about money — and it is
   // exactly the free-tier trip that changes what visitors see.
   | 'system.bandwidthCeilingTripped'
+  // A Stripe billing webhook threw AFTER its handlers had begun (AGL-2157),
+  // so its side effects may be half applied and its idempotency claim is
+  // being HELD — Stripe will not retry it. Staff audience: this is the one
+  // failure on that route no automatic retry can make safe, because the
+  // handlers behind it are not all idempotent, and a human has to reconcile.
+  | 'system.billingWebhookHalfApplied'
 
 export interface AglynNotification {
   $id?: string
@@ -145,6 +151,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'system.abuseReportUrgent': 'Urgent abuse report',
     'system.dmcaCounterNotice': 'DMCA counter-notice',
     'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
+    'system.billingWebhookHalfApplied': 'Billing webhook half applied',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
