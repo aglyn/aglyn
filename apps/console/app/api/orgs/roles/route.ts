@@ -31,6 +31,27 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { FieldPath } from 'firebase-admin/firestore'
+
+/**
+ * Custom roles returned per request (AGL-2334).
+ *
+ * This was a bare `.limit(50)` with no cursor and no count — an undocumented
+ * hard cap that applied to Enterprise too, where the plan grid says
+ * "unlimited". Role 51 was not merely on a second page, it was invisible:
+ * the console lists roles to assign them, so a role nobody can see is a role
+ * nobody can use. Same shape as AGL-2336's membership window, same fix — a
+ * page with a cursor, and a caller that follows it.
+ */
+const ROLE_PAGE = 100
+
+/**
+ * Firestore commits at most 500 writes per batch. Deleting a role clears the
+ * dangling `roleId` from every member carrying it, and that query is
+ * unbounded — so an org past 500 such members threw, leaving the role
+ * deleted and the members still pointing at it (AGL-2334).
+ */
+const MEMBER_WRITE_CHUNK = 400
 
 function sanitizePermissions(
   raw: unknown,
@@ -92,9 +113,21 @@ async function handler(request: Request): Promise<Response> {
     const rolesRef = firestore.collection('orgs').doc(orgId).collection('roles')
 
     if (method === 'GET') {
-      const snapshot = await rolesRef.limit(50).get()
+      // Ordered by document id so the cursor is total and stable — an
+      // unordered limit has no defined order to page THROUGH, which is how a
+      // window becomes a sample rather than a prefix.
+      let listing = rolesRef.orderBy(FieldPath.documentId()).limit(ROLE_PAGE)
+      const cursor = String(query['cursor'] ?? '')
+      if (cursor) listing = listing.startAfter(cursor)
+      const snapshot = await listing.get()
+      const roles = snapshot.docs.map((doc) => ({ $id: doc.id, ...doc.data() }))
       return Response.json({
-        roles: snapshot.docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
+        roles,
+        // Present only when there may be more. A caller that ignores it gets
+        // the old behaviour with a bigger number; one that follows it gets
+        // every role. What neither gets any more is silence.
+        nextCursor:
+          roles.length === ROLE_PAGE ? roles[roles.length - 1].$id : null,
       }, { status: 200 })
     }
 
@@ -139,11 +172,17 @@ async function handler(request: Request): Promise<Response> {
         .collection('members')
         .where('roleId', '==', roleId)
         .get()
-      const batch = firestore.batch()
-      for (const member of carriers.docs) {
-        batch.set(member.ref, { roleId: null }, { merge: true })
+      // Chunked: one batch caps at 500 writes, and this query is unbounded.
+      // A 600-member org used to throw here AFTER the role doc was already
+      // deleted, so the failure left every carrier pointing at a role that
+      // no longer existed — the exact dangling reference this cleanup is for.
+      for (let start = 0; start < carriers.docs.length; start += MEMBER_WRITE_CHUNK) {
+        const batch = firestore.batch()
+        for (const member of carriers.docs.slice(start, start + MEMBER_WRITE_CHUNK)) {
+          batch.set(member.ref, { roleId: null }, { merge: true })
+        }
+        await batch.commit()
       }
-      await batch.commit()
       await logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
