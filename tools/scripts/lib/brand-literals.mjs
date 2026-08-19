@@ -94,17 +94,117 @@ const IDENTIFIER_BEFORE = /[@/.\-\w]$/
 const IDENTIFIER_AFTER = /^[./\-_A-Za-z]/
 
 /**
+ * ## Regex literals, and why both walkers below have to know about them
+ *
+ * A regex literal can contain a quote — `/[&<>"']/g` is an ordinary HTML
+ * escaper — and a walker that does not recognise one reads that `"` as the
+ * start of a STRING. Everything after it is then parsed one quote out of
+ * phase, for the rest of the file: comments stop being stripped, and the
+ * doc-comment prose this detector deliberately ignores gets counted as copy.
+ *
+ * That is not hypothetical. `libs/plugins/commerce/src/lib/server/
+ * supplier-update.ts` has exactly that escaper, and its only `Aglyn` is in a
+ * doc comment fourteen lines later — the gate reported it as a GAINED literal
+ * and went red on a file with no brand copy in it at all (AGL-2278). The same
+ * desync runs the other way too: text the walker swallows into a phantom
+ * string span is text it can no longer see a real literal in, so this class
+ * manufactures false GREENS as readily as false REDS.
+ *
+ * ### Telling a regex from a division without a parser
+ *
+ * `/` is regex-or-division depending on the PRECEDING token, which is the one
+ * genuinely ambiguous thing in JS lexing. The standard heuristic: after an
+ * operand — an identifier, a number, `)`, `]`, or a closing quote — a `/` is
+ * division; after an operator or an opening bracket it starts a regex.
+ *
+ * Two deliberate narrowings, each guarding a real shape in this repo:
+ *
+ *  - **`<` is never a regex opener here.** `</div>` in a `.tsx` file is a
+ *    closing JSX tag whose `/` follows `<`, and treating it as a regex would
+ *    swallow to the next `/` on the line — inventing exactly the desync this
+ *    change exists to remove, in the file type that carries most of the copy.
+ *    `x < /re/` is not real code; JSX is on every console page.
+ *  - **A regex must close on its own line.** If no unescaped `/` terminates it
+ *    before the newline, the guess was wrong: back out and treat the `/` as an
+ *    ordinary character. Erring this way costs nothing — the worst case is the
+ *    behaviour that existed before this change — while erring the other way
+ *    consumes real code.
+ */
+const OPERAND_END = /[\w$)\]'"`]/
+const REGEX_KEYWORD =
+  /(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void|yield|await|case|do|else)$/
+
+/**
+ * Does a `/` at this point open a regex literal, given the significant
+ * character before it and the code emitted so far?
+ */
+function opensRegex(prev, emitted) {
+  if (prev === '<') return false
+  if (!prev) return true
+  if (!OPERAND_END.test(prev)) return true
+  // `return /x/`, `typeof /x/` — an operand-looking tail that is a keyword.
+  // Trailing whitespace trimmed: one caller passes the emitted source (which
+  // keeps it) and the other a significant-characters-only tail (which does
+  // not), and the pattern anchors at the end.
+  return REGEX_KEYWORD.test(emitted.slice(-24).replace(/\s+$/, ''))
+}
+
+/**
+ * End offset (exclusive, flags included) of the regex literal starting at
+ * `start`, or `-1` when it does not terminate on its own line — in which case
+ * the `/` was not a regex opener after all.
+ */
+function regexLiteralEnd(source, start) {
+  let i = start + 1
+  let inClass = false
+  const n = source.length
+  // `//` was consumed as a comment before we got here, so an immediate `/` is
+  // not reachable. `/=` IS a valid regex start (`/= 'Aglyn'/` matches an
+  // assignment) — divide-assign never reaches here, because `a /= 2` has an
+  // operand before the slash and `opensRegex` has already said no.
+  if (source[i] === undefined) return -1
+  while (i < n) {
+    const ch = source[i]
+    if (ch === '\n') return -1
+    if (ch === '\\') {
+      i += 2
+      continue
+    }
+    if (ch === '[') inClass = true
+    else if (ch === ']') inClass = false
+    else if (ch === '/' && !inClass) {
+      i += 1
+      while (i < n && /[a-z]/.test(source[i])) i += 1 // flags
+      return i
+    }
+    i += 1
+  }
+  return -1
+}
+
+/**
  * Strip comments and mask nothing else.
  *
  * Line and block comments only — a `//` inside a string (`'https://x'`) would
  * be mangled by a naive strip, so string spans are walked first and preserved.
  * Doing this properly matters: the colour ratchet's equivalent step is what
  * keeps a paragraph explaining the rule from tripping the rule.
+ *
+ * Regex literals are copied through verbatim, for the reason set out above.
+ *
+ * A block comment's NEWLINES survive it. They carry no brand copy, but every
+ * line number this module reports is counted in the stripped source, so
+ * collapsing them silently shifted `--list` output by the height of whatever
+ * comment came before it — in practice by the fifteen-line licence header on
+ * every file in the repo, which is enough to send a reader to the wrong entry
+ * and let them conclude the gate is confused.
  */
 export function stripComments(source) {
   let out = ''
   let i = 0
   const n = source.length
+  /** Last significant (non-whitespace) character emitted — the `/` oracle. */
+  let prev = ''
   while (i < n) {
     const ch = source[i]
     // String or template literal — copy verbatim, honouring escapes.
@@ -125,6 +225,7 @@ export function stripComments(source) {
         }
         i += 1
       }
+      prev = quote
       continue
     }
     if (ch === '/' && source[i + 1] === '/') {
@@ -133,11 +234,24 @@ export function stripComments(source) {
     }
     if (ch === '/' && source[i + 1] === '*') {
       i += 2
-      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) i += 1
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        if (source[i] === '\n') out += '\n'
+        i += 1
+      }
       i += 2
       continue
     }
+    if (ch === '/' && opensRegex(prev, out)) {
+      const end = regexLiteralEnd(source, i)
+      if (end !== -1) {
+        out += source.slice(i, end)
+        i = end
+        prev = '/'
+        continue
+      }
+    }
     out += ch
+    if (!/\s/.test(ch)) prev = ch
     i += 1
   }
   return out
@@ -152,9 +266,31 @@ function stringSpans(source) {
   const spans = []
   let i = 0
   const n = source.length
+  /**
+   * As in `stripComments` — comments are gone by here, regexes are not.
+   * `tail` is the last few significant characters, kept rolling rather than
+   * re-sliced from the head: a `slice(0, i)` per character is quadratic, and
+   * this walks fifteen thousand files.
+   */
+  let prev = ''
+  let tail = ''
+  const note = (ch) => {
+    if (/\s/.test(ch)) return
+    prev = ch
+    tail = (tail + ch).slice(-12)
+  }
   while (i < n) {
     const ch = source[i]
     if (ch !== "'" && ch !== '"' && ch !== '`') {
+      if (ch === '/' && opensRegex(prev, tail)) {
+        const end = regexLiteralEnd(source, i)
+        if (end !== -1) {
+          i = end
+          note('/')
+          continue
+        }
+      }
+      note(ch)
       i += 1
       continue
     }
@@ -173,6 +309,7 @@ function stringSpans(source) {
       i += 1
     }
     spans.push({ start, end: i })
+    note(quote)
   }
   return spans
 }

@@ -147,6 +147,76 @@ test('stripComments preserves string contents verbatim', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Regex literals (AGL-2278). A `/[&<>"']/g` is an ordinary HTML escaper, and a
+// walker that reads its `"` as a string quote parses the rest of the file one
+// quote out of phase — which both invents literals in comments and hides real
+// ones in code. Both directions get a test, because the second is the one that
+// would let the gate certify a file it can no longer read.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('a quote inside a regex does not make a comment count as copy', () => {
+  // The exact shape that sent the gate red on supplier-update.ts: an escaper,
+  // then a doc comment mentioning the brand. Nothing here is brand copy.
+  const source =
+    'const e = (v) => v.replace(/[&<>"\']/g, (c) => c)\n' +
+    '/** Token-gated — suppliers have no Aglyn account. */\n' +
+    'export const handler = 1'
+  assert.deepEqual(findBrandLiterals(source), [])
+})
+
+test('a quote inside a regex does not hide the copy that follows it', () => {
+  // The false-GREEN half, and the reason this is a correctness bug rather than
+  // a noise bug. The same desync ate eleven phantom spans out of
+  // `tx-return-webfile.ts` and, with them, seven REAL strings underneath.
+  const source =
+    'const e = (v) => v.replace(/[&<>"\']/g, (c) => c)\n' +
+    "const copy = 'Computed against Aglyn’s registrations'"
+  assert.equal(findBrandLiterals(source).length, 1)
+})
+
+test('the brand inside a regex is a matcher, not copy', () => {
+  assert.equal(findBrandLiterals("expect(s).not.toMatch(/= 'Aglyn'/)").length, 0)
+})
+
+test('a JSX closing tag is not a regex opener', () => {
+  // `</div>` is a `/` preceded by `<`. Treating it as a regex would consume to
+  // the next `/` on the line and desync `.tsx` — the file type carrying most
+  // of the copy this gate exists to read.
+  const source = "<div><span>x</span></div>\nconst a = 'Open Aglyn'"
+  assert.equal(findBrandLiterals(source).length, 1)
+})
+
+test('division is not mistaken for a regex', () => {
+  const source =
+    "const r = total / count\nconst s = items[0] / 2\nconst a = 'Open Aglyn'"
+  assert.equal(findBrandLiterals(source).length, 1)
+})
+
+test('a regex in return position is still a regex', () => {
+  const source =
+    "function f() { return /['\"]/g }\nconst a = 'Open Aglyn'"
+  assert.equal(findBrandLiterals(source).length, 1)
+})
+
+test('an unterminated regex guess backs out rather than eating code', () => {
+  // A `/` the heuristic calls a regex but that does not close on its line is a
+  // wrong guess. Backing out costs nothing; consuming would swallow real code.
+  const source = "const a = (1) ? x /\n  y : z\nconst b = 'Open Aglyn'"
+  assert.equal(findBrandLiterals(source).length, 1)
+})
+
+test('reported line numbers survive a block comment', () => {
+  // Every line number this module reports is counted in the stripped source,
+  // so a block comment that collapsed would shift `--list` by its height — in
+  // practice by the fifteen-line licence header on every file in the repo.
+  const source = "/**\n * a\n * b\n */\nconst a = 'Open Aglyn'"
+  assert.deepEqual(
+    findBrandLiterals(source).map((one) => one.line),
+    [5],
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // The ratchet, and the gate itself.
 // ─────────────────────────────────────────────────────────────────────────────
 
