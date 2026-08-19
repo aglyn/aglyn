@@ -46,7 +46,7 @@ import {
   preservePhaseTerms,
   writePhaseItems,
 } from '../../../../utils/server/billing-schedule'
-import { RETENTION_COLLECTION } from '../../_lib/retention'
+import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 
 // lockdown-423: exempt — managing/reactivating the subscription IS the recovery path out of a
 // billing lock; part of the surface AGL-1501 keeps sessions alive for.
@@ -372,7 +372,7 @@ async function handler(request: Request): Promise<Response> {
             .collection(RETENTION_COLLECTION)
             .doc()
             .create({
-              kind: 'cancel_completed',
+              kind: RETENTION_KINDS.cancel,
               surface: 'subscription_cancel',
               funnelSkipped: !funnelId,
               ...(funnelId ? { funnelId } : {}),

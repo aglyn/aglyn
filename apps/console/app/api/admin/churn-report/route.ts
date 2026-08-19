@@ -1,0 +1,199 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  emailUnverifiedResponse,
+  firebaseAdmin,
+  isImpersonationSession,
+} from '@aglyn/tenant-data-admin'
+import {
+  CHURN_SURVEY_REASONS,
+  RETENTION_COLLECTION,
+  RETENTION_KINDS,
+  RETENTION_SURFACES,
+} from '../../_lib/retention'
+
+/**
+ * How many retention documents one report reads.
+ *
+ * A ceiling rather than a page: this is an aggregate, and an aggregate that
+ * quietly summarises an arbitrary slice is worse than no aggregate — it reads
+ * like a total. So the cap is small enough to stay cheap, and the response
+ * says whether it was hit ({@link ChurnReport.capped}) so the number is never
+ * mistaken for the whole truth.
+ */
+export const CHURN_REPORT_SCAN_LIMIT = 2000
+
+/**
+ * The staff churn report (AGL-2248, under AGL-1863 / AGL-1859 §3).
+ *
+ * `orgs/{orgId}/retention` had five writers and NO reader. The funnel stored
+ * every why-are-you-leaving answer exactly as asked and nothing anywhere could
+ * look at them: the collection is Admin-SDK-only by construction (the orgs
+ * rules block matches subcollections by name and has no wildcard), so there is
+ * not even a client path to it, and reading them meant opening the Firebase
+ * console one workspace at a time.
+ *
+ * GA4 carries the counts, deliberately WITHOUT the free text — customer prose
+ * must not go into analytics params — and Firestore is where that text went
+ * instead. Which made the funnel's most useful artifact write-only.
+ *
+ * ⚠️ NO `where` AND NO `orderBy`, on purpose.
+ *
+ * A filtered or ordered COLLECTION_GROUP query needs a declared field override
+ * in `cloud/firebase-firestore.indexes.json`; the automatic single-field
+ * indexes this project relies on are collection-scoped, which is why the file
+ * declares COLLECTION_GROUP overrides explicitly for `installs`, `members` and
+ * the rest. Adding one without deploying it turns `check:index-drift` red, and
+ * deploying it is an infra write on a frozen launch path. An unfiltered,
+ * capped scan bucketed in memory needs no index at all and answers the same
+ * question at this volume.
+ *
+ * Free text is NOT surfaced. It lives in its own `churnSurveyDetails`
+ * documents under a 365-day TTL (AGL-1978) precisely so it can expire, and a
+ * rate report is not what one reads prose for.
+ */
+export interface ChurnReport {
+  /** Surveys answered, by closed-set reason. Every reason present, incl. 0. */
+  byReason: Record<string, number>
+  /** Surveys answered, by funnel surface — cancel versus account delete. */
+  bySurface: Record<string, number>
+  /** Surveys answered, by the tier the org was on when it answered. */
+  byPlan: Record<string, number>
+  /** Total surveys — the denominator every rate above is taken against. */
+  surveys: number
+  /** Departures recorded, and how many never saw the survey at all. */
+  cancels: { total: number; funnelSkipped: number }
+  /** Winback offers reserved, and how many actually reached Stripe. */
+  winbacks: { reserved: number; applied: number }
+  /** Documents read. */
+  scanned: number
+  /** True when the scan hit {@link CHURN_REPORT_SCAN_LIMIT} — see above. */
+  capped: boolean
+}
+
+/** Every closed-set key at zero, so a missing reason reads as 0, not absent. */
+function zeroedReasons(): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const reason of CHURN_SURVEY_REASONS) counts[reason] = 0
+  return counts
+}
+
+/** Same for the two surfaces — a surface with no churn is a fact, not a gap. */
+function zeroedSurfaces(): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const surface of RETENTION_SURFACES) counts[surface] = 0
+  return counts
+}
+
+async function handler(request: Request): Promise<Response> {
+  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const headers = rawHeaders as Partial<Record<string, string>>
+  if (method !== 'GET') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405 })
+  }
+  const authorization = headers.authorization ?? ''
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    if (!decoded.email_verified && !isImpersonationSession(decoded)) {
+      return emailUnverifiedResponse()
+    }
+    // Staff claim, same posture as every other `/api/admin/*` route. These are
+    // other people's stated reasons for leaving; no org-scoped permission
+    // opens them, which is why the collection has no client rule either.
+    if (!decoded['staff']) {
+      return Response.json({ error: 'Staff only' }, { status: 403 })
+    }
+
+    const snapshot = await firebaseAdmin
+      .app()
+      .firestore()
+      .collectionGroup(RETENTION_COLLECTION)
+      .limit(CHURN_REPORT_SCAN_LIMIT)
+      .get()
+
+    const report: ChurnReport = {
+      byReason: zeroedReasons(),
+      bySurface: zeroedSurfaces(),
+      byPlan: {},
+      surveys: 0,
+      cancels: { total: 0, funnelSkipped: 0 },
+      winbacks: { reserved: 0, applied: 0 },
+      scanned: snapshot.size,
+      capped: snapshot.size >= CHURN_REPORT_SCAN_LIMIT,
+    }
+
+    for (const doc of snapshot.docs) {
+      const kind = String(doc.get('kind') ?? '')
+      if (kind === RETENTION_KINDS.survey) {
+        report.surveys += 1
+        const reason = String(doc.get('reason') ?? '')
+        // Bucketed only if it is IN the closed set. An unknown value is
+        // counted nowhere rather than inventing a column, which is the
+        // difference between a breakdown and a list of typos — and the
+        // route that writes these validates against the same set, so an
+        // unknown one means the set changed under stored data.
+        if (reason in report.byReason) report.byReason[reason] += 1
+        const surface = String(doc.get('surface') ?? '')
+        if (surface in report.bySurface) report.bySurface[surface] += 1
+        // The plan ladder is NOT closed the way the reasons are (enterprise,
+        // comped and legacy tiers all appear), so this bucket grows to fit
+        // what is there. `null` plans land under 'unknown' rather than being
+        // dropped: an org that answered with no plan field still answered.
+        const plan = doc.get('plan')
+        const planKey = plan ? String(plan) : 'unknown'
+        report.byPlan[planKey] = (report.byPlan[planKey] ?? 0) + 1
+        continue
+      }
+      if (
+        kind === RETENTION_KINDS.cancel ||
+        kind === RETENTION_KINDS.deleteRequested
+      ) {
+        report.cancels.total += 1
+        // The marker the cancel/delete routes write when no funnelId rode
+        // along — a departure that never saw the survey. Counting it is what
+        // stops the survey numbers from quietly excluding the people who
+        // left through Stripe, support, or the API.
+        if (doc.get('funnelSkipped') === true) report.cancels.funnelSkipped += 1
+        continue
+      }
+      if (
+        kind === RETENTION_KINDS.winbackReserved ||
+        kind === RETENTION_KINDS.winbackApplied
+      ) {
+        report.winbacks.reserved += 1
+        if (kind === RETENTION_KINDS.winbackApplied) {
+          report.winbacks.applied += 1
+        }
+      }
+    }
+
+    return Response.json(report, { status: 200 })
+  } catch (error) {
+    console.error(error)
+    return Response.json({ error: 'Churn report failed' }, { status: 500 })
+  }
+}
+
+export const dynamic = 'force-dynamic'
+export { handler as GET }
