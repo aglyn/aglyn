@@ -159,7 +159,7 @@ export default function StaffChurnReportCard() {
               <Stack
                 key={reason}
                 direction="row"
-                justifyContent="space-between"
+                sx={{ justifyContent: 'space-between' }}
               >
                 <Typography variant="body2">{humanize(reason)}</Typography>
                 <Typography variant="body2" color="text.secondary">
