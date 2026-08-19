@@ -18,12 +18,26 @@
 // Strip non-IdP sign-in methods from every account in an org's SSO tenant
 // (AGL-1129), for an org that has turned on `sso.enforced`.
 //
-// This is the ONLY trigger today. The issue assumed a staff SSO-config save
-// would call the sweep inline, but no route or UI writes `org.sso` at all —
-// aglyn-org's block was written by hand, and `sso.enforced` has no writer in
-// the codebase (verified 2026-07-30). When that staff surface lands it should
-// call `enforceSsoSignInMethods` directly and keep this as the re-run path;
-// a sweep is wanted regardless, for accounts that arrive after the flip.
+// THE RE-RUN PATH, not the only trigger (AGL-2254). This header used to say
+// "no route or UI writes `org.sso` at all — `sso.enforced` has no writer in
+// the codebase (verified 2026-07-30)", and asked that the staff surface call
+// `enforceSsoSignInMethods` inline when it landed. It landed, and it does:
+//
+//   apps/console/app/api/orgs/sso/route.ts
+//     action 'enforce-preview' -> dry-run rehearsal (force: true)
+//     action 'enforce-apply'   -> sets sso.enforced = true, THEN sweeps
+//     action 'enforce-off'     -> sets sso.enforced = false
+//
+// with `apps/console/components/org-sso-card.component.tsx` rendering all
+// three. AGL-1210 shipped that two weeks before this comment was corrected,
+// so the claim was false for the whole of that time — and it is the kind of
+// false claim that costs more than it looks: a capability audit grepping for
+// writers of `sso.enforced` reads "no writer in the codebase" and files SSO
+// enforcement as an unbuilt feature. One did.
+//
+// What this script is FOR now: re-running the sweep over accounts that
+// arrived after the flip (the route sweeps once, at the moment of applying),
+// and rehearsing against a throwaway account with --force.
 //
 // Mirrors libs/tenant/data/admin/src/lib/server/sso-enforcement.ts, which
 // holds the logic and the reasoning. Dry-run by default. Idempotent: a second
