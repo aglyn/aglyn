@@ -78,6 +78,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Architecture: Multi-Tenant Organizations',
     excerpt: 'How Aglyn organizes tenants — org workspaces, membership with per-site access, security rules, subdomains, and billing attribution.',
   },
+  assistSignals: {
+    path: '/staff-console/assist-signals',
+    title: 'Assist Signal',
+    excerpt: 'The docs-gap and cost board behind Assist — how the ranking is ordered, why ungrounded questions are counted separately, and what the cache-read rate says about margin.',
+  },
   bandwidth: {
     path: '/workspace-and-billing/billing-and-plans/bandwidth',
     title: 'Bandwidth',
@@ -640,6 +645,7 @@ export const DOCS_HELP_ANCHORS = {
   aiAssist: ['#copy-assist', '#ai-generate-section', '#limits', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#related'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
+  assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#the-inspector', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
   billing: ['#tiers--entitlements', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#usage-budget', '#seats', '#audience-contacts', '#organization-data', '#api-access', '#payments', '#sales-tax', '#platform-fees', '#related'],
