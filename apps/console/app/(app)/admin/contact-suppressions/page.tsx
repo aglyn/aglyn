@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { operatorContactLine } from '@aglyn/aglyn/app-utils/operator-identity'
 import { mdiPhoneOff } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -228,7 +229,7 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
               <Stack spacing={1.5}>
                 <Typography variant="body2" color="text.secondary">
                   {
-                    'For an opt-out that arrived by email to privacy@aglyn.com or during a call. Replying STOP to a text is handled automatically once texting exists.'
+                    `For an opt-out that arrived by email to ${operatorContactLine('legal').text} or during a call. Replying STOP to a text is handled automatically once texting exists.`
                   }
                 </Typography>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>

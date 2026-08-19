@@ -48,9 +48,24 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import { openSystemEmailVersion } from '../../../../utils/open-system-email-version'
 
-/** Firebase's own template settings, for the rows we do not control. */
-const FIREBASE_TEMPLATES_URL =
-  'https://console.firebase.google.com/project/aglyn-main/authentication/emails'
+/**
+ * Firebase's own template settings, for the rows we do not control.
+ *
+ * The project id comes from `NEXT_PUBLIC_FIREBASE_PROJECT_ID` (AGL-2202) —
+ * hard-coded to `aglyn-main`, this staff link sent a self-host operator to
+ * OUR Firebase console, where they see a permission error if they are lucky
+ * and somebody else's auth templates if they are not. Unset, it points at the
+ * project picker rather than guessing, which is the honest answer for a
+ * deployment that has not told us which project it runs.
+ */
+const FIREBASE_PROJECT_ID = (
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || ''
+).trim()
+const FIREBASE_TEMPLATES_URL = FIREBASE_PROJECT_ID
+  ? `https://console.firebase.google.com/project/${encodeURIComponent(
+      FIREBASE_PROJECT_ID,
+    )}/authentication/emails`
+  : 'https://console.firebase.google.com/'
 
 /** Stripe's own customer-email settings, for the billing rows (AGL-767). */
 const STRIPE_EMAILS_URL = 'https://dashboard.stripe.com/settings/emails'

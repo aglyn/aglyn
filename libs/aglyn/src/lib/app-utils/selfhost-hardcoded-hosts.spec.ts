@@ -185,12 +185,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
-    file: 'apps/console/app/(app)/admin/contact-suppressions/page.tsx',
-    count: 1,
-    reason:
-      'AGL-2196 — staff copy naming privacy@aglyn.com. The fix is written and was BACKED OUT unapplied: another agent holds this file dirty in the shared checkout, and `git commit --only` bounds the file list, not the lines, so committing it would carry their in-progress edit into this commit.',
-  },
-  {
     file: 'apps/console/components/editor-hint-cookie.component.tsx',
     count: 2,
     reason:
