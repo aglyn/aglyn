@@ -585,6 +585,13 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         -line.quantity,
         locationId || undefined,
       )
+      // What the floor actually let go (AGL-2149).
+      const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+        product,
+        variantId,
+        -line.quantity,
+        locationId || undefined,
+      )
       // Two lines of one product must COMPOUND (AGL-1828): the next line
       // starts from these variants, not from the product as first read —
       // recomputing from the original would erase this decrement when the
@@ -606,6 +613,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           productId: line.productId,
           variantId,
           delta: -line.quantity,
+          ...(appliedDelta !== -line.quantity ? { appliedDelta } : {}),
           reason: 'sale',
           orderId: orderRef.id,
           ...(locationId ? { locationId } : {}),

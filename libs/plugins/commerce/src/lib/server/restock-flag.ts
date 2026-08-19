@@ -113,6 +113,29 @@ export async function flagOrderRestock(options: {
     // still unanswered adds nothing the merchant does not have; one they
     // already ANSWERED is a new question, because stock moved since.
     if (order.restockCheck && !order.restockCheck.resolution) return
+    // AN ORDER THAT WAS CANCELLED HAS NO RESTOCK QUESTION LEFT (AGL-2149).
+    // Until `cancelled: ['refunded']` this was unreachable — a cancelled order
+    // could not refund at all — and reaching it now would be the double-count
+    // this flag exists to avoid: `cancel-order.ts` already put the units back
+    // and wrote the `reason: 'cancellation'` ledger rows, so a fresh "N units
+    // may need restocking" prompt on top of that invites the merchant to
+    // restock the same units a SECOND time. (`cancel-order.ts` handles the
+    // opposite order of events — refund first, then cancel — by resolving the
+    // open check with what it actually did.)
+    //
+    // Read from the TIMELINE, not from `order.status`: a full refund flips the
+    // order to `refunded` in the transaction above this call, so by the time
+    // the flag runs the cancellation is no longer the current status — but the
+    // event it stamped is still there, and it is the durable record of the
+    // release. A partial refund would leave `cancelled` standing and a status
+    // test would catch that one case and silently miss the full one.
+    //
+    // The cases where the cancel released nothing are covered by the same skip:
+    // a `pending` cancel and a POS card order with no `sale` ledger row never
+    // decremented anything, so nothing is missing from the shelf to ask about.
+    if ((order.timeline ?? []).some((event) => event.event === 'cancelled')) {
+      return
+    }
 
     const { lines } = await resolveTrackedRestockLines(
       hostRef,

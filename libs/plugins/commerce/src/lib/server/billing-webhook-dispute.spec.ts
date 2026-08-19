@@ -775,16 +775,52 @@ describe('redelivery and races', () => {
   })
 
   /**
-   * A chargeback must not rewrite a terminal state the merchant chose. The
-   * loss is still recorded — the money really did leave.
+   * REVISED BY AGL-2149, deliberately. This used to assert that a chargeback
+   * "must not rewrite a terminal state the merchant chose", and that reading
+   * was downstream of `cancelled: []` — the transition table's own claim that
+   * nothing follows a cancellation. It does not survive the reason that entry
+   * had to change: `cancel-order.ts` accepts a PAID order and moves no money,
+   * so `cancelled` is a state an order can sit in with the shopper's money
+   * still taken, and `cancelled: ['refunded']` is what lets it back out.
+   *
+   * With the edge open, a chargeback that reverses this order IN FULL now
+   * closes it as `refunded`, and that is the accurate status rather than a
+   * rewrite: every gate that matches on `'refunded'` — downloads, membership
+   * entitlement, the redemption paths — becomes MORE restrictive on an order
+   * whose money is entirely gone, never less. The contact's
+   * `refundedOrdersCount` counts it for the same reason: it is an order that
+   * was reversed.
+   *
+   * The once-only property the original comment protected is untouched, and is
+   * pinned by the test above: the flip is gated on `canTransitionOrder`, and
+   * `refunded` still has no legal transition out of it.
    */
-  it('records a loss on a cancelled order without flipping its status', async () => {
+  it('closes a cancelled order as refunded when a chargeback reverses it in full', async () => {
     docs.set('hosts/host-1/orders/order-1', { ...order(), status: 'cancelled' })
     await deliver('charge.dispute.closed', disputeEvent({ status: 'lost' }))
-    expect(order().status).toBe('cancelled')
+    expect(order().status).toBe('refunded')
     expect(order().refundedCents).toBe(DISPUTE_CENTS)
-    expect(contact().refundedOrdersCount).toBeUndefined()
+    expect(contact().refundedOrdersCount).toBe(1)
     expect(contact().refundedCents).toBe(DISPUTE_CENTS)
+  })
+
+  /**
+   * And a PARTIAL loss on a cancelled order still leaves it cancelled — the
+   * widened edge did not make every chargeback close an order, only the ones
+   * that take all of the money.
+   */
+  it('leaves a cancelled order cancelled when the chargeback is partial', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...order(),
+      status: 'cancelled',
+      refundedCents: 1700,
+    })
+    await deliver(
+      'charge.dispute.closed',
+      disputeEvent({ status: 'lost', amount: DISPUTE_CENTS - 3000 }),
+    )
+    expect(order().status).toBe('cancelled')
+    expect(contact().refundedOrdersCount).toBeUndefined()
   })
 })
 
