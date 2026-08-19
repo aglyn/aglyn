@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
+import { REUSABLE_COMPONENT_CATEGORY } from '@aglyn/aglyn'
 import { DragType } from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import { DragOverlay } from '@dnd-kit/core'
 import { Box, Grid } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
 import useVisibleComponentCategories from '../hooks/use-visible-component-categories'
+import { besignerDocsUrl } from '../utils/docs-help'
 import { AccordionListComponent } from './accordion-list.component'
 import Draggable from './dnd/draggable'
 import NodeCard, { type NodeCardItemData } from './node-card'
@@ -45,6 +47,20 @@ export const ComponentAccordionList = observer(
         items={items}
         defaultExpanded={items.map((i) => i.$id)}
         getItemId={(item) => item?.$id}
+        // Only the host's own components group carries help (AGL-2167).
+        // The built-in groups are self-evident from their contents; this one
+        // is the only group whose items the user has to CREATE before it
+        // holds anything, and an empty-looking group explains nothing.
+        getItemHelp={(item) =>
+          item?.$id === REUSABLE_COMPONENT_CATEGORY
+            ? {
+                title: 'Your components',
+                excerpt:
+                  'Sections you promoted into reusable components. Drop one to place an instance — edit the component once and every instance follows.',
+                href: besignerDocsUrl('reusableComponents', '#insert-instances'),
+              }
+            : undefined
+        }
         onRenderSummary={({ item }) => (
           <Observer>{() => <>{item?.label}</>}</Observer>
         )}

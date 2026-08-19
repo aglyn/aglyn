@@ -38,6 +38,16 @@
  * `help-coverage.spec.ts` deliberately does not cover the editor — those pages
  * render neither `DashboardLayout` nor `CardDisplay`, so counting them there
  * would report a hole that is not one. This is the editor's half.
+ *
+ * **Presence is not correctness (AGL-2167).** Counting call sites answers
+ * "is this topic linked from somewhere", which every topic satisfies if the
+ * whole editor points at the same page — the exact shape of AGL-1074, where
+ * twelve plugin surfaces shared one "Plugins & Marketplace" tooltip and the
+ * coverage guard was happy. So the second half of this file pins each topic
+ * to the SURFACE it belongs beside: a file, a marker that identifies the
+ * panel inside it, and a proximity window. Repointing the SEO panel at the
+ * `screens` page leaves both topics referenced in that file and still fails,
+ * because `seo` no longer appears next to the SEO heading.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -117,4 +127,100 @@ describe('besigner docs topics (AGL-2130)', () => {
     const undeclared = referenced.filter((topic) => !declared.includes(topic))
     expect(undeclared).toEqual([])
   })
+})
+
+/**
+ * Where each topic's help affordance must live: the file rendering the
+ * panel, and a marker naming that panel inside it. The marker has to be a
+ * string only that surface contains — a heading label, the control it
+ * captions — so that "the right file" cannot stand in for "the right
+ * panel" in a file rendering several.
+ *
+ * `NEAR_LINES` is the window a `besignerDocsUrl('<topic>')` call has to
+ * fall inside, measured from the marker. It is deliberately tight: wide
+ * enough for the JSX a `HelpTip` needs, too narrow for the next panel down.
+ */
+const NEAR_LINES = 18
+
+const DESIGNER = 'libs/besigner/feature/designer/src/lib/components'
+const SCREEN_EDITOR =
+  "apps/console/app/(editor)/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner/page.tsx"
+
+const TOPIC_SURFACES: Record<string, { file: string; marker: string }> = {
+  besigner: {
+    file: `${DESIGNER}/app-bar-primary.component.tsx`,
+    marker: '<BesignerSvgLogo',
+  },
+  bindings: {
+    file: `${DESIGNER}/insert-token-menu.component.tsx`,
+    marker: 'placeholder="Search data',
+  },
+  dragDropHierarchy: {
+    file: `${DESIGNER}/aside-panel.component.tsx`,
+    marker: "{'Add Element'}",
+  },
+  interactions: {
+    file: `${DESIGNER}/element-props-form.component.tsx`,
+    marker: "{'Interactions'}",
+  },
+  responsiveStyling: {
+    file: `${DESIGNER}/element-styles-form.component.tsx`,
+    marker: '<BoxStyler',
+  },
+  reusableComponents: {
+    file: `${DESIGNER}/component-accordion-list.tsx`,
+    marker: 'item?.$id === REUSABLE_COMPONENT_CATEGORY',
+  },
+  screens: { file: SCREEN_EDITOR, marker: "{'Shared layout'}" },
+  seo: { file: SCREEN_EDITOR, marker: "{'SEO'}" },
+  textEditing: {
+    file: `${DESIGNER}/element-props-form.component.tsx`,
+    marker: '<ElementPropsFormTemplate',
+  },
+}
+
+describe('besigner docs topics point at the right panel (AGL-2167)', () => {
+  it('names a surface for every declared topic, and declares every named one', () => {
+    expect([...declared].sort()).toEqual(Object.keys(TOPIC_SURFACES).sort())
+  })
+
+  it.each(Object.entries(TOPIC_SURFACES))(
+    '%s is linked from the panel it explains',
+    (topic, { file, marker }) => {
+      const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
+
+      // A marker that stopped matching, or that now matches twice, makes
+      // the proximity check meaningless — fail on the marker itself rather
+      // than let it decide anything.
+      const markerLines = lines.flatMap((line, index) =>
+        line.includes(marker) ? [index] : [],
+      )
+      expect({ topic, marker, matches: markerLines.length }).toEqual({
+        topic,
+        marker,
+        matches: 1,
+      })
+
+      const at = markerLines[0]
+      const window = lines
+        .slice(Math.max(0, at - NEAR_LINES), at + NEAR_LINES + 1)
+        .join('\n')
+      if (!window.includes(`besignerDocsUrl('${topic}'`)) {
+        // What IS next to the marker, if anything — a wrong topic is the
+        // failure this test exists for, so name it.
+        const wrong = [
+          ...window.matchAll(/besignerDocsUrl\(\s*'([A-Za-z]+)'/g),
+        ].map((match) => match[1])
+        throw new Error(
+          `${file} should link besignerDocsUrl('${topic}') within ${NEAR_LINES} lines of ${marker} (line ${
+            at + 1
+          }) — the panel that topic describes. ${
+            wrong.length
+              ? `Found ${wrong.join(', ')} there instead, which sends the reader to the wrong page while every count-based check still passes.`
+              : 'Found no help link there at all.'
+          }`,
+        )
+      }
+    },
+  )
 })

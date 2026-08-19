@@ -20,6 +20,7 @@ export * from './lib/drafts/besigner-draft-store'
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'
 
+export * from './lib/utils/docs-help'
 export * from './lib/utils/publish-failure-message'
 
 export * from './lib/hooks/use-add-element-drawer-callback'
