@@ -293,6 +293,15 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const { data: user } = useUser()
   const orgId = (org as any)?.$id as string | undefined
   const [teamSeats, setTeamSeats] = useState<number | null>(null)
+  /**
+   * How many of `teamSeats` are invites sent but not yet accepted (AGL-2304).
+   *
+   * Kept separate purely to LABEL the meter. The total already includes them —
+   * it has to, because the invite gate counts them — but a number silently
+   * larger than the visible team list is its own kind of confusing, and the
+   * question an admin asks at that moment is "why does it say 5 when I see 3".
+   */
+  const [pendingSeats, setPendingSeats] = useState(0)
   // Org-level data meters (AGL-239/240): datasets and their storage are
   // org-scoped, so they meter once here instead of per host.
   const [orgDatasets, setOrgDatasets] = useState<number | null>(null)
@@ -320,7 +329,10 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     void fetchSeatCounts(user, orgId).then((counts) => {
       // `null` means unanswerable, and the meter keeps its "not yet metered"
       // state — deliberately not 0, which reads as "no seats used".
-      if (active && counts) setTeamSeats(counts.managerSeats)
+      if (active && counts) {
+        setTeamSeats(counts.managerSeats)
+        setPendingSeats(counts.pendingManagerSeats)
+      }
     })
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'contacts'))
       .then((snapshot) => {
@@ -469,7 +481,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.hostLimit}
       />
       <UsageMeter
-        label="Team seats (incl. you)"
+        label={
+          pendingSeats > 0
+            ? `Team seats (incl. you + ${pendingSeats} invited)`
+            : 'Team seats (incl. you)'
+        }
         used={teamSeats}
         limit={teamSeatLimit}
       />

@@ -132,9 +132,47 @@ async function handler(request: Request): Promise<Response> {
       // the roster to satisfy it would hand every caller the names and emails
       // AGL-1026 restricted.
       if (String(query.counts ?? '') === '1') {
+        // PENDING INVITES HOLD A SEAT, so the meter has to count them
+        // (AGL-2304).
+        //
+        // The invite GATE has always counted `members + pendingInvites` —
+        // `orgs/invites`, `action: 'send'`, managers on both sides. This
+        // number is what the Billing page's "Team seats" meter renders, and it
+        // counted the roster alone. So an org with 3 managers and 2 invites out
+        // on a 5-seat plan read `3 / 5` and was refused on the very next
+        // invite, with no way to see why.
+        //
+        // `run-an-agency-workspace.md` tells agencies to do the arithmetic this
+        // meter was getting wrong, in as many words: "plan headcount against
+        // invites sent, not invites accepted, or you will hit a refusal
+        // mid-onboarding". The console was the thing making that impossible.
+        //
+        // `organizations.ts` already states the rule for the COLLABORATOR
+        // counter (AGL-2068): the two populations "must be counted together or
+        // the cap is enforced against a fraction of itself". Manager seats are
+        // the same shape; only the display half had not followed.
+        //
+        // `acceptedAt == null` is the same predicate the gate uses, so an
+        // accepted invite is not double-counted against its own roster row.
+        const pendingInvites = await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('orgs')
+          .doc(orgId)
+          .collection('invites')
+          .where('acceptedAt', '==', null)
+          .get()
+        const pendingManagerSeats = countManagerSeats(
+          pendingInvites.docs.map((doc) => doc.data() as never),
+        )
         return Response.json(
           {
-            managerSeats: countManagerSeats(members as never),
+            managerSeats:
+              countManagerSeats(members as never) + pendingManagerSeats,
+            // Broken out so the meter can say WHY it is higher than the
+            // roster — a number that silently disagrees with the visible team
+            // list is the other way to make this confusing.
+            pendingManagerSeats,
             memberCount: members.length,
           },
           { status: 200 },

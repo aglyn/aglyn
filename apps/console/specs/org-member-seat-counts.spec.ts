@@ -43,13 +43,55 @@ const mockVerifyIdToken = jest.fn()
 const mockListOrgMembers = jest.fn()
 const mockResolveOrgMembership = jest.fn()
 
+/**
+ * Pending invite documents the fake `orgs/{id}/invites` collection holds.
+ * Mutated per test; every entry is un-accepted unless it says otherwise.
+ */
+let mockInvites: Array<Record<string, unknown>> = []
+/** Every `.where(...)` the route applied to the invites collection. */
+const mockInviteWhere: Array<[string, string, unknown]> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...a: unknown[]) => mockVerifyIdToken(...a) }),
       firestore: () => ({
-        collection: () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }),
+        collection: () => ({
+          doc: () => ({
+            get: async () => ({ exists: false }),
+            /**
+             * The invites subcollection, modelled with its filter APPLIED
+             * (AGL-2304).
+             *
+             * A double that ignored `.where()` and returned every invite would
+             * turn an accepted one into a phantom held seat and report a
+             * GREEN for a route that had stopped filtering — the unfaithful
+             * -double failure mode. So the predicate is really evaluated, and
+             * a test below feeds it an accepted invite to prove it.
+             */
+            collection: () => {
+              const chain = {
+                where: (field: string, op: string, value: unknown) => {
+                  mockInviteWhere.push([field, op, value])
+                  return chain
+                },
+                get: async () => ({
+                  docs: mockInvites
+                    .filter((invite) =>
+                      mockInviteWhere.every(([field, , value]) =>
+                        field === 'acceptedAt'
+                          ? (invite[field] ?? null) === value
+                          : invite[field] === value,
+                      ),
+                    )
+                    .map((invite) => ({ data: () => invite })),
+                }),
+              }
+              return chain
+            },
+          }),
+        }),
       }),
     }),
   },
@@ -102,6 +144,8 @@ const get = (qs: string) =>
 describe('GET /api/orgs/members?counts=1 (AGL-1253)', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockInvites = []
+    mockInviteWhere.length = 0
     mockVerifyIdToken.mockResolvedValue({ uid: 'u1', email_verified: true })
     mockResolveOrgMembership.mockResolvedValue({ role: 'owner' })
     mockListOrgMembers.mockResolvedValue(ROSTER)
@@ -114,6 +158,82 @@ describe('GET /api/orgs/members?counts=1 (AGL-1253)', () => {
     // front of orgs that had only spent collaborator seats (AGL-1113).
     expect(body.managerSeats).toBe(2)
     expect(body.memberCount).toBe(3)
+  })
+
+  /**
+   * AGL-2304 — the meter must count what the GATE counts.
+   *
+   * `orgs/invites` (`action: 'send'`) has always refused against
+   * `members + pendingInvites`. This endpoint fed the Billing page's "Team
+   * seats" meter and counted the roster alone, so an org with 3 managers and 2
+   * invites out on a 5-seat plan read `3 / 5` and was refused on the next
+   * invite with nothing on screen explaining why.
+   *
+   * `run-an-agency-workspace.md` tells agencies to plan against invites SENT
+   * rather than accepted — the console was what made that impossible.
+   */
+  describe('pending invites hold a seat (AGL-2304)', () => {
+    it('adds un-accepted MANAGER invites to the total', async () => {
+      mockInvites = [
+        { email: 'new-admin@x.test', role: 'admin', allHosts: true, acceptedAt: null },
+      ]
+      const body = await (await get('?orgId=o1&counts=1')).json()
+      expect(body.managerSeats).toBe(3)
+      expect(body.pendingManagerSeats).toBe(1)
+      // The roster itself has not changed — this is a seats question, not a
+      // members question, and conflating them is the other available bug.
+      expect(body.memberCount).toBe(3)
+    })
+
+    it('does NOT count a pending COLLABORATOR invite as a manager seat', async () => {
+      // Collaborator seats meter per host against `membersPerHost`. Counting
+      // them here would put a false "out of team seats" in front of an agency
+      // onboarding a client — the exact defect AGL-1113 fixed on the roster
+      // side, reintroduced through the invite list.
+      mockInvites = [
+        {
+          email: 'client@x.test',
+          role: 'editor',
+          allHosts: false,
+          hostAccess: { h1: 'editor' },
+          acceptedAt: null,
+        },
+      ]
+      const body = await (await get('?orgId=o1&counts=1')).json()
+      expect(body.managerSeats).toBe(2)
+      expect(body.pendingManagerSeats).toBe(0)
+    })
+
+    it('filters on acceptedAt, so an accepted invite is not double-counted', async () => {
+      // An accepted invite already has a roster row. Counting it again would
+      // charge the org twice for one person and refuse them a seat they hold.
+      mockInvites = [
+        { email: 'joined@x.test', role: 'admin', allHosts: true, acceptedAt: 12345 },
+      ]
+      const body = await (await get('?orgId=o1&counts=1')).json()
+      expect(body.managerSeats).toBe(2)
+      expect(mockInviteWhere).toContainEqual(['acceptedAt', '==', null])
+    })
+
+    it('CONTROL — no pending invites leaves the count exactly as it was', async () => {
+      // Without this, "adds pending invites" would also pass against a route
+      // that had started adding a constant.
+      mockInvites = []
+      const body = await (await get('?orgId=o1&counts=1')).json()
+      expect(body.managerSeats).toBe(2)
+      expect(body.pendingManagerSeats).toBe(0)
+    })
+
+    it('still returns no roster data once invites are in play', async () => {
+      // The invite documents carry EMAILS. AGL-1026 restricted who may see
+      // the org's addresses, and this endpoint answers for every member — so
+      // widening what it reads must not widen what it returns.
+      mockInvites = [
+        { email: 'secret-invitee@x.test', role: 'admin', allHosts: true, acceptedAt: null },
+      ]
+      const body = await (await get('?orgId=o1&counts=1')).json()
+      expect(JSON.stringify(body)).not.toContain('@x.test')
+    })
   })
 
   it('does NOT return the roster in counts mode', async () => {

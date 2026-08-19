@@ -53,9 +53,29 @@ describe('fetchSeatCounts (AGL-1255)', () => {
   })
 
   it('returns the counts the server gave', async () => {
+    stubFetch(async () =>
+      json({ managerSeats: 5, pendingManagerSeats: 3, memberCount: 5 }),
+    )
+    await expect(fetchSeatCounts(user, 'o1')).resolves.toEqual({
+      managerSeats: 5,
+      pendingManagerSeats: 3,
+      memberCount: 5,
+    })
+  })
+
+  /**
+   * A server that has not been redeployed yet still answers correctly
+   * (AGL-2304).
+   *
+   * `managerSeats` is the number every caller feeds to a quota comparison, so
+   * it must survive a missing breakdown untouched. Only the split defaults —
+   * to 0, which costs a caption on the meter and nothing else.
+   */
+  it('defaults only the BREAKDOWN when the server omits it', async () => {
     stubFetch(async () => json({ managerSeats: 2, memberCount: 5 }))
     await expect(fetchSeatCounts(user, 'o1')).resolves.toEqual({
       managerSeats: 2,
+      pendingManagerSeats: 0,
       memberCount: 5,
     })
   })
@@ -111,9 +131,12 @@ describe('fetchSeatCounts (AGL-1255)', () => {
   it('CONTROL — zero really is reported when the server says zero', async () => {
     // Without this, "never zero" could be satisfied by a function that maps
     // every zero to null — which would warn about a limit nobody is near.
-    stubFetch(async () => json({ managerSeats: 0, memberCount: 0 }))
+    stubFetch(async () =>
+      json({ managerSeats: 0, pendingManagerSeats: 0, memberCount: 0 }),
+    )
     await expect(fetchSeatCounts(user, 'o1')).resolves.toEqual({
       managerSeats: 0,
+      pendingManagerSeats: 0,
       memberCount: 0,
     })
   })
