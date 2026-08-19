@@ -30,7 +30,7 @@ import {
   ICON_VARIANT_ELEMENT_TREE_VIEW,
   ICON_VARIANT_MODIFY_ADD,
 } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   getDisplayName,
@@ -70,6 +70,7 @@ import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
+import { besignerDocsUrl } from '../utils/docs-help'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
 } from './workspace-panel.component'
@@ -336,7 +337,15 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
   const handleAddElementClick = useAddElementDrawerCallback()
   return (
     <TabPanelInner sx={{ pl: 0.5 }}>
-      <Box sx={{ px: 0.05, pb: 1, pt: 1 }}>
+      <Box
+        sx={{
+          px: 0.05,
+          pb: 1,
+          pt: 1,
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
         <Button
           color="primary"
           startIcon={
@@ -348,6 +357,15 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
         >
           {'Add Element'}
         </Button>
+        {/* The hierarchy is the one panel whose rules are not visible in it
+            (AGL-2167): which elements accept children, and what dropping on
+            an edge does versus dropping in the center. */}
+        <HelpTip
+          title="Drag, drop & hierarchy"
+          excerpt="Reparent by dragging here or on the canvas. Containers accept children; dropping on a leaf element makes a sibling instead."
+          href={besignerDocsUrl('dragDropHierarchy', '#drop-zones-edges-vs-center')}
+          sx={{ ml: 'auto', mr: 0.5, fontSize: '0.9em' }}
+        />
       </Box>
       <NodeTreeView ref={ref} {...props} />
     </TabPanelInner>

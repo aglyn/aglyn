@@ -38,6 +38,7 @@ import {
   mdiContentSave,
 } from '@aglyn/shared-data-mdi'
 import {
+  HelpTip,
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
 import {
@@ -72,6 +73,7 @@ import {
   ScreenLinkField,
   SCREEN_LINK_FIELD_COMPONENT,
 } from './screen-link-field.component'
+import { besignerDocsUrl } from '../utils/docs-help'
 import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
   InteractionsContext,
@@ -871,6 +873,27 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           >
             {({ formFields, schema, ...rest }) => (
               <>
+                {/* Text-capable elements only (AGL-2167): the Text
+                    attribute here and double-click-to-edit on the canvas
+                    are the same value, which is the single thing about
+                    this panel that surprises people. */}
+                {textEditable || hasTextAttributes ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-end',
+                      mb: -1,
+                    }}
+                  >
+                    <HelpTip
+                      title="Editing text"
+                      excerpt="The Text attribute and double-clicking the element on the canvas edit the same value. Rich text is opt-in per element."
+                      href={besignerDocsUrl('textEditing', '#the-text-attribute')}
+                      sx={{ fontSize: '0.9em' }}
+                    />
+                  </Box>
+                ) : null}
                 <ElementPropsFormTemplate
                   formFields={formFields}
                   schema={schema}
@@ -889,6 +912,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       }}
                     >
                       {'Bindings on this element'}
+                      {/* AGL-2167. A summary in warning color is the only
+                          signal that a referent went missing, and nothing
+                          here says what to do about it. */}
+                      <HelpTip
+                        title="Bindings on this element"
+                        excerpt="Each row is a bound attribute, shown with its current value. A row in warning color means the variable or function it points at no longer exists."
+                        href={besignerDocsUrl('bindings', '#where-used--safety')}
+                        sx={{ ml: 0.25, fontSize: '0.9em' }}
+                      />
                     </Box>
                     {boundPropSummaries.map((summary) => (
                       <Box
@@ -985,6 +1017,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       sx={{ mt: 2 }}
                     >
                       {'Interactions'}
+                      {/* AGL-2167 — the trigger list says when, and
+                          nothing here says what an interaction can then
+                          do, or that the target is picked by clicking. */}
+                      <HelpTip
+                        title="Interactions"
+                        excerpt="Run an action when this element is clicked, hovered, or scrolled into view. Targets are picked by clicking them on the canvas."
+                        href={besignerDocsUrl('interactions', '#fluent-interactions')}
+                        sx={{ ml: 0.25, fontSize: '0.9em' }}
+                      />
                     </Typography>
                     {nodeAutomations.map((automation) => (
                       <Stack

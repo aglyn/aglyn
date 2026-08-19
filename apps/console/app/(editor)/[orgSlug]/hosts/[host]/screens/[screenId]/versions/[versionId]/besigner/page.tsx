@@ -25,6 +25,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
+  besignerDocsUrl,
   BesignerConflictAlertComponent,
   BesignerDraftAlertComponent,
   LayoutChromeContext,
@@ -45,7 +46,7 @@ import {
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import { AppLink, HelpTip, useLoading } from '@aglyn/shared-ui-jsx'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx/const/prebuilt-components'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -1250,7 +1251,18 @@ function BesignerPage(props) {
               {normalizedSlug ? 'Publish' : 'Unpublish'}
             </Button>
           </Stack>
-          <Typography variant="subtitle2">{'Shared layout'}</Typography>
+          <Typography variant="subtitle2">
+            {'Shared layout'}
+            {/* AGL-2167 — binding a layout is the one control here whose
+                effect is invisible on this screen's own canvas until it is
+                set, and nesting rules are not guessable from a picker. */}
+            <HelpTip
+              title="Screens & layouts"
+              excerpt="A layout wraps this screen in shared chrome — appbar, footer — maintained once. Layouts can nest; the screen renders in the innermost slot."
+              href={besignerDocsUrl('screens', '#layouts')}
+              sx={{ ml: 0.25, fontSize: '0.9em' }}
+            />
+          </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'}
           </Typography>
@@ -1268,7 +1280,18 @@ function BesignerPage(props) {
               </MenuItem>
             ))}
           </TextField>
-          <Typography variant="subtitle2">{'SEO'}</Typography>
+          <Typography variant="subtitle2">
+            {'SEO'}
+            {/* AGL-2167 — these three fields are per-screen overrides of
+                site-wide defaults, and nothing on this panel says so or
+                says where the defaults live. */}
+            <HelpTip
+              title="SEO"
+              excerpt="Per-screen overrides of the site's SEO defaults. Left empty, a screen falls back to the site-wide title pattern and social card."
+              href={besignerDocsUrl('seo', '#per-screen-seo')}
+              sx={{ ml: 0.25, fontSize: '0.9em' }}
+            />
+          </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Search and social metadata for this screen. Saved separately ' +
               'from the canvas.'}
