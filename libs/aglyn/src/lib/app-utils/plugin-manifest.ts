@@ -204,13 +204,41 @@ export interface PluginInstall {
 /** `revocations/{listingId}` — platform kill switch checked at load. */
 export interface PluginRevocation {
   /**
-   * Specific versions revoked, or `'all'` to kill the whole listing. This is
-   * the ONLY field any reader consults — everything else on the doc records
-   * who owns the entry so the two writers can coexist.
+   * Specific versions revoked, or `'all'` to kill the whole listing. The
+   * field every INSTALLABILITY reader consults, via `isPluginRevoked`.
+   *
+   * It used to say this was the only field any reader consulted, and that
+   * was the defect rather than a description of one: staff are required to
+   * type a reason, it was written here, and nothing rendered it — so the
+   * customer whose site broke and the publisher whose version was pulled
+   * both got a bare chip (AGL-2328). `reason` and the timestamp are now
+   * read by `host-plugins-card` and by the publisher branch of
+   * `listing-versions`. Do not restore the old claim.
    */
   versions: string[] | 'all'
+  /** Typed by staff, REQUIRED to revoke. Rendered to both audiences. */
   reason?: string
+  /**
+   * ⚠️ DECLARED HERE AND WRITTEN BY NOTHING. Every writer in
+   * `apps/console/app/api/admin/plugin-reviews/route.ts` stores
+   * `revokedAt` instead. A reader that trusts this field alone shows no
+   * date for every revocation that actually exists — read both, the way
+   * `revocationTimeMs` in `listing-versions.ts` does.
+   */
   atMs?: number
+  /**
+   * What the writers actually store — a Firestore server timestamp, so its
+   * shape depends on which SDK read it back (`toMillis()` on admin, a
+   * `seconds` field through a client). Deliberately `unknown` rather than a
+   * lie about which one a given reader will see.
+   */
+  revokedAt?: unknown
+  /**
+   * The staff uid that pulled it. Recorded, and deliberately NEVER returned
+   * to a customer or a publisher: who acted belongs in the audit log, not
+   * on the screen of the person it was done to (AGL-2328).
+   */
+  revokedBy?: string
   /**
    * `'takedown'` when the listing-level hide wrote it (AGL-948). Un-hiding
    * clears a takedown-owned entry, so it must not be the only record.
