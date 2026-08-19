@@ -339,6 +339,21 @@ export interface InventoryAdjustment {
   variantId: string
   /** Positive = stock added, negative = removed. */
   delta: number
+  /**
+   * What the count ACTUALLY moved by, when the floor in
+   * `adjustVariantInventory` absorbed part of `delta` (AGL-2149). Written only
+   * when the two differ, which for a sale means a backorder product that sold
+   * past zero: `delta` stays the units sold — that is the merchant's stock
+   * history and it must keep saying "3 went out the door" — while this says how
+   * many of them the count could give up.
+   *
+   * A REVERSAL MUST READ THIS, NOT `delta`. Restoring `delta` on a backorder
+   * sale that the floor swallowed invents inventory that never existed: 0 sells
+   * 3, the count stays 0, and a `+3` on cancellation leaves 3 units nobody has.
+   * Absent on every row written before AGL-2149 and on every row where nothing
+   * was clamped, so `appliedDelta ?? delta` is the reader.
+   */
+  appliedDelta?: number
   reason: InventoryAdjustmentReason
   /** Order id for sale/refund adjustments. */
   orderId?: string
@@ -468,6 +483,44 @@ export function adjustVariantInventory(
       inventory: Math.max(0, Number(variant.inventory) + delta),
     }
   })
+}
+
+/**
+ * What `adjustVariantInventory` will ACTUALLY move the count by (AGL-2149).
+ *
+ * The floor in that helper is not a rounding detail, it is a silent absorber. A
+ * backorder product (`oversellPolicy: 'backorder'`, which `canPurchase` admits
+ * at any stock level) sitting at 0 sells 3: `Math.max(0, 0 + -3)` is 0, so the
+ * count does not move — correctly, since inventory is a shelf count and shelves
+ * do not go negative — but the ledger row said `-3` and every reversal read it
+ * as three units to put back. Cancelling that order handed the merchant 3 units
+ * that never existed and a stock badge that offers them for sale.
+ *
+ * Removing the floor is not the alternative: every reader of `inventory` — the
+ * badges, `canPurchase`, `productInventory`, `isLowStock` — assumes it cannot
+ * go negative, and a negative count would be a far wider change than the bug.
+ * So the clamp stays and the amount it absorbed is recorded instead.
+ *
+ * Deliberately mirrors `adjustVariantInventory`'s own arithmetic, including
+ * which field the clamp applies to in the location-tracked case, so the two
+ * cannot disagree about what happened.
+ */
+export function appliedVariantInventoryDelta(
+  product: Pick<HostProduct, 'variants'>,
+  variantId: string,
+  delta: number,
+  locationId?: string,
+): number {
+  const variant = (product.variants ?? []).find(
+    (item) => item.id === variantId,
+  )
+  if (!variant || variant.inventory == null) return 0
+  if (locationId && variant.inventoryByLocation) {
+    const before = Number(variant.inventoryByLocation[locationId] ?? 0)
+    return Math.max(0, before + delta) - before
+  }
+  const before = Number(variant.inventory)
+  return Math.max(0, before + delta) - before
 }
 
 /**

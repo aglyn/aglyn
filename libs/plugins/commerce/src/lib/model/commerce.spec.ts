@@ -17,6 +17,7 @@
 
 import {
   adjustVariantInventory,
+  appliedVariantInventoryDelta,
   canPurchase,
   commerceSlug,
   expandVariantMatrix,
@@ -239,6 +240,44 @@ describe('inventory (AGL-281)', () => {
     expect(restocked.find((v: any) => v.id === 'b').inventory).toBe(5)
     const untouched = adjustVariantInventory(tracked, 'c', -1)
     expect(untouched.find((v: any) => v.id === 'c').inventory).toBeUndefined()
+  })
+
+  /**
+   * WHAT THE FLOOR ABSORBED (AGL-2149). The clamp above is not a rounding
+   * detail: on a backorder product it swallows the overshoot silently, and a
+   * reversal that read the requested `-3` back would invent three units nobody
+   * has. This is the number a reversal must read instead.
+   */
+  it('appliedVariantInventoryDelta reports what the floor let through', () => {
+    // Requested -3 against 2 in stock: only 2 could leave.
+    expect(appliedVariantInventoryDelta(tracked, 'a', -3)).toBe(-2)
+    // The whole decrement absorbed — 0 in stock, nothing to give up.
+    expect(appliedVariantInventoryDelta(tracked, 'b', -3)).toBe(0)
+    // Nothing clamped: the applied delta IS the requested one.
+    expect(appliedVariantInventoryDelta(tracked, 'a', -2)).toBe(-2)
+    expect(appliedVariantInventoryDelta(tracked, 'b', 5)).toBe(5)
+    // Untracked and unknown variants move nothing.
+    expect(appliedVariantInventoryDelta(tracked, 'c', -1)).toBe(0)
+    expect(appliedVariantInventoryDelta(tracked, 'missing', -1)).toBe(0)
+  })
+
+  it('appliedVariantInventoryDelta reads the location bucket the clamp applies to', () => {
+    const multiLocation = product({
+      variants: [
+        {
+          id: 'a',
+          priceUsd: 10,
+          inventory: 5,
+          inventoryByLocation: { main: 3, store: 2 },
+        },
+      ],
+    })
+    expect(appliedVariantInventoryDelta(multiLocation, 'a', -2, 'main')).toBe(-2)
+    // The bucket holds 3, not the flat 5, so a -4 against `main` moves 3.
+    expect(appliedVariantInventoryDelta(multiLocation, 'a', -4, 'main')).toBe(-3)
+    // …and it agrees with what the writer actually produces.
+    const adjusted = adjustVariantInventory(multiLocation, 'a', -4, 'main')
+    expect(adjusted[0].inventoryByLocation).toEqual({ main: 0, store: 2 })
   })
 
   it('adjusts per-location buckets and re-sums the flat total (AGL-286)', () => {

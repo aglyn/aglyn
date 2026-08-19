@@ -231,6 +231,16 @@ export interface OrderRestockCheck {
   resolvedBy?: string
 }
 
+/**
+ * A cart line a paid order could not record (AGL-2149). All that survives a
+ * deleted product is what the shopper's cart asked for.
+ */
+export interface OrderUnresolvedLine {
+  productId: string
+  variantId?: string
+  quantity: number
+}
+
 /** `hosts/{hostId}/orders/{id}` doc. */
 export interface HostOrder {
   /** Human order number, sequential per host (e.g. #1042). */
@@ -277,6 +287,17 @@ export interface HostOrder {
   dispute?: OrderDispute
   /** Stock a reversal left off the shelf, awaiting the merchant (AGL-1797). */
   restockCheck?: OrderRestockCheck
+  /**
+   * Cart lines the webhook could not price because the product was deleted
+   * between session creation and payment (AGL-2149). Present ONLY on an order
+   * that is short of what the shopper was charged: `totals.itemsCents` is
+   * missing these lines while `amountCents` still holds the full
+   * `amount_total`, and this is the record of which lines the difference is.
+   *
+   * Deliberately NOT an `OrderLineItem[]`: the product doc is gone, so there is
+   * no name, no price and no type to record — only what the cart asked for.
+   */
+  unresolvedLines?: OrderUnresolvedLine[]
   createdAtMs?: number
   // Legacy Commerce Starter fields (AGL-90) kept readable.
   productId?: string
@@ -287,6 +308,26 @@ export interface HostOrder {
 /**
  * Legal status transitions. Refund/cancel policies: anything paid can
  * refund; only unfulfilled orders cancel (refund instead once shipped).
+ *
+ * `cancelled` IS NOT TERMINAL, and treating it as one trapped money (AGL-2149).
+ * `cancel-order.ts` accepts a **paid** order — `paid: [… 'cancelled' …]` above
+ * — and moves no money when it does: it flips the status and returns the stock.
+ * `refund.ts` gates on `canTransitionOrder(order.status, 'refunded')`, so with
+ * `cancelled: []` the refund door closed behind the cancel and answered "orders
+ * in cancelled cannot refund" forever. An admin who cancelled a paid order
+ * instead of refunding it — the two buttons sit next to each other in the order
+ * dialog — had permanently locked the shopper's money out of every refund route
+ * this product has. The shopper's only remaining recourse was a chargeback,
+ * which costs the merchant the goods, the money AND the dispute fee.
+ *
+ * Whether cancelling a PAID order should refuse, or refund on the merchant's
+ * behalf, is a real product question and is deliberately NOT answered here:
+ * either would change what an existing console button does to money. Making the
+ * money reachable is the part that must not wait for that answer.
+ *
+ * A cancelled order that never took money simply has nothing to refund —
+ * `refund.ts` resolves no payment intent and answers "No payment to refund" —
+ * so the widened edge costs a lapsed `pending` order nothing.
  */
 const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['paid', 'cancelled'],
@@ -294,7 +335,7 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   partially_fulfilled: ['fulfilled', 'refunded'],
   fulfilled: ['delivered', 'refunded'],
   delivered: ['refunded'],
-  cancelled: [],
+  cancelled: ['refunded'],
   refunded: [],
 }
 

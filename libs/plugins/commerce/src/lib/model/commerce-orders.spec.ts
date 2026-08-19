@@ -48,6 +48,23 @@ describe('canTransitionOrder', () => {
     expect(canTransitionOrder('refunded', 'paid')).toBe(false)
     expect(canTransitionOrder('cancelled', 'paid')).toBe(false)
   })
+
+  /**
+   * AGL-2149. `cancel-order.ts` accepts a PAID order and moves no money, so
+   * with `cancelled: []` an admin who cancelled instead of refunding locked the
+   * shopper's money out of `refund.ts` — which gates on exactly this call —
+   * permanently. This edge is the money's way back out.
+   */
+  it('lets a cancelled order still be refunded', () => {
+    expect(canTransitionOrder('cancelled', 'refunded')).toBe(true)
+  })
+
+  /** …and `refunded` really is terminal, which is what makes the flip once-only. */
+  it('keeps refunded terminal', () => {
+    expect(canTransitionOrder('refunded', 'cancelled')).toBe(false)
+    expect(canTransitionOrder('refunded', 'refunded')).toBe(false)
+    expect(canTransitionOrder('refunded', 'fulfilled')).toBe(false)
+  })
 })
 
 describe('computeOrderTotals', () => {

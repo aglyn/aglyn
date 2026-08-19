@@ -864,6 +864,201 @@ describe('a POS card order (AGL-1825)', () => {
 // The open restock question (AGL-1797)
 // ---------------------------------------------------------------------------
 
+/**
+ * THE FLOOR THE SALE HIT, AND WHAT COMES BACK BECAUSE OF IT (AGL-2149).
+ *
+ * `adjustVariantInventory` clamps at zero, and on a BACKORDER product that
+ * clamp silently absorbs the overshoot: `canPurchase` admits any quantity when
+ * `oversellPolicy` is `backorder`, so a variant sitting at 0 can sell 3,
+ * `Math.max(0, 0 + -3)` leaves the count at 0 — correctly, a shelf count does
+ * not go negative — and the ledger row still said `-3`.
+ *
+ * Cancelling then read that `-3` and put back three units that never existed:
+ * the merchant's count went from 0 to 3, the stock badge offered them, and the
+ * next shopper bought goods nobody had. A silent under-count turned into a
+ * silent OVER-count, which is strictly worse — under-counting refuses a sale
+ * that could have been made, over-counting takes one that cannot be filled.
+ *
+ * The sale rows now carry `appliedDelta` when the floor absorbed something, and
+ * this is the reader. Rows the ledger does NOT describe are untouched, which is
+ * what keeps the pre-AGL-1807 paths (decremented with no row at all) from
+ * having their stock stranded — pinned below.
+ */
+describe('a sale the inventory floor clamped (AGL-2149)', () => {
+  function seedSaleRow(
+    id: string,
+    row: Record<string, any>,
+  ): void {
+    docs.set(`hosts/${HOST}/inventoryAdjustments/${id}`, {
+      reason: 'sale',
+      orderId: ORDER,
+      atMs: 3,
+      ...row,
+    })
+  }
+
+  /**
+   * THE DEFECT. Backorder sale of 3 against a variant at 0: the count never
+   * moved, so nothing may come back.
+   */
+  it('restores nothing when the sale took nothing off the shelf', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedProduct('prod-mug', [{ id: 'var-one', inventory: 5 }])
+    seedOrder()
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -3,
+      appliedDelta: 0,
+    })
+    seedSaleRow('sale-mug', {
+      productId: 'prod-mug',
+      variantId: 'var-one',
+      delta: -2,
+    })
+
+    const result = await post()
+
+    expect(result.status).toBe(200)
+    // The tee stays at 0 — three units that never existed are not invented.
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(0)
+    // …and the mug, whose sale really did decrement, comes back in full.
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 2 })
+    // No `cancellation` row for stock that did not move — the same rule
+    // AGL-1797 applied to the flag: a ledger row for an unmoved count would
+    // corrupt the history the products hub renders.
+    expect(
+      adjustments().filter((row) => row.reason === 'cancellation'),
+    ).toEqual([
+      expect.objectContaining({
+        productId: 'prod-mug',
+        variantId: 'var-one',
+        delta: 2,
+      }),
+    ])
+    expect(storedOrder().status).toBe('cancelled')
+  })
+
+  /** A PARTIAL clamp: 5 sold against 2 in stock gives back exactly 2. */
+  it('restores only the part the floor let through', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedOrder({
+      lineItems: [
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+      ],
+    })
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: -2,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(2)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 2 })
+    expect(storedOrder().timeline.at(-1).detail).toBe(
+      '2 units returned to stock',
+    )
+  })
+
+  /**
+   * THE NEGATIVE CONTROL that matters most: an ordinary sale, whose row carries
+   * no `appliedDelta` because nothing was clamped, still restores in full. A
+   * "fix" that simply stopped restoring would pass every test above.
+   */
+  it('restores the full quantity on an ordinary sale', async () => {
+    seedTrackedShop()
+    seedSaleRow('sale-tee', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -3,
+    })
+    seedSaleRow('sale-mug', {
+      productId: 'prod-mug',
+      variantId: 'var-one',
+      delta: -2,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+  })
+
+  /**
+   * And the other negative control: an order the ledger says NOTHING about is
+   * not capped to zero. A pre-AGL-1807 draft link decremented without writing
+   * any row, and gating those on the ledger would strand their stock — the same
+   * reasoning that kept the AGL-1825 guard scoped to card orders.
+   */
+  it('restores in full when the ledger describes the order at all', async () => {
+    seedTrackedShop()
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(15)
+    expect(inventoryOf('prod-mug', 'var-one')).toBe(7)
+    expect(result.body).toEqual({ ok: true, released: 2, units: 5 })
+  })
+
+  /**
+   * Two lines of the same product+variant share ONE budget. Ten sold against
+   * four in stock, split across two lines of five: four units come back in
+   * total, not four per line.
+   */
+  it('shares one cap across two lines of the same variant', async () => {
+    seedHost()
+    seedProduct('prod-tee', [{ id: 'var-m', inventory: 0 }])
+    seedOrder({
+      lineItems: [
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+        {
+          productId: 'prod-tee',
+          variantId: 'var-m',
+          name: 'Tee',
+          quantity: 5,
+          unitAmountCents: 1400,
+        },
+      ],
+    })
+    seedSaleRow('sale-tee-1', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: -4,
+    })
+    seedSaleRow('sale-tee-2', {
+      productId: 'prod-tee',
+      variantId: 'var-m',
+      delta: -5,
+      appliedDelta: 0,
+    })
+
+    const result = await post()
+
+    expect(inventoryOf('prod-tee', 'var-m')).toBe(4)
+    expect(result.body).toEqual({ ok: true, released: 1, units: 4 })
+  })
+})
+
 describe('an open restockCheck', () => {
   const openCheck = {
     kind: 'refund',

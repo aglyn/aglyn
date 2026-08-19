@@ -44,8 +44,40 @@ import { recordStorefrontTax } from './storefront-tax-record'
  * Assigns unassigned license keys for a digital product (AGL-308):
  * stamps order/email on the key docs, returns the key strings, and
  * nudges managers when the pool runs low.
+ *
+ * EACH KEY IS CLAIMED IN ITS OWN TRANSACTION (AGL-2149). The original shape was
+ * a query for `assignedAtMs == null` followed by a bare `set(…, { merge: true })`
+ * per document, with nothing between the read and the write. Two orders for the
+ * same product landing together — the ordinary case for a digital product that
+ * is selling — both read the same head of the pool and both stamped it, so the
+ * second write simply overwrote the first order's `orderId` and BOTH buyers
+ * were mailed the same key. That is a redeemable secret handed out twice, and
+ * it is invisible afterwards: the key doc records only the later order.
+ *
+ * The claim is a transaction rather than the `create()` primitive `refund.ts`
+ * uses for idempotency, because the document being claimed ALREADY EXISTS — the
+ * merchant uploaded the pool — so there is no create to lose. What a
+ * transaction gives is the same guarantee from the other side: Firestore aborts
+ * and retries the transaction if `assignedAtMs` changed between this
+ * transaction's read of the key and its commit, so exactly one of two racing
+ * orders can turn a `null` into a timestamp. The in-transaction re-read of
+ * `assignedAtMs` is the test that makes the abort observable to us rather than
+ * merely survived: a key another order took while we were queuing is skipped,
+ * not double-stamped.
+ *
+ * THE POOL QUERY OVER-FETCHES for the same reason. Asking for exactly
+ * `quantity` candidates and then losing three of them to a concurrent order
+ * would silently short the buyer, so the query takes headroom and the loop
+ * stops at `quantity` claims. A buyer can still be short-changed when the pool
+ * genuinely runs dry — that is the merchant's stock problem, and the low-pool
+ * nudge below is what tells them.
+ *
+ * The failure mode is still "fewer keys than paid for", never "someone else's
+ * key": swallowing stays, because the money has moved and a thrown assignment
+ * would take the receipt and the fulfilment down with it.
  */
 async function assignLicenseKeys(
+  firestore: FirebaseFirestore.Firestore,
   hostRef: FirebaseFirestore.DocumentReference,
   hostId: string,
   productId: string,
@@ -54,19 +86,36 @@ async function assignLicenseKeys(
   quantity: number,
 ): Promise<string[]> {
   try {
+    const wanted = Math.max(1, quantity)
     const pool = await hostRef
       .collection('licenseKeys')
       .where('productId', '==', productId)
       .where('assignedAtMs', '==', null)
-      .limit(Math.max(1, quantity))
+      // Headroom for keys a concurrent order claims out from under this one.
+      .limit(wanted * 3)
       .get()
     const keys: string[] = []
     for (const docSnapshot of pool.docs) {
-      await docSnapshot.ref.set(
-        { orderId, email, assignedAtMs: Date.now() },
-        { merge: true },
-      )
-      keys.push(String(docSnapshot.get('key')))
+      if (keys.length >= wanted) break
+      const claimed = await firestore
+        .runTransaction(async (transaction) => {
+          const fresh = await transaction.get(docSnapshot.ref)
+          if (!fresh.exists) return null
+          // Re-asked INSIDE the transaction that writes it. This is the whole
+          // guard: the query's answer is a snapshot from before we queued.
+          if (fresh.get('assignedAtMs') != null) return null
+          transaction.update(docSnapshot.ref, {
+            orderId,
+            email,
+            assignedAtMs: Date.now(),
+          })
+          return String(fresh.get('key'))
+        })
+        .catch((error) => {
+          console.error('license key claim failed', error)
+          return null
+        })
+      if (claimed) keys.push(claimed)
     }
     if (keys.length) {
       const remaining = await hostRef
@@ -1578,6 +1627,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 stockVariantId,
                 -cycleQuantity,
               )
+              // What the floor actually let go (AGL-2149).
+              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+                stocked,
+                stockVariantId,
+                -cycleQuantity,
+              )
               const updated = { ...stocked, variants }
               await hostRef
                 .collection('products')
@@ -1596,6 +1651,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   productId,
                   variantId: stockVariantId,
                   delta: -cycleQuantity,
+                  ...(appliedDelta !== -cycleQuantity ? { appliedDelta } : {}),
                   reason: 'sale',
                   orderId: invoiceId,
                   atMs: Date.now(),
@@ -1825,6 +1881,30 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               : null,
           ]),
         )
+        // A cart line whose product was deleted between the shopper opening
+        // the Stripe session and this webhook landing (AGL-2149). The line is
+        // dropped from `lineItems` below and skipped by the inventory loop,
+        // and until now that was SILENT: the order was written with fewer lines
+        // than the shopper paid for while `amountCents` stayed the full
+        // `amount_total`, so `itemsCents` and the charge disagreed and nothing
+        // said why. A merchant reconciling that order sees a short order and no
+        // explanation; a shopper sees goods they paid for missing.
+        //
+        // The upstream fix — snapshotting each line into `checkouts/{sessionId}`
+        // at session creation so the webhook can price a deleted product from
+        // the snapshot instead of the product doc — is a schema addition to the
+        // recovery document that the abandoned-cart path also reads, and is NOT
+        // done here. What is done is to make the loss LOUD: the unresolvable
+        // lines are recorded on the order itself, stamped on the timeline the
+        // console dialog renders, and pushed to the managers. A silent
+        // discrepancy on a paid order is the worse outcome of the two.
+        const unresolvedLines = cart.lines
+          .filter((line) => !productsById.get(line.productId))
+          .map((line) => ({
+            productId: line.productId,
+            ...(line.variantId ? { variantId: line.variantId } : {}),
+            quantity: line.quantity,
+          }))
         const lineItems: CommerceModel.OrderLineItem[] = cart.lines
           .map((line) => {
             const product = productsById.get(line.productId)
@@ -1878,7 +1958,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             channel: 'online',
             lineItems,
             totals,
-            timeline: [{ atMs: Date.now(), event: 'paid' }],
+            timeline: [
+              { atMs: Date.now(), event: 'paid' },
+              ...(unresolvedLines.length
+                ? [
+                    {
+                      atMs: Date.now(),
+                      event: 'line-unresolved',
+                      detail:
+                        `${unresolvedLines.length} paid ${
+                          unresolvedLines.length === 1 ? 'line' : 'lines'
+                        } could not be recorded because the product was ` +
+                        'deleted during checkout, so this order is short of ' +
+                        'what the shopper was charged. Refund the difference ' +
+                        'or fulfil it by hand.',
+                    },
+                  ]
+                : []),
+            ],
+            // The structured half, for the console badge and for anything
+            // reconciling `totals.itemsCents` against `amountCents`.
+            ...(unresolvedLines.length ? { unresolvedLines } : {}),
             paymentIntentId: String(object?.payment_intent ?? '') || null,
             checkoutSessionId: String(object.id),
             customerName: object?.customer_details?.name ?? null,
@@ -1909,6 +2009,27 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // the non-idempotent effects below (inventory / coupon / gift-card
         // decrements) that would otherwise double-apply.
         if (!created) return
+        // AGL-2149: loud, not silent. Logged for the platform and pushed to the
+        // merchant, once, behind the same `created` guard as every other
+        // non-idempotent effect so a redelivery does not re-nag.
+        if (unresolvedLines.length) {
+          console.error('commerce cart order lost a paid line', {
+            hostId: String(hostId),
+            orderId: String(object.id),
+            unresolvedLines,
+          })
+          void notifyHostManagers(String(hostId), {
+            type: 'content.order',
+            title: 'A paid order is missing items',
+            body:
+              `Order ${object.id} was charged in full but ` +
+              `${unresolvedLines.length} ${
+                unresolvedLines.length === 1 ? 'line' : 'lines'
+              } could not be recorded — the product was deleted during ` +
+              'checkout. Refund the difference or fulfil it by hand.',
+            link: `/${hostId}/products`,
+          })
+        }
         await cartRef.delete().catch(() => undefined)
         // Recoverable checkout closes (AGL-296) so recovery emails stop;
         // the doc also carries the marketing opt-in (AGL-301).
@@ -1928,6 +2049,42 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           status: 'completed',
           completedAtMs: Date.now(),
         }).catch(() => undefined)
+        // License keys (AGL-308) per digital line — OUTSIDE the receipt gate
+        // (AGL-2149). These used to be assigned inside `if (isEmailConfigured()
+        // && buyerEmailForReceipt)`, so a store with no SMTP configured, or a
+        // buyer whose email Stripe did not hand back, produced a paid digital
+        // order that never had a key assigned to it at all — not "the email did
+        // not arrive", but "the key was never claimed", and nothing later
+        // retries it because the `created` guard above turns a redelivery away.
+        // The key is the GOODS on a digital order; the receipt is how they are
+        // announced. Assignment is the part that must not be optional.
+        //
+        // Ordering is deliberate and is what the move had to preserve: the
+        // receipt body below reads `licenseKeysByProduct`, so the assignment
+        // still has to run BEFORE the mail is composed. Hoisting it (rather
+        // than duplicating it into an else-branch) keeps that single ordering.
+        // The buyer's email is stamped on each key when Stripe gave us one and
+        // is `null` otherwise — the key doc's `orderId` is the join that
+        // matters, and the order carries the buyer identity anyway.
+        const licenseKeysByProduct: Record<string, string[]> = {}
+        for (const line of lineItems) {
+          if (line.productType !== 'digital') continue
+          const keys = await assignLicenseKeys(
+            firestore,
+            hostRef,
+            String(hostId),
+            line.productId,
+            String(object.id),
+            object?.customer_details?.email ?? null,
+            line.quantity,
+          )
+          if (keys.length) licenseKeysByProduct[line.productId] = keys
+        }
+        if (Object.keys(licenseKeysByProduct).length) {
+          await orderRef
+            .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
+            .catch(() => undefined)
+        }
         // Branded receipt (AGL-296): env-gated like every outbound email.
         const buyerEmailForReceipt = object?.customer_details?.email
         if (isEmailConfigured() && buyerEmailForReceipt) {
@@ -1947,25 +2104,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 } — $${((line.unitAmountCents * line.quantity) / 100).toFixed(2)}`,
             )
             .join('\n')
-          // License keys (AGL-308) per digital line.
-          const licenseKeysByProduct: Record<string, string[]> = {}
-          for (const line of lineItems) {
-            if (line.productType !== 'digital') continue
-            const keys = await assignLicenseKeys(
-              hostRef,
-              String(hostId),
-              line.productId,
-              String(object.id),
-              object?.customer_details?.email ?? null,
-              line.quantity,
-            )
-            if (keys.length) licenseKeysByProduct[line.productId] = keys
-          }
-          if (Object.keys(licenseKeysByProduct).length) {
-            await orderRef
-              .set({ licenseKeys: licenseKeysByProduct }, { merge: true })
-              .catch(() => undefined)
-          }
+          // The keys assigned above the gate (AGL-2149); the receipt only
+          // reports them.
           const licenseText = Object.entries(licenseKeysByProduct)
             .flatMap(([keyProductId, keys]) => {
               const line = lineItems.find(
@@ -2041,6 +2181,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             variantId,
             -line.quantity,
           )
+          // What the floor actually let go (AGL-2149).
+          const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+            product,
+            variantId,
+            -line.quantity,
+          )
           // Two lines of one product must COMPOUND (AGL-1830): a cart holds
           // two VARIANTS of one product as two lines (`lineKey` merges on
           // product+variant), and recomputing each from the product as first
@@ -2067,6 +2213,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               productId: line.productId,
               variantId,
               delta: -line.quantity,
+              ...(appliedDelta !== -line.quantity ? { appliedDelta } : {}),
               reason: 'sale',
               orderId: String(object.id),
               atMs: Date.now(),
@@ -2399,6 +2546,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 soldVariantId,
                 -quantity,
               )
+              // What the floor actually let go (AGL-2149).
+              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+                lifted,
+                soldVariantId,
+                -quantity,
+              )
               await productRef
                 .set(
                   {
@@ -2422,6 +2575,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   productId: String(productId),
                   variantId: soldVariantId,
                   delta: -quantity,
+                  ...(appliedDelta !== -quantity ? { appliedDelta } : {}),
                   reason: 'sale',
                   orderId: String(orderId),
                   atMs: Date.now(),
@@ -2496,6 +2650,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 -soldQty,
                 order.locationId || undefined,
               )
+              // What the floor actually let go (AGL-2149).
+              const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+                lineProduct,
+                soldVariantId,
+                -soldQty,
+                order.locationId || undefined,
+              )
               // Two lines of one product must COMPOUND: the next line starts
               // from these variants, not from the product as first read —
               // recomputing from the original would erase this decrement
@@ -2524,6 +2685,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   productId: lineProductId,
                   variantId: soldVariantId,
                   delta: -soldQty,
+                  ...(appliedDelta !== -soldQty ? { appliedDelta } : {}),
                   reason: 'sale',
                   orderId: String(orderId),
                   ...(order.locationId
@@ -2778,6 +2940,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               soldVariantId,
               -soldQuantity,
             )
+            // What the floor actually let go (AGL-2149).
+            const appliedDelta = CommerceModel.appliedVariantInventoryDelta(
+              lifted,
+              soldVariantId,
+              -soldQuantity,
+            )
             const updated = { ...lifted, variants }
             await productRef
               .set(
@@ -2794,6 +2962,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 productId: String(productId),
                 variantId: soldVariantId,
                 delta: -soldQuantity,
+                ...(appliedDelta !== -soldQuantity ? { appliedDelta } : {}),
                 reason: 'sale',
                 orderId: String(object.id),
                 atMs: Date.now(),

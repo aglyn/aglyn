@@ -177,22 +177,53 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       //
       // One equality filter, so the automatic single-field index answers it;
       // the reason test runs here, over the handful of rows one order has.
+      //
+      // THE SAME READ NOW ALSO BOUNDS HOW MUCH COMES BACK (AGL-2149), so it is
+      // no longer scoped to card orders. `adjustVariantInventory` floors at
+      // zero, and that floor silently absorbs the overshoot on a BACKORDER
+      // product: stock 0, `canPurchase` admits the sale because the policy says
+      // to, three units sell, `Math.max(0, 0 + -3)` leaves the count at 0 —
+      // and a `+3` here would hand the merchant three units nobody has and a
+      // stock badge offering them. The sale rows carry `appliedDelta` for
+      // exactly this: `delta` stays the units sold (the merchant's history),
+      // `appliedDelta` says how many the count could actually give up.
+      //
+      // Only lines the ledger DESCRIBES are capped. A pair the ledger says
+      // nothing about restores as before, which is what keeps the pre-AGL-1807
+      // draft links — decremented with no row at all — from having their stock
+      // stranded, and what keeps a single swallowed ledger write from turning
+      // into a lost restock on an unrelated line of the same order.
       let saleDecremented = true
-      if (
-        order.status === 'paid' &&
-        order.channel === 'pos' &&
-        (order.timeline ?? []).some(
-          (event) => event.event === 'pos-card-pending',
-        )
-      ) {
+      const releaseCap = new Map<string, number>()
+      const capKey = (productId: string, variantId: string) =>
+        `${productId} ${variantId}`
+      if (order.status === 'paid') {
         const orderAdjustments = await transaction.get(
           hostRef
             .collection('inventoryAdjustments')
             .where('orderId', '==', orderId),
         )
-        saleDecremented = orderAdjustments.docs.some(
+        const saleRows = orderAdjustments.docs.filter(
           (row) => row.get('reason') === 'sale',
         )
+        if (
+          order.channel === 'pos' &&
+          (order.timeline ?? []).some(
+            (event) => event.event === 'pos-card-pending',
+          )
+        ) {
+          saleDecremented = saleRows.length > 0
+        }
+        for (const row of saleRows) {
+          const productId = String(row.get('productId') ?? '')
+          const variantId = String(row.get('variantId') ?? '')
+          if (!productId || !variantId) continue
+          const moved = Number(row.get('appliedDelta') ?? row.get('delta') ?? 0)
+          // Sale rows are negative; the cap is how many units left the shelf.
+          const units = Math.max(0, -moved)
+          const key = capKey(productId, variantId)
+          releaseCap.set(key, (releaseCap.get(key) ?? 0) + units)
+        }
       }
 
       // `paid` is the only status reachable here whose sale decremented; see
@@ -214,9 +245,18 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       // the last, silently dropping units.
       const byProduct = new Map<string, CommerceModel.OrderRestockLine[]>()
       for (const line of lines) {
+        // Never more than the sale actually took off the shelf (AGL-2149). The
+        // cap is consumed as it is spent, so two lines of the same
+        // product+variant share one budget rather than each claiming it whole.
+        const key = capKey(line.productId, line.variantId)
+        const budget = releaseCap.get(key)
+        const quantity =
+          budget == null ? line.quantity : Math.min(line.quantity, budget)
+        if (budget != null) releaseCap.set(key, budget - quantity)
+        if (quantity <= 0) continue
         byProduct.set(line.productId, [
           ...(byProduct.get(line.productId) ?? []),
-          line,
+          { ...line, quantity },
         ])
       }
       for (const [productId, productLines] of byProduct) {
@@ -256,7 +296,10 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
         }
       }
 
-      const units = lines.reduce((sum, line) => sum + line.quantity, 0)
+      // From the CAPPED lines, not the order's, so the timeline reports what
+      // was actually put back (AGL-2149).
+      const releasedLines = [...byProduct.values()].flat()
+      const units = releasedLines.reduce((sum, line) => sum + line.quantity, 0)
       const patch: Record<string, unknown> = {
         status: 'cancelled',
         timeline: CommerceModel.appendOrderEvent(
@@ -284,7 +327,7 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
       transaction.update(orderRef, patch)
       return {
         status: 200,
-        body: { ok: true, released: lines.length, units },
+        body: { ok: true, released: releasedLines.length, units },
       }
     })
     return res.status(outcome.status).json(outcome.body)
