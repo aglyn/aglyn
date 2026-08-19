@@ -66,7 +66,24 @@ import type { ReactNode } from 'react'
  * The copy is deliberately generic about the operator too ("this site"),
  * because on `global-error` we genuinely do not know whose site it is.
  */
-const ROOT_CLASS = 'aglyn-status-screen'
+
+/**
+ * Names nobody — including in the CLASS, which is the half the rule above
+ * missed (AGL-2350).
+ *
+ * This was `aglyn-status-screen`, three lines under a docblock promising "no
+ * support address that would identify the operator to a visitor who was never
+ * told one exists". The class ships to that visitor twice: on the root
+ * element, and four more times inside the `<style>` block below — on the 404
+ * and crash pages of a white-label customer's own domain.
+ *
+ * No string-scanning gate could see it. `check:brand-literals` looks for a
+ * CAPITALISED `Aglyn`, on the sound reasoning that a lowercase one is nearly
+ * always a hostname, package scope, cookie name or CSS class. That exclusion
+ * is what made this invisible: it is a CSS class, and it is also copy about
+ * who the operator is.
+ */
+const ROOT_CLASS = 'status-screen-plain'
 
 /**
  * Light values on the bare class, dark values behind the media query — so a
