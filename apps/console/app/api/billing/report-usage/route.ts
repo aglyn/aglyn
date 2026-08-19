@@ -297,6 +297,131 @@ async function orgSiteSizeBytes(
   }
 }
 
+/**
+ * Subscription statuses that can still produce an invoice (AGL-1878).
+ *
+ * A meter event is priced by the SUBSCRIPTION ITEM that carries the metered
+ * price, on that subscription's next invoice. So the question "will this event
+ * be charged" is the question "does this customer have a live subscription
+ * item on our meter", and these are the statuses for which "live" is true.
+ *
+ * `canceled`, `incomplete`, `incomplete_expired` and `paused` are excluded: no
+ * further invoice is generated for any of them, so an event reported against
+ * one is an event nobody pays. Excluding a status is the SAFE direction —
+ * `reportedAt` is then not stamped, the org-month stays re-sweepable, and the
+ * next day's cron reports it if the subscription recovered. Including one
+ * wrongly is the direction that forfeits the money for good.
+ */
+const BILLABLE_SUBSCRIPTION_STATUSES = new Set([
+  'active',
+  'trialing',
+  'past_due',
+  'unpaid',
+])
+
+/**
+ * Why the meter event could not be charged, or `null` when it can (AGL-1878).
+ *
+ * ## The defect this exists for
+ *
+ * `report-usage` treated "Stripe returned 200 for the meter event" as "the
+ * customer was charged", and stamped `reportedAt` on that basis — which makes
+ * the org-month permanently skipped. But `POST /v1/billing/meter_events`
+ * returns 200 for ANY valid customer id. It has no idea whether that customer
+ * has a subscription item priced on the meter, and if they do not, the event
+ * lands on the meter, reaches **no invoice line**, and the `reportedAt` stamp
+ * then guarantees nothing will ever re-report it.
+ *
+ * That is not hypothetical. On live Stripe, customer `cus_UuQjDdd1oxPMNH`
+ * carries a meter event of **3 units on 2026-08-01** (the July rollup) while
+ * its subscription `sub_1TubsJ…` carries a plan item and no metered item at
+ * all — so those 3¢ were measured, accepted by Stripe, and invoiced to nobody.
+ * The invoice for the OTHER live subscription, which does carry the yearly
+ * metered item, shows the line ("Aglyn metered usage (at $0.01 / year)"), so
+ * the difference is exactly the item and nothing else.
+ *
+ * Nothing self-heals it: `checkout/route.ts` attaches the metered item on a
+ * NEW subscription and `subscription/route.ts` back-fills it only on a plan or
+ * interval switch, and both routes already log a warning for the case where
+ * the interval's `STRIPE_PRICE_METERED*` env is unset — a subscription created
+ * in that window never gains the item by itself.
+ *
+ * ## Why this refuses to send rather than sending and flagging
+ *
+ * Sending an event that reaches no invoice makes the METER lie too — the
+ * platform's own usage figures would carry volume nobody was billed for, and
+ * the natural repair (attach the item later) would then retroactively price
+ * everything already sitting in the period, which is the AGL-1875 hazard. So
+ * the event is withheld, `reportedAt` is not stamped, and the org-month stays
+ * re-sweepable: the money becomes RECOVERABLE instead of forfeited.
+ *
+ * ## Failing to ASK is treated the same as a "no"
+ *
+ * A Stripe read that errors returns `'check-failed'`, which withholds exactly
+ * like a missing item. Same reasoning: an unreported month reports late and
+ * visibly, a wrongly-stamped one is silent and permanent.
+ *
+ * Matched on `price.recurring.meter` first — the meter id is what actually
+ * prices the event, so this keeps working if the price ids are re-minted — and
+ * on the two configured price ids as a fallback for a deployment with no
+ * `STRIPE_METER_ID` set.
+ */
+async function meterReportBlockedReason(
+  stripeKey: string,
+  customerId: string,
+): Promise<'meter-not-configured' | 'no-metered-item' | 'check-failed' | null> {
+  const meterId = process.env.STRIPE_METER_ID
+  const meteredPriceIds = new Set(
+    [
+      process.env.STRIPE_PRICE_METERED,
+      process.env.STRIPE_PRICE_METERED_YEARLY,
+    ].filter(Boolean),
+  )
+  // NOTHING TO MATCH AGAINST is its own answer, and it must not be reported as
+  // the customer's fault. With no `STRIPE_METER_ID` and neither metered price
+  // id set, this deployment cannot tell a billable subscription from an
+  // unbillable one — so it withholds (recoverable, and 207 says so daily)
+  // rather than reporting into the dark, and names the ENVIRONMENT as the
+  // reason so the fix is one variable rather than a customer investigation.
+  if (!meterId && meteredPriceIds.size === 0) return 'meter-not-configured'
+  try {
+    // `status=all` and filter here: Stripe's filter takes ONE status, and the
+    // set above is four. A customer has a handful of subscriptions at most, so
+    // one page is the whole answer.
+    const query = new URLSearchParams({
+      customer: customerId,
+      status: 'all',
+      limit: '100',
+    })
+    const response = await fetch(
+      `https://api.stripe.com/v1/subscriptions?${query.toString()}`,
+      { headers: { Authorization: `Bearer ${stripeKey}` } },
+    )
+    if (!response.ok) {
+      console.error(
+        '[report-usage] could not read subscriptions',
+        await response.json(),
+      )
+      return 'check-failed'
+    }
+    const payload = await response.json()
+    const billable = (payload?.data ?? []).some(
+      (subscription: any) =>
+        BILLABLE_SUBSCRIPTION_STATUSES.has(String(subscription?.status)) &&
+        (subscription?.items?.data ?? []).some((item: any) => {
+          const price = item?.price
+          if (!price) return false
+          if (meterId && price?.recurring?.meter === meterId) return true
+          return meteredPriceIds.has(price?.id)
+        }),
+    )
+    return billable ? null : 'no-metered-item'
+  } catch (error) {
+    console.error('[report-usage] subscription check failed', error)
+    return 'check-failed'
+  }
+}
+
 async function hostUsage(
   hostRef: FirebaseFirestore.DocumentReference,
   month: string,
@@ -449,6 +574,17 @@ async function handler(request: Request): Promise<Response> {
     )
     const orgResults: Record<string, any> = {}
     const failures: Record<string, string> = {}
+    /**
+     * Closed org-months that MEASURED billable usage and put none of it on an
+     * invoice (AGL-1878) — the money we did not charge, named and counted.
+     *
+     * Separate from `failures` because the two need different responses: a
+     * failure is one org skipped for this pass and picked up tomorrow, while
+     * this is real revenue sitting unclaimed until somebody attaches a metered
+     * subscription item. Both make the run 207, which is what fails the
+     * workflow — see the note on the status below.
+     */
+    const unbilled: Record<string, { billedCents: number; reason: string }> = {}
     // The cursor must name the last org FINISHED, never the last attempted —
     // handing back a failed org's id skips it forever, which is the
     // partial-month bug wearing a cursor.
@@ -714,6 +850,18 @@ async function handler(request: Request): Promise<Response> {
       }
 
       let reported = false
+      /**
+       * Why a closed month's `billedCents` did not reach an invoice, or `null`
+       * when it did (AGL-1878). `'no-customer'` and `'meter-event-failed'` are
+       * decided here; the other two come from `meterReportBlockedReason`.
+       */
+      let meterReportBlocked:
+        | 'no-customer'
+        | 'meter-not-configured'
+        | 'no-metered-item'
+        | 'check-failed'
+        | 'meter-event-failed'
+        | null = null
       // `closed` FIRST, and it is the whole point of AGL-2219's guard: an
       // in-progress sweep computes and stores the running figure the budget
       // card and the budget alert read, and it must not — cannot — put that
@@ -721,7 +869,19 @@ async function handler(request: Request): Promise<Response> {
       if (closed && stripeKey && billedCents > 0) {
         // AGL-1028: reads the manager-gated billing doc, org doc as fallback.
         const customerId = (await readOrgBilling(orgId)).stripeCustomerId
-        if (customerId) {
+        if (!customerId) {
+          meterReportBlocked = 'no-customer'
+        } else {
+          // A 200 from `meter_events` is NOT a charge — see
+          // `meterReportBlockedReason`. Asked BEFORE the POST so an event that
+          // would reach no invoice is never sent and `reportedAt` is never
+          // stamped, which is what keeps the money recoverable.
+          meterReportBlocked = await meterReportBlockedReason(
+            stripeKey,
+            String(customerId),
+          )
+        }
+        if (customerId && !meterReportBlocked) {
           const response = await fetch(
             'https://api.stripe.com/v1/billing/meter_events',
             {
@@ -732,6 +892,10 @@ async function handler(request: Request): Promise<Response> {
               },
               body: new URLSearchParams({
                 event_name: meterEventName,
+                // ONE event per org-month, and the only reason a re-run cannot
+                // double-charge inside Stripe's own dedupe window. Beyond it,
+                // `reportedAt` above is the durable guard — the two are not
+                // redundant, they cover different spans.
                 identifier: `${orgId}-${month}`,
                 'payload[stripe_customer_id]': String(customerId),
                 'payload[value]': String(billedCents),
@@ -739,7 +903,20 @@ async function handler(request: Request): Promise<Response> {
             },
           )
           if (response.ok) reported = true
-          else console.error('meter event failed', await response.json())
+          else {
+            meterReportBlocked = 'meter-event-failed'
+            console.error('meter event failed', await response.json())
+          }
+        }
+        if (meterReportBlocked) {
+          // LOUD. A closed month that measured real money and put it on no
+          // invoice is the one outcome nobody may learn about from a silence.
+          console.error('[report-usage] billable usage NOT reported', {
+            orgId,
+            month,
+            billedCents,
+            reason: meterReportBlocked,
+          })
         }
       }
 
@@ -858,6 +1035,29 @@ async function handler(request: Request): Promise<Response> {
           maxBillableScreens: screenCaps.maxBillable,
           screensOverCapHostIds: screenCaps.overCapHostIds,
           billedCents,
+          /**
+           * WHY a closed month reached no invoice, and HOW MUCH went with it
+           * (AGL-1878).
+           *
+           * `billedCents` alone cannot answer "were we paid for this": it is
+           * what the month MEASURED, and until now the only trace of whether
+           * anything was charged was the presence of `reportedAt` — which was
+           * stamped on a Stripe 200 that does not mean charged. These two
+           * fields make the gap countable: sum `meterUnbilledCents` across
+           * every org's `usage` subcollection and that is money measured and
+           * never invoiced.
+           *
+           * Both are written on EVERY sweep, `null`/0 included, so a month
+           * that billed cleanly is distinguishable from one written by an
+           * older deployment that did not know to say.
+           *
+           * Only a CLOSED month can be unbilled — an open one is not supposed
+           * to reach an invoice at all (AGL-2219), so counting its running
+           * figure as owed would make every in-progress rollup look like a
+           * leak.
+           */
+          meterReportBlocked,
+          meterUnbilledCents: closed && !reported ? billedCents : 0,
           computedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           ...(reported && {
             reportedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
@@ -866,6 +1066,9 @@ async function handler(request: Request): Promise<Response> {
         { merge: true },
       )
       orgResults[orgId] = { billedCents, reported }
+      if (meterReportBlocked) {
+        unbilled[orgId] = { billedCents, reason: meterReportBlocked }
+      }
       } catch (error) {
         // One org's bad data must not abandon the rest of the month. Recorded
         // and surfaced in the response, so a partial sweep is visible rather
@@ -885,6 +1088,7 @@ async function handler(request: Request): Promise<Response> {
     // non-zero, so the skip is loud instead of quiet. A cron should finish
     // what it can and complain, not spin.
     const failed = Object.keys(failures)
+    const unclaimed = Object.keys(unbilled)
     return Response.json(
       {
         month,
@@ -895,12 +1099,23 @@ async function handler(request: Request): Promise<Response> {
         closed,
         orgs: orgResults,
         ...(failed.length ? { failures } : {}),
+        // AGL-1878. Present only when there is something to say, so a clean
+        // sweep's body is unchanged and the key's presence IS the signal.
+        ...(unclaimed.length ? { unbilled } : {}),
         processed: chunk.items.length,
         total: chunk.total,
         nextCursor: chunk.nextCursor,
         done: chunk.done,
       },
-      { status: failed.length ? 207 : 200 },
+      // 207 ALSO for unbilled usage, not only for failures. The workflow exits
+      // non-zero on 207 and that is the platform's one alerting channel for
+      // this cron; a month that measured money and charged none of it is
+      // exactly "the sweep finished and something in it needs a person". It
+      // cannot become daily noise on its own: a dead subscription resolves to
+      // the free plan (`resolveEffectivePlan`), which meters nothing, so
+      // `billedCents` is 0 and no report is attempted. Reaching here means a
+      // LIVE paid subscription with no item on the meter.
+      { status: failed.length || unclaimed.length ? 207 : 200 },
     )
   } catch (error) {
     console.error(error)

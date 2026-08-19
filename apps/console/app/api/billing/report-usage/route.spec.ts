@@ -237,11 +237,49 @@ const GB = 1024 * 1024 * 1024
 
 /** Every Stripe Billing Meter event the route actually posted. */
 const meterEvents: URLSearchParams[] = []
+
+/**
+ * What `GET /v1/subscriptions` answers — the check AGL-1878 put in front of
+ * the meter event.
+ *
+ * Default is a LIVE subscription carrying the metered price, because that is
+ * the shape every pre-existing case in this suite assumes: they assert that a
+ * closed month DOES meter, and if the default were "no metered item" they
+ * would all still pass for the wrong reason (nothing posted, because nothing
+ * was billable). A test changes this only when the missing item is the subject.
+ */
+let subscriptionsResponse: { ok: boolean; body: any } = {
+  ok: true,
+  body: {
+    data: [
+      {
+        status: 'active',
+        items: {
+          data: [
+            { price: { id: 'price_plan' } },
+            { price: { id: 'price_metered_test' } },
+          ],
+        },
+      },
+    ],
+  },
+}
+
+/** Every subscriptions read the route made, so "it asked" is assertable. */
+const subscriptionReads: string[] = []
+
 const fetchMock = jest.fn(async (url: unknown, init?: any) => {
   const href = String(url)
   if (href.includes('/billing/meter_events')) {
     meterEvents.push(new URLSearchParams(String(init?.body ?? '')))
     return { ok: true, json: async () => ({ object: 'billing.meter_event' }) }
+  }
+  if (href.includes('/v1/subscriptions')) {
+    subscriptionReads.push(href)
+    return {
+      ok: subscriptionsResponse.ok,
+      json: async () => subscriptionsResponse.body,
+    }
   }
   throw new Error(`unexpected fetch: ${href}`)
 })
@@ -280,13 +318,21 @@ function seedOrg() {
   mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: 20_000 })
 }
 
-function loadRoute() {
+function loadRoute(extraEnv: Record<string, string> = {}) {
   jest.resetModules()
   process.env = {
     ...ORIGINAL_ENV,
     STRIPE_SECRET_KEY: 'sk_test_not_a_real_key',
     STRIPE_METER_EVENT_NAME: 'aglyn_metered_usage',
+    // The price ids the AGL-1878 check matches a subscription item against.
+    STRIPE_PRICE_METERED: 'price_metered_test',
+    STRIPE_PRICE_METERED_YEARLY: 'price_metered_yearly_test',
+    // EXPLICITLY EMPTY, overridden by the one case that is about it. `nx test`
+    // leaks the root `.env`, so a real meter id could otherwise arrive here
+    // and decide a match nothing in this file asked for.
+    STRIPE_METER_ID: '',
     CRON_SECRET: 'test-cron-secret',
+    ...extraEnv,
   } as NodeJS.ProcessEnv
   return require('./route').POST as (request: Request) => Promise<Response>
 }
@@ -315,7 +361,24 @@ beforeAll(() => {
 
 beforeEach(() => {
   meterEvents.length = 0
+  subscriptionReads.length = 0
   fetchMock.mockClear()
+  subscriptionsResponse = {
+    ok: true,
+    body: {
+      data: [
+        {
+          status: 'active',
+          items: {
+            data: [
+              { price: { id: 'price_plan' } },
+              { price: { id: 'price_metered_test' } },
+            ],
+          },
+        },
+      ],
+    },
+  }
 })
 
 afterEach(() => {
@@ -471,5 +534,235 @@ describe('the in-progress rollup refreshes rather than freezing', () => {
 
     // Forced red by stamping `reportedAt` on the open month: the second sweep
     // hit the already-reported skip and `second` equalled `first`.
+  })
+})
+
+/*==========================================
+ * AGL-1878 — A STRIPE 200 IS NOT A CHARGE.
+ *
+ * `POST /v1/billing/meter_events` returns 200 for any valid customer id. It
+ * says nothing about whether that customer has a subscription item priced on
+ * the meter, and without one the event lands on the meter and reaches NO
+ * invoice line. The route used to stamp `reportedAt` on that 200, which makes
+ * the org-month permanently skipped — so the usage was measured, accepted, and
+ * forfeited, silently and for good.
+ *
+ * Observed on LIVE Stripe before this suite existed: customer
+ * `cus_UuQjDdd1oxPMNH` carries a meter event of 3 units dated 2026-08-01 (the
+ * July rollup) while its subscription `sub_1TubsJ…` has a plan item and no
+ * metered item. The other live subscription, which does carry the yearly
+ * metered item, shows the line on its invoice. The item is the whole
+ * difference.
+ *
+ * Every case below was forced red before it was kept; each says how.
+ *=========================================*/
+describe('AGL-1878: usage is withheld rather than forfeited when nothing can bill it', () => {
+  /** A subscriptions payload with a plan item and no metered item. */
+  function subscriptionWithoutMeteredItem(status = 'active') {
+    return {
+      ok: true,
+      body: { data: [{ status, items: { data: [{ price: { id: 'price_plan' } }] } }] },
+    }
+  }
+
+  it('posts NO meter event when the subscription carries no metered item', async () => {
+    seedOrg()
+    subscriptionsResponse = subscriptionWithoutMeteredItem()
+    await runSweep(loadRoute())
+
+    expect(subscriptionReads).toHaveLength(1)
+    expect(subscriptionReads[0]).toContain('customer=cus_test_org')
+    expect(meterEvents).toHaveLength(0)
+
+    // Forced red by deleting the `meterReportBlockedReason` call: one meter
+    // event appeared, exactly the live `cus_UuQjDdd1oxPMNH` shape.
+  })
+
+  it('does NOT stamp reportedAt, so the month stays re-sweepable', async () => {
+    // THE MONEY PROPERTY. `reportedAt` is what makes an org-month permanently
+    // skipped; withholding the stamp is the difference between revenue that is
+    // recoverable and revenue that is gone.
+    seedOrg()
+    subscriptionsResponse = subscriptionWithoutMeteredItem()
+    await runSweep(loadRoute())
+
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['reportedAt']).toBeUndefined()
+    expect(rollup['meterReportBlocked']).toBe('no-metered-item')
+    expect(rollup['meterUnbilledCents']).toBe(rollup['billedCents'])
+    expect(rollup['meterUnbilledCents']).toBeGreaterThan(0)
+
+    // And a later sweep, once the item exists, DOES report it — the whole
+    // point of not stamping.
+    subscriptionsResponse = {
+      ok: true,
+      body: {
+        data: [
+          {
+            status: 'active',
+            items: { data: [{ price: { id: 'price_metered_yearly_test' } }] },
+          },
+        ],
+      },
+    }
+    await runSweep(loadRoute())
+    expect(meterEvents).toHaveLength(1)
+    expect(meterEvents[0].get('identifier')).toBe(`org-1-${CLOSED}`)
+    expect(
+      mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['reportedAt'],
+    ).toBe('<server-timestamp>')
+
+    // Forced red by restoring the old `if (response.ok) reported = true` with
+    // no gate: the first sweep stamped `reportedAt`, and the second — the
+    // sweep that represents somebody attaching the item — reported nothing at
+    // all, which is the defect stated as a test.
+  })
+
+  it('answers 207 with the unbilled cents named, so the workflow fails', async () => {
+    // 207 is this cron's only alerting channel (`scheduled-crons.yml` exits
+    // non-zero on it). Money measured and charged to nobody must not be
+    // something you find by reading a rollup document you had no reason to
+    // open.
+    seedOrg()
+    subscriptionsResponse = subscriptionWithoutMeteredItem()
+    const response = await runSweep(loadRoute())
+
+    expect(response.status).toBe(207)
+    const payload: any = await response.json()
+    expect(payload.unbilled['org-1'].reason).toBe('no-metered-item')
+    expect(payload.unbilled['org-1'].billedCents).toBeGreaterThan(0)
+
+    // Forced red by returning `failed.length ? 207 : 200`: status was 200 and
+    // `unbilled` was absent, i.e. the leak was silent again.
+  })
+
+  it('treats a metered item on a DEAD subscription as no item at all', async () => {
+    // A canceled subscription generates no further invoice, so an event
+    // reported against it is an event nobody pays. The item being present is
+    // not the question; the subscription being able to bill is.
+    seedOrg()
+    subscriptionsResponse = {
+      ok: true,
+      body: {
+        data: [
+          {
+            status: 'canceled',
+            items: { data: [{ price: { id: 'price_metered_test' } }] },
+          },
+        ],
+      },
+    }
+    await runSweep(loadRoute())
+
+    expect(meterEvents).toHaveLength(0)
+    expect(
+      mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['meterReportBlocked'],
+    ).toBe('no-metered-item')
+
+    // Forced red by dropping the `BILLABLE_SUBSCRIPTION_STATUSES` test: the
+    // canceled subscription's item counted and the event was posted.
+  })
+
+  it('matches on the METER id too, not only the configured price ids', async () => {
+    // The price ids can be re-minted (`aglyn_metered_usage_yearly` was, on
+    // 2026-08-09); the meter is what actually prices the event. A deployment
+    // whose `STRIPE_PRICE_METERED*` drifted from Stripe must still bill.
+    seedOrg()
+    subscriptionsResponse = {
+      ok: true,
+      body: {
+        data: [
+          {
+            status: 'active',
+            items: {
+              data: [
+                { price: { id: 'price_reminted', recurring: { meter: 'mtr_test' } } },
+              ],
+            },
+          },
+        ],
+      },
+    }
+    await runSweep(loadRoute({ STRIPE_METER_ID: 'mtr_test' }))
+
+    expect(meterEvents).toHaveLength(1)
+
+    // Forced red by matching on the price ids alone: no event, because the
+    // re-minted price id is in no env var.
+  })
+
+  it('withholds when the subscription read FAILS, rather than guessing', async () => {
+    // Failing to ASK is treated as a "no". An unreported month reports late
+    // and visibly; a wrongly-stamped one is silent and permanent, so the
+    // unknown answer must take the recoverable branch.
+    seedOrg()
+    subscriptionsResponse = { ok: false, body: { error: { message: 'boom' } } }
+    const response = await runSweep(loadRoute())
+
+    expect(meterEvents).toHaveLength(0)
+    expect(response.status).toBe(207)
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['meterReportBlocked']).toBe('check-failed')
+    expect(rollup['reportedAt']).toBeUndefined()
+
+    // Forced red by returning `null` from the `!response.ok` arm: the event
+    // was posted into the dark on a Stripe outage.
+  })
+
+  it('names the ENVIRONMENT when no metered price is configured at all', async () => {
+    // The hazard this check introduces, stated as a test. With no
+    // `STRIPE_METER_ID` and neither price id set, nothing can be matched — so
+    // the route withholds from EVERYBODY, and it must say the deployment is
+    // misconfigured rather than blame each customer's subscription. Withheld,
+    // not forfeited: `reportedAt` is unstamped and the 207 repeats daily until
+    // somebody sets the variable.
+    seedOrg()
+    const response = await runSweep(
+      loadRoute({ STRIPE_PRICE_METERED: '', STRIPE_PRICE_METERED_YEARLY: '' }),
+    )
+
+    // It does not even ASK Stripe: there is nothing to compare an answer to.
+    expect(subscriptionReads).toHaveLength(0)
+    expect(meterEvents).toHaveLength(0)
+    expect(response.status).toBe(207)
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['meterReportBlocked']).toBe('meter-not-configured')
+    expect(rollup['reportedAt']).toBeUndefined()
+
+    // Forced red by deleting the `!meterId && meteredPriceIds.size === 0`
+    // guard: the reason came back as `no-metered-item`, pointing an operator
+    // at the customer's subscription for a fault in their own env.
+  })
+
+  it('POSITIVE CONTROL: a clean sweep is still 200 and records no block', async () => {
+    // Without this the suite is satisfied by a route that withholds from
+    // everybody, which loses more money than the bug did.
+    seedOrg()
+    const response = await runSweep(loadRoute())
+
+    expect(response.status).toBe(200)
+    expect(meterEvents).toHaveLength(1)
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['meterReportBlocked']).toBeNull()
+    expect(rollup['meterUnbilledCents']).toBe(0)
+    expect(rollup['reportedAt']).toBe('<server-timestamp>')
+  })
+
+  it('never reads subscriptions for an OPEN month — no month, no cost', async () => {
+    // The check is inside the `closed` branch. An in-progress sweep runs daily
+    // over every org and must not pay a Stripe round trip per org for a
+    // question it is not allowed to act on.
+    seedOrg()
+    await runSweep(loadRoute(), { query: '?month=current' })
+
+    expect(subscriptionReads).toHaveLength(0)
+    expect(meterEvents).toHaveLength(0)
+    expect(
+      mockDocs.get(`orgs/org-1/usage/${OPEN}`)!['meterUnbilledCents'],
+    ).toBe(0)
+
+    // Forced red by hoisting the check above `if (closed …)`: one subscription
+    // read per org per day, and `meterUnbilledCents` claimed the running
+    // mid-month figure was money owed.
   })
 })

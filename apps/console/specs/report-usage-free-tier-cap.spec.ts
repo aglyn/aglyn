@@ -214,6 +214,25 @@ const fetchMock = jest.fn(async (url: unknown, init?: any) => {
     meterEvents.push(new URLSearchParams(String(init?.body ?? '')))
     return { ok: true, json: async () => ({ object: 'billing.meter_event' }) }
   }
+  // AGL-1878: the route now asks whether the customer has a subscription item
+  // priced on the meter before it reports, because a 200 from `meter_events`
+  // is not a charge. Answered YES here so the POSITIVE CONTROLS in this file
+  // still assert a real meter event — a "no" would silence them and they would
+  // pass for the wrong reason. What THIS suite is about is the plan, not the
+  // subscription item, and that separation is why the answer is a constant.
+  if (href.includes('/v1/subscriptions')) {
+    return {
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            status: 'active',
+            items: { data: [{ price: { id: 'price_metered_test' } }] },
+          },
+        ],
+      }),
+    }
+  }
   throw new Error(`unexpected fetch: ${href}`)
 })
 
@@ -253,6 +272,11 @@ function loadRoute() {
   process.env = {
     ...ORIGINAL_ENV,
     STRIPE_SECRET_KEY: 'sk_test_not_a_real_key',
+    // AGL-1878: what the subscription-item check matches a customer's items
+    // against. Production sets it; a suite that left it unset would take the
+    // `meter-not-configured` branch and stop metering for a reason that has
+    // nothing to do with the plan this file is about.
+    STRIPE_PRICE_METERED: 'price_metered_test',
     STRIPE_METER_EVENT_NAME: 'aglyn_metered_usage',
     CRON_SECRET: 'test-cron-secret',
   } as NodeJS.ProcessEnv
