@@ -95,7 +95,7 @@ live project; that read-back is the `ttls list` command below.
 
 | Data | Period | Mechanism | Evidence |
 | --- | --- | --- | --- |
-| `adminAudit` | **90 days hot, then 365 days archived** — ~15 months end to end | `/api/admin/audit-archive`, daily 03:00 UTC, moves rows to `adminAudit-archive/{yyyy-MM}/*.jsonl` in the media bucket and deletes them from Firestore. The bucket's lifecycle rule then deletes at age 365. | `audit-archive/route.ts:24`, `cloud/media-bucket-lifecycle.json` |
+| `adminAudit` | **90 days hot, then 365 days archived** — ~15 months end to end | `/api/admin/audit-archive`, daily 03:00 UTC, moves rows to `adminAudit-archive/{yyyy-MM}/*.jsonl` in the media bucket and deletes them from Firestore. The bucket's lifecycle rule then deletes at age 365. Only a POST archives — a GET reports the plan and touches nothing (AGL-2084). | `audit-archive/route.ts:24`, `cloud/media-bucket-lifecycle.json` |
 | Org erasure | **7-day reversible hold**, then permanent | `erasureRequestedAt` + `ERASURE_HOLD_MS`; `/api/admin/run-erasures` daily 04:00 UTC. The hold is re-verified inside `eraseOrg` — the cron cannot skip it and neither can the manual script. | `erase.ts:32,659` (AGL-485) |
 
 The archived half is readable **inside the product** (AGL-2324): the staff

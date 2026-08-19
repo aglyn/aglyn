@@ -16,7 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
@@ -41,7 +41,8 @@ const ERASURE_HOLD_DAYS = 7
  * deletion path.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, query, body, headers: rawHeaders } =
+    await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -54,6 +55,19 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
+  // A GET REPORTS; it never archives and never deletes (AGL-2084). This route
+  // was one of the two irreversible scheduled routes that lacked the guard its
+  // siblings chose deliberately — a bare GET on this URL wrote every audit row
+  // older than 90 days into Storage and then DELETED it from Firestore. The
+  // exposure was never remote (CRON_SECRET gates the whole route); it is every
+  // way an intended READ turns into a GET — a pasted URL, a link-preview
+  // fetcher, a prefetching browser, a re-run line in shell history.
+  //
+  // `scheduled-crons.yml` fires this route with a bodyless POST, which is
+  // exactly why the shared helper keys the default on the METHOD and not on
+  // the body being absent.
+  const dryRun = isCronDryRun({ method, query, body })
+
   try {
     const app = firebaseAdmin.app()
     const firestore = app.firestore()
@@ -65,15 +79,29 @@ async function handler(request: Request): Promise<Response> {
 
     let archived = 0
     let batches = 0
+    // A dry run has to page with a cursor. The real run advances the window by
+    // DELETING the batch it just archived, so a dry run reusing that loop
+    // unchanged would re-read the same first 500 rows until it hit
+    // MAX_BATCHES_PER_RUN and report a plan five thousand rows too big.
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null
     while (batches < MAX_BATCHES_PER_RUN) {
-      const snapshot = await firestore
+      let pending: FirebaseFirestore.Query = firestore
         .collection('adminAudit')
         .where('at', '<', cutoff)
         .orderBy('at', 'asc')
-        .limit(BATCH_SIZE)
-        .get()
+      if (cursor) pending = pending.startAfter(cursor)
+      const snapshot = await pending.limit(BATCH_SIZE).get()
       if (snapshot.empty) break
       batches += 1
+
+      if (dryRun) {
+        // Report what a real run WOULD move out of Firestore, and touch
+        // nothing: no Storage object, no delete, and no staff email below.
+        archived += snapshot.size
+        cursor = snapshot.docs[snapshot.docs.length - 1] ?? null
+        if (snapshot.size < BATCH_SIZE) break
+        continue
+      }
 
       // Partition lines by the month the entry was written.
       const byMonth: Record<string, string[]> = {}
@@ -123,7 +151,7 @@ async function handler(request: Request): Promise<Response> {
       requestedAt: doc.get('erasureRequestedAt')?.toDate?.() ?? null,
     }))
     const staffEmail = process.env.STAFF_ALERT_EMAIL
-    if (due.length && staffEmail) {
+    if (due.length && staffEmail && !dryRun) {
       const orgsList = due
         .map(
           (entry) =>
@@ -157,6 +185,9 @@ async function handler(request: Request): Promise<Response> {
     }
 
     return Response.json({
+      dryRun,
+      // On a dry run this is the PLAN, not a result: the number of rows a real
+      // run would move into Storage and then delete.
       archived,
       batches,
       retentionDays: RETENTION_DAYS,
