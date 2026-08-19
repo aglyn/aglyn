@@ -78,6 +78,36 @@ export interface CookieWriter {
   readonly dead?: string
 }
 
+/**
+ * The surfaces below name hosts, and this file feeds the Cookie Policy — so a
+ * self-hosted deployment would otherwise publish a compliance document naming
+ * Aglyn's own hostnames, with no way to correct it short of editing source.
+ * That is the one thing the self-host rule forbids, and it is why
+ * `selfhost-hardcoded-hosts.spec.ts` fires here.
+ *
+ * Allow-listing the count would have been the cheap answer and the wrong one:
+ * every other entry in that allowlist earns its place by being a READER of a
+ * `NEXT_PUBLIC_*` var whose literal is merely the default. This file now meets
+ * the same bar, using the same two vars (and the same defaults) as the console
+ * routes that already read them.
+ *
+ * Dot access, not bracket access: Next inlines `process.env.NEXT_PUBLIC_X` at
+ * build time and does NOT inline `process.env['NEXT_PUBLIC_X']` — the bracket
+ * form is what left CNAME_TARGET un-substituted in AGL-2037.
+ */
+const CONSOLE_HOST = (
+  process.env.NEXT_PUBLIC_CONSOLE_URL || 'https://app.aglyn.com'
+)
+  .replace(/^https?:\/\//, '')
+  .replace(/\/+$/, '')
+
+const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
+
+// No code default exists for this one — `apps/tenant/middleware.ts` matches it
+// only when set — so the literal here is Aglyn's own deployment value, and a
+// self-hoster's `.env` (see .env.example: sites.example.com) replaces it.
+const TENANT_DOMAIN = process.env.NEXT_PUBLIC_TENANT_DOMAIN ?? 'aglyn.app'
+
 export const COOKIE_WRITERS: Record<string, CookieWriter> = {
   'apps/console/app/api/auth/session/route.ts': {
     note: 'Mints and clears the console session on sign-in and sign-out.',
@@ -85,7 +115,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: '__session',
         token: "'__session'",
-        surface: 'app.aglyn.com and workspace subdomains of aglyn.com',
+        surface: `${CONSOLE_HOST} and workspace subdomains of ${WORKSPACE_DOMAIN}`,
         purpose: 'Keeps you signed in to the console',
         duration: '14 days (a sign-out tombstone lasts 24 hours)',
         httpOnly: true,
@@ -93,7 +123,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: '__session_tenant',
         token: "'__session_tenant'",
-        surface: 'app.aglyn.com and workspace subdomains of aglyn.com',
+        surface: `${CONSOLE_HOST} and workspace subdomains of ${WORKSPACE_DOMAIN}`,
         purpose:
           'Records which sign-in context (enterprise SSO tenant) the session belongs to',
         duration: '14 days',
@@ -105,7 +135,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         // the module that declares the constant.
         name: 'aglyn_device',
         token: 'DEVICE_COOKIE',
-        surface: 'app.aglyn.com',
+        surface: CONSOLE_HOST,
         purpose:
           'Recognises a device you have signed in from before, so a sign-in from a new one can be flagged to you',
         duration: '365 days',
@@ -119,7 +149,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: 'aglyn_session_activity',
         token: 'ACTIVITY_COOKIE',
-        surface: 'app.aglyn.com and workspace subdomains of aglyn.com',
+        surface: `${CONSOLE_HOST} and workspace subdomains of ${WORKSPACE_DOMAIN}`,
         purpose: 'Last-activity timestamp, so an idle session is signed out',
         duration: '24 hours',
         httpOnly: true,
@@ -132,7 +162,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: 'aglyn_editor',
         token: "'aglyn_editor'",
-        surface: 'aglyn.com and its subdomains',
+        surface: `${WORKSPACE_DOMAIN} and its subdomains`,
         purpose:
           'Marks the browser as one an Aglyn editor is signed in on, so a site you can edit offers the edit bar. Its value is the literal 1 — no personal data',
         duration: '7 days, cleared on sign-out',
@@ -141,12 +171,12 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     ],
   },
   'apps/tenant/app/api/edit-hint/set/route.ts': {
-    note: 'The aglyn.app twin of the console editor hint, plus its signed credential.',
+    note: `The ${TENANT_DOMAIN} twin of the console editor hint, plus its signed credential.`,
     cookies: [
       {
         name: 'aglyn_edit_hint',
         token: 'EDIT_HINT_COOKIE',
-        surface: '*.aglyn.app',
+        surface: `*.${TENANT_DOMAIN}`,
         purpose:
           'Signed proof that an Aglyn editor is signed in, exchanged for edit access on a site you administer',
         duration: '7 days',
@@ -155,8 +185,8 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: 'aglyn_editor',
         token: 'aglyn_editor=1',
-        surface: '*.aglyn.app',
-        purpose: 'The JS-visible half of the same hint, on the aglyn.app domain',
+        surface: `*.${TENANT_DOMAIN}`,
+        purpose: `The JS-visible half of the same hint, on the ${TENANT_DOMAIN} domain`,
         duration: '7 days',
         httpOnly: false,
       },
@@ -182,7 +212,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       {
         name: 'aglyn_cart_{siteId}',
         token: 'cartCookieName',
-        surface: 'customer sites with commerce (*.aglyn.app and custom domains)',
+        surface: `customer sites with commerce (*.${TENANT_DOMAIN} and custom domains)`,
         purpose: 'Remembers the shopping cart you have built, before checkout',
         duration: '90 days',
         httpOnly: true,
@@ -255,20 +285,20 @@ export const THIRD_PARTY_COOKIES: Record<string, ThirdPartyCookies> = {
     names: ['_ga', '_ga_<id>', '_gid'],
     loaderToken: 'ANALYTICS_COOKIE_PREFIXES',
     surface:
-      'aglyn.com, app.aglyn.com (loaded through the Firebase SDK, not a gtag tag), docs.aglyn.com, and customer sites that configure their own id',
+      `${WORKSPACE_DOMAIN}, ${CONSOLE_HOST} (loaded through the Firebase SDK, not a gtag tag), the docs site, and customer sites that configure their own id`,
     purpose: 'Measures how the site is used',
   },
   Stripe: {
     names: ['__stripe_mid', '__stripe_sid'],
     loaderToken: 'loadStripe',
     surface:
-      'app.aglyn.com at checkout, and every customer storefront that takes payment',
+      `${CONSOLE_HOST} at checkout, and every customer storefront that takes payment`,
     purpose: 'Fraud prevention and payment session continuity',
   },
   'Google reCAPTCHA': {
     names: ['_GRECAPTCHA'],
     loaderToken: 'ReCaptchaEnterpriseProvider',
-    surface: 'app.aglyn.com, set on google.com by Firebase App Check',
+    surface: `${CONSOLE_HOST}, set on google.com by Firebase App Check`,
     purpose: 'Bot protection',
   },
 }

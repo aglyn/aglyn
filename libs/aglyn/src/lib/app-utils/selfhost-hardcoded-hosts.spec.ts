@@ -203,6 +203,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
+    file: 'apps/console/constants/cookie-inventory.ts',
+    count: 3,
+    reason:
+      'Reader of NEXT_PUBLIC_CONSOLE_URL, NEXT_PUBLIC_WORKSPACE_DOMAIN and NEXT_PUBLIC_TENANT_DOMAIN; the three literals are their defaults. This registry feeds the Cookie Policy, so a self-hosted deployment must be able to name its OWN surfaces rather than publish a compliance document naming Aglyn hosts (AGL-2412).',
+  },
+  {
     file: 'apps/console/constants/docs-links.ts',
     count: 1,
     reason:
