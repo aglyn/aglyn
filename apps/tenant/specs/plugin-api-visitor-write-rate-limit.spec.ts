@@ -109,6 +109,15 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plugin-api-rate-limit',
   ),
+  // The dispatcher gained a cross-origin refusal (AGL-1880) AFTER this mock
+  // was written, and a hand-built factory only provides what it names — so
+  // every test here died on `crossOriginPluginWriteRefusal is not a function`
+  // rather than on anything about the rate limit it exists to test. Spread
+  // the real module: the refusal is part of the path under test, not a
+  // collaborator worth faking.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plugin-api-cross-origin',
+  ),
   pluginIdForRegisteredApiPath: jest.fn(() => 'commerce'),
   resolvePluginApiRoute: jest.fn(() => ({ path: mockPath })),
   runLegacyHandler: jest.fn(async () => {

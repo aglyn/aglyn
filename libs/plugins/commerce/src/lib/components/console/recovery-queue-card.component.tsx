@@ -37,6 +37,7 @@ const REMIND_AFTER_MS = 60 * 60 * 1000
 const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
 
 const recoveryHelp = pluginDocsHelp('commerce', {
+  anchor: '#recovery-and-alerts',
   title: 'Recovery & alerts',
   excerpt:
     'Shoppers who left a checkout unfinished, and shoppers waiting to be ' +

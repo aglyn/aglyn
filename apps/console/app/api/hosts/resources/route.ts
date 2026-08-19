@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   checkHostRegisterQuota,
@@ -344,7 +344,10 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
+    // `author` (AGL-2334): creating a screen, layout or component is
+    // AUTHORING — the document is not reachable by anyone until a route is
+    // registered for it, and registering a route is refused in the rules.
+    if (!hostRoleCanWrite(memberRole)) {
       return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
     }
 

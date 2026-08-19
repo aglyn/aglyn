@@ -55,6 +55,7 @@ export interface StockMovementsCardProps {
 const WINDOW = 100
 
 const movementsHelp = pluginDocsHelp('commerce', {
+  anchor: '#stock-movements',
   title: 'Stock movements',
   excerpt:
     'Every change to a tracked count — sales, returns, cancellations and ' +

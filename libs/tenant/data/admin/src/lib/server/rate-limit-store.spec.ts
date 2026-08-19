@@ -328,3 +328,124 @@ describe('recordSignupRefusal (AGL-1907)', () => {
     ])
   })
 })
+
+/**
+ * AGL-2404 — a contended key must produce a DECISION, not a held function.
+ *
+ * Measured against production on 2026-08-19 at `/api/protection/unlock`:
+ * sequential traffic refused cleanly (10 × 404, then 429 with `Retry-After`),
+ * but **two** concurrent requests on one key were already enough for one of
+ * them to die at ~10.3 s as a bodyless 504 — the account-default function
+ * ceiling. The cap itself never broke: a follow-up sequential probe in the
+ * same window showed exactly 10 admitted before the 429, so the timed-out
+ * transactions committed nothing. The defect is the refusal mechanism.
+ */
+describe('AGL-2404 · a contended counter refuses instead of hanging', () => {
+  const opts = (firestore: unknown, extra?: Record<string, unknown>) => ({
+    firestore,
+    limit: 10,
+    windowMs: 60_000,
+    now: 10_000,
+    budgetMs: 25,
+    ...extra,
+  })
+
+  /** A store that is UP but whose transaction for this doc never settles. */
+  function hangingFirestore() {
+    return {
+      collection: () => ({ doc: (id: string) => ({ path: id }) }),
+      runTransaction: () => new Promise(() => undefined),
+    }
+  }
+
+  /** A store that rejects with a gRPC status code. */
+  function codeFirestore(code: number) {
+    return {
+      collection: () => ({ doc: (id: string) => ({ path: id }) }),
+      runTransaction: () => Promise.reject(Object.assign(new Error('x'), { code })),
+    }
+  }
+
+  beforeEach(() => {
+    resetRateLimitDegradationForTests()
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    jest.restoreAllMocks()
+    resetRateLimitDegradationForTests()
+  })
+
+  it('answers within its budget when the transaction never settles', async () => {
+    // Without the wall-clock bound this call cannot fail — it can only hang
+    // until the platform kills the request, which is the 504. The assertion
+    // that matters is that it RETURNS at all.
+    const started = Date.now()
+    const result = await consumeRateLimit('unlock:h:s:ip', opts(hangingFirestore()))
+    expect(Date.now() - started).toBeLessThan(2_000)
+    expect(result.contended).toBe(true)
+    expect(result.allowed).toBe(false)
+    // A refusal a caller can turn into a real 429 + Retry-After: the window
+    // end is preserved so `X-RateLimit-Reset` stays honest.
+    expect(result.resetMs).toBe(60_000)
+    expect(result.limit).toBe(10)
+  })
+
+  it('fails CLOSED on contention — going concurrent must not widen the cap', async () => {
+    // The fail-soft path answers from a per-instance Map that starts empty,
+    // so degrading here would hand a caller a fresh budget per instance for
+    // the price of racing itself. That is the AGL-794 defect, re-entered
+    // through the back door.
+    const result = await consumeRateLimit('unlock:h:s:ip', opts(codeFirestore(10)))
+    expect(result.allowed).toBe(false)
+    expect(result.contended).toBe(true)
+    expect(result.degraded).toBe(false)
+  })
+
+  it('treats DEADLINE_EXCEEDED as contention too', async () => {
+    const result = await consumeRateLimit('apiv1:k', opts(codeFirestore(4)))
+    expect(result.contended).toBe(true)
+    expect(result.degraded).toBe(false)
+  })
+
+  it('does not record contention as a degradation', async () => {
+    // `/api/health/rate-limits` asks one question: did the durable store stop
+    // answering? A contended document is the store working, so a contention
+    // marker in that feed would answer it wrongly and mask a real outage.
+    const firestore = hangingFirestore()
+    for (let i = 0; i < 5; i += 1) {
+      await consumeRateLimit('unlock:h:s:ip', opts(firestore))
+    }
+    expect(currentRateLimitDegradation()).toBeNull()
+  })
+
+  it('still fails SOFT when the store itself is unreachable', async () => {
+    // The other half of the classification: an outage is NOT contention, and
+    // must keep the pre-existing posture so a Firestore blip never locks real
+    // visitors out of a customer's site.
+    const down = {
+      collection: () => ({ doc: (id: string) => ({ path: id }) }),
+      runTransaction: () => Promise.reject(new Error('firestore unavailable')),
+    }
+    const result = await consumeRateLimit('form:h:ip', opts(down))
+    expect(result.degraded).toBe(true)
+    expect(result.contended).toBe(false)
+    expect(result.allowed).toBe(true)
+    expect(currentRateLimitDegradation()?.count).toBe(1)
+  })
+
+  it('bounds the transaction attempts the SDK may spend', async () => {
+    // The default 5 attempts, each behind a growing backoff, is how one hot
+    // document becomes ten seconds of held function. An abandoned transaction
+    // must stop adding to the contention its caller was refused for.
+    const seen: Array<Record<string, unknown>> = []
+    const firestore = {
+      collection: () => ({ doc: (id: string) => ({ path: id }) }),
+      runTransaction: (_fn: unknown, options: Record<string, unknown>) => {
+        seen.push(options)
+        return Promise.resolve(1)
+      },
+    }
+    await consumeRateLimit('apiv1:k', opts(firestore))
+    expect(seen[0]?.['maxAttempts']).toBe(3)
+  })
+})

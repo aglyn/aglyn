@@ -97,6 +97,33 @@ The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
 environment variable (default `60`; set `0` to disable).
 :::
 
+## Recent sign-ins
+
+When your account is signed in to from a device it has not been used on before,
+we email you: the device, the approximate location, the IP address, and the
+time. **Manage Account → Security → Recent sign-ins** is the list that email
+points at — every device that has signed in to your account, newest first, up
+to the last 50.
+
+Each row names the device as a summary of its browser and operating system
+("Chrome on Windows"), and beneath it the approximate location, the IP address,
+when it was last used, and when it was first seen. Location and IP come from
+the network the request arrived on, so they are approximate — a mobile
+connection or a VPN can put you in a city you have never been to.
+
+A device here is a browser that holds a long-lived cookie we set when you sign
+in, not a fingerprint of your hardware. Clearing cookies, using a private
+window, or switching browsers therefore shows up as a **new** device, and the
+first device ever recorded on an account never triggers the email.
+
+**If you do not recognise a sign-in**, treat it as an account compromise:
+[reset your password](#resetting-your-password) and add a passkey from the same
+Security section. Signing another device out remotely is not available yet —
+the card says so rather than offering a button that would not work.
+
+If the card cannot load your history it says so. That is not the same as an
+empty list — do not read a failed load as "nothing else has signed in".
+
 ## Downloading your data
 
 **Manage Account → Close account → Download my data** gives you a machine-readable JSON

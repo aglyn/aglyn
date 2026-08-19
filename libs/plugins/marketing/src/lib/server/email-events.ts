@@ -28,6 +28,8 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { assignExperimentVariant, type HostExperiment } from '../model/experiments'
+// The one list `campaign-send` reads, keyed the one way it keys it.
+import { suppressionId } from './campaign-send'
 
 /**
  * Svix signature check (Resend webhooks): HMAC-SHA256 over
@@ -82,6 +84,77 @@ function tagMap(raw: unknown): Record<string, string> {
 }
 
 /**
+ * A bounce or a complaint suppresses the address (AGL-1918).
+ *
+ * Until now this webhook answered `email.bounced` and `email.complained` with
+ * `200 {ignored:true}` — acknowledged, and dropped. The consequences were not
+ * cosmetic, because `campaign-send.ts` filters its audience against exactly
+ * one list and nothing but an unsubscribe click ever wrote to it: a hard-bounced
+ * address was re-sent on every subsequent campaign forever, and a spam
+ * complaint had no effect on whether that complainant was mailed again. Both
+ * are the behaviours mailbox providers measure a sending domain on, and
+ * `aglyn.com` carries the password resets and receipts on the same key and the
+ * same From address as the campaigns.
+ *
+ * WHICH failures suppress:
+ *
+ * - **Every complaint.** Someone pressed "report spam". There is no reading of
+ *   that which permits mailing them again.
+ * - **Permanent bounces only.** Resend reports `data.bounce.type` as
+ *   `Permanent` or `Transient`. A transient bounce is a full mailbox or a
+ *   greylisting server — suppressing on one would unsubscribe a real
+ *   subscriber over a temporary condition at their provider, which is a
+ *   customer's list being quietly destroyed by our error handling.
+ * - An **unrecognised or absent** bounce type does NOT suppress. Guessing in
+ *   the suppressing direction is the destructive guess, and the spec asserts
+ *   the shape so a payload change fails as itself rather than by silently
+ *   ceasing to suppress anything.
+ *
+ * The entry is keyed and shaped exactly as the unsubscribe handler's
+ * (`suppressionId(email)` → `{ email, createdAt }`), because the reader does
+ * not care how an address got there — it is one list, and a second shape would
+ * be a second list that `campaign-send` reads half of. `createdAt` is written
+ * only when the document is new, so a bounce arriving after an unsubscribe
+ * does not restamp the date the person actually unsubscribed.
+ */
+async function recordDeliveryFailure(args: {
+  firestore: FirebaseFirestore.Firestore
+  hostRef: FirebaseFirestore.DocumentReference
+  type: 'email.bounced' | 'email.complained'
+  recipient: string
+  bounceType: string
+  res: Parameters<PluginApiHandler>[1]
+}) {
+  const { firestore, hostRef, type, recipient, bounceType, res } = args
+  if (!recipient) return res.status(200).json({ ignored: true })
+
+  const complaint = type === 'email.complained'
+  const permanent = bounceType.trim().toLowerCase() === 'permanent'
+  if (!complaint && !permanent) {
+    // A transient bounce is real information we deliberately do not act on.
+    return res.status(200).json({ ok: true, suppressed: false })
+  }
+
+  const ref = hostRef.collection('suppressions').doc(suppressionId(recipient))
+  await firestore.runTransaction(async (transaction) => {
+    const existing = await transaction.get(ref)
+    transaction.set(
+      ref,
+      {
+        email: recipient,
+        reason: complaint ? 'complaint' : 'bounce',
+        suppressedAt: FieldValue.serverTimestamp(),
+        ...(existing.exists
+          ? {}
+          : { createdAt: FieldValue.serverTimestamp() }),
+      },
+      { merge: true },
+    )
+  })
+  return res.status(200).json({ ok: true, suppressed: true })
+}
+
+/**
  * Resend event ingestion (AGL-268), relocated from the console app route
  * into its owning plugin (AGL-418) — the URL `/api/email/events` is
  * preserved through the plugin API dispatcher. Opened/clicked events
@@ -114,19 +187,47 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
   try {
     const event = JSON.parse(payload.toString('utf8'))
     const type = String(event?.type ?? '')
-    if (type !== 'email.opened' && type !== 'email.clicked') {
+    if (
+      type !== 'email.opened' &&
+      type !== 'email.clicked' &&
+      type !== 'email.bounced' &&
+      type !== 'email.complained'
+    ) {
       return res.status(200).json({ ignored: true })
     }
     const data = event?.data ?? {}
     const tags = tagMap(data?.tags)
     const hostId = tags['hostId']
     const campaignId = tags['campaignId']
-    // Both are path components, so "non-empty" was never the whole question.
-    if (!isDocumentId(hostId) || !isDocumentId(campaignId)) {
+    const recipient = String(
+      Array.isArray(data?.to) ? (data.to[0] ?? '') : (data?.to ?? ''),
+    )
+      .trim()
+      .toLowerCase()
+    // A path component, so "non-empty" was never the whole question.
+    if (!isDocumentId(hostId)) {
       return res.status(200).json({ ignored: true })
     }
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
+
+    if (type === 'email.bounced' || type === 'email.complained') {
+      return await recordDeliveryFailure({
+        firestore,
+        hostRef,
+        type,
+        recipient,
+        bounceType: String(data?.bounce?.type ?? ''),
+        res,
+      })
+    }
+
+    // Opens and clicks are counted against the campaign, so this pair needs
+    // both ids; the failure path above needs only the host, because a
+    // suppression outlives the campaign that discovered it.
+    if (!isDocumentId(campaignId)) {
+      return res.status(200).json({ ignored: true })
+    }
     // Plain refusal (AGL-1768). A merge-set against a missing path CREATES it,
     // so an open re-created a campaign the merchant had deleted — a document
     // holding a `stats` map and nothing else: no subject, no body, no
@@ -148,11 +249,6 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
 
     // Experiment conversion (AGL-268): clicks are the signal.
     const experimentId = tags['experimentId']
-    const recipient = String(
-      Array.isArray(data?.to) ? (data.to[0] ?? '') : (data?.to ?? ''),
-    )
-      .trim()
-      .toLowerCase()
     if (type === 'email.clicked' && isDocumentId(experimentId) && recipient) {
       const experimentSnapshot = await hostRef
         .collection('experiments')

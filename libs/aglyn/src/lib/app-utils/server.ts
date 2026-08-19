@@ -111,6 +111,10 @@ export * from './marketplace-verification'
 export * from './name-search'
 export * from './api-plugins'
 export * from './plugin-api-rate-limit'
+// The same-origin gate on visitor-facing plugin writes (AGL-1880). After
+// `plugin-api-rate-limit`, whose `isMachinePluginApiPath` it reuses so the
+// two gates exempt exactly the same machine surfaces.
+export * from './plugin-api-cross-origin'
 export * from './actions'
 export * from './element-ui'
 export * from './media-folders'

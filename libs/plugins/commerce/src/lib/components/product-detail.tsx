@@ -655,6 +655,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 <TextField
                   placeholder="you@example.com"
                   type="email"
+                  // Third instance of the nameless-input defect (AGL-2392).
+                  // Named for its job rather than "Email address": this row
+                  // appears inside a product page that may also carry the
+                  // newsletter block, and two fields both announced as
+                  // "Email address" is barely better than none.
+                  slotProps={{
+                    htmlInput: {
+                      'aria-label': 'Email address for back-in-stock alert',
+                    },
+                  }}
                   value={notifyEmail}
                   onChange={(event) => setNotifyEmail(event.target.value)}
                   size="small"

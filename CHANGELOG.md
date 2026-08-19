@@ -9,6 +9,59 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.4 — 2026-08-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.3...v1.0.0-beta.4)
+
+### Added
+
+- **media:** DAM alt text defaults into every placement ([AGL-1896](https://linear.app/aglyn/issue/AGL-1896), [AGL-173](https://linear.app/aglyn/issue/AGL-173), [AGL-1305](https://linear.app/aglyn/issue/AGL-1305))
+- **console:** a new cookie cannot reach production undeclared ([AGL-1918](https://linear.app/aglyn/issue/AGL-1918))
+- **besigner,console:** the eight declared help topics get the panels they name ([AGL-2167](https://linear.app/aglyn/issue/AGL-2167), [AGL-2130](https://linear.app/aglyn/issue/AGL-2130), [AGL-1074](https://linear.app/aglyn/issue/AGL-1074))
+- **console,rules:** an author host role edits content and cannot publish ([AGL-2334](https://linear.app/aglyn/issue/AGL-2334), [AGL-2380](https://linear.app/aglyn/issue/AGL-2380), [AGL-2131](https://linear.app/aglyn/issue/AGL-2131))
+
+### Fixed
+
+- **limits:** a contended rate-limit key refuses instead of hanging ([AGL-2404](https://linear.app/aglyn/issue/AGL-2404), [AGL-794](https://linear.app/aglyn/issue/AGL-794), [AGL-2416](https://linear.app/aglyn/issue/AGL-2416))
+- **selfhost:** the cookie inventory names its OWN surfaces, not Aglyn's ([AGL-2412](https://linear.app/aglyn/issue/AGL-2412), [AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2037](https://linear.app/aglyn/issue/AGL-2037))
+- **console:** report-usage resolves the metered price through the helper ([AGL-2405](https://linear.app/aglyn/issue/AGL-2405), [AGL-1878](https://linear.app/aglyn/issue/AGL-1878), [AGL-1352](https://linear.app/aglyn/issue/AGL-1352), [AGL-1340](https://linear.app/aglyn/issue/AGL-1340), [AGL-1715](https://linear.app/aglyn/issue/AGL-1715))
+- **marketing:** a bounce and a complaint suppress the address ([AGL-1918](https://linear.app/aglyn/issue/AGL-1918))
+- **tenant:** the plugin dispatcher refuses cross-origin visitor writes ([AGL-1880](https://linear.app/aglyn/issue/AGL-1880))
+- **docs,commerce:** three console cards get the docs section their tooltip promises ([AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2226](https://linear.app/aglyn/issue/AGL-2226), [AGL-2341](https://linear.app/aglyn/issue/AGL-2341), [AGL-2227](https://linear.app/aglyn/issue/AGL-2227))
+- **tenant:** the plugin dispatcher refuses cross-origin visitor writes ([AGL-1880](https://linear.app/aglyn/issue/AGL-1880))
+- **console:** a Stripe 200 on a meter event is not a charge ([AGL-1878](https://linear.app/aglyn/issue/AGL-1878))
+- **security:** stop trusting aglyn-console.vercel.app, and pin the list ([AGL-1940](https://linear.app/aglyn/issue/AGL-1940), [AGL-1135](https://linear.app/aglyn/issue/AGL-1135), [AGL-1344](https://linear.app/aglyn/issue/AGL-1344), [AGL-1486](https://linear.app/aglyn/issue/AGL-1486))
+- **console:** a GET on the audit archive reports instead of deleting ([AGL-2084](https://linear.app/aglyn/issue/AGL-2084), [AGL-2165](https://linear.app/aglyn/issue/AGL-2165))
+- **console:** a GET on the audit archive reports instead of deleting ([AGL-2084](https://linear.app/aglyn/issue/AGL-2084), [AGL-2165](https://linear.app/aglyn/issue/AGL-2165))
+- **plugins:** name the published-site email-capture fields ([AGL-2392](https://linear.app/aglyn/issue/AGL-2392), [AGL-1665](https://linear.app/aglyn/issue/AGL-1665))
+- **tenant:** collection pages announce their RSS feed, and the feed names itself ([AGL-2391](https://linear.app/aglyn/issue/AGL-2391), [AGL-1385](https://linear.app/aglyn/issue/AGL-1385))
+- **plugins:** name the published-site email-capture fields ([AGL-2392](https://linear.app/aglyn/issue/AGL-2392), [AGL-1665](https://linear.app/aglyn/issue/AGL-1665))
+- **tenant:** collection pages announce their RSS feed, and the feed names itself ([AGL-2391](https://linear.app/aglyn/issue/AGL-2391), [AGL-1385](https://linear.app/aglyn/issue/AGL-1385))
+- **besigner:** the Custom CSS form speaks the Styles panel's spelling ([AGL-2390](https://linear.app/aglyn/issue/AGL-2390), [AGL-2207](https://linear.app/aglyn/issue/AGL-2207), [AGL-2209](https://linear.app/aglyn/issue/AGL-2209), [AGL-2208](https://linear.app/aglyn/issue/AGL-2208), [AGL-2210](https://linear.app/aglyn/issue/AGL-2210))
+- **besigner:** the Custom CSS form speaks the Styles panel's spelling ([AGL-2390](https://linear.app/aglyn/issue/AGL-2390), [AGL-2207](https://linear.app/aglyn/issue/AGL-2207), [AGL-2209](https://linear.app/aglyn/issue/AGL-2209), [AGL-2208](https://linear.app/aglyn/issue/AGL-2208), [AGL-2210](https://linear.app/aglyn/issue/AGL-2210))
+
+### Documentation
+
+- the rate-limiting runbook gains the contention posture ([AGL-2404](https://linear.app/aglyn/issue/AGL-2404))
+- six beta.3 features that shipped with no documentation get some ([AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-2249](https://linear.app/aglyn/issue/AGL-2249), [AGL-2328](https://linear.app/aglyn/issue/AGL-2328), [AGL-2343](https://linear.app/aglyn/issue/AGL-2343), [AGL-2318](https://linear.app/aglyn/issue/AGL-2318), [AGL-2335](https://linear.app/aglyn/issue/AGL-2335), [AGL-2316](https://linear.app/aglyn/issue/AGL-2316))
+- **email:** the runbook points at a DNS zone that no longer exists ([AGL-1918](https://linear.app/aglyn/issue/AGL-1918), [AGL-1495](https://linear.app/aglyn/issue/AGL-1495), [AGL-1493](https://linear.app/aglyn/issue/AGL-1493), [AGL-2407](https://linear.app/aglyn/issue/AGL-2407), [AGL-2408](https://linear.app/aglyn/issue/AGL-2408), [AGL-2409](https://linear.app/aglyn/issue/AGL-2409))
+- the six legal/ops intakes are verified to deliver, not unconfirmed ([AGL-1911](https://linear.app/aglyn/issue/AGL-1911), [AGL-1577](https://linear.app/aglyn/issue/AGL-1577), [AGL-1973](https://linear.app/aglyn/issue/AGL-1973), [AGL-1983](https://linear.app/aglyn/issue/AGL-1983), [AGL-2400](https://linear.app/aglyn/issue/AGL-2400))
+- the six legal/ops intakes are verified to deliver, not unconfirmed ([AGL-1911](https://linear.app/aglyn/issue/AGL-1911), [AGL-1577](https://linear.app/aglyn/issue/AGL-1577), [AGL-1973](https://linear.app/aglyn/issue/AGL-1973), [AGL-1983](https://linear.app/aglyn/issue/AGL-1983), [AGL-2400](https://linear.app/aglyn/issue/AGL-2400))
+- **handoff:** v1.0.0-beta.3 is promoted, deployed, tagged; rules+indexes live ([AGL-566](https://linear.app/aglyn/issue/AGL-566))
+- **handoff:** v1.0.0-beta.3 is promoted, deployed, tagged; rules+indexes live ([AGL-566](https://linear.app/aglyn/issue/AGL-566))
+
+<details>
+<summary>Also in this release: 4 test, 2 ci</summary>
+
+- **tenant:** the release-gate spec's mock stops hiding the cross-origin refusal ([AGL-2419](https://linear.app/aglyn/issue/AGL-2419), [AGL-1880](https://linear.app/aglyn/issue/AGL-1880), [AGL-2415](https://linear.app/aglyn/issue/AGL-2415))
+- **tenant:** the visitor-write rate-limit spec stops faking a symbol away ([AGL-2415](https://linear.app/aglyn/issue/AGL-2415), [AGL-1880](https://linear.app/aglyn/issue/AGL-1880))
+- **shared:** pin the merge semantics a caller gets wrong, not just the bump ([AGL-1866](https://linear.app/aglyn/issue/AGL-1866), [AGL-2301](https://linear.app/aglyn/issue/AGL-2301))
+- **tools:** make the shared-ui-jsx barrel discipline an exit code ([AGL-1895](https://linear.app/aglyn/issue/AGL-1895), [AGL-1290](https://linear.app/aglyn/issue/AGL-1290))
+- **deps:** add the dependabot version-update config the repo never had ([AGL-2058](https://linear.app/aglyn/issue/AGL-2058), [AGL-2051](https://linear.app/aglyn/issue/AGL-2051))
+- **deps:** add the dependabot version-update config the repo never had ([AGL-2058](https://linear.app/aglyn/issue/AGL-2058), [AGL-2051](https://linear.app/aglyn/issue/AGL-2051))
+
+</details>
+
 ## v1.0.0-beta.3 — 2026-08-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.2...v1.0.0-beta.3)

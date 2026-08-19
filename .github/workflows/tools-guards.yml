@@ -369,6 +369,21 @@ jobs:
       - run: npm run test:brand-literals
       - run: npm run check:brand-literals
 
+      # The shared-ui-jsx barrel allowlist (AGL-1895). Same reason as the two
+      # ratchets above for living here rather than only in nx-ci.yml, and one
+      # more: it is about the CONTENT of libs/, so `libs/**` in the `paths:`
+      # filter is what makes it able to see its own regression.
+      #
+      # AGL-1290 established that everything reachable from
+      # `libs/shared/ui/jsx/src/index.ts` ships eagerly on EVERY published
+      # customer page, wrote the rule down in a comment, and a comment cannot
+      # fail. This is that rule as an exit code. Its detector is unit-tested
+      # separately — five of those tests are forced reds against the real
+      # module graph, because a gate nobody has watched fail is a gate nobody
+      # knows the shape of.
+      - run: npm run test:jsx-barrel
+      - run: npm run check:jsx-barrel
+
       # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
       # dot form, so a bracket read in a client-reachable module is `undefined`
       # in the browser and the value silently falls back to Aglyn's default —

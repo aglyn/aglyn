@@ -17,7 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import {
   ArtifactObject,
   artifactClaimKey,
@@ -69,13 +69,11 @@ async function handler(request: Request): Promise<Response> {
   }
 
   // Dry run is the SAFE default for a GET (a browser or a curl someone
-  // pasted); the cron POSTs with an explicit dryRun=0.
-  const dryRunParam = (body as { dryRun?: unknown } | undefined)?.dryRun ??
-    query['dryRun']
-  const dryRun =
-    dryRunParam === undefined
-      ? method === 'GET'
-      : dryRunParam !== '0' && dryRunParam !== 'false' && dryRunParam !== false
+  // pasted); the cron POSTs with an explicit dryRun=0. The rule moved into
+  // `isCronDryRun` (AGL-2084) — this route and `reverify-plugin-versions` each
+  // had their own transcription of it, and `audit-archive`, which deletes
+  // Firestore rows, was the copy nobody ever wrote.
+  const dryRun = isCronDryRun({ method, query, body })
 
   try {
     const app = firebaseAdmin.app()

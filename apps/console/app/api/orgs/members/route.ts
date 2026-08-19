@@ -47,7 +47,14 @@ import {
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
 
-const HOST_ROLES = new Set<HostAccessRole>(['admin', 'editor', 'viewer'])
+// `author` (AGL-2334) is assignable per site like every other host role —
+// a capability the rules enforce but no door writes is not a feature.
+const HOST_ROLES = new Set<HostAccessRole>([
+  'admin',
+  'editor',
+  'author',
+  'viewer',
+])
 
 function sanitizeHostAccess(
   raw: unknown,

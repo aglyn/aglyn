@@ -308,7 +308,9 @@ https://your-domain.com/api/collections-rss?host=<your-site>&collection=<collect
 
 Items carry the entry's title, link, publish date, excerpt, and its category and tags as
 feed categories, newest first. Link it from your own footer or share it with
-aggregators — feed readers don't discover it automatically yet.
+aggregators. Feed readers also find it on their own: every collection page — the list,
+each paginated page, each category, and each entry — declares the feed in its page head,
+so pasting your blog's own address into a reader subscribes it to the feed.
 
 ## Tips
 

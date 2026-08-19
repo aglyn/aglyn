@@ -26,6 +26,55 @@ Postmark / Mailgun), chosen because it's purpose-built for app email
 ~18 call sites. Google Workspace SMTP is **not** used for app mail — it caps at
 ~2,000/day and would risk locking the real mailboxes.
 
+## Inbound: the published intake addresses
+
+Everything above is about mail we **send**. These are the addresses we have
+**promised** in published documents, so they have to receive. All of them are
+Google **Groups** in the Workspace (not aliases on a personal mailbox), which is
+deliberate: a group gains and loses members without the address changing, keeps
+its archive across a membership change, and can carry an auto-reply later
+without re-plumbing.
+
+| Address | Promised in | Delivers to |
+| --- | --- | --- |
+| `privacy@aglyn.com` | Privacy Policy §7, §9, §11, §13; DPA Annex A data-importer contact; `/legal/subprocessors` | `zach@aglyn.com` |
+| `legal@aglyn.com` | Terms §18.1, §18.5 (arbitration opt-out), §19.8, §19.11; Marketplace Publisher Agreement §14 | `zach@aglyn.com` |
+| `security@aglyn.com` | Privacy Policy §6; Terms §3.3; `docs.aglyn.com/trust` | `zach@aglyn.com` |
+| `abuse@aglyn.com` | Acceptable Use Policy | `zach@aglyn.com` |
+| `dmca@aglyn.com` | Copyright/DMCA Policy | `zach@aglyn.com` |
+| `support@aglyn.com` | Terms; `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` — printed on the lockdown 503, the quarantine notice, the sanctions 451 and the abuse/counter-notice intakes | `zach@aglyn.com` |
+
+Also live as groups: `info@`, `hello@`, `help@`, `sales@`, `billing@`,
+`accounting@`, `admin@`, `talent@`, `copyright@`, `webmaster@` (the DMARC `rua`
+destination and the ICANN registrant contact).
+
+### How to verify one of these — and how *not* to
+
+⚠️ **Do not verify by test send.** A default routing rule (AGL-1577) accepts
+mail for *non-existent* `@aglyn.com` addresses and suppresses the bounce, so
+"I sent it and it didn't bounce" is exactly as true of an address that was never
+created. That check cannot fail, so it proves nothing.
+
+Verify by **configuration**, which can fail:
+
+```
+https://groups.google.com/a/aglyn.com/g/<name>/members
+```
+
+A real group renders its member list. An address that does not exist returns
+**404** — run it against something like `nosuchbox` as a negative control before
+trusting a positive. Check `Settings → Who can post` is **Anyone on the web**
+too: a group that exists but only accepts posts from members will reject a
+stranger's DSAR or §512 notice.
+
+Note that the Groups **"All groups"** listing is *not* a complete enumeration —
+`abuse@` is absent from it while demonstrably existing. Only the direct probe
+above is conclusive.
+
+Last verified **2026-08-19** (AGL-1911): all six accept unmoderated posts from
+anyone on the web and deliver each message to `zach@aglyn.com`. Each has a
+single member and no auto-acknowledgement — AGL-2400.
+
 ## Current DNS facts (aglyn.com)
 
 - **DNS host:** **Vercel DNS** (`ns1/ns2.vercel-dns.com`) — manage records with
@@ -56,25 +105,34 @@ Resend → **Domains** → **Add Domain** → enter **`aglyn.com`** (the root, s
 sender can be a bare `@aglyn.com` address). Pick the region closest to the
 deployment. Resend then shows ~3 DNS records to add.
 
-### 3. Add Resend's DNS records to Google Cloud DNS
+### 3. Add Resend's DNS records to Vercel DNS
+The zone is on **Vercel DNS**, as "Current DNS facts" above records — this
+section used to say Google Cloud DNS, and following it now sends you looking
+for a zone that no longer exists.
+
 Copy the **exact** values Resend shows. They look like this (the `send`
 subdomain is Resend's return-path — it does not affect Workspace inbound mail):
 
-| Type | Name (Cloud DNS "DNS name") | Value | Notes |
+| Type | Name | Value | Notes |
 | --- | --- | --- | --- |
 | `MX` | `send` | `feedback-smtp.<region>.amazonses.com` (priority 10) | bounce handling |
 | `TXT` | `send` | `v=spf1 include:amazonses.com ~all` | SPF for the send subdomain |
 | `TXT` | `resend._domainkey` | `p=<long DKIM public key>` | DKIM signing |
 
-In Cloud DNS you enter just the subdomain part as the DNS name (e.g. `send`,
-`resend._domainkey`) — it appends `.aglyn.com` automatically. Paste long DKIM
-values as a single string; Cloud DNS handles the 255-char chunking.
+Enter just the subdomain part as the name (e.g. `send`, `resend._domainkey`) —
+`.aglyn.com` is appended for you. Paste long DKIM values as a single string.
+
+```sh
+vercel dns add aglyn.com send MX feedback-smtp.<region>.amazonses.com 10
+vercel dns add aglyn.com send TXT "v=spf1 include:amazonses.com ~all"
+vercel dns add aglyn.com resend._domainkey TXT "p=<long DKIM public key>"
+```
 
 Do **not** touch the existing root `MX`, root `SPF`, or `_dmarc` records.
 
 ### 4. Verify
-Back in Resend → Domains → **Verify**. Google Cloud DNS usually propagates in a
-few minutes. Wait for the domain to show **Verified**.
+Back in Resend → Domains → **Verify**. Vercel DNS usually propagates in a few
+minutes. Wait for the domain to show **Verified**.
 
 ### 5. Create an API key
 Resend → **API Keys** → **Create** → permission **Sending access**, scoped to
@@ -175,9 +233,44 @@ true` report with an unverified domain will still bounce.
 4. Check Resend → **Emails** for the delivery log; bounces/complaints show there
    too.
 
+## Sending-domain warm-up
+
+**Verdict: no warm-up schedule is needed for launch** (AGL-1918, 2026-08-19).
+Recorded here rather than left as a silent omission, because "warm up the
+sending domain if volume will ramp" is a conditional item and the condition is
+not met.
+
+Why it is not met:
+
+- `aglyn.com` is **not a cold domain**. It has been sending real product mail
+  through Resend since 2026-07-23 (AGL-709), on a Verified domain with
+  DKIM `d=aglyn.com` strict alignment.
+- Warm-up is a **shared-IP-pool** discipline aimed at a sudden order-of-magnitude
+  jump. Week One sends to a 20-name Tranche A, not to a list. Twenty invites
+  plus their receipts is not a ramp.
+- The mail that actually scales with signups — verification, password reset,
+  invites — is one message per human action, and invites are already capped at
+  30/actor/hour and 60/org/hour (AGL-1907).
+
+What matters more than a ramp, and is tracked separately:
+
+- Bounces and complaints on **campaign** mail now suppress the address
+  (AGL-1918); the same on **transactional** mail is AGL-2407.
+- One-click `List-Unsubscribe` — AGL-2408.
+- There is no send-rate governor anywhere, so if volume ever does need a ramp
+  there is nothing to turn — AGL-2409.
+
+Revisit this verdict if any of these becomes true: a campaign audience passes
+a few thousand, a bulk import produces a first-send to a purchased or aged
+list, or the sending identity moves to a new subdomain (a new subdomain **is**
+a cold domain, whatever aglyn.com's history).
+
 ## Later hardening (optional)
 
-- Tighten DMARC from `p=none` to `p=quarantine` once Resend traffic looks clean.
-- Consider a monitored `hello@aglyn.com` reply-to for a human touch.
+- Tighten DMARC from `p=quarantine` to `p=reject` once the aggregate-report
+  backlog confirms Resend, Workspace and Stripe all pass aligned. (`p=none` →
+  `p=quarantine` was done in AGL-1493; see "Current DNS facts" above.)
+- Consider a monitored `hello@aglyn.com` reply-to for a human touch. Nothing
+  sets `replyTo` today, on any message — AGL-2408 §4.
 - ~~Consolidate the ~18 copy-pasted Resend call sites~~ — done in AGL-709; see
   [`@aglyn/shared-util-email`](../libs/shared/util/email/README.md).

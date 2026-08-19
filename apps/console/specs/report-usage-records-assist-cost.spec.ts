@@ -138,6 +138,14 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkContactQuota: actual.checkContactQuota,
     checkDataStorageQuota: actual.checkDataStorageQuota,
     resolveOrgEntitlements: actual.resolveOrgEntitlements,
+    // AGL-2405: the route resolves the metered price through
+    // `utils/server/billing-addons`, which derives PAID_PLANS from
+    // SELF_SERVE_PLANS at module load. REAL, because these ARE the pricing
+    // constants — a stub here would be a stubbed price.
+    SELF_SERVE_PLANS: actual.SELF_SERVE_PLANS,
+    PLAN_PRICING: actual.PLAN_PRICING,
+    EVENT_CALENDAR_ADDON_MONTHLY_USD: actual.EVENT_CALENDAR_ADDON_MONTHLY_USD,
+    POS_REGISTER_ADDON_MONTHLY_USD: actual.POS_REGISTER_ADDON_MONTHLY_USD,
     decodeStoredNodes: () => ({}),
     nodeMapBytes: () => 0,
     isReleaseFlagOnForOrg: () => true,

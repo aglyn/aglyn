@@ -37,12 +37,17 @@ export function BesignerMediaPickerProvider(
 ) {
   const { hostId, children } = props
   const [open, setOpen] = useState(false)
-  const pendingPick = useRef<((value: string) => void) | null>(null)
+  const pendingPick = useRef<
+    ((value: string, asset?: { alt?: string }) => void) | null
+  >(null)
 
-  const onPickMedia = useCallback((onPick: (value: string) => void) => {
-    pendingPick.current = onPick
-    setOpen(true)
-  }, [])
+  const onPickMedia = useCallback(
+    (onPick: (value: string, asset?: { alt?: string }) => void) => {
+      pendingPick.current = onPick
+      setOpen(true)
+    },
+    [],
+  )
   const value = useMemo(() => ({ onPickMedia }), [onPickMedia])
 
   return (
@@ -77,7 +82,12 @@ export function BesignerMediaPickerProvider(
           // would hand it paid delivery, since the CDN handler checks the
           // entitlement nowhere.
           const src = mediaNodeSrc(media)
-          if (src) pendingPick.current?.(src)
+          // The asset's own alt rides along (AGL-1896) so the requesting
+          // surface can default a blank alt attribute from it. Handed over
+          // raw — `inheritedMediaAlt` at the call site owns the precedence,
+          // because only the call site can see the placement's current alt
+          // and its `decorative` switch.
+          if (src) pendingPick.current?.(src, { alt: media.alt })
           pendingPick.current = null
           setOpen(false)
         }}

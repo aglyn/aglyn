@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   authForPool,
   emailUnverifiedResponse,
@@ -122,9 +122,15 @@ async function handler(request: Request): Promise<Response> {
       decoded.uid
     ]
     const orgRole = membership.get('role') as string | undefined
+    // `author` (AGL-2334) is a content role, so it belongs on this list.
+    // The co-edit claim is what lets the besigner mutate the version document
+    // at all — refusing it would have shipped a role that can edit content in
+    // the security rules and cannot open the editor that does the editing.
+    // The publish gate is in the rules, on the publish FIELDS; it is not this
+    // claim's job, and narrowing here would break the half of the role that
+    // has to work.
     const canEdit =
-      hostRole === 'admin' ||
-      hostRole === 'editor' ||
+      hostRoleCanWrite(hostRole) ||
       orgRole === 'owner' ||
       orgRole === 'admin' ||
       orgRole === 'editor'

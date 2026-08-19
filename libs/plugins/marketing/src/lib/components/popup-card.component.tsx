@@ -20,6 +20,8 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   type HostPopup,
+  inheritedMediaAlt,
+  MEDIA_ALT_MAX_LENGTH,
   pluginDocsHelp,
   useMediaPicker,
 } from '@aglyn/aglyn'
@@ -142,6 +144,12 @@ export function PopupCard(props: PopupCardProps) {
               headline: (draft.headline ?? '').slice(0, 120),
               body: (draft.body ?? '').slice(0, 1000),
               imageUrl: (draft.imageUrl ?? '').trim(),
+              // AGL-1896. Capped at the same length the media library saves
+              // alt through, so a value defaulted from an asset and a value
+              // typed here cannot diverge.
+              imageAlt: (draft.imageAlt ?? '')
+                .trim()
+                .slice(0, MEDIA_ALT_MAX_LENGTH),
               ctaLabel: (draft.ctaLabel ?? '').slice(0, 60),
               ctaHref: (draft.ctaHref ?? '').trim(),
               collectEmail: Boolean(draft.collectEmail),
@@ -235,13 +243,40 @@ export function PopupCard(props: PopupCardProps) {
               onClick={() =>
                 void (async () => {
                   const media = await pickMedia?.()
-                  if (media) patch({ imageUrl: media.url })
+                  if (!media) return
+                  // Alt defaults from the asset (AGL-1896), never clobbering
+                  // one the author already typed for THIS popup. Undefined
+                  // when the asset has no alt or the field is already
+                  // filled, and the spread then leaves `imageAlt` alone.
+                  const inheritedAlt = inheritedMediaAlt({
+                    placementAlt: draft.imageAlt,
+                    assetAlt: media.alt,
+                  })
+                  patch({
+                    imageUrl: media.url,
+                    ...(inheritedAlt ? { imageAlt: inheritedAlt } : {}),
+                  })
                 })()
               }
             >
               {'Browse media'}
             </Button>
           </Stack>
+          {/* AGL-1896: the popup image rendered `alt=""` with no field
+              behind it. Offered whenever there is an image to describe. */}
+          {(draft.imageUrl ?? '').trim() ? (
+            <TextField
+              label="Image alt text"
+              size="small"
+              value={draft.imageAlt ?? ''}
+              onChange={(event) => patch({ imageAlt: event.target.value })}
+              helperText={
+                'Describes the image for screen readers. Filled in from the ' +
+                'media library when you pick an image that has alt text. ' +
+                'Leave empty only if the image is purely decorative.'
+              }
+            />
+          ) : null}
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Switch
               checked={Boolean(draft.collectEmail)}

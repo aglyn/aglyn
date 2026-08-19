@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { firebaseAdmin, projectDomainStatus } from '@aglyn/tenant-data-admin'
-import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 
 /** Hosts examined per run — a ceiling on time and Vercel API calls. */
@@ -82,11 +82,7 @@ async function handler(request: Request): Promise<Response> {
     )
   }
 
-  const asFlag = (value: unknown): boolean =>
-    value !== undefined && value !== '0' && value !== 'false' && value !== false
-  const payload = body as { dryRun?: unknown } | undefined
-  const dryRunInput = payload?.dryRun ?? query['dryRun']
-  const dryRun = dryRunInput === undefined ? method === 'GET' : asFlag(dryRunInput)
+  const dryRun = isCronDryRun({ method, query, body })
 
   const firestore = firebaseAdmin.app().firestore()
   const completed: string[] = []

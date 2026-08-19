@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { hostRoleCanWrite } from '@aglyn/aglyn/server'
 import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore'
 import { lockdownRefusal } from './lockdown'
 import { getOrgDoc } from './organizations'
@@ -76,9 +77,12 @@ export async function editAccessMintRefusal(options: {
     uid
   ]
   const orgRole = membership.get('role') as string | undefined
+  // `author` (AGL-2334) — the edit-bar entry token. Same reasoning as the
+  // presence broker: this buys entry to the editor, and an author's whole
+  // purpose is to be in it. What they cannot do once inside is enforced by
+  // the rules on the publish fields.
   const canEdit =
-    hostRole === 'admin' ||
-    hostRole === 'editor' ||
+    hostRoleCanWrite(hostRole) ||
     orgRole === 'owner' ||
     orgRole === 'admin' ||
     orgRole === 'editor'

@@ -38,6 +38,7 @@ import {
   type AglynOrgCustomRole,
   type AglynOrgMember,
   type CollaboratorSeatEntry,
+  type HostAccessRole,
   type OrgPermission,
   type OrgRole,
 } from '@aglyn/aglyn/server'
@@ -918,7 +919,8 @@ export interface UpsertOrgMemberOptions {
   uid: string
   role: OrgRole
   allHosts?: boolean
-  hostAccess?: Record<string, 'admin' | 'editor' | 'viewer'>
+  /** Per-site grants. `author` (AGL-2334) rides the shared union. */
+  hostAccess?: Record<string, HostAccessRole>
   /** Custom role reference (AGL-243); null clears it. */
   roleId?: string | null
   email?: string | null
@@ -1149,7 +1151,8 @@ export async function grantHostAccess(options: {
   orgId: string
   uid: string
   hostId: string
-  role: 'viewer' | 'editor' | 'admin'
+  /** `author` (AGL-2334) edits content and cannot publish. */
+  role: HostAccessRole
   email?: string | null
   displayName?: string | null
   invitedBy?: string

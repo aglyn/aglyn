@@ -32,6 +32,22 @@ export interface PickedMedia {
   fileName?: string
   /** MIME type, when known. */
   contentType?: string
+  /**
+   * The asset's own alt text, as authored in the media library (AGL-1896).
+   *
+   * Carried so a placement can DEFAULT from the asset instead of asking the
+   * author to retype it — the same logo on eight pages had its alt typed
+   * eight times, and in practice shipped blank on published customer sites.
+   * Absent for every asset whose alt has never been filled in; there is no
+   * fallback to {@link fileName}, deliberately. A file name is not a
+   * description, and "IMG_4021.jpg" read aloud by a screen reader is worse
+   * than the silence it replaces.
+   *
+   * Consumers must not read this directly into a stored field. Pass it to
+   * `inheritedMediaAlt` with whatever the placement already holds, so the
+   * per-placement override keeps winning.
+   */
+  alt?: string
 }
 
 /**

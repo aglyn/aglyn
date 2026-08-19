@@ -17,6 +17,7 @@
 
 import {
   checkEntitlement,
+  hostRoleCanWrite,
   hostScopeToken,
   isOrgWideMember,
   memberScopeTokens,
@@ -218,7 +219,12 @@ export async function resolveMediaScope(
     return { error: { status: 404, message: 'Unknown site' } }
   }
   const memberRole = (hostSnapshot.get('memberRoles') ?? {})[uid]
-  if (memberRole !== 'admin' && memberRole !== 'editor') {
+  // `author` (AGL-2334) uploads to the SITE library. Adding an image to the
+  // page you are editing is editing; a media asset is not reachable by a
+  // visitor until a published page references it, and publishing that page is
+  // what the rules refuse. Leaving this at admin/editor would have shipped a
+  // content role that cannot add a picture.
+  if (!hostRoleCanWrite(memberRole)) {
     return { error: { status: 403, message: 'Not a site admin' } }
   }
   const resolvedOrg = await getOrgForHost(hostId)

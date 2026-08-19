@@ -360,7 +360,13 @@ export const emailImageSchema: Aglyn.ComponentSchema<EmailImageProps> = {
     {
       name: 'alt',
       label: 'Alt text',
-      description: 'Shown while images are blocked — most clients block by default.',
+      // AGL-1896: the same "Browse media" default the site Image element
+      // gets. It matters MORE here — most clients block images by default,
+      // so for most recipients the alt text IS the block.
+      description:
+        'Shown while images are blocked — most clients block by default. ' +
+        'Filled in from the media library when you pick a file that has ' +
+        'alt text.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
     {

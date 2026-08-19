@@ -18,7 +18,36 @@ bring it back.
 ## Export
 
 Export a dataset's records to **CSV** or **JSON** — useful for backups, bulk edits in a
-spreadsheet, or moving data into another tool.
+spreadsheet, or moving data into another tool. The **CSV** and **JSON** buttons on the
+data toolbar export the **whole dataset**, not the page of records currently on screen.
+
+### What you get {#export-contents}
+
+- **Every record**, in a stable order that is the same on every export of the same data.
+- **Every field in the model, in model order** — the CSV's header row is the field ids,
+  and the JSON is an array of objects keyed by the same ids. A field with no value comes
+  out empty rather than being omitted.
+- **Values in their portable form**, which is the form the importer reads back: dates as
+  ISO-8601, coordinates as `latitude, longitude`, lists and references comma-joined, and
+  map fields as JSON. That is what makes the round-trip lossless.
+
+The file is named after the dataset. Nothing is filtered out — a search or sort you have
+applied in the table does not narrow the export.
+
+### Large datasets {#large-exports}
+
+The server streams the file rather than assembling it in your browser, so the size of the
+dataset is not the limit it used to be. Two things follow:
+
+- The button reads **Exporting…** while it runs. A large dataset takes a while; leave the
+  page open until the download starts.
+- The download is **checked before it is saved**. The server states how many records it
+  is sending, and if fewer arrive — a dropped connection mid-transfer — the export is
+  refused with *"Export incomplete"* and nothing is saved. Run it again. A short file is
+  otherwise perfectly well-formed and gives you no way to notice it is short.
+
+Records added while an export is running may or may not be included; the count is taken
+when the export starts.
 
 ## Import
 

@@ -27,6 +27,7 @@ import {
   buildInstancePropFields,
   buildVisibilityFields,
   elementPropsComponentMapper,
+  inheritedAltPatch,
   useDebouncedCommit,
 } from './element-props-form.component'
 
@@ -302,5 +303,122 @@ describe('buildVisibilityFields (AGL-1314)', () => {
       expect(field.help).toMatchObject({ title: field.label })
       expect(String(field.description).length).toBeGreaterThan(0)
     }
+  })
+})
+
+/**
+ * AGL-1896. "Browse media" wrote the picked value and nothing else, so the
+ * author retyped the asset's alt at every placement — the same logo on eight
+ * pages, eight times — and a field retyped per placement ships blank, on the
+ * customer's published site.
+ *
+ * The patch is spread into a props object that `updateNodeProps` REPLACES
+ * wholesale, so every assertion about "writes nothing" is made on
+ * `Object.keys`. `toEqual({})` treats an `alt: undefined` property as absent
+ * and would pass against a patch that silently CLEARS an authored alt.
+ */
+describe('inheritedAltPatch (AGL-1896)', () => {
+  const IMAGE = { propName: 'src', declaresAlt: true }
+
+  it('defaults a blank alt from the picked asset', () => {
+    expect(
+      inheritedAltPatch({ ...IMAGE, props: {}, assetAlt: 'A blue kettle' }),
+    ).toEqual({ alt: 'A blue kettle' })
+  })
+
+  /**
+   * The commonest authoring path in the product, and the one a stricter
+   * "only when the key is absent" rule would have skipped entirely: our own
+   * presets ship `alt: ''` (see `card.tsx`), so a preset dropped on the
+   * canvas and pointed at a library asset is exactly the case this issue was
+   * filed about.
+   */
+  it('treats a preset\'s empty alt as blank, not as an authored value', () => {
+    expect(
+      inheritedAltPatch({
+        ...IMAGE,
+        props: { alt: '', src: 'media:host-1/old' },
+        assetAlt: 'A blue kettle',
+      }),
+    ).toEqual({ alt: 'A blue kettle' })
+  })
+
+  it('never overwrites an alt the author wrote for this placement', () => {
+    const patch = inheritedAltPatch({
+      ...IMAGE,
+      props: { alt: 'Our founder holding the first kettle' },
+      assetAlt: 'A blue kettle',
+    })
+    expect(Object.keys(patch)).toEqual([])
+  })
+
+  /**
+   * `decorative` is AGL-1305's explicit "screen readers should skip this",
+   * and `image.tsx` forces `alt=""` over any alt text while it is on.
+   * Inheriting here would write a sentence the renderer discards — invisible
+   * in the output and misleading in the panel.
+   */
+  it('respects the Decorative switch', () => {
+    const patch = inheritedAltPatch({
+      ...IMAGE,
+      props: { alt: '', decorative: true },
+      assetAlt: 'A blue kettle',
+    })
+    expect(Object.keys(patch)).toEqual([])
+  })
+
+  /**
+   * The Browse button is offered on every media-ish attribute. A poster
+   * frame's or a background's description is not the ELEMENT's alt text, and
+   * no pairing anywhere says otherwise — so only `src` inherits.
+   */
+  it.each(['poster', 'backgroundImage', 'logoUrl', 'thumbnail'])(
+    'does not write an alt when the pick was for %s',
+    (propName) => {
+      const patch = inheritedAltPatch({
+        propName,
+        declaresAlt: true,
+        props: {},
+        assetAlt: 'A blue kettle',
+      })
+      expect(Object.keys(patch)).toEqual([])
+    },
+  )
+
+  it('writes nothing onto an element whose schema declares no alt', () => {
+    const patch = inheritedAltPatch({
+      propName: 'src',
+      declaresAlt: false,
+      props: {},
+      assetAlt: 'A blue kettle',
+    })
+    expect(Object.keys(patch)).toEqual([])
+  })
+
+  /**
+   * Never a fabricated default. Nothing in this path has seen the image, and
+   * the file name — the tempting non-empty stand-in — is not a description.
+   */
+  it('writes nothing for an asset nobody has described', () => {
+    for (const assetAlt of [undefined, '', '   ']) {
+      const patch = inheritedAltPatch({ ...IMAGE, props: {}, assetAlt })
+      expect(Object.keys(patch)).toEqual([])
+    }
+  })
+
+  /**
+   * The spread the handler actually performs. An `alt` key that arrives
+   * undefined is indistinguishable downstream from an authored empty alt,
+   * so the no-op case must leave the existing props byte-identical.
+   */
+  it('leaves the committed props untouched when it declines', () => {
+    const props = { src: 'media:host-1/old', alt: 'Written by hand' }
+    const next = {
+      ...props,
+      src: 'media:host-1/new',
+      ...inheritedAltPatch({ ...IMAGE, props, assetAlt: 'A blue kettle' }),
+    }
+    expect(Object.keys(next).sort()).toEqual(['alt', 'src'])
+    expect(next.alt).toBe('Written by hand')
   })
 })

@@ -20,7 +20,7 @@ import {
   ICON_VARIANT_THEME_LIGHT,
   ICON_VARIANT_THEME_SYSTEM,
 } from '@aglyn/shared-data-enums'
-import { AglynSvgIcon, BesignerSvgLogo } from '@aglyn/shared-ui-jsx'
+import { AglynSvgIcon, BesignerSvgLogo, HelpTip } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { getThemeModeDisplayName, styled } from '@aglyn/shared-ui-theme'
 import AppBar, { type AppBarProps } from '@mui/material/AppBar'
@@ -30,6 +30,7 @@ import { useColorScheme } from '@mui/material/styles'
 import Toolbar from '@mui/material/Toolbar'
 import MuiTooltip from '@mui/material/Tooltip'
 import { forwardRef } from 'react'
+import { besignerDocsUrl } from '../utils/docs-help'
 
 const AppBarPrimary = styled(AppBar, {
   name: 'AglynAppBarPrimary',
@@ -76,6 +77,16 @@ export const AppBarPrimaryComponent = forwardRef<
           sx={{ width: 'auto' }}
           fontSize="medium"
           color="inherit"
+        />
+        {/* The editor's one "what is all this" link (AGL-2167). It sits on
+            the product mark rather than in a panel because it is the only
+            help here that is about the whole canvas — every other tip in
+            the besigner explains the control it stands next to. */}
+        <HelpTip
+          title="The Besigner"
+          excerpt="The visual editor: drag elements onto the canvas, edit text inline, style per breakpoint, and publish a version."
+          href={besignerDocsUrl('besigner', '#what-you-can-do')}
+          sx={{ ml: 0.5, fontSize: '0.9em' }}
         />
         <Box sx={{ flexGrow: 1 }} />
         <MuiTooltip

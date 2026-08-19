@@ -3733,6 +3733,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               helperText="Press Enter to add"
             />
           </Box>
+          {/* AGL-1896. The field itself is not new — what is new is that
+              something finally READS it. Until now this was a private note
+              on the asset: every placement asked the author to type alt
+              again from scratch, so the same logo on eight pages needed it
+              eight times and in practice shipped blank on the customer's
+              published site. The helper text is the whole feature from the
+              author's side; without it, nobody has a reason to fill this in
+              once instead of eight times. */}
           <TextField
             size="small"
             label="Alt text"
@@ -3741,6 +3749,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               setEditor((prev) =>
                 prev ? { ...prev, alt: event.target.value } : prev,
               )
+            }
+            // `slotProps.htmlInput`, not the `inputProps` shorthand — MUI 9
+            // dropped the latter from the TextField prop union, so it does
+            // not compile.
+            slotProps={{
+              htmlInput: { maxLength: Aglyn.MEDIA_ALT_MAX_LENGTH },
+            }}
+            helperText={
+              'Describes the image for screen readers and search engines. ' +
+              'Used automatically wherever this file is placed — you can ' +
+              'still override it on any individual placement.'
             }
           />
           <TextField

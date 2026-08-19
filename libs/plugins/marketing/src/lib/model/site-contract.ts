@@ -69,6 +69,17 @@ export interface PopupData {
   headline?: string
   body: string
   imageUrl?: string
+  /**
+   * Alt text for {@link imageUrl} (AGL-1896).
+   *
+   * The popup image used to render with a hardcoded `alt=""` and there was
+   * no field anywhere that could have changed it — an author-chosen banner,
+   * on a paying customer's published site, invisible to a screen reader by
+   * construction. Defaults from the DAM asset's own alt when the author
+   * picks one through "Browse media"; an empty value still renders `alt=""`,
+   * which is the right markup for a genuinely decorative banner.
+   */
+  imageAlt?: string
   ctaLabel?: string
   ctaHref?: string
   trigger: string

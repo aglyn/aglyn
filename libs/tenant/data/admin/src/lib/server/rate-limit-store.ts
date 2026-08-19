@@ -330,12 +330,98 @@ export function recordSignupRefusal(
     .catch(() => undefined)
 }
 
+/**
+ * Wall-clock budget for one durable counter transaction (AGL-2404).
+ *
+ * Without a bound this function could not fail at all — it could only hang.
+ * `runTransaction` on a single hot document contends, retries with backoff,
+ * and on a contended key routinely outran the platform's function ceiling, so
+ * the request died as a **504 with no body and no `Retry-After`** instead of
+ * the cheap 429 the limiter exists to produce. Measured against production on
+ * 2026-08-19 at `/api/protection/unlock`: sequential traffic refused cleanly
+ * at the 10th attempt, while **two** concurrent requests on one key were
+ * already enough to produce a 504 at ~10.3 s — the account-default function
+ * ceiling, since that route declares no `maxDuration`.
+ *
+ * 2.5 s is chosen to sit far below the smallest ceiling any caller runs at
+ * (10 s at the Vercel account default) while leaving room for a normal
+ * transaction, which measured ~0.6 s end to end on the same endpoint. The
+ * point is not to make the limiter faster; it is to make it *answerable*, so
+ * that a contended key produces a decision rather than a held function.
+ */
+export const RATE_LIMIT_TRANSACTION_BUDGET_MS = 2_500
+
+/**
+ * Attempts the SDK may spend before it gives up on its own.
+ *
+ * The default is 5, each separated by a growing backoff — which is how a
+ * single contended document turns into ten seconds of held function. Three
+ * bounds the work the *abandoned* transaction goes on doing after this
+ * function has already stopped waiting for it, so a refused caller stops
+ * adding to the contention it was refused for.
+ */
+const RATE_LIMIT_TRANSACTION_ATTEMPTS = 3
+
+/**
+ * Thrown when the durable counter could not reach a decision inside
+ * {@link RATE_LIMIT_TRANSACTION_BUDGET_MS}. Distinct from a store *error* on
+ * purpose — see the classification note on {@link consumeRateLimit}.
+ */
+export class RateLimitContentionError extends Error {
+  constructor(message = 'rate-limit counter contended') {
+    super(message)
+    this.name = 'RateLimitContentionError'
+  }
+}
+
+/**
+ * gRPC status codes that mean "the store is up, this document is hot":
+ * `ABORTED` (10) is what Firestore returns when a transaction loses its
+ * optimistic race too many times, and `DEADLINE_EXCEEDED` (4) is the same
+ * condition observed as a timeout. Neither is an outage, so neither may take
+ * the fail-soft path — degrading on contention would let a caller widen its
+ * own cap just by going concurrent, which is the exact defect AGL-794 closed.
+ */
+const CONTENTION_CODES = new Set([4, 10])
+
+function isContention(error: unknown): boolean {
+  if (error instanceof RateLimitContentionError) return true
+  const code = (error as { code?: unknown })?.code
+  return typeof code === 'number' && CONTENTION_CODES.has(code)
+}
+
+/**
+ * Resolve `work`, or reject with {@link RateLimitContentionError} once
+ * `budgetMs` elapses.
+ *
+ * The losing promise is explicitly silenced: an abandoned transaction that
+ * rejects later would otherwise surface as an unhandled rejection and, on a
+ * strict runtime, take the instance down — turning a contention fix into an
+ * availability bug.
+ */
+async function withBudget<T>(work: Promise<T>, budgetMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  work.catch(() => undefined)
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new RateLimitContentionError()), budgetMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export interface DurableRateLimitOptions {
   limit?: number
   windowMs?: number
   now?: number
   /** Injectable for tests; defaults to the Admin SDK's Firestore. */
   firestore?: any
+  /** Injectable for tests; defaults to {@link RATE_LIMIT_TRANSACTION_BUDGET_MS}. */
+  budgetMs?: number
 }
 
 export interface DurableRateLimitResult extends RateLimitResult {
@@ -344,6 +430,13 @@ export interface DurableRateLimitResult extends RateLimitResult {
    * answered instead — the cap held for this instance only.
    */
   degraded: boolean
+  /**
+   * True when the counter could not be read and written inside its budget
+   * because the key is contended, and the request was refused on that basis
+   * rather than on a counted overage (AGL-2404). Always `false` on an
+   * allowed result.
+   */
+  contended: boolean
 }
 
 /**
@@ -370,6 +463,37 @@ function bucketId(key: string, windowStartMs: number): string {
  * failing fully closed would lock legitimate visitors out of a site because of
  * an unrelated Firestore blip. Degrading to the per-instance cap keeps some
  * protection and keeps the site usable, and says which happened.
+ *
+ * ## Two failures, two postures (AGL-2404)
+ *
+ * "Firestore is unreachable" and "this one document is contended" are not the
+ * same event and must not get the same answer:
+ *
+ * - **The store is down** (fast error — `UNAVAILABLE`, a missing app, a
+ *   credential failure). Fail SOFT, exactly as before: degrade to the
+ *   per-instance cap and flag `degraded`. A real visitor must not lose access
+ *   to a customer's site over an unrelated blip.
+ * - **The key is contended** (`ABORTED`, `DEADLINE_EXCEEDED`, or the budget
+ *   above elapsing). Fail CLOSED: refuse with `contended: true` and let the
+ *   caller answer 429 with its usual `Retry-After`. Degrading here would be a
+ *   partial bypass — concurrent requests on ONE key are cheap to generate,
+ *   and if they dropped the cap to a per-instance count then going wide would
+ *   widen the cap, which is precisely the property AGL-794 removed.
+ *
+ * Refusing on contention is never worse than the 504 it replaces. A 504 is
+ * also a failed request, but it costs a full function timeout, carries no
+ * `Retry-After` for a well-behaved client to back off on, and invites an
+ * immediate retry that deepens the contention. Contention on a single key
+ * also means, at nearly every call site, either abuse or a client
+ * double-submitting: the keys are per (host, screen, IP), per uid, or per API
+ * key, so a legitimate visitor essentially never races themselves.
+ *
+ * What this deliberately does NOT do is make the counter cheaper. Bringing
+ * the contention threshold up — a sharded counter, or an atomic
+ * `FieldValue.increment` with a read-back instead of a read-modify-write
+ * transaction — is a change to the storage shape shared by nine auth
+ * surfaces, and belongs behind a load rehearsal rather than in the same pass
+ * as the bound that stops the bleeding.
  */
 export async function consumeRateLimit(
   key: string,
@@ -388,22 +512,30 @@ export async function consumeRateLimit(
       .collection(RATE_LIMIT_COLLECTION)
       .doc(bucketId(key, windowStartMs))
 
-    const count = await firestore.runTransaction(async (tx: any) => {
-      const snapshot = await tx.get(ref)
-      const next = ((snapshot.exists ? snapshot.get('count') : 0) ?? 0) + 1
-      tx.set(
-        ref,
-        {
-          count: next,
-          windowStartMs,
-          // For a Firestore TTL policy on `expiresAt` — without one these
-          // documents accumulate forever. See docs/RATE_LIMITING.md.
-          expiresAt: new Date(resetMs + windowMs),
+    // Explicit type argument: `firestore` is `any`, so the transaction's
+    // promise infers as `any` and would widen the counter to `unknown`.
+    const count = await withBudget<number>(
+      firestore.runTransaction(
+        async (tx: any) => {
+          const snapshot = await tx.get(ref)
+          const next = ((snapshot.exists ? snapshot.get('count') : 0) ?? 0) + 1
+          tx.set(
+            ref,
+            {
+              count: next,
+              windowStartMs,
+              // For a Firestore TTL policy on `expiresAt` — without one these
+              // documents accumulate forever. See docs/RATE_LIMITING.md.
+              expiresAt: new Date(resetMs + windowMs),
+            },
+            { merge: true },
+          )
+          return next
         },
-        { merge: true },
-      )
-      return next
-    })
+        { maxAttempts: RATE_LIMIT_TRANSACTION_ATTEMPTS },
+      ),
+      options?.budgetMs ?? RATE_LIMIT_TRANSACTION_BUDGET_MS,
+    )
 
     // The store answered, so any episode this instance was in is over. The
     // marker is written here rather than in the `catch` because the store is
@@ -416,10 +548,35 @@ export async function consumeRateLimit(
       remaining: Math.max(0, limit - count),
       resetMs,
       degraded: false,
+      contended: false,
     }
   } catch (error) {
+    if (isContention(error)) {
+      // NOT `noteDegradation`: nothing degraded. The durable counter is still
+      // the only authority and it still holds — this caller simply did not get
+      // a turn. Recording it as a degradation would put contention markers in
+      // front of `/api/health/rate-limits`, whose whole question is "did the
+      // durable store stop answering", and answer it wrongly.
+      //
+      // `resetMs` stays the true end of the window so `X-RateLimit-Reset`
+      // remains honest, which also makes the caller's `Retry-After` a bounded
+      // back-off to the window boundary — the one client behaviour that
+      // actually relieves the contention.
+      return {
+        allowed: false,
+        limit,
+        remaining: 0,
+        resetMs,
+        degraded: false,
+        contended: true,
+      }
+    }
     noteDegradation(now, error)
-    return { ...checkRateLimit(key, { limit, windowMs, now }), degraded: true }
+    return {
+      ...checkRateLimit(key, { limit, windowMs, now }),
+      degraded: true,
+      contended: false,
+    }
   }
 }
 

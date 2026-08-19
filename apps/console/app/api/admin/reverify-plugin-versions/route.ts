@@ -25,7 +25,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyStaff } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import {
   reverifyOutcome,
   summariseReverify,
@@ -80,12 +80,11 @@ async function handler(request: Request): Promise<Response> {
 
   const asFlag = (value: unknown): boolean =>
     value !== undefined && value !== '0' && value !== 'false' && value !== false
-  const payload = body as { dryRun?: unknown; force?: unknown } | undefined
+  const payload = body as { force?: unknown } | undefined
   // A GET is somebody's curl or a browser: report, never write. The cron
   // POSTs, and writing back a verdict is what makes the next reviewer's page
   // load free, so a dry run is not the default there.
-  const dryRunInput = payload?.dryRun ?? query['dryRun']
-  const dryRun = dryRunInput === undefined ? method === 'GET' : asFlag(dryRunInput)
+  const dryRun = isCronDryRun({ method, query, body })
   const force = asFlag(payload?.force ?? query['force'])
 
   try {

@@ -54,6 +54,82 @@ The **Products** page is the catalog manager:
 - **Locations** split stock across warehouses/storefronts (plan-capped);
   adjustments and POS sales bucket per location.
 
+### Stock movements {#stock-movements}
+
+**Inventory → Stock movements** is the history behind every tracked count —
+the answer to "the shelf says four and the console says six, what happened?"
+
+Five things write to it and they all appear in one list, newest first: a paid
+sale, a refunded return, a cancelled order putting stock back, a point-of-sale
+sale at the register, and any hand adjustment you make from the products hub.
+Each row carries **when**, **which product** (and variant, when the product has
+options), **how much the count changed**, the **reason** — Sale, Refund return,
+Restock, Correction, Damaged, Order cancelled — and the **source** that wrote
+it. Filter by product or by reason to narrow it.
+
+The list holds the most recent 100 movements. Filtering happens inside that
+window, so a product with no recent movement will not appear in the product
+filter at all — that is the absence of a movement, not a missing row.
+
+:::note A change and an applied change can differ
+A row shows two numbers when they disagree. The first is the change that was
+asked for; the second is what the count could actually give up. They differ
+when a product with backorders allowed sells past zero — three sold against a
+count of zero moves the count by nothing, and both numbers are shown so the
+discrepancy is legible rather than silently rounded away.
+:::
+
+## Gift cards & store credit {#gift-cards}
+
+**Gift cards** lists every card your store has issued, what is left on each
+one, and what that adds up to. Business plan and above.
+
+Cards arrive two ways:
+
+- **A shopper buys one.** A gift-card purchase mints a card with a code at the
+  moment the payment settles.
+- **You issue one by hand.** Enter an amount and, optionally, an email address
+  and the code is created and mailed to that person. This is the goodwill
+  gesture and the service-recovery path — a refund you would rather keep as
+  store credit.
+
+Balances apply automatically at checkout; a shopper enters the code and the
+card is drawn down by what the order uses. Search the list by code or by
+recipient email to find one.
+
+:::caution Outstanding balance is a liability, not revenue
+The **outstanding** total at the top is money customers have already paid you
+and have not yet spent. It is store credit you owe against future orders, and
+it belongs on the liability side of your books — not in a sales figure. Cards
+are counted at zero or above, so a card that has somehow gone negative cannot
+flatter that total downward.
+:::
+
+**Voiding** a card zeroes whatever is left on it. The holder can no longer
+redeem it and the action cannot be undone, so you are asked to confirm the
+remaining amount first.
+
+## Recovery & alerts {#recovery-and-alerts}
+
+Two queues the storefront fills and Aglyn drains for you, both visible so you
+can see they are moving.
+
+**Abandoned checkouts** — a shopper who reached checkout, entered their email
+and left. Aglyn emails them once, with a link back to the cart they had built,
+about fifteen minutes after that checkout has been idle for an hour. A checkout
+that gets completed stops reminding itself, and one that is never completed is
+given up on after seven days. The card shows how many are due a reminder, how
+many are still inside the first hour, and how many have already been reminded,
+with the most recent few named. Pro plan and above.
+
+**Back-in-stock alerts** — anyone who used *"Notify me when it's back"* on a
+sold-out product is emailed once its stock goes above zero. The count of
+shoppers waiting is a demand signal worth restocking against. Available on
+every plan that includes commerce.
+
+Both are read-only here on purpose. Sending is the scheduled job's to do, and a
+"send now" button would race it for a reminder you cannot un-send.
+
 ## Orders
 
 Every paid checkout becomes an order with a sequential number, line-item

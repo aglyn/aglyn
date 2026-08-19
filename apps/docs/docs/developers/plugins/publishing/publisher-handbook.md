@@ -374,6 +374,38 @@ applies to you; uninstall it or roll back to an approved version. Review
 can also stop a version outright, and then every site pinned to it renders
 a placeholder instead of the plugin.
 
+### When a live version is disabled {#disabled-versions}
+
+Revocation is not rejection. A rejected version never went live; a
+**disabled** version passed review, shipped, and was then stopped by the
+platform. There are two ways that happens: a listing-wide **takedown**, which
+staff cannot do without recording a reason, and a per-version kill switch that
+stops one version and leaves the others installable. Where a reason is on file,
+both you and the sites running the version are shown the same one.
+
+**What you see.** On your listing's **Review status** card, a disabled version
+carries a red **Disabled** chip *beside* its review chip rather than instead of
+it — the version is still approved, and that is worth knowing, because it means
+the problem is not your submission. Under the row, an alert repeats that nobody
+can install the version and that sites already running it render a placeholder,
+followed by the reason on file and the date it was disabled. When no reason was
+recorded, no reason line appears — rather than an empty one that would read as
+*no reason given*. Who disabled it is not shown; that belongs to the audit log.
+
+The card also stops crediting a disabled version with installs. If the version
+that was installing today is the one that got pulled, the card leads with that
+instead: it is still your latest approved version, nobody can install it, and
+**publishing a new version is what clears it** — the same bytes cannot be
+re-enabled by editing the listing.
+
+**What a site owner sees.** On **Marketplace → Installed**, their entry for
+your plugin gets a red **disabled** chip next to its version, and an alert
+saying the platform disabled this version and that it renders a placeholder on
+their site until they upgrade or uninstall it. The same recorded reason and
+date appear there, so the explanation your customers read is the one you read.
+Their two ways out are the two buttons already on that row — upgrade to a later
+version if one exists, or uninstall.
+
 ## Private plugins
 
 Choose **Only this organization** under *Who can install this* when you
@@ -512,3 +544,23 @@ account, with what buyers paid, the tax and the platform fee shown beside it.
 Refunds and lost chargebacks are excluded from that total: your share is
 pulled back from your Connect account, and the amount returned is listed
 separately.
+
+### Why a $1 listing is a bad price {#low-prices-and-processing}
+
+Type a very low price into the publish form and the hint under the price field
+changes to say what that sale costs to process. At $1 it reads: processing the
+payment costs about **$0.36**, more than the **$0.20** platform fee — so the
+sale does not cover the cost of taking it. $3 or more does.
+
+The figures come from the payment processor's per-transaction cost, which is a
+percentage of what the buyer pays (the price plus sales tax) plus a fixed
+amount per transaction. That fixed amount is what makes small prices
+uneconomic: it does not shrink with the price, while the platform's 20% cut
+does. The quote uses the 20% take rate and assumes the most expensive payment
+method a buyer may choose, so the advice holds whichever plan you are on.
+
+**Nothing enforces this.** The hint is advice, the publish button stays
+enabled, and a $1 listing publishes. It is there so a price is chosen knowing
+what it does, and because a **free** listing takes no payment at all and so
+costs nothing to process — that is often the better answer for something you
+were about to charge a dollar for.

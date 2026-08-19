@@ -39,8 +39,8 @@ is the failure mode.
 
 | Channel | Where it lands | Status |
 | --- | --- | --- |
-| `privacy@aglyn.com` | A Workspace mailbox | **The published intake. Existence unverified — AGL-1973.** Confirm this before Sept 1; a bounce does not stop the clock. |
-| `security@aglyn.com` | Workspace | Vulnerability reports, per `docs.aglyn.com/trust`. Same unverified status. |
+| `privacy@aglyn.com` | Google Group → `zach@aglyn.com` | **The published intake. Confirmed to deliver 2026-08-19 (AGL-1911)** — anyone on the web can post, unmoderated. It sends **no auto-acknowledgement**, so the requester holds no receipt and the clock runs regardless (AGL-2400). |
+| `security@aglyn.com` | Google Group → `zach@aglyn.com` | Vulnerability reports, per `docs.aglyn.com/trust`. Same configuration, same confirmation, same missing acknowledgement. |
 | Support ticket | `/admin/support` | Real and working. Staff see a `support.ticketOpened` notification with a deep link. |
 | Phone opt-out ("stop calling me", "delete my number") | `/admin/contact-suppressions` | Real and working (AGL-1592). Its own path — §5. |
 | In-product self-serve | the customer does it themselves | §4. Always offer this first. |
@@ -368,7 +368,7 @@ comfortably outlives the response window.
 
 | | Filed |
 | --- | --- |
-| We do not know that `privacy@aglyn.com` receives mail. | AGL-1973 |
+| ~~We do not know that `privacy@aglyn.com` receives mail.~~ **Closed 2026-08-19 (AGL-1911)** — it is a Google Group that accepts unmoderated posts from anyone on the web and delivers each one to `zach@aglyn.com`. Residual: no auto-acknowledgement, so a requester has no receipt and no stated response window. | AGL-1911, AGL-2400 |
 | ~~Erasure does not reach `profiles`, `publisherProfiles` or `publisherHandles`.~~ **Closed 2026-08-18 (AGL-1970)** — all three are swept, and a surviving marketplace listing leaves only a content-free tombstone. | AGL-1970 |
 | ~~Erasure does not reach `supportTickets`.~~ **Closed 2026-08-18 (AGL-1971).** One caveat to say accurately if asked: erasing a **person** redacts their name and email from support threads but does not delete the threads — those belong to the workspace, and only the workspace can ask for them. | AGL-1971 |
 | Assist Q&A has no retention period. | AGL-1972 |

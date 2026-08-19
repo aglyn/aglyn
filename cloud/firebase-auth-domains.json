@@ -1,0 +1,79 @@
+{
+  "$schema-note": "The Firebase Auth authorized-domain allowlist for aglyn-main, as reviewed and approved in git. Checked against LIVE by `npm run check:authorized-domains` (tools/scripts/check-authorized-domains.mjs). This list has no deploy step — it is edited in a console UI or through the Identity Toolkit Admin API, so a commit here is NOT evidence live changed, and live changing is not evidence anyone approved it. That is the whole reason the checker exists.",
+  "$why-it-matters": "An authorized domain is what Firebase checks before letting a page run the OAuth handshake. A hostname on this list that we do not control is an account-takeover vector: whoever claims it can stand up a page Firebase Auth treats as ours. AGL-1135, AGL-1344, AGL-1486 and AGL-1940 are four instances of the same drift, which is why the list is now pinned rather than audited by hand.",
+  "$adding-an-entry": "Never add one to make a red check green. Add it because a surface genuinely needs to complete sign-in there, and say so in `why` — the next audit reads that field to decide whether the entry is still earned.",
+  "projectId": "aglyn-main",
+  "domains": [
+    {
+      "domain": "localhost",
+      "why": "Local development sign-in (`nx serve console`, port 4200) and the auth emulator. Firebase seeds this on every project."
+    },
+    {
+      "domain": "aglyn-main.firebaseapp.com",
+      "why": "Firebase's own default Hosting domain, and the origin that actually serves `/__/auth/handler` for the OAuth handshake. Measured 2026-08-19: 200. AGL-1919 tracks moving the handshake off it; until that lands, removing this breaks Google sign-in outright."
+    },
+    {
+      "domain": "aglyn-main.web.app",
+      "why": "The second default domain Firebase provisions for the same Hosting site. Provisioned by Firebase, not claimable by anyone else, and paired with the entry above."
+    },
+    {
+      "domain": "app.aglyn.com",
+      "why": "The console. Vercel project `aglyn-console`. Measured 2026-08-19: /signin 200, /__/auth/handler 200. The primary sign-in surface."
+    },
+    {
+      "domain": "auth.aglyn.com",
+      "why": "The dedicated OAuth origin (AGL-462/465) — the auth helper iframe is served here. Vercel project `aglyn-console`. Measured 2026-08-19: /signin 200, /__/auth/handler 200."
+    },
+    {
+      "domain": "aglyn.com",
+      "why": "Marketing and the tenant runtime apex. Vercel project `aglyn-tenant`. Measured 2026-08-19: /signin 200."
+    },
+    {
+      "domain": "aglyn.app",
+      "why": "Tenant apex. `aglyn.app` and `*.aglyn.app` are both attached to Vercel project `aglyn-tenant`, and published tenant sites are served from the wildcard. The apex itself 308s to aglyn.com; the entry is here for the tenant surfaces, not the apex."
+    },
+    {
+      "domain": "admin.aglyn.com",
+      "stale": true,
+      "why": "REVIEW (AGL-1940). Serves nothing: attached to no Vercel project across either team, and 404 DEPLOYMENT_NOT_FOUND at / and /signin on 2026-08-19. Retained rather than removed because it is a subdomain of a zone we control, so unlike aglyn-console.vercel.app nobody else can claim it — this is untidy, not a takeover vector. Remove it once someone confirms no admin surface is planned there."
+    },
+    {
+      "domain": "api.aglyn.com",
+      "stale": true,
+      "why": "REVIEW (AGL-1940). Same evidence as admin.aglyn.com: no Vercel project, 404 DEPLOYMENT_NOT_FOUND at /, /v1 and /signin on 2026-08-19. Named as the intended host for the customer REST API, which is why it was left in place — but an API host does not run the browser sign-in handshake, so it very likely does not need to be here even once that ships."
+    }
+  ],
+  "removed": [
+    {
+      "domain": "aglyn-console.vercel.app",
+      "removedOn": "2026-08-19",
+      "issue": "AGL-1940",
+      "why": "A hostname in a namespace we do not control. Vercel hands out `<project>.vercel.app` by PROJECT NAME, and this one is not ours: our console project's aliases are `aglyn-console-aglyn.vercel.app` and `aglyn-console-git-production-aglyn.vercel.app` (the suffixed form Vercel falls back to when the bare name is unavailable — contrast `aglyn-plugins.vercel.app`, which the plugins project does hold). It responded 404 DEPLOYMENT_NOT_FOUND, byte-identical to a never-claimed control hostname. Do not re-add."
+    },
+    {
+      "domain": "vercel.app",
+      "issue": "AGL-1344",
+      "why": "A bare entry that trusted every project on vercel.app. Already gone from live before this file existed; recorded so nobody re-adds it."
+    },
+    {
+      "domain": "aglyn.io",
+      "issue": "AGL-1344",
+      "why": "Legacy pre-cutover domain. Removed before this file existed."
+    },
+    {
+      "domain": "app.aglyn.io",
+      "issue": "AGL-1344",
+      "why": "Legacy pre-cutover domain. Removed before this file existed."
+    },
+    {
+      "domain": "auth.aglyn.io",
+      "issue": "AGL-1344",
+      "why": "Legacy pre-cutover domain. Removed before this file existed."
+    },
+    {
+      "domain": "tenant.aglyn.app",
+      "issue": "AGL-1344",
+      "why": "Superseded by the `aglyn.app` entry above."
+    }
+  ]
+}

@@ -49,6 +49,35 @@ whether their reach is the whole organization or a list of sites:
 Pending invites carry the same label, so you can tell a pending manager from a pending
 collaborator before it's accepted.
 
+### Site roles
+
+Every person with access to a site holds one of four **site roles**. Managers get
+`admin` on every site in the organization; collaborators are given a role per site.
+
+| Site role | Can edit content | Can publish | Notes |
+|---|---|---|---|
+| **Viewer** | No | No | Read-only |
+| **Author** | Yes | **No** | Drafts and edits everything; nothing they do goes live |
+| **Editor** | Yes | Yes | The usual working role |
+| **Admin** | Yes | Yes | Also manages the site's people, domain and plugins |
+
+**Author** is the role to give a client who should work on their own content without
+being able to put it in front of visitors. Concretely, an Author *cannot*:
+
+- publish or unpublish a page, or change its address
+- change which saved version a page, layout or component serves
+- schedule any of the above for later
+- publish, unpublish or schedule a collection entry
+- delete a page, layout or component
+- read the site's orders or its webhook signing secrets
+
+Everything else is open to them: writing and designing pages, editing layouts and
+components, uploading media, drafting and editing entries, and saving as many versions
+as they like. Someone with a publishing role reviews the draft and publishes it.
+
+This is enforced in the database itself, not just hidden in the console — an Author
+cannot publish through any route into Aglyn.
+
 ### What a site collaborator sees
 
 Someone invited to a **specific site** rather than the whole organization gets a console

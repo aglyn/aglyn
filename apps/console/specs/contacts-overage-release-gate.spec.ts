@@ -308,8 +308,33 @@ beforeEach(() => {
   // A FAKE key. The route only calls Stripe when one is set, and the meter
   // event is the thing under test — but no request leaves the process.
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
+  // AGL-1878: what the subscription-item check matches against. Production
+  // sets it; a suite that left it unset would take the
+  // `meter-not-configured` branch and stop metering for a reason that has
+  // nothing to do with what this file is about.
+  process.env.STRIPE_PRICE_METERED = 'price_metered_test'
   delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
   global.fetch = jest.fn(async (url: any, init: any) => {
+    // AGL-1878: the route asks whether the customer carries a subscription
+    // item priced on the meter before it reports, because a 200 from
+    // `meter_events` is not a charge. Matched BEFORE the meter-event arm —
+    // both are `api.stripe.com`, and folding them together pushed a bodyless
+    // GET into `mockMeterEvents` as if it were an event. Answered YES so the
+    // cases that assert an event still assert one; what this suite is about is
+    // the release flag, not the subscription item.
+    if (String(url).includes('/v1/subscriptions')) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              status: 'active',
+              items: { data: [{ price: { id: 'price_metered_test' } }] },
+            },
+          ],
+        }),
+      } as any
+    }
     if (String(url).includes('api.stripe.com')) {
       mockMeterEvents.push(String(init?.body ?? ''))
       return { ok: true, json: async () => ({}) } as any
@@ -321,6 +346,7 @@ beforeEach(() => {
 afterEach(() => {
   global.fetch = ORIGINAL_FETCH
   delete process.env.STRIPE_SECRET_KEY
+  delete process.env.STRIPE_PRICE_METERED
 })
 
 describe('the audience band is not invoiced while the Contacts page is dark', () => {
