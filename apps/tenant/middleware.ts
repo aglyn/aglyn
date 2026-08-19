@@ -112,15 +112,27 @@ const TENANT_HOST_PARAM = 'tenantHost'
 const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
 
 /**
- * The `x-powered-by` value (AGL-2088). A LITERAL, not an import.
+ * The `x-powered-by` value (AGL-2088). A local READ, not an import.
  *
  * The canonical definition is `PLATFORM_GENERATOR_NAME` in
- * `libs/aglyn/.../plan-entitlements.ts`, and the `<meta name="generator">` tag
+ * `libs/aglyn/.../platform-brand.ts`, and the `<meta name="generator">` tag
  * reads it from there. This file cannot: middleware runs in the edge runtime,
  * and every other middleware in the repo — console included — imports only
  * app-local `constants/` or the root `security-origins`, precisely so a
  * server-only graph (firebase-admin, the entitlement resolvers) never gets
  * dragged into an edge bundle.
+ *
+ * It was a bare `'Aglyn'` literal, which was fine while the canonical value
+ * was also a literal. AGL-2153 made the brand configurable, and at that moment
+ * a hand-copied literal stopped being a duplicate and became a DIVERGENCE: a
+ * self-hoster who renamed the product would have served
+ * `<meta name="generator">` with their name and `x-powered-by` with ours, on
+ * the same response. So the copy reads the same env var under the same name —
+ * one value, one name (AGL-733) — rather than restating the answer.
+ *
+ * Dot notation is required, not stylistic: Next substitutes `NEXT_PUBLIC_*`
+ * textually in the dot form only, and the bracket form reads `undefined` in an
+ * edge bundle exactly as it does in the browser (AGL-2037).
  *
  * The copy is kept honest by assertion rather than by hope:
  * `platform-fingerprint-headers.spec.ts` imports the lib constant and asserts
@@ -128,7 +140,8 @@ const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
  * place fails a test instead of quietly shipping two different names to
  * detectors that key on the string.
  */
-const PLATFORM_GENERATOR_NAME = 'Aglyn'
+const PLATFORM_GENERATOR_NAME =
+  process.env.NEXT_PUBLIC_PLATFORM_BRAND_NAME?.trim() || 'Aglyn'
 
 /**
  * Lockdown verdict at the REQUEST level (AGL-1501). The edge runtime cannot

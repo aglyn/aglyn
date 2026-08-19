@@ -668,7 +668,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         // can never drift or partly-render as Aglyn. `showBranding` still
         // decides whether the badge shows at all.
         (() => {
-          const brand = props.branding ?? Aglyn.AGLYN_BRANDING_PROFILE
+          const brand = props.branding ?? Aglyn.PLATFORM_BRANDING_PROFILE
           // Same resolver as every other surface (AGL-1407). The org branding
           // card writes a typed URL today, which passes straight through; this
           // is what stops a picked `media:` reference reaching the badge as a

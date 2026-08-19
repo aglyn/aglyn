@@ -26,7 +26,7 @@ import {
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import {
-  AGLYN_BRANDING_PROFILE,
+  PLATFORM_BRANDING_PROFILE,
   brandMergeTokens,
   type ResolvedBrandingProfile,
 } from '@aglyn/aglyn/server'
@@ -216,7 +216,7 @@ export async function renderSystemEmail(
 export async function renderEffectiveSystemEmail(
   templateKey: string,
   merge: Record<string, string> = {},
-  branding: ResolvedBrandingProfile = AGLYN_BRANDING_PROFILE,
+  branding: ResolvedBrandingProfile = PLATFORM_BRANDING_PROFILE,
 ): Promise<RenderedSystemEmail | null> {
   const definition = getSystemEmailTemplate(templateKey)
   if (!definition || !isSystemEmailEditable(definition)) return null

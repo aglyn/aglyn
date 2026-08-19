@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AGLYN_BRANDING_PROFILE, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { PLATFORM_BRANDING_PROFILE, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   generateOrgSlug,
   isValidOrgSlug,
@@ -200,13 +200,13 @@ async function handler(request: Request): Promise<Response> {
             // welcome copy now carries `{{brand.productName}}`, and a template
             // rendered with no brand tokens has them BLANKED rather than left
             // visible, so the greeting would read "Welcome to " (AGL-2139).
-            AGLYN_BRANDING_PROFILE,
+            PLATFORM_BRANDING_PROFILE,
           )
           await sendEmail({
             to: decoded.email,
             subject:
               designed?.subject ??
-              `Welcome to ${AGLYN_BRANDING_PROFILE.productName}`,
+              `Welcome to ${PLATFORM_BRANDING_PROFILE.productName}`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             context: 'welcome',
