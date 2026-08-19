@@ -59,8 +59,16 @@ describe('Box element (AGL-1201)', () => {
     // A bare div has zero height and no border: the drop would look like
     // nothing happened. On the node's own `sx` (AGL-1346) — in `props.sx`
     // the outline rendered but no click could clear it.
+    //
+    // Named for the four sides, not MUI's `p` (AGL-2207): the panel's
+    // Padding control reads the longhands, so a preset that shipped `p`
+    // was a value the author could see paint and not see in the panel.
     const data = presets[0].data as any
-    expect(data.sx.p).toBeTruthy()
+    expect(data.sx.p).toBeUndefined()
+    expect(data.sx.paddingTop).toBeTruthy()
+    expect(data.sx.paddingRight).toBeTruthy()
+    expect(data.sx.paddingBottom).toBeTruthy()
+    expect(data.sx.paddingLeft).toBeTruthy()
     expect(data.sx.border).toBeTruthy()
     expect(data.props).not.toHaveProperty('sx')
   })

@@ -182,11 +182,21 @@ describe('mui block presets', () => {
       canvas.getNode(Aglyn.NODE_ROOT_ID)!,
     )
 
-    expect(inserted.sx).toEqual({ py: 10, px: 4, alignItems: 'center' })
+    // Spelled as the longhands the Styles panel's Padding control is named
+    // for (AGL-2207): with `py`/`px` the hero's band padding rendered and
+    // the control read empty, and clearing it did nothing.
+    const heroSx = {
+      paddingTop: 10,
+      paddingBottom: 10,
+      paddingLeft: 4,
+      paddingRight: 4,
+      alignItems: 'center',
+    }
+    expect(inserted.sx).toEqual(heroSx)
     expect(inserted.props).toEqual({ spacing: 2 })
     // …and it survives the save boundary, which omits an empty sx.
     const saved = (canvas.toJSON().nodes as Record<string, any>)[inserted.$id]
-    expect(saved.sx).toEqual({ py: 10, px: 4, alignItems: 'center' })
+    expect(saved.sx).toEqual(heroSx)
     expect(saved.props?.sx).toBeUndefined()
   })
 

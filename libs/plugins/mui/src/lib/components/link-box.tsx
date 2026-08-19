@@ -181,7 +181,10 @@ export const presets: Aglyn.PresetSchema[] = [
       // Node-level sx (AGL-1346) — the record the Styles panel edits.
       sx: {
         display: 'block',
-        p: 2,
+        paddingTop: 2,
+        paddingRight: 2,
+        paddingBottom: 2,
+        paddingLeft: 2,
         borderRadius: 1,
         '&:hover': { backgroundColor: 'action.hover' },
       },

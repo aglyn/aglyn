@@ -121,7 +121,7 @@ function shell(childIds: string[]): NodesMap {
       // 2026-08-18), not an arbitrary narrow default: a collection entry is
       // an article body, and `xl` — the section default — runs a paragraph
       // past 180 characters a line. Stock breakpoint, no bespoke number.
-      props: { maxWidth: 'md', sx: { py: 6 } },
+      props: { maxWidth: 'md', sx: { paddingTop: 6, paddingBottom: 6 } },
       nodes: [id('stack')],
     },
     [id('stack')]: {
@@ -247,7 +247,7 @@ export function buildCollectionEntryFallbackNodes(
       componentId: Aglyn.COLLECTION_RELATED_COMPONENT_ID,
       pluginId: 'mui',
       parentId: id('stack'),
-      props: { heading: 'Related articles', limit: 3, sx: { pt: 2 } },
+      props: { heading: 'Related articles', limit: 3, sx: { paddingTop: 2 } },
     },
   ])
   entries.push([
@@ -356,7 +356,7 @@ function paginationNodes(
     props: {
       direction: 'row',
       spacing: 3,
-      sx: { alignItems: 'center', justifyContent: 'center', pt: 2 },
+      sx: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     },
     nodes: children,
   }
@@ -397,7 +397,7 @@ export function buildCollectionListFallbackNodes(
         componentId: Aglyn.COLLECTION_CATEGORIES_COMPONENT_ID,
         pluginId: 'mui',
         parentId: id('stack'),
-        props: { allLabel: 'All', sx: { pb: 1 } },
+        props: { allLabel: 'All', sx: { paddingBottom: 1 } },
       }
     : null
   const lead = pills ? [titleId, id('pills')] : [titleId]
