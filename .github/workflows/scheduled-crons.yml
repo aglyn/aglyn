@@ -104,6 +104,14 @@ on:
     # double-send). A backlog therefore drains at 40 campaigns/hour rather
     # than stalling.
     - cron: '*/15 * * * *' # campaigns/process-scheduled — every 15 minutes
+    # A custom domain's slow steps are not ours: a certificate issues over
+    # seconds to minutes, and an ownership challenge or a DNS correction
+    # happens in the customer's registrar on their own clock. Until AGL-2010
+    # nothing re-checked, so a domain that went healthy after the attach
+    # stayed dark until a human pressed Re-attach. Frequent because the
+    # customer is sitting there waiting for their site; cheap because a run
+    # with nothing pending is two Firestore reads and no Vercel calls.
+    - cron: '*/20 * * * *' # finish-domain-attachments — every 20 minutes
   workflow_dispatch:
     inputs:
       path:
@@ -124,6 +132,7 @@ on:
           - /api/admin/backfill-scope
           - /api/admin/firestore-export
           - /api/campaigns/process-scheduled
+          - /api/admin/finish-domain-attachments
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
@@ -163,6 +172,7 @@ jobs:
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;
             '30 6 * * 1') path=/api/admin/backfill-scope ;;
             '*/15 * * * *') path=/api/campaigns/process-scheduled ;;
+            '*/20 * * * *') path=/api/admin/finish-domain-attachments ;;
             *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then

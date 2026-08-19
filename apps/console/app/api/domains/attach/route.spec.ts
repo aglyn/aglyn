@@ -276,6 +276,15 @@ describe('one domain, one site — in both directions (AGL-743)', () => {
     // uniqueness check that matched the caller's own document would answer
     // "already connected to another site" — about itself.
     seedHost('mine', { cname: 'example.com', cnameAttachmentPending: true })
+    // Stated rather than inherited from the default (AGL-1996). This test is
+    // about the uniqueness check, and clearing the pending flag is only
+    // correct for a domain that SERVES. It used to ride the suite's
+    // `certificate-pending` default and assert the flag was cleared, which
+    // pinned the defect as passing behaviour.
+    mockProjectDomainStatus.mockResolvedValue({
+      domain: 'example.com',
+      state: 'serving',
+    })
 
     const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
 
@@ -372,6 +381,36 @@ describe('a successful POST is not a serving domain (AGL-1913)', () => {
     await expect(response.json()).resolves.toMatchObject({
       state: 'dns-misconfigured',
       conflicts: [{ type: 'A', value: '203.0.113.9' }],
+    })
+    expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('mine.aglyn.app')),
+    ).toBe(false)
+  })
+
+  it('a domain with no certificate yet is NOT serving — no redirect, flag stays', async () => {
+    // AGL-1996. `certificate-pending` means Vercel has accepted and routed
+    // the name but no certificate exists, so HTTPS fails. It used to count as
+    // serving, which is the one case the redirect comment above describes and
+    // the one it did not defend against: the flag was deleted, the edge
+    // redirect was registered, and the site lost BOTH addresses — the
+    // subdomain now redirects, and the destination answers a TLS error.
+    seedHost('mine')
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'certificate-pending',
+      domain: 'example.com',
+      verification: [],
+      conflicts: [],
+    })
+
+    const response = await POST(post({ hostId: 'mine', domain: 'example.com' }))
+
+    // Still a successful attach — the domain IS on the project. What it is
+    // not is ready for visitors, and the body says which.
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      attached: true,
+      state: 'certificate-pending',
     })
     expect(docs.get('hosts/mine')?.['cnameAttachmentPending']).toBe(true)
     expect(
