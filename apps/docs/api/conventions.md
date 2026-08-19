@@ -101,7 +101,7 @@ errors add a `code` with the specific detail.
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
-| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. |
+| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
 
@@ -137,11 +137,14 @@ apart:
 | `"commerce"` | The API works, but the plan no longer includes **commerce**, so [orders](resources/orders.md) and [products](resources/products.md) are closed. Every other resource keeps working. | Restore a plan with commerce. |
 | `"data_store"` | The API works, but the plan doesn't include **datasets**, so [creating one](resources/datasets.md#create-a-dataset) is closed. | Move to a plan with the data store. |
 | `"dataset_quota"` | Datasets are included and **every included slot is used**. The message names the limit, and the add-on price when extra datasets are purchasable on this plan. | Buy extra datasets, or upgrade. |
+| `"record_quota"` | The dataset holds every record the plan includes. The message names the limit. | Upgrade. |
+| `"data_storage_quota"` | Dataset storage is exhausted, or the plan includes none. The message names the included size. | Upgrade. |
+| `"contact_quota"` | The **audience band** is full on a plan that doesn't meter contact overage. See [contacts](resources/contacts.md#plan-gates) — on plans that do meter it, this never happens and the extra contacts bill instead. | Upgrade. |
 
 Branch on `code`, not on the message. An integration that retries a plan failure
 forever is the failure mode here — none of them is transient, so back off and alert
-a human instead. `dataset_quota` is the one a human can clear in minutes, which is
-why it is the one that does **not** consume an
+a human instead. The quota codes are the ones a human can clear in minutes, which is
+why they are the ones that do **not** consume an
 [`Idempotency-Key`](#idempotency).
 
 We answer `plan_required` rather than `404` for the commerce case on purpose. Hiding a
@@ -150,7 +153,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Five operations accept an **`Idempotency-Key`** header:
+Seven operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -159,11 +162,15 @@ Five operations accept an **`Idempotency-Key`** header:
 | `POST /v1/datasets/{datasetId}/records` | that dataset |
 | `DELETE /v1/datasets/{datasetId}/records/{recordId}` | that dataset |
 | `DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` | that site |
+| `POST /v1/contacts` | the organization |
+| `DELETE /v1/contacts/{contactId}` | the organization |
 
-`POST /v1/datasets` is the only organization-scoped one, because it is the only
-operation with no object to scope to yet. Every other row is scoped to the
-object named in its own path — including `DELETE /v1/datasets/{datasetId}`,
-where the dataset being removed is still the scope.
+Three rows are organization-scoped. `POST /v1/datasets` is because it is the only
+dataset operation with no object to scope to yet. Both contact operations are because
+**contacts are organization-wide**: one list is shared by every site, so there is no
+narrower object to scope a key to. Every other row is scoped to the object named in
+its own path — including `DELETE /v1/datasets/{datasetId}`, where the dataset being
+removed is still the scope.
 
 Send the same key to retry safely — if the original succeeded, the same response
 comes back instead of a duplicate or a `404`:
@@ -202,10 +209,17 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 - A request that **fails** releases its key, so you can fix the cause and retry with
   the same one. A `400` never consumes a key at all, and neither does a refusal that
   a customer can clear: a `403 plan_required` on
-  [`POST /v1/datasets`](resources/datasets.md#plan-gates) goes away when someone buys
-  an add-on, and a `409 dataset_not_empty` goes away when the records are deleted. A
-  key burned on either would mean the retry that should finally succeed replays the
-  refusal forever.
+  [`POST /v1/datasets`](resources/datasets.md#plan-gates) or
+  [`POST /v1/contacts`](resources/contacts.md#plan-gates) goes away when someone
+  upgrades, a `409 dataset_not_empty` goes away when the records are deleted, and a
+  `409 contact_exists` goes away when the duplicate is removed. A key burned on any of
+  them would mean the retry that should finally succeed replays the refusal forever.
+- The mirror of that rule matters just as much on
+  [`POST /v1/contacts`](resources/contacts.md#plan-gates): a create that **succeeds**
+  is remembered, so a retry replays it *even when that create consumed the last slot
+  in the audience band*. Otherwise the retry after a lost response would be refused by
+  the quota it had itself just filled, and you would have no way to tell whether the
+  contact exists.
 
 ### Deletes
 
@@ -236,6 +250,11 @@ curl -X DELETE https://app.aglyn.com/api/v1/datasets/ds_1/records/k3f9a1c7be \
 scoped to the site rather than to a dataset. It is the delete most likely to run on
 a timer — a purge after a nightly export — which is exactly the case where a lost
 response has to be distinguishable from a wrong id.
+
+`DELETE /v1/contacts/{contactId}` behaves the same way, scoped to the organization.
+Send a key on it as a matter of course: contact deletions are usually erasure requests
+running from a script, and "already erased" and "wrong id" prescribe very different
+next steps.
 
 `PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
 over the stored ones, so the same body twice lands the same state *and* returns the

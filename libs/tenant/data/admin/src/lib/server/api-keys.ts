@@ -32,15 +32,25 @@ import { firebaseAdmin } from './firebase-admin'
 /**
  * Scopes a key can be granted, as `resource:action`. Every entry must be
  * enforced by a real endpoint — a mintable scope that grants nothing reads
- * as a broken permission (AGL-899 removed `contacts:write` on those grounds;
- * contacts are read-only over the API, created by the site capture points).
- * Re-add it in the same change that ships contact writes, which must meter
- * against the audience bands (AGL-890) the way site capture does.
+ * as a broken permission (AGL-899 removed `contacts:write` on those grounds,
+ * and AGL-2276 re-added it in the same change that shipped the writes, which
+ * is the condition AGL-899 set).
  */
 export const API_SCOPES = [
   'datasets:read',
   'datasets:write',
   'contacts:read',
+  // AGL-2276. Contacts used to arrive only through the four site capture
+  // points, so an integration that OWNS the customer list upstream — a CRM,
+  // a mailing tool, a migration off another platform — could read the
+  // audience and never add to it. The write is metered against the same
+  // audience bands capture is (AGL-890): `checkContactQuota` on the create,
+  // and the monthly rollup counts `orgs/{orgId}/contacts` whatever wrote
+  // them, so an API-created contact bills exactly like a form-captured one.
+  // The scope covers the create, the tag/notes edit the console's Contacts
+  // page already makes, and the delete — never `email`, which is the dedupe
+  // key, and never `sources`/`interactions`, which are provenance.
+  'contacts:write',
   'sites:read',
   'forms:read',
   // AGL-2127. A lead sync could READ a submission and never record that it

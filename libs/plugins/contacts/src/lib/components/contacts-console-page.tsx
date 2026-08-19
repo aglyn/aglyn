@@ -69,6 +69,11 @@ const SOURCE_LABELS: Record<ContactSource, string> = {
   order: 'Customer',
   booking: 'Booking',
   newsletter: 'Newsletter',
+  // AGL-2276: added by an integration through `POST /v1/contacts`, rather
+  // than captured on a site. The map is typed `Record<ContactSource, string>`
+  // precisely so a new source cannot be added to the union without landing a
+  // label here.
+  api: 'API',
 }
 
 type ContactDoc = HostContact & {

@@ -56,6 +56,7 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'datasets:read', label: 'Datasets — read', description: 'List datasets and read their records.' },
   { scope: 'datasets:write', label: 'Datasets — write', description: 'Create, update, and delete records.' },
   { scope: 'contacts:read', label: 'Contacts — read', description: 'List and read contacts.' },
+  { scope: 'contacts:write', label: 'Contacts — write', description: 'Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from.' },
   { scope: 'sites:read', label: 'Sites — read', description: 'List sites and their details.' },
   { scope: 'forms:read', label: 'Form submissions — read', description: 'Read a site’s form submissions.' },
   { scope: 'forms:write', label: 'Form submissions — write', description: 'Mark a site’s form submissions read or unread, and delete them. Never edits what a visitor typed.' },

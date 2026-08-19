@@ -62,6 +62,7 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `datasets:read` | List datasets, read records. |
 | `datasets:write` | Create, update, and delete records. |
 | `contacts:read` | List and read contacts. |
+| `contacts:write` | Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from. |
 | `sites:read` | List sites and read their details. |
 | `forms:read` | Read a site's form submissions. |
 | `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
@@ -74,11 +75,14 @@ nothing that rewrites a submission's `fields` — a submission is a record of wh
 visitor typed, and an API that could edit it would make the inbox unattributable. See
 [form submissions](resources/form-submissions.md#read-is-the-only-writable-field).
 
+`contacts:write` is narrow for the same kind of reason. It adds, edits and deletes
+contacts, and cannot touch the two fields that would make the list untrustworthy: the
+`email` a contact is unified on, and the `sources` recording where the person came
+from. See [contacts](resources/contacts.md#read-only-fields).
+
 Several resources are **read-only** over the API, and the missing write scope is
 deliberate in each case rather than an oversight:
 
-- **Contacts** are created by the capture points on your sites (forms, member
-  sign-ups, orders, bookings), so there is no `contacts:write`.
 - **Orders** and **products** move money and stock. A write scope for them belongs to
   the change that ships the endpoint, not ahead of it — a scope you can grant that
   grants nothing is a broken permission.

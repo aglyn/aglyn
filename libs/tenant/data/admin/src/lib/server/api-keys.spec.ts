@@ -57,12 +57,27 @@ describe('api-keys (pure helpers)', () => {
       expect(normalizeScopes(['nope', 'also:nope'])).toEqual([])
     })
 
-    it('refuses contacts:write — no endpoint enforces it (AGL-899)', () => {
-      // A mintable scope that grants nothing reads as a broken permission.
-      // Re-add this only alongside real contact-write endpoints.
-      expect(isApiScope('contacts:write')).toBe(false)
-      expect(normalizeScopes(['contacts:read', 'contacts:write'])).toEqual([
+    it('admits contacts:write, now that endpoints enforce it (AGL-2276)', () => {
+      // AGL-899 removed this scope because nothing enforced it, and set the
+      // condition for its return: re-add it in the same change that ships the
+      // writes. AGL-2276 shipped `POST /v1/contacts`, `PATCH /v1/contacts/{id}`
+      // and `DELETE /v1/contacts/{id}`, all of which call
+      // `requireScope(ctx, 'contacts:write')`. The rule AGL-899 was defending
+      // is still the rule — a mintable scope that grants nothing reads as a
+      // broken permission — so this case now pins the other direction.
+      expect(isApiScope('contacts:write')).toBe(true)
+      expect(normalizeScopes(['contacts:write', 'contacts:read'])).toEqual([
         'contacts:read',
+        'contacts:write',
+      ])
+    })
+
+    it('still refuses a scope no endpoint enforces (the AGL-899 rule)', () => {
+      // The guard AGL-899 installed, kept alive against a real absentee: no
+      // handler asks for `sites:write`, so nobody may mint it.
+      expect(isApiScope('sites:write')).toBe(false)
+      expect(normalizeScopes(['sites:read', 'sites:write'])).toEqual([
+        'sites:read',
       ])
     })
   })
