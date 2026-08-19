@@ -65,7 +65,8 @@ import { consumeOnboardingPlanIntent } from '../../../utils/onboarding-plan-inte
  * first site (which auto-provisions the workspace).
  */
 function OrgJump() {
-  const { orgs, loading, confirmed } = useOrgScope()
+  const { orgs, loading, confirmed, hasMoreOrgs, loadMoreOrgs } =
+    useOrgScope()
   // A first-time invitee has zero orgs and lands here; this is the only jump
   // surface, so it must offer the invite (AGL-851). Without it the invite was
   // reachable only from a hosts page, which needs an org you don't have yet.
@@ -326,6 +327,23 @@ function OrgJump() {
                   ),
                 }))}
               />
+              {/* AGL-2336: this grid is a WINDOW over the membership list and
+                  used to end in silence, so an agency past its 50th client
+                  saw a complete-looking picker that was not complete. */}
+              {hasMoreOrgs ? (
+                <Box>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    {`Showing ${orgs.length} of your workspaces.`}
+                  </Typography>
+                  <Button variant="outlined" onClick={loadMoreOrgs}>
+                    {'Load more workspaces'}
+                  </Button>
+                </Box>
+              ) : null}
             </Stack>
           )}
           <CreateOrgDialog

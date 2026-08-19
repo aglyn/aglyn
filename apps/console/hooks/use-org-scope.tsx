@@ -41,6 +41,23 @@ import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
 
 /**
+ * How many memberships the live listener holds at a time (AGL-2336).
+ *
+ * This used to be a bare `limit(50)` with no cursor, no count and no "load
+ * more", and `useOrgScope` is not a list — it is what resolves WHICH org you
+ * are in. So an agency following our own `run-an-agency-workspace` advice
+ * (one organization per client) was not merely missing rows from a switcher
+ * past its 50th client: those workspaces were UNREACHABLE, because nothing
+ * could produce a `currentOrg` for them.
+ *
+ * The number is now a page, not a ceiling — `loadMoreOrgs` grows the window,
+ * `hasMoreOrgs` says the window is full so the list is not the whole truth,
+ * and `orgSlugs`-keyed resolution below reaches a workspace whether or not
+ * it is inside the window at all.
+ */
+export const ORG_PAGE_SIZE = 50
+
+/**
  * Console hostnames that are NOT org workspaces. Anything else with a
  * subdomain (e.g. business1.aglyn.com) resolves through orgSlugs.
  */
@@ -88,6 +105,14 @@ export interface OrgScopeContextValue {
   error: boolean
   /** Re-runs the membership listen after it gave up (AGL-1260). */
   retry: () => void
+  /**
+   * The membership window came back FULL, so there are probably more (AGL-2336).
+   * The truthful reading is "this list is not known to be complete" — surface
+   * it rather than letting a truncated list pass for the whole set.
+   */
+  hasMoreOrgs: boolean
+  /** Grows the membership window by one page (AGL-2336). */
+  loadMoreOrgs: () => void
 }
 
 const OrgScopeContext = createContext<OrgScopeContextValue>({
@@ -101,6 +126,8 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   slugExists: null,
   error: false,
   retry: () => undefined,
+  hasMoreOrgs: false,
+  loadMoreOrgs: () => undefined,
 })
 
 /**
@@ -131,6 +158,23 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   // behind `retry`, same shape as useHostResolution's (AGL-1200).
   const [attempt, setAttempt] = useState(0)
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+  // The membership window (AGL-2336). A page, not a ceiling.
+  const [windowSize, setWindowSize] = useState(ORG_PAGE_SIZE)
+  const [hasMoreOrgs, setHasMoreOrgs] = useState(false)
+  const loadMoreOrgs = useCallback(
+    () => setWindowSize((size) => size + ORG_PAGE_SIZE),
+    [],
+  )
+  /**
+   * A membership fetched by id because the URL named a workspace that is NOT
+   * in the loaded window (AGL-2336). Two reads, once, and only when needed —
+   * this is what makes workspace 51 REACHABLE rather than merely listed.
+   * Keyed by what was asked for so a confirmed miss is not asked again.
+   */
+  const [outOfWindow, setOutOfWindow] = useState<{
+    key: string
+    org: UserOrgMembership | null
+  } | null>(null)
   const orgSlug = useMemo(subdomainSlugFromLocation, [])
 
   useEffect(() => {
@@ -141,8 +185,12 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       setError(false)
       return undefined
     }
-    setLoading(true)
-    setConfirmed(false)
+    // Growing the window re-subscribes; that is not a fresh cold load, and
+    // flipping `loading` back on would blank the chrome app-wide mid-session.
+    if (windowSize === ORG_PAGE_SIZE) {
+      setLoading(true)
+      setConfirmed(false)
+    }
     setError(false)
     // Metadata changes included so the cache→server confirmation is
     // delivered even when the data is identical (AGL-886): without it, a
@@ -155,7 +203,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
-        query(collection(firestore, 'users', user.uid, 'orgs'), limit(50)),
+        query(collection(firestore, 'users', user.uid, 'orgs'), limit(windowSize)),
         { includeMetadataChanges: true },
         (snapshot) => {
           // A delivered snapshot re-arms the budget: a listen that worked and
@@ -164,6 +212,11 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
           if (!snapshot.metadata.fromCache) setConfirmed(true)
           // Metadata-only ticks carry no doc changes — skip the list write so
           // the whole app doesn't re-render on the confirmation event.
+          // A FULL window means the query hit its limit, so there may be
+          // more behind it. Not "there are more" — Firestore cannot say —
+          // but "this list is not known to be complete", which is exactly
+          // the thing the old silent truncation refused to admit.
+          setHasMoreOrgs(snapshot.docs.length >= windowSize)
           if (!seeded || snapshot.docChanges().length) {
             seeded = true
             setOrgs(
@@ -199,7 +252,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }
-  }, [firestore, user?.uid, attempt])
+  }, [firestore, user?.uid, attempt, windowSize])
 
   useEffect(() => {
     setSelectedOrgId(
@@ -241,6 +294,93 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     }
   }, [firestore, orgSlug])
 
+  /**
+   * The workspace the URL names, when it is NOT inside the loaded membership
+   * window (AGL-2336).
+   *
+   * This is the whole lock-out. `useOrgScope` resolves `currentOrg` by
+   * SEARCHING the loaded list, so before this the list WAS the set of
+   * reachable workspaces: a user whose membership fell past the window got a
+   * null `currentOrg` on a URL they were fully entitled to, and paging the
+   * list would not have fixed it — you cannot page to a workspace you cannot
+   * name. Resolving the named one directly costs two reads and is
+   * independent of how many memberships exist.
+   */
+  const missingTarget = useMemo(() => {
+    if (pathOrgSlug) {
+      return orgs.some((org) => org.slug === pathOrgSlug)
+        ? null
+        : { kind: 'slug' as const, key: pathOrgSlug }
+    }
+    if (subdomainOrgId) {
+      return orgs.some((org) => org.$id === subdomainOrgId)
+        ? null
+        : { kind: 'id' as const, key: subdomainOrgId }
+    }
+    return null
+  }, [orgs, pathOrgSlug, subdomainOrgId])
+
+  useEffect(() => {
+    // Nothing to reach, or the window already covers it: drop any answer
+    // held for a workspace we are no longer being asked about.
+    if (!missingTarget) {
+      setOutOfWindow(null)
+      return undefined
+    }
+    // Wait for the list before spending reads — on a cold load everything
+    // looks missing for a moment, and reading then would cost two reads on
+    // every navigation rather than only on the ones that need it.
+    if (!user?.uid || loading) return undefined
+    // Already answered for this key — including a CONFIRMED miss, which must
+    // not be re-asked on every snapshot.
+    if (outOfWindow?.key === missingTarget.key) return undefined
+    let active = true
+    void (async () => {
+      try {
+        let orgId = missingTarget.key
+        if (missingTarget.kind === 'slug') {
+          // `orgSlugs` is the public slug index — the same doc the subdomain
+          // path resolves through.
+          const slugSnapshot = await getDoc(
+            doc(firestore, 'orgSlugs', missingTarget.key),
+          )
+          const resolved = slugSnapshot.data()?.['orgId'] as string | undefined
+          if (!resolved) {
+            // No such workspace. A definitive miss, recorded so the route
+            // guards can 404 rather than spin.
+            if (active) setOutOfWindow({ key: missingTarget.key, org: null })
+            return
+          }
+          orgId = resolved
+        }
+        // The membership doc itself is the authorization: a user can only
+        // read their OWN `users/{uid}/orgs/*`, so a hit here means the same
+        // thing a hit in the listener's window means.
+        const membership = await getDoc(
+          doc(firestore, 'users', user.uid, 'orgs', orgId),
+        )
+        if (!active) return
+        setOutOfWindow({
+          key: missingTarget.key,
+          org: membership.exists()
+            ? ({
+                $id: membership.id,
+                ...membership.data(),
+              } as UserOrgMembership)
+            : null,
+        })
+      } catch {
+        // A FAILED read is not a confirmed absence — leave the key
+        // unanswered so a later snapshot or navigation tries again, exactly
+        // as `slugExists` does above.
+        if (active) setOutOfWindow(null)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [firestore, user?.uid, loading, missingTarget, outOfWindow?.key])
+
   const selectOrg = useCallback((orgId: string) => {
     setSelectedOrgId(orgId)
     try {
@@ -257,14 +397,22 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       (orgId && orgs.find((org) => org.$id === orgId)) || null
     // The URL path is authoritative on org-scoped routes; everything else is
     // a fallback for routes without an `[orgSlug]` (the jump page, manage/*).
+    // The directly-resolved membership sits with the URL-derived candidates,
+    // never ahead of the loaded window and never below the "first org"
+    // fallback: it answers the SAME question the URL asks, for a workspace
+    // the window happens not to hold (AGL-2336).
+    const reached = (key: string | null) =>
+      (key && outOfWindow?.key === key && outOfWindow.org) || null
     return (
       bySlug(pathOrgSlug) ??
+      reached(pathOrgSlug) ??
       byId(subdomainOrgId) ??
+      reached(subdomainOrgId) ??
       byId(selectedOrgId) ??
       orgs[0] ??
       null
     )
-  }, [orgs, pathOrgSlug, subdomainOrgId, selectedOrgId])
+  }, [orgs, pathOrgSlug, subdomainOrgId, selectedOrgId, outOfWindow])
 
   const context = useMemo(
     () => ({
@@ -278,8 +426,23 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       slugExists,
       error,
       retry,
+      hasMoreOrgs,
+      loadMoreOrgs,
     }),
-    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed, slugExists, error, retry],
+    [
+      orgs,
+      currentOrg,
+      selectOrg,
+      orgSlug,
+      pathOrgSlug,
+      loading,
+      confirmed,
+      slugExists,
+      error,
+      retry,
+      hasMoreOrgs,
+      loadMoreOrgs,
+    ],
   )
 
   return (
