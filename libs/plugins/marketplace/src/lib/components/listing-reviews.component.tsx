@@ -36,6 +36,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import ReportTarget from './report-target.component'
 
 /**
  * Ratings and comments on a listing (AGL-655).
@@ -299,6 +300,17 @@ export function ListingReviews({
                         <Typography variant="body2" color="text.secondary">
                           {review.comment}
                         </Typography>
+                      ) : null}
+                      {/* Not on your OWN review: the queue is for things a
+                          stranger wrote, and "report yourself" is noise a
+                          staff member then has to read. Editing yours is
+                          already the control above. */}
+                      {uid && review.$id !== uid ? (
+                        <ReportTarget
+                          listingId={listingId}
+                          reviewUid={review.$id}
+                          label={`this review by ${name}`}
+                        />
                       ) : null}
                     </Stack>
                   </Stack>

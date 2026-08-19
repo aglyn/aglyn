@@ -107,6 +107,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import HubTabs from '@aglyn/shared-ui-next/components/hub-tabs'
 import ListingReviews from './listing-reviews.component'
+import ReportTarget from './report-target.component'
 import PluginSiteSet from './plugin-site-set.component'
 import { MenuItem, TextField } from '@mui/material'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
@@ -2195,6 +2196,15 @@ export function MarketplaceListingContent({
                       <ListingReviews
                         listingId={listingId}
                         listing={listing}
+                      />
+                      {/* The listing-level report (AGL-2435). Pre-publication
+                          review is plugin-only by design — a template or
+                          component is inert until someone installs it — so
+                          after-the-fact reporting is the ENTIRE safety net for
+                          every other artifact type, and it had no way in. */}
+                      <ReportTarget
+                        listingId={listingId}
+                        label={String(listing?.displayName ?? 'this listing')}
                       />
                     </Stack>
                   ),
