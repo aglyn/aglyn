@@ -353,8 +353,10 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'Catalog taxonomy, reordered and renamed in the catalog organization card.',
   suppliers: 'Supplier records, edited in the product editor dialog.',
   inventoryAdjustments:
-    'Stock adjustment ledger rows, written when a merchant edits inventory ' +
-    'in the products hub.',
+    'Stock adjustment ledger rows, APPEND-ONLY (AGL-2269): the products hub ' +
+    'creates one client-side beside every manual stock edit, but update and ' +
+    'delete are excluded because `cancel-order.ts` reads these rows to bound ' +
+    'how much inventory a cancellation releases.',
   locations: 'Physical locations, authored in the locations card.',
   reservations: 'POS/booking holds, created and released from the POS page.',
   resources: 'Bookable resources, authored in the reservations card.',

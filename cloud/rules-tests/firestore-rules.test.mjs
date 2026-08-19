@@ -1374,9 +1374,14 @@ describe('hosts', () => {
       'actions', 'overlays', 'experiments', 'campaigns', 'emailTemplates',
       'coupons', 'discounts', 'memberPosts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
-      'settings', 'media', 'mediaFolders', 'leads', 'inventoryAdjustments',
+      'settings', 'media', 'mediaFolders', 'leads',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
     ]
+    // `inventoryAdjustments` LEFT this list in AGL-2269 and is not an
+    // oversight: it is now append-only, so it fails the update/delete legs
+    // below by design. Its create leg — the products hub's manual adjustment
+    // row, the one client write it really has — is asserted in the dedicated
+    // describe above, beside the denials that are the point of the change.
     for (const name of AUTHORING) {
       // Absent from every exclusion list, so the catch-all is the only thing
       // granting these. If a future narrowing takes one out, this names it.
@@ -5113,6 +5118,80 @@ describe('the vestigial billing trio and the identity quartet are Admin-SDK-only
  * too: a create writes `status` free-hand, and delete-and-recreate would
  * re-mint the document with any status at all.
  */
+/**
+ * AGL-2269. `hosts/{hostId}/inventoryAdjustments` is an append-only LEDGER and
+ * was in none of the catch-all's exclusion lists, so any host admin or editor
+ * could rewrite or delete a row from the browser.
+ *
+ * It is load-bearing rather than historical. `cancel-order.ts` reads its
+ * `reason: 'sale'` rows to decide whether a POS card order decremented at all,
+ * and caps the units it releases at each row's `appliedDelta` (AGL-2149) so a
+ * backordered sale cannot be cancelled into stock nobody has. A row a client
+ * can forge or delete changes how much inventory a cancellation invents.
+ */
+describe('the inventory ledger is append-only (AGL-2269)', () => {
+  const ROW = 'adj-1'
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'inventoryAdjustments', ROW),
+        {
+          productId: 'prod-1',
+          variantId: 'var-1',
+          delta: -3,
+          appliedDelta: -3,
+          reason: 'sale',
+          orderId: 'order-1',
+          atMs: 1_755_000_000_000,
+        },
+      )
+    })
+  })
+
+  it('no client rewrites or deletes a ledger row', async () => {
+    await mustDeny(
+      'the site ADMIN rewriting what a sale took off the shelf',
+      updateDoc(
+        doc(authed(OWNER), 'hosts', HOST, 'inventoryAdjustments', ROW),
+        { appliedDelta: -30 },
+      ),
+    )
+    await mustDeny(
+      'the EDITOR changing the reason a cancellation reads',
+      updateDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'inventoryAdjustments', ROW),
+        { reason: 'correction' },
+      ),
+    )
+    await mustDeny(
+      'the site ADMIN deleting the row a cancellation is capped by',
+      deleteDoc(doc(authed(OWNER), 'hosts', HOST, 'inventoryAdjustments', ROW)),
+    )
+  })
+
+  /**
+   * POSITIVE CONTROL, and the reason this is an append-only rule rather than a
+   * server-only one: the products hub writes a row client-side beside every
+   * manual stock edit, and appending is what a ledger is for.
+   */
+  it('POSITIVE CONTROL: the products hub still appends a row', async () => {
+    await mustAllow(
+      "the products hub's manual adjustment row",
+      setDoc(
+        doc(authed(EDITOR), 'hosts', HOST, 'inventoryAdjustments', 'adj-new'),
+        {
+          productId: 'prod-1',
+          variantId: 'var-1',
+          delta: 5,
+          reason: 'correction',
+          atMs: 1_755_000_001_000,
+        },
+      ),
+    )
+  })
+})
+
 describe('an order status is Admin-SDK-only — notes and restock answers stay client-side (AGL-1827)', () => {
   const ORDER = 'order-1827'
   const FLAGGED_AT = 1_755_000_000_000
