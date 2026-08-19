@@ -351,7 +351,20 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
   // the client (which is the default in most inboxes) must still say who sent
   // the mail. Height is capped rather than set, so a wordmark and a square
   // mark both land at a sane size without the sender supplying dimensions.
-  const brandLogo = String(brandLogoUrl ?? '').trim()
+  //
+  // The src goes through `imageSrc` like every other image in the message
+  // (AGL-2230), and NOT into the tag raw. `emailLogoUrl` is collected by
+  // `MediaUrlField`, whose "Browse" button writes the picked asset's
+  // site-relative `cdnPath` — and the org DAM's other generation stores a
+  // `media:{scope}/{mediaId}` reference. Neither is a URL an inbox can
+  // resolve: there is no page to resolve it against, so a raw pass-through
+  // put `src="media:h1/med9"` at the top of every transactional email a
+  // white-label org sent. `imageSrc` absolutizes both forms against
+  // `mediaOrigin`, passes a real https URL through untouched, and returns
+  // undefined when it cannot produce something fetchable — in which case the
+  // row is dropped, on the same reasoning as AGL-1224: a gap reads as a plain
+  // email, a broken-image box reads as a broken one.
+  const brandLogo = imageSrc(String(brandLogoUrl ?? '').trim()) ?? ''
   // The product name from the merge map, because most inboxes block images by
   // default — a logo with no `alt` is a blank box where the sender's identity
   // should be. Falls back to nothing rather than to a literal, which would

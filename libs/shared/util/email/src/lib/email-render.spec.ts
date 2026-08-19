@@ -266,7 +266,32 @@ describe('brand logo header (AGL-2139)', () => {
       mediaOrigin: 'https://console.example.com',
       mediaHostId: 'h1',
     })
-    expect(html).toContain('https://console.example.com/api/media/cdn/')
+    // The whole point is the ABSOLUTE form, so assert the exact src rather
+    // than a substring: `toContain('/api/media/cdn/')` alone would also pass
+    // on a renderer that emitted the site-relative path, which is the very
+    // bug AGL-1224 fixed for every other image.
+    expect(html).toContain(
+      'src="https://console.example.com/api/media/cdn/h1/med9"',
+    )
+    // And the stored reference must not survive into the markup. Without
+    // this, a renderer that emitted BOTH — or that passed the ref through in
+    // some other attribute — would still read as green (AGL-2230).
+    expect(html).not.toContain('media:h1/med9')
+  })
+
+  it('resolves a cdnPath logo, which is what "Browse" actually stores', () => {
+    // `MediaUrlField.onPick` writes `media.cdnPath`, a SITE-RELATIVE path —
+    // so this generation reaches the renderer just as often as a `media:`
+    // ref, and is equally unfetchable from an inbox (AGL-2230).
+    const { html } = renderEmailHtml({
+      nodes: BODY,
+      brandLogoUrl: '/api/media/cdn/h1/med9',
+      mediaOrigin: 'https://console.example.com',
+    })
+    expect(html).toContain(
+      'src="https://console.example.com/api/media/cdn/h1/med9"',
+    )
+    expect(html).not.toContain('src="/api/media/cdn/')
   })
 
   it('DROPS a relative logo rather than emitting a broken src', () => {
@@ -274,5 +299,11 @@ describe('brand logo header (AGL-2139)', () => {
     // resolve `/api/media/cdn/…` against, so a gap beats a broken-image box.
     const { html } = renderEmailHtml({ nodes: BODY, brandLogoUrl: 'media:h1/med9' })
     expect(html).not.toContain('<img')
+    // Belt and braces: the ref must not leak anywhere in the document, not
+    // merely out of an `<img>` tag.
+    expect(html).not.toContain('media:h1/med9')
+    // The rest of the email still renders — a dropped logo is a gap, not a
+    // failed render.
+    expect(html).toContain('hello')
   })
 })
