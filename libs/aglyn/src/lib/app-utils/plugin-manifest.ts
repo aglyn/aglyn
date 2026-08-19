@@ -640,8 +640,22 @@ export function nextRevocationState(
     | { type: 'takedown' }
     | { type: 'restore' },
 ): PluginRevocation | null {
-  const reviewVersions = [...(current?.reviewVersions ?? [])]
   const takenDown = current?.source === 'takedown'
+  // A document written before AGL-1085 — or by hand, which the rules permit
+  // any staff client to do — has `versions` and NO `reviewVersions`
+  // (AGL-2305). `withReview` REPLACES `versions` wholesale from this seed, so
+  // reading it as an empty list silently rebuilt the document: revoking a
+  // second version un-revoked the first, and un-revoking any version returned
+  // `null`, which the caller turns into a DELETE of the whole kill switch.
+  //
+  // A legacy `versions` array is adopted as the review-owned half, which is
+  // what it actually was: before AGL-1085 the only writer that produced an
+  // array here was a reviewer, and `'all'` (the takedown form) is excluded
+  // because that half is owned by `source` and restored by `restore`.
+  const reviewVersions = [
+    ...(current?.reviewVersions ??
+      (Array.isArray(current?.versions) ? current.versions : [])),
+  ]
   const withReview = (versions: string[], stillTakenDown: boolean) => {
     if (stillTakenDown) {
       return { ...current, versions: 'all' as const, reviewVersions: versions }

@@ -41,6 +41,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import {
   compareArtifactVersions,
+  isPluginRevoked,
   lockdownRefusalText,
   parseLockdownRefusal,
 } from '@aglyn/aglyn'
@@ -164,10 +165,13 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
         (doc) => doc.$id === install.$id,
       )
       if (!revocation) continue
-      map[install.$id] =
-        revocation.versions === 'all' ||
-        (Array.isArray(revocation.versions) &&
-          revocation.versions.includes(install.version))
+      // THE SHARED PREDICATE, not a fourth copy of it (AGL-2305). This card
+      // carried a byte-for-byte duplicate of `isPluginRevoked`'s body, which
+      // is precisely what AGL-1085 collapsed three inline copies into one to
+      // stop: a reader that disagrees with the writer about this document's
+      // shape is how a kill switch silently stops killing. It happened to be
+      // correct; being correct today is not the property that matters.
+      map[install.$id] = isPluginRevoked(revocation, install.version)
     }
     return map
   }, [installs, revocationDocs])

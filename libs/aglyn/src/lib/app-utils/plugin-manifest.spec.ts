@@ -19,6 +19,7 @@ import {
   attachPluginInstalls,
   isPluginNetworkAllowed,
   isPluginRevoked,
+  isListingWideRevocation,
   nextRevocationState,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
@@ -168,6 +169,92 @@ describe('isPluginRevoked', () => {
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.0.0')).toBe(true)
     expect(isPluginRevoked({ versions: ['1.0.0'] }, '1.1.0')).toBe(false)
     expect(isPluginRevoked(null, '1.0.0')).toBe(false)
+  })
+})
+
+describe('isListingWideRevocation (AGL-2288)', () => {
+  it('is true only for the listing-wide kill', () => {
+    expect(isListingWideRevocation({ versions: 'all' })).toBe(true)
+    expect(isListingWideRevocation({ versions: ['1.0.0'] })).toBe(false)
+    expect(isListingWideRevocation(null)).toBe(false)
+    expect(isListingWideRevocation(undefined)).toBe(false)
+  })
+
+  it('is the same fact `isPluginRevoked` reads', () => {
+    // The point of splitting it out: marketplace checkout has no version to
+    // ask about, and a second spelling of `versions === 'all'` at that call
+    // site is how the two would come apart.
+    expect(isPluginRevoked({ versions: 'all' }, 'anything')).toBe(true)
+  })
+})
+
+/**
+ * A legacy or hand-written revocations document is ADOPTED, not rebuilt
+ * (AGL-2305).
+ *
+ * `withReview` replaces `versions` wholesale from the `reviewVersions` seed,
+ * and documents written before AGL-1085 have no `reviewVersions` at all —
+ * `revocations` is `allow write: if isStaff()`, so a staff client can produce
+ * that shape by hand today. Seeding from an empty list made the next review
+ * action silently discard every version already revoked, and an un-revoke
+ * return `null`, which the caller turns into a DELETE of the whole kill
+ * switch.
+ */
+describe('nextRevocationState on a pre-AGL-1085 document (AGL-2305)', () => {
+  const legacy = { versions: ['1.0.0'] } as const
+
+  it('keeps the legacy version when a second one is revoked', () => {
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'revoke-version',
+        version: '2.0.0',
+      }),
+    ).toMatchObject({
+      versions: ['1.0.0', '2.0.0'],
+      reviewVersions: ['1.0.0', '2.0.0'],
+    })
+  })
+
+  it('does not DELETE the document when an unrelated version is un-revoked', () => {
+    // The sharp end: `null` here means "delete the kill switch", and 1.0.0 was
+    // never un-revoked by anybody.
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'unrevoke-version',
+        version: '2.0.0',
+      }),
+    ).toMatchObject({ versions: ['1.0.0'] })
+  })
+
+  it('still deletes once the last legacy version is un-revoked', () => {
+    // Adoption must not make a revocation un-clearable — that would be the
+    // opposite failure.
+    expect(
+      nextRevocationState(legacy as never, {
+        type: 'unrevoke-version',
+        version: '1.0.0',
+      }),
+    ).toBeNull()
+  })
+
+  it('does not adopt the takedown form as review-owned', () => {
+    // `versions: 'all'` is the takedown's own half, restored by `restore`.
+    // Adopting it would turn an un-hide into a permanent per-version
+    // revocation of a version string that does not exist.
+    expect(
+      nextRevocationState({ versions: 'all', source: 'takedown' } as never, {
+        type: 'restore',
+      }),
+    ).toBeNull()
+  })
+
+  it('leaves an AGL-1085-shaped document alone', () => {
+    expect(
+      nextRevocationState(
+        { versions: ['1.0.0'], reviewVersions: ['1.0.0'] } as never,
+        { type: 'unrevoke-version', version: '1.0.0' },
+      ),
+    ).toBeNull()
   })
 })
 
