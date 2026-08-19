@@ -111,6 +111,11 @@ const STRIPE_ENV = {
   STRIPE_PRICE_METERED: 'price_metered_usage',
   STRIPE_PRICE_PRO_EXTRA_SEAT: 'price_pro_seat',
   STRIPE_PRICE_STARTER_EXTRA_SEAT: 'price_starter_seat',
+  // The annual variants (AGL-532), so a same-tier INTERVAL switch has real
+  // prices to move onto rather than falling out as "Unknown target plan".
+  STRIPE_PRICE_PRO_YEARLY: 'price_pro_yearly',
+  STRIPE_PRICE_STARTER_YEARLY: 'price_starter_yearly',
+  STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
 
 /** 2026-01-01T00:00:00Z — the subscription's current period end. */
@@ -754,5 +759,98 @@ describe('a failed schedule swap clears the mirror (AGL-2151)', () => {
     ).toBe(502)
     expect(releasedScheduleIds).toEqual([])
     expect(mockWriteOrgBilling).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * "Keep my plan" must not swallow an INTERVAL change (AGL-2156 §2).
+ *
+ * The same-tier guard keyed on the plan alone and ignored `targetInterval`,
+ * which is resolved a few lines earlier. A `pro/month → pro/year` switch
+ * therefore returned `ok: true` having changed nothing, and the page would
+ * snackbar "Plan switched to pro" over an untouched subscription. Latent while
+ * the current tier's button is disabled — and it closed the only server path
+ * an annual-conversion UI could use. Annual conversion is a retention lever.
+ */
+describe('a same-tier interval change actually switches (AGL-2156)', () => {
+  it('pro/month → pro/year re-prices the plan item onto the annual price', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'pro',
+      interval: 'year',
+    })
+    expect(response.status).toBe(200)
+    expect(capturedSubUpdateBody?.get('items[0][price]')).toBe(
+      'price_pro_yearly',
+    )
+    // The metered item follows the interval too — Stripe rejects a
+    // subscription whose items mix `recurring.interval` (AGL-1340/1280).
+    expect(capturedSubUpdateBody?.get('items[1][price]')).toBe(
+      'price_metered_usage_yearly',
+    )
+    expect(lastBillingPatch()?.interval).toBe('year')
+  })
+
+  it('NEGATIVE CONTROL: same plan AND same interval is still release-only', async () => {
+    // "Keep my plan" — the undo for a pending downgrade — must keep working.
+    subscriptionSchedule = 'sub_sched_old'
+    const post = loadSubscription()
+    const payload = await (
+      await call(post, { action: 'switch', plan: 'pro', interval: 'month' })
+    ).json()
+    expect(payload.releasedPendingDowngrade).toBe(true)
+    expect(capturedSubUpdateBody).toBeNull()
+  })
+})
+
+/**
+ * `pro → free` must not answer "Unknown target plan" (AGL-2156 §1).
+ *
+ * `'free'` IS in `SELF_SERVE_PLANS` and `isLadderDowngrade` classifies the
+ * move as a downgrade; only `PRICE_ENV` having no `free` entry stopped it, and
+ * the message it produced described a bug rather than the product. The one
+ * thing keeping a user off this path was a disabled button on one card.
+ */
+describe('moving to Free is named as a cancel, not an unknown plan (AGL-2156)', () => {
+  it('says what the route actually is', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'free',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    const payload = await response.json()
+    expect(payload.code).toBe('cancel_required')
+    expect(payload.error).toMatch(/canceling your subscription/i)
+    expect(payload.error).not.toMatch(/Unknown target plan/)
+    // And nothing was done to the subscription on the way to saying so.
+    expect(capturedSubUpdateBody).toBeNull()
+    expect(capturedScheduleCreateBody).toBeNull()
+  })
+
+  it('the same is true of a PREVIEW', async () => {
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'preview',
+      plan: 'free',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).code).toBe('cancel_required')
+  })
+
+  it('NEGATIVE CONTROL: a genuinely unknown plan still says so', async () => {
+    // The Free branch must not become a catch-all that hides a real
+    // misconfiguration behind a cancel message.
+    const post = loadSubscription()
+    const response = await call(post, {
+      action: 'switch',
+      plan: 'platinum',
+      interval: 'month',
+    })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toBe('Unknown target plan')
   })
 })

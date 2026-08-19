@@ -322,10 +322,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * to carry that warning, and moving the decision without moving the
    * warning would have dropped it silently.
    */
+  const openCancelFunnel = useCallback(async () => {
+    setFunnelImpact(await overLimitSummary('free'))
+    setFunnelOpen(true)
+  }, [overLimitSummary])
+
   const handleCancelToggle = useCallback(async () => {
     if (!cancelAtPeriodEnd) {
-      setFunnelImpact(await overLimitSummary('free'))
-      setFunnelOpen(true)
+      await openCancelFunnel()
       return
     }
     const dequeue = queueLoading()
@@ -342,7 +346,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [
     cancelAtPeriodEnd,
-    overLimitSummary,
+    openCancelFunnel,
     subscriptionRequest,
     queueLoading,
     enqueueSnackbar,
@@ -453,6 +457,27 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
       try {
+        // Moving to Free is a CANCEL, not a switch (AGL-2156). There is no
+        // Free price to check out or switch to — the server says so in as many
+        // words now — and for a subscriber it is the cheapest save the
+        // retention funnel has, so the grid's Free card lands in the funnel
+        // rather than on a disabled button that said "No credit card
+        // required" to somebody already paying.
+        if (targetPlan === 'free' && subscriptionActive) {
+          dequeue()
+          if (cancelAtPeriodEnd) {
+            // Already on the way out: opening the funnel again would ask them
+            // to cancel something that is already canceled.
+            enqueueSnackbar(
+              'Your subscription already ends at the period end — this ' +
+                'organization moves to Free then.',
+              { variant: 'info', persist: false },
+            )
+            return
+          }
+          await openCancelFunnel()
+          return
+        }
         // Plan switches on a live subscription go through the proration
         // preview + subscription update, never a second Checkout (AGL-269).
         if (subscriptionActive && org?.plan && targetPlan !== 'free') {
@@ -657,6 +682,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       interval,
       subscriptionActive,
       cancelAtPeriodEnd,
+      openCancelFunnel,
       org?.plan,
       overLimitSummary,
       subscriptionRequest,
@@ -1270,9 +1296,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
               size: { xs: 12 },
               children: (
                 <BillingPlanCardsComponent
-                  plan={org?.plan as OrgPlan | undefined}
+                  // The page's own defaulted value (AGL-1422), not the raw
+                  // field (AGL-2156): a pre-billing workspace with no `plan`
+                  // handed the grid `undefined`, which is `currentIndex = -1` —
+                  // no "Current plan" chip, NO tier recommended at all, and
+                  // every button reading "Upgrade", while the rest of this
+                  // page said they were on Free.
+                  plan={plan}
                   interval={interval}
                   enterprise={enterprise}
+                  subscriptionActive={subscriptionActive}
                   highlight={planIntent?.plan}
                   onSelect={(tier) =>
                     permissions.editBilling

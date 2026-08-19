@@ -404,6 +404,23 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
+    // Free is a real rung of `SELF_SERVE_PLANS` and `isLadderDowngrade` would
+    // happily classify `pro → free` as a downgrade, but `PRICE_ENV` has no
+    // `free` entry — so the request fell through to "Unknown target plan",
+    // which is both wrong and useless (AGL-2156). Nothing prevented a user
+    // reaching it except a disabled button on one card. Say the true thing
+    // instead: there is no Free price because moving to Free IS the cancel.
+    if (targetPlan === 'free') {
+      return Response.json(
+        {
+          error:
+            'Moving to Free means canceling your subscription — it runs to ' +
+            'the end of the period you have already paid for.',
+          code: 'cancel_required',
+        },
+        { status: 400 },
+      )
+    }
     const items: any[] = subscription.items?.data ?? []
     // The base plan item, matched on its known plan price id (AGL-1340).
     // This was "the item no add-on price claims" (AGL-528) — identification
@@ -445,7 +462,21 @@ async function handler(request: Request): Promise<Response> {
     // Switching to the plan you are already on is only meaningful as "keep my
     // plan" — the undo for a pending downgrade. Release the schedule and
     // clear the mirror; without one it is a no-op, said honestly.
-    if (action === 'switch' && targetPlan === currentPlan) {
+    // ...and only when the INTERVAL is unchanged too (AGL-2156). Keyed on the
+    // plan alone, a `pro/month → pro/year` switch answered `ok: true` having
+    // changed nothing, and the page snackbarred "Plan switched to pro" over an
+    // untouched subscription. Latent while the current tier's button is
+    // disabled, but it closed the only server path an annual-conversion UI
+    // could use — and annual conversion (AGL-532) is a retention lever. A
+    // same-tier interval change now falls through to the switch below, which
+    // re-prices the plan item, the add-ons and the metered item onto the
+    // target interval together (Stripe rejects a subscription whose items mix
+    // intervals).
+    if (
+      action === 'switch' &&
+      targetPlan === currentPlan &&
+      targetInterval === currentInterval
+    ) {
       const released = await releasePendingSchedule(secretKey, subscription)
       if (released) {
         await writeOrgBilling(org.ref.id, {

@@ -200,6 +200,19 @@ export interface BillingPlanCardsProps {
    */
   enterprise?: boolean
   /**
+   * True when the org has a LIVE subscription (AGL-2156).
+   *
+   * It decides what the FREE card is. For a prospect it is an offer, and "No
+   * credit card required" behind a disabled button is the right copy. For a
+   * SUBSCRIBER that same card was prospect copy on a dead control: the one
+   * thing a paying customer needs to know — that the route to Free is to
+   * cancel — was nowhere on the grid, and the disabled button was the only
+   * thing stopping a `pro → free` switch from 400ing "Unknown target plan"
+   * server-side. That matters to retention specifically: moving to Free is the
+   * cheapest save available, and the grid offered no route to it.
+   */
+  subscriptionActive?: boolean
+  /**
    * Plan the visitor already chose on the marketing site (AGL-1117), read off
    * `?plan=` by the billing page. It emphasizes that card instead of the
    * next-tier-up default, so the deep link lands on the plan they clicked.
@@ -286,6 +299,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     plan,
     interval = 'month',
     enterprise = false,
+    subscriptionActive = false,
     highlight,
     onSelect,
   } = props
@@ -328,6 +342,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     () => highlightIndex >= 0 && currentIndex >= 0 && highlightIndex < currentIndex,
   )
   const lowerTierCount = currentIndex > 0 ? currentIndex : 0
+  // A subscriber on a paid tier has a real route to Free, and it is the cancel
+  // flow (AGL-2156). Enterprise is excluded for the same reason every other
+  // self-serve CTA is: that agreement is changed by talking to us.
+  const canCancelToFree = subscriptionActive && !enterprise && currentIndex > 0
 
   return (
     <Grid container spacing={2} id="plans">
@@ -407,6 +425,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                     {'Contact us to change'}
                   </Button>
                 ) : !isCurrent ? (
+                  <>
                   <Button
                     fullWidth
                     size="small"
@@ -423,10 +442,12 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                           : 'outlined'
                     }
                     color={isLower ? 'inherit' : 'primary'}
-                    // Free has no Stripe price to check out; moving down to
-                    // it means canceling the subscription (Stripe portal,
-                    // not built yet).
-                    disabled={tier === 'free'}
+                    // Free has no Stripe price to check out. For a PROSPECT
+                    // that makes the card an offer with nothing to click; for
+                    // a SUBSCRIBER it has a real route, and it is the cancel
+                    // flow (AGL-2156) — which the page owns, and which states
+                    // what happens and when.
+                    disabled={tier === 'free' && !canCancelToFree}
                     onClick={() => onSelect(tier)}
                     sx={{ mb: 1.5, ...(isLower ? { color: 'text.secondary' } : {}) }}
                   >
@@ -434,11 +455,30 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         promise the price is permanent — no price locks, no
                         grandfathering. Enforced by no-price-commitment.spec. */}
                     {tier === 'free'
-                      ? 'No credit card required'
+                      ? canCancelToFree
+                        ? 'Cancel & move to Free'
+                        : 'No credit card required'
                       : currentIndex < 0 || index > currentIndex
                         ? 'Upgrade'
                         : 'Downgrade'}
                   </Button>
+                  {/* The button name alone would still be a surprise — a
+                      customer clicking it deserves to know their paid plan
+                      runs out rather than stopping today, and that nothing is
+                      deleted. The funnel repeats it at the decision; this is
+                      the version visible while they are still choosing. */}
+                  {tier === 'free' && canCancelToFree ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: -1, mb: 1.5 }}
+                    >
+                      {'Your paid plan runs to the end of the period you have ' +
+                        'already paid for, then this organization moves to ' +
+                        'Free. Nothing is deleted.'}
+                    </Typography>
+                  ) : null}
+                  </>
                 ) : (
                   <Button fullWidth size="small" disabled sx={{ mb: 1.5 }}>
                     {'Your plan'}

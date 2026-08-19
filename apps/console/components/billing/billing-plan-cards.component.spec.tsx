@@ -32,6 +32,8 @@
  * halves — collapsed by default, and reachable in one click.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { BillingPlanCardsComponent } from './billing-plan-cards.component'
 
@@ -187,5 +189,145 @@ describe('a stated intent overrides the default (AGL-1117 under AGL-1864)', () =
     // card as a recommendation to buy what they have.
     expect(screen.getAllByText('Recommended').length).toBe(1)
     expect(screen.getAllByText('Current plan').length).toBe(1)
+  })
+})
+
+/**
+ * The Free card is two different cards (AGL-2156).
+ *
+ * For a PROSPECT it is an offer, and "No credit card required" behind a
+ * disabled button is the right copy. For a SUBSCRIBER the same card was
+ * prospect copy on a dead control: nothing on the grid said that the route to
+ * Free is to cancel, and the disabled button was the ONLY thing preventing a
+ * `pro → free` switch from reaching a server that answers "Unknown target
+ * plan" (`PRICE_ENV` has no `free` entry, while `'free'` IS in
+ * `SELF_SERVE_PLANS` and `isLadderDowngrade` classifies the move as a
+ * downgrade).
+ *
+ * It matters to retention specifically: moving to Free is the cheapest save
+ * available and the grid offered no route to it.
+ */
+describe('the Free card is honest to a subscriber (AGL-2156)', () => {
+  function expandLowerTiers() {
+    fireEvent.click(disclosure() as HTMLElement)
+  }
+
+  it('a paying org gets a WORKING route, and it says it is a cancel', () => {
+    const { onSelect } = renderCards({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
+    const button = screen.getByRole('button', { name: 'Cancel & move to Free' })
+    // jest-dom is not set up in this project — assert the property directly.
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(button)
+    // The page routes 'free' at the cancel flow; the grid's job is to ask.
+    expect(onSelect).toHaveBeenCalledWith('free')
+  })
+
+  it('states what happens and when, beside the control', () => {
+    renderCards({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
+    expect(
+      screen.getByText(/runs to the end of the period you have already paid for/i),
+    ).toBeTruthy()
+    expect(screen.getByText(/Nothing is deleted/i)).toBeTruthy()
+  })
+
+  it('never shows a subscriber the prospect copy', () => {
+    renderCards({ plan: 'pro', subscriptionActive: true })
+    expandLowerTiers()
+    expect(screen.queryByText('No credit card required')).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: a PROSPECT still sees the offer, still disabled', () => {
+    // There is nothing to cancel, so there is nothing to click — and "No
+    // credit card required" is the true sentence for them.
+    renderCards({ plan: undefined, subscriptionActive: false })
+    const button = screen.getByRole('button', { name: 'No credit card required' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(
+      screen.queryByRole('button', { name: 'Cancel & move to Free' }),
+    ).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: an ENTERPRISE org gets no self-serve route to Free', () => {
+    // An enterprise agreement is changed by talking to us (AGL-1118), which
+    // is true of leaving it as much as of changing tier inside it.
+    renderCards({ plan: 'pro', enterprise: true, subscriptionActive: true })
+    expect(
+      screen.queryByRole('button', { name: 'Cancel & move to Free' }),
+    ).toBeNull()
+  })
+
+  it('NEGATIVE CONTROL: an org already ON Free is not offered a cancel', () => {
+    renderCards({ plan: 'free', subscriptionActive: true })
+    expect(
+      screen.queryByRole('button', { name: 'Cancel & move to Free' }),
+    ).toBeNull()
+    expect(screen.getAllByText('Current plan').length).toBe(1)
+  })
+})
+
+/**
+ * A pre-billing workspace has no `plan` field (AGL-2156 §3).
+ *
+ * The page defaults it — `const plan = (org?.plan ?? 'free') as OrgPlan`, the
+ * convention AGL-1422 documents — everywhere except the one prop it hands this
+ * grid, which got the raw value. `undefined` means `currentIndex = -1`: no
+ * "Current plan" chip, NO tier recommended at all, and every button reading
+ * "Upgrade", while the rest of the page told them they were on Free.
+ *
+ * The component is right to treat `undefined` as "a visitor, show the whole
+ * ladder" — this pins the difference the caller must not blur.
+ */
+describe('an org with no plan field reads as Free, not as nothing (AGL-2156)', () => {
+  it("'free' marks the current tier and recommends the next one up", () => {
+    renderCards({ plan: 'free' })
+    expect(screen.getAllByText('Current plan').length).toBe(1)
+    expect(screen.getAllByText('Recommended').length).toBe(1)
+  })
+
+  it('undefined recommends NOTHING — which is why the page must default it', () => {
+    renderCards({ plan: undefined })
+    expect(screen.queryByText('Current plan')).toBeNull()
+    expect(screen.queryByText('Recommended')).toBeNull()
+  })
+})
+
+/**
+ * ...and the caller must pass the DEFAULTED value (AGL-2156 §3).
+ *
+ * The two tests above pin the component's halves, but the defect was in the
+ * PROP: `billing/page.tsx` computed `const plan = (org?.plan ?? 'free') as
+ * OrgPlan` and used it everywhere on the page while handing this grid the raw
+ * `org?.plan`. No component test can see that, so the guard reads the call
+ * site — the same posture as `billing-surface-coverage.spec.ts`, where the
+ * only way to find a wiring fault is to look at the wiring.
+ */
+describe('the billing page hands the grid a defaulted plan (AGL-2156)', () => {
+  it('never passes the raw org field', () => {
+    const source = readFileSync(
+      join(
+        __dirname,
+        '..',
+        '..',
+        'app',
+        '(app)',
+        '[orgSlug]',
+        'billing',
+        'page.tsx',
+      ),
+      'utf8',
+    )
+    const element = source.slice(source.indexOf('<BillingPlanCardsComponent'))
+    const planProp = /\bplan=\{([^}]*)\}/.exec(element)?.[1]?.trim()
+    expect(planProp).toBeTruthy()
+    // `org?.plan` is `undefined` for a pre-billing workspace, which the
+    // component reads as "a visitor with no tier" — no current chip, nothing
+    // recommended — while the rest of the page says Free.
+    expect(planProp).not.toMatch(/org\?\.plan/)
+    // Either the page's own defaulted local, or a default stated inline.
+    expect(
+      planProp === 'plan' || /\?\?\s*'free'/.test(planProp ?? ''),
+    ).toBe(true)
   })
 })
