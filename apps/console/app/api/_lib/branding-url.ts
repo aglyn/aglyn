@@ -53,8 +53,7 @@
  * all still refused.
  */
 
-/** Mirrors the CDN route's own grammar — see `SEGMENT` in media-ref.ts. */
-const MEDIA_CDN_PATH = /^\/api\/media\/cdn\/[A-Za-z0-9_:-]{1,131}\/[A-Za-z0-9_-]{1,64}$/
+import { isMediaCdnPath } from '@aglyn/aglyn/server'
 
 /** An absolute https URL, and nothing else. */
 export function isBrandingLinkUrl(value: string): boolean {
@@ -66,8 +65,15 @@ export function isBrandingLinkUrl(value: string): boolean {
  *
  * Order matters only for readability; the two shapes cannot overlap, because
  * a value starting `https://` can never also start `/api/`.
+ *
+ * The CDN half was a private regex here until AGL-2286 found the same
+ * validator-refuses-its-own-picker defect on the org profile logo and the
+ * member avatar. The avatar's validator lives in a lib that cannot import
+ * from `apps/console`, so the grammar moved to `media-ref.ts` — which already
+ * owns `MEDIA_CDN_ROUTE` and `isMediaCdnScope` — and is delegated to here.
+ * One definition rather than a third copy of the same shape.
  */
 export function isBrandingImageUrl(value: string): boolean {
   if (isBrandingLinkUrl(value)) return true
-  return MEDIA_CDN_PATH.test(value)
+  return isMediaCdnPath(value)
 }

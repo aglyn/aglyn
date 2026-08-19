@@ -228,8 +228,23 @@ async function handler(request: Request): Promise<Response> {
           .trim()
           .slice(0, max)
       const logoUrl = clean(body?.logoUrl, 500)
-      if (logoUrl && !/^https:\/\//i.test(logoUrl)) {
-        return Response.json({ error: 'Logo URLs must be https://' }, { status: 400 })
+      // Same rule as the white-label logo below, and for the same reason
+      // (AGL-2286): the Organization Settings logo field is a `MediaUrlField`
+      // whose helper text reads "Browse the org media library or paste an
+      // https URL", and Browse writes `media.cdnPath` — always relative. The
+      // bare `^https://` test that stood here refused every asset the picker
+      // could produce, so the only way to set an org logo was to paste a URL
+      // from somewhere the customer hosts themselves. The relative form is
+      // legal at the read sites (the org switcher renders it straight into an
+      // Avatar `src`); the validator was the one reader that did not know.
+      if (logoUrl && !isBrandingImageUrl(logoUrl)) {
+        return Response.json(
+          {
+            error:
+              'Logo URL must be an https:// URL or an image from your media library',
+          },
+          { status: 400 },
+        )
       }
       // The org's address is STRUCTURED (AGL-1133). It was a 400-character
       // free-text blob, which reads as an address to a human and is unusable

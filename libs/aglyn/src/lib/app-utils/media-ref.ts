@@ -140,6 +140,41 @@ export function parseMediaRef(value: unknown): MediaRef | null {
 }
 
 /**
+ * Whether a value is a media-library CDN **path** — exactly what the media
+ * picker writes (AGL-2286).
+ *
+ * `MediaUrlField`'s `onPick` hands back `media.cdnPath`, which is
+ * `/api/media/cdn/{scope}/{mediaId}` and is never absolute. Several save
+ * routes validated their URL field with a bare `^https://` test and so
+ * refused every asset their own Browse button could produce. AGL-2247 fixed
+ * that for the white-label branding profile with a private regex inside
+ * `apps/console/app/api/_lib/branding-url.ts`; this is that predicate
+ * promoted to the module that already owns the grammar, because the org
+ * profile logo and the member avatar had the same defect and live in a lib
+ * `apps/console` cannot be imported from.
+ *
+ * Deliberately NOT {@link isMediaCdnUrl}, which asks a different question
+ * with `includes()` and would answer yes to `https://evil.example/x/api/media/cdn/a/b`.
+ * A validator needs the strict form, so this mirrors {@link parseMediaRef}
+ * exactly — same first-slash boundary, same `isMediaCdnScope` and `SEGMENT`
+ * checks — rather than re-deriving a regex that could drift from the route
+ * the path is about to be served by.
+ */
+export function isMediaCdnPath(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const prefix = `${MEDIA_CDN_ROUTE}/`
+  if (!value.startsWith(prefix)) return false
+  const rest = value.slice(prefix.length)
+  // The scope segment may contain `:` but never `/`, so the FIRST slash is
+  // the boundary and the media id is everything after it.
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return false
+  const scope = rest.slice(0, slash)
+  const mediaId = rest.slice(slash + 1)
+  return isMediaCdnScope(scope) && SEGMENT.test(mediaId)
+}
+
+/**
  * Rewrites an org scope so it names the site doing the rendering — the
  * scope-segment twin of `hostQualifiedCdnPath` (AGL-1043).
  *

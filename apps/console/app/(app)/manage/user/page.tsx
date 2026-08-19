@@ -19,6 +19,7 @@
 
 import {
   canLinkSocialProvider,
+  isMediaCdnPath,
   normalizeAddress,
   normalizePhone,
 } from '@aglyn/aglyn'
@@ -365,11 +366,18 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   }, [(data as any)?.photoUrl, user?.photoURL])
   const handlePhotoSave = useCallback(async () => {
     const cleaned = photoUrl.trim()
-    if (cleaned && !/^https:\/\//i.test(cleaned)) {
-      return void enqueueSnackbar('Image URLs must be https://', {
-        variant: 'warning',
-        persist: false,
-      })
+    // Must accept what this card's own Browse button produces (AGL-2286) —
+    // `MediaUrlField` writes `media.cdnPath`, which is never absolute. This
+    // check fired FIRST, so a user who picked a library image never even
+    // reached the server's identical refusal; the field's own helper text
+    // offers the library. Mirrors `normalizeMemberPhotoUrl`, which is the
+    // boundary — this one is the courtesy.
+    const cleanedIsHttps = /^https:\/\//i.test(cleaned)
+    if (cleaned && !cleanedIsHttps && !isMediaCdnPath(cleaned)) {
+      return void enqueueSnackbar(
+        'Image URL must be an https:// URL or an image from your media library',
+        { variant: 'warning', persist: false },
+      )
     }
     const dequeueLoading = queueLoading()
     try {
