@@ -2341,15 +2341,20 @@ export function checkEntitlement(
 /**
  * A branding profile with every field present — what a branded surface
  * renders. Image/color/domain fields are nullable (Aglyn's own surfaces
- * bake those in rather than carry a URL); the text fields always have a
- * value so callers never string-concatenate `undefined`.
+ * bake those in rather than carry a URL); the remaining text fields always
+ * have a value so callers never string-concatenate `undefined`.
+ *
+ * `supportUrl` is nullable too, and it is the one field where null carries a
+ * decision rather than an absence — see {@link resolveBrandingProfile}. A
+ * caller must render NOTHING for it, never a placeholder and never a
+ * substitute.
  */
 export interface ResolvedBrandingProfile {
   productName: string
   logoUrl: string | null
   faviconUrl: string | null
   primaryColor: string | null
-  supportUrl: string
+  supportUrl: string | null
   fromName: string
   emailLogoUrl: string | null
   customConsoleDomain: string | null
@@ -2420,8 +2425,22 @@ export function resolveBrandingProfile(
     primaryColor:
       cleanBrandString(profile.primaryColor) ??
       PLATFORM_BRANDING_PROFILE.primaryColor,
-    supportUrl:
-      cleanBrandString(profile.supportUrl) ?? PLATFORM_BRANDING_PROFILE.supportUrl,
+    // NO FALLBACK, and this is the one field that gets none (AGL-2428).
+    //
+    // Only a white-label org reaches this line — the guard above hands every
+    // other org the platform profile whole. So a blank here belongs to an
+    // organization whose transactional mail reads as *theirs* to a recipient
+    // who is *their* customer, and filling the gap with Aglyn's desk sends
+    // that person to a support team that cannot help them, while disclosing
+    // a vendor they were never told about. `platform-brand.ts` calls the
+    // same substitution in the self-host case "a trap dressed as a default";
+    // this is that trap with a different victim.
+    //
+    // Blank therefore means NO LINK, exactly as `emailLogoUrl` one field
+    // down already means no logo. An email with a gap where a link should be
+    // reads as broken; an email with no support line reads as plain, which
+    // is the right appearance for an organization that has not set one.
+    supportUrl: cleanBrandString(profile.supportUrl) ?? null,
     fromName:
       cleanBrandString(profile.fromName) ?? PLATFORM_BRANDING_PROFILE.fromName,
     emailLogoUrl:
@@ -2465,7 +2484,16 @@ export function brandMergeTokens(
   return {
     'brand.productName': branding.productName,
     'brand.fromName': branding.fromName,
-    'brand.supportUrl': branding.supportUrl,
+    // EMPTY, never omitted, when the org has no Support URL (AGL-2428).
+    //
+    // `renderLoadedSystemEmail` merges these OVER `DEFAULT_BRAND_TOKENS`,
+    // which carries the platform's own support URL for the genuinely
+    // org-less senders. Dropping the key here would let that default show
+    // through and mail a white-label org's customer a link to Aglyn — the
+    // exact leak this closes — so the key must be present and empty in order
+    // to overwrite it. A designed template that interpolates the token
+    // renders nothing where it sits.
+    'brand.supportUrl': branding.supportUrl ?? '',
   }
 }
 

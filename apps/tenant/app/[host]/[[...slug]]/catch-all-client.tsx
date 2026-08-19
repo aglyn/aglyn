@@ -694,12 +694,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           const brandLogo = Aglyn.resolveMediaSrc(brand.logoUrl, {
             hostId: host?.$id,
           })
-          return (
-            <a
-              href={brand.supportUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{
+          // A LINK ONLY IF THERE IS SOMEWHERE TO SEND THEM (AGL-2428).
+          //
+          // `supportUrl` is null for a white-label org that left the field
+          // blank, and the badge must then be a plain label rather than an
+          // anchor: an `<a>` with no href is still announced as a link by a
+          // screen reader and still takes focus, which promises a
+          // destination that does not exist. In practice this branch is the
+          // uncommon one — the badge renders only for an org WITHOUT the
+          // concealment entitlement, and those resolve to the platform
+          // profile — but the type is nullable and the honest markup is
+          // cheaper than reasoning about which orgs can reach it.
+          const badgeStyle = {
                 position: 'fixed',
                 bottom: 12,
                 right: 12,
@@ -714,8 +720,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 color: '#fff',
                 backgroundColor: brand.primaryColor ?? 'rgba(0, 0, 0, 0.72)',
                 textDecoration: 'none',
-              }}
-            >
+          } as const
+          const badgeContent = (
+            <>
               {brandLogo ? (
                 <img
                   src={brandLogo}
@@ -725,7 +732,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 />
               ) : null}
               {`Made with ${brand.productName}`}
+            </>
+          )
+          return brand.supportUrl ? (
+            <a
+              href={brand.supportUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={badgeStyle}
+            >
+              {badgeContent}
             </a>
+          ) : (
+            <span style={badgeStyle}>{badgeContent}</span>
           )
         })()
       ) : null}

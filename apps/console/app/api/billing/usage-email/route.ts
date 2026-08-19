@@ -24,6 +24,7 @@ import {
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { previousMonth } from '../../../../utils/billing-month'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { brandSupportLine } from '../../_lib/brand-support-line'
 import {
   loadSystemEmail,
   renderLoadedSystemEmail,
@@ -180,9 +181,14 @@ async function handler(request: Request): Promise<Response> {
       const branding = resolveBrandingProfile(
         orgDoc.data() as Partial<AglynOrgBilling>,
       )
+      // The support line is OMITTED, not defaulted, when the org has none
+      // (AGL-2428). This mail goes to a white-label org's own customer and
+      // reads as that org throughout; a "Need help?" pointing at Aglyn sends
+      // them to a desk that cannot help them and names a vendor they were
+      // never told about. No line at all reads as plain, which is correct.
       const fallbackText =
         `Here is your ${branding.productName} usage summary for ${month}.\n\n` +
-        `${usageSummary}\n\nNeed help? ${branding.supportUrl}`
+        `${usageSummary}${brandSupportLine(branding)}`
       const orgName = orgDoc.get('name') ?? 'your organization'
       // Render the batch-resolved template for this org's values (AGL-768);
       // null falls back to the built-in copy above.

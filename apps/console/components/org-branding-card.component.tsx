@@ -99,6 +99,10 @@ export function OrgBrandingCard() {
 
   // The Aglyn defaults, shown as placeholders so blanks read as "falls back to
   // Aglyn" rather than looking broken.
+  //
+  // Support URL is the exception and does not use them (AGL-2428): blank
+  // there means NO LINK, not Aglyn's desk, and a placeholder showing Aglyn's
+  // support page would tell the owner the opposite of what the field does.
   const defaults = resolveBrandingProfile(null)
 
   const set = (key: keyof BrandingDraft) => (value: string) =>
@@ -194,10 +198,10 @@ export function OrgBrandingCard() {
           />
           <TextField
             label="Support URL"
-            placeholder={defaults.supportUrl}
+            placeholder="No support link is shown"
             value={draft.supportUrl}
             onChange={(event) => set('supportUrl')(event.target.value)}
-            helperText="Linked from branded surfaces and email footers."
+            helperText="Linked from branded surfaces and email footers. Leave it blank and no support link appears at all — your customers are never sent to Aglyn."
           />
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <Box
