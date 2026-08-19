@@ -91,6 +91,44 @@ Products, categories, and collections each have a host-unique slug used in
 storefront URLs (`/products/{slug}`, `/collections/{slug}`). Slugs are
 lowercase letters, numbers, and dashes.
 
+## Google Merchant Center feed {#merchant-center-feed}
+
+Your catalog is also published as a product feed for **Google Merchant
+Center**. The address is on the **Store settings** card under **Commerce →
+Settings**: a read-only **Google Merchant Center feed URL** field with a
+**Copy feed URL** button beside it.
+
+In Merchant Center, add it under **Products → Feeds** as a **scheduled
+fetch**. Merchant Center then re-reads the URL on the schedule you set there,
+so catalog changes reach it without another upload.
+
+What the feed contains:
+
+- **One item per active product.** Draft, archived, and deleted products never
+  appear. Items are per *product*, not per variant — the price is the lowest
+  price across the product's variants.
+- **Per item**: the product id, name, description (its name again if the
+  description is empty), a link to `/products/{slug}` on your store, the
+  product's first image if it has one, the price in **USD**, an availability
+  value, and the condition `new`.
+- **Availability** is `out_of_stock` when a tracked stock count has reached
+  zero and the product does not allow backorders. Everything else — including
+  untracked stock — is `in_stock`.
+- **Up to 500 products.** A larger catalog is not fully represented in the
+  feed.
+
+Two things worth knowing before you submit it:
+
+- **Use the URL the card gives you.** Each item's link is built from the
+  address the feed was requested on, so submitting the wrong one puts the
+  wrong domain on every product in Merchant Center.
+- **The URL appears once the site has an address** — a subdomain or a custom
+  domain. Until then the card says so rather than showing a partial URL.
+
+The feed needs no credentials to read, and it carries only what your
+storefront already shows publicly. Responses are cached for an hour, so a
+price or stock change can take that long to appear in a fetch.
+
 ## Related
 
 - [Commerce overview](overview.md)

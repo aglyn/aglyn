@@ -119,6 +119,7 @@ export function RecentSignInsCard() {
     <CardDisplay
       header="Recent sign-ins"
       help={docsHelp('account', {
+        anchor: '#recent-sign-ins',
         excerpt:
           'Every device that has signed in to your account, newest first — ' +
           'the list behind the "new sign-in" email.',
