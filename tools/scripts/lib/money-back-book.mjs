@@ -77,6 +77,16 @@ export function classifyBookingSession(session) {
  *
  * `past_due` and `unpaid` are deliberately included: the schedule is still
  * live and Stripe will retry, so they are forward exposure, not history.
+ *
+ * AGL-1715-EXEMPT: this is NOT the live-subscription triple in
+ * `org-billing-doc.ts`, which answers "may this org open a SECOND
+ * subscription". This one asks "will this subscription bill again", and the
+ * two disagree exactly on `unpaid` — an org in dunning may not subscribe
+ * again, and its schedule is still live and still owes. Dropping the two
+ * dunning statuses to reuse the shared predicate would hide the accounts
+ * with an outstanding balance, which are the subject of the audit. This file
+ * is bare `node` and never built, so it could not import that lib anyway;
+ * it reads Stripe, decides nothing and writes nothing.
  */
 export const BILLING_STATUSES = new Set([
   'active',

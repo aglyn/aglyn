@@ -115,6 +115,16 @@ const DOCUMENTED_COPIES: Record<string, string> = {
   'libs/plugins/commerce/src/lib/server/member-post.ts':
     'Same as gate.ts — the tenant\'s live member subscribers, for who gets ' +
     'the member-post email (AGL-316). Not an Aglyn org subscription.',
+  'tools/scripts/lib/money-back-book.mjs':
+    'A deliberate SUPERSET — it adds `unpaid`. The question is "will this ' +
+    'subscription bill AGAIN", so the set is forward exposure rather than ' +
+    'history: `past_due` and `unpaid` are both still live schedules Stripe ' +
+    'will retry, and money that has not been collected yet is the whole ' +
+    'subject of the audit (AGL-2323). Answering it with the ' +
+    '"may this org subscribe" list would drop the dunning orgs, who are the ' +
+    'ones with an outstanding balance. A bare `node` ops script like ' +
+    'audit-metered-coverage.mjs below — never built, so it cannot import a ' +
+    'TypeScript lib; it reads Stripe, decides nothing and writes nothing.',
   'tools/scripts/audit-metered-coverage.mjs':
     'A standalone `node` ops script that talks to the Stripe REST API ' +
     'directly. It is run with bare node and never built, so it cannot import ' +
