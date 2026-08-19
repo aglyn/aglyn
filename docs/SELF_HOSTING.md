@@ -58,6 +58,15 @@ since the setup scripts in step 3 read them. Three rules matter:
   your console display and link every one of your sites at an address you do
   not control, and makes every published site advertise that address as its
   canonical origin to Google, feed readers and inboxes (AGL-2121).
+- `AGLYN_TENANT_HOST_CNAME` and `NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME` are
+  **two variables**, and `.env.selfhost.example` ships only the second. The
+  prefixed one is what the console displays and verifies in the custom-domain
+  wizard (`apps/console/utils/tenant-dns.ts`, default `sites.aglyn.app`); the
+  unprefixed one is what the tenant middleware matches the incoming `Host`
+  against, mapped through the `env` block of `apps/tenant/next.config.js` and
+  therefore fixed at image-build time. **Set both, to the same value**, before
+  `docker compose build` — the host-resolution branch AGL-2177 restored has
+  nothing to match against otherwise.
 
 ### Building `apps/docs` as your own documentation (AGL-2124)
 
@@ -80,8 +89,11 @@ DOCS_STATUS_TARGETS='console|Console|https://app.example.com|Sign-in and editing
 ```
 
 If you point `DOCS_ERROR_BEACON_ENDPOINT` at your own console's
-`/api/errors`, set `NEXT_PUBLIC_AGLYN_DOCS_URL` on that console to your docs
+`/api/errors`, set `NEXT_PUBLIC_DOCS_ORIGIN` on that console to your docs
 origin — the collector's CORS allowlist reads it, and defaults to Aglyn's.
+(The older `NEXT_PUBLIC_AGLYN_DOCS_URL` is still honoured for a deployment
+already configured under it, but `NEXT_PUBLIC_DOCS_ORIGIN` is the one name to
+use now — AGL-2186.)
 
 ## 3. Set your Firebase project up
 
@@ -285,7 +297,10 @@ Every key here is optional and independent. A missing key disables its feature
 | Updates | `git pull && docker compose up --build`. The release notes are [`CHANGELOG.md`](../CHANGELOG.md), where each release is a `v<semver>` git tag on the commit that shipped; a rules change appears there as a `fix(rules)`/`feat(rules)` entry. Re-run the deploy scripts when they change. Check what you are running with `git describe --tags --match 'v*'`. |
 | Marketplace | Visible by default and backed by Aglyn's Stripe Connect platform, which you do not have. Browsing works; Buy and payout-onboarding explain themselves only after being clicked. Turn `release_marketplace` off in Remote Config if you do not want it. |
 | Staff / admin surfaces | Built for Aglyn's own operations — the tax-return page in particular carries Aglyn LLC's Texas registration identifiers and is meaningless elsewhere. |
-| Docs site (`apps/docs`) | Not part of `docker compose`. If you build and publish it yourself, note it currently compiles Aglyn's GA4 measurement id with no override. (AGL-2018) |
+| Docs site (`apps/docs`) | Not part of `docker compose` — build and publish it separately if you want it. Its configuration is the "Your own docs build" row above. |
+| Deployment shape | **Set `AGLYN_STANDALONE=1` in `.env.selfhost`.** `isDeployedRuntime()` — and the tenant middleware's local copy of it — is what tells the software this is a real deployment rather than a laptop, and it gates the whole host-resolution switch plus the canonical custom-domain redirect. `docker/tenant.Dockerfile` and `docker/console.Dockerfile` set it in their **build** stage; that does not carry into the `runner` stage, and neither `.env.selfhost.example` nor `docker-compose.yml` supplies it at runtime. Without it a stock container reads itself as a developer's machine, matches no host, and 307s every visitor to the configured console (AGL-2177). |
+| Custom-domain verification | `/api/domains/verify` has a DEV soft pass that accepts any CNAME, because a laptop has no DNS pointing at a tenant edge. It used to key on `!process.env.VERCEL` — never set on a container — so it was **on in production on every self-host install**, and any domain carrying any CNAME to anywhere verified: the AGL-733 defect, reinstated. It now keys on `isDevelopmentRuntime()` / `NODE_ENV`, which both Dockerfiles set to `production` in the runner stage (AGL-2180). A relaxation must key on the variable that means "not production", never on the absence of a vendor's. **Upgrade if you run an image built before this.** |
+| Edit-hint bounce | `apps/tenant/app/api/edit-hint/set/route.ts` validates the `return` origin against an allowlist. Aglyn's two console origins are seeded **only when `NEXT_PUBLIC_CONSOLE_URL` is unset**; they used to be unconditional with yours merely added, so an operator could not narrow the list and their tenant runtime kept an open redirect target at a console they do not run (AGL-2176). Name your console and it is the only permitted target. The same variable is the tenant middleware's fallback redirect, so leaving it unset also sends a visitor who lands on an unresolvable host to `app.aglyn.com`. |
 
 ## Local development without Docker
 

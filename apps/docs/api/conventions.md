@@ -150,14 +150,20 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Four operations accept an **`Idempotency-Key`** header:
+Five operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
 | `POST /v1/datasets` | the organization |
-| `DELETE /v1/datasets/{datasetId}` | the organization |
+| `DELETE /v1/datasets/{datasetId}` | that dataset |
 | `POST /v1/datasets/{datasetId}/records` | that dataset |
 | `DELETE /v1/datasets/{datasetId}/records/{recordId}` | that dataset |
+| `DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` | that site |
+
+`POST /v1/datasets` is the only organization-scoped one, because it is the only
+operation with no object to scope to yet. Every other row is scoped to the
+object named in its own path — including `DELETE /v1/datasets/{datasetId}`,
+where the dataset being removed is still the scope.
 
 Send the same key to retry safely — if the original succeeded, the same response
 comes back instead of a duplicate or a `404`:
@@ -225,6 +231,11 @@ curl -X DELETE https://app.aglyn.com/api/v1/datasets/ds_1/records/k3f9a1c7be \
   That's deliberate: a `204`-for-everything would hand you a success for a typo'd id
   and take away the only signal that you're asking about the wrong record.
 - A `404` **releases** the key, so you can correct the id and retry with the same one.
+
+`DELETE /v1/sites/{siteId}/form-submissions/{submissionId}` behaves the same way,
+scoped to the site rather than to a dataset. It is the delete most likely to run on
+a timer — a purge after a nightly export — which is exactly the case where a lost
+response has to be distinguishable from a wrong id.
 
 `PATCH` doesn't take the header and doesn't need it. It merges the supplied `values`
 over the stored ones, so the same body twice lands the same state *and* returns the
