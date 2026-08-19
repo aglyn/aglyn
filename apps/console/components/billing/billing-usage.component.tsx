@@ -102,10 +102,18 @@ export function UsageMeter(props: {
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Stack direction="row" sx={{ alignItems: 'center' }}>
-          <Typography variant="body2">{label}</Typography>
+        {/*
+          The tip renders INSIDE the label, not beside it in a wrapper.
+          `usage-org-wide-denominator` and `contacts-overage-caption-release-gate`
+          both find a meter by `getByText(label).parentElement` and read the
+          row's text from it; a wrapper makes that parent the wrapper, whose
+          text is the label alone. The icon contributes no text, so the label
+          still matches and the row is still the parent.
+        */}
+        <Typography variant="body2">
+          {label}
           {help ? <HelpTip {...help} sx={{ ml: 0.5, fontSize: '0.8em' }} /> : null}
-        </Stack>
+        </Typography>
         <Typography variant="body2" color="text.secondary">
           {unmetered
             ? `not yet metered · limit ${formatLimit(limit, unit)}`
