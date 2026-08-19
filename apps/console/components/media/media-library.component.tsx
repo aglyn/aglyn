@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useDebounce } from '@aglyn/shared-util-vendor'
@@ -681,8 +682,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const assetOrigin = useMemo(() => {
     if (hostId && hostDoc) {
-      if (hostDoc.cname) return `https://${hostDoc.cname}`
-      if (hostDoc.subdomain) return `https://${hostDoc.subdomain}.aglyn.app`
+      // hostDisplayDomain covers both branches and reads the configured apex
+      // (AGL-2172) — this re-derivation pinned a self-hoster's media URLs to
+      // aglyn.app, an origin that does not serve their assets.
+      const domain = hostDisplayDomain(hostDoc)
+      if (domain) return `https://${domain}`
     }
     return typeof window !== 'undefined' ? window.location.origin : ''
   }, [hostId, hostDoc])

@@ -37,7 +37,21 @@
  * The CNAME target a subdomain points at. Public because the wizard prints it.
  */
 export const CNAME_TARGET = (
-  process.env['NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME'] ?? 'sites.aglyn.app'
+  // Dot notation, and it is the whole fix (AGL-2037). Next inlines
+  // `NEXT_PUBLIC_*` into the browser bundle by textually substituting
+  // `process.env.NAME`; the bracket form is never substituted. This module is
+  // imported by `custom-domain-card.component.tsx`, which is `'use client'`,
+  // so the bracket form read `undefined` in the browser and this constant
+  // collapsed to Aglyn's target no matter what an operator configured — their
+  // wizard telling their customer to create a DNS record pointing at OUR
+  // infrastructure. Note this is the same invariant the header above is about,
+  // broken through a different mechanism: the env name was unified by AGL-733,
+  // and the ACCESS FORM silently re-split displayed target from verified
+  // target, because the verify route runs server-side where brackets work.
+  //
+  // `||` not `??`, matching AGL-2022: an empty string is not a configured
+  // value, and an empty CNAME target is a wizard printing nothing.
+  process.env.NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME || 'sites.aglyn.app'
 ).toLowerCase()
 
 /**
@@ -53,8 +67,14 @@ export const CNAME_TARGET = (
  * lands on and must never be the address we recommend (AGL-1264).
  */
 export const HOST_APEX_ADDRESSES = (
-  process.env['NEXT_PUBLIC_AGLYN_TENANT_APEX_ADDRESSES'] ??
-  process.env['AGLYN_TENANT_APEX_ADDRESSES'] ??
+  // Dot form for the public name — same reason as `CNAME_TARGET` above, and it
+  // was broken the same way: the browser read `undefined` and the wizard
+  // printed Vercel's addresses to an operator's customer. The server-only name
+  // below KEEPS the bracket form deliberately: it is never substituted by
+  // design, is only meaningful server-side, and the dot form would inline a
+  // server-only value into the client bundle.
+  process.env.NEXT_PUBLIC_AGLYN_TENANT_APEX_ADDRESSES ||
+  process.env['AGLYN_TENANT_APEX_ADDRESSES'] ||
   '216.198.79.1,216.198.79.65,64.29.17.1,64.29.17.65,76.76.21.21'
 )
   .split(',')

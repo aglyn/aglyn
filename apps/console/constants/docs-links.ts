@@ -36,8 +36,29 @@ export {
 
 // The docs Vercel project deploys from apps/docs; the canonical domain lives
 // in apps/docs/docusaurus.config.ts — keep the two in sync.
+/**
+ * The docs-site origin (AGL-2186).
+ *
+ * `NEXT_PUBLIC_DOCS_ORIGIN` is canonical — it is the name `.env.selfhost.example`
+ * and `docs/SELF_HOSTING.md` document, so it is the one an operator has
+ * actually set. `NEXT_PUBLIC_AGLYN_DOCS_URL` is the older name kept as a
+ * fallback so an existing deployment configured under it keeps working.
+ *
+ * They were TWO independent variables reading one value: Assist citations
+ * honoured the documented name while every console and besigner help link
+ * honoured the undocumented one. An operator who followed the runbook exactly
+ * retargeted a third of their links and left the rest pointing at our
+ * documentation, presented inside their product as theirs. That is the exact
+ * pattern `operator-identity.ts` warns about — "AGL-733 is the record of what
+ * happens when one value acquires two env names" — with the split already in
+ * place one directory over from the warning.
+ *
+ * Dot notation: reaches client bundles (AGL-2037).
+ */
 export const DOCS_BASE_URL = (
-  process.env.NEXT_PUBLIC_AGLYN_DOCS_URL || 'https://docs.aglyn.com'
+  process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
+  process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
+  'https://docs.aglyn.com'
 ).replace(/\/+$/, '')
 
 /** Absolute docs URL for a docs-site path (docs serve from the site root). */

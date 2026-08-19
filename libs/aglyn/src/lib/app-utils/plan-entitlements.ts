@@ -24,6 +24,7 @@ import type {
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation'
+import { PLATFORM_BRAND_NAME, PLATFORM_SUPPORT_URL } from './platform-brand'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -1956,18 +1957,31 @@ export interface ResolvedBrandingProfile {
 }
 
 /**
- * The Aglyn (non-white-label) brand — the fallback every surface gets when
- * an org lacks the `whiteLabel` entitlement, and the gap-filler for a
- * partial agency profile. Kept here beside the entitlement so brand and
- * gate stay reviewed together.
+ * The PLATFORM (non-white-label) brand — the fallback every surface gets when
+ * an org lacks the `whiteLabel` entitlement, and the gap-filler for a partial
+ * agency profile. Kept here beside the entitlement so brand and gate stay
+ * reviewed together.
+ *
+ * Renamed from `AGLYN_BRANDING_PROFILE` (AGL-2153), and the rename is the
+ * substance rather than tidying: the old name asserted *whose* brand this is,
+ * and on a self-host install that assertion is exactly what stopped being
+ * true. It is the platform's own brand, and which platform that is, is now
+ * configuration.
+ *
+ * This one change reaches further than it looks. `resolveBrandingProfile` is
+ * the single resolver EVERY branded surface routes through — console chrome,
+ * published-site badge and title, transactional email — and this is its
+ * fallback. Making the fallback read `platform-brand.ts` gives all of them a
+ * self-host brand without extending the white-label machinery at all; only its
+ * default needed to stop being a constant.
  */
-export const AGLYN_BRANDING_PROFILE: ResolvedBrandingProfile = {
-  productName: 'Aglyn',
+export const PLATFORM_BRANDING_PROFILE: ResolvedBrandingProfile = {
+  productName: PLATFORM_BRAND_NAME,
   logoUrl: null,
   faviconUrl: null,
   primaryColor: null,
-  supportUrl: 'https://aglyn.com/support',
-  fromName: 'Aglyn',
+  supportUrl: PLATFORM_SUPPORT_URL,
+  fromName: PLATFORM_BRAND_NAME,
   emailLogoUrl: null,
   customConsoleDomain: null,
 }
@@ -1995,28 +2009,28 @@ function cleanBrandString(value: string | undefined): string | undefined {
 export function resolveBrandingProfile(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedBrandingProfile {
-  if (!checkEntitlement(org, 'whiteLabel')) return AGLYN_BRANDING_PROFILE
+  if (!checkEntitlement(org, 'whiteLabel')) return PLATFORM_BRANDING_PROFILE
   const profile = (org?.brandingProfile ?? {}) as OrgBrandingProfile
   return {
     productName:
       cleanBrandString(profile.productName) ??
-      AGLYN_BRANDING_PROFILE.productName,
-    logoUrl: cleanBrandString(profile.logoUrl) ?? AGLYN_BRANDING_PROFILE.logoUrl,
+      PLATFORM_BRANDING_PROFILE.productName,
+    logoUrl: cleanBrandString(profile.logoUrl) ?? PLATFORM_BRANDING_PROFILE.logoUrl,
     faviconUrl:
-      cleanBrandString(profile.faviconUrl) ?? AGLYN_BRANDING_PROFILE.faviconUrl,
+      cleanBrandString(profile.faviconUrl) ?? PLATFORM_BRANDING_PROFILE.faviconUrl,
     primaryColor:
       cleanBrandString(profile.primaryColor) ??
-      AGLYN_BRANDING_PROFILE.primaryColor,
+      PLATFORM_BRANDING_PROFILE.primaryColor,
     supportUrl:
-      cleanBrandString(profile.supportUrl) ?? AGLYN_BRANDING_PROFILE.supportUrl,
+      cleanBrandString(profile.supportUrl) ?? PLATFORM_BRANDING_PROFILE.supportUrl,
     fromName:
-      cleanBrandString(profile.fromName) ?? AGLYN_BRANDING_PROFILE.fromName,
+      cleanBrandString(profile.fromName) ?? PLATFORM_BRANDING_PROFILE.fromName,
     emailLogoUrl:
       cleanBrandString(profile.emailLogoUrl) ??
-      AGLYN_BRANDING_PROFILE.emailLogoUrl,
+      PLATFORM_BRANDING_PROFILE.emailLogoUrl,
     customConsoleDomain:
       cleanBrandString(profile.customConsoleDomain) ??
-      AGLYN_BRANDING_PROFILE.customConsoleDomain,
+      PLATFORM_BRANDING_PROFILE.customConsoleDomain,
   }
 }
 
@@ -2036,7 +2050,7 @@ export function resolveBrandingProfile(
  *
  * Token bodies are namespaced `brand.*` so a designer can tell them from the
  * per-send values, and they resolve for EVERY org — Aglyn's own included,
- * since `AGLYN_BRANDING_PROFILE.productName` is `'Aglyn'`. That is what makes
+ * since `PLATFORM_BRANDING_PROFILE.productName` is `'Aglyn'`. That is what makes
  * a single template correct for both populations instead of one hard-coded
  * for the majority.
  *
@@ -2067,7 +2081,7 @@ export function brandMergeTokens(
  * our runtime to no consumer. A detector needs the product name and nothing
  * else.
  */
-export const PLATFORM_GENERATOR_NAME = 'Aglyn'
+export const PLATFORM_GENERATOR_NAME = PLATFORM_BRAND_NAME
 
 /**
  * May this org's published pages say they were built with Aglyn? (AGL-2088)

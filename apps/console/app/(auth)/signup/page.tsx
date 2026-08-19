@@ -22,6 +22,7 @@ import {
   generateOrgSlug,
   onboardingDestination,
   parseOnboardingPlanIntent,
+  PLATFORM_BRAND_NAME,
 } from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { AuthResultError } from '@aglyn/shared-data-enums'
@@ -34,20 +35,21 @@ import {
   FIELD_SCHEMA_PASSWORD_CONFIRM,
 } from '@aglyn/shared-data-forms'
 import { useSearchParams } from 'next/navigation'
-import {
-  AppLink,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import {
-  mdiGoogle,
-} from '@aglyn/shared-data-mdi'
-import {
-  MdiIcon,
-} from '@aglyn/shared-ui-jsx'
+import { mdiGoogle } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
-import { Alert, Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  Button,
+  CircularProgress,
+  Divider,
+  Link,
+  Stack,
+  Typography,
+} from '@mui/material'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -566,9 +568,13 @@ function SignUp() {
   return (
     <AuthFormComponent
       paperTop={
-        <Typography component="div" variant="body2" sx={{
-          alignSelf: "flex-end"
-        }}>
+        <Typography
+          component="div"
+          variant="body2"
+          sx={{
+            alignSelf: 'flex-end',
+          }}
+        >
           <AppLink href="/signin">{'Sign in'}</AppLink>
         </Typography>
       }
@@ -586,7 +592,7 @@ function SignUp() {
             : `Create your account to start on ${PLAN_LABELS[planIntent.plan]}, billed ${
                 planIntent.interval === 'year' ? 'yearly' : 'monthly'
               }`
-          : 'Create a new Aglyn Account'
+          : `Create a new ${PLATFORM_BRAND_NAME} Account`
       }
       paperAfter={
         <Typography component="div" variant="body2">
@@ -633,10 +639,11 @@ function SignUp() {
         direction="column"
         spacing={1}
         sx={{
-          justifyContent: "center",
-          alignItems: "stretch",
-          paddingBottom: 2
-        }}>
+          justifyContent: 'center',
+          alignItems: 'stretch',
+          paddingBottom: 2,
+        }}
+      >
         <Button
           variant="outlined"
           startIcon={<MdiIcon path={mdiGoogle.path} />}
@@ -647,7 +654,7 @@ function SignUp() {
         </Button>
       </Stack>
     </AuthFormComponent>
-  );
+  )
 }
 SignUp.displayName = 'Page:SignUp'
 

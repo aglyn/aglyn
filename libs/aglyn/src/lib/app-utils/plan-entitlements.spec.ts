@@ -16,7 +16,7 @@
  */
 
 import {
-  AGLYN_BRANDING_PROFILE,
+  PLATFORM_BRANDING_PROFILE,
   checkApiRequestQuota,
   checkContactQuota,
   checkDataStorageQuota,
@@ -1611,7 +1611,7 @@ describe('plan entitlements', () => {
     })
 
     it('returns the Aglyn defaults when white-label is off, ignoring any stored profile', () => {
-      expect(resolveBrandingProfile(undefined)).toEqual(AGLYN_BRANDING_PROFILE)
+      expect(resolveBrandingProfile(undefined)).toEqual(PLATFORM_BRANDING_PROFILE)
       expect(resolveBrandingProfile({ plan: 'business' } as any).productName).toBe(
         'Aglyn',
       )
@@ -1620,7 +1620,7 @@ describe('plan entitlements', () => {
         plan: 'pro',
         brandingProfile: { productName: 'Acme Sites', fromName: 'Acme' },
       } as any
-      expect(resolveBrandingProfile(notEntitled)).toEqual(AGLYN_BRANDING_PROFILE)
+      expect(resolveBrandingProfile(notEntitled)).toEqual(PLATFORM_BRANDING_PROFILE)
     })
 
     it('applies the org profile when white-label is on, filling gaps with Aglyn defaults', () => {
@@ -1640,7 +1640,7 @@ describe('plan entitlements', () => {
       expect(brand.logoUrl).toBe('https://cdn.acme.com/logo.png')
       expect(brand.primaryColor).toBe('#ff5a00')
       // Unset fields fall back to the Aglyn defaults, not undefined.
-      expect(brand.supportUrl).toBe(AGLYN_BRANDING_PROFILE.supportUrl)
+      expect(brand.supportUrl).toBe(PLATFORM_BRANDING_PROFILE.supportUrl)
       expect(brand.faviconUrl).toBeNull()
       expect(brand.customConsoleDomain).toBeNull()
     })

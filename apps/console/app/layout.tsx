@@ -16,6 +16,8 @@
  */
 
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { TITLE_TEMPLATE } from './page-title'
 // Deep import (not the barrel) so this Server Component doesn't pull the theme
 // lib's createContext HOCs into the RSC graph (AGL-405).
 import { APP_EMOTION_CACHE_OPTIONS } from '@aglyn/shared-ui-theme/util/emotion-cache'
@@ -39,10 +41,18 @@ import '../public/_static/styles/styles.css'
  */
 const SOCIAL_CARD = '/_static/images/social/aglyn-console-social-card.png'
 
-// The console is an installable PWA. The manifest and its icons are plain
-// static files under `/_static`, which middleware excludes from the auth
-// matcher so the browser can fetch them pre-login (AGL-1052).
-const PWA_MANIFEST = '/_static/_pwa/manifest.json'
+// The console is an installable PWA. Its ICONS are plain static files under
+// `/_static`, which middleware excludes from the auth matcher so the browser
+// can fetch them pre-login (AGL-1052).
+//
+// The manifest itself is no longer one of them (AGL-2153). It carried the
+// literals "Aglyn Console" / "Aglyn" / "…your Aglyn sites.", and a static JSON
+// cannot read configuration at all — so a self-hoster's installed app was
+// titled Aglyn on their users' home screens with no way to change it short of
+// editing a file in the repo. It is now `app/manifest.ts`, served at
+// `/manifest.webmanifest`, and that path is added to the middleware matcher's
+// exclusion list so it stays fetchable pre-login exactly as the static file
+// was.
 const BRAND_ICONS = '/_static/images/brand'
 
 // The installable app icon, distinct from the transparent favicon glyph. This
@@ -66,10 +76,22 @@ export const metadata: Metadata = {
   // and the bare brand, not `APP_CONSOLE.SEP`/`AFFIX` ('–' / 'Aglyn Platform
   // Console'). Those read as a marketing string in a browser tab, and the
   // tab is where a console user distinguishes between several open pages.
-  title: { default: APP_CONSOLE.TITLE ?? 'Aglyn', template: '%s · Aglyn' },
+  // The brand comes from configuration (AGL-2153) — a self-host operator's
+  // every browser tab said "· Aglyn" regardless of what they had renamed.
+  // `TITLE_TEMPLATE` is imported rather than restated (AGL-2170). It was a
+  // second copy of the same string, kept honest by a spec asserting the two
+  // matched — which worked while both were the literal '%s · Aglyn' and broke
+  // the moment the brand became configuration (AGL-2153), because a source
+  // substring check cannot compare two interpolations. One definition removes
+  // the drift class rather than re-guarding it, which is what that spec's own
+  // name ("defined once") always claimed.
+  title: {
+    default: APP_CONSOLE.TITLE ?? PLATFORM_BRAND_NAME,
+    template: TITLE_TEMPLATE,
+  },
   description: APP_CONSOLE.DESCRIPTION,
-  manifest: PWA_MANIFEST,
-  applicationName: 'Aglyn Console',
+  manifest: '/manifest.webmanifest',
+  applicationName: `${PLATFORM_BRAND_NAME} Console`,
   icons: {
     icon: [
       { url: `${BRAND_ICONS}/icon-32x32.png`, sizes: '32x32', type: 'image/png' },
@@ -83,20 +105,20 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'Aglyn',
+    title: PLATFORM_BRAND_NAME,
     statusBarStyle: 'default',
   },
   openGraph: {
     title: APP_CONSOLE.TITLE,
     description: APP_CONSOLE.DESCRIPTION,
-    siteName: 'Aglyn',
+    siteName: PLATFORM_BRAND_NAME,
     type: 'website',
     images: [
       {
         url: SOCIAL_CARD,
         width: 1200,
         height: 630,
-        alt: 'Aglyn Console',
+        alt: `${PLATFORM_BRAND_NAME} Console`,
       },
     ],
   },
@@ -112,7 +134,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   // Matches `theme_color` in the manifest; without it the installed window
-  // renders its title bar in the browser default rather than Aglyn's slate.
+  // renders its title bar in the browser default rather than the platform's
+  // slate. A colour, not a name — an operator reskins it with the brand images
+  // in their build context (AGL-2153), like the icons beside it.
   themeColor: '#404c5c',
 }
 

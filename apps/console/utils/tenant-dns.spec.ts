@@ -169,3 +169,112 @@ describe('dnsInstructionsFor (AGL-1327)', () => {
     )
   })
 })
+
+/**
+ * The DNS facts are configuration, in the browser too (AGL-2037).
+ *
+ * Note what every assertion above has in common: each pins `sites.aglyn.app`
+ * and `216.198.79.1` as literals. All of them passed against a module whose
+ * client-side reads were `undefined` — because the value they collapsed to IS
+ * the literal being asserted. That is the shape `operator-identity.spec.ts`
+ * warns about, and here it hid a defect with real consequences: a self-hoster's
+ * wizard told their customer to create a DNS record pointing at Aglyn's
+ * infrastructure, and the customer would go and create it.
+ *
+ * So these are written in both directions, and the SELF-HOST cases assert our
+ * values are GONE rather than merely that theirs are present.
+ *
+ * Module-scope constants, so each shape needs a fresh registry — asserting
+ * against the already-imported binding only ever re-tests the default.
+ *
+ * ## What this suite CANNOT prove, and where that proof lives
+ *
+ * AGL-2037 asked for a forced red in which "restoring the bracket form must
+ * fail the SELF-HOST case". That is not achievable here, and believing it is
+ * would be worse than knowing it is not.
+ *
+ * Jest runs in Node, where `process.env.X` and `process.env['X']` are the same
+ * property read on a real object — verified, not assumed. The bracket bug does
+ * not exist in Node at all; it appears only after Next's build-time
+ * substitution, which rewrites the dot form and leaves the bracket form to
+ * resolve against a `process.env` that, in a browser bundle, does not carry
+ * the value. So every case below passes identically under both access forms,
+ * and a guard written to catch the access form here would be green for a
+ * reason unrelated to the thing it claims to check.
+ *
+ * These cases prove the module reads CONFIGURATION — they would catch a
+ * hardcoded literal, which is a real regression. The ACCESS FORM is proven by
+ * `tools/scripts/check-next-public-access.mjs`, a source-level gate that reads
+ * the one artefact jest is blind to, and which was verified to go red on
+ * exactly this file's bracket form.
+ */
+describe('the DNS wizard follows the operator, not us (AGL-2037)', () => {
+  const KEYS = [
+    'NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME',
+    'NEXT_PUBLIC_AGLYN_TENANT_APEX_ADDRESSES',
+    'AGLYN_TENANT_APEX_ADDRESSES',
+  ] as const
+  const ORIGINAL = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]))
+
+  afterEach(() => {
+    for (const key of KEYS) {
+      const value = ORIGINAL[key]
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    jest.resetModules()
+  })
+
+  function loadWith(env: Partial<Record<(typeof KEYS)[number], string>>) {
+    for (const key of KEYS) delete process.env[key]
+    for (const [key, value] of Object.entries(env)) process.env[key] = value
+    jest.resetModules()
+    return require('./tenant-dns') as typeof import('./tenant-dns')
+  }
+
+  it('SELF-HOST shape: the wizard names the operator CNAME target, not ours', () => {
+    const dns = loadWith({
+      NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME: 'sites.example.com',
+    })
+    expect(dns.CNAME_TARGET).toBe('sites.example.com')
+
+    // The rendered instruction is what the customer actually copies.
+    const [alias] = dns.dnsInstructionsFor('example.com')
+    expect(dns.formatDnsInstruction(alias)).toContain('sites.example.com')
+    expect(dns.formatDnsInstruction(alias)).not.toContain('aglyn.app')
+  })
+
+  it('SELF-HOST shape: the apex addresses follow the operator too', () => {
+    const dns = loadWith({
+      NEXT_PUBLIC_AGLYN_TENANT_APEX_ADDRESSES: '203.0.113.10,203.0.113.11',
+    })
+    expect(dns.HOST_APEX_ADDRESSES).toEqual(['203.0.113.10', '203.0.113.11'])
+    expect(dns.RECOMMENDED_APEX_ADDRESS).toBe('203.0.113.10')
+    // Vercel's pool must not survive an operator's configuration — an A record
+    // pointed there serves nothing of theirs.
+    expect(dns.HOST_APEX_ADDRESSES).not.toContain('216.198.79.1')
+  })
+
+  it('AGLYN-OPERATED shape: unset still names our own infrastructure', () => {
+    const dns = loadWith({})
+    expect(dns.CNAME_TARGET).toBe('sites.aglyn.app')
+    expect(dns.RECOMMENDED_APEX_ADDRESS).toBe('216.198.79.1')
+  })
+
+  it('reads an empty value as unset, not as an empty CNAME target', () => {
+    // `??` would have accepted `''` here and printed a record with no target.
+    // This is why AGL-2022 uses `||`, and why this case exists.
+    expect(loadWith({ NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME: '' }).CNAME_TARGET).toBe(
+      'sites.aglyn.app',
+    )
+  })
+
+  it('still honours the server-only apex-address name on its own', () => {
+    // An existing deployment that set only the server name keeps verifying
+    // exactly as before — the bracket form is correct there and stays.
+    expect(
+      loadWith({ AGLYN_TENANT_APEX_ADDRESSES: '198.51.100.7' })
+        .HOST_APEX_ADDRESSES,
+    ).toEqual(['198.51.100.7'])
+  })
+})

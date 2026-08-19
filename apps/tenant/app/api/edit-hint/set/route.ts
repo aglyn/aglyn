@@ -61,12 +61,19 @@ export const dynamic = 'force-dynamic'
  * custom domain must plant nothing there.
  */
 
-/** Where the bounce may send the browser back to: console origins, exactly. */
+/**
+ * Where the bounce may send the browser back to: console origins, exactly.
+ *
+ * Aglyn's two origins are seeded ONLY when this deployment has not named its
+ * own (AGL-2176). They used to be unconditional, with the configured origin
+ * merely added — so a self-hoster could not remove them, and their tenant
+ * runtime kept an open redirect target at a console they do not run. The
+ * comment above is explicit that a bounce landing anywhere else "must plant
+ * nothing there"; an allowlist an operator cannot narrow is the same idea
+ * left half-applied.
+ */
 function consoleReturnAllowlist(): Set<string> {
-  const origins = new Set<string>([
-    'https://app.aglyn.com',
-    'https://app.aglyn.io',
-  ])
+  const origins = new Set<string>()
   const configured = process.env.NEXT_PUBLIC_CONSOLE_URL
   if (configured) {
     try {
@@ -74,6 +81,13 @@ function consoleReturnAllowlist(): Set<string> {
     } catch {
       // A malformed env var must not widen or break the list.
     }
+  }
+  // Nothing configured: fall back to Aglyn's own console origins, so our
+  // deployment is unchanged by this. A deployment that HAS named its console
+  // gets exactly that one and nothing else.
+  if (!origins.size) {
+    origins.add('https://app.aglyn.com')
+    origins.add('https://app.aglyn.io')
   }
   if (process.env.NODE_ENV !== 'production') {
     origins.add('http://localhost:4200')

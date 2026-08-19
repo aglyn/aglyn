@@ -26,7 +26,7 @@ import {
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { AGLYN_BRANDING_PROFILE, brandMergeTokens } from '@aglyn/aglyn/server'
+import { PLATFORM_BRANDING_PROFILE, brandMergeTokens } from '@aglyn/aglyn/server'
 
 /**
  * `brand.*` tokens every system email resolves, UNDER whatever the caller
@@ -46,7 +46,7 @@ import { AGLYN_BRANDING_PROFILE, brandMergeTokens } from '@aglyn/aglyn/server'
  * look one up because that would be an enumeration oracle). Aglyn IS their
  * brand, so they need no change and get the right answer.
  */
-const DEFAULT_BRAND_TOKENS = brandMergeTokens(AGLYN_BRANDING_PROFILE)
+const DEFAULT_BRAND_TOKENS = brandMergeTokens(PLATFORM_BRANDING_PROFILE)
 
 /**
  * Blanks any `{{token}}` the caller did not supply.
@@ -252,6 +252,10 @@ export async function renderEffectiveSystemEmail(
   if (designed) return designed
 
   // Nothing published — render the catalog default the editor would seed.
+  // The default carries `{{brand.*}}` tokens now (AGL-2139), so it needs the
+  // same token set the designed path gets or the copy renders with holes
+  // where the brand should be — `blankUnresolvedTokens` does not leave a
+  // token visible, it deletes it.
   const nodes = buildDefaultEmailNodeMap(definition)
   const merged = { ...DEFAULT_BRAND_TOKENS, ...merge }
   const rendered = renderEmailHtml({

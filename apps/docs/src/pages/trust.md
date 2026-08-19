@@ -41,8 +41,11 @@ does not exist.
 | **Stripe** | Payments. Card details go directly to Stripe; Aglyn never receives or stores a card number. |
 | **Resend** | Transactional email delivery. |
 
-The formal DPA and the authoritative subprocessor list are contract documents —
-ask and we will send them. This table is the engineering view and may lag them.
+The authoritative versions are published, not gated: the
+[Data Processing Addendum](https://aglyn.com/legal/dpa) and the
+[subprocessor list](https://aglyn.com/legal/subprocessors). Read them without
+asking anyone. This table is the engineering view and may lag them, so where
+the two disagree the published list is the one that governs.
 
 ## Authentication
 

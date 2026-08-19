@@ -18,14 +18,14 @@
 import { execFileSync } from 'child_process'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { AGLYN_BRANDING_PROFILE } from './plan-entitlements'
+import { PLATFORM_BRANDING_PROFILE } from './plan-entitlements'
 
 /**
  * White-Label Phase 2/3 coverage guard.
  *
  * Every branded surface MUST read its brand through the ONE shared
  * `resolveBrandingProfile` (directly, or via the `useBranding` hook that wraps
- * it, or via the pre-resolved `AGLYN_BRANDING_PROFILE` fallback) — never a new
+ * it, or via the pre-resolved `PLATFORM_BRANDING_PROFILE` fallback) — never a new
  * hard-coded "Aglyn". This is the whole safety story: a white-label org can
  * never partly-render as Aglyn because there is a single source (the
  * multi-surface drift that dogged `removeBranding`).
@@ -64,7 +64,7 @@ describe('white-label branding coverage (Phase 2/3)', () => {
       // Published-site "Made with …" badge reads props.branding, falling back
       // to the shared Aglyn default rather than a hard-coded brand.
       file: 'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
-      mustContain: ['props.branding', 'AGLYN_BRANDING_PROFILE'],
+      mustContain: ['props.branding', 'PLATFORM_BRANDING_PROFILE'],
     },
     {
       // Tenant <title>/OG fallback reads props.branding.productName.
@@ -216,7 +216,7 @@ describe('white-label branding coverage (Phase 2/3)', () => {
       'a consumer. media-ref.ts:335 already anticipates it in a comment.',
   }
 
-  const BRANDING_FIELDS = Object.keys(AGLYN_BRANDING_PROFILE)
+  const BRANDING_FIELDS = Object.keys(PLATFORM_BRANDING_PROFILE)
 
   it('enumerates the branding fields at all', () => {
     // A field sweep over an empty set passes vacuously.

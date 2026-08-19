@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { buildDocsUrl } from '../constants/docs-links'
 import { canManageOrg, checkEntitlement } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -257,7 +258,7 @@ export function OrgApiKeysCard() {
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
             {'Create keys to call the '}
-            <Link href="https://docs.aglyn.com/api" target="_blank" rel="noopener noreferrer">
+            <Link href={buildDocsUrl('/api')} target="_blank" rel="noopener noreferrer">
               {'Aglyn REST API'}
             </Link>
             {'. A key is shown once at creation — store it somewhere safe. Each key is scoped to exactly what it needs.'}

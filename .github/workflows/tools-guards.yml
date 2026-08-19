@@ -226,3 +226,23 @@ jobs:
       - run: npm run test:hardcoded-colours
 
       - run: npm run check:hardcoded-colours
+
+      # Brand-literal ratchet (AGL-2170), the same shape and the same sweep
+      # roots as the colour one above. AGL-2153 made the platform brand
+      # configuration so a self-host operator can rename the product without
+      # editing source; this is what stops the next hardcoded "Aglyn" from
+      # being written into user-visible copy by someone with no reason to know
+      # that. Its detector is unit-tested separately, because a ratchet whose
+      # detector is wrong is a number nobody can act on.
+      - run: npm run test:brand-literals
+      - run: npm run check:brand-literals
+
+      # NEXT_PUBLIC access form (AGL-2037, AGL-2172). Next substitutes only the
+      # dot form, so a bracket read in a client-reachable module is `undefined`
+      # in the browser and the value silently falls back to Aglyn's default —
+      # which is how a self-hoster's custom-domain wizard came to print OUR
+      # CNAME target and Vercel's IPs to their customer. Deliberately NOT a
+      # jest guard: in Node both access forms are the same property read, so a
+      # spec cannot see this class at all, and one written to try would be
+      # green for an unrelated reason.
+      - run: npm run check:next-public-access

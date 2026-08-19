@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { PLATFORM_BRANDING_PROFILE, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   generateOrgSlug,
   isValidOrgSlug,
@@ -186,6 +186,11 @@ async function handler(request: Request): Promise<Response> {
           const fallbackText =
             `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
             `is ready.\n\nOpen your dashboard at ${origin}.`
+          // No brand argument: `renderSystemEmail` already merges
+          // `DEFAULT_BRAND_TOKENS` — the platform profile — under whatever the
+          // caller supplies (AGL-2139). That is the right answer here anyway,
+          // since the org was created seconds ago and carries no `whiteLabel`
+          // entitlement, so `resolveBrandingProfile` would return exactly it.
           const designed = await renderSystemEmail('welcome', {
             name: ownerName,
             'org.name': name,
@@ -193,7 +198,9 @@ async function handler(request: Request): Promise<Response> {
           })
           await sendEmail({
             to: decoded.email,
-            subject: designed?.subject ?? 'Welcome to Aglyn',
+            subject:
+              designed?.subject ??
+              `Welcome to ${PLATFORM_BRANDING_PROFILE.productName}`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             context: 'welcome',

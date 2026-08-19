@@ -309,37 +309,9 @@ export function findHardcodedColours(source) {
 /**
  * Compare a measured census against a baseline of per-file ceilings.
  *
- * Three distinct verdicts, because collapsing them hides the interesting one:
- *
- *  - `regressions` — a file gained literals, or a file with none gained its
- *    first. This is what goes red.
- *  - `improvements` — a file has fewer than its baseline. Not a failure, but
- *    reported, because the baseline should be lowered in the same commit.
- *  - `stale` — a baseline row for a file that is now clean or gone. Also red:
- *    an exemption nobody has read is the AGL-2002 shape.
- *
- * @param {Record<string, number>} counts measured, file → count
- * @param {Record<string, number>} baseline file → allowed ceiling
+ * Lives in `./ratchet-baseline.mjs` since AGL-2170, where the brand-literal
+ * gate shares it — the three-verdict shape (and specifically that `stale` is
+ * red) is a decision that must not exist in two copies. Re-exported here so
+ * every existing caller and this module's own tests are unchanged.
  */
-export function compareToBaseline(counts, baseline) {
-  const regressions = []
-  const improvements = []
-  const stale = []
-
-  for (const [file, count] of Object.entries(counts)) {
-    const allowed = baseline[file] ?? 0
-    if (count > allowed) regressions.push({ file, count, allowed })
-    else if (count < allowed) improvements.push({ file, count, allowed })
-  }
-
-  for (const [file, allowed] of Object.entries(baseline))
-    if (!counts[file]) stale.push({ file, allowed })
-
-  const by = (a, b) => a.file.localeCompare(b.file)
-  return {
-    clean: regressions.length === 0 && stale.length === 0,
-    regressions: regressions.sort(by),
-    improvements: improvements.sort(by),
-    stale: stale.sort(by),
-  }
-}
+export { compareToBaseline } from './ratchet-baseline.mjs'

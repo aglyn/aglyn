@@ -120,3 +120,70 @@ describe('docs help registry', () => {
     }
   })
 })
+
+/**
+ * The docs origin is ONE value under ONE canonical name (AGL-2186).
+ *
+ * It was two: Assist citations read `NEXT_PUBLIC_DOCS_ORIGIN` — the name the
+ * self-host runbook documents — while every console and besigner help link
+ * read an undocumented `NEXT_PUBLIC_AGLYN_DOCS_URL`. An operator who followed
+ * the runbook exactly retargeted a third of their links and left the rest
+ * citing our documentation inside their product.
+ *
+ * Module scope, so each shape needs a fresh registry.
+ */
+describe('the docs origin is one value under one name (AGL-2186)', () => {
+  const KEYS = ['NEXT_PUBLIC_DOCS_ORIGIN', 'NEXT_PUBLIC_AGLYN_DOCS_URL'] as const
+  const ORIGINAL = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]))
+
+  afterEach(() => {
+    for (const key of KEYS) {
+      const value = ORIGINAL[key]
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    jest.resetModules()
+  })
+
+  function loadWith(env: Partial<Record<(typeof KEYS)[number], string>>) {
+    for (const key of KEYS) delete process.env[key]
+    for (const [key, value] of Object.entries(env)) process.env[key] = value
+    jest.resetModules()
+    return require('./docs-links') as typeof import('./docs-links')
+  }
+
+  it('SELF-HOST shape: the documented name retargets console help links', () => {
+    // The half that was broken — this reader ignored the runbook's variable.
+    const links = loadWith({ NEXT_PUBLIC_DOCS_ORIGIN: 'https://docs.example.com' })
+    expect(links.DOCS_BASE_URL).toBe('https://docs.example.com')
+    expect(links.buildDocsUrl('/api')).toBe('https://docs.example.com/api')
+    expect(links.buildDocsUrl('/api')).not.toContain('aglyn')
+  })
+
+  it('still honours the older name on its own, so a configured deploy keeps working', () => {
+    expect(
+      loadWith({ NEXT_PUBLIC_AGLYN_DOCS_URL: 'https://old.example.com' })
+        .DOCS_BASE_URL,
+    ).toBe('https://old.example.com')
+  })
+
+  it('prefers the canonical name when both are set', () => {
+    expect(
+      loadWith({
+        NEXT_PUBLIC_DOCS_ORIGIN: 'https://new.example.com',
+        NEXT_PUBLIC_AGLYN_DOCS_URL: 'https://old.example.com',
+      }).DOCS_BASE_URL,
+    ).toBe('https://new.example.com')
+  })
+
+  it('AGLYN-OPERATED shape: unset is still our docs site', () => {
+    expect(loadWith({}).DOCS_BASE_URL).toBe('https://docs.aglyn.com')
+  })
+
+  it('trims a trailing slash, which a copied URL carries', () => {
+    expect(
+      loadWith({ NEXT_PUBLIC_DOCS_ORIGIN: 'https://docs.example.com/' })
+        .DOCS_BASE_URL,
+    ).toBe('https://docs.example.com')
+  })
+})

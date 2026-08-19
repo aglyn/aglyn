@@ -115,7 +115,11 @@ them. The password itself is never written to the log.
 
 The organization's **Team** page shows a **Recent Activity** feed — renames, workspace URL
 changes, ownership transfers, members added/removed or re-roled, and invites sent, revoked,
-or accepted — each with who did it and when. Visible to any member of the organization.
+or accepted — each with who did it and when.
+
+Visible to members whose role carries the **Activity & audit log** permission.
+Owners and admins have it by default; **viewers do not**, and neither does a
+custom role until you grant it.
 
 Entries name the thing that changed and link straight to it, so "Saved the screen — Home"
 takes you to that screen. Entries recorded before this shipped show a plain description

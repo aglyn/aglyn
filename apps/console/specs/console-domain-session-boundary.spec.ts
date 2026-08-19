@@ -84,7 +84,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
    * emails, and an empty object would leave `{{brand.productName}}` in the
    * body of every one of them with nothing here to notice.
    */
-  AGLYN_BRANDING_PROFILE: {
+  PLATFORM_BRANDING_PROFILE: {
     productName: 'Aglyn',
     fromName: 'Aglyn',
     supportUrl: 'https://aglyn.com/support',

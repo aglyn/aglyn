@@ -88,3 +88,70 @@ describe('legal document version', () => {
     expect(snapshot('privacy')).toContain('Last updated:')
   })
 })
+
+/**
+ * The clickwrap links follow the OPERATOR, and the recorded identity does not
+ * (AGL-2017).
+ *
+ * Both halves are asserted on purpose. A self-hosted console showed its users
+ * a checkbox agreeing to Aglyn LLC's Terms for a service Aglyn does not
+ * provide; the links are configuration now. But the version and the
+ * `sha256`/`bytes` triples still identify OUR snapshots, so the acceptance an
+ * operator records still names our bytes. That is a legal decision rather than
+ * a refactor — the operator's own document identity, or an explicit "no
+ * platform agreement" mode — and pinning it here means the day someone changes
+ * it, they are told this suite encodes an unresolved question rather than a
+ * behaviour to preserve.
+ */
+describe('the clickwrap points at the operator (AGL-2017)', () => {
+  const KEY = 'NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN'
+  const ORIGINAL = process.env[KEY]
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env[KEY]
+    else process.env[KEY] = ORIGINAL
+    jest.resetModules()
+  })
+
+  function loadWith(value: string | undefined) {
+    if (value === undefined) delete process.env[KEY]
+    else process.env[KEY] = value
+    jest.resetModules()
+    return {
+      shared: require('../constants/shared') as typeof import('../constants/shared'),
+      documents:
+        require('../constants/legal-documents') as typeof import('../constants/legal-documents'),
+    }
+  }
+
+  it('SELF-HOST shape: the links name the operator, never us', () => {
+    const { shared } = loadWith('https://example.com')
+    expect(shared.LEGAL_URLS.TERMS).toBe('https://example.com/legal/terms')
+    expect(shared.LEGAL_URLS.PRIVACY).toBe('https://example.com/legal/privacy')
+    expect(JSON.stringify(shared.LEGAL_URLS)).not.toContain('aglyn')
+  })
+
+  it('tolerates a trailing slash, which a copied origin carries', () => {
+    expect(loadWith('https://example.com/').shared.LEGAL_URLS.TERMS).toBe(
+      'https://example.com/legal/terms',
+    )
+  })
+
+  it('AGLYN-OPERATED shape: unset is still our own published documents', () => {
+    expect(loadWith(undefined).shared.LEGAL_URLS.TERMS).toBe(
+      'https://aglyn.com/legal/terms',
+    )
+  })
+
+  it('the RECORDED document identity is still ours — the open half', () => {
+    // Deliberately asserting the LIMITATION, so it is visible rather than
+    // assumed closed. An operator's user clicks through to the operator's
+    // terms and we record acceptance of a snapshot of OURS.
+    const { documents } = loadWith('https://example.com')
+    expect(documents.LEGAL_DOCUMENT_VERSION).toMatch(/^v\d+$/)
+    // The version is a compile-time constant, and must stay one: making it
+    // dynamic turns today's silent degrade into a 500, because
+    // recordLegalAcceptance throws on a falsy version.
+    expect(documents.LEGAL_DOCUMENT_VERSION).toBeTruthy()
+  })
+})

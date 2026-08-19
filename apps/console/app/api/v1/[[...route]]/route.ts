@@ -21,6 +21,7 @@
  * console session chokepoint). This file owns the pipeline (auth, entitlement,
  * rate limit, error envelope); resource handlers are wired in AGL-618.
  */
+import { buildDocsUrl } from '../../../../constants/docs-links'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
 import { dispatchResource } from '../../../../utils/api-v1-resources'
@@ -59,7 +60,9 @@ async function dispatch(
         object: 'api',
         name: 'Aglyn REST API',
         version: 'v1',
-        documentation: 'https://docs.aglyn.com/api',
+        // The operator's OWN docs, not ours (AGL-2186) — this is returned in
+        // the body of THEIR public API's responses.
+        documentation: buildDocsUrl('/api'),
         // Only top-level resources belong here. Form submissions are a
         // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
         // deliberately absent — advertising `forms` 404'd every client that

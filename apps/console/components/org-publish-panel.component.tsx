@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { PLAN_ENTITLEMENTS, resolveMarketplaceFeePct } from '@aglyn/aglyn'
+import {
+  PLAN_ENTITLEMENTS,
+  PLATFORM_BRAND_NAME,
+  resolveMarketplaceFeePct,
+} from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
@@ -342,9 +346,9 @@ export function OrgPublishPanel({
         {orgReady ? (
           <Alert severity={feePct > paidFeePct ? 'warning' : 'info'}>
             {feePct > paidFeePct
-              ? `Aglyn keeps ${feePct}% of each sale on your current plan. ` +
+              ? `${PLATFORM_BRAND_NAME} keeps ${feePct}% of each sale on your current plan. ` +
                 `On a paid plan it is ${paidFeePct}%.`
-              : `Aglyn keeps ${feePct}% of each sale. Payment processing ` +
+              : `${PLATFORM_BRAND_NAME} keeps ${feePct}% of each sale. Payment processing ` +
                 'fees are charged separately by Stripe.'}
             {feePct > paidFeePct && orgSlug ? (
               <Box sx={{ mt: 1 }}>

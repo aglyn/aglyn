@@ -23,7 +23,9 @@ import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
 import getSiteNav from '../../utils/get-site-nav'
 import AdminBarSlot from './admin-bar/admin-bar-slot'
+import getOrgBilling from '../../utils/get-org-billing'
 import { getHostCached } from './host-data'
+import { orgBrandFavicon, resolveSiteFaviconHref } from './site-favicon'
 import { HostThemeProviders } from './host-theme-providers'
 
 /**
@@ -78,7 +80,7 @@ export default async function HostLayout({
    * stored value carries no MIME, and a WRONG `type` is worse than none —
    * browsers use it to pick between candidates and will skip the only one.
    */
-  const faviconHref = resolveMediaSrc(hostRes.host?.seo?.favicon, {
+  const siteFavicon = resolveMediaSrc(hostRes.host?.seo?.favicon, {
     hostId: hostRes.host?.$id,
   })
   /**
@@ -95,6 +97,45 @@ export default async function HostLayout({
    * with it.
    */
   const siteLinks = await getSiteNav(hostRes.host)
+
+  /**
+   * The white-label half AGL-1421 left open (AGL-2183).
+   *
+   * The comment above is right that an EMPTY href is worse than none — but
+   * "none" means the browser requests the origin's `/favicon.ico`, and on this
+   * app that file is Aglyn's mark. So on a white-label customer's own domain,
+   * the tab carried our logo, on the very surface whose comment says a
+   * white-label site is not white-label while it does.
+   *
+   * Two additions, in precedence order after the site's own icon:
+   *
+   *  - the ORG's `branding.faviconUrl`. That field was collected in the
+   *    branding editor, validated, persisted and resolved, and read by exactly
+   *    one consumer — the console's own chrome. An agency uploaded its mark
+   *    and got it nowhere their clients' visitors would ever look.
+   *  - failing both, `data:,` for an org entitled to concealment. It is the
+   *    standard "no favicon" form: a valid, empty data URL, so the browser
+   *    renders nothing and never falls back to the origin. A blank tab is a
+   *    small loss; a competitor's logo in it is a broken promise.
+   *
+   * `showsPlatformAttribution` is the gate rather than a fresh entitlement
+   * check, because it already encodes the asymmetry this needs: an UNRESOLVED
+   * org suppresses. `getOrgBilling` fails open with `org: null` on a Firestore
+   * error, `resolveOrgEntitlements(null)` resolves to the free plan, and a
+   * transient read failure on an Agency site would otherwise put our mark back
+   * in their tab.
+   *
+   * No new Firestore read: `getOrgBilling` is render-cached on a 60s TTL and
+   * `load-page-data` already calls it for this same request.
+   */
+  const orgRes = await getOrgBilling({ hostId: hostRes.host?.$id })
+  const faviconHref = resolveSiteFaviconHref({
+    siteFavicon,
+    brandFavicon: resolveMediaSrc(orgBrandFavicon(orgRes.org), {
+      hostId: hostRes.host?.$id,
+    }),
+    org: orgRes.org,
+  })
   return (
     <HostThemeProviders
       hostTheme={hostTheme}
