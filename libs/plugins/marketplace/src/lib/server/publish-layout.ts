@@ -26,6 +26,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { sanitizeMarketplaceDefinition } from '../model/marketplace'
 import { resolvePublisherProfile } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 
 /** The node marking where a bound screen's content grafts in. */
 const LAYOUT_SLOT_COMPONENT_ID = 'layoutSlot'
@@ -98,18 +99,13 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
     }
 
     const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error:
-          'Set up payouts first — Marketplace → Payouts — to sell layouts',
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2252) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'layouts',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     const layoutRef = hostRef.collection('layouts').doc(layoutId)
     const layoutSnapshot = await layoutRef.get()

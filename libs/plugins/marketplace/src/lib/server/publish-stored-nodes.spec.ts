@@ -109,10 +109,28 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('./publisher-profile', () => ({
+  // A CURRENT acceptance by default, because these routes now refuse without
+  // one (AGL-2252), read through a mutable store so the two cases at the foot
+  // of this file can make it stale. Deliberately the real constant rather than
+  // a literal: the gate compares against `PUBLISHER_AGREEMENT_VERSION`, so
+  // pinning a string here would turn the next agreement bump into a mystery
+  // failure in a spec that is otherwise about node storage.
   resolvePublisherProfile: async () => ({
     orgId: 'org-1',
+    handle: 'acme',
     stripeChargesEnabled: true,
+    agreement: (
+      jest.requireMock('./publisher-profile') as {
+        __agreement: { version: string } | undefined
+      }
+    ).__agreement,
   }),
+  __agreement: {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    version: (require('@aglyn/aglyn/app-utils/publisher-agreement') as {
+      PUBLISHER_AGREEMENT_VERSION: string
+    }).PUBLISHER_AGREEMENT_VERSION,
+  } as { version: string } | undefined,
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
@@ -442,5 +460,61 @@ describe('an undecoded definition does not read as an authoring mistake', () => 
     })
 
     expect(result.ok).toBe(true)
+  })
+})
+
+/**
+ * The publisher agreement, observed refusing on a LIVE route (AGL-2252).
+ *
+ * `publish-agreement-gate.spec.ts` unit-tests the decision and guards that
+ * every publish door calls it. This is the other half of that pair: a pure
+ * function nobody calls is exactly the failure that guard cannot see past a
+ * `publishPreconditionRefusal(publisher, {` substring, so at least one door
+ * has to be watched refusing for real. Both handlers this file already stands
+ * up are exercised, because they took different routes to the same gate.
+ *
+ * The mocked profile is otherwise perfect — a real org, payouts enabled — so
+ * what changes the answer is the agreement and nothing else.
+ */
+describe('a publish door refuses without a current agreement (AGL-2252)', () => {
+  const profileMock = jest.requireMock('./publisher-profile') as {
+    __agreement: { version: string } | undefined
+  }
+  const current = profileMock.__agreement
+
+  afterEach(() => {
+    profileMock.__agreement = current
+  })
+
+  it('refuses a TEMPLATE publish when the org has never accepted', async () => {
+    profileMock.__agreement = undefined
+    seed(SCREEN_NODES)
+
+    const result = await publishTemplate()
+
+    expect(result.status).toBe(412)
+    expect(result.body.agreement).toMatchObject({ state: 'none' })
+    // And it refused BEFORE writing anything: a listing created under no
+    // terms is the thing being prevented, not a message shown afterwards.
+    expect(versionWrite()).toBeUndefined()
+  })
+
+  it('refuses a LAYOUT publish when the acceptance is stale', async () => {
+    profileMock.__agreement = { version: '1999-01-01.1' }
+    seed(LAYOUT_NODES)
+
+    const result = await publishLayout()
+
+    expect(result.status).toBe(412)
+    expect(result.body.agreement).toMatchObject({
+      accepted: '1999-01-01.1',
+      state: 'outdated',
+    })
+    expect(versionWrite()).toBeUndefined()
+  })
+
+  it('publishes once the acceptance is current — the control', async () => {
+    seed(SCREEN_NODES)
+    expect(await publishTemplate()).toEqual(PUBLISHED)
   })
 })

@@ -21,6 +21,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { MARKETPLACE_MAX_PRICE_USD, sanitizeDatasetSchema } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 
 /**
  * Publishes an org dataset's SCHEMA to the marketplace (AGL-657).
@@ -90,18 +91,13 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
     }
 
     const publisher = await resolvePublisherProfile(firestore, orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error:
-          'Set up payouts first — Marketplace → Payouts — to sell schemas',
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2252) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'schemas',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     const datasetSnapshot = await orgRef
       .collection('datasets')

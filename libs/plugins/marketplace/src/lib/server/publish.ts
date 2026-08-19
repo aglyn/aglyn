@@ -21,6 +21,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { resolvePublisherProfile } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 
 /**
  * Publishes a host reusable component to the marketplace (AGL-44). Runs
@@ -97,19 +98,13 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     // whoever clicked publish. `profileId` keeps its name — it is still the
     // publisher profile's doc id, which is now the org id.
     const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    // Paid listings require completed Stripe Connect onboarding (AGL-46).
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error:
-          'Set up payouts first — Marketplace → Payouts — to sell components',
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2252) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'components',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     const definitionSnapshot = await firestore
       .collection('hosts')

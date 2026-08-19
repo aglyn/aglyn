@@ -26,6 +26,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { resolvePublisherProfile } from './publisher-profile'
+import { publishPreconditionRefusal } from './publish-preconditions'
 
 const MAX_TEMPLATE_SCREENS = 25
 
@@ -100,18 +101,13 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
 
     // Publishing is ORG-ONLY (AGL-652).
     const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
-    if (!publisher) {
-      return res.status(412).json({
-        error:
-          'Set up your publisher profile first — Marketplace → Profile.',
-      })
-    }
-    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
-      return res.status(412).json({
-        error:
-          'Set up payouts first — Marketplace → Payouts — to sell templates',
-      })
-    }
+    // Profile, payouts AND the publisher agreement, in one gate
+    // (AGL-2252) — see `publishPreconditionRefusal`.
+    const refusal = publishPreconditionRefusal(publisher, {
+      priceUsd,
+      sells: 'templates',
+    })
+    if (refusal) return res.status(refusal.status).json(refusal.body)
 
     // Capture: every screen in the routing map (published) with its
     // published version, sanitized like any marketplace definition.
