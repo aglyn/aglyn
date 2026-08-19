@@ -83,11 +83,21 @@ jobs:
     name: Build both images and serve one request
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      DOCKER_BUILDKIT: '1'
+      COMPOSE_DOCKER_CLI_BUILD: '1'
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      # No `docker/setup-buildx-action`: this repository's Actions policy is
+      # `allowed_actions: selected` with `verified_allowed: false` and only
+      # `nrwl/*` permitted alongside GitHub-owned ones, so a `docker/*` action
+      # makes the whole run a `startup_failure` with no jobs and no log — which
+      # is how this was found. It is not needed either: BuildKit is the default
+      # builder on `ubuntu-latest`, and compose v2 uses it, which is what the
+      # `--secret` mount requires. The variable below states that rather than
+      # relying on it.
 
       - name: Synthesise an operator's env file
         run: node tools/scripts/selfhost-ci-env.mjs
