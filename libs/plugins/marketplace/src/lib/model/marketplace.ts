@@ -1479,3 +1479,78 @@ export function resolveInstalledDatasetSchema(
   }
   return { schema: { fields, order: schema.order }, degradedFieldIds }
 }
+
+/** One row of the listing detail's `What's included` checklist. */
+export interface ListingInclusion {
+  label: string
+  /** Whether the row is a positive inclusion or a stated limit. */
+  tone: 'included' | 'note'
+}
+
+/** What each artifact type drops into the org when it installs. */
+const ARTIFACT_INSTALL_RESULT: Record<MarketplaceArtifactType, string> = {
+  plugin: 'A plugin, sandboxed on its own origin with a per-plugin CSP',
+  component: 'An editable component you can place on any screen',
+  template: 'Editable screens you can rework in Besigner',
+  layout: 'An editable layout you can apply to any screen',
+  datasetSchema: 'A new empty dataset with its fields already defined',
+  emailTemplate: 'An editable email design you can send campaigns from',
+  theme: 'A theme applied to the site you choose',
+}
+
+/**
+ * The `WHAT'S INCLUDED` checklist the marketplace listing mockup shows
+ * (AGL-2173), derived entirely from facts the listing already carries.
+ *
+ * The mockup's own bullets — `12 responsive screens`, `Blog & work
+ * layouts` — are publisher-authored prose, and nothing collects them:
+ * there is no content manifest on a listing or a version, so counting
+ * screens would mean inventing a number. What IS knowable is what the
+ * install physically does, where it lands, whether it has been reviewed,
+ * and under what licence — which is the question a shopper is asking when
+ * they read that box.
+ *
+ * Ordered decision-first: what you get, then where it goes, then the two
+ * facts that most often stop an install.
+ */
+export function listingInclusions(
+  listing: {
+    artifactType?: string
+    type?: string
+    kind?: string
+    license?: string
+    priceUsd?: number
+    reviewStatus?: string
+  },
+  options: { reviewedVersion?: boolean } = {},
+): ListingInclusion[] {
+  const type = listingArtifactType(listing)
+  const rows: ListingInclusion[] = [
+    { label: ARTIFACT_INSTALL_RESULT[type] ?? 'An installable artifact', tone: 'included' },
+  ]
+  const targets = installTargetsFor(listing)
+  rows.push({
+    label: targets.includes('org')
+      ? 'Installs org-wide, covering sites you add later'
+      : 'Installs per site — new sites are not covered automatically',
+    // The host-only case is a real limit and the picker already has to say
+    // so; softening it here would put the caveat only where nobody reads.
+    tone: targets.includes('org') ? 'included' : 'note',
+  })
+  if (options.reviewedVersion) {
+    rows.push({
+      label: 'This version passed marketplace review',
+      tone: 'included',
+    })
+  }
+  if (listing.license) {
+    rows.push({ label: `Licensed ${listing.license}`, tone: 'included' })
+  }
+  rows.push({
+    label: Number(listing.priceUsd ?? 0) > 0
+      ? 'A one-time purchase — updates to this listing are included'
+      : 'Free, including every future update',
+    tone: 'included',
+  })
+  return rows
+}

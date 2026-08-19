@@ -21,6 +21,7 @@ import {
   listingArtifactType,
   installsUnreviewedFallback,
   listingArtifactLabel,
+  listingInclusions,
   installTargetsFor,
   isPrivateListing,
   resolveInstallPlan,
@@ -46,8 +47,10 @@ import {
 } from '@aglyn/aglyn'
 import {
   mdiCheckCircle,
+  mdiCheckCircleOutline,
   mdiEmailOutline,
   mdiGithub,
+  mdiInformationOutline,
   mdiLifebuoy,
   mdiLinkedin,
   mdiStorefrontOutline,
@@ -82,6 +85,7 @@ import {
   FormLabel,
   IconButton,
   Link as MuiLink,
+  Rating,
   Stack,
   Tooltip,
   Typography,
@@ -1209,6 +1213,34 @@ export function MarketplaceListingContent({
                             color={priceUsd > 0 ? 'primary' : 'default'}
                             label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
                           />
+                          {/*
+                            The rating in the HEADER (AGL-2173), which is
+                            where the mockup puts it and where a shopper
+                            decides. The `Rating` widget existed only
+                            inside the `Ratings & comments` card at the
+                            bottom of a long page, below the README — past
+                            the point the install decision is made.
+                           */}
+                          {listing?.ratingCount ? (
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              sx={{ alignItems: 'center' }}
+                            >
+                              <Rating
+                                size="small"
+                                readOnly
+                                precision={0.1}
+                                value={Number(listing.ratingAverage ?? 0)}
+                              />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {`${listing.ratingAverage ?? 0} (${listing.ratingCount})`}
+                              </Typography>
+                            </Stack>
+                          ) : null}
                           {/* Two numbers that are NOT the same question
                               (AGL-1418). They used to read `7 installs · 2
                               active` — "installs" first and unqualified, so
@@ -1355,6 +1387,58 @@ export function MarketplaceListingContent({
                               {`v${listing?.latestVersion ?? '…'}`}
                             </Typography>
                           </Stack>
+                          {/*
+                            `WHAT'S INCLUDED` (AGL-2173), which the mockup
+                            puts under the description and this page did
+                            not have at all.
+
+                            Every row is derived from a fact the listing
+                            already carries — what the install physically
+                            produces, where it lands, review, licence,
+                            price. The mockup's own bullets (`12 responsive
+                            screens`) are publisher prose we do not
+                            collect, and counting screens would mean
+                            inventing a number.
+                           */}
+                          <Divider />
+                          <Stack spacing={0.75}>
+                            <Typography
+                              variant="overline"
+                              color="text.secondary"
+                            >
+                              {"What's included"}
+                            </Typography>
+                            {listingInclusions(listing ?? {}, {
+                              reviewedVersion:
+                                listing?.latestVersionReviewState ===
+                                'approved',
+                            }).map((row) => (
+                              <Stack
+                                key={row.label}
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'flex-start' }}
+                              >
+                                <MdiIcon
+                                  path={
+                                    row.tone === 'included'
+                                      ? mdiCheckCircleOutline
+                                      : mdiInformationOutline
+                                  }
+                                  size={0.8}
+                                  color={
+                                    row.tone === 'included'
+                                      ? 'success'
+                                      : 'disabled'
+                                  }
+                                />
+                                <Typography variant="body2">
+                                  {row.label}
+                                </Typography>
+                              </Stack>
+                            ))}
+                          </Stack>
+                          <Divider />
                         {/* Where it actually runs (AGL-997). At org scope an
                             install is a SET of sites; this page used to
                             resolve the single acting host and announce

@@ -23,6 +23,7 @@ import {
   Tooltip,
   Grid,
   MenuItem,
+  Rating,
   Stack,
   TextField,
   Typography,
@@ -601,13 +602,20 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                         <Chip size="small" color="success" label="Reviewed" />
                       </Tooltip>
                     ) : null}
-                    {priceUsd > 0 ? (
-                      <Chip
-                        size="small"
-                        color="primary"
-                        label={`$${priceUsd}`}
-                      />
-                    ) : null}
+                    {/*
+                      Price on EVERY card, `Free` included (AGL-2173). The
+                      chip only rendered above zero, so the four free
+                      listings the marketplace mockup shows carried no
+                      price at all — and "no chip" is the one reading a
+                      shopper cannot distinguish from "we forgot", on the
+                      row where the paid listing beside it says $29.
+                     */}
+                    <Chip
+                      size="small"
+                      color={priceUsd > 0 ? 'primary' : 'success'}
+                      variant={priceUsd > 0 ? 'filled' : 'outlined'}
+                      label={priceUsd > 0 ? `$${priceUsd}` : 'Free'}
+                    />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {`v${listing.latestVersion}`}
@@ -630,14 +638,38 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
                           listing.installCount === 1 ? '' : 's'
                         }`
                       : ''}
-                    {/* Count alongside the average: "5.0" from one rating
-                        and from forty are not the same claim (AGL-655). */}
-                    {listing.ratingCount
-                      ? ` · ★ ${listing.ratingAverage ?? 0} (${
-                          listing.ratingCount
-                        })`
-                      : ''}
                   </Typography>
+                  {/*
+                    Stars, as the mockup draws them (AGL-2173). The count
+                    stays alongside the average: "5.0" from one rating and
+                    from forty are not the same claim (AGL-655). An unrated
+                    listing says so rather than rendering nothing — silence
+                    read as "no stars", which is the opposite of "not yet
+                    rated".
+                   */}
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    {listing.ratingCount ? (
+                      <>
+                        <Rating
+                          size="small"
+                          readOnly
+                          precision={0.1}
+                          value={Number(listing.ratingAverage ?? 0)}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {`${listing.ratingAverage ?? 0} (${listing.ratingCount})`}
+                        </Typography>
+                      </>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary">
+                        {'Not yet rated'}
+                      </Typography>
+                    )}
+                  </Stack>
                   {listing.description ? (
                     <Typography
                       variant="body2"
