@@ -137,6 +137,15 @@ interface ListingInstallTotals {
   activeInstalls: number
   /** Installs no version claims, so the per-version split is incomplete. */
   untrackedActiveInstalls: number
+  /**
+   * The same shortfall all-time (AGL-2339). Served by both branches of
+   * `listing-versions.ts` since AGL-1418 and typed by nothing until now,
+   * which is why only its `activeInstalls` sibling ever reached the page.
+   *
+   * Always the LARGER of the two: an uninstall deletes its pin and leaves the
+   * all-time accumulator alone.
+   */
+  untrackedInstallCount: number
 }
 
 const renderInlines = (inlines: MarkdownInline[]) =>
@@ -747,6 +756,13 @@ export function MarketplaceListingContent({
                 untrackedActiveInstalls: Number(
                   payload.untrackedActiveInstalls ?? 0,
                 ),
+                // THIS PROJECTION is where the field died (AGL-2339). The
+                // route served it from both branches; the client copied its
+                // sibling and not it, so the page could never render what the
+                // server had already computed.
+                untrackedInstallCount: Number(
+                  payload.untrackedInstallCount ?? 0,
+                ),
               }
             : null,
         )
@@ -779,7 +795,11 @@ export function MarketplaceListingContent({
     return {
       installCount: Number(listing?.installCount ?? 0),
       activeInstalls: stored,
+      // Zero on the fallback, because the listing document holds no split at
+      // all — claiming a shortfall it cannot know would be the contradiction
+      // this fallback exists to avoid.
       untrackedActiveInstalls: 0,
+      untrackedInstallCount: 0,
     }
   }, [totals, listing?.activeInstalls, listing?.installCount])
   const latestEntry = versions[0]
@@ -2073,25 +2093,31 @@ export function MarketplaceListingContent({
                                 the breakdown disagree with the header. Saying
                                 the split is short is honest; inventing a
                                 version to hang them on is not. */}
-                            {installTotals?.untrackedActiveInstalls ? (
+                            {installTotals?.untrackedActiveInstalls ||
+                            installTotals?.untrackedInstallCount ? (
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
                               >
-                                {`${installTotals.untrackedActiveInstalls} ` +
-                                  `active install${
-                                    installTotals.untrackedActiveInstalls === 1
+                                {/* Both halves of the shortfall (AGL-2339).
+                                    `untrackedActiveInstalls` was rendered and
+                                    its sibling `untrackedInstallCount` was
+                                    served and read by nothing — an asymmetry,
+                                    not a decision. All-time is the LARGER
+                                    number (an uninstall deletes its pin and
+                                    leaves the accumulator alone), so showing
+                                    only the active half made the all-time
+                                    header look wrong by a margin the page
+                                    could not explain. */}
+                                {`${installTotals.untrackedInstallCount} ` +
+                                  `install${
+                                    installTotals.untrackedInstallCount === 1
                                       ? ''
                                       : 's'
-                                  } predate${
-                                    installTotals.untrackedActiveInstalls === 1
-                                      ? 's'
-                                      : ''
-                                  } per-version tracking and ${
-                                    installTotals.untrackedActiveInstalls === 1
-                                      ? 'is'
-                                      : 'are'
-                                  } not counted above.`}
+                                  } all-time and ${
+                                    installTotals.untrackedActiveInstalls
+                                  } still active predate per-version ` +
+                                  'tracking, and are not counted above.'}
                               </Typography>
                             ) : null}
                           </Stack>

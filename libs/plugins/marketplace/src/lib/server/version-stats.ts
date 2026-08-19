@@ -89,13 +89,6 @@ export interface ReconciledInstallTallies {
    */
   untrackedInstallCount: number
   untrackedActiveInstalls: number
-  /**
-   * Whether `activeInstalls` was counted from the pins rather than inferred
-   * from two accumulators (AGL-1419). Callers that write anything back must
-   * check this: a reconciled number is the best available reading, a verified
-   * one is the truth.
-   */
-  activeVerified: boolean
 }
 
 const asCount = (value: unknown): number => {
@@ -228,7 +221,6 @@ export function reconcileInstallTallies(
     activeInstalls: activeTotal,
     untrackedInstallCount: Math.max(0, installTotal - installSum),
     untrackedActiveInstalls: Math.max(0, activeTotal - activeSum),
-    activeVerified: verified != null,
   }
 }
 

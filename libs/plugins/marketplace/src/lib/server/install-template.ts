@@ -284,7 +284,13 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       baseStored: provenance.baseStored,
       // Retained so an older client doesn't render "Added undefined screens".
       screens: 0,
-      themeApplied: false,
+      // `themeApplied: false` used to ride along here and is GONE (AGL-2339).
+      // It had zero references anywhere in the repo — not a client, not a
+      // spec, not a type — so unlike `screens` above it was not back-compat
+      // for anything. A hardcoded `false` returned as a result is worse than
+      // an absent field: it reads as a measured fact, and the first caller to
+      // trust it would have been told a template install never applies a
+      // theme by something that never looked.
     })
   } catch (error) {
     console.error(error)

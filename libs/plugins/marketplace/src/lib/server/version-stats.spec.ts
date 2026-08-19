@@ -279,7 +279,6 @@ describe('reconcileInstallTallies with live pins (AGL-1419)', () => {
     expect(result.activeInstalls).toBe(2)
     expect(result.versions.map((entry) => entry.activeInstalls)).toEqual([2, 0, 0])
     expect(result.untrackedActiveInstalls).toBe(0)
-    expect(result.activeVerified).toBe(true)
     // All-time stays an accumulator: an uninstall deletes its pin and leaves
     // nothing behind, so the pins can only establish the floor.
     expect(result.installCount).toBe(10)
@@ -371,11 +370,7 @@ describe('reconcileInstallTallies with live pins (AGL-1419)', () => {
       { installCount: 7, activeInstalls: 2 },
       null,
     )
-    expect(result).toMatchObject({
-      installCount: 7,
-      activeInstalls: 2,
-      activeVerified: false,
-    })
+    expect(result).toMatchObject({ installCount: 7, activeInstalls: 2 })
     expect(result.versions[0]).toMatchObject({ installCount: 7, activeInstalls: 2 })
   })
 })

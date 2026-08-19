@@ -1401,6 +1401,27 @@ const PluginReviewDetail: NextPageWithLayout<Record<string, never>> = () => {
                           asked for. Verify is already on this bar and is
                           how a request is GRANTED, so there is no second
                           grant button. */}
+                      {/*
+                        * What a colleague already told this publisher
+                        * (AGL-2339).
+                        *
+                        * `declineReason` was served by the route and the page
+                        * only branched on `state`, so the PUBLISHER could read
+                        * the reason their verification was refused —
+                        * `listing-verification-request.component` renders it —
+                        * and the staff reviewer handling the re-request could
+                        * not. Whoever picks up the second ask would otherwise
+                        * re-decide it blind, or contradict the first answer.
+                        */}
+                      {detail.verificationRequest?.declineReason ? (
+                        <Chip
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          sx={{ maxWidth: 420 }}
+                          label={`Previously declined: ${detail.verificationRequest.declineReason}`}
+                        />
+                      ) : null}
                       {detail.verificationRequest?.state === 'pending' ? (
                         <Button
                           size="small"
