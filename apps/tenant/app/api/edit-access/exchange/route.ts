@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
   EDIT_HINT_COOKIE,
   editAccessMintRefusal,
@@ -131,7 +132,8 @@ export async function POST(request: Request): Promise<Response> {
     const subdomain = host.get('subdomain') as string | undefined
     const isProductionAlias =
       hostname === cname ||
-      (subdomain && hostname === `${subdomain}.aglyn.app`)
+      // AGL-2121: the configured apex, not our literal — see /api/edit-context.
+      (subdomain && hostname === `${subdomain}.${TENANT_APEX}`)
     const isDevOrPreview =
       hostname === 'localhost' ||
       hostname.endsWith('.localhost') ||
