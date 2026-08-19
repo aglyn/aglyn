@@ -1295,6 +1295,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   plan={plan}
                   interval={interval}
                   enterprise={enterprise}
+                  // `enterprise` says the org READS as Enterprise; the doc
+                  // says what it actually holds (AGL-2297). Two of the three
+                  // ways to read as Enterprise are display overlays on a lower
+                  // base plan, so without this the card ticked entitlements the
+                  // org does not have.
+                  org={org}
                   subscriptionActive={subscriptionActive}
                   highlight={planIntent?.plan}
                   onSelect={(tier) =>

@@ -1055,9 +1055,24 @@ export function applyDiscountUsd(
  *    lower base plan;
  *  - a billing org on a **negotiated custom price** (`customMonthlyUsd > 0`) —
  *    a paying enterprise deal still parked on its pre-AGL-1118 base plan; or
- *  - an explicit **`org.enterprise`** marker — a *comped* enterprise account
- *    (full Enterprise capability + SSO, 100%-discounted so it collects $0,
- *    while infra cost is still metered).
+ *  - an explicit **`org.enterprise`** marker — a *comped* enterprise account,
+ *    100%-discounted so it collects $0 while infra cost is still metered.
+ *
+ * ⚠️ This function answers ONE question — "does this org read as Enterprise" —
+ * and it is not the same question as "what does this org get". Only the first
+ * bullet grants anything: `resolveEffectivePlan` reads `org.plan` and nothing
+ * else, so `org.enterprise` and `customMonthlyUsd` are read NOWHERE but here.
+ * A comped or custom-priced org resolves its BASE plan's entitlements, and
+ * gets Enterprise capability through a per-org `entitlements` override — see
+ * `ssoEnabled`, whose docblock calls that "how enterprise orgs provisioned
+ * before that plan existed still get it".
+ *
+ * This paragraph replaces a parenthetical claiming the comped marker carried
+ * "full Enterprise capability + SSO" (AGL-2297). It never did, and the billing
+ * page believed it: the Enterprise card ticked five entitlements against any
+ * org this function marked, so a comped org whose overrides granted SSO but
+ * not white-label was shown a green tick for full white-label while the
+ * branding card correctly refused it.
  *
  * The last two are kept for orgs provisioned before `enterprise` was a plan;
  * migrating such an org to `plan: 'enterprise'` is the clean end state and

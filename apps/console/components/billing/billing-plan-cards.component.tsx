@@ -17,9 +17,13 @@
 'use client'
 
 import {
+  type AglynOrgBilling,
+  checkEntitlement,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
+  resolveOrgEntitlements,
+  resolveTransactionFeePct,
   SELF_SERVE_PLANS,
   type OrgPlan,
   UNLIMITED,
@@ -63,13 +67,92 @@ const PLAN_TAGLINES: Record<OrgPlan, string> = {
   enterprise: 'Unlimited everything, SSO, and a dedicated agreement.',
 }
 
-/** What the Enterprise card promises over Agency (the top self-serve tier). */
-const ENTERPRISE_HIGHLIGHTS = [
-  'Unlimited sites, screens, seats, and storage',
-  'SAML / OIDC single sign-on for your whole team',
-  'Full white-label — your brand, not ours',
-  '0% platform fees on every sale',
-  'Custom pricing, invoicing, and terms',
+/**
+ * What the Enterprise card promises over Agency (the top self-serve tier) —
+ * and, for an org already ON an Enterprise arrangement, whether it actually
+ * holds each one (AGL-2297).
+ *
+ * ## Why every row carries a predicate
+ *
+ * This was a bare `string[]` rendered with a green tick beside each line,
+ * unconditionally. That is fine for a PROSPECT, where the card is an offer
+ * describing the tier. It was wrong for a customer, because `isEnterpriseOrg`
+ * is true in three ways and only one of them grants anything:
+ *
+ *  - `plan === 'enterprise'` — resolves the Enterprise entitlement row;
+ *  - `org.enterprise === true` — a comped marker, read NOWHERE except
+ *    `isEnterpriseOrg`;
+ *  - `subscription.customMonthlyUsd > 0` — a negotiated price, also read
+ *    nowhere else.
+ *
+ * The last two are display overlays on a LOWER base plan. `ssoEnabled`'s own
+ * docblock says so outright: a legacy enterprise org gets SSO through a
+ * per-org `entitlements` override, "which is how enterprise orgs provisioned
+ * before that plan existed still get it". So an org whose overrides granted
+ * SSO but not white-label was shown a green tick against **"Full white-label —
+ * your brand, not ours"** above a `Current plan` badge, while the branding card
+ * two pages away correctly refused it as not entitled.
+ *
+ * ## Why derived rather than hand-written
+ *
+ * The feature grid 500 lines below already carries `FEATURE_ROW_EXCLUSIONS`
+ * with the reason spelled out — "a hand-written row list with no derivation is
+ * what decayed to 19 of 34 (AGL-2079)". This list was exactly that artifact,
+ * sitting above the guard built to prevent it. Each row now ASKS the
+ * entitlement model rather than asserting an answer, so a re-cut tier moves
+ * the card with it.
+ *
+ * ⚠️ Two labels here are advertising claims the code cannot make true, and
+ * they are deliberately NOT edited to match reality:
+ *   - **OIDC.** No OIDC code path exists — `/api/orgs/sso` hardcodes
+ *     `protocol: 'saml'` at both write sites, and `enterprise/sso.md` is
+ *     titled "Single sign-on (SAML)" and never mentions OIDC. Building it is a
+ *     real feature, not a copy fix, so the claim stands until that decision is
+ *     made. Tracked on AGL-2297.
+ *   - **"every sale"** → corrected to **storefront sales**, because
+ *     `marketplaceFeePct` is 20 on Enterprise exactly as on every paid tier,
+ *     and the price list is frozen — so "change the product to match the
+ *     advertising" is not available here. `billing-and-plans/overview.md`
+ *     already scopes the 0% to storefront sales; this makes the card agree
+ *     with the price list rather than overstate it.
+ */
+export const ENTERPRISE_HIGHLIGHTS: Array<{
+  label: string
+  /** Whether THIS org actually holds the claim. */
+  holds: (org: Partial<AglynOrgBilling> | null | undefined) => boolean
+}> = [
+  {
+    label: 'Unlimited sites, screens, seats, and storage',
+    holds: (org) => {
+      const entitlements = resolveOrgEntitlements(org)
+      return (
+        entitlements.hostLimit === UNLIMITED &&
+        entitlements.screensPerHost === UNLIMITED &&
+        entitlements.managersPerOrg === UNLIMITED &&
+        entitlements.storagePerHostMb === UNLIMITED
+      )
+    },
+  },
+  {
+    label: 'SAML / OIDC single sign-on for your whole team',
+    holds: (org) => checkEntitlement(org, 'ssoEnabled'),
+  },
+  {
+    label: 'Full white-label — your brand, not ours',
+    holds: (org) => checkEntitlement(org, 'whiteLabel'),
+  },
+  {
+    label: '0% platform fees on storefront sales',
+    holds: (org) =>
+      resolveTransactionFeePct(org, 'physical') === 0 &&
+      resolveTransactionFeePct(org, 'digital') === 0,
+  },
+  {
+    // Not an entitlement — it is what having an agreement at all means, and
+    // every org this card marks as current has one by construction.
+    label: 'Custom pricing, invoicing, and terms',
+    holds: () => true,
+  },
 ]
 
 const quotaLabel = (value: number, unit?: string) =>
@@ -200,6 +283,23 @@ export interface BillingPlanCardsProps {
    */
   enterprise?: boolean
   /**
+   * The org's billing doc, for checking what an Enterprise arrangement
+   * ACTUALLY grants this org (AGL-2297).
+   *
+   * `enterprise` above answers "does this org read as Enterprise", which is
+   * true for a comped marker and a negotiated price as well as for the real
+   * plan — and those two are display overlays on a lower base plan that grant
+   * nothing. Without the org doc the card could only tick every highlight
+   * unconditionally, which is what it did.
+   *
+   * Optional, and its absence is handled the safe way round: undefined checks
+   * as the free plan, so a card rendered without it ticks nothing rather than
+   * claiming everything. Only consulted when `enterprise` is true — a prospect
+   * is being shown the tier as an offer, and every line of that offer is
+   * accurate about the tier.
+   */
+  org?: Partial<AglynOrgBilling> | null
+  /**
    * True when the org has a LIVE subscription (AGL-2156).
    *
    * It decides what the FREE card is. For a prospect it is an offer, and "No
@@ -299,6 +399,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
     plan,
     interval = 'month',
     enterprise = false,
+    org,
     subscriptionActive = false,
     highlight,
     onSelect,
@@ -678,21 +779,54 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 </Typography>
               </Stack>
               <Stack spacing={0.5} sx={{ flex: 2 }}>
-                {ENTERPRISE_HIGHLIGHTS.map((label) => (
-                  <Stack
-                    key={label}
-                    direction="row"
-                    spacing={0.75}
-                    sx={{ alignItems: 'center' }}
+                {ENTERPRISE_HIGHLIGHTS.map(({ label, holds }) => {
+                  // A PROSPECT is being shown the tier, and every line is
+                  // accurate about the tier — so the offer ticks in full. A
+                  // CURRENT org is being told what it has, and that is a
+                  // different question with a different answer whenever the
+                  // Enterprise reading came from a comped marker or a
+                  // negotiated price rather than the plan itself.
+                  const held = enterprise ? holds(org) : true
+                  return (
+                    <Stack
+                      key={label}
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ alignItems: 'center' }}
+                    >
+                      <MdiIcon
+                        fontSize="inherit"
+                        sx={{ color: held ? 'success.main' : 'text.disabled' }}
+                        path={
+                          held
+                            ? ICON_VARIANT_SYMBOL_CONFIRMED.path
+                            : ICON_VARIANT_SYMBOL_MINUS.path
+                        }
+                      />
+                      <Typography
+                        variant="body2"
+                        color={held ? 'text.primary' : 'text.secondary'}
+                      >
+                        {label}
+                      </Typography>
+                    </Stack>
+                  )
+                })}
+                {enterprise &&
+                ENTERPRISE_HIGHLIGHTS.some(({ holds }) => !holds(org)) ? (
+                  // Actionable, not just honest: the fix for a legacy
+                  // arrangement is a per-org entitlements override or a move
+                  // onto the real plan, and neither is something the admin can
+                  // do from here.
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ pt: 0.5 }}
                   >
-                    <MdiIcon
-                      fontSize="inherit"
-                      sx={{ color: 'success.main' }}
-                      path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
-                    />
-                    <Typography variant="body2">{label}</Typography>
-                  </Stack>
-                ))}
+                    {'Your agreement does not currently enable everything ' +
+                      'Enterprise can include — talk to us to turn the rest on.'}
+                  </Typography>
+                ) : null}
               </Stack>
               <Stack
                 spacing={1}
