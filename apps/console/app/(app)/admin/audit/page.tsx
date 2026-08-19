@@ -126,7 +126,16 @@ function ArchiveCard() {
   }
 
   return (
-    <CardDisplay header={'Archive (90–365 days)'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Archive (90–365 days)'}
+      help={docsHelp('staffConsole', {
+        anchor: '#audit-archival',
+        excerpt:
+          'A nightly cron moves audit entries past the 90-day retention window into a Storage compliance trail (JSON lines, month-partitioned), kept a further 365 days.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           Entries older than 90 days leave Firestore for the compliance trail
