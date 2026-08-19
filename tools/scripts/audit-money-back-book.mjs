@@ -171,6 +171,7 @@ async function auditSubscriptions() {
       interval: items[0]?.price?.recurring?.interval ?? null,
       automaticTax: sub.automatic_tax?.enabled === true,
       untaxed: verdict.untaxed,
+      stillBilling: verdict.stillBilling,
       reason: verdict.reason,
     })
   }
@@ -193,6 +194,13 @@ async function main() {
   const misrouted = bookings.rows.filter((r) => r.misrouted === true)
   const indeterminate = bookings.rows.filter((r) => r.misrouted === null)
   const untaxed = subscriptions.rows.filter((r) => r.untaxed)
+  // Forward exposure vs historical liability: see `classifySubscription`.
+  const untaxedBilling = untaxed.filter((r) => r.stillBilling)
+  const untaxedEnded = untaxed.filter((r) => !r.stillBilling)
+  const exposurePerCycleCents = untaxedBilling.reduce(
+    (n, r) => n + (r.perCycleCents ?? 0),
+    0,
+  )
 
   const owedByHost = {}
   for (const r of misrouted) {
@@ -216,7 +224,13 @@ async function main() {
       indeterminate: indeterminate.length,
       owedByHost,
     },
-    subscriptions: { ...subscriptions, untaxed: untaxed.length },
+    subscriptions: {
+      ...subscriptions,
+      untaxed: untaxed.length,
+      untaxedStillBilling: untaxedBilling.length,
+      untaxedEnded: untaxedEnded.length,
+      exposurePerCycleCents,
+    },
     corroboration: {
       lifetimeBalanceTransactions: ledger.length,
       transfersEver: transfers.length,
@@ -264,10 +278,20 @@ async function main() {
       `subscriptions scanned      : ${subscriptions.totalSubscriptionsScanned}`,
     )
     console.log(`commerce-subscription rows : ${subscriptions.rows.length}`)
-    console.log(`UNTAXED                    : ${untaxed.length}`)
+    console.log(
+      `UNTAXED, still billing     : ${untaxedBilling.length} (forward exposure)`,
+    )
+    console.log(
+      `UNTAXED, ended             : ${untaxedEnded.length} (historical liability only)`,
+    )
+    if (untaxedBilling.length) {
+      console.log(
+        `under-collected per cycle  : ${money(exposurePerCycleCents, untaxedBilling[0].currency)} across all live rows`,
+      )
+    }
     for (const r of subscriptions.rows) {
       console.log(
-        `  ${r.untaxed ? 'UNTAXED' : 'ok     '} ${r.subscriptionId} ${r.created} ` +
+        `  ${r.untaxed ? (r.stillBilling ? 'UNTAXED*' : 'untaxed ') : 'ok      '} ${r.subscriptionId} ${r.created} ` +
           `status=${r.status} host=${r.hostId} ${money(r.perCycleCents, r.currency)}/${r.interval} — ${r.reason}`,
       )
     }

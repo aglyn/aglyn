@@ -37,6 +37,10 @@
 //        Stripe Tax stores falsely flagged; the automatic_tax test fails
 //   `misrouted: null` -> `misrouted: false` on an unexpanded PaymentIntent
 //        an unreadable charge reads as clean; the indeterminate test fails
+//   `BILLING_STATUSES` gains `'canceled'`
+//        a dead subscription counts as live exposure; the canceled test fails
+//   `BILLING_STATUSES` loses `'past_due'`
+//        a retrying schedule is written off as history; the past_due test fails
 //
 // If you change a verdict, repeat that exercise. A suite that cannot fail is
 // the thing this file exists to prevent.
@@ -45,6 +49,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  BILLING_STATUSES,
   classifyBookingSession,
   classifySubscription,
 } from './money-back-book.mjs'
@@ -199,4 +204,62 @@ test('AGL-2323: an org paying Aglyn is not a storefront subscription', () => {
     items: { data: [] },
   })
   assert.equal(verdict.relevant, false)
+})
+
+const untaxedItems = {
+  data: [
+    { id: 'si_x', tax_rates: [], price: { unit_amount: 5000 }, quantity: 1 },
+  ],
+}
+
+test('AGL-2323: an active untaxed subscription is forward exposure', () => {
+  const verdict = classifySubscription({
+    id: 'sub_active',
+    status: 'active',
+    metadata: { type: 'commerce-subscription', hostId: 'host_a' },
+    automatic_tax: { enabled: false },
+    items: untaxedItems,
+  })
+  assert.equal(verdict.untaxed, true)
+  assert.equal(verdict.stillBilling, true)
+})
+
+test('AGL-2323: a canceled untaxed subscription is history, not exposure', () => {
+  // It bills nothing more, so a `tax_rates` backfill would do nothing for it.
+  // Counting it as live exposure sends someone to write Stripe updates that
+  // change no future invoice.
+  const verdict = classifySubscription({
+    id: 'sub_canceled',
+    status: 'canceled',
+    metadata: { type: 'commerce-subscription', hostId: 'host_a' },
+    automatic_tax: { enabled: false },
+    items: untaxedItems,
+  })
+  assert.equal(verdict.untaxed, true)
+  assert.equal(verdict.stillBilling, false)
+})
+
+test('AGL-2323: a past_due subscription is still billing', () => {
+  // Stripe will retry, so the schedule is live and every future cycle still
+  // under-collects. Treating a dunning subscription as dead understates it.
+  const verdict = classifySubscription({
+    id: 'sub_past_due',
+    status: 'past_due',
+    metadata: { type: 'commerce-subscription', hostId: 'host_a' },
+    automatic_tax: { enabled: false },
+    items: untaxedItems,
+  })
+  assert.equal(verdict.stillBilling, true)
+})
+
+test('AGL-2323: the billing statuses are exactly the ones that charge again', () => {
+  assert.deepEqual([...BILLING_STATUSES].sort(), [
+    'active',
+    'past_due',
+    'trialing',
+    'unpaid',
+  ])
+  for (const dead of ['canceled', 'incomplete_expired', 'paused']) {
+    assert.equal(BILLING_STATUSES.has(dead), false, dead)
+  }
 })

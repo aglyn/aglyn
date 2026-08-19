@@ -72,31 +72,70 @@ export function classifyBookingSession(session) {
 }
 
 /**
+ * Statuses in which a subscription will bill again. Anything else has stopped
+ * charging, so it cannot ADD to the under-collection from here.
+ *
+ * `past_due` and `unpaid` are deliberately included: the schedule is still
+ * live and Stripe will retry, so they are forward exposure, not history.
+ */
+export const BILLING_STATUSES = new Set([
+  'active',
+  'trialing',
+  'past_due',
+  'unpaid',
+])
+
+/**
  * AGL-2323. A storefront subscription bills untaxed when NEITHER mechanism is
  * carrying tax: no `tax_rates` on any item (what AGL-1751 attaches) and
  * `automatic_tax` disabled (Stripe Tax). Checking only one of the two would
  * flag every store on the other tax mode.
+ *
+ * `untaxed` is split by `stillBilling` because the two are different problems
+ * with different owners, and a single headline number conflates them:
+ *
+ *   stillBilling  — FORWARD EXPOSURE. Every future cycle under-collects until
+ *                   someone backfills `tax_rates` onto the item. This is the
+ *                   number that decides whether a migration is urgent.
+ *   !stillBilling — HISTORICAL LIABILITY ONLY. A canceled subscription bills
+ *                   nothing more, so a backfill would do nothing for it, but
+ *                   the cycles it already billed untaxed are still tax the
+ *                   merchant showed a buyer and never collected. That is an
+ *                   accounting decision, not a migration.
+ *
+ * Reporting one total would make a dead back book look like live exposure and
+ * send someone to write Stripe updates that change nothing.
  */
 export function classifySubscription(sub) {
   const md = sub.metadata ?? {}
   if (md.type !== 'commerce-subscription') {
     return { relevant: false, reason: 'not-a-storefront-subscription' }
   }
+  const stillBilling = BILLING_STATUSES.has(sub.status)
   const items = sub.items?.data ?? []
   if (sub.automatic_tax?.enabled === true) {
-    return { relevant: true, untaxed: false, reason: 'automatic_tax enabled' }
+    return {
+      relevant: true,
+      untaxed: false,
+      stillBilling,
+      reason: 'automatic_tax enabled',
+    }
   }
   const withRates = items.filter((i) => (i.tax_rates ?? []).length > 0)
   if (withRates.length > 0) {
     return {
       relevant: true,
       untaxed: false,
+      stillBilling,
       reason: `tax_rates on ${withRates.length}/${items.length} item(s)`,
     }
   }
   return {
     relevant: true,
     untaxed: true,
-    reason: 'no item tax_rates and automatic_tax disabled',
+    stillBilling,
+    reason: stillBilling
+      ? 'no item tax_rates and automatic_tax disabled — every future cycle under-collects'
+      : 'no item tax_rates and automatic_tax disabled — ended, historical liability only',
   }
 }
