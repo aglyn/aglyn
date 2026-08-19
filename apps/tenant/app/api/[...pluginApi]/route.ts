@@ -16,6 +16,7 @@
  */
 
 import {
+  crossOriginPluginWriteRefusal,
   lockdownPausedSurfaceForPluginApiPath,
   pluginIdForRegisteredApiPath,
   resolveHostEnabledPlugins,
@@ -52,6 +53,22 @@ async function dispatch(
   await ensureRemoteServerBundles()
   const { pluginApi } = await params
   const path = Array.isArray(pluginApi) ? pluginApi.join('/') : ''
+
+  // Same-origin gate (AGL-1880). FIRST, and before any Firestore read, which
+  // is the opposite of where the rate limiter sits and for a reason the two
+  // do not share: that gate is a Firestore transaction, so it is placed late
+  // to avoid making an unregistered path cost one. This gate is pure header
+  // comparison and costs nothing, so nothing is bought by deferring it — and
+  // deferring it would mean a forged cross-origin write still spent the org
+  // lookup and the lockdown read against the victim merchant's own Firestore
+  // before being refused.
+  //
+  // The consequence to accept knowingly: a cross-origin WRITE to an
+  // unregistered path now answers 403 where it used to answer 404. That
+  // discloses nothing — the caller chose the origin, so it already knows the
+  // one fact the 403 states.
+  const foreignOrigin = crossOriginPluginWriteRefusal({ path, request })
+  if (foreignOrigin) return foreignOrigin
 
   // Per-request org gate: resolve the owning plugin from the path prefix
   // and the target host from the request (query `hostId`, else JSON body —
