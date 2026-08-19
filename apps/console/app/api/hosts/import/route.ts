@@ -536,6 +536,14 @@ async function handler(request: Request): Promise<Response> {
   if (!hostId || typeof bundle !== 'object' || bundle === null) {
     return Response.json({ error: 'Missing hostId or bundle' }, { status: 400 })
   }
+  // THE DEPLOYMENT BRAND IS RIGHT HERE, and stays (AGL-2352). Two reasons,
+  // either sufficient. The sentence names a FILE FORMAT — `bundle.format` is
+  // the literal `'aglyn-site-export'`, a property of the software that wrote
+  // the bundle, not of the org importing it; an agency's own product name in
+  // front of "site export" would describe a format that does not exist. And
+  // this refusal is emitted BEFORE the Authorization header below is even
+  // read, so there is no org to resolve a brand from — the format check
+  // deliberately rejects a malformed bundle without authenticating it.
   if (
     bundle.format !== SITE_EXPORT_FORMAT ||
     Number(bundle.version) > SITE_EXPORT_VERSION

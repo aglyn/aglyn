@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
-  PLATFORM_BRAND_NAME,
   pluginRequestFromWeb,
+  resolveBrandingProfile,
   resolveIdpDisplayName,
 } from '@aglyn/aglyn/server'
 import {
@@ -153,9 +154,21 @@ async function handler(request: Request): Promise<Response> {
     // which is the thing SSO customers buy. Reported as a block, not an
     // error, so the UI says why instead of failing.
     if (tenantId) {
+      // THE ORG'S BRAND, not the deployment's (AGL-2352). This string is
+      // rendered straight into the console UI on Team → member detail, so a
+      // white-label org's admin read OUR product name in the middle of their
+      // own console. AGL-2319 could only reach `PLATFORM_BRAND_NAME` here
+      // because server code has no `useBranding`, and AGL-2352 recorded the
+      // cost of doing better as "a Firestore read per request to brand an
+      // error string" — which is not the cost on THIS route: `orgSnapshot` is
+      // already in hand above, fetched for the lockdown verdict, so resolving
+      // the brand adds no read at all.
+      const branding = resolveBrandingProfile(
+        orgSnapshot.data() as Partial<AglynOrgBilling>,
+      )
       const ssoBlock =
         'This person signs in through your organization’s identity ' +
-        `provider. Passwords are managed there, not in ${PLATFORM_BRAND_NAME}.`
+        `provider. Passwords are managed there, not in ${branding.productName}.`
       if (method === 'GET') {
         return Response.json(
           { email: target.email ?? null, canSetPassword: false, blockedReason: ssoBlock },
