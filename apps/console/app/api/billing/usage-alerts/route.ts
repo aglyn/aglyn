@@ -537,18 +537,37 @@ async function handler(request: Request): Promise<Response> {
        * failure mode AGL-1529 rejected on arrival was a spend ceiling that
        * takes a site down to save $2.
        *=========================================*/
-      const assistUsageDoc = await org.ref
-        .collection('assistUsage')
-        .doc(month)
-        .get()
+      // BY DOCUMENT ID, not the `rollup` read above (AGL-2219).
+      //
+      // `rollup` is the latest usage document by `computedAt`, which is the
+      // right thing for `dataStorageMb` and `maxBillableScreens` — those
+      // deliberately accept a stale figure rather than pay to re-measure. It
+      // is the wrong thing for money. Two sweeps now write into this
+      // collection (the closed month at 02:00, the month in progress at
+      // 07:00), so "latest by `computedAt`" answers "whichever cron ran most
+      // recently", and a budget that fires or stays silent depending on the
+      // ORDER of two schedules is not a control, it is a coincidence. An id
+      // is a property.
+      //
+      // `orgMonthlySpend` still compares `month` against itself, so this is
+      // belt and braces on purpose: a document fetched by id cannot carry a
+      // different month, and if one ever does the mismatch must win.
+      const [thisMonthRollup, assistUsageDoc] = await Promise.all([
+        org.ref.collection('usage').doc(month).get(),
+        org.ref.collection('assistUsage').doc(month).get(),
+      ])
       const spend = orgMonthlySpend({
         month,
-        rollupBilledCents: rollup?.get('billedCents'),
-        // COMPARED, not trusted. `rollup` is the LATEST usage document by
-        // `computedAt`, which on the first days of a month is still LAST
-        // month's — evaluating August's budget against July's spend would
-        // fire every budget on the platform on the 1st.
-        rollupMonth: rollup?.get('month'),
+        rollupBilledCents: thisMonthRollup.get('billedCents'),
+        // COMPARED, not trusted. A missing document reads as `meteredFresh:
+        // false` rather than as $0 — the difference between a budget that has
+        // nothing to say yet and one that is broken, and the distinction
+        // AGL-2219 turned out to hinge on: for months NOTHING wrote this
+        // document during the month it names, so this guard was correctly
+        // refusing an input that never arrived.
+        rollupMonth: thisMonthRollup.exists
+          ? (thisMonthRollup.get('month') ?? month)
+          : null,
         assistEstCostUsd: assistUsageDoc.get('estCostUsd'),
         assistBilledFrom: process.env.BILL_ASSIST_TOKENS_FROM,
       })

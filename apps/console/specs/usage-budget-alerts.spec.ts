@@ -39,8 +39,17 @@ interface SeededOrg {
   id: string
   plan: string
   usageBudget?: { amountUsd?: unknown; thresholdPcts?: unknown }
-  /** The latest `orgs/{id}/usage/*` document, or none. */
+  /** The latest `orgs/{id}/usage/*` document by `computedAt`, or none. */
   rollup?: { month: string; billedCents: number } | null
+  /**
+   * `orgs/{id}/usage/{month}` read BY ID, when it differs from the latest
+   * (AGL-2219). Two sweeps write into this collection now — the closed month
+   * at 02:00, the month in progress at 07:00 — so the newest document by
+   * `computedAt` is whichever cron ran last, and that is not a property a
+   * budget may depend on. Seeding the two apart is the only way to tell the
+   * two reads apart at all.
+   */
+  monthRollup?: { month: string; billedCents: number } | null
   /** `orgs/{id}/assistUsage/{month}.estCostUsd`. */
   assistEstCostUsd?: number
   /** `orgs/{id}/counters/media.bytes` — the org library. */
@@ -93,6 +102,22 @@ function orgSubcollection(org: SeededOrg, name: string): any {
     const api: any = {
       orderBy: () => api,
       limit: () => api,
+      // BY DOCUMENT ID (AGL-2219). The cron now reads `usage/{month}`
+      // directly for the budget's spend figure: two sweeps write into this
+      // collection (the closed month, and the month in progress), so "latest
+      // by `computedAt`" answers "whichever cron ran most recently".
+      //
+      // Modelled faithfully — an id that is not the seeded rollup's month
+      // reads as a MISSING document, exactly as Firestore would. A double
+      // that returned the rollup for any id would make the wrong-month case
+      // below pass for the wrong reason.
+      doc: (id: string) => {
+        const byId = org.monthRollup ?? org.rollup
+        return {
+          get: async () =>
+            snapshotOf(byId && byId.month === id ? { ...byId } : null),
+        }
+      },
       get: async () => ({
         docs: org.rollup
           ? [
@@ -376,6 +401,32 @@ describe('usage budgets fire from the invoice’s own figure (AGL-1528)', () => 
     ]
     await run()
     expect(budgetAlerts()).toHaveLength(0)
+  })
+
+  it('reads THIS month by id, not whichever sweep wrote last', async () => {
+    // The latest document by `computedAt` is LAST month's — the state the
+    // 02:00 closed-month sweep leaves behind whenever it runs after the
+    // 07:00 in-progress one (a manual backfill, a retried chunk, a schedule
+    // reorder). The current month's rollup exists and says $25.00.
+    //
+    // Under the old `orderBy('computedAt').limit(1)` read this org went
+    // SILENT, because the month comparison correctly refused July's figure
+    // for an August budget. Reading by id makes the answer a property of the
+    // document's name instead of a property of two crons' running order.
+    //
+    // Forced red by reverting the route to `rollup?.get(...)`: no alert.
+    mockOrgs = [
+      seededOrg({
+        rollup: { month: LAST_MONTH, billedCents: 999_00 },
+        monthRollup: { month: MONTH, billedCents: 2_500 },
+        usageBudget: { amountUsd: 50 },
+      }),
+    ]
+    await run()
+    expect(budgetAlerts()).toHaveLength(1)
+    expect(budgetAlerts()[0].body).toContain('$25.00')
+    // …and NOT the $999.00 the stale latest document carries.
+    expect(budgetAlerts()[0].body).not.toContain('999')
   })
 
   it('is silent for an org with no rollup at all', async () => {

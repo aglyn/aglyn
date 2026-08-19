@@ -27,6 +27,27 @@ on:
     - cron: '0 2 * * *' # report-usage   — daily 02:00 UTC
     - cron: '0 3 * * *' # audit-archive  — daily 03:00 UTC
     - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
+    # The IN-PROGRESS month (AGL-2219), an hour ahead of usage-alerts so the
+    # budget evaluation reads a figure computed today rather than yesterday.
+    #
+    # This is a SECOND report-usage sweep, and it is not a duplicate of the
+    # 02:00 one. That one rolls up the CLOSED month — the invoice — and is the
+    # only run that ever reaches Stripe. This one writes
+    # `orgs/{id}/usage/{thisMonth}` so that "what has this org spent so far
+    # this month" has an answer at all: `report-usage` is the sole writer of
+    # that document and only ever wrote the closed month, which left every
+    # usage budget on the platform structurally unable to fire and the Billing
+    # card permanently saying "we haven't totalled this month yet".
+    #
+    # `?month=current` in the URL and NOT in the body: the resumable-sweep
+    # loop below re-POSTs `{"cursor": ...}` and nothing else, so a month
+    # carried in the body would apply to the first chunk and silently revert
+    # to the previous month for every chunk after it.
+    #
+    # The route refuses to meter or stamp `reportedAt` for a month that has
+    # not ended, so this schedule cannot bill anybody early however it is
+    # invoked — see `monthIsClosed`.
+    - cron: '0 7 * * *' # report-usage (current month, no metering) — daily 07:00 UTC
     - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
     - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
     # Weekly Firestore GCS export (AGL-1843) — the independent copy that
@@ -91,6 +112,9 @@ on:
         type: choice
         options:
           - /api/billing/report-usage
+          # The in-progress month (AGL-2219) — computes and stores the running
+          # figure, never meters. Safe to run by hand at any time.
+          - /api/billing/report-usage?month=current
           - /api/admin/audit-archive
           - /api/admin/run-erasures
           - /api/billing/usage-alerts
@@ -131,6 +155,7 @@ jobs:
             '0 2 * * *') path=/api/billing/report-usage ;;
             '0 3 * * *') path=/api/admin/audit-archive ;;
             '0 4 * * *') path=/api/admin/run-erasures ;;
+            '0 7 * * *') path='/api/billing/report-usage?month=current' ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 6 1 * *') path=/api/billing/usage-email ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;

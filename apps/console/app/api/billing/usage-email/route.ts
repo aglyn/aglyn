@@ -22,6 +22,7 @@ import {
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { previousMonth } from '../../../../utils/billing-month'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   loadSystemEmail,
@@ -35,14 +36,7 @@ import {
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller.
 
-/** Previous calendar month as YYYY-MM (the default summary target). */
-
-function previousMonth(): string {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString()
-    .slice(0, 7)
-}
+// `previousMonth` is shared (AGL-2219) — see `utils/billing-month.ts`.
 
 function formatUsd(costUsd: number) {
   return `$${costUsd.toFixed(2)}`

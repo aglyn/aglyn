@@ -29,19 +29,13 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { previousMonth } from '../../../../utils/billing-month'
 
 /** Previous calendar month as YYYY-MM (the rollup key). */
 function monthBefore(month: string): string {
   const [year, monthPart] = month.split('-').map(Number)
   const date = new Date(Date.UTC(year, monthPart - 1 - 1, 1))
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
-}
-
-function previousMonth(): string {
-  const now = new Date()
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString()
-    .slice(0, 7)
 }
 
 /**
