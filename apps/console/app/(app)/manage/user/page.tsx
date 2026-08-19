@@ -86,6 +86,7 @@ import CardDisplayFormTemplate from '../../../../components/card-display-form-te
 import CloseAccountCard from '../../../../components/close-account-card.component'
 import DataExportCard from '../../../../components/data-export-card.component'
 import PasskeysCard from '../../../../components/passkeys-card.component'
+import RecentSignInsCard from '../../../../components/recent-sign-ins-card.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -815,6 +816,10 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                   ? formPanel(securitySchema, handleSecuritySave)
                   : null}
                 <PasskeysCard />
+                {/* The other half of the new-device email (AGL-2318). Below
+                    passkeys because that is the ACTION someone takes after
+                    reading a sign-in they do not recognise. */}
+                <RecentSignInsCard />
               </Stack>
             ),
           },
