@@ -702,6 +702,81 @@ export interface SubscriptionInvoiceSource {
   lines?: { data?: readonly SubscriptionInvoiceLine[] | null } | null
 }
 
+/**
+ * The base a subscription invoice's platform fee SHOULD be taken on
+ * (AGL-2317): post-discount items, with tax and shipping removed.
+ *
+ * Every one-time door — `checkout.ts`, `cart-checkout.ts`, `draft-order.ts`,
+ * `pos-order.ts` and (since AGL-2315) bookings — sends a cents amount computed
+ * on items alone. The recurring door sent `application_fee_percent`, which
+ * Stripe applies to the WHOLE invoice, so Aglyn took a cut of sales tax — money
+ * that is the state's — and of shipping. On the issue's worked example ($30/mo
+ * digital, Business 2%, an 8.25% TX rate) the one-time base is $30.00 → 60¢ and
+ * the invoice total is $32.48 → 65¢.
+ *
+ * `total` and not a re-summed `lines.data[]`, deliberately. Stripe's own total
+ * is already net of every invoice-level discount and of any proration CREDIT,
+ * both of which `computeSubscriptionInvoiceOrder` drops (it floors a line at 0,
+ * which is right for a stored line item and wrong for a fee base — a mid-cycle
+ * downgrade credit reduces what the merchant is actually paid). Subtracting the
+ * two parts Stripe reports separately leaves exactly what was charged for goods.
+ *
+ * Tax is read on both spellings for the reason stated on `SubscriptionInvoiceSource`
+ * — the scalar was removed on newer API versions and the endpoint's version is
+ * dashboard configuration this repo cannot see. Reading only one of them would
+ * silently value tax at 0 and hand back the whole invoice total as the base,
+ * which is the very bug this closes.
+ */
+export function subscriptionInvoiceFeeBasisCents(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): number {
+  const totalCents = metadataCents(invoice?.total)
+  if (totalCents <= 0) return 0
+  const scalarTax = Number(invoice?.tax ?? NaN)
+  const taxCents =
+    Number.isFinite(scalarTax) && scalarTax > 0
+      ? scalarTax
+      : sumAmounts(invoice?.total_taxes ?? invoice?.total_tax_amounts)
+  const shippingCents = metadataCents(invoice?.shipping_cost?.amount_total)
+  return Math.max(0, totalCents - Math.max(0, taxCents) - shippingCents)
+}
+
+/**
+ * What the platform fee on a paid subscription invoice WOULD have been on the
+ * items-only base, at the rate Stripe actually applied (AGL-2317).
+ *
+ * ## The rate is never named here, on purpose
+ *
+ * Pricing is locked for Sept 1, so this is a BASE correction and must not be
+ * able to become a rate change. It therefore takes no plan, no entitlement and
+ * no `resolveTransactionFeePct` call: it scales the fee Stripe already charged
+ * by `base / total`. Whatever rate produced `application_fee_amount` — the
+ * sale-time one, a rate AGL-2289 has since re-priced, or a staff override —
+ * comes through untouched, and the only thing removed is the portion that was
+ * taken on tax and shipping. A test that changed a rate could not make this
+ * function agree with it.
+ *
+ * `Math.max(1, …)` matches `checkout.ts`: where a rate applies at all, the
+ * floor is a cent, never zero. An invoice with no fee, no total, or nothing but
+ * tax answers 0 and asks for no correction it cannot justify.
+ */
+export function subscriptionInvoiceItemsOnlyFeeCents(
+  invoice: SubscriptionInvoiceSource | null | undefined,
+): number {
+  const chargedCents = metadataCents(invoice?.application_fee_amount)
+  if (chargedCents <= 0) return 0
+  const totalCents = metadataCents(invoice?.total)
+  // Nothing to scale against — leave what Stripe took rather than inventing a
+  // reduction from a total we cannot read.
+  if (totalCents <= 0) return chargedCents
+  const basisCents = subscriptionInvoiceFeeBasisCents(invoice)
+  if (basisCents <= 0) return 0
+  // Tax-free and shipping-free invoices — the majority — land here and are
+  // byte-identical to today, which is what makes this safe inside the freeze.
+  if (basisCents >= totalCents) return chargedCents
+  return Math.max(1, Math.round((chargedCents * basisCents) / totalCents))
+}
+
 /** Sum of an `[{ amount }]` list, ignoring anything unreadable. */
 function sumAmounts(list: readonly { amount?: unknown }[] | null | undefined) {
   return (list ?? []).reduce((sum, entry) => {
