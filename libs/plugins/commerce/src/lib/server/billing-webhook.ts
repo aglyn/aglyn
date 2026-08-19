@@ -1260,8 +1260,32 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // `storefrontSubscriptions` (Business+) is what makes a recurring
         // product sellable at all. A Business org that drops to Pro still has
         // a storefront and must still stop billing subscribers.
+        //
+        // A FAILED READ IS NOT AN ANSWER (AGL-2258). The `.catch(() => null)`
+        // here made a transient Firestore failure indistinguishable from a
+        // lapsed org: `checkEntitlement(null, …)` resolves through
+        // `resolveOrgEntitlements(null)` to the FREE plan, so a moment of
+        // unavailability cancelled a healthy merchant's subscriber at period
+        // end and notified them their plan no longer covers subscriptions.
+        //
+        // Failing closed against a MISSING org is right and is kept — an
+        // unindexed host has no storefront, and that is an answer. Failing
+        // closed against an unreadable one is not: the two failure directions
+        // are wildly asymmetric. Skipping the stop costs Aglyn one cycle at
+        // the wrong take rate and the next cycle re-asks; taking it costs a
+        // paying merchant a subscriber, irreversibly, on a question we never
+        // actually asked.
+        let renewalOrgUnreadable = false
         const renewalOrg = (
-          await getOrgForHost(invoiceHostId).catch(() => null)
+          await getOrgForHost(invoiceHostId).catch((error) => {
+            renewalOrgUnreadable = true
+            console.error(
+              'Renewal plan check could not read the org; the lapse stop is skipped for this cycle (AGL-2258)',
+              { hostId: invoiceHostId, subscriptionId },
+              error,
+            )
+            return null
+          })
         )?.org
         const renewalEntitled =
           Aglyn.checkEntitlement(renewalOrg as any, 'commerce') &&
@@ -1588,7 +1612,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         // still needs stopping, and gating the stop on `recorded` would mean a
         // Stripe redelivery — or a stop that failed once — never tries again.
         // Its own claim marker is what makes it once-only.
-        if (!renewalEntitled) {
+        // `renewalOrgUnreadable` and not `!renewalOrg` (AGL-2258): a null org
+        // we successfully read still stops, which is AGL-2071's decision.
+        if (!renewalEntitled && !renewalOrgUnreadable) {
           await stopLapsedStorefrontSubscription(
             invoiceHostId,
             subscriptionId,

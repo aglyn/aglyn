@@ -133,6 +133,8 @@ const contactUpserts: any[] = []
  * so `resolveEffectivePlan` has `plan` and `subscription.status` to work with.
  */
 let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+/** Set to make the org read REJECT, as a Firestore outage does. */
+let orgReadError: Error | null = null
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
@@ -146,7 +148,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     },
   },
   findUserByUidAcrossPools: async () => null,
-  getOrgForHost: async () => ({ org: orgFixture }),
+  getOrgForHost: async () => {
+    // A Firestore read that REJECTS, which the fake could not express before
+    // (AGL-2258) — and a double that cannot fail the way the real thing fails
+    // cannot prove anything about what happens when it does.
+    if (orgReadError) throw orgReadError
+    return { org: orgFixture }
+  },
   meterHostEmail: async () => undefined,
   notifyHostManagers: async (hostId: string, notification: any) => {
     notifications.push({ hostId, ...notification })
@@ -329,6 +337,7 @@ beforeEach(() => {
   })
   docs.set('hosts/host-1/subscriptions/sub_1', { ...SOLD_SUBSCRIPTION })
   orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+  orgReadError = null
   process.env.STRIPE_SECRET_KEY = 'sk_test_renewal_spec'
 })
 
@@ -1190,6 +1199,50 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
         String(entry.title).includes('stopped renewing'),
       ),
     ).toHaveLength(1)
+  })
+
+  /**
+   * AGL-2258. `getOrgForHost(...).catch(() => null)` made a transient
+   * Firestore failure indistinguishable from a lapsed org:
+   * `checkEntitlement(null, …)` resolves through `resolveOrgEntitlements(null)`
+   * to the FREE plan, so a moment of unavailability cancelled a HEALTHY
+   * merchant's subscriber at period end and notified them their plan no longer
+   * covered subscriptions.
+   *
+   * The two directions are wildly asymmetric. Skipping the stop costs Aglyn
+   * one cycle at the wrong take rate and the next cycle re-asks; taking it
+   * costs a paying merchant a subscriber, irreversibly, on a question nobody
+   * actually answered.
+   */
+  it('does NOT stop when the org could not be READ', async () => {
+    // The org itself is perfectly healthy — the read is what failed.
+    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgReadError = new Error('DEADLINE_EXCEEDED')
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stripeStopCalls()).toHaveLength(0)
+    expect(storedSubscription().cancelAtPeriodEnd).toBeUndefined()
+    expect(
+      notifications.filter((entry) =>
+        String(entry.title).includes('stopped renewing'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  /**
+   * POSITIVE CONTROL for the branch above: a null org we successfully READ is
+   * still an answer, and still stops. AGL-2071's fail-closed against a missing
+   * storefront is not what AGL-2258 relaxes.
+   */
+  it('POSITIVE CONTROL: a successfully-read missing org still stops', async () => {
+    orgFixture = null
+    acceptStop()
+
+    await deliver(RENEWAL_INVOICE)
+
+    expect(stripeStopCalls()).toHaveLength(1)
   })
 
   /**
