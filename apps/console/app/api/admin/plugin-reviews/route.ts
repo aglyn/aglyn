@@ -761,6 +761,25 @@ async function handler(request: Request): Promise<Response> {
         } else if (current) {
           await revocationRef.delete()
         }
+        // The offer follows the kill switch here too (AGL-2368). AGL-2306
+        // taught the per-version revoke and the reject path to repair the
+        // mirror and left this one out, so a takedown flattened `versions` to
+        // `'all'` — revoking every build — while `latestApprovedVersion` went
+        // on naming one. `hiddenAt` hides the listing from browse and blocks
+        // the install route, so nothing was installable through it; but a
+        // restore clears `hiddenAt` first and the mirror is what the update
+        // badges read, and `nextRevocationState` can return a document that
+        // still holds a reviewer's per-version revocations. Recomputed from
+        // the versions in both directions rather than reasoned about.
+        //
+        // Named explicitly rather than reusing `target`: `isPlugin` is only
+        // true when `reviewUid` is empty, so they are the same document — but
+        // that is a fact two conditions apart, and a repair pointed at a
+        // review subdocument would write a `latestApprovedVersion` onto it.
+        await repairLatestApprovedVersion(
+          firestore.collection('marketplaceListings').doc(listingId),
+          next,
+        )
       }
 
       await firestore.collection('adminAudit').add({

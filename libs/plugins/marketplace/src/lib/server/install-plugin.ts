@@ -18,9 +18,11 @@
 import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  compareArtifactVersions,
   isCompatibleHostAbi,
   isFirstPartyPlugin,
   isPluginRevoked,
+  newestInstallableVersion,
   PLUGIN_HOST_ABI_VERSION,
   type PluginApiHandler,
   type PluginRevocation,
@@ -35,7 +37,6 @@ import {
   isPrivateListing,
   isVersionApproved,
   listingArtifactType,
-  newestApprovedVersion,
 } from '../model/marketplace'
 
 /**
@@ -257,6 +258,19 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // The publisher may still install their own unapproved version — that
     // is how you test a plugin before submitting it, and it reaches only
     // their own sites.
+    // Read the kill switch BEFORE resolving, not after (AGL-2368).
+    //
+    // The order used to be: pick the newest APPROVED version, then 409 if that
+    // one happens to be revoked. Revocation was never an input to the choice,
+    // only a veto on it — so stopping one build stopped the whole listing.
+    // v2.0.0 revoked with v1.0.0 approved and installable resolved to v2.0.0
+    // and answered 409, and `requirePurchase` above has already taken the
+    // buyer's money by then. A per-version revocation is deliberately NOT
+    // listing-wide (`isListingWideRevocation`); that path made it so anyway.
+    const revocation = (
+      await firestore.collection('revocations').doc(listingId).get()
+    ).data() as PluginRevocation | undefined
+
     let version = requestedVersion ?? ''
     let versionData: any
     if (version) {
@@ -281,9 +295,24 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
         publishedAt: doc.get('publishedAt'),
         data: doc.data(),
       }))
-      const newest = newestApprovedVersion(candidates as never) as
-        | { version: string; data: any }
-        | null
+      // The SHARED predicate (AGL-2306/2368): approved AND not revoked, which
+      // is the same function `repairLatestApprovedVersion` writes the listing
+      // mirror from. Two readings of "what is on offer" is how the badge and
+      // the route came to disagree; one function is how they cannot.
+      //
+      // Note this also orders by version rather than by `publishedAt`, which
+      // is what the mirror has always done — so the version this route hands
+      // over is now the version the listing page advertised.
+      const newestVersion = newestInstallableVersion(
+        candidates,
+        revocation,
+        compareArtifactVersions,
+      )
+      const newest = newestVersion
+        ? (candidates.find((entry) => entry.version === newestVersion) as
+            | { version: string; data: any }
+            | undefined)
+        : undefined
       // The publisher testing their own listing falls back to latest.
       const fallback = ownsListing
         ? candidates.find(
@@ -306,9 +335,11 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     // Kill switch (AGL-43 §3.5): a revoked version can't be installed.
     // Shares the predicate with the loaders (AGL-1085) so "installable" and
     // "runnable" cannot drift apart.
-    const revocation = (
-      await firestore.collection('revocations').doc(listingId).get()
-    ).data() as PluginRevocation | undefined
+    //
+    // Still checked after resolution, and still load-bearing: the unpinned
+    // branch can no longer choose a revoked version, but an EXPLICIT pin and
+    // the publisher's `latestVersion` fallback both can, and a listing-wide
+    // takedown revokes whatever either of them names.
     if (isPluginRevoked(revocation, version)) {
       return res
         .status(409)

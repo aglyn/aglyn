@@ -24,6 +24,7 @@ import {
   useFirestoreDoc,
   useHostOrgId,
 } from '@aglyn/tenant-feature-instance'
+import { offeredPluginVersion } from '@aglyn/aglyn'
 import { resolveOrgInstallSummary } from '../model/marketplace'
 import { useMarketplaceActions } from '../hooks/use-marketplace-actions'
 import PluginSiteSet from './plugin-site-set.component'
@@ -94,6 +95,16 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
     [firestore, listingId],
   )
 
+  // The kill switch (AGL-2368). This panel offers an UPDATE, so it is asking
+  // "what installs today" and had only the review-verdict mirror to ask —
+  // which nothing cleared on revoke, so it offered a version the install
+  // route refuses. Listing-scoped and public, one read for the panel.
+  const { data: revocation } = useFirestoreDoc<any>(
+    () =>
+      listingId ? doc(firestore, 'revocations', listingId) : null,
+    [firestore, listingId],
+  )
+
   const orgInstall = useMemo(
     () => resolveOrgInstallSummary(hosts ?? [], sitePins, orgPin ?? null),
     [hosts, sitePins, orgPin],
@@ -125,9 +136,10 @@ export function PluginSiteSetPanel(props: PluginSiteSetPanelProps) {
       listing={actionListing}
       hosts={hosts ?? []}
       orgInstall={orgInstall}
-      // The newest APPROVED version (AGL-1016) — never `latestVersion`, or the
-      // page would offer an update the install route refuses.
-      latestVersion={listing?.latestApprovedVersion}
+      // The newest INSTALLABLE version (AGL-1016/2368) — never `latestVersion`,
+      // and never the review verdict alone, or the page offers an update the
+      // install route refuses.
+      latestVersion={offeredPluginVersion(listing, revocation) ?? undefined}
       installPlan={installPlan}
       uninstall={uninstall}
       onChanged={() => setPinsNonce((current) => current + 1)}

@@ -22,6 +22,7 @@ import {
   isListingWideRevocation,
   newestInstallableVersion,
   nextRevocationState,
+  offeredPluginVersion,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
   type PluginRevocation,
@@ -244,6 +245,58 @@ describe('newestInstallableVersion (AGL-2306)', () => {
         () => null,
       ),
     ).toBe('1.0.0')
+  })
+})
+
+describe('offeredPluginVersion (AGL-2368)', () => {
+  const listing = (latestApprovedVersion?: string) => ({ latestApprovedVersion })
+
+  it('CONTROL: hands back the mirror when nothing is revoked', () => {
+    expect(offeredPluginVersion(listing('2.0.0'), null)).toBe('2.0.0')
+    expect(offeredPluginVersion(listing('2.0.0'), undefined)).toBe('2.0.0')
+    // A revocation that does not name this version is not a revocation of it.
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: ['1.0.0'] })).toBe(
+      '2.0.0',
+    )
+  })
+
+  it('offers NOTHING when the mirror names a revoked version', () => {
+    // The whole point. `latestApprovedVersion` is a review verdict and the
+    // kill switch does not clear it, so the two are simultaneously true and a
+    // client reading only the first advertises stopped bytes.
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: ['2.0.0'] })).toBeNull()
+  })
+
+  it('offers nothing under a listing-wide takedown', () => {
+    expect(offeredPluginVersion(listing('2.0.0'), { versions: 'all' })).toBeNull()
+  })
+
+  it('does not guess a next-best version', () => {
+    // A client has no version list — it holds one mirror and one revocation
+    // document. Answering "nothing to offer" is the honest reading of a
+    // mirror caught between two non-transactional writes; inventing 1.0.0
+    // here would be inventing a fact.
+    expect(
+      offeredPluginVersion(
+        { latestApprovedVersion: '2.0.0', latestVersion: '3.0.0' } as never,
+        { versions: ['2.0.0'] },
+      ),
+    ).toBeNull()
+  })
+
+  it('treats an absent or empty mirror as nothing on offer', () => {
+    expect(offeredPluginVersion(listing(undefined), null)).toBeNull()
+    expect(offeredPluginVersion(listing(''), null)).toBeNull()
+    expect(offeredPluginVersion(null, null)).toBeNull()
+    expect(offeredPluginVersion(undefined, { versions: 'all' })).toBeNull()
+  })
+
+  it('reads a NUMERIC mirror, which is what legacy listings carry', () => {
+    // `latestApprovedVersion` is typed `string | number` on the listing.
+    expect(offeredPluginVersion({ latestApprovedVersion: 3 }, null)).toBe('3')
+    expect(
+      offeredPluginVersion({ latestApprovedVersion: 3 }, { versions: ['3'] }),
+    ).toBeNull()
   })
 })
 

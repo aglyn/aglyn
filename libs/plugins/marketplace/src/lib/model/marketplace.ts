@@ -28,6 +28,10 @@
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
+import {
+  offeredPluginVersion,
+  type PluginRevocation,
+} from '@aglyn/aglyn/app-utils/plugin-manifest'
 // Visibility lives in core (AGL-876), for the same reason the artifact-type
 // union and the verification policy do: the console's listing route asks the
 // question and `scope:app` may not depend on `aglyn:addons`. Imported AND
@@ -600,6 +604,12 @@ export function isVersionApproved(
  * describe exactly what the route will do. Two independent readings of
  * "would this be unreviewed?" is how the affordance ends up warning about
  * the wrong installs, or staying silent on the right ones.
+ *
+ * The route's `newest` is `newestInstallableVersion` since AGL-2368 — a
+ * revoked version is no longer a candidate, so it no longer suppresses the
+ * fallback either. `revocation` is optional because most callers have none;
+ * without it this asks the pre-AGL-2368 question, which is the same answer
+ * whenever the mirror is current.
  */
 export function installsUnreviewedFallback(
   listing:
@@ -611,13 +621,17 @@ export function installsUnreviewedFallback(
     | null
     | undefined,
   viewerOrgId: string | null | undefined,
+  revocation?: PluginRevocation | null,
 ): boolean {
   if (!listing?.profileId || !viewerOrgId) return false
   // Only the publishing org gets the fallback; everyone else is refused.
   if (listing.profileId !== viewerOrgId) return false
-  // An approved version exists → the route serves THAT, however much newer
-  // the pending one is. Not an unreviewed install.
-  if (String(listing.latestApprovedVersion ?? '')) return false
+  // An INSTALLABLE version exists → the route serves THAT, however much newer
+  // the pending one is. Not an unreviewed install. Reading approval alone got
+  // this backwards for a revoked listing: the route would fall back to
+  // `latestVersion` for the owner and hand over unreviewed bytes, while the
+  // page said nothing, because a stopped version still counted as approved.
+  if (offeredPluginVersion(listing, revocation)) return false
   return Boolean(String(listing.latestVersion ?? ''))
 }
 

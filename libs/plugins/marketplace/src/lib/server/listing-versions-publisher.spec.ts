@@ -29,14 +29,16 @@
  * one does.
  */
 
+// The REAL module (AGL-2368). This was a hand-listed pair — a CLOSED WORLD —
+// and the day `listing-versions` reached for a third export
+// (`newestInstallableVersion`) every case in this file died on
+// `is not a function`. It was already the pattern the comment below asks for:
+// `isPluginRevoked` is shared with the installer and the loaders precisely so
+// "what a publisher is told is disabled" and "what refuses to install" cannot
+// drift, and the same argument covers the comparator and the offer
+// derivation. Nothing here needs stubbing, so nothing here is stubbed.
 jest.mock('@aglyn/aglyn/server', () => ({
-  compareArtifactVersions: () => 0,
-  // The REAL predicate (AGL-2328), not a stub. It is shared with the
-  // installer and the loaders precisely so "what a publisher is told is
-  // disabled" and "what refuses to install" cannot drift, and a fake here
-  // would test the route against a second copy of the rule.
-  isPluginRevoked: jest.requireActual('@aglyn/aglyn/app-utils/plugin-manifest')
-    .isPluginRevoked,
+  ...jest.requireActual('@aglyn/aglyn/server'),
 }))
 
 jest.mock('../model/marketplace', () => ({
@@ -121,6 +123,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       __pins: { total: number; byVersion: Record<string, number> } | 'no-index'
       __aggregations: string[]
       __writes: Array<Record<string, unknown>>
+      __sets: Array<Record<string, unknown>>
       __revocation: Record<string, unknown> | undefined
     }
   const listingRef = {
@@ -129,7 +132,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       get: (key: string) => store().__listing?.[key],
       updateTime: 'update-time-token',
     }),
-    set: async () => undefined,
+    // Recorded separately from `update`: the AGL-1016/2368 mirror repair is a
+    // merge-`set`, and the AGL-1418/1419 assertions below count `update`s.
+    set: async (patch: Record<string, unknown>) => {
+      store().__sets.push(patch)
+      return undefined
+    },
     update: async (patch: Record<string, unknown>) => {
       store().__writes.push(patch)
       return undefined
@@ -210,8 +218,19 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       | 'no-index',
     __aggregations: [] as string[],
     __writes: [] as Array<Record<string, unknown>>,
+    __sets: [] as Array<Record<string, unknown>>,
     __revocation: undefined as Record<string, unknown> | undefined,
     firebaseAdmin: {
+      firestore: {
+        FieldValue: {
+          // A distinguishable sentinel. The repair DELETES the mirror when
+          // nothing is installable rather than writing '' — an absent field
+          // reads as "no update to offer", an empty string is a value a
+          // reader has to interpret — and asserting that needs the two
+          // outcomes to be told apart.
+          delete: () => 'FIELD_DELETE',
+        },
+      },
       app: () => ({
         auth: () => ({ verifyIdToken: async () => ({ uid: 'uid-1' }) }),
         firestore: () => ({
@@ -243,6 +262,7 @@ const adminMock = jest.requireMock('@aglyn/tenant-data-admin') as {
   __pins: { total: number; byVersion: Record<string, number> } | 'no-index'
   __aggregations: string[]
   __writes: Array<Record<string, unknown>>
+  __sets: Array<Record<string, unknown>>
   __revocation: Record<string, unknown> | undefined
 }
 const DEFAULT_LISTING = { ...adminMock.__listing }
@@ -286,6 +306,7 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
     adminMock.__pins = { total: 3, byVersion: { '1.0.1': 1, '1.0.0': 1 } }
     adminMock.__aggregations = []
     adminMock.__writes = []
+    adminMock.__sets = []
     adminMock.__revocation = undefined
     // The backoff and single-flight maps outlive a test otherwise, and a
     // suite that passes because a previous test poisoned a cache is worse
@@ -623,6 +644,104 @@ describe('publisher-scoped listing versions (AGL-1079)', () => {
       const result = await call({ listingId: 'l1' })
       expect(result.body.revocationReason).toBeUndefined()
       expect(result.body.revokedAtMs).toBeUndefined()
+    })
+  })
+  /**
+   * The mirror repair, which used to UNDO the kill switch (AGL-2368).
+   *
+   * The buyer branch repairs `latestApprovedVersion` from the versions it
+   * already has in hand — the only place that can, since `pluginVersions` is
+   * server-only. It asked `newestApprovedVersion` (approval only, blind to
+   * revocation) and "only ever moved the value forward", which together made
+   * it the exact inverse of a repair: AGL-2306 taught the review route to step
+   * the mirror back off a revoked version, and the next hit here wrote the
+   * revoked version straight back. This branch is a PUBLIC, unauthenticated
+   * GET, so "the next hit" is the next person who opens the listing page.
+   *
+   * The fixture has v1.0.1 `rejected` and v1.0.0 `approved`, so every case
+   * below turns on the kill switch alone.
+   */
+  describe('the latestApprovedVersion repair follows the kill switch (AGL-2368)', () => {
+    /** What the repair wrote, or undefined if it wrote nothing. */
+    const repaired = () =>
+      adminMock.__sets.find((patch) => 'latestApprovedVersion' in patch)?.[
+        'latestApprovedVersion'
+      ]
+
+    it('CONTROL: writes nothing when the mirror is already right', async () => {
+      // The fixture's mirror is '1.0.0' and '1.0.0' is the only installable
+      // version. A repair that fired here would be rewriting the listing
+      // document on every public page view.
+      await call({ listingId: 'l1' })
+      expect(repaired()).toBeUndefined()
+    })
+
+    it('CONTROL: repairs a mirror that is genuinely BEHIND', async () => {
+      // The AGL-1016 case this code exists for: a plugin approved before the
+      // field existed carries none, and the console would otherwise report it
+      // as "no published version to compare against" forever.
+      adminMock.__listing = { ...DEFAULT_LISTING, latestApprovedVersion: '' }
+      await call({ listingId: 'l1' })
+      expect(repaired()).toBe('1.0.0')
+    })
+
+    it('does NOT write a revoked version back into the mirror', async () => {
+      // The defect, stated directly, and the one the "only ever moves
+      // forward" rule guaranteed. The mirror sits at an older value than the
+      // revoked version, so the OLD code compared 0.9.0 < 1.0.0 and wrote
+      // 1.0.0 — the version the kill switch had just stopped — over the top
+      // of AGL-2306's repair. Asserting the absence of that write is the
+      // point, so the value is checked, not merely the fact of a write.
+      adminMock.__listing = {
+        ...DEFAULT_LISTING,
+        latestApprovedVersion: '0.9.0',
+      }
+      adminMock.__revocation = { versions: ['1.0.0'] }
+      await call({ listingId: 'l1' })
+      expect(repaired()).not.toBe('1.0.0')
+      expect(repaired()).toBe('FIELD_DELETE')
+    })
+
+    it('steps the mirror BACK when the version it names is revoked', async () => {
+      // The other half, and the half the "only ever moves forward" rule made
+      // impossible: the stored value is a real version and still has to go.
+      adminMock.__revocation = { versions: ['1.0.0'] }
+      await call({ listingId: 'l1' })
+      expect(repaired()).toBe('FIELD_DELETE')
+    })
+
+    it('restores the offer when the version is UN-revoked', async () => {
+      // Un-revoking has to be reachable from here too, or the repair is a
+      // one-way ratchet in the new direction instead of the old one.
+      adminMock.__listing = { ...DEFAULT_LISTING, latestApprovedVersion: '' }
+      adminMock.__revocation = undefined
+      await call({ listingId: 'l1' })
+      expect(repaired()).toBe('1.0.0')
+    })
+
+    it('a listing-wide takedown clears the offer, not just one version', async () => {
+      adminMock.__revocation = { versions: 'all' }
+      await call({ listingId: 'l1' })
+      expect(repaired()).toBe('FIELD_DELETE')
+    })
+
+    it('GUARD: a non-plugin listing is never repaired at all', async () => {
+      // `reviewState` and the approved-version guarantee are plugin concepts;
+      // a copied artifact's `versions` docs carry neither, so deriving a
+      // mirror for one would delete a field it legitimately does not have.
+      const marketplaceMock = jest.requireMock('../model/marketplace') as {
+        listingArtifactType: () => string
+      }
+      const spy = jest
+        .spyOn(marketplaceMock, 'listingArtifactType')
+        .mockReturnValue('component')
+      try {
+        adminMock.__listing = { ...DEFAULT_LISTING, latestApprovedVersion: '' }
+        await call({ listingId: 'l1' })
+        expect(repaired()).toBeUndefined()
+      } finally {
+        spy.mockRestore()
+      }
     })
   })
 })

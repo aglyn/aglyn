@@ -178,9 +178,17 @@ const OrgPluginInstallation: NextPageWithLayout<Record<string, never>> = () => {
     () => doc(firestore, 'marketplaceListings', listingId || '-missing-'),
     [firestore, listingId],
   )
+  // The kill switch behind that listing (AGL-2368). A revoked version stays
+  // `approved` — revocation does not clear a review verdict — so without this
+  // the update line offered bytes `install-plugin` answers 409 to. Public
+  // read, listing-scoped, one document.
+  const { data: revocation } = useFirestoreDoc<any>(
+    () => (listingId ? doc(firestore, 'revocations', listingId) : null),
+    [firestore, listingId],
+  )
   const updateStatus = useMemo(
-    () => resolveUpdateState(pin as never, listing ?? null, 'plugin'),
-    [pin, listing],
+    () => resolveUpdateState(pin as never, listing ?? null, 'plugin', revocation),
+    [pin, listing, revocation],
   )
 
   const onChanged = useCallback(

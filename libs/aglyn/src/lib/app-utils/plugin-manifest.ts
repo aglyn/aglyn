@@ -639,6 +639,38 @@ export function isListingWideRevocation(
 }
 
 /**
+ * What a listing OFFERS a client right now (AGL-2368).
+ *
+ * `newestInstallableVersion` is the derivation, and it needs the version set —
+ * which is server-only (`pluginVersions`). A client has the listing's
+ * `latestApprovedVersion` mirror instead, and since AGL-2306 every writer of
+ * that mirror computes it with `newestInstallableVersion`. So on a client the
+ * mirror IS the answer, with one gap: the revocation document and the listing
+ * document are two non-transactional writes, and a live listener sees them
+ * land at different times. In that window the mirror names a version the kill
+ * switch has already stopped, which is the whole shape of this bug.
+ *
+ * So a client that holds the revocation checks it against the mirror and, when
+ * they disagree, offers NOTHING rather than the next-best guess. It cannot
+ * compute the next-best guess — it has no version list — and "no update to
+ * offer" is the safe reading of a mirror it has caught mid-repair. The repair
+ * lands moments later and the real answer appears.
+ *
+ * A client with no revocation in hand passes `undefined` and gets the mirror,
+ * which is what it had before. That is a real fallback, not a silent one: the
+ * gap it leaves is bounded by the repair, and the install route derives live
+ * and refuses regardless.
+ */
+export function offeredPluginVersion(
+  listing: { latestApprovedVersion?: unknown } | null | undefined,
+  revocation: PluginRevocation | null | undefined,
+): string | null {
+  const offered = String(listing?.latestApprovedVersion ?? '')
+  if (!offered) return null
+  return isPluginRevoked(revocation, offered) ? null : offered
+}
+
+/**
  * The newest version a buyer could actually install right now (AGL-2306).
  *
  * Two things have to be true of an offer, and the listing's

@@ -83,6 +83,70 @@ describe('resolveUpdateState (AGL-1016)', () => {
     expect(status.availableVersion).toBe('1.0.0')
   })
 
+  /**
+   * The offer follows the kill switch (AGL-2368).
+   *
+   * `latestApprovedVersion` is a review verdict and revocation does not clear
+   * it, so the badge offered "Update to vX" for bytes `install-plugin`
+   * answers 409 to — the same leak AGL-1016 closed against `latestVersion`,
+   * reopened one state over.
+   */
+  describe('and the kill switch (AGL-2368)', () => {
+    const listing = {
+      artifactType: 'plugin' as const,
+      latestVersion: '1.2.0',
+      latestApprovedVersion: '1.1.0',
+    }
+
+    it('CONTROL: still offers the update when nothing is revoked', () => {
+      expect(
+        resolveUpdateState(pin, listing, undefined, { versions: ['9.9.9'] })
+          .state,
+      ).toBe('update-available')
+      expect(resolveUpdateState(pin, listing, undefined, null).state).toBe(
+        'update-available',
+      )
+    })
+
+    it('offers no update when the version it would offer is revoked', () => {
+      const status = resolveUpdateState(pin, listing, undefined, {
+        versions: ['1.1.0'],
+      })
+      expect(status.state).toBe('unknown')
+      expect(status.unknownReason).toBe('nothing-published')
+      expect(status.availableVersion).toBeNull()
+    })
+
+    it('offers no update under a listing-wide takedown', () => {
+      expect(
+        resolveUpdateState(pin, listing, undefined, { versions: 'all' }).state,
+      ).toBe('unknown')
+    })
+
+    it('does not fall through to latestVersion when the offer is revoked', () => {
+      // The failure that would look like a fix: dropping to `latestVersion`
+      // advertises an UNREVIEWED version, which is exactly what AGL-1016
+      // removed from this function.
+      const status = resolveUpdateState(pin, listing, undefined, {
+        versions: ['1.1.0'],
+      })
+      expect(status.availableVersion).not.toBe('1.2.0')
+    })
+
+    it('leaves COPIED artifacts alone — they have no kill switch', () => {
+      // `versions` is a plugin document; a component compares against
+      // `latestVersion` and must not be silenced by one.
+      const status = resolveUpdateState(
+        { listingId: 'listing-1', version: '1.0.0' },
+        { artifactType: 'component', latestVersion: '1.1.0' },
+        'component',
+        { versions: 'all' },
+      )
+      expect(status.state).toBe('update-available')
+      expect(status.availableVersion).toBe('1.1.0')
+    })
+  })
+
   it('is unknown for a plugin listing with nothing approved yet', () => {
     const status = resolveUpdateState(pin, {
       artifactType: 'plugin',

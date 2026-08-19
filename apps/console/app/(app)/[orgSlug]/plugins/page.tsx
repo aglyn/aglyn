@@ -166,6 +166,16 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
    */
   const listingIdsKey = installations.map((install) => install.$id).sort().join('|')
   const [listings, setListings] = useState<Record<string, any>>({})
+  /**
+   * The kill switches for the same listings (AGL-2368).
+   *
+   * Fetched here rather than left to the mirror because a revoked version
+   * stays `approved` — revocation does not clear a review verdict — so the
+   * chip offered an update `install-plugin` answers 409 to. Same public
+   * collection, same chunking, and a failure leaves the map empty, which
+   * degrades to the mirror alone rather than to a false "up to date".
+   */
+  const [revocations, setRevocations] = useState<Record<string, any>>({})
   useEffect(() => {
     const ids = listingIdsKey ? listingIdsKey.split('|') : []
     if (!ids.length) return
@@ -174,25 +184,30 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
     for (let index = 0; index < ids.length; index += 30) {
       chunks.push(ids.slice(index, index + 30))
     }
-    void Promise.all(
-      chunks.map((chunk) =>
-        getDocs(
-          query(
-            collection(firestore, 'marketplaceListings'),
-            where(documentId(), 'in', chunk),
+    const fetchChunks = (path: string) =>
+      Promise.all(
+        chunks.map((chunk) =>
+          getDocs(
+            query(collection(firestore, path), where(documentId(), 'in', chunk)),
           ),
         ),
-      ),
-    )
-      .then((results) => {
-        if (!active) return
-        setListings(
-          Object.fromEntries(
-            results.flatMap((snapshot) =>
-              snapshot.docs.map((entry) => [entry.id, entry.data()]),
-            ),
+      ).then((results) =>
+        Object.fromEntries(
+          results.flatMap((snapshot) =>
+            snapshot.docs.map((entry) => [entry.id, entry.data()]),
           ),
-        )
+        ),
+      )
+    void fetchChunks('marketplaceListings')
+      .then((map) => {
+        if (!active) return
+        setListings(map)
+      })
+      .catch(() => undefined)
+    void fetchChunks('revocations')
+      .then((map) => {
+        if (!active) return
+        setRevocations(map)
       })
       .catch(() => undefined)
     return () => {
@@ -341,13 +356,14 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
             {installations.length ? (
               <Stack>
                 {installations.map((install) => {
-                  // The update signal (AGL-1016), from the one shared
-                  // comparison — for plugins that is the newest APPROVED
+                  // The update signal (AGL-1016/2368), from the one shared
+                  // comparison — for plugins that is the newest INSTALLABLE
                   // version, so this can never offer what install refuses.
                   const status = resolveUpdateState(
                     install as never,
                     listings[install.$id] ?? null,
                     'plugin',
+                    revocations[install.$id] ?? null,
                   )
                   return row(
                     install.$id,

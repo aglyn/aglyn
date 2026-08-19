@@ -43,6 +43,7 @@ import {
   compareArtifactVersions,
   isPluginRevoked,
   lockdownRefusalText,
+  offeredPluginVersion,
   parseLockdownRefusal,
 } from '@aglyn/aglyn'
 import {
@@ -136,18 +137,6 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     [firestore, listingIds.join(',')],
     { idField: '$id' },
   )
-  // The newest APPROVED version, not the newest published one (AGL-1016).
-  // Offering `latestVersion` here put an Upgrade button in front of every
-  // workspace the moment a publisher uploaded, and the install route then
-  // refused the click — AGL-966 only ever hands out reviewed bytes.
-  const latestByListing = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const listing of (listingDocs as any[]) ?? []) {
-      map[listing.$id] = String(listing.latestApprovedVersion ?? '')
-    }
-    return map
-  }, [listingDocs])
-
   // Kill switches (public revocations read) for the installed listings.
   const { data: revocationDocs } = useFirestoreCollection<any>(
     () =>
@@ -207,6 +196,30 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     }
     return map
   }, [revocationDocs])
+
+  // The newest INSTALLABLE version, not merely the newest approved one
+  // (AGL-1016, corrected by AGL-2368).
+  //
+  // Offering `latestVersion` here put an Upgrade button in front of every
+  // workspace the moment a publisher uploaded, and the install route then
+  // refused the click — AGL-966 only ever hands out reviewed bytes. The
+  // mirror fixed that and then reproduced it one state over: nothing cleared
+  // it when a version was revoked, so the Upgrade button pointed at bytes the
+  // kill switch had stopped. Every writer of the mirror now derives it from
+  // `newestInstallableVersion`, and this card holds the revocation document
+  // ALREADY — it is right there, feeding the disabled chip below — so it
+  // cross-checks rather than trusting a cache written by a separate,
+  // non-transactional write it can observe mid-flight.
+  const latestByListing = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const listing of (listingDocs as any[]) ?? []) {
+      const revocation = ((revocationDocs as any[]) ?? []).find(
+        (doc) => doc.$id === listing.$id,
+      )
+      map[listing.$id] = offeredPluginVersion(listing, revocation) ?? ''
+    }
+    return map
+  }, [listingDocs, revocationDocs])
 
   const handleUpgrade = useCallback(
     (install: any) => async () => {

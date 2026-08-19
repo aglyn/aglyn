@@ -17,6 +17,7 @@
 
 import {
   isPluginRevoked,
+  newestInstallableVersion,
   type PluginApiHandler,
   type PluginRevocation,
 } from '@aglyn/aglyn/server'
@@ -24,7 +25,6 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   isVersionApproved,
   listingArtifactType,
-  newestApprovedVersion,
 } from '../model/marketplace'
 import { compareArtifactVersions } from '@aglyn/aglyn/server'
 import {
@@ -351,33 +351,63 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
       publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
     }))
 
-    // Repair `latestApprovedVersion` when it is missing or behind (AGL-1016).
+    // Repair `latestApprovedVersion` when it disagrees with the versions
+    // (AGL-1016, corrected by AGL-2368).
     //
     // The field is written by the approval route, so every plugin approved
     // before it existed carries none — and the console would report those as
     // "no published version to compare against" forever, which is a worse lie
     // than the one it replaced. The approved set is already in hand here and
     // `pluginVersions` is server-only, so this is the one place that can
-    // repair it. Idempotent, and it only ever moves the value forward.
-    // Plugins only: `reviewState` and the approved-version guarantee are a
-    // plugin concept, and a copied artifact's `versions` docs carry neither.
+    // repair it. Plugins only: `reviewState` and the approved-version
+    // guarantee are a plugin concept, and a copied artifact's `versions` docs
+    // carry neither.
+    //
+    // Two things were wrong with the original, and they compounded. It asked
+    // `newestApprovedVersion` — approval only, blind to the kill switch — and
+    // it "only ever moved the value forward". So it did not merely fail to
+    // step the mirror back off a revoked version; it actively WROTE ONE BACK.
+    // AGL-2306 taught the review route to repair the mirror on revoke, and the
+    // very next hit on this handler undid it: stored v1.0.0 (correct), newest
+    // approved v2.0.0 (revoked), v1.0.0 < v2.0.0, write. This endpoint is a
+    // public unauthenticated GET, so "the next hit" is the next page view.
+    //
+    // Now derived from the whole set through the SHARED predicate the review
+    // route repairs with, and applied whenever it differs — a derivation has
+    // no direction to preserve. The monotonic rule belongs to the APPROVAL
+    // writer, where it means "a reviewer working through a backlog must not
+    // walk the offer backwards"; here it only ever preserved a wrong answer.
+    const revocation = !isPlugin
+      ? undefined
+      : ((
+          await firestore.collection('revocations').doc(listingId).get()
+        ).data() as PluginRevocation | undefined)
     const newest = !isPlugin
       ? null
-      : (newestApprovedVersion(
+      : newestInstallableVersion(
           snapshot.docs.map((doc) => ({
             version: String(doc.get('version') ?? doc.id),
             reviewState: doc.get('reviewState'),
-            publishedAt: doc.get('publishedAt'),
-          })) as never,
-        ) as { version?: string } | null)
-    if (newest?.version) {
+          })),
+          revocation,
+          compareArtifactVersions,
+        )
+    if (isPlugin) {
       const stored = listingSnapshot.get('latestApprovedVersion')
-      if (
-        stored == null ||
-        (compareArtifactVersions(String(stored), newest.version) ?? 0) < 0
-      ) {
+      const storedString = stored == null ? '' : String(stored)
+      if (storedString !== (newest ?? '')) {
         await listingRef
-          .set({ latestApprovedVersion: newest.version }, { merge: true })
+          .set(
+            {
+              // Deleted rather than emptied when nothing qualifies, matching
+              // `repairLatestApprovedVersion`: an ABSENT mirror reads as "no
+              // update to offer", an empty string is a value readers have to
+              // interpret.
+              latestApprovedVersion:
+                newest ?? firebaseAdmin.firestore.FieldValue.delete(),
+            },
+            { merge: true },
+          )
           .catch(() => undefined)
       }
     }

@@ -41,6 +41,7 @@ import {
   type MarkdownInline,
   parseMarkdownLite,
   PLATFORM_BRAND_NAME,
+  offeredPluginVersion,
   PLUGIN_HOST_ABI_VERSION,
   pluginDocsHelp,
   resolveMediaSrc,
@@ -687,17 +688,38 @@ export function MarketplaceListingContent({
   }, [artifactType, datasetInstalls, emailInstalls, themeHostDoc, listingId])
 
   /**
-   * The version this listing actually offers (AGL-1016).
+   * The kill switch, on the page with the Install button (AGL-2368).
    *
-   * For a plugin that is the newest APPROVED version, not `latestVersion`.
-   * This page used to compare against `latestVersion`, so publishing v1.1.0
-   * lit up "Update to v1.1.0" for every workspace the moment it was uploaded —
-   * and the install route then refused it, because AGL-966 only ever hands out
-   * reviewed bytes. The badge was advertising what the marketplace would not
-   * give you.
+   * One document read for the whole page — the switch is listing-scoped —
+   * and public, which is what lets the marketplace loaders and the
+   * host-plugins card read it already.
+   */
+  const { data: revocation } = useFirestoreDoc<any>(
+    () =>
+      isPlugin && listingId
+        ? doc(firestore, 'revocations', listingId)
+        : null,
+    [firestore, isPlugin, listingId],
+  )
+
+  /**
+   * The version this listing actually offers (AGL-1016, AGL-2368).
+   *
+   * For a plugin that is the newest INSTALLABLE version, not `latestVersion`
+   * and not merely the newest approved one. This page used to compare against
+   * `latestVersion`, so publishing v1.1.0 lit up "Update to v1.1.0" for every
+   * workspace the moment it was uploaded — and the install route then refused
+   * it, because AGL-966 only ever hands out reviewed bytes. The badge was
+   * advertising what the marketplace would not give you.
+   *
+   * `latestApprovedVersion` fixed that and left the same defect one state
+   * over: approval is a review verdict and revocation does not clear it, so a
+   * killed version stayed the offer. This is the page with the Install and
+   * Buy buttons on it, so it cross-checks the mirror against the switch
+   * rather than trusting a cache two writes behind.
    */
   const offeredVersion = isPlugin
-    ? listing?.latestApprovedVersion
+    ? offeredPluginVersion(listing, revocation)
     : listing?.latestVersion
 
   /**
@@ -715,7 +737,7 @@ export function MarketplaceListingContent({
    * unreviewed install however new the pending one is.
    */
   const unreviewedInstall =
-    isPlugin && installsUnreviewedFallback(listing, viewerOrgId)
+    isPlugin && installsUnreviewedFallback(listing, viewerOrgId, revocation)
   /** What would actually land — the route's fallback, named. */
   const installingVersion = unreviewedInstall
     ? listing?.latestVersion
@@ -885,6 +907,9 @@ export function MarketplaceListingContent({
             } as never),
         listing ?? null,
         artifactType,
+        // The kill switch (AGL-2368) — this line said "Update to vX" for a
+        // version the install route refuses, because approval survives it.
+        revocation,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -896,6 +921,7 @@ export function MarketplaceListingContent({
       listingId,
       listing,
       artifactType,
+      revocation,
     ],
   )
   const priceUsd = Number(listing?.priceUsd ?? 0)

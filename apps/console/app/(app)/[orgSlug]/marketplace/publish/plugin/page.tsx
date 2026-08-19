@@ -56,6 +56,15 @@ const PublishPluginPage: NextPageWithLayout<Record<string, never>> = () => {
     [firestore, listingId],
     { idField: '$id' },
   )
+  // The kill switch on that listing (AGL-2368). The form tells a publisher
+  // which version "is what installs today", and it read the review-verdict
+  // mirror to say so — which revocation does not clear, so a publisher whose
+  // live version had been stopped was told it was still serving customers.
+  const { data: revocation } = useFirestoreDoc<any>(
+    () => (listingId ? doc(firestore, 'revocations', listingId) : null),
+    [firestore, listingId],
+  )
+
   // Only bind to a listing this org actually publishes. Otherwise a guessed
   // id would pre-fill someone else's listing content into this form.
   const target =
@@ -105,6 +114,7 @@ const PublishPluginPage: NextPageWithLayout<Record<string, never>> = () => {
             orgId={currentOrg.$id}
             orgSlug={orgSlug}
             listing={target}
+            revocation={revocation ?? null}
           />
         ) : null}
       </Container>
