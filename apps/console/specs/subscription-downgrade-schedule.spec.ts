@@ -254,6 +254,12 @@ beforeEach(() => {
             items: subscriptionItems.map((item: any) => ({
               price: item.price.id,
               ...(item.quantity != null ? { quantity: item.quantity } : {}),
+              // Stripe copies each item's manually applied tax rates onto the
+              // phase it builds from `from_subscription`, so the fake must
+              // carry them too — a double that dropped them here could not
+              // tell a restatement that preserves `tax_rates` from one that
+              // does not (AGL-2146).
+              ...(item.tax_rates ? { tax_rates: item.tax_rates } : {}),
             })),
             ...schedulePhaseExtras,
           },
@@ -476,6 +482,35 @@ describe('a downgrade preserves the terms it did not change (AGL-2146)', () => {
     expect(update?.get('phases[1][collection_method]')).toBe('send_invoice')
   })
 
+  it("restates each item's manually applied tax_rates", async () => {
+    // A phase item is restated in full or not at all. Written back with price
+    // and quantity alone, the customer's line silently changes how it is taxed
+    // at the flip — the same unannounced money change the coupon loss was.
+    subscriptionItems = [
+      { ...PRO_ITEM, tax_rates: [{ id: 'txr_vat_20' }, 'txr_city_1'] },
+      METERED_ITEM,
+    ]
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    // Both shapes Stripe returns: expanded objects and bare ids.
+    expect(update?.get('phases[0][items][0][tax_rates][0]')).toBe('txr_vat_20')
+    expect(update?.get('phases[0][items][0][tax_rates][1]')).toBe('txr_city_1')
+    // The item they belong to is still the one it was.
+    expect(update?.get('phases[0][items][0][price]')).toBe('price_pro_monthly')
+  })
+
+  it('restates the phase METADATA the mirror and Stripe both read', async () => {
+    schedulePhaseExtras = { metadata: { plan: 'pro', orgId: 'org-1' } }
+    expect((await downgrade()).status).toBe(200)
+    const update = capturedScheduleUpdateBody
+    expect(update?.get('phases[0][metadata][plan]')).toBe('pro')
+    expect(update?.get('phases[0][metadata][orgId]')).toBe('org-1')
+    // And the target phase still declares the plan it is moving TO, which is
+    // what the webhook mirror reads at the flip. Dropping phase 0's metadata
+    // never broke this one, which is exactly why it went unnoticed.
+    expect(update?.get('phases[1][metadata][plan]')).toBe('starter')
+  })
+
   it('NEGATIVE CONTROL: a phase with no such terms invents none', async () => {
     // The plain downgrade must not start sending empty discount or trial
     // params — Stripe would reject some and silently reinterpret others.
@@ -485,6 +520,11 @@ describe('a downgrade preserves the terms it did not change (AGL-2146)', () => {
     expect(update?.get('phases[0][coupon]')).toBeNull()
     expect(update?.get('phases[0][trial_end]')).toBeNull()
     expect(update?.get('phases[0][collection_method]')).toBeNull()
+    // An EMPTY `tax_rates` is not a no-op to Stripe — it CLEARS them. A
+    // restatement that always wrote the key would delete the rates it exists
+    // to preserve, so "no rates" must send no key at all.
+    expect(update?.get('phases[0][items][0][tax_rates][0]')).toBeNull()
+    expect(update?.get('phases[0][metadata][plan]')).toBeNull()
     // The move itself still happened.
     expect(update?.get('phases[1][items][0][price]')).toBe('price_starter_monthly')
   })
