@@ -76,9 +76,13 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest comparison matters; a delayed run must not pile up.
-  group: rules-drift
-  cancel-in-progress: true
+  # AGL-2378. "Only the newest comparison matters" holds for the daily
+  # schedule, not for a push — a cancelled push run leaves that commit
+  # unjudged, and the surviving run is comparing a different tree. Grouped by
+  # COMMIT on push and never cancelled; schedule and workflow_dispatch keep
+  # the ref-scoped group and supersede as before.
+  group: rules-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read

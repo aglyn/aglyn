@@ -46,8 +46,12 @@ on:
       - .github/workflows/retired-colour-census.yml
 
 concurrency:
-  group: retired-colour-census
-  cancel-in-progress: true
+  # AGL-2378. The census (schedule/dispatch) genuinely only wants its newest
+  # sample, so those keep the ref-scoped group and still supersede. A push
+  # here runs the detector SELF-TEST, and that is a per-commit verdict: a
+  # detector edit cancelled by the next push is a detector nothing checked.
+  group: retired-colour-census-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read

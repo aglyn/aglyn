@@ -81,9 +81,18 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest comparison matters; a delayed run must not pile up.
-  group: index-drift
-  cancel-in-progress: true
+  # AGL-2378. "Only the newest comparison matters" is true of the daily
+  # schedule and FALSE of a push: a cancelled push run leaves that commit with
+  # no verdict, and the newest run is comparing a different tree. A push is
+  # therefore grouped by its own COMMIT and never cancelled; schedule and
+  # workflow_dispatch keep the ref-scoped group and still supersede.
+  #
+  # Low volume here because of the path filter above, but the failure mode is
+  # the same one that discarded 47 of 82 tools-guards runs on 2026-08-19 — and
+  # two pushes touching the indexes inside one run's duration is exactly the
+  # case this file exists to judge.
+  group: index-drift-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
