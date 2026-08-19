@@ -1029,9 +1029,12 @@ describe('expandCollectionEntries search index (AGL-1516)', () => {
     nodes['list'].props.search = true
     nodes['list'].props.perPage = 20
     const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
-    expect(expanded['list'].props.searchTotal).toBe(
-      expanded['list'].props.searchIndex.length,
-    )
+    // Widened locally: `props` is an index signature, so `searchIndex` reads
+    // as `unknown` and `.length` does not typecheck on it. Every other
+    // assertion in this file reaches the array through a matcher, which
+    // accepts `unknown`; this one compares two numbers and cannot.
+    const searchIndex = expanded['list'].props.searchIndex as unknown[]
+    expect(expanded['list'].props.searchTotal).toBe(searchIndex.length)
   })
 
   it('counts the FILTERED set, not the whole collection', () => {
