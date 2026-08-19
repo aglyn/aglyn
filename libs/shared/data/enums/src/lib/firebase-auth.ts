@@ -34,6 +34,31 @@ import {
  * system administrator" line — the single worst thing to tell someone whose
  * actual problem is that they have another Google account in session.
  */
+/**
+ * Who a locked-out user is told to contact (AGL-2196).
+ *
+ * This string was `support@aglyn.com`, rendered on the sign-in screen of every
+ * deployment — including a self-hosted one, where the only person who can
+ * re-enable the account is the local operator and Aglyn's support desk has
+ * never heard of the user. An unauthenticated dead end pointed at the wrong
+ * company.
+ *
+ * Read straight from the environment rather than through
+ * `operatorIdentity()`, and that is not laziness: `@aglyn/aglyn` already
+ * imports this library, so importing it back would be a project cycle. The
+ * same reasoning is written down in `platform-brand.ts`, which re-reads this
+ * exact variable for the same reason.
+ *
+ * Unset, the sentence names no address at all rather than the wrong one —
+ * Aglyn's own deployment sets `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL`
+ * (`.env.example`), so its copy is unchanged. Dot notation is load-bearing:
+ * Next substitutes `process.env.NAME` textually and never the bracket form.
+ */
+const DISABLED_ACCOUNT_CONTACT: string =
+  (typeof process !== 'undefined' &&
+    process.env?.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL?.trim()) ||
+  'your administrator'
+
 export const AuthAppErrorCodes = {
   /** Google resolved SSO against the wrong signed-in account. */
   SSO_ACCOUNT_MISMATCH: 'auth/sso-account-mismatch',
@@ -189,7 +214,7 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   // this is the notice a locked-out person actually sees at sign-in. The
   // copy is the action, not the diagnosis — the reason lives with support.
   [AuthErrorCodes.USER_DISABLED]:
-    'This account is currently disabled. Contact support@aglyn.com to restore access.',
+    `This account is currently disabled. Contact ${DISABLED_ACCOUNT_CONTACT} to restore access.`,
   [AuthErrorCodes.USER_SIGNED_OUT]:
     'You have been signed out. Sign in again to continue.',
   [AuthErrorCodes.WEAK_PASSWORD]:

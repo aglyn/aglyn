@@ -23,6 +23,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { operatorIdentity } from '@aglyn/aglyn/app-utils/operator-identity'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 
 /**
  * The sender domain this deployment expects in production (AGL-709/721).
@@ -99,7 +100,8 @@ async function handler(request: Request): Promise<Response> {
     if (!config.hasFrom) {
       blockers.push(
         'USAGE_EMAIL_FROM is not set — without it every sender no-ops, ' +
-          'even with a valid API key. Set it to "Aglyn <noreply@aglyn.com>".',
+          `even with a valid API key. Set it to "${PLATFORM_BRAND_NAME} ` +
+          `<noreply@${EXPECTED_FROM_DOMAIN}>".`,
       )
     }
     if (config.fromDomain && config.fromDomain !== EXPECTED_FROM_DOMAIN) {

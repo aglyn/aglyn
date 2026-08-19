@@ -25,7 +25,12 @@
 // Wired into CI via the `test:plugin-loader` npm script.
 
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { csp, sanitizeAncestors, sanitizeNetwork } from './load.mjs'
+
+/** Repo root, so the subprocess below can import the loader by path. */
+const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url))
 
 let failures = 0
 function test(name, fn) {
@@ -116,6 +121,61 @@ test('treats a missing or malformed list as empty, never as permissive', () => {
   assert.deepEqual(sanitizeNetwork('https://evil.example'), [])
   assert.deepEqual(sanitizeAncestors(null), [])
   assert.match(csp(sanitizeNetwork(undefined), sanitizeAncestors(null)), /connect-src 'self';/)
+})
+
+/**
+ * Self-host retargeting (AGL-2196).
+ *
+ * `CONSOLE_ORIGIN` / `TENANT_APEX` are read at MODULE scope, so the only
+ * honest way to test the configured branch is a fresh process with the
+ * environment already set — mutating `process.env` after import proves
+ * nothing about a value that was frozen at import time.
+ */
+function cspInProcessWith(env) {
+  const script =
+    "import('./tools/plugin-loader/origin/api/load.mjs')" +
+    ".then((m) => { process.stdout.write(m.csp([], [])) })"
+  return execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  })
+}
+
+test('frame-ancestors follows the operator console and tenant apex', () => {
+  const policy = cspInProcessWith({
+    PLUGIN_LOADER_CONSOLE_URL: 'https://console.example.com',
+    PLUGIN_LOADER_TENANT_DOMAIN: 'sites.example.com',
+  })
+  assert.match(
+    policy,
+    /frame-ancestors https:\/\/console\.example\.com https:\/\/\*\.sites\.example\.com$/,
+  )
+  // The whole point: OUR hosts must be gone, not merely joined.
+  assert.doesNotMatch(policy, /aglyn/)
+})
+
+test('unset env keeps Aglyn own deployment byte-identical', () => {
+  const policy = cspInProcessWith({
+    PLUGIN_LOADER_CONSOLE_URL: '',
+    PLUGIN_LOADER_TENANT_DOMAIN: '',
+  })
+  assert.match(
+    policy,
+    /frame-ancestors https:\/\/app\.aglyn\.com https:\/\/\*\.aglyn\.app$/,
+  )
+})
+
+test('a malformed value falls back rather than widening the policy', () => {
+  const policy = cspInProcessWith({
+    PLUGIN_LOADER_CONSOLE_URL: 'not a url',
+    // A bare `*` or an empty label here would make `*.` match everything.
+    PLUGIN_LOADER_TENANT_DOMAIN: '*',
+  })
+  assert.match(
+    policy,
+    /frame-ancestors https:\/\/app\.aglyn\.com https:\/\/\*\.aglyn\.app$/,
+  )
 })
 
 if (failures) {

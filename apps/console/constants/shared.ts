@@ -102,7 +102,7 @@ export const LEGAL_REFERENCE_URLS = {
  * Upgrade button. Same posture as `LEGAL_URLS`: an absolute marketing-site URL
  * opened in a new tab, a full navigation rather than in-SPA routing.
  */
-export const ENTERPRISE_CONTACT_URL = 'https://aglyn.com/contact?plan=enterprise'
+export const ENTERPRISE_CONTACT_URL = `${LEGAL_ORIGIN}/contact?plan=enterprise`
 
 export const mainNavigation = [
   // {

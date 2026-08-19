@@ -21,9 +21,52 @@ const HOST_ID = /^[A-Za-z0-9_-]{1,64}$/
 const NETWORK_ORIGIN = /^https:\/\/[^\s/]+$/
 // Strict origin shape for CSP/HTML injection — scheme + hostname only.
 const ANCESTOR_ORIGIN = /^https:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/
+// Bare hostname, at least two labels — the shape `*.<apex>` needs.
+const ANCESTOR_HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
 
-const BASE_FRAME_ANCESTORS =
-  'frame-ancestors https://app.aglyn.com https://*.aglyn.app'
+/**
+ * Where this loader's control plane lives, and who may frame it (AGL-2196).
+ *
+ * Both were bare `app.aglyn.com` literals in a file with no `process.env`
+ * read anywhere, which made this the one Aglyn-operated service a self-hoster
+ * could not point away from. Two consequences, and the second is the sharp
+ * one:
+ *
+ *  1. `frame-ancestors` named only Aglyn's console and `*.aglyn.app`, so an
+ *     operator's own console could never frame its own plugin sandbox. Not a
+ *     degraded feature — a blank iframe, blocked by the browser, with the
+ *     reason only in the console log.
+ *  2. The two lookups below queried Aglyn's marketplace API with the
+ *     operator's own listing and host ids, on every sandbox load. That is
+ *     someone else's traffic arriving at our infrastructure carrying their
+ *     identifiers, and it returns 404s that silently strip every plugin's
+ *     declared network capability.
+ *
+ * `CONSOLE_ORIGIN` and `TENANT_APEX` are read at module scope from the
+ * loader's own deployment environment. Aglyn's deployment sets neither, so
+ * the defaults keep our behaviour byte-identical.
+ */
+const CONSOLE_ORIGIN = (() => {
+  const raw = String(process.env.PLUGIN_LOADER_CONSOLE_URL ?? '').trim()
+  if (!raw) return 'https://app.aglyn.com'
+  try {
+    return new URL(raw).origin
+  } catch {
+    // A malformed value must not silently retarget the control plane.
+    return 'https://app.aglyn.com'
+  }
+})()
+
+const TENANT_APEX = (() => {
+  const raw = String(process.env.PLUGIN_LOADER_TENANT_DOMAIN ?? '')
+    .trim()
+    .toLowerCase()
+  // Must look like a hostname: a bare `*.` wildcard, or an empty label, would
+  // widen `frame-ancestors` to everything.
+  return ANCESTOR_HOSTNAME.test(raw) ? raw : 'aglyn.app'
+})()
+
+const BASE_FRAME_ANCESTORS = `frame-ancestors ${CONSOLE_ORIGIN} https://*.${TENANT_APEX}`
 
 // includeFiles roots differ between builders — resolve the shipped
 // load.html wherever this bundle landed, lazily and cached.
@@ -122,7 +165,8 @@ export default async function handler(req, res) {
   if (LISTING_ID.test(listingId) && VERSION.test(version)) {
     try {
       const payload = await fetchJson(
-        'https://app.aglyn.com/api/marketplace/listing-versions?listingId=' +
+        CONSOLE_ORIGIN +
+          '/api/marketplace/listing-versions?listingId=' +
           encodeURIComponent(listingId),
       )
       const entry = (payload?.versions ?? []).find(
@@ -143,7 +187,8 @@ export default async function handler(req, res) {
   if (HOST_ID.test(hostId)) {
     try {
       const payload = await fetchJson(
-        'https://app.aglyn.com/api/plugin-host-origins/' +
+        CONSOLE_ORIGIN +
+          '/api/plugin-host-origins/' +
           encodeURIComponent(hostId),
       )
       ancestors = sanitizeAncestors(payload?.origins)
