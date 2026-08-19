@@ -79,6 +79,12 @@ export interface CampaignSendOptions {
   audience: string
   segmentId?: string
   listId?: string
+  /**
+   * Resolve the audience and return the count WITHOUT sending anything
+   * (AGL-2178). Returns before the first write, so it mints no campaign
+   * id and touches no counter.
+   */
+  dryRun?: boolean
   emails?: string[]
   campaignId?: string
   experimentId?: string
@@ -191,7 +197,16 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
  */
 export async function performCampaignSend(
   options: CampaignSendOptions,
-): Promise<{ campaignId: string; recipients: number; sent: number }> {
+): Promise<{
+  campaignId: string
+  recipients: number
+  sent: number
+  /** Dry run only (AGL-2178): recipients left after the suppression list. */
+  sendable?: number
+  /** Dry run only: how many of `recipients` have unsubscribed. */
+  suppressed?: number
+  dryRun?: boolean
+}> {
   const unsubscribeSecret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
   if (!isEmailConfigured() || !unsubscribeSecret) {
@@ -374,6 +389,36 @@ export async function performCampaignSend(
           'booking reminders, password resets — keeps sending.',
         403,
       )
+    }
+  }
+
+  /*
+   * Recipient PREVIEW (AGL-2178). The campaign composer mockup shows
+   * `Recipients 1,240` beside the audience picker, and the console had no
+   * count before a send at all — the number appeared afterwards, in a
+   * snackbar.
+   *
+   * It returns from HERE rather than from a counting function of its own,
+   * and that is the whole point: the figure has already been through
+   * audience resolution, normalisation, de-duplication, the
+   * `MAX_RECIPIENTS_PER_SEND` cap, the suppression list and the monthly
+   * quota. A second implementation would be a second set of rules to
+   * drift, and the one number a merchant checks before pressing Send is
+   * the worst possible place for an estimate that disagrees with what
+   * happens.
+   *
+   * Nothing has been written above this line — every step so far is a
+   * read — so an early return here leaves no campaign document, no
+   * counter and no id behind.
+   */
+  if (options.dryRun) {
+    return {
+      campaignId: '',
+      recipients: recipients.length,
+      sendable: sendable.length,
+      suppressed: recipients.length - sendable.length,
+      sent: 0,
+      dryRun: true,
     }
   }
 
@@ -643,6 +688,26 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         senderUid: decoded.uid,
       })
       return res.status(200).json({ ...result, test: true })
+    }
+
+    if (action === 'preview') {
+      // Read-only, and it needs the same admin/editor role as a send: the
+      // audience size of someone else's site is not public information.
+      const result = await performCampaignSend({
+        hostId,
+        subject: subject || 'preview',
+        body: body || 'preview',
+        audience,
+        segmentId: String(req.body?.segmentId ?? ''),
+        listId: String(req.body?.listId ?? ''),
+        emails: Array.isArray(req.body?.emails)
+          ? req.body.emails.map(String)
+          : undefined,
+        templateScreenId: templateScreenId || undefined,
+        senderUid: decoded.uid,
+        dryRun: true,
+      })
+      return res.status(200).json(result)
     }
 
     if (action === 'schedule') {

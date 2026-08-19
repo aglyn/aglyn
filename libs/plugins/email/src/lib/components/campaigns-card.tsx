@@ -30,7 +30,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { createEmailScreen } from '../utils/create-email-screen'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -230,6 +230,86 @@ export function HostCampaignsCard(props: { hostId: string }) {
     }
   }, [busy, user, hostId, subject, body, templateScreenId, enqueueSnackbar])
 
+  /*
+   * The audience select's value packs the kind and the id into one string
+   * (`list:abc`). Decomposed ONCE here so the preview and the send cannot
+   * disagree about what they are asking for — they had two copies of this
+   * split, which is how a preview counts a segment while the send resolves
+   * a list.
+   */
+  const audienceKind = audience.startsWith('segment:')
+    ? 'segment'
+    : audience.startsWith('list:')
+      ? 'list'
+      : audience
+  const segmentId = audience.startsWith('segment:')
+    ? audience.slice('segment:'.length)
+    : ''
+  const listId = audience.startsWith('list:')
+    ? audience.slice('list:'.length)
+    : ''
+
+  /**
+   * `Recipients 1,240` (AGL-2178) — the readout the campaign composer
+   * mockup puts beside the audience picker, and the number the console
+   * only ever produced AFTER a send, in a snackbar.
+   *
+   * It comes from a dry run of the real send path, so it has already
+   * been through audience resolution, de-duplication, the per-send cap,
+   * the suppression list and the monthly quota. Counting the audience
+   * here instead would be a second set of rules to drift from the one
+   * that decides what actually goes out — on the one number a merchant
+   * checks before pressing Send.
+   */
+  const [preview, setPreview] = useState<
+    | { sendable: number; suppressed: number }
+    | { error: string }
+    | null
+  >(null)
+  useEffect(() => {
+    let active = true
+    setPreview(null)
+    // Debounced: switching audience with the keyboard walks the whole
+    // list, and each stop would otherwise be a full audience resolution.
+    const timer = setTimeout(async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/campaigns/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            hostId,
+            action: 'preview',
+            audience: audienceKind,
+            ...(segmentId ? { segmentId } : {}),
+            ...(listId ? { listId } : {}),
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!active) return
+        if (!response.ok) {
+          // The refusals are useful, not noise: "The audience is empty"
+          // and the monthly-cap message are exactly what a merchant needs
+          // BEFORE writing the email rather than after.
+          return setPreview({ error: String(payload?.error ?? '') })
+        }
+        setPreview({
+          sendable: Number(payload?.sendable ?? 0),
+          suppressed: Number(payload?.suppressed ?? 0),
+        })
+      } catch {
+        if (active) setPreview(null)
+      }
+    }, 400)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [hostId, user, audienceKind, segmentId, listId])
+
   const handleSend = useCallback(async () => {
     if (!subject.trim() || (!templateScreenId && !body.trim()) || busy) return
     const sendAtMs = sendAt ? new Date(sendAt).getTime() : 0
@@ -274,17 +354,9 @@ export function HostCampaignsCard(props: { hostId: string }) {
           ...(scheduling ? { action: 'schedule', sendAtMs } : {}),
           subject: subject.trim(),
           body: body.trim(),
-          audience: audience.startsWith('segment:')
-            ? 'segment'
-            : audience.startsWith('list:')
-              ? 'list'
-              : audience,
-          ...(audience.startsWith('segment:')
-            ? { segmentId: audience.slice('segment:'.length) }
-            : {}),
-          ...(audience.startsWith('list:')
-            ? { listId: audience.slice('list:'.length) }
-            : {}),
+          audience: audienceKind,
+          ...(segmentId ? { segmentId } : {}),
+          ...(listId ? { listId } : {}),
           ...(experimentId ? { experimentId } : {}),
           ...(templateScreenId ? { templateScreenId } : {}),
         }),
@@ -403,6 +475,24 @@ export function HostCampaignsCard(props: { hostId: string }) {
               </MenuItem>
             ))}
           </TextField>
+        </Stack>
+        {/*
+          The readout the mockup puts beside the audience picker
+          (AGL-2178). It reports what the SEND resolved, so an empty
+          audience or a monthly cap is said here — before the email is
+          written — instead of after the Send button.
+         */}
+        <Typography variant="caption" color="text.secondary">
+          {preview === null
+            ? 'Counting recipients…'
+            : 'error' in preview
+              ? preview.error || 'Could not count this audience'
+              : `Recipients ${preview.sendable.toLocaleString()}` +
+                (preview.suppressed
+                  ? ` · ${preview.suppressed.toLocaleString()} unsubscribed`
+                  : '')}
+        </Typography>
+        <Stack direction="row" spacing={1}>
           {emailExperiments.length ? (
             // Email A/B (AGL-255): variant subject/body overrides apply
             // per recipient; a decided experiment sends the winner copy.
