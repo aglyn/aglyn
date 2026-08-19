@@ -26,16 +26,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   activityHref,
   activityPrimaryText,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface OrgActivityCardProps {
   orgId: string
@@ -82,17 +80,55 @@ export interface OrgActivityCardProps {
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, max = 20, header = 'Recent Activity', actorId, targetId } = props
   const { orgSlug } = useParams<{ orgSlug: string }>()
-  const firestore = useFirestore()
-  const { data: entries } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'orgs', orgId, 'activity'),
-        orderBy('createdAt', 'desc'),
-        limit(200),
-      ),
-    [firestore, orgId],
-    { idField: '$id' },
-  )
+  const { data: user } = useUser()
+  const [entries, setEntries] = useState<any[] | null>(null)
+  // The user object's IDENTITY changes on every render of the provider above,
+  // so depending on it re-runs the effect, which sets state, which renders,
+  // which re-runs the effect — a fetch loop that only shows up under load.
+  // The effect keys on the UID and reads the live object through a ref.
+  const userRef = useRef(user)
+  userRef.current = user
+  const uid = (user as any)?.uid ?? null
+  /*==========================================
+   * READ THROUGH THE ROUTE, not the client SDK (AGL-2444).
+   *
+   * This was a live `orgs/{orgId}/activity` listener, and the security rule
+   * behind it gated on `isOrgWideMember()` — the ROSTER question. The
+   * `org.auditLog` permission was consulted only by the team page deciding
+   * whether to mount this card, so revoking it hid the card and changed
+   * nothing about who could read the feed. `/api/orgs/activity` checks the
+   * permission with the Admin SDK and the rule now denies members outright,
+   * which is what turns that check into enforcement.
+   *
+   * The live listener is what is lost, and knowingly: an audit feed is read
+   * deliberately rather than watched, and a permission that only holds while
+   * nobody opens a console is not one. The window, the ordering and the
+   * client tie-break sort below are unchanged — they moved, they were not
+   * redesigned.
+   *=========================================*/
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const idToken = await (userRef.current as any)?.getIdToken?.()
+      if (!idToken) return
+      try {
+        const response = await fetch(
+          `/api/orgs/activity?orgId=${encodeURIComponent(orgId)}`,
+          { headers: { Authorization: `Bearer ${idToken}` } },
+        )
+        // A 403 is a real answer — this member's role does not carry
+        // `org.auditLog` — and it must read as an empty feed rather than as a
+        // feed still loading, or the card spins forever on a denial.
+        const payload = response.ok ? await response.json() : { entries: [] }
+        if (live) setEntries(payload?.entries ?? [])
+      } catch {
+        if (live) setEntries([])
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [orgId, uid])
   // Filters (wave v5): free-text over action/actor plus a type select
   // when the entries carry one.
   const [filter, setFilter] = useState('')

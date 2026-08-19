@@ -2433,6 +2433,29 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
   })
 
   /**
+   * NOBODY reads the org activity log from a client any more (AGL-2444).
+   *
+   * The rule was `isOrgWideMember()`, which is the ROSTER question and knows
+   * nothing about the `org.auditLog` permission — so revoking that permission
+   * in a custom role hid the console card and left the collection readable
+   * from any Firestore client. `/api/orgs/activity` checks the permission
+   * with the Admin SDK, and this denial is what makes that check the access
+   * control rather than a second opinion on one.
+   *
+   * The org-wide VIEWER is the case that matters: they pass every roster
+   * check the old rule made, so a rule that still granted them would leave
+   * the hole exactly where it was.
+   */
+  it('and NO org-wide member reads it directly either — the route is the door', async () => {
+    await assertFails(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'activity', 'a1')))
+    await assertFails(getDoc(doc(authed(OWNER), 'orgs', ORG, 'activity', 'a1')))
+    // The paired control: the same reader still gets the org data the rules
+    // are genuinely responsible for, so this is a targeted denial rather than
+    // an org that stopped being readable.
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'usage', '2026-07')))
+  })
+
+  /**
    * AGL-1143. `orgs/{orgId}/analytics/{day}` reached NO match block at all, so
    * it was denied by default — for every role, staff included, because a path
    * that matches nothing never gets as far as evaluating `isStaff()`.

@@ -2,15 +2,7 @@
   // Standalone config — does NOT extend the monorepo's tsconfig.base.json on purpose.
   // Docusaurus ships its own strict base with the right JSX/module settings for React 18.
   "extends": "@docusaurus/tsconfig",
-  // `eslint.config.mjs` and `jest.config.ts` are TOOLING, and both arrived
-  // with the lint/test targets AGL-2377 added. Left in, tsc's default
-  // `**/*` include pulls them into this program — and `eslint.config.mjs`
-  // imports the ROOT config, which drags the whole `tools/lint-rules` tree
-  // into a TypeScript 5.6.3 compile of a workspace written against 6.0.2.
-  // That is the AGL-2363 shape again, one edit away: a change in a file this
-  // app does not own would redden `docs:typecheck`. The specs stay IN — they
-  // are the app's own source and type-checking them is the point.
-  "exclude": [".docusaurus", "build", "eslint.config.mjs", "jest.config.ts"],
+  "exclude": [".docusaurus", "build"],
   // No `ignoreDeprecations`: this app resolves TypeScript 5.6.3 (pinned via
   // @docusaurus/tsconfig), while the root is on 6.0.2. 5.6.3 REJECTS the "6.0"
   // value an nx migration wrote here, so tsc failed parsing the CONFIG and

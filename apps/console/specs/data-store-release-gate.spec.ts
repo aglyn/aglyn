@@ -109,6 +109,24 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockGateCalls.push([flagKey, orgId])
     return mockFlagOn
   },
+  // The REAL role → permission resolution, not a boolean (AGL-2444). This
+  // route now checks `data.manage` on top of the writer-role gate, and a
+  // `jest.mock` factory is a CLOSED WORLD: omitting it fails as "not a
+  // function" inside the handler, which reads as a broken suite rather than
+  // as a missing gate. Resolved from the member document so the fixtures'
+  // roles keep deciding, exactly as the route decides in production.
+  memberHasOrgPermission: async (
+    _orgId: string,
+    subject: unknown,
+    permission: string,
+  ) =>
+    Boolean(
+      (
+        jest.requireActual('@aglyn/aglyn/app-utils/org-permissions') as {
+          resolveOrgPermissions: (member: unknown) => Record<string, boolean>
+        }
+      ).resolveOrgPermissions(subject)[permission],
+    ),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({

@@ -24,12 +24,19 @@ Control what each teammate can do with **roles** — named permission sets — p
 3. Save, then assign it to members from the roster's **Custom role** column.
 
 The permission catalog covers organization settings, the activity log, billing (view
-and manage separately), member management, site creation and deletion, data,
-marketing, marketplace publishing, and plugin installs.
+and manage separately), member management, site creation and deletion, organization
+data, marketplace publishing, and plugin installs.
 
-Permissions are enforced everywhere — across the console's APIs and every surface — so a
-role reliably limits what a member can see and do. Members without billing or settings
-permissions don't see those tabs at all.
+Permissions are enforced on the server — every one of them is checked by the API that
+performs the action, not merely used to hide a button — so a role reliably limits what
+a member can do, whichever route they reach it by. Members without billing or settings
+permissions don't see those tabs at all either.
+
+There is deliberately no permission for **marketing** surfaces (announcement bars,
+popups, campaigns). Those belong to a **site**, not to the organization, and access to
+them follows the member's role on that site — see
+[Site access](./invite-teammates.md). An organization-level toggle would suggest a
+control the model does not have.
 
 ## Effective permissions
 

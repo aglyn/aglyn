@@ -581,13 +581,25 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Org activity log: mirrors hosts/{hostId}/activity. Org-wide readers
-      // only (AGL-1026) — it names who did what across every site, which is
-      // both a roster leak and a map of work on sites the reader cannot see.
-      // A collaborator still gets their own sites' log at
-      // `hosts/{hostId}/activity`.
+      // Org activity log: mirrors hosts/{hostId}/activity. It names who did
+      // what across every site, which is both a roster leak and a map of work
+      // on sites the reader cannot see (AGL-1026). A collaborator still gets
+      // their own sites' log at `hosts/{hostId}/activity`.
+      //
+      // NO CUSTOMER READS IT FROM A CLIENT (AGL-2444). This was
+      // `isOrgWideMember()`, which is the ROSTER question and knows nothing
+      // about the granular permission catalog — so `org.auditLog` was a
+      // display gate on the team page and nothing else: a member whose custom
+      // role revoked it read the feed straight out of any Firestore client.
+      // `/api/orgs/activity` is now the only door, and it checks the
+      // permission with the Admin SDK, which bypasses these rules. Denying
+      // here is therefore what makes that check the access control rather
+      // than a second opinion.
+      //
+      // Staff keep the direct read: the staff console reads across orgs by
+      // design and is gated by the `staff` claim, not by a customer's role.
       match /activity/{entryId} {
-        allow read: if isStaff() || isOrgWideMember();
+        allow read: if isStaff();
         allow write: if false;
       }
 

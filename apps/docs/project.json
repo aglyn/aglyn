@@ -37,17 +37,6 @@
         "cwd": "apps/docs",
         "command": "npm run typecheck"
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
-    "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/docs"],
-      "options": {
-        "jestConfig": "apps/docs/jest.config.ts"
-      }
     }
   }
 }

@@ -119,7 +119,9 @@ or accepted — each with who did it and when.
 
 Visible to members whose role carries the **Activity & audit log** permission.
 Owners and admins have it by default; **viewers do not**, and neither does a
-custom role until you grant it.
+custom role until you grant it. Revoking it does not merely hide the card — the
+feed is served by an API that checks the permission, so a member without it
+cannot read the log by any route.
 
 Entries name the thing that changed and link straight to it, so "Saved the screen — Home"
 takes you to that screen. Entries recorded before this shipped show a plain description

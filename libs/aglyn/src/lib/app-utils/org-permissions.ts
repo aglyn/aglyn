@@ -35,7 +35,6 @@ export type OrgPermission =
   | 'hosts.create'
   | 'hosts.delete'
   | 'data.manage'
-  | 'marketing.manage'
   | 'marketplace.publish'
   | 'plugins.install'
 
@@ -60,7 +59,28 @@ export interface OrgPermissionDefinition {
   description: string
 }
 
-/** Every permission, in display order for role editors. */
+/**
+ * Every permission, in display order for role editors.
+ *
+ * ⚠️ **EVERY KEY HERE MUST BE ENFORCED SERVER-SIDE.** A permission a customer
+ * can tick that changes nothing is worse than its absence, because it implies
+ * a control that does not exist — an owner unticks "delete sites", hands the
+ * role out, and the member deletes sites while the console does not even dim
+ * the button. Three of the eleven were in exactly that state (AGL-2444).
+ *
+ * `marketing.manage` was removed rather than wired, and the reason is worth
+ * keeping: announcement bars, popups and campaigns live at
+ * `hosts/{hostId}/overlays|campaigns|experiments` and are written
+ * client-direct against the security rules, which gate on the HOST role.
+ * There is no org-level boundary for it to sit on, and the action it named is
+ * not org-scoped at all. Wiring it would have meant inventing one and
+ * producing a second permission that looks enforced and is not. If a granular
+ * marketing permission is wanted it belongs in the plugin-declared mechanism
+ * (AGL-435), scoped to a host — a product decision, not this repair.
+ *
+ * `apps/console/specs/org-permissions-are-enforced.spec.ts` fails the build if
+ * a key here gains no server-side consumer.
+ */
 export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
   {
     key: 'org.settings',
@@ -103,11 +123,6 @@ export const ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
     description: 'Create, edit, and delete organization datasets.',
   },
   {
-    key: 'marketing.manage',
-    label: 'Manage marketing',
-    description: 'Edit announcement bars, popups, and campaigns.',
-  },
-  {
     key: 'marketplace.publish',
     label: 'Publish to marketplace',
     description: 'Publish listings under the organization profile.',
@@ -146,7 +161,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   editor: {
     ...NO_PERMISSIONS,
     'data.manage': true,
-    'marketing.manage': true,
     'marketplace.publish': true,
     'plugins.install': true,
   },

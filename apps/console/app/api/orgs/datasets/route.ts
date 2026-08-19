@@ -36,6 +36,7 @@ import {
   isImpersonationSession,
   isServerReleaseFlagOnForOrg,
   lockdownRefusal,
+  memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
@@ -121,6 +122,31 @@ async function handler(request: Request): Promise<Response> {
     const member = membership?.member as any
     if (!member || !WRITER_ROLES.has(String(member.role))) {
       return Response.json({ error: 'Editing org data requires the editor role' }, { status: 403 })
+    }
+    /*==========================================
+     * AND the granular permission (AGL-2444).
+     *
+     * `data.manage` had ZERO consumers: an owner could build a custom role
+     * with "Manage data" unticked, assign it, and the member kept creating,
+     * editing and deleting datasets — because this gate read the raw role,
+     * exactly the defect AGL-2350 fixed one route over on `hosts.create`.
+     *
+     * Identical for the built-in roles — `data.manage` is on for owner,
+     * admin and editor, which is `WRITER_ROLES` — so nobody's access moves.
+     * What it adds is that a custom role or a per-member override is now
+     * honoured, which is the narrowing the docs sell.
+     *
+     * The role check is kept ALONGSIDE it rather than replaced. It mirrors
+     * the rules' `canWriteOrgData()`, and a route that disagreed with the
+     * rules would let one door open while the other stayed shut.
+     *=========================================*/
+    if (
+      decoded['staff'] !== true &&
+      !(await memberHasOrgPermission(orgId, member, 'data.manage'))
+    ) {
+      return Response.json({
+        error: 'Your organization role does not allow editing organization data',
+      }, { status: 403 })
     }
 
     // Release gate (AGL-1653). `<FeatureGate flag="release_data_store">` on
