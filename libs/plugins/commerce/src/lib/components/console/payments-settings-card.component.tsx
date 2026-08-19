@@ -208,8 +208,15 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
               {'Buyers pay on your own Stripe account; Aglyn collects a ' +
                 'platform fee per sale based on your plan:'}
             </Typography>
+            {/* The DIGITAL rate is not products-only (AGL-2315). A paid
+                booking is a service sale and resolves through the same
+                `'service'`/digital axis, so a bookings-only merchant pays this
+                exact number — and this card was the one place they could read
+                their own rate while naming only "products". Stated here rather
+                than adding a third figure: it is one rate, not two. */}
             <Typography variant="body2">
-              {`Physical products: ${physicalPct}% · Digital products: ${digitalPct}%`}
+              {`Physical products: ${physicalPct}% · Digital products, ` +
+                `services & bookings: ${digitalPct}%`}
               {physicalPct > 0 || digitalPct > 0 ? (
                 <Typography
                   component="span"

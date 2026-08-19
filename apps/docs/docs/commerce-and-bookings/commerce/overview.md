@@ -25,7 +25,7 @@ sequenceDiagram
 ```
 
 :::info Plan availability
-**Paid**. Starter sells up to 100 products (2% physical / 7% digital fee);
+**Paid**. Starter sells up to 100 products (2% physical / 5% digital fee);
 Pro and Business raise limits and remove fees.
 :::
 

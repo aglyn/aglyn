@@ -144,7 +144,9 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
     holds: (org) => checkEntitlement(org, 'whiteLabel'),
   },
   {
-    label: '0% platform fees on storefront sales',
+    // Bookings ride the digital axis too (AGL-2315), so the predicate below
+    // was already right — only the wording scoped it to the storefront.
+    label: '0% platform fees on sales and bookings',
     holds: (org) =>
       resolveTransactionFeePct(org, 'physical') === 0 &&
       resolveTransactionFeePct(org, 'digital') === 0,
@@ -693,14 +695,17 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   </Typography>
                   {/* Declining platform-fee ladder (AGL-892): charged at
                       checkout as the Stripe Connect application fee;
-                      memberships/gated content bill at the digital rate. */}
+                      memberships, gated content and paid BOOKINGS all bill at
+                      the digital rate (AGL-2315 — a booking is a service sale
+                      and resolves through the same `'service'`/digital axis,
+                      not a rate of its own). */}
                   <Typography variant="body2">
                     {entitlements.features.commerce
                       ? entitlements.transactionFeePhysicalPct > 0 ||
                         entitlements.transactionFeeDigitalPct > 0
                         ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
-                          `${entitlements.transactionFeeDigitalPct}% digital & ` +
-                          'membership fees'
+                          `${entitlements.transactionFeeDigitalPct}% digital, ` +
+                          'membership & booking fees'
                         : '0% platform fees'
                       : 'No storefront'}
                   </Typography>
