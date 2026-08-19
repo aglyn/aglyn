@@ -35,7 +35,13 @@
 // PLAN_PRICING in libs/aglyn/src/lib/app-utils/plan-entitlements.ts — keep
 // the two in sync when pricing changes.
 
-import { WEBHOOK_EVENTS } from './lib/stripe-webhook-health.mjs'
+import {
+  CONNECT_SCOPE_METADATA_KEY,
+  CONNECT_SCOPE_METADATA_VALUE,
+  CONNECT_WEBHOOK_EVENTS,
+  isConnectEndpoint,
+  WEBHOOK_EVENTS,
+} from './lib/stripe-webhook-health.mjs'
 
 const SECRET = process.env.STRIPE_SECRET_KEY
 if (!SECRET) {
@@ -299,6 +305,80 @@ if (webhookUrl) {
       env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
       console.log(`+ webhook endpoint ${endpoint.id} → ${webhookUrl}`)
     }
+  }
+  // The CONNECT destination (AGL-2122), same URL, separate event list.
+  //
+  // `account.updated` for a CONNECTED account is delivered only to a
+  // destination created with `connect: true`. The handler that reads it —
+  // `syncConnectAccountStatus`, AGL-1997's fix for merchants selling on a
+  // stale `stripeChargesEnabled` — has therefore never run in production:
+  // measured 2026-08-18, the live account had exactly one destination and no
+  // Connect one.
+  //
+  // Stamped with metadata because Stripe's endpoint object states NOTHING
+  // about `connect: true` when read back (verified against the live account;
+  // the returned keys are api_version, application, created, description,
+  // enabled_events, id, livemode, metadata, object, status, url). Without the
+  // stamp the audit cannot tell the two destinations apart, and an audit that
+  // inferred the type from the subscribed events would be concluding what it
+  // is trying to verify.
+  const connectExisting = (endpoints.data ?? []).find(
+    (endpoint) => endpoint.url === webhookUrl && isConnectEndpoint(endpoint),
+  )
+  if (connectExisting) {
+    const connectEnabled = connectExisting.enabled_events ?? []
+    const connectMissing = connectEnabled.includes('*')
+      ? []
+      : CONNECT_WEBHOOK_EVENTS.filter((event) => !connectEnabled.includes(event))
+    console.log(
+      `= connect destination ${connectExisting.id} already covers ${webhookUrl}`,
+    )
+    if (connectMissing.length === 0) {
+      console.log(
+        `  ✓ all ${CONNECT_WEBHOOK_EVENTS.length} connect event(s) subscribed`,
+      )
+    } else if (RECONCILE_EVENTS && !DRY_RUN) {
+      const union = [...connectEnabled, ...connectMissing]
+      await stripe(
+        `webhook_endpoints/${connectExisting.id}`,
+        Object.fromEntries(
+          union.map((event, index) => [`enabled_events[${index}]`, event]),
+        ),
+      )
+      console.log(`  + subscribed ${connectMissing.join(', ')}`)
+    } else {
+      console.log(`  ! NOT subscribed: ${connectMissing.join(', ')}`)
+    }
+  } else if (DRY_RUN) {
+    console.log(
+      `! connect destination for ${webhookUrl} MISSING (would be created) — ` +
+        'every connected merchant\'s readiness flag is stale until it exists',
+    )
+  } else {
+    // `connect=true` is settable ONLY at creation; there is no update that
+    // converts an account destination into a Connect one, which is why this
+    // creates rather than reconciling the existing one.
+    const connectEndpoint = await stripe(
+      'webhook_endpoints',
+      Object.fromEntries([
+        ['url', webhookUrl],
+        ['connect', 'true'],
+        ['description', 'Aglyn Connect (connected-account events)'],
+        [
+          `metadata[${CONNECT_SCOPE_METADATA_KEY}]`,
+          CONNECT_SCOPE_METADATA_VALUE,
+        ],
+        ...CONNECT_WEBHOOK_EVENTS.map((event, index) => [
+          `enabled_events[${index}]`,
+          event,
+        ]),
+      ]),
+    )
+    // A SECOND secret: Stripe signs Connect deliveries with the Connect
+    // destination's own key, so the route must be given both or every
+    // connected-account delivery 400s on signature — the AGL-1551 shape.
+    env['STRIPE_CONNECT_WEBHOOK_SECRET'] = connectEndpoint.secret
+    console.log(`+ connect destination ${connectEndpoint.id} → ${webhookUrl}`)
   }
 } else {
   console.log(

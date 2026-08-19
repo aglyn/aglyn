@@ -66,6 +66,65 @@ export const WEBHOOK_EVENTS = [
   'charge.dispute.closed',
 ]
 
+/**
+ * The events that only a **Connect** destination can ever deliver (AGL-2122).
+ *
+ * `account.updated` for a CONNECTED account — a storefront merchant's or a
+ * marketplace publisher's Stripe account — is delivered to a destination
+ * created with `connect: true`, and to nothing else. Putting it in
+ * `WEBHOOK_EVENTS` above would subscribe the PLATFORM's own account instead:
+ * `syncConnectAccountStatus` would find no `profiles`/`publisherProfiles`
+ * document bound to the platform account id, do nothing, and every check here
+ * would go green while the fail-open it exists to close stayed open. That is
+ * the worst available outcome — a false green over a known gap — so the two
+ * lists are separate and are asserted against separate destinations.
+ *
+ * The handler this feeds has existed since AGL-1997 and has never run in
+ * production: measured against the live account on 2026-08-18,
+ * `GET /v1/webhook_endpoints` returned exactly one destination, carrying
+ * exactly the ten `WEBHOOK_EVENTS` and no Connect destination at all.
+ *
+ * What it guards: `stripeChargesEnabled` is the cached flag every commerce
+ * money route gates on (checkout, cart checkout, draft orders, reservations,
+ * POS). Without this event nothing refreshes it but the merchant reopening the
+ * Connect route, so an account Stripe later restricts keeps selling on a stale
+ * `true` and the SHOPPER meets the failure at payment time.
+ */
+export const CONNECT_WEBHOOK_EVENTS = [
+  // Connect readiness (AGL-1997) — `libs/tenant/data/admin/src/lib/server/
+  // connect-account-status.ts`, via the commerce and marketplace handlers.
+  'account.updated',
+]
+
+/**
+ * How a Connect destination is TOLD APART from an account one.
+ *
+ * Measured, not assumed: `GET /v1/webhook_endpoints` on the live account
+ * (2026-08-18) returns objects whose only keys are `api_version`,
+ * `application`, `created`, `description`, `enabled_events`, `id`, `livemode`,
+ * `metadata`, `object`, `status`, `url`. **None of them states whether the
+ * endpoint was created with `connect: true`** — `application` is null on a
+ * plain destination and is about Connect *apps*, not about this.
+ *
+ * So the type cannot be read back from Stripe, and an audit that inferred it
+ * from the subscribed events would be circular: it would conclude "this is the
+ * Connect destination" from the very fact it is trying to verify. The
+ * destination is therefore STAMPED at creation, by `setup-stripe.mjs` and by
+ * hand in the dashboard, and the audit reads the stamp. An unstamped Connect
+ * destination reads as an account one and fails `endpoint.count` loudly, which
+ * is the right direction to fail in.
+ */
+export const CONNECT_SCOPE_METADATA_KEY = 'aglyn_scope'
+export const CONNECT_SCOPE_METADATA_VALUE = 'connect'
+
+/** Whether an endpoint object carries the Connect stamp above. */
+export function isConnectEndpoint(endpoint) {
+  return (
+    endpoint?.metadata?.[CONNECT_SCOPE_METADATA_KEY] ===
+    CONNECT_SCOPE_METADATA_VALUE
+  )
+}
+
 /** The production destination this repo deploys against. */
 export const PLATFORM_WEBHOOK_URL = 'https://app.aglyn.com/api/billing/webhook'
 
@@ -234,9 +293,16 @@ export function assessWebhookHealth({
   // and reported "no destination" — which would have made the audit unable to
   // ASK about the test endpoint at all, and the test endpoint turned out to be
   // missing three events (see `--mode test`).
-  const live = endpoints.filter(
+  const sameMode = endpoints.filter(
     (endpoint) => (endpoint?.livemode !== false) === expectLivemode,
   )
+  // Partitioned by the AGL-2122 stamp: the two destinations answer different
+  // questions and must be assessed against different event lists. Before this,
+  // `endpoint.count` demanded exactly ONE destination account-wide, so adding
+  // the Connect destination the commerce handler needs would have turned the
+  // audit red for doing the right thing.
+  const connectEndpoints = sameMode.filter(isConnectEndpoint)
+  const live = sameMode.filter((endpoint) => !isConnectEndpoint(endpoint))
   if (live.length !== 1) {
     add(
       'endpoint.count',
@@ -293,6 +359,56 @@ export function assessWebhookHealth({
         FAIL,
         `${missing.length} required event(s) not subscribed`,
         missing,
+      )
+    }
+  }
+
+  // ---- The Connect destination (AGL-2122) --------------------------------
+  //
+  // Its own check rather than another entry in `endpoint.events`, because the
+  // failure it reports is a DIFFERENT failure: the platform destination can be
+  // perfectly healthy while every connected merchant's readiness flag quietly
+  // rots. Reported as one destination missing, not ten events missing.
+  if (connectEndpoints.length !== 1) {
+    add(
+      'connect.endpoint',
+      FAIL,
+      connectEndpoints.length === 0
+        ? `No Connect destination (metadata ${CONNECT_SCOPE_METADATA_KEY}=${CONNECT_SCOPE_METADATA_VALUE}). ` +
+          '`account.updated` for a connected account is delivered to nothing, ' +
+          'so `stripeChargesEnabled` never refreshes and a restricted merchant ' +
+          'keeps selling until the shopper is declined.'
+        : `Expected exactly 1 Connect destination, found ${connectEndpoints.length}`,
+      connectEndpoints.map((entry) => ({ id: entry.id, url: entry.url })),
+    )
+    add('connect.events', FAIL, 'No Connect destination to assess')
+  } else {
+    const connect = connectEndpoints[0]
+    add('connect.endpoint', PASS, 'Connect destination present', {
+      id: connect.id,
+    })
+    const connectEnabled = new Set(connect.enabled_events ?? [])
+    const connectMissing = connectEnabled.has('*')
+      ? []
+      : CONNECT_WEBHOOK_EVENTS.filter((entry) => !connectEnabled.has(entry))
+    if (connect.status !== 'enabled') {
+      add(
+        'connect.events',
+        FAIL,
+        `Connect destination status is ${connect.status ?? 'unknown'}, expected enabled`,
+      )
+    } else if (connectMissing.length === 0) {
+      add(
+        'connect.events',
+        PASS,
+        `All ${CONNECT_WEBHOOK_EVENTS.length} Connect event(s) subscribed`,
+      )
+    } else {
+      add(
+        'connect.events',
+        FAIL,
+        `${connectMissing.length} Connect event(s) not subscribed`,
+        connectMissing,
       )
     }
   }

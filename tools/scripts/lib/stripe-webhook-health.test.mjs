@@ -31,6 +31,7 @@ import {
   PLATFORM_WEBHOOK_URL,
   RETRY_LAG_SECONDS,
   WEBHOOK_EVENTS,
+  CONNECT_WEBHOOK_EVENTS,
   assessWebhookHealth,
   resolveWindow,
 } from './stripe-webhook-health.mjs'
@@ -60,9 +61,25 @@ const processedAfter = (id, lagSeconds = 2) => ({
   receivedAt: AT + lagSeconds,
 })
 
+/**
+ * The Connect destination (AGL-2122), stamped the way `setup-stripe.mjs`
+ * stamps it. Stripe's endpoint object states nothing about `connect: true`
+ * (measured against the live account 2026-08-18 — see the module), so the
+ * stamp IS the discriminator and the fixture has to carry it.
+ */
+const connectEndpoint = (overrides = {}) => ({
+  id: 'we_connect_test',
+  livemode: true,
+  status: 'enabled',
+  url: PLATFORM_WEBHOOK_URL,
+  metadata: { aglyn_scope: 'connect' },
+  enabled_events: [...CONNECT_WEBHOOK_EVENTS],
+  ...overrides,
+})
+
 /** A fully healthy account: one delivery, delivered first try, handled. */
 const healthy = (overrides = {}) => ({
-  endpoints: [endpoint()],
+  endpoints: [endpoint(), connectEndpoint()],
   events: [event('evt_ok', 'invoice.paid')],
   failedEventIds: [],
   processedEvents: [processedAfter('evt_ok')],
@@ -86,6 +103,8 @@ test('the happy path is green, and every check actually ran', () => {
     'endpoint.status',
     'endpoint.url',
     'endpoint.events',
+    'connect.endpoint',
+    'connect.events',
     'delivery.evidence',
     'delivery.failures',
     'delivery.retries',
@@ -356,7 +375,9 @@ test('the per-type decomposition separates attempts, failures and processing gap
 
 test('a catch-all `*` subscription satisfies the required set', () => {
   const result = assessWebhookHealth(
-    healthy({ endpoints: [endpoint({ enabled_events: ['*'] })] }),
+    healthy({
+      endpoints: [endpoint({ enabled_events: ['*'] }), connectEndpoint()],
+    }),
   )
   assert.equal(levelOf(result, 'endpoint.events'), 'pass')
   assert.equal(result.ok, true)
@@ -376,6 +397,79 @@ test('the required event list carries the ten the platform destination needs', (
   ]) {
     assert.ok(WEBHOOK_EVENTS.includes(required), `${required} missing`)
   }
+})
+
+// ---------------------------------------------------------------------------
+// The Connect destination (AGL-2122).
+//
+// Every check below is given the input that makes it fail, because the whole
+// reason this gap survived is that no check could ever report it: the audit
+// demanded exactly ONE destination account-wide, so the state where the
+// Connect destination is missing was indistinguishable from the state where
+// everything is correct — and was in fact the LIVE state on 2026-08-18.
+
+test('no Connect destination → RED, and it says what stops working', () => {
+  const result = assessWebhookHealth(healthy({ endpoints: [endpoint()] }))
+  assert.equal(levelOf(result, 'connect.endpoint'), 'fail')
+  assert.equal(levelOf(result, 'connect.events'), 'fail')
+  assert.equal(result.ok, false)
+  const finding = result.findings.find((f) => f.check === 'connect.endpoint')
+  // Naming the consequence, not just the absence — this is the exact live
+  // state, and "1 destination, all events subscribed" read as healthy.
+  assert.match(finding.message, /stripeChargesEnabled/)
+})
+
+test('the platform destination alone still passes ITS own checks', () => {
+  // The two failures must stay separable: a missing Connect destination is
+  // not evidence that platform billing is broken, and reporting it as such
+  // would train the reader to ignore the red.
+  const result = assessWebhookHealth(healthy({ endpoints: [endpoint()] }))
+  assert.equal(levelOf(result, 'endpoint.count'), 'pass')
+  assert.equal(levelOf(result, 'endpoint.events'), 'pass')
+})
+
+test('an UNSTAMPED Connect destination reads as a second account one → RED', () => {
+  // The failure mode of the stamp itself. Adding the destination in the
+  // dashboard without the metadata key leaves the audit unable to see it, and
+  // it must fail loudly rather than be silently ignored.
+  const result = assessWebhookHealth(
+    healthy({
+      endpoints: [
+        endpoint(),
+        connectEndpoint({ metadata: {} }),
+      ],
+    }),
+  )
+  assert.equal(levelOf(result, 'endpoint.count'), 'fail')
+  assert.equal(levelOf(result, 'connect.endpoint'), 'fail')
+})
+
+test('a Connect destination missing account.updated → RED', () => {
+  const result = assessWebhookHealth(
+    healthy({
+      endpoints: [endpoint(), connectEndpoint({ enabled_events: [] })],
+    }),
+  )
+  assert.equal(levelOf(result, 'connect.endpoint'), 'pass')
+  assert.equal(levelOf(result, 'connect.events'), 'fail')
+  assert.equal(result.ok, false)
+})
+
+test('a DISABLED Connect destination → RED even with the event subscribed', () => {
+  const result = assessWebhookHealth(
+    healthy({
+      endpoints: [endpoint(), connectEndpoint({ status: 'disabled' })],
+    }),
+  )
+  assert.equal(levelOf(result, 'connect.events'), 'fail')
+})
+
+test('account.updated must NOT be in the platform list', () => {
+  // Putting it there is the plausible wrong fix: it subscribes the PLATFORM's
+  // own account, `syncConnectAccountStatus` matches no profile, and every
+  // check goes green over an unchanged fail-open.
+  assert.ok(!WEBHOOK_EVENTS.includes('account.updated'))
+  assert.ok(CONNECT_WEBHOOK_EVENTS.includes('account.updated'))
 })
 
 // ---------------------------------------------------------------------------
@@ -459,7 +553,10 @@ test('an unknown destination creation date still respects retention', () => {
 test('a test-mode key assesses the test-mode endpoint', () => {
   const result = assessWebhookHealth(
     healthy({
-      endpoints: [endpoint({ livemode: false })],
+      endpoints: [
+        endpoint({ livemode: false }),
+        connectEndpoint({ livemode: false }),
+      ],
       expectLivemode: false,
     }),
   )

@@ -178,7 +178,15 @@ async function handler(request: Request): Promise<Response> {
   // against STRIPE_WEBHOOK_SECRET_TEST when the live secret rejects (or is
   // unset). Secrets are never logged.
   const testSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST
-  if (!secret && !testSecret) {
+  // The CONNECT destination signs with its OWN secret (AGL-2122). Stripe
+  // delivers connected-account events (`account.updated` — the input to
+  // AGL-1997's Connect-readiness refresh) only to a destination created with
+  // `connect: true`, and that destination has a separate signing key. Without
+  // this arm, standing the destination up would 400 every one of its
+  // deliveries on signature — the exact AGL-1551 shape, behind a green
+  // "Active" badge, for the one event stream nothing else can supply.
+  const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
+  if (!secret && !testSecret && !connectSecret) {
     return Response.json({ error: 'Billing is not configured.' }, { status: 501 })
   }
 
@@ -190,6 +198,9 @@ async function handler(request: Request): Promise<Response> {
       : false) ||
     (testSecret
       ? verifyStripeSignature(payload, signatureHeader, testSecret)
+      : false) ||
+    (connectSecret
+      ? verifyStripeSignature(payload, signatureHeader, connectSecret)
       : false)
   if (!verified) {
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
