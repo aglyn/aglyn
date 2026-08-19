@@ -404,7 +404,18 @@ function adjustments(): Record<string, any>[] {
   )
 }
 
-const fetchMock = jest.fn(async (url: any) => {
+/**
+ * The return type is ANNOTATED, not inferred (AGL-2255).
+ *
+ * A function body that only throws infers `Promise<never>`, and `jest.fn`
+ * carries that onto `mockImplementationOnce` — where no value is assignable to
+ * `never`, so the two Stripe-expiry cases below could not supply a response at
+ * all. `{ ok: boolean }` is exactly what the code under test consumes:
+ * `cancel-order.ts` reads one property off the expiry response, `!expiry?.ok`.
+ * Naming it here is what lets those overrides be type-checked for real instead
+ * of cast past.
+ */
+const fetchMock = jest.fn(async (url: any): Promise<{ ok: boolean }> => {
   throw new Error(`Unexpected fetch to ${String(url)}`)
 })
 
@@ -1324,7 +1335,7 @@ describe('the payment link a cancelled order orphans (AGL-2244)', () => {
   it('expires the session so the link cannot be paid after the cancel', async () => {
     seedPendingLink()
     expectedStripeCalls = 1
-    fetchMock.mockImplementationOnce(async () => ({ ok: true }) as any)
+    fetchMock.mockImplementationOnce(async () => ({ ok: true }))
 
     const result = await post()
 
@@ -1340,7 +1351,7 @@ describe('the payment link a cancelled order orphans (AGL-2244)', () => {
   it('still cancels, and says so in the log, when Stripe refuses', async () => {
     seedPendingLink()
     expectedStripeCalls = 1
-    fetchMock.mockImplementationOnce(async () => ({ ok: false }) as any)
+    fetchMock.mockImplementationOnce(async () => ({ ok: false }))
 
     const result = await post()
 
