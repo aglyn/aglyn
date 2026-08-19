@@ -106,6 +106,17 @@ const DOCUMENTED_COPIES: Record<string, string> = {
     'that failed on it. Answering it with the live-subscription list would ' +
     'show a stale method on exactly the orgs in dunning, who are the ones ' +
     'looking. Pinned by stripe-payment-method.spec.ts.',
+  'apps/console/app/api/billing/report-usage/route.ts':
+    'A deliberate SUPERSET — it adds `unpaid`. The question is "will this ' +
+    'subscription bill AGAIN", so that a meter event is only reported when ' +
+    'something can still invoice it (AGL-1878): a 200 from ' +
+    '`billing/meter_events` is not a charge, and reporting against a ' +
+    'subscription that will never invoice again stamps `reportedAt` and ' +
+    'forfeits the org-month for good. `unpaid` is a schedule Stripe still ' +
+    'retries, so it belongs — forward exposure, exactly as in ' +
+    'money-back-book.mjs below. Answering with the "may this org subscribe" ' +
+    'triple would withhold from every org in dunning and 207 the cron daily ' +
+    'for the length of the dunning. Pinned by report-usage/route.spec.ts.',
   'libs/plugins/commerce/src/lib/server/gate.ts':
     "A TENANT's own site members' subscriptions to the TENANT's products " +
     '(`hosts/{hostId}/subscriptions`), not an Aglyn org subscription. ' +

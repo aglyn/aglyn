@@ -43,6 +43,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { CRON_CHUNK_SIZE, selectCronChunk } from '../../../../utils/cron-chunk'
 import {
+  isMeteredPriceId,
+  meteredPriceId,
+} from '../../../../utils/server/billing-addons'
+import {
   currentMonth,
   monthIsClosed,
   previousMonth,
@@ -311,6 +315,18 @@ async function orgSiteSizeBytes(
  * `reportedAt` is then not stamped, the org-month stays re-sweepable, and the
  * next day's cron reports it if the subscription recovered. Including one
  * wrongly is the direction that forfeits the money for good.
+ *
+ * AGL-1715-EXEMPT: a deliberate SUPERSET of the canonical live-subscription
+ * triple in `org-billing-doc.ts` — it adds `unpaid`. That triple answers "may
+ * this org open a SECOND subscription", and it leaves `unpaid` out because
+ * there is no live subscription left to protect and a new one is the buyer's
+ * only way forward. This set answers the opposite, forward-looking question:
+ * "will this subscription bill AGAIN". `unpaid` is a schedule Stripe still
+ * retries, so a meter item under it can still reach an invoice — and
+ * answering with the canonical triple would withhold from exactly the orgs in
+ * dunning, who are the ones carrying an outstanding balance, re-sweeping and
+ * 207-ing them every day for as long as the dunning lasts. Same question, and
+ * the same superset, as `tools/scripts/lib/money-back-book.mjs`.
  */
 const BILLABLE_SUBSCRIPTION_STATUSES = new Set([
   'active',
@@ -371,11 +387,21 @@ async function meterReportBlockedReason(
   customerId: string,
 ): Promise<'meter-not-configured' | 'no-metered-item' | 'check-failed' | null> {
   const meterId = process.env.STRIPE_METER_ID
-  const meteredPriceIds = new Set(
-    [
-      process.env.STRIPE_PRICE_METERED,
-      process.env.STRIPE_PRICE_METERED_YEARLY,
-    ].filter(Boolean),
+  // Resolved through the required-argument price helper and
+  // `isMeteredPriceId` rather than by reading `STRIPE_PRICE_METERED*` here.
+  // Those two env names are spelled in exactly one module on purpose
+  // (AGL-1340) — a second reading is a copy that can drift from the one the
+  // attach paths use, and `metered-coverage.spec.ts` fails the build over it
+  // (AGL-1352). The membership question below is also already answered,
+  // interval-agnostically, by `isMeteredPriceId`; re-implementing it inline
+  // was the duplication.
+  //
+  // Deliberately do NOT spell the helper's name with its opening paren
+  // anywhere in this file's prose: that spec matches METERS against raw
+  // source, comments included, so a comment that did would satisfy the guard
+  // on its own and keep it green after the real call below was gone.
+  const meteredPriceConfigured = Boolean(
+    meteredPriceId('month') || meteredPriceId('year'),
   )
   // NOTHING TO MATCH AGAINST is its own answer, and it must not be reported as
   // the customer's fault. With no `STRIPE_METER_ID` and neither metered price
@@ -383,7 +409,7 @@ async function meterReportBlockedReason(
   // unbillable one — so it withholds (recoverable, and 207 says so daily)
   // rather than reporting into the dark, and names the ENVIRONMENT as the
   // reason so the fix is one variable rather than a customer investigation.
-  if (!meterId && meteredPriceIds.size === 0) return 'meter-not-configured'
+  if (!meterId && !meteredPriceConfigured) return 'meter-not-configured'
   try {
     // `status=all` and filter here: Stripe's filter takes ONE status, and the
     // set above is four. A customer has a handful of subscriptions at most, so
@@ -412,7 +438,7 @@ async function meterReportBlockedReason(
           const price = item?.price
           if (!price) return false
           if (meterId && price?.recurring?.meter === meterId) return true
-          return meteredPriceIds.has(price?.id)
+          return isMeteredPriceId(price?.id)
         }),
     )
     return billable ? null : 'no-metered-item'

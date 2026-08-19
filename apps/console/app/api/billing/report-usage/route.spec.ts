@@ -197,6 +197,15 @@ jest.mock('@aglyn/aglyn/server', () => {
     checkContactQuota: entitlements.checkContactQuota,
     checkDataStorageQuota: entitlements.checkDataStorageQuota,
     resolveOrgEntitlements: entitlements.resolveOrgEntitlements,
+    // AGL-2405: the route resolves the metered price through
+    // `utils/server/billing-addons`, which derives PAID_PLANS from
+    // SELF_SERVE_PLANS at module load. REAL, because these ARE the pricing
+    // constants — a stub here would be a stubbed price.
+    SELF_SERVE_PLANS: entitlements.SELF_SERVE_PLANS,
+    PLAN_PRICING: entitlements.PLAN_PRICING,
+    EVENT_CALENDAR_ADDON_MONTHLY_USD:
+      entitlements.EVENT_CALENDAR_ADDON_MONTHLY_USD,
+    POS_REGISTER_ADDON_MONTHLY_USD: entitlements.POS_REGISTER_ADDON_MONTHLY_USD,
     // REAL: the query string is the mechanism, so parsing it must not be
     // simulated. See the header.
     pluginRequestFromWeb: adapter.pluginRequestFromWeb,
@@ -729,9 +738,35 @@ describe('AGL-1878: usage is withheld rather than forfeited when nothing can bil
     expect(rollup['meterReportBlocked']).toBe('meter-not-configured')
     expect(rollup['reportedAt']).toBeUndefined()
 
-    // Forced red by deleting the `!meterId && meteredPriceIds.size === 0`
-    // guard: the reason came back as `no-metered-item`, pointing an operator
-    // at the customer's subscription for a fault in their own env.
+    // Forced red by deleting the `!meterId && !meteredPriceConfigured` guard:
+    // the reason came back as `no-metered-item`, pointing an operator at the
+    // customer's subscription for a fault in their own env.
+  })
+
+  it('an ANNUAL-only deployment is configured, and is asked about (AGL-2405)', async () => {
+    // "Configured" means EITHER price id, not the monthly one. An all-annual
+    // deployment has `STRIPE_PRICE_METERED_YEARLY` and no monthly price, and
+    // calling that `meter-not-configured` would withhold from every customer
+    // on it and send an operator hunting a variable that is correctly unset.
+    //
+    // This is the case that keeps the two-interval probe honest: with only the
+    // monthly id consulted, everything else in this suite still passes,
+    // because the one env test above blanks BOTH ids.
+    seedOrg()
+    const response = await runSweep(
+      loadRoute({ STRIPE_PRICE_METERED: '' }),
+    )
+
+    // It ASKED — which is the half a monthly-only probe would skip.
+    expect(subscriptionReads).toHaveLength(1)
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['meterReportBlocked']).not.toBe('meter-not-configured')
+    // The fixture's item carries the MONTHLY price, so on an annual-only
+    // deployment it genuinely is not on this meter — the customer-level
+    // answer, reached by looking rather than by giving up.
+    expect(rollup['meterReportBlocked']).toBe('no-metered-item')
+    expect(rollup['reportedAt']).toBeUndefined()
+    expect(response.status).toBe(207)
   })
 
   it('POSITIVE CONTROL: a clean sweep is still 200 and records no block', async () => {
