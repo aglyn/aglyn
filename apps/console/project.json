@@ -54,7 +54,8 @@
       "inputs": [
         "default",
         "^default",
-        "{workspaceRoot}/.github/workflows/scheduled-crons.yml"
+        "{workspaceRoot}/.github/workflows/scheduled-crons.yml",
+        "{workspaceRoot}/tools/scripts/cron-deploy-state.sh"
       ],
       "options": {
         "jestConfig": "apps/console/jest.config.ts"

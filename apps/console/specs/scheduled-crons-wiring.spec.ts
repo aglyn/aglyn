@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -35,8 +36,9 @@ import { join } from 'node:path'
  * the three edits AGL-2134 made fails a different test below.
  */
 describe('scheduled-crons.yml wiring', () => {
+  const repoRoot = join(__dirname, '..', '..', '..')
   const workflow = readFileSync(
-    join(__dirname, '..', '..', '..', '.github', 'workflows', 'scheduled-crons.yml'),
+    join(repoRoot, '.github', 'workflows', 'scheduled-crons.yml'),
     'utf8',
   )
 
@@ -128,5 +130,78 @@ describe('scheduled-crons.yml wiring', () => {
     const everyNMinutes = /^\*\/(\d+)$/.exec(minuteField)
     expect(everyNMinutes).not.toBeNull()
     expect(Number(everyNMinutes?.[1])).toBeLessThanOrEqual(15)
+  })
+
+  /**
+   * AGL-2359 — the workflow lives on `main`, the routes live in production.
+   *
+   * `finish-domain-attachments` and its every-20-minutes schedule landed in
+   * one correct commit (AGL-1996/AGL-2010) and the cron then 404ed ~72 times
+   * a day against a production deploy 236 commits behind. The job now asks
+   * `tools/scripts/cron-deploy-state.sh` whether the route's source file is
+   * at `refs/heads/production` and skips the POST when it provably is not.
+   *
+   * That guard is only worth having while it can still fail, and it rests on
+   * a route → source-file mapping that nothing else re-derives. So the tests
+   * below hold both ends: the mapping must resolve every scheduled route to a
+   * file that really exists, and the POST step must keep failing on a 404.
+   */
+  describe('the deploy-ordering guard (AGL-2359)', () => {
+    const script = join(repoRoot, 'tools', 'scripts', 'cron-deploy-state.sh')
+    const implFor = (route: string) =>
+      execFileSync(script, ['--impl', route], { encoding: 'utf8' }).trim()
+
+    it('resolves every scheduled route to a file that exists', () => {
+      // A mapping that points at a moved or renamed file is not a harmless
+      // typo: that file is absent from BOTH refs, so the route would read as
+      // "not deployed yet" forever and the cron would stop silently. The
+      // script fails closed on exactly this (it answers `unknown`, and the
+      // job POSTs anyway) — this test is the other half, catching it at the
+      // commit that breaks it rather than at the next 404.
+      const missing = [...caseArms.values()]
+        .map((route) => [route, implFor(route)] as const)
+        .filter(([, impl]) => !impl || !existsSync(join(repoRoot, impl)))
+      expect(missing).toEqual([])
+    })
+
+    it('does not resolve a plugin-served route by App Router convention', () => {
+      // The specific trap. `/api/campaigns/process-scheduled` has no
+      // `apps/console/app/api/campaigns/...` file on any ref — the marketing
+      // plugin's server router serves it through `/api/[...pluginApi]` — and
+      // it returns 200 in production today. A guard that resolved it by
+      // convention would mark a working cron as undeployed and quietly stop
+      // calling it: AGL-2134's silent-inertness bug, reintroduced by the
+      // guard meant to prevent a different one.
+      const impl = implFor('/api/campaigns/process-scheduled')
+      expect(impl).not.toMatch(/^apps\/console\/app\//)
+      expect(existsSync(join(repoRoot, impl))).toBe(true)
+    })
+
+    it('strips a query string before resolving to a file', () => {
+      // `?month=current` (AGL-2219) is a route the workflow POSTs but not a
+      // path on disk.
+      expect(implFor('/api/billing/report-usage?month=current')).toBe(
+        implFor('/api/billing/report-usage'),
+      )
+    })
+
+    it('gates the POST on a PROVEN absence, and on nothing else', () => {
+      // The skip must be conditioned on the route being absent from the
+      // deployed tree — never on the response code. `unknown`, which is what
+      // the script answers for every question it cannot settle, must still
+      // POST.
+      const gate = /^\s*if:\s*(.+)$/m.exec(
+        workflow.slice(workflow.indexOf('POST the console cron route')),
+      )?.[1]
+      expect(gate).toBe("steps.deployed.outputs.state != 'not-deployed'")
+    })
+
+    it('still fails the job on a 404 from a route that IS deployed', () => {
+      // The regression that would make this whole change worthless: an arm
+      // that forgives 404 turns the workflow into a check that cannot fail,
+      // and a broken cron route is precisely what it exists to catch.
+      expect(workflow).toContain('Cron route returned $code (expected 200)')
+      expect(workflow).not.toMatch(/code" = "404"|code" == "404"|404\).*continue/)
+    })
   })
 })
