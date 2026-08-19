@@ -69,7 +69,12 @@ async function handler(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
     const month = previousMonth()
 
-    const [orgsSnapshot, hostsCount, purchasesSnapshot] = await Promise.all([
+    const [
+      orgsSnapshot,
+      hostsCount,
+      purchasesSnapshot,
+      reversalRecoverySnapshot,
+    ] = await Promise.all([
       firestore
         .collection('orgs')
         .orderBy('createdAt', 'desc')
@@ -86,6 +91,26 @@ async function handler(request: Request): Promise<Response> {
         .catch(() =>
           firestore.collection('marketplacePurchases').limit(50).get(),
         ),
+      // The refund-reversal recovery queue (AGL-2309). `billing-webhook.ts`
+      // stamps `reversalFailedAt` / `reversalFailedReason` /
+      // `reversalOwedCents` when Stripe DEFINITIVELY refuses to pull the
+      // publisher's share back after a buyer refund — a 400 like
+      // `balance_insufficient`, which neither throws nor redelivers. The
+      // publisher keeps their 80% and Aglyn eats the gross until a human
+      // chases it.
+      //
+      // That writer's own comment named this query as the queue and the query
+      // did not exist, so every one of those rows was money owed to Aglyn with
+      // a written record nobody could find. A single-field inequality — the
+      // automatic index covers it, so no composite and no index drift.
+      // Ordering is done in JS below for the same reason: Firestore would
+      // require the first `orderBy` to be `reversalFailedAt`, and sorting on
+      // the client keeps the query to one field.
+      firestore
+        .collection('marketplacePurchases')
+        .where('reversalFailedAt', '!=', null)
+        .limit(50)
+        .get(),
     ])
     // Org usage rollups live at orgs/{orgId}/usage/{month} (AGL-238) —
     // direct doc gets per fetched org, no collection-group index needed.
@@ -179,6 +204,38 @@ async function handler(request: Request): Promise<Response> {
       }
     })
 
+    /**
+     * The rows behind the recovery queue (AGL-2309).
+     *
+     * `owedCents` is projected from the document rather than recomputed here:
+     * the webhook knew what it failed to reverse (`toReverseCents` at the
+     * moment of the refusal) and the ledger cannot re-derive it afterwards,
+     * because `netPaidCents` deliberately subtracts only the reversal that
+     * ACTUALLY happened. Zero for a refusal whose amount was unknown — the
+     * `no-charge-on-cause` and `no-transfer` branches settle without one —
+     * and those rows still belong on the queue, because the reason is the
+     * actionable part.
+     */
+    const reversalRecovery = reversalRecoverySnapshot.docs
+      .map((doc) => {
+        const data = doc.data()
+        return {
+          $id: doc.id,
+          listingId: data['listingId'] ?? null,
+          sellerOrgId: data['sellerOrgId'] ?? null,
+          buyerUid: data['buyerUid'] ?? null,
+          owedCents: Number(data['reversalOwedCents'] ?? 0),
+          reason: data['reversalFailedReason'] ?? null,
+          cause: data['reversalFailedCause'] ?? null,
+          failedAt: data['reversalFailedAt']?.toMillis?.() ?? null,
+        }
+      })
+      .sort((a, b) => (b.failedAt ?? 0) - (a.failedAt ?? 0))
+    const reversalOwedCents = reversalRecovery.reduce(
+      (total, row) => total + row.owedCents,
+      0,
+    )
+
     // Anomaly flags (AGL-205): orgs whose page views or metered cost
     // jumped >=10x month-over-month — an abuse/runaway early warning.
     const anomalies = usagePairs
@@ -249,9 +306,13 @@ async function handler(request: Request): Promise<Response> {
         compedOrgs,
         planCounts,
         rollupMonth: month,
+        // Summed on the server so the headline and the rows cannot disagree
+        // about what is outstanding (AGL-2309).
+        reversalOwedCents,
       },
       newestOrgs,
       purchases,
+      reversalRecovery,
       topUsage,
     }, { status: 200 })
   } catch (error) {

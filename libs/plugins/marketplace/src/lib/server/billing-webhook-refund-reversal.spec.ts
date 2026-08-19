@@ -758,6 +758,39 @@ describe('a partial refund reverses the seller share proportionally (AGL-2299)',
     expect(purchase()['reversedTransferCents']).toBeUndefined()
   })
 
+  it('records the MEASURED owed amount, not a constant (AGL-2309)', async () => {
+    // AGL-2309 gave the queue a staff surface, and a surface is only worth
+    // building if the number on it is the real one. The test above pins a
+    // single refusal at 3695 — which any writer hardcoding 3695 would also
+    // pass, and a hardcoded owed amount is exactly the failure that makes a
+    // recovery queue worse than none: staff would chase the wrong sum.
+    //
+    // So: two refusals of DIFFERENT sizes on the same purchase, and the
+    // recorded amount has to move with the refund. A refusal does not settle
+    // (`reversedTransferCents` stays free, asserted above), so the second
+    // refund re-runs and overwrites.
+    //
+    // floor(5000 × 8000 ÷ 10825) = 3695; floor(8000 × 8000 ÷ 10825) = 5912.
+    const refuse = (amountRefunded: number) =>
+      stubStripe({
+        charge: { body: { ...chargeBody, amount_refunded: amountRefunded } },
+        transfer: { body: transferBody() },
+        reversalPost: {
+          ok: false,
+          status: 400,
+          body: { error: { code: 'balance_insufficient' } },
+        },
+      })
+
+    refuse(5000)
+    await marketplaceBillingWebhookHandler(partial(5000))
+    expect(purchase()['reversalOwedCents']).toBe(3695)
+
+    refuse(8000)
+    await marketplaceBillingWebhookHandler(partial(8000))
+    expect(purchase()['reversalOwedCents']).toBe(5912)
+  })
+
   it('THROWS on a transient Stripe failure so the redelivery is the retry', async () => {
     stubStripe({
       charge: { body: { ...chargeBody, amount_refunded: 5000 } },
