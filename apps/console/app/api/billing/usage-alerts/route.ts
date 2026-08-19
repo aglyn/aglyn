@@ -288,12 +288,126 @@ async function handler(request: Request): Promise<Response> {
      * the whole defect was that the truncation had no reader.
      */
     const truncatedOrgs: string[] = []
+    /**
+     * Thresholds RECORDED WITHOUT SENDING on an org's first evaluation
+     * (AGL-2420) — see `seedOnly` in the loop. Reported in its own field
+     * rather than inside `alerted`, because "we wrote a guard" and "we warned
+     * a customer" are different events and a count that mixed them would make
+     * the silent pass indistinguishable from a mass mailing.
+     */
+    const seeded: Array<Record<string, unknown>> = []
 
     for (const org of orgs.docs) {
       const orgData = org.data()
-      // Plan-less orgs resolve to Free with zero included quotas —
-      // alerting them would just be noise; the console banner covers it.
-      if (!orgData['plan']) continue
+
+      /*==========================================
+       * NO `if (!orgData['plan']) continue` (AGL-2420).
+       *
+       * That line stood here for a year and read as a taste judgement about
+       * noise. What it actually was: `createOrganization` writes no `plan`
+       * field — the field is STRIPE-WEBHOOK-OWNED and only ever stamped by a
+       * subscription — so the guard skipped every never-subscribed org, i.e.
+       * the entire organic free tier arriving on September 1. Quota alerts,
+       * budget alerts and the billing auto-lock were all dark for them.
+       * AGL-2413 rescued the one consequence that refused traffic (the
+       * bandwidth cap now also engages at `/api/analytics/collect`); the
+       * notifications stayed dark, which is this issue.
+       *
+       * `resolveEffectivePlan` has always answered `'free'` for an absent
+       * plan. It was simply never asked. So NOTHING IS STAMPED to fix this:
+       * writing a defaulted `plan: 'free'` onto orgs through a merge is the
+       * converter hazard that destroys the webhook's real value, and
+       * `org-override` deletes the field to MEAN "no plan".
+       *
+       * The comment's premise was also half wrong on its own terms. The
+       * zero-quota dimensions it worried about — `emailSendsPerMonth`,
+       * `workflowRunsPerMonth`, `actionRunsPerMonth`, `maxDatasetsPerOrg`,
+       * `dataStorageMbPerOrg`, all `0` on free — are already skipped by
+       * `!(check.limit > 0)` in the check loop below, so "80% of your 0
+       * included API requests" was never reachable. What free DOES have a
+       * real band for is sites, screens, media storage, contacts, form
+       * submissions and bandwidth, and those are exactly the warnings the
+       * product promises a free customer.
+       *
+       * COST: a plan-less org now costs what any other org costs — one host
+       * page plus counter reads and an analytics range per host. Free is
+       * `hostLimit: 1`, so that is the cheapest org shape the sweep has, and
+       * `USAGE_ALERT_ORG_CHUNK` already bounds the invocation.
+       *=========================================*/
+
+      // Hoisted to the top of the loop body (AGL-2420): the seed decision
+      // below has to read the guard map before any check runs.
+      const guards =
+        (orgData['usageAlerts'] as Record<
+          string,
+          { month?: string; threshold?: number }
+        >) ?? {}
+      const guardUpdates: Record<string, { month: string; threshold: number }> =
+        {}
+
+      /*==========================================
+       * THE FIRST SWEEP OF AN ORG IS SILENT — it BACKFILLS the guard map
+       * instead of firing (AGL-2420, Zach's call).
+       *
+       * Removing the `continue` above, on its own, mails every free org on
+       * the platform on the next run: their guard maps are empty, so every
+       * band they already sit above reads as a threshold crossed for the
+       * first time. That is not a warning, it is a retroactive alarm about a
+       * state the customer has been in for weeks — and it arrives from a cron
+       * that sweeps the whole platform at once.
+       *
+       * So on the first evaluation of an org the sweep has never looked at,
+       * every threshold it currently sits above is RECORDED AS ALREADY
+       * NOTIFIED and nothing is sent. A genuine crossing after that — the
+       * next band, or the same band next month — finds the guard, sees a
+       * higher threshold, and mails normally. The dedupe machinery is
+       * unchanged; it is only seeded with the truth instead of with silence.
+       *
+       * WHICH ORGS. Only the ones the `continue` was skipping: an org with no
+       * `plan`, no seed marker, and an untouched guard map. A plan-ful org
+       * has been swept every day for a year, so ITS empty guard map is a true
+       * statement that it has never crossed anything, and its first crossing
+       * is genuinely new — seeding on an absent guard map alone would swallow
+       * the real first alert for every paying customer on the platform.
+       *
+       * THE MARKER IS ITS OWN FIELD, and it is written even when nothing was
+       * recorded. A plan-less org that is inside every band produces no guard
+       * entries, so without a marker it would look "never evaluated" again
+       * tomorrow, and the first band it ever crossed would be seeded silently
+       * instead of announced — a permanent one-alert hole rather than a
+       * one-run one. `usageAlertsSeeded` is written by this route and read by
+       * this route; it defaults nothing and shadows no field anybody else
+       * owns.
+       *
+       * NOT SUPPRESSED BY THE SEED: the bandwidth cap and the billing
+       * auto-lock, further down. Neither is a notification — one is the
+       * enforcement AGL-2413 is about (and the beacon has usually engaged it
+       * already, so the month guard makes this a no-op), and the other is
+       * inert unless `AUTO_LOCK_BILLING_FROM` is set and cannot fire for an
+       * org that has never had a subscription to be delinquent on.
+       *=========================================*/
+      const seedOnly =
+        !orgData['plan'] &&
+        !orgData['usageAlertsSeeded'] &&
+        Object.keys(guards).length === 0
+
+      /**
+       * Record the dedupe guard for `key` at `threshold`, and answer whether
+       * the alert may actually be SENT.
+       *
+       * `false` means this is the org's first evaluation: the guard is
+       * written exactly as it would have been had the alert gone out, and no
+       * console notification and no email is produced. Every send site in
+       * this loop goes through here, so a fourth one added later cannot
+       * quietly opt out of the rule.
+       */
+      const recordAlert = (key: string, threshold: number): boolean => {
+        guardUpdates[key] = { month, threshold }
+        if (!seedOnly) return true
+        seeded.push({ orgId: org.id, quota: key, threshold })
+        return false
+      }
+
       const entitlements = resolveOrgEntitlements(orgData as any)
 
       // Monthly email (AGL-1438). TWO figures, because the plan's cap and
@@ -640,13 +754,10 @@ async function handler(request: Request): Promise<Response> {
           })
         : '/org/billing'
 
-      const guards =
-        (orgData['usageAlerts'] as Record<
-          string,
-          { month?: string; threshold?: number }
-        >) ?? {}
-      const guardUpdates: Record<string, { month: string; threshold: number }> =
-        {}
+      // `guards` and `guardUpdates` are declared at the TOP of this loop body
+      // (AGL-2420) — the seed decision needs the guard map before any check
+      // runs, and two declarations of the same map would be two answers.
+      //
       // Config-driven since AGL-1886, and shared with the specs that pin the
       // percentages. Read once per org rather than once per check so a single
       // sweep cannot use two different approach thresholds.
@@ -665,7 +776,11 @@ async function handler(request: Request): Promise<Response> {
         if (guard?.month === month && (guard.threshold ?? 0) >= threshold) {
           continue
         }
-        guardUpdates[check.key] = { month, threshold }
+        // Records the guard and answers whether to SEND (AGL-2420). On an
+        // org's first evaluation it records and returns false, so the org is
+        // deduped from here on without ever having been mailed about a state
+        // it was already in.
+        if (!recordAlert(check.key, threshold)) continue
         // THE ALERT IS THE PROTECTION (2026-08-18). Zach's condition on
         // billing storage was "so customers don't get a surprise bill" — and
         // once overage bills by default rather than being refused, this
@@ -796,8 +911,10 @@ async function handler(request: Request): Promise<Response> {
         guard: guards[BUDGET_GUARD_KEY],
         month,
       })
-      if (budgetThreshold) {
-        guardUpdates[BUDGET_GUARD_KEY] = { month, threshold: budgetThreshold }
+      // `recordAlert` writes the guard and answers whether to SEND (AGL-2420);
+      // short-circuit order matters, so it is only reached when a threshold is
+      // genuinely due.
+      if (budgetThreshold && recordAlert(BUDGET_GUARD_KEY, budgetThreshold)) {
         const amount = budget.amountUsd ?? 0
         const title =
           budgetThreshold >= 100
@@ -865,19 +982,20 @@ async function handler(request: Request): Promise<Response> {
       const assistCogsThreshold = assistCogsAlertThresholdUsd(
         process.env.ASSIST_ORG_MONTHLY_COGS_ALERT_USD,
       )
+      // Hoisted out of the block (AGL-2420) so `recordAlert` can take it in
+      // the condition. Pure arithmetic — it answers 0 for a zero or
+      // non-finite threshold and is never read unless the breach predicate
+      // agrees.
+      const multiple = assistMarginMultiple(spend.assistUsd, assistCogsThreshold)
       if (
         assistMarginBreach({
           assistUsd: spend.assistUsd,
           thresholdUsd: assistCogsThreshold,
           guard: guards['assistCogs'],
           month,
-        })
+        }) &&
+        recordAlert('assistCogs', multiple)
       ) {
-        const multiple = assistMarginMultiple(
-          spend.assistUsd,
-          assistCogsThreshold,
-        )
-        guardUpdates['assistCogs'] = { month, threshold: multiple }
         // ONE set of words for both channels, as with the quota alerts —
         // hoisted rather than written twice so a staff inbox and the staff
         // bell can never say different things about the same number.
@@ -943,9 +1061,9 @@ async function handler(request: Request): Promise<Response> {
           ceilingUsd: assistCeilingUsd,
           guard: guards['assistCeiling'],
           month,
-        })
+        }) &&
+        recordAlert('assistCeiling', 1)
       ) {
-        guardUpdates['assistCeiling'] = { month, threshold: 1 }
         const ceilingTitle =
           `Assist is REFUSING ${org.get('slug') ?? org.id} — the ` +
           `$${Number(assistCeilingUsd).toFixed(0)} monthly spend ceiling is crossed`
@@ -1033,7 +1151,40 @@ async function handler(request: Request): Promise<Response> {
       }
 
       if (Object.keys(guardUpdates).length) {
-        orgUpdates['usageAlerts'] = { ...guards, ...guardUpdates }
+        /*==========================================
+         * THE DELTA, not `{ ...guards, ...guardUpdates }` (AGL-2420).
+         *
+         * `set(..., { merge: true })` DEEP-merges a nested map: keys of
+         * `usageAlerts` that this write does not mention survive untouched.
+         * So writing the whole spread was never necessary to preserve them —
+         * and it was actively harmful, because this is a NON-TRANSACTIONAL
+         * read-modify-write and `guards` is a snapshot taken hundreds of
+         * lines and several awaits ago.
+         *
+         * The concrete loss: `api/billing/usage-budget` clears the budget
+         * guard with `update({ 'usageAlerts.budget': FieldValue.delete() })`
+         * precisely so a customer who changes their budget gets alerted
+         * against the NEW amount. A sweep holding a stale `guards` would
+         * write that deleted key straight back, and the customer's new budget
+         * would stay silent for the rest of the month. A concurrent sweep's
+         * entry for another key was at the same risk.
+         *
+         * Writing only what this org's own run decided cannot resurrect a
+         * deleted key and cannot overwrite a key it never looked at. It does
+         * not make the read-modify-write transactional — two sweeps deciding
+         * the SAME key concurrently still last-write-wins — but they compute
+         * the same threshold from the same month, so that collision is
+         * idempotent rather than lossy.
+         *=========================================*/
+        orgUpdates['usageAlerts'] = guardUpdates
+      }
+      if (seedOnly) {
+        // Written even when `guardUpdates` is empty (AGL-2420) — an org
+        // inside every band records no guards, and without this marker its
+        // first real crossing would be seeded silently instead of announced.
+        // Its own field: nothing else reads or writes it, and it defaults
+        // nothing that the Stripe webhook owns.
+        orgUpdates['usageAlertsSeeded'] = { month, at: Date.now() }
       }
       if (Object.keys(orgUpdates).length) {
         // NO CACHE FAN-OUT (deliberate). The tenant's org doc is cached for 60
@@ -1121,6 +1272,14 @@ async function handler(request: Request): Promise<Response> {
         // field rather than inside a count of notifications.
         capped: capped.length,
         cappedDetails: capped,
+        // Guards BACKFILLED without sending, on orgs this sweep had never
+        // evaluated (AGL-2420). Its own field for the same reason `capped`
+        // is: a silent first pass and a mass mailing must not be able to
+        // report themselves the same way. On the run after the free tier
+        // arrives this number is large and `alerted` is not — that is the
+        // fix working, and it is only visible because it is counted here.
+        seeded: seeded.length,
+        seededDetails: seeded,
         // The sweep's own extent (AGL-2220). `alerted: 0` is the answer we
         // want most days, and it used to be indistinguishable from a sweep
         // that stopped at 500 orgs and never said so. `swept` is how many
