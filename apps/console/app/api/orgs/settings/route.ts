@@ -18,6 +18,7 @@
 import { after } from 'next/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { stripeAddressDivergence } from '../../../../utils/stripe-address-divergence'
+import { isBrandingImageUrl, isBrandingLinkUrl } from '../../_lib/branding-url'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
@@ -456,16 +457,34 @@ async function handler(request: Request): Promise<Response> {
       const emailLogoUrl = clean(input.emailLogoUrl, 500)
       const primaryColor = clean(input.primaryColor, 32)
       let customConsoleDomain = clean(input.customConsoleDomain, 253).toLowerCase()
-      const urlFields: Array<[string, string]> = [
-        ['Support URL', supportUrl],
+      /**
+       * `supportUrl` is NAVIGATED, so it stays https-only: it is a link a
+       * customer clicks out to from an inbox or a branded page, where a
+       * site-relative path means nothing.
+       *
+       * The other three are RENDERED, and each one's "Browse" button writes a
+       * site-relative CDN path — so one shared https-only rule made Browse a
+       * dead button on the tier that costs the most (AGL-2247). Both
+       * predicates stay allowlists; see `branding-url.ts` for which shapes and
+       * why.
+       */
+      if (supportUrl && !isBrandingLinkUrl(supportUrl)) {
+        return Response.json(
+          { error: 'Support URL must be an https:// URL' },
+          { status: 400 },
+        )
+      }
+      const imageFields: Array<[string, string]> = [
         ['Logo URL', logoUrl],
         ['Favicon URL', faviconUrl],
         ['Email logo URL', emailLogoUrl],
       ]
-      for (const [label, url] of urlFields) {
-        if (url && !/^https:\/\//i.test(url)) {
+      for (const [label, url] of imageFields) {
+        if (url && !isBrandingImageUrl(url)) {
           return Response.json(
-            { error: `${label} must be an https:// URL` },
+            {
+              error: `${label} must be an https:// URL or an image from your media library`,
+            },
             { status: 400 },
           )
         }
