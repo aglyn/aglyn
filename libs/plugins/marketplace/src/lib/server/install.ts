@@ -19,6 +19,7 @@ import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { isPrivateListing } from '../model/marketplace'
 import { canActAsPublisher } from './publisher-profile'
 import { hasDivergedFromBase, recordInstallProvenance } from './provenance'
 import { requirePurchase } from './purchase-entitlement'
@@ -104,7 +105,22 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       .doc(listingId)
     const listingSnapshot = await listingRef.get()
     const listing = listingSnapshot.data() as any
-    if (!listing || listing.deletedAt) {
+    if (
+      !listing ||
+      listing.deletedAt ||
+      // Staff takedown blocks new installs on EVERY artifact type
+      // (AGL-2290). AGL-948 extended takedown past plugins in the browse
+      // predicate and in `resolveMarketplacePluginVersion`, but the gate that
+      // decides whether content is HANDED OVER was only ever added to
+      // `install-plugin.ts`. So a component, theme, template, layout, email
+      // template or dataset schema that staff had taken down stayed
+      // installable by anyone holding its listing id — which makes takedown a
+      // suggestion for six of the seven artifact types.
+      //
+      // No owner exemption, matching `install-plugin.ts`: a takedown is a
+      // moderation decision about the artifact, not about who is asking.
+      listing.hiddenAt
+    ) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
 
@@ -117,6 +133,16 @@ export const installHandler: PluginApiHandler = async (req, res) => {
       decoded.uid,
       listing.profileId,
     )
+    // Private listings install ONLY for the owning org (AGL-2290).
+    //
+    // `install-plugin.ts` has carried this since AGL-968; the other six never
+    // did, so a private component, theme, template, layout, email template or
+    // dataset schema was installable by anyone who knew its listing id. Browse
+    // hides them and the detail page 404s, but neither is a control — the
+    // route is.
+    if (isPrivateListing(listing) && !ownsListing) {
+      return res.status(404).json({ error: 'Unknown listing' })
+    }
     // A FULLY refunded purchase no longer entitles (AGL-1546). The gate this
     // route once inlined is now shared (AGL-1699): it was the only one of
     // eight paid-content paths that had learned the refund rule.

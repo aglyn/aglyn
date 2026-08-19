@@ -172,7 +172,22 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     const listingRef = firestore.collection('marketplaceListings').doc(listingId)
     const listingSnapshot = await listingRef.get()
     const listing = listingSnapshot.data() as any
-    if (!listing || listing.deletedAt) {
+    if (
+      !listing ||
+      listing.deletedAt ||
+      // Staff takedown blocks new installs on EVERY artifact type
+      // (AGL-2290). AGL-948 extended takedown past plugins in the browse
+      // predicate and in `resolveMarketplacePluginVersion`, but the gate that
+      // decides whether content is HANDED OVER was only ever added to
+      // `install-plugin.ts`. So a component, theme, template, layout, email
+      // template or dataset schema that staff had taken down stayed
+      // installable by anyone holding its listing id — which makes takedown a
+      // suggestion for six of the seven artifact types.
+      //
+      // No owner exemption, matching `install-plugin.ts`: a takedown is a
+      // moderation decision about the artifact, not about who is asking.
+      listing.hiddenAt
+    ) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
     // Taking a NEW version of a paid listing is buying content, and this
