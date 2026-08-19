@@ -199,24 +199,53 @@ function fakeOrgDoc(org: SeededOrg) {
 const fakeFirestore = {
   collection: (name: string) => {
     if (name === 'orgs') {
-      const api: any = {
-        limit: () => api,
-        get: async () => ({
-          docs: mockOrgs.map(fakeOrgDoc),
-          size: mockOrgs.length,
-        }),
-        // The EMAIL fan-out addresses an org by id (AGL-2052) rather than
-        // walking the sweep's snapshot, so the double has to serve both.
-        doc: (orgId: string) => {
-          const org = mockOrgs.find((entry) => entry.id === orgId)
-          return {
-            id: orgId,
-            collection: (sub: string) =>
-              org ? orgSubcollection(org, sub) : emptyCollection(),
-          }
-        },
+      /**
+       * ORDER, LIMIT and START-AFTER are all modelled (AGL-2220).
+       *
+       * The sweep is chunked now, and `limit: () => api` — a stub that
+       * accepts the call and ignores it — would hand back every seeded org on
+       * every page. The cursor could then be wrong in any direction and this
+       * suite would never notice: a page that skipped orgs, a cursor that
+       * never advanced, an infinite loop. The whole point of the change is
+       * that the sweep is bounded and resumable, so the double has to be able
+       * to express a boundary.
+       */
+      const build = (
+        limit: number | null,
+        startAfter: string | null,
+      ): any => {
+        const api: any = {
+          orderBy: () => api,
+          limit: (size: number) => build(size, startAfter),
+          startAfter: (ref: any) =>
+            build(limit, typeof ref === 'string' ? ref : ref?.id),
+          get: async () => {
+            const ordered = [...mockOrgs].sort((a, b) =>
+              a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+            )
+            // Strictly greater than: the cursor names an org already
+            // finished, so including it would redo one org per resume.
+            const remaining = startAfter
+              ? ordered.filter((org) => org.id > startAfter)
+              : ordered
+            const page =
+              limit == null ? remaining : remaining.slice(0, limit)
+            return { docs: page.map(fakeOrgDoc), size: page.length }
+          },
+          // The EMAIL fan-out addresses an org by id (AGL-2052) rather than
+          // walking the sweep's snapshot, so the double has to serve both.
+          doc: (orgId: string) => {
+            const org = mockOrgs.find((entry) => entry.id === orgId)
+            return {
+              id: orgId,
+              collection: (sub: string) =>
+                org ? orgSubcollection(org, sub) : emptyCollection(),
+            }
+          },
+        }
+        return api
       }
-      return api
+      return build(null, null)
     }
     if (name === 'hosts') {
       const api: any = {
@@ -267,10 +296,17 @@ jest.mock('@aglyn/aglyn/server', () => ({
   Route: { MANAGE_BILLING: 'MANAGE_BILLING' },
   ORG_BILLING_SUBCOLLECTION: 'billing',
   ORG_BILLING_DOC_ID: 'billing',
+  // The BODY IS REAL (AGL-2220). It used to be a hardcoded `{}`, which was
+  // harmless while the route ignored it and became a lie the moment the sweep
+  // grew a `cursor` and a `limit`: every pagination assertion would have run
+  // against the first page forever, and passed.
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
-    body: {},
+    body: await request
+      .clone()
+      .json()
+      .catch(() => ({})),
     headers: {
       'x-cron-secret': request.headers.get('x-cron-secret') ?? undefined,
     },
@@ -296,18 +332,28 @@ const LAST_MONTH = new Date(
   .toISOString()
   .slice(0, 7)
 
-async function run() {
+async function run(body?: Record<string, unknown>) {
   mockNotifications = []
   mockStaffNotifications = []
   mockEmails = []
   mockGuardWrites = []
+  return runChunk(body)
+}
+
+/** One invocation, WITHOUT clearing what earlier chunks recorded. */
+async function runChunk(body?: Record<string, unknown>) {
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
-      headers: { 'x-cron-secret': CRON_SECRET },
+      headers: {
+        'x-cron-secret': CRON_SECRET,
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
     }),
   )
   expect(response.status).toBe(200)
+  return response.json() as Promise<Record<string, any>>
 }
 
 const budgetAlerts = () =>
@@ -549,6 +595,81 @@ describe('delivery is console AND email (AGL-2052)', () => {
       expect(mail?.context).toBe('usage-alert')
       expect(mail?.to).toEqual(['owner@acme.test'])
       expect(mail?.text).toContain(notification.body)
+    }
+  })
+})
+
+describe('the sweep is bounded, resumable and honest about it (AGL-2220)', () => {
+  /** Five orgs, each over its own $50 budget, ids ordered so pages are legible. */
+  function fiveOverBudgetOrgs() {
+    return ['org-a', 'org-b', 'org-c', 'org-d', 'org-e'].map((id) =>
+      seededOrg({
+        id,
+        monthRollup: { month: MONTH, billedCents: 5_000 },
+        usageBudget: { amountUsd: 50 },
+      }),
+    )
+  }
+
+  it('reports how far it got, and does NOT claim to be done', async () => {
+    // THE DEFECT. The old sweep took `limit(500)` with no cursor and returned
+    // `alerted: N` whether it had covered the platform or stopped at 500 —
+    // and `alerted: 0` is the answer we want most days, so a truncated sweep
+    // was indistinguishable from a quiet one. Now it says which.
+    mockOrgs = fiveOverBudgetOrgs()
+    const first = await run({ limit: 2 })
+    expect(first['swept']).toBe(2)
+    expect(first['done']).toBe(false)
+    expect(first['nextCursor']).toBe('org-b')
+    expect(budgetAlerts()).toHaveLength(2)
+  })
+
+  it('the caller\u2019s loop reaches EVERY org, exactly once', async () => {
+    // The property the ceiling removed: an org past the page boundary got no
+    // quota alert, no budget alert, no margin alert, no bandwidth cap and no
+    // auto-lock. Driven the way `scheduled-crons.yml` drives it — re-POST
+    // with the cursor until `done`.
+    mockOrgs = fiveOverBudgetOrgs()
+    await run({ limit: 2 })
+    let payload = { done: false, nextCursor: 'org-b' } as Record<string, any>
+    let pages = 1
+    while (!payload['done']) {
+      payload = await runChunk({ limit: 2, cursor: payload['nextCursor'] })
+      pages += 1
+      expect(pages).toBeLessThanOrEqual(10)
+    }
+    expect(payload['done']).toBe(true)
+    expect(payload['nextCursor']).toBeNull()
+
+    const alerted = budgetAlerts().map((entry) => entry.orgId).sort()
+    expect(alerted).toEqual(['org-a', 'org-b', 'org-c', 'org-d', 'org-e'])
+    // Exactly once each: a cursor that included the org it names would redo
+    // one org per resume, and the dedupe guard is written at the END of an
+    // org's pass, so a double visit inside one sweep would double-mail.
+    expect(new Set(alerted).size).toBe(alerted.length)
+  })
+
+  it('finishes in ONE page when the platform fits', async () => {
+    // The ordinary case, and the one that must not have grown a second
+    // invocation: a small platform is still one call.
+    mockOrgs = fiveOverBudgetOrgs()
+    const payload = await run()
+    expect(payload['swept']).toBe(5)
+    expect(payload['done']).toBe(true)
+    expect(payload['nextCursor']).toBeNull()
+    expect(budgetAlerts()).toHaveLength(5)
+  })
+
+  it('ignores a cursor that is not an org id, rather than throwing', async () => {
+    // `.doc('')` throws SYNCHRONOUSLY, at construction, outside any `.catch()`
+    // on the promise, and a slash builds a ref to a deeper path instead of
+    // refusing. Either would take down the whole sweep — including the
+    // billing auto-lock it hosts — on a malformed resume.
+    mockOrgs = fiveOverBudgetOrgs()
+    for (const bad of ['', 'orgs/org-a', 42, null]) {
+      const payload = await run({ cursor: bad })
+      expect(payload['swept']).toBe(5)
+      expect(payload['done']).toBe(true)
     }
   })
 })

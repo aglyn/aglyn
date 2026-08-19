@@ -67,6 +67,22 @@ import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
 // the billing auto-lock sweep; gating the locker on the lock is circular.
 
 /**
+ * Orgs per invocation (AGL-2220).
+ *
+ * Deliberately well under the 500 this route used to attempt in one shot: an
+ * org costs one host query plus six counter reads and an analytics range per
+ * host, and the sweep has `maxDuration = 60`. A chunk that times out never
+ * advances its cursor, so the safe size is the one that finishes, not the one
+ * that finishes fastest. 100 is a fifth of the old attempt per invocation and
+ * — against the workflow's 50-page loop guard — ten times the platform reach.
+ *
+ * `report-usage` uses 10 (`CRON_CHUNK_SIZE`) because it prices every meter per
+ * org; this route only reads counters, so it is not the same unit of work and
+ * does not share the constant.
+ */
+export const USAGE_ALERT_ORG_CHUNK = 100
+
+/**
  * Usage-threshold notifications (AGL-276, wave v5): the in-console
  * quota banner only helps people who are looking — this cron pushes a
  * `billing.usage` notification to org admins when a quota crosses the
@@ -87,7 +103,7 @@ import { consoleOrigin, emailOrgAdmins } from '../../_lib/usage-alert-email'
  * check itself.
  */
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -109,7 +125,61 @@ async function handler(request: Request): Promise<Response> {
     // against another — the same discipline `approachPct` below is read once
     // for.
     const month = bandwidthCapMonthKey()
-    const orgs = await firestore.collection('orgs').limit(500).get()
+
+    /*==========================================
+     * A RESUMABLE SWEEP (AGL-2220).
+     *
+     * This was `collection('orgs').limit(500).get()` — no order, no cursor,
+     * no truncation flag. Every org past the first 500 got **no quota alert,
+     * no budget alert, no Assist margin alert, no free-plan bandwidth cap and
+     * no billing auto-lock**, and the response reported `alerted: N` exactly
+     * as if the platform had been swept. A ceiling is tolerable; a SILENT one
+     * on the platform's only pre-invoice warning is not, and public signups
+     * can reach 500 orgs.
+     *
+     * `report-usage` was chunked for this reason (AGL-1141) and the workflow
+     * already loops on `done:false` + `nextCursor`, so this is the same
+     * protocol rather than a second one.
+     *
+     * ORDERED BY DOCUMENT ID, which is what makes "everything after the
+     * cursor" mean the same thing across invocations even as orgs are created
+     * and deleted mid-sweep — Firestore's default iteration order is not a
+     * promise (the same argument `selectCronChunk` makes for sorting ids).
+     *
+     * `limit + 1` rather than a count query: one extra document answers "is
+     * there more" exactly, for one read, and a count would be a second query
+     * whose answer could disagree with the page it describes.
+     *=========================================*/
+    const requestedLimit = Number((body as any)?.limit)
+    const pageSize =
+      Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? Math.min(Math.floor(requestedLimit), USAGE_ALERT_ORG_CHUNK)
+        : USAGE_ALERT_ORG_CHUNK
+    const rawCursor = (body as any)?.cursor
+    // `.doc('')` throws SYNCHRONOUSLY, at construction, outside any `.catch()`
+    // on the promise — and a slash would build a ref to a deeper path rather
+    // than refusing. Neither may reach the collection, so the cursor is
+    // validated as an org ID before it becomes one.
+    const cursor =
+      typeof rawCursor === 'string' &&
+      rawCursor.length > 0 &&
+      !rawCursor.includes('/')
+        ? rawCursor
+        : null
+    let orgQuery = firestore
+      .collection('orgs')
+      .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
+      .limit(pageSize + 1)
+    if (cursor) {
+      // A DocumentReference, not the bare id string: with `__name__` ordering
+      // the cursor value is a document PATH, and handing the SDK a reference
+      // removes any question about what it is resolved against.
+      orgQuery = orgQuery.startAfter(firestore.collection('orgs').doc(cursor))
+    }
+    const page = await orgQuery.get()
+    const hasMore = page.docs.length > pageSize
+    const orgDocs = hasMore ? page.docs.slice(0, pageSize) : page.docs
+    const orgs = { docs: orgDocs }
     const alerted: Array<Record<string, unknown>> = []
     /** Orgs whose free-plan bandwidth cap engaged on THIS run (AGL-2155). */
     const capped: Array<Record<string, unknown>> = []
@@ -805,6 +875,14 @@ async function handler(request: Request): Promise<Response> {
         // field rather than inside a count of notifications.
         capped: capped.length,
         cappedDetails: capped,
+        // The sweep's own extent (AGL-2220). `alerted: 0` is the answer we
+        // want most days, and it used to be indistinguishable from a sweep
+        // that stopped at 500 orgs and never said so. `swept` is how many
+        // this invocation actually looked at, and `done` is the only thing
+        // that means the platform was covered.
+        swept: orgDocs.length,
+        nextCursor: hasMore ? (orgDocs[orgDocs.length - 1]?.id ?? null) : null,
+        done: !hasMore,
       },
       { status: 200 },
     )
