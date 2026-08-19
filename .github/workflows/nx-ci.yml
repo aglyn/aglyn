@@ -45,19 +45,33 @@ jobs:
     # once and made the workflow read as "constantly failing" when many of
     # those runs simply never got to answer.
     #
-    # 30 is 3x the slowest run that has ever COMPLETED this pipeline (9.9m, on
-    # 947100c2c, immediately after the hang was fixed; the all-time fastest
-    # green is 1.7m and the slowest green 8.6m). It is the same headroom
-    # multiple emulator-guards.yml allows its heavy job, and the same ceiling —
-    # 30 is already the largest timeout in this repo, which is right for what
-    # is by far its largest job.
+    # 60, and the first number here was WRONG — recorded so nobody re-derives
+    # it from the same bad sample. It was set to 30 on the reasoning that 9.9m
+    # (947100c2c, the first run to complete after the hang fix) was the slowest
+    # completing run. That sample was one narrowly-affected commit. `nx affected`
+    # scope dominates the runtime, and the real spread measured over the
+    # following hour was 7.8m to 32.8m — `0585f3df1` and `96fe2d2a` both
+    # completed at 32.8m, and `d0512575d` ran past 32.7m. The 30m bound then did
+    # exactly what a too-tight bound does: it cancelled run 32266221225 at
+    # 15:18:30, thirty minutes to the second after its job started, on a run
+    # whose siblings finished honestly at 32.8m.
+    #
+    # That is worse than no bound at all. An unbounded stuck run is one obvious
+    # red; a bound below the real distribution turns every honest slow run into
+    # a cancellation, which is indistinguishable from the AGL-2378 eviction bug
+    # this file was just fixed for and reads as "NX CI is constantly failing".
+    #
+    # 60 is ~1.8x the slowest observed completion (32.8m), still 6x under
+    # GitHub's 6-hour default, and still bounds a genuine hang — the AGL-2374
+    # hang band ran 22-76m with a 54.4m median.
     #
     # The hang is fixed, so this is a backstop against the NEXT one rather than
     # a live fire. If a legitimately wide commit — one touching tsconfig.base
     # or the root package.json, where `nx affected` approaches all 40 projects
-    # — ever trips this, RAISE the number. Do not remove it: unbounded is how
-    # one stuck spec starves the branch for six hours.
-    timeout-minutes: 30
+    # — ever trips this, RAISE the number; measure the spread first rather than
+    # trusting a single fast run, which is the mistake above. Do not remove it:
+    # unbounded is how one stuck spec starves the branch for six hours.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v5
