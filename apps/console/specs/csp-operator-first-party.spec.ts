@@ -161,3 +161,90 @@ describe('CSP first-party set follows the operator (AGL-2198)', () => {
     )
   })
 })
+
+/**
+ * A self-host container does not tell browsers that Aglyn may frame it
+ * (AGL-2446).
+ *
+ * AGL-2198 merged the operator's hosts in and kept ours, reasoning that ours
+ * are harmless on their deployment "because nothing there resolves to it".
+ * True of `img-src`, whose entries name hosts a page might load FROM. Not true
+ * of `frame-ancestors`, whose entries name hosts allowed to FRAME the page —
+ * and Aglyn's 26 origins are live servers we run. Measured against a real
+ * container: every published page answered with all 26 of ours, plus the
+ * operator's, and no configuration removed them.
+ *
+ * The gate is the deployment shape, not the presence of operator config, and
+ * the difference is load-bearing: Aglyn's own deployment sets the
+ * `NEXT_PUBLIC_*` values too, so a "seed ours only when theirs is empty" rule
+ * would have stripped our 26 origins from OUR policy and broken the
+ * `auth.aglyn.com` helper iframe.
+ */
+describe('frame-ancestors on a self-host container (AGL-2446)', () => {
+  const CONTAINER = {
+    AGLYN_STANDALONE: '1',
+    NEXT_PUBLIC_CONSOLE_URL: 'https://console.example.com',
+    NEXT_PUBLIC_TENANT_DOMAIN: 'sites.example.com',
+  }
+
+  function withStandalone<T>(
+    env: Record<string, string | undefined>,
+    run: () => T,
+  ): T {
+    const saved = process.env.AGLYN_STANDALONE
+    try {
+      if (env.AGLYN_STANDALONE === undefined) delete process.env.AGLYN_STANDALONE
+      else process.env.AGLYN_STANDALONE = env.AGLYN_STANDALONE
+      return withEnv(env, run)
+    } finally {
+      if (saved === undefined) delete process.env.AGLYN_STANDALONE
+      else process.env.AGLYN_STANDALONE = saved
+    }
+  }
+
+  it("SELF-HOST: only the operator's hosts may frame their pages", () => {
+    const ancestors = withStandalone(CONTAINER, () =>
+      sourcesOf(baseCspDirectives(true), 'frame-ancestors'),
+    )
+    expect(ancestors).toEqual([
+      'https://console.example.com',
+      'https://sites.example.com',
+    ])
+    // The assertion that matters is the absence, stated as an absence rather
+    // than inferred from the equality above.
+    for (const domain of PRODUCTION_DOMAINS) {
+      expect(ancestors).not.toContain(`https://${domain}`)
+    }
+  })
+
+  it('SELF-HOST with nothing configured falls to \'self\', never to an empty list', () => {
+    // An empty source list is not a strict policy — `frame-ancestors ` with no
+    // sources is an INVALID directive, which browsers drop, leaving the page
+    // framable by anyone. This is the failure mode the narrowing could have
+    // introduced, so it is asserted directly.
+    const ancestors = withStandalone({ AGLYN_STANDALONE: '1' }, () =>
+      sourcesOf(baseCspDirectives(true), 'frame-ancestors'),
+    )
+    expect(ancestors).toEqual(["'self'"])
+  })
+
+  it('AGLYN-OPERATED is untouched: our 26 hosts, plus the operator entries', () => {
+    const ancestors = withStandalone(
+      { NEXT_PUBLIC_CONSOLE_URL: 'https://app.aglyn.com' },
+      () => sourcesOf(baseCspDirectives(true), 'frame-ancestors'),
+    )
+    for (const domain of PRODUCTION_DOMAINS) {
+      expect(ancestors).toContain(`https://${domain}`)
+    }
+  })
+
+  it('img-src is NOT narrowed — the two directives mean different things', () => {
+    // `img-src` names hosts a page may load FROM, where AGL-2198's "harmless"
+    // reasoning does hold. Narrowing it as well would break media that legitimately
+    // still resolves, so the change is deliberately confined to frame-ancestors.
+    const img = withStandalone(CONTAINER, () =>
+      sourcesOf(imgSrcDirective(true), 'img-src'),
+    )
+    expect(img.length).toBeGreaterThan(0)
+  })
+})

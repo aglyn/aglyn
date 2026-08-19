@@ -10,7 +10,16 @@
 # The env file is mounted as a BuildKit secret so Next.js can inline the
 # NEXT_PUBLIC_* client config at build time WITHOUT the file (or your keys)
 # ending up in an image layer. The same file is passed again at runtime
-# (--env-file / compose env_file) for the server-side secrets.
+# (compose `env_file`) for the server-side secrets.
+#
+# Use compose, not `docker run --env-file`. Compose strips surrounding quotes
+# from a value; `docker run --env-file` does NOT, so FIREBASE_PRIVATE_KEY —
+# which the template quotes, and must, because `set -a && source .env` in the
+# setup steps eats the `\n` escapes otherwise — arrives with literal quote
+# characters. The Admin SDK then throws `Failed to parse private key` under an
+# OpenSSL `DECODER routines::unsupported` stack at module evaluation, the
+# console serves pages anyway, and `/api/health` answers 500 rather than the
+# 503 it should (AGL-2443).
 #
 # See docs/SELF_HOSTING.md for the full runbook.
 
