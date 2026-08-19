@@ -113,6 +113,10 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `aglyn_experiment` | Custom | Tenant (marketing) | `experiment_id`, `variant_id`, `experiment_action` | Engagement — experiment exposures/conversions |
 | `refund` | Reserved | **Server** (AGL-1850) | `transaction_id` (the ORIGINAL purchase's), `currency`, `value` | Revenue — nets refunded revenue against `purchase`; without it GA can only ever drift UP from Stripe |
 | `subscription_cancelled` | Custom | **Server** (AGL-1851) | `plan` (the tier being LEFT), `billing_interval?`, `tenure_days?` | Churn rate, plan-tier churn mix, tenure at cancellation |
+| `churn_survey_submitted` | Custom | Console (AGL-1865) | `reason` (closed set), `surface`, `plan?` | **Retention — why people leave, broken down by tier** |
+| `downsell_accepted` | Custom | Console (AGL-1865) | `from_plan`, `to_plan`, `surface` | Retention — saves by downgrade, and what they cost |
+| `winback_discount_accepted` | Custom | Console (AGL-1865) | `percent_off`, `duration_months`, `surface`, `plan?` | Retention — saves by discount, and what they cost |
+| `cancellation_completed` | Custom | Console (AGL-1865) | `surface`, `funnel_completed`, `plan?` | Retention — the funnel's denominator |
 | `LCP` / `CLS` / `INP` / `TTFB` | web.dev pattern | Console + Tenant (AGL-1642) | `value` (=delta), `metric_id`, `metric_value`, `metric_delta`, `metric_rating`, `surface` | Real-user performance; the hydration-stall attribution question |
 
 `method` values: `password`, `google_popup`, `google_redirect`, `google_signin`
@@ -260,6 +264,29 @@ decisions in full live on the issues.
 - **`subscription_cancelled` (AGL-1851)** — churn, server-side (no browser
   is present when a subscription ends). Reports the plan being LEFT, never
   the `free` the org mirror writes — the assembly spec pins that exact trap.
+- **Retention funnel (AGL-1865)** — `churn_survey_submitted`,
+  `downsell_accepted`, `winback_discount_accepted`, `cancellation_completed`,
+  all client-side from `retention-funnel.dialog.tsx`, under one of two
+  `surface` values: `subscription_cancel` or `account_delete`. The funnel's
+  conversion rate is `downsell_accepted` + `winback_discount_accepted` over
+  `churn_survey_submitted`; `cancellation_completed` is the departures that
+  got all the way out.
+  - **`cancellation_completed` is NOT `subscription_cancelled`.** They count
+    different things at different times and must never be summed. The first
+    is client-side at the moment the customer confirms; the second is
+    server-side from the webhook when the subscription actually ends — which
+    for an end-of-cycle cancel is up to a month later, and which also fires
+    for departures that never touched the funnel at all (Stripe dashboard,
+    support ops, dunning exhaustion). `subscription_cancelled` is the churn
+    number; `cancellation_completed` is the funnel's exit count.
+  - `funnel_completed` on `cancellation_completed` mirrors the inverse of the
+    `funnelSkipped` marker the cancel/delete routes write to
+    `orgs/{orgId}/retention`, so GA and Firestore cannot disagree about how
+    many departures were ever surveyed. A survey that failed to store reports
+    `false` rather than going silent.
+  - `winback_discount_accepted` reports the SERVER's minted terms, not the
+    constants the dialog was shown — the margin question ("what did this save
+    cost?") is answered wrong by anything else.
 - **`org_plan` / `org_role` user properties (AGL-1852)** — the active
   workspace's tier and role, read through `useOrgPlans` (enterprise
   override, no-field-means-free). `buildOrgUserProperties` owns the clearing

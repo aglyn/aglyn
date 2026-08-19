@@ -415,6 +415,38 @@ async function handler(request: Request): Promise<Response> {
         // later invoice event back to it. The two Stripe-side steps that
         // follow write nothing here and are left to run: they are best-effort
         // and self-healing by contract.
+        // A downgrade that has LANDED must stop being "pending" (AGL-2144).
+        // `writeOrgBilling` merge-sets, and a merge preserves nested keys it
+        // does not mention — so `subscription.pendingDowngrade` survived the
+        // flip verbatim and nothing else ever cleared it: the two clears in
+        // /api/billing/subscription cover release and "keep my plan", and no
+        // `subscription_schedule.*` event is handled anywhere. The org doc was
+        // left reading `plan: 'starter'` AND `pendingDowngrade: { plan:
+        // 'starter', effectiveAt: <a date now in the past> }`, forever, which
+        // the billing page renders as a warning chip saying it "moves to
+        // starter" on an org already on Starter, next to a prominent
+        // "Keep my current plan" button offering to undo something that
+        // already happened.
+        //
+        // Detected by a POSITIVE signal rather than the absence of a schedule.
+        // Phase 1 stamps `metadata[plan]` with the target tier, so once the
+        // phase flips the mirrored plan EQUALS the pending target and the
+        // downgrade is provably done. Keying on `!object.schedule` instead
+        // would clear on any out-of-order `subscription.updated` that predates
+        // the schedule being attached — dropping a downgrade the customer had
+        // actually scheduled, silently, in the wrong direction.
+        // Read off the nested `subscription` map rather than through a dotted
+        // field path: dot notation is a DocumentSnapshot nicety, and depending
+        // on it here would make this branch untestable against any double that
+        // models `get()` as the plain field lookup it mostly is.
+        const pendingDowngradePlan =
+          ((orgSnapshot.get('subscription') as any)?.pendingDowngrade?.plan as
+            | string
+            | undefined) ?? null
+        // A cancellation clears it too: there is no subscription left to
+        // move down.
+        const downgradeLanded =
+          pendingDowngradePlan !== null && (canceled || pendingDowngradePlan === plan)
         if (mirrored) {
           await writeOrgBilling(String(orgId), {
             stripeCustomerId,
@@ -432,6 +464,7 @@ async function handler(request: Request): Promise<Response> {
               currentPeriodEnd: object?.current_period_end
                 ? new Date(object.current_period_end * 1000)
                 : null,
+              ...(downgradeLanded ? { pendingDowngrade: null } : {}),
             },
           } as never)
         }
