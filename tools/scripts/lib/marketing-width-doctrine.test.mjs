@@ -19,8 +19,14 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
+  FRAME_COLUMN_EXPECTATIONS,
+  evaluateContainerGutterReconciliation,
   evaluateMarketingWidthDoctrine,
+  formatContainerGutterFailure,
   formatMarketingWidthDoctrineFailure,
+  modalContentColumn,
+  stockContainerGutterPx,
+  stockXlColumnPx,
 } from './marketing-width-doctrine.mjs'
 
 const SKELETON = 'tools/marketing/product-page-skeleton.md'
@@ -218,5 +224,231 @@ describe('the failure report says what to do', () => {
     assert.match(text, /1392/)
     assert.match(text, /1488/)
     assert.match(text, /Re-measure before changing a width/)
+  })
+})
+
+/* -------------------------------------------------------------------------
+ * The GUTTER half (AGL-2362)
+ * ---------------------------------------------------------------------- */
+
+/** One frame in the shape the extractor emits: sections -> groups -> widthPx. */
+const frameOf = (canvas, column, repeats = 9) => ({
+  frameSize: { width: canvas, height: 1000 },
+  sections: [
+    {
+      // Every section band is the FRAME width at every variant — that is the
+      // reading that produced AGL-2362's "mobile is full-bleed" premise, so
+      // the fixture reproduces it deliberately.
+      widthPx: canvas,
+      groups: [
+        ...Array.from({ length: repeats }, () => ({ widthPx: column })),
+        { widthPx: 58 },
+      ],
+    },
+  ],
+})
+
+const REAL_FRAMES = () =>
+  FRAME_COLUMN_EXPECTATIONS.map((expected) => ({
+    path: expected.file,
+    frame: frameOf(expected.canvas, expected.column),
+  }))
+
+const REAL_THEME = () => [
+  {
+    path: 'libs/shared/ui/theme/src/lib/console.theme.ts',
+    source: ['export const options = {', '  spacing: 8,', '}'].join('\n'),
+  },
+  {
+    path: 'libs/shared/ui/theme/src/lib/util/host-theme.ts',
+    source: "export const HOST_THEME_COMPONENT_WHITELIST = ['MuiButton']",
+  },
+]
+
+describe('the stock Container gutter model', () => {
+  it('reproduces MUI 9.2.0: 16px at xs, 24px from sm up', () => {
+    assert.equal(stockContainerGutterPx(375), 16)
+    assert.equal(stockContainerGutterPx(599), 16)
+    assert.equal(stockContainerGutterPx(600), 24)
+    assert.equal(stockContainerGutterPx(1920), 24)
+  })
+
+  it('renders the columns the desktop frames are measured at', () => {
+    assert.equal(stockXlColumnPx(1440), 1392)
+    assert.equal(stockXlColumnPx(1920), 1488)
+    // And the two that do NOT match the frames.
+    assert.equal(stockXlColumnPx(768), 720)
+    assert.equal(stockXlColumnPx(375), 343)
+  })
+})
+
+describe('the design column is the GROUP width, never the section band', () => {
+  it('ignores the full-bleed section band', () => {
+    // The exact mobile shape: a 375 band whose content is 335.
+    const modal = modalContentColumn(frameOf(375, 335, 10))
+    assert.deepEqual(modal, { width: 335, count: 10 })
+  })
+
+  it('RED on purpose: reading the band would report 375 and a -32 delta', () => {
+    // AGL-2362's premise. The band is 375 at mobile — and 1440 at desktop, so
+    // "the band equals the canvas" is not evidence of full-bleed anywhere.
+    const bandReading = frameOf(375, 335, 10).sections[0].widthPx
+    assert.equal(bandReading, 375)
+    assert.equal(bandReading - stockXlColumnPx(375), 32)
+    // What the real column gives instead.
+    assert.equal(modalContentColumn(frameOf(375, 335, 10)).width - 343, -8)
+  })
+})
+
+describe('gutter reconciliation — the good state passes', () => {
+  it('accepts the frames and the theme as they stand today', () => {
+    const result = evaluateContainerGutterReconciliation({
+      frames: REAL_FRAMES(),
+      themeFiles: REAL_THEME(),
+    })
+    assert.equal(result.ok, true, JSON.stringify(result.findings, null, 2))
+    assert.equal(result.checked, 4)
+  })
+})
+
+describe('RED on purpose: a theme gutter override cannot pass silently', () => {
+  it('fails the precondition when console.theme.ts overrides MuiContainer', () => {
+    const themeFiles = REAL_THEME()
+    themeFiles[0].source = [
+      'export const options = {',
+      '  spacing: 8,',
+      '  components: { MuiContainer: { styleOverrides: {} } },',
+      '}',
+    ].join('\n')
+    const result = evaluateContainerGutterReconciliation({
+      frames: REAL_FRAMES(),
+      themeFiles,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.findings[0].kind, 'precondition')
+    assert.match(result.findings[0].what, /MuiContainer/)
+  })
+
+  it('fails when MuiContainer reaches the host theme whitelist', () => {
+    const themeFiles = REAL_THEME()
+    themeFiles[1].source =
+      "export const HOST_THEME_COMPONENT_WHITELIST = ['MuiButton', 'MuiContainer']"
+    const result = evaluateContainerGutterReconciliation({
+      frames: REAL_FRAMES(),
+      themeFiles,
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /WHITELIST/)
+  })
+
+  it('fails when the spacing multiplier moves under the model', () => {
+    const themeFiles = REAL_THEME()
+    themeFiles[0].source = themeFiles[0].source.replace('spacing: 8', 'spacing: 4')
+    const result = evaluateContainerGutterReconciliation({
+      frames: REAL_FRAMES(),
+      themeFiles,
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /spacing: 8/)
+  })
+})
+
+describe('the CONTROL: desktop and widescreen must stay at delta 0', () => {
+  // This is the assertion that makes a global gutter override unbuyable. It
+  // reconciles against a variant nobody proposed changing, so a theme-wide
+  // fix for tablet shows up here as a REGRESSION rather than as silence.
+  for (const variant of ['desktop', 'widescreen']) {
+    it(`fails if the ${variant} column drifts off stock by one pixel`, () => {
+      const expected = FRAME_COLUMN_EXPECTATIONS.find(
+        (candidate) => candidate.variant === variant,
+      )
+      const frames = REAL_FRAMES().map((entry) =>
+        entry.path === expected.file
+          ? { ...entry, frame: frameOf(expected.canvas, expected.column - 1) }
+          : entry,
+      )
+      const result = evaluateContainerGutterReconciliation({
+        frames,
+        themeFiles: REAL_THEME(),
+      })
+      assert.equal(result.ok, false)
+      assert.match(result.findings[0].what, /was re-cut/)
+    })
+  }
+})
+
+describe('RED on purpose: the pinned tablet and mobile deltas', () => {
+  it('fails if the tablet frame is re-cut to MUI stock without saying so', () => {
+    // 688 -> 720 is precisely "option 2" from AGL-2362. It is a legitimate
+    // change; it just may not happen silently.
+    const frames = REAL_FRAMES().map((entry) =>
+      entry.path.endsWith('copy-tablet.json')
+        ? { ...entry, frame: frameOf(768, 720, 11) }
+        : entry,
+    )
+    const result = evaluateContainerGutterReconciliation({
+      frames,
+      themeFiles: REAL_THEME(),
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /design column is 720/)
+  })
+
+  it('fails if the mobile delta is restated as the fictional -32', () => {
+    // A frame drawn to the "full-bleed 375" the issue asserted.
+    const frames = REAL_FRAMES().map((entry) =>
+      entry.path.endsWith('copy-mobile.json')
+        ? { ...entry, frame: frameOf(375, 375, 10) }
+        : entry,
+    )
+    const result = evaluateContainerGutterReconciliation({
+      frames,
+      themeFiles: REAL_THEME(),
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /design column is 375/)
+  })
+
+  it('reports a missing frame rather than passing over it', () => {
+    const result = evaluateContainerGutterReconciliation({
+      frames: REAL_FRAMES().slice(0, 3),
+      themeFiles: REAL_THEME(),
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /not scanned/)
+  })
+
+  it('reports a frame whose groups record no widthPx at all', () => {
+    // The shape of every product-copy/ and solutions-copy/ extract.
+    const frames = REAL_FRAMES().map((entry) =>
+      entry.path.endsWith('copy-mobile.json')
+        ? {
+            ...entry,
+            frame: {
+              frameSize: { width: 375, height: 10 },
+              sections: [{ widthPx: 375, groups: [{ name: 'x' }] }],
+            },
+          }
+        : entry,
+    )
+    const result = evaluateContainerGutterReconciliation({
+      frames,
+      themeFiles: REAL_THEME(),
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.findings[0].what, /no group records a widthPx/)
+  })
+})
+
+describe('the gutter failure report says what to do', () => {
+  it('names the control and refuses the pixel-cap reflex', () => {
+    const report = formatContainerGutterFailure({
+      ok: false,
+      checked: 4,
+      findings: [{ kind: 'gutter', path: 'x', what: 'y' }],
+    })
+    assert.match(report, /control/)
+    assert.match(report, /AGL-1298/)
+    assert.match(report, /do not narrow the site/)
   })
 })

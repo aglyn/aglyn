@@ -200,15 +200,26 @@ section is the design's own inner width:
 | desktop | 1440 | **1392** | 48 | 9 |
 | widescreen | 1920 | **1488** | 432 | 9 |
 | tablet | 768 | **688** | 80 | 11 |
-| mobile | 375 | 375 (full-bleed) | 0 | — |
+| mobile | 375 | **335** | 40 | 10 |
 
 A stock `maxWidth="xl"` Container caps at `min(viewport, 1536)` and subtracts
 its own gutters, so it renders **1392 at 1440** and **1488 at 1920** — the
 design columns exactly, at both desktop widths. Nothing to reconcile there;
 `xl` never renders as a 1536-wide column at any real breakpoint. At 768 and
-375 MUI's stock gutters differ from the frames' (720 vs 688; 343 vs 375) — a
-separate small-width question tracked on AGL-2362, and a gutter question
-rather than a reason to hand-roll a cap.
+375 MUI's stock gutters differ from the frames' (720 vs 688; 343 vs 335) —
+tracked on AGL-2362, which measured both and closed **no change**: the
+AGL-1282 re-extract re-cut desktop and widescreen off the fictional 1280
+column on 2026-08-08 and never touched tablet or mobile, so those margins are
+an unfinished re-cut rather than a brand decision. Re-cut the frames if you
+want them consistent; do not move the theme's gutters and do not hand-roll a
+cap.
+
+The design column is the **group** `widthPx`, not the section's. Every section
+band equals the frame width at every variant, mobile included — reading the
+band is what produced the "mobile is full-bleed, 32 out" claim. Mobile
+actually runs 335 on four sections, 343 on "Usage pricing" (already exactly
+what stock renders) and 375 only on "Compare features", a scrolling table that
+bleeds on purpose via `maxWidth={false}`.
 
 > ⚠️ This paragraph asserted a "same 1280 content column" until 2026-08-19,
 > and `product-page-skeleton.md` prescribed a bespoke `sx {maxWidth: '1328px'}`

@@ -26,7 +26,11 @@ import { fileURLToPath } from 'node:url'
 
 import {
   DOCTRINE_DOCS,
+  FRAME_COLUMN_EXPECTATIONS,
+  GUTTER_MODEL_PRECONDITIONS,
+  evaluateContainerGutterReconciliation,
   evaluateMarketingWidthDoctrine,
+  formatContainerGutterFailure,
   formatMarketingWidthDoctrineFailure,
 } from './lib/marketing-width-doctrine.mjs'
 
@@ -43,14 +47,38 @@ const files = DOCTRINE_DOCS.map((path) => ({
 
 const result = evaluateMarketingWidthDoctrine(files)
 
-if (result.ok) {
+// The GUTTER half (AGL-2362). The prose check above stops the docs prescribing
+// a pixel column; this one reconciles the extracted frames against the gutters
+// stock MUI actually renders, and pins the two frames that were never re-cut.
+const gutters = evaluateContainerGutterReconciliation({
+  frames: FRAME_COLUMN_EXPECTATIONS.map((expected) => ({
+    path: expected.file,
+    frame: JSON.parse(readFileSync(join(repoRoot, expected.file), 'utf8')),
+  })),
+  themeFiles: GUTTER_MODEL_PRECONDITIONS.map((precondition) => ({
+    path: precondition.path,
+    source: readFileSync(join(repoRoot, precondition.path), 'utf8'),
+  })),
+})
+
+if (result.ok && gutters.ok) {
   console.log(
     `Marketing width doctrine holds: stock maxWidth "xl" -> 1392 @1440 / ` +
       `1488 @1920 (the measured frames), no pixel column asserted ` +
       `(${result.checked} doc(s) scanned).`,
   )
+  console.log(
+    `Marketing gutter reconciliation holds: stock gutters match the frames ` +
+      `EXACTLY at desktop and widescreen (delta 0); tablet (-32) and mobile ` +
+      `(-8) are the two frames the AGL-1282 re-cut left behind ` +
+      `(${gutters.checked} frame(s) reconciled).`,
+  )
   process.exit(0)
 }
 
-console.error(formatMarketingWidthDoctrineFailure(result))
+if (!result.ok) console.error(formatMarketingWidthDoctrineFailure(result))
+if (!gutters.ok) {
+  if (!result.ok) console.error('')
+  console.error(formatContainerGutterFailure(gutters))
+}
 process.exit(1)

@@ -50,12 +50,31 @@ to match.
   | 1440 | `min(1440,1536) − 48` = **1392** | **1392** | `pricing-copy/copy-desktop.json`, 9 sections |
   | 1920 | `min(1920,1536) − 48` = **1488** | **1488** | `pricing-copy/copy-widescreen.json`, 9 sections |
   | 768 | `768 − 48` = 720 | 688 | `pricing-copy/copy-tablet.json`, 11 sections |
-  | 375 | `375 − 32` = 343 | 375 (full-bleed) | `pricing-copy/copy-mobile.json` |
+  | 375 | `375 − 32` = 343 | 335 | `pricing-copy/copy-mobile.json`, 10 sections |
 
   Desktop and widescreen match to the pixel — **there is nothing to fix
-  there.** Tablet and mobile differ by 32px because MUI's stock gutters differ
-  from the frames'; that is a real small-width question, tracked on AGL-2362,
-  and it is a **gutter** question — **not** a reason to reach for a pixel cap.
+  there.** Tablet is 32 narrower than stock and mobile 8; AGL-2362 measured
+  both and closed **no change**. The reason is in the git history rather than
+  in the pixels: the AGL-1282 re-extract (`241f6fc00` → `aa3234865`,
+  2026-08-08) moved desktop from a 1280 column to 1392 and widescreen to 1488,
+  and **left tablet and mobile untouched**. Their 40px and 20px margins are the
+  same vintage as the 1280 AGL-2360 proved fictional — an unfinished re-cut,
+  not a brand decision. Re-cut those two frames if you want them consistent;
+  do **not** move the theme's gutters, and never reach for a pixel cap.
+
+  **Read the group width, not the section band.** Every section's own `widthPx`
+  is the frame width at *every* variant — 1440 at desktop as much as 375 at
+  mobile — because a section band is full-bleed by construction. Reading the
+  band as the column is what produced the claim that mobile is full-bleed and
+  32 out. It is not: four of its six sections measure 335, "Usage pricing"
+  measures 343 (already exactly stock), and only "Compare features" measures
+  375 — a horizontally-scrolling table that bleeds on purpose, which is a
+  per-section `maxWidth={false}` choice and not a gutter at all.
+
+  `npm run check:marketing-width-doctrine` reconciles all four frames against
+  this arithmetic and pins each delta, with desktop and widescreen held at 0 as
+  the control: a theme-level `MuiContainer` gutter override moves every
+  breakpoint at once, so it cannot buy tablet without breaking them.
 
   > ⚠️ **This bullet asserted the opposite until 2026-08-19, and its wording
   > is the trap.** It read *"`{maxWidth: false}` sx `{maxWidth: '1328px'}` →
