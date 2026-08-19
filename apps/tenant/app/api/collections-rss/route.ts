@@ -149,12 +149,37 @@ async function buildRssXml(
     )
     .join('\n')
 
+  // The feed's own address (AGL-2391). Its absence is a W3C Feed Validator
+  // ERROR, not a nicety, and it became load-bearing the moment collection
+  // pages started announcing this feed with `<link rel="alternate">`: a
+  // reader handed the feed by autodiscovery has only the page's word for
+  // where the feed lives, and `atom:link rel="self"` is how the feed
+  // confirms it. Without it, a feed fetched through one alias re-identifies
+  // itself as a new subscription when fetched through another.
+  //
+  // `base` is the site's PUBLIC origin, the same value `<guid>` is built
+  // from, so the self link cannot disagree with the identities the reader
+  // has already stored.
+  const selfUrl = `${base}/${collectionSlug}/rss.xml`
+  // Newest publish time, for readers that poll conditionally. Derived from
+  // the entries actually in the feed rather than "now", so an unchanged feed
+  // keeps reporting an unchanged date — a `lastBuildDate` of `now` is worse
+  // than none, because it tells every reader the feed changed on every poll.
+  const newestSeconds = content.entries.reduce(
+    (newest, entry) => Math.max(newest, entry.publishedAt?.seconds ?? 0),
+    0,
+  )
+
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<rss version="2.0"><channel>\n' +
+    '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>\n' +
     `  <title>${escapeXml(content.collection.displayName)}</title>\n` +
     `  <link>${base}/${collectionSlug}</link>\n` +
+    `  <atom:link href="${escapeXml(selfUrl)}" rel="self" type="application/rss+xml"/>\n` +
     `  <description>${escapeXml(content.collection.displayName)}</description>\n` +
+    (newestSeconds
+      ? `  <lastBuildDate>${new Date(newestSeconds * 1000).toUTCString()}</lastBuildDate>\n`
+      : '') +
     items +
     '\n</channel></rss>\n'
 

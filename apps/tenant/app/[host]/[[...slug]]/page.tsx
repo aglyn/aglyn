@@ -244,14 +244,39 @@ function buildMetadata(props: Props): Metadata {
     const unknownCategory = Boolean(
       category && !category.known && !content.entries?.length,
     )
+    // Feed autodiscovery (AGL-2391). `/{collection}/rss.xml` has been served
+    // since AGL-1385, but nothing ever ANNOUNCED it: a reader pointed at
+    // `/blog` had no way to find the feed, and `apps/docs` says so out loud
+    // ("feed readers don't discover it automatically yet"). A body link to
+    // the feed — which aglyn.com/blog has — is a link for people, not for
+    // readers; the `<link rel="alternate">` is the one browsers, readers and
+    // aggregators actually look at.
+    //
+    // Announced on entry and category pages too, not just the list root: the
+    // collection feed is the only feed the platform produces for that
+    // content, and it is the URL a reader should end up subscribed to
+    // whichever of its pages they were handed. Skipped on an unknown
+    // category for the same reason that branch is `noindex` — that address
+    // names no content, so it has no feed to offer.
+    const collectionFeed =
+      collectionBase && collectionSlug && !unknownCategory
+        ? `${collectionBase}/${collectionSlug}/rss.xml`
+        : undefined
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
       ...(searchDiscouraged || unknownCategory
         ? { robots: { index: false, follow: true } }
         : {}),
-      ...(contentCanonical
-        ? { alternates: { canonical: contentCanonical } }
+      ...(contentCanonical || collectionFeed
+        ? {
+            alternates: {
+              ...(contentCanonical ? { canonical: contentCanonical } : {}),
+              ...(collectionFeed
+                ? { types: { 'application/rss+xml': collectionFeed } }
+                : {}),
+            },
+          }
         : {}),
       openGraph: {
         title: fullTitle,
