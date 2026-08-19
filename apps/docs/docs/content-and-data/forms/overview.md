@@ -16,6 +16,16 @@ and your [contacts CRM](../contacts/overview.md).
 **Free** for basic forms and the inbox. Higher tiers raise submission and dataset caps.
 :::
 
+## Reading submissions from code
+
+Everything on this page describes the console inbox. The same submissions are
+available over the REST API — list them, **mark each one read** as your integration
+processes it, and delete them once they're archived elsewhere. That `read` flag is
+what stops a nightly sync from pushing the same lead twice.
+
+See **[Form submissions in the API reference](/api/resources/form-submissions)**, or
+start from [Your first API call](../../guides/your-first-api-call.md).
+
 ## Build a form
 
 1. Drop **form components** onto a screen in the Besigner (fields, submit button).

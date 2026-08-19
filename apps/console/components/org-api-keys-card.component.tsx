@@ -40,13 +40,24 @@ import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgScope } from '../hooks/use-org-scope'
 
-/** Scopes offered in the UI — the subset the v1 API currently serves. */
+/**
+ * Scopes offered in the UI. This list must hold EVERY entry of `API_SCOPES`
+ * — a scope the server enforces but this picker omits is a scope nobody can
+ * grant, so the endpoint behind it ships closed to every customer.
+ *
+ * It is a hand-maintained copy rather than a `map` over `API_SCOPES` because
+ * that constant lives in `@aglyn/tenant-data-admin`, whose module graph pulls
+ * `firebase-admin` — not something to drag into a client bundle for eight
+ * strings. `apps/console/specs/api-scope-picker-coverage.spec.ts` reads both
+ * files and fails when they disagree (AGL-2127).
+ */
 const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }> = [
   { scope: 'datasets:read', label: 'Datasets — read', description: 'List datasets and read their records.' },
   { scope: 'datasets:write', label: 'Datasets — write', description: 'Create, update, and delete records.' },
   { scope: 'contacts:read', label: 'Contacts — read', description: 'List and read contacts.' },
   { scope: 'sites:read', label: 'Sites — read', description: 'List sites and their details.' },
   { scope: 'forms:read', label: 'Form submissions — read', description: 'Read a site’s form submissions.' },
+  { scope: 'forms:write', label: 'Form submissions — write', description: 'Mark a site’s form submissions read or unread, and delete them. Never edits what a visitor typed.' },
   { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },
   { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
   { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },

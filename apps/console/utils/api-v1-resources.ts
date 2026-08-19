@@ -142,7 +142,12 @@ async function claimWrite(
   ctx: ApiV1Context,
   scopeSuffix: string,
   key: string | null,
-  kind: 'records' | 'record-deletes' | 'datasets' | 'dataset-deletes',
+  kind:
+    | 'records'
+    | 'record-deletes'
+    | 'datasets'
+    | 'dataset-deletes'
+    | 'form-submission-deletes',
 ): Promise<{ claim: AttemptClaim } | { replay: Response }> {
   const result = await claimAttempt(ctx.firestore, {
     kind,
@@ -798,33 +803,197 @@ async function handleSites(
   }
 
   if (sub === 'form-submissions') {
-    const denied = requireScope(ctx, 'forms:read')
-    if (denied) return denied
-    if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    let query: FirebaseFirestore.Query = ctx.firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('formSubmissions')
-    const form = url.searchParams.get('form')
-    if (form) query = query.where('formName', '==', form)
-    const { docs, nextCursor } = await paginate(query, url)
-    const data = docs.map((doc) => ({
-      id: doc.id,
-      object: 'form_submission',
-      form: doc.get('formName') ?? null,
-      path: doc.get('path') ?? null,
-      fields: doc.get('fields') ?? {},
-      read: Boolean(doc.get('read')),
-      created: serialize(doc.get('createdAt')) ?? null,
-    }))
-    return listResponse(data, nextCursor, ctx.headers)
+    return handleFormSubmissions(request, ctx, segments, url)
   }
 
   if (sub === 'orders') return handleOrders(request, ctx, segments, url)
   if (sub === 'products') return handleProducts(request, ctx, segments, url)
   if (sub === 'media') return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId))
+  // Kept below the sub-resources so an unknown one still 404s here.
 
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
+}
+
+// ── Form submissions ────────────────────────────────────────────────────────
+
+function formSubmissionView(doc: FirebaseFirestore.DocumentSnapshot) {
+  return {
+    id: doc.id,
+    object: 'form_submission',
+    form: doc.get('formName') ?? null,
+    path: doc.get('path') ?? null,
+    fields: doc.get('fields') ?? {},
+    read: Boolean(doc.get('read')),
+    created: serialize(doc.get('createdAt')) ?? null,
+  }
+}
+
+/**
+ * `/v1/sites/{siteId}/form-submissions[/{submissionId}]` (AGL-2127).
+ *
+ * The list was the whole surface, and that shaped every integration written
+ * against it badly. A lead sync polls, pushes new rows into a CRM, and then
+ * has nowhere to record that it did — so it either re-pushes the same lead
+ * next poll, or keeps its own high-water mark of ids against a list that
+ * `conventions.md` publishes as ordered by DOCUMENT ID, not by time. The
+ * `read` flag the console's inbox toggles on the very same document is the
+ * state the integration needed and could not write.
+ *
+ * `read` is the ONLY writable field. A submission is what a visitor typed,
+ * and an API that let an integration quietly rewrite it would make the
+ * inbox's contents unattributable — so anything else in the body is a
+ * `validation_failed` naming the offending key rather than a silent drop.
+ */
+async function handleFormSubmissions(
+  request: Request,
+  ctx: ApiV1Context,
+  segments: string[],
+  url: URL,
+): Promise<Response> {
+  const [, hostId, , submissionId] = segments
+  const collection = ctx.firestore
+    .collection('hosts')
+    .doc(hostId)
+    .collection('formSubmissions')
+
+  if (!submissionId) {
+    const denied = requireScope(ctx, 'forms:read')
+    if (denied) return denied
+    if (request.method !== 'GET') {
+      return ApiErrors.methodNotAllowed({
+        headers: { ...ctx.headers, Allow: 'GET' },
+      })
+    }
+    let query: FirebaseFirestore.Query = collection
+    const form = url.searchParams.get('form')
+    if (form) query = query.where('formName', '==', form)
+    const { docs, nextCursor } = await paginate(query, url)
+    return listResponse(docs.map(formSubmissionView), nextCursor, ctx.headers)
+  }
+
+  const submissionRef = collection.doc(submissionId)
+
+  if (request.method === 'GET') {
+    const denied = requireScope(ctx, 'forms:read')
+    if (denied) return denied
+    const snap = await submissionRef.get()
+    if (!snap.exists) {
+      return ApiErrors.notFound({
+        message: 'No such form submission',
+        headers: ctx.headers,
+      })
+    }
+    return apiJson(formSubmissionView(snap), { headers: ctx.headers })
+  }
+
+  if (request.method === 'PATCH') {
+    const denied = requireScope(ctx, 'forms:write')
+    if (denied) return denied
+    return updateFormSubmission(request, ctx, submissionRef)
+  }
+
+  if (request.method === 'DELETE') {
+    const denied = requireScope(ctx, 'forms:write')
+    if (denied) return denied
+    return deleteFormSubmission(request, ctx, hostId, submissionRef)
+  }
+
+  return ApiErrors.methodNotAllowed({
+    headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
+  })
+}
+
+/**
+ * Mark one submission read or unread. No `Idempotency-Key`: the same body
+ * twice lands the same state AND returns the same `200`, which is the test
+ * `updateRecord` and `updateDataset` are held to.
+ */
+async function updateFormSubmission(
+  request: Request,
+  ctx: ApiV1Context,
+  submissionRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const body = await readJsonBody(request)
+  const unknown = Object.keys(body).filter((key) => key !== 'read')
+  if (unknown.length > 0) {
+    // Named, not dropped. `values` on a record drops unknown fields because a
+    // dataset model defines what exists; a submission has no model, so a
+    // silent drop here would read as "we stored your correction" when nothing
+    // was stored, and the visitor's answers are exactly the thing that must
+    // not be quietly editable.
+    return ApiErrors.badRequest({
+      message: 'Only `read` can be changed on a form submission',
+      code: 'validation_failed',
+      fields: Object.fromEntries(
+        unknown.map((key) => [key, 'Not writable on a form submission']),
+      ),
+      headers: ctx.headers,
+    })
+  }
+  if (typeof body.read !== 'boolean') {
+    return ApiErrors.badRequest({
+      message: 'Form submission failed validation',
+      code: 'validation_failed',
+      fields: { read: 'Must be true or false' },
+      headers: ctx.headers,
+    })
+  }
+
+  const snap = await submissionRef.get()
+  if (!snap.exists) {
+    return ApiErrors.notFound({
+      message: 'No such form submission',
+      headers: ctx.headers,
+    })
+  }
+  await submissionRef.update({ read: body.read })
+  return apiJson(formSubmissionView(await submissionRef.get()), {
+    headers: ctx.headers,
+  })
+}
+
+/**
+ * Delete one submission. Accepts an `Idempotency-Key` for the reason
+ * `deleteRecord` does: a purge that runs after an export is the operation
+ * most likely to be retried on a timer, and without a key the retry cannot
+ * tell "already gone" from "wrong id".
+ */
+async function deleteFormSubmission(
+  request: Request,
+  ctx: ApiV1Context,
+  hostId: string,
+  submissionRef: FirebaseFirestore.DocumentReference,
+): Promise<Response> {
+  const claimed = await claimWrite(
+    ctx,
+    hostId,
+    request.headers.get('Idempotency-Key'),
+    'form-submission-deletes',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+
+  try {
+    const snap = await submissionRef.get()
+    if (!snap.exists) {
+      await claim.release()
+      return ApiErrors.notFound({
+        message: 'No such form submission',
+        headers: ctx.headers,
+      })
+    }
+    await submissionRef.delete()
+    const view = {
+      id: submissionRef.id,
+      object: 'form_submission',
+      deleted: true,
+    }
+    await claim.record(200, view)
+    return apiJson(view, { headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
 }
 
 // ── Commerce: orders & products (read) ──────────────────────────────────────

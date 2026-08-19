@@ -174,8 +174,9 @@ routine things. The [REST API](/api/) reads across your organization with one ke
 
 - **[Sites](/api/resources/sites)** — enumerate every site and its domain, which is
   the basis of any status dashboard you build.
-- **[Form submissions](/api/resources/sites#list-form-submissions)** — pull every
-  client's leads into one place, or into their CRM.
+- **[Form submissions](/api/resources/form-submissions)** — pull every client's leads
+  into one place, or into their CRM, and **mark each one read** as you go so the next
+  run doesn't send it twice.
 - **[Orders](/api/resources/orders)** and
   [Products](/api/resources/products) — for clients who sell.
 - **[Media](/api/resources/media)** — audit alt text across every site, or find what's

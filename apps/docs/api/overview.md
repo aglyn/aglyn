@@ -9,7 +9,7 @@ description: A REST API for your organization's datasets, contacts, sites, form 
 
 The Aglyn REST API gives you programmatic access to your organization's data —
 [datasets and records](resources/datasets.md), [contacts](resources/contacts.md),
-[sites with their form submissions](resources/sites.md), your store's
+[sites](resources/sites.md) and their [form submissions](resources/form-submissions.md), your store's
 [orders](resources/orders.md) and [products](resources/products.md), and your
 [media library](resources/media.md). Use it to sync content from another system, push
 orders into accounting, feed a catalog to a marketplace, back up records, or build an
@@ -135,7 +135,8 @@ for failing fast at startup with a clear message.
 | --- | --- |
 | [Datasets & records](resources/datasets.md) | Create, read, update, and delete datasets and the records inside them — the one resource the API can provision from nothing. |
 | [Contacts](resources/contacts.md) | Read your organization's contacts. |
-| [Sites & form submissions](resources/sites.md) | List sites and read their form submissions. |
+| [Sites](resources/sites.md) | List sites and read their details. |
+| [Form submissions](resources/form-submissions.md) | Read a site's form submissions, mark them read as you process them, and delete them after export. |
 | [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes. |
 | [Products](resources/products.md) | Read a site's catalog — variants, prices, stock levels. |
 | [Media](resources/media.md) | List files in the organization library and in each site's media. |
