@@ -150,6 +150,11 @@ export interface AccordionListProps<T = any> {
   onRenderSummary: (props: { item: T }) => JSX.Children
   onRenderDetail: (props: { item: T }) => JSX.Children
   getItemId: (item: T) => string | number
+  /** Per-item help affordance on the accordion summary (AGL-2167). Returns
+   * undefined for the groups that need no explanation, so a list can help
+   * one group without captioning every one of them — which `AccordionProps`
+   * cannot do, since it applies to all of them alike. */
+  getItemHelp?: (item: T) => HelpTipContent | undefined
 }
 
 export const AccordionListComponent = observer(
@@ -164,6 +169,7 @@ export const AccordionListComponent = observer(
       AccordionDetailsProps,
       unique,
       getItemId,
+      getItemHelp,
     } = props
 
     const [expanded, setExpanded] = useState<JSX.Key[]>(() => [
@@ -196,6 +202,7 @@ export const AccordionListComponent = observer(
               disableGutters
               square
               summary={onRenderSummary({ item })}
+              help={getItemHelp?.(item)}
               AccordionSummaryProps={AccordionSummaryProps}
               AccordionDetailsProps={AccordionDetailsProps}
               {...AccordionProps}

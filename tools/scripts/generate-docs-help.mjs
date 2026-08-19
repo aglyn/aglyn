@@ -86,7 +86,15 @@ const CONSOLE_ALIASES = {
 // dragDropHierarchy, textEditing, reusableComponents, interactions, bindings,
 // screens, seo. Re-add one line at a time, beside its call site.
 const BESIGNER_TOPICS = {
+  besigner: '/building-sites/besigner/overview',
+  bindings: '/building-sites/bindings/overview',
+  dragDropHierarchy: '/building-sites/besigner/drag-drop-hierarchy',
+  interactions: '/building-sites/besigner/interactions-and-custom-html',
   responsiveStyling: '/building-sites/besigner/responsive-styling',
+  reusableComponents: '/building-sites/besigner/reusable-components',
+  screens: '/building-sites/screens-and-layouts/overview',
+  seo: '/building-sites/seo/overview',
+  textEditing: '/building-sites/besigner/text-editing',
 }
 
 // The first-party plugin consoles — Products, POS, Bookings, Emails, Data,
