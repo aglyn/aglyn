@@ -158,8 +158,9 @@ jobs:
       # while themselves unguarded.
       - run: npm run test:deploy-guard
       - run: npm run test:erase-cli
-      # Also run in rules-drift.yml, which is where it produces signal today
-      # (this workflow is disabled_manually — AGL-1776). Kept here as well on
+      # Also run in rules-drift.yml and index-drift.yml. This workflow is
+      # ACTIVE and runs it too; an older comment here claimed it was
+      # `disabled_manually`, which was false (AGL-2381). Kept in all three on
       # purpose: the suite asserts, at the DECLARATION, that rules-drift.yml
       # still invokes the checker and this self-test. Asserted only from
       # inside rules-drift.yml that claim is circular — delete the step and

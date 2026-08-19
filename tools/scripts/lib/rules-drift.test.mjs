@@ -597,10 +597,12 @@ describe('the checker is wired (workflow + package.json)', () => {
     // this suite. Asserted solely from inside rules-drift.yml it would be
     // circular — removing the step would remove the check on the removal.
     //
-    // AGL-1816: that second home used to be nx-ci.yml, which is
-    // `disabled_manually` and runs on no runner, so the redundancy existed
-    // only as text in a file that never executes. index-drift.yml is active,
-    // and the two drift workflows now each run both self-tests.
+    // AGL-1816: that second home used to be nx-ci.yml. It is ACTIVE and does
+    // run this suite — the `disabled_manually` claim recorded here was false
+    // (AGL-2381) — but it runs it behind `typecheck` and `docs:typecheck` in
+    // one sequential job, so the step executed in 26 of 72 runs on 2026-08-19.
+    // index-drift.yml answers on every push, and the two drift workflows now
+    // each run both self-tests.
     const indexDrift = readFileSync(
       join(repoRoot, '.github', 'workflows', 'index-drift.yml'),
       'utf8',
@@ -609,9 +611,11 @@ describe('the checker is wired (workflow + package.json)', () => {
   })
 
   it('the homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
-    // These suites' only other home is nx-ci.yml, which is `disabled_manually`
-    // and runs on no runner (AGL-1816) — text in a file that never executes.
-    // tools-guards.yml is their active home. The assertion lives HERE, in a
+    // These suites' only other home is nx-ci.yml. It is ACTIVE and does run
+    // them — the `disabled_manually` claim here was false (AGL-2381) — but it
+    // runs them behind `typecheck` and `docs:typecheck` in one sequential job,
+    // so they executed in 26 of 72 runs on 2026-08-19 (AGL-1816).
+    // tools-guards.yml is the home that answers on every push. The assertion lives HERE, in a
     // suite that rules-drift.yml, index-drift.yml AND tools-guards.yml all
     // run, because asserted only from inside tools-guards.yml it would be
     // circular: deleting a step would delete the check on the deletion (the
@@ -695,8 +699,11 @@ describe('the checker is wired (workflow + package.json)', () => {
   it('the two emulator guard suites run in the ACTIVE emulator-guards.yml (AGL-2002)', () => {
     // Same argument as the block above, one tier heavier. `test:rules` and
     // `test:emulator-guards` need a JVM and the emulator suite, so nx-ci.yml
-    // excludes the first ON PURPOSE and never had the second — and nx-ci.yml
-    // is `disabled_manually` anyway. emulator-guards.yml is their only home.
+    // excludes the first ON PURPOSE and never had the second.
+    // emulator-guards.yml is their only home. (This note used to add "and
+    // nx-ci.yml is `disabled_manually` anyway" — false, and corrected in
+    // AGL-2381. It was never load-bearing here: nx-ci.yml being active does
+    // not give it a JVM, and it still runs neither suite.)
     //
     // Asserted from HERE for the anti-circularity reason: this suite runs in
     // rules-drift.yml, index-drift.yml and tools-guards.yml, none of which is

@@ -59,8 +59,11 @@ permissions:
 jobs:
   # Guard the guard (AGL-1778/AGL-1816): everything below trusts this
   # detector's verdict about production content, and its self-test's only
-  # other home is nx-ci.yml — which is `disabled_manually` and runs on no
-  # runner, so until this job the suite executed nowhere. The suite is the
+  # other home is nx-ci.yml. That workflow is ACTIVE and does run the suite —
+  # the `disabled_manually` claim once recorded here was false (AGL-2381) —
+  # but it runs it behind `typecheck` and `docs:typecheck` in one sequential
+  # job, so the step executed in 26 of 72 runs on 2026-08-19. This job is the
+  # home that answers on every push. The suite is the
   # thing that caught the live 176 reading as 6: a detector that dedupes to
   # distinct rules reports "almost clean" on a page that is anything but.
   #

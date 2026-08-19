@@ -1,10 +1,28 @@
 name: Tools guards
 
-# Runs the seven pure-node `tools/` guard suites whose only other home is
-# nx-ci.yml — which is `disabled_manually` and runs on no runner, so every
-# gate added to it since it was switched off has never executed once
-# (AGL-1776/AGL-1816/AGL-1822). These suites are secretless, dependency-light
-# and seconds each; this workflow is their one cheap ACTIVE home.
+# Runs the pure-node `tools/` guard suites whose only other home is nx-ci.yml.
+#
+# AGL-2381: the reason recorded here used to be that nx-ci.yml was
+# `disabled_manually` and ran on no runner, so every gate added to it since it
+# was switched off had never executed once. That is FALSE — the Actions API
+# reports nx-ci.yml as `active`, and it runs on every push to main and on every
+# pull request.
+#
+# The duplication is kept anyway, for a reason that does not depend on a
+# workflow's enabled/disabled state — a state no diff can show, and which drifts
+# silently, which is how this comment came to be wrong in the first place.
+# nx-ci.yml is a SINGLE sequential job, and `npm run typecheck` and
+# `npx nx run docs:typecheck` sit ahead of every guard step in it. Any type
+# error anywhere in the workspace therefore withdraws ALL of these guards at
+# once. Measured on 2026-08-19: across 72 completed nx-ci runs the guard steps
+# executed in 26 and were skipped in 46 — a 36% answer rate, while `npm ci` and
+# `typecheck` ran in 72 of 72.
+#
+# So nx-ci.yml is a real home but a conditional one, and it is conditional on
+# something entirely unrelated to what these guards measure. This workflow is
+# the unconditional home: secretless, dependency-light, seconds each, and it
+# answers whether or not the tree type-checks
+# (AGL-1776/AGL-1816/AGL-1822/AGL-2381).
 #
 # What each guards:
 #  - test:eslint-rules        the eight local ESLint guard rules' RuleTester
