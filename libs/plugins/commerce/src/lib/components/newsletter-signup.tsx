@@ -99,6 +99,13 @@ const NewsletterSignup = forwardRef<HTMLDivElement, NewsletterSignupProps>(
           <TextField
             type="email"
             placeholder="you@example.com"
+            // The field's only accessible name (AGL-2392). `heading` is
+            // optional and is a plain `subtitle1` above the row, never a
+            // `<label>`, so without this the input ships nameless — which is
+            // what aglyn.com/blog does today. A placeholder is not a name:
+            // assistive tech is not required to announce it, and it vanishes
+            // the moment the visitor types.
+            slotProps={{ htmlInput: { 'aria-label': 'Email address' } }}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             size="small"
