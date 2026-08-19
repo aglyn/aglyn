@@ -208,6 +208,102 @@ describe('white-label branding coverage (Phase 2/3)', () => {
   )
 
   /**
+   * ACCOUNT-SCOPED senders (AGL-2326) — the class this guard could not see.
+   *
+   * Every entry in `ORG_EMAIL_SENDERS` has an org in hand, so "resolve the
+   * brand" is a mechanical instruction. These four do not: a password reset,
+   * an email verification, a new-device alert and an admin-initiated reset
+   * notice all belong to a PERSON, and a person can be a member of several
+   * organizations. They were absent from every list above, which is why the
+   * guard was green on all four while none of them resolved any brand at all.
+   *
+   * ## Why they are not simply added to `ORG_EMAIL_SENDERS`
+   *
+   * Because the answer is not known yet, and the wrong answer is worse than
+   * the current one. Guessing an org for a recipient who belongs to two means
+   * **mailing Agency A's brand to somebody who is also Agency B's user** —
+   * one customer's identity delivered into another customer's user's inbox.
+   * `render-system-email.ts` states the sharper half for the reset path
+   * specifically: it *"deliberately refuses to look one up because that would
+   * be an enumeration oracle"*. AGL-2352 records that decision as correct and
+   * asks that nobody "fix" it into one.
+   *
+   * So the decision AGL-2326 needs — the org an action originated in, the
+   * user's sole org when they have exactly one, or the platform brand when
+   * ambiguous — is a product decision, and it has to be made before the
+   * wiring rather than during it.
+   *
+   * ## What this block DOES assert, and why it is worth having anyway
+   *
+   * Invisibility was half the defect. These files are now named, so:
+   *
+   *  1. the brand still arrives from CONFIGURATION — `PLATFORM_BRAND_NAME`
+   *     (which is what makes self-host rename cleanly) or a designed template
+   *     through `renderSystemEmail` — and never from fresh hand-written copy;
+   *  2. the exemption stays a REAL gap. A file that starts resolving an org
+   *     brand must MOVE to `ORG_EMAIL_SENDERS` and be held to the from-name
+   *     rule, not sit here half-wired. Same discipline `FIELD_EXEMPT` applies
+   *     below: an exemption that has been closed should be deleted, not kept.
+   *
+   * The literal half of AGL-2326 is already closed — AGL-2319 replaced the
+   * hardcoded `'Aglyn'` in all four, and `check:brand-literals` holds that.
+   * What is left is the org resolution, and that is what (2) watches for.
+   */
+  const ACCOUNT_SCOPED_SENDERS: string[] = [
+    'apps/console/app/api/auth/send-password-reset/route.ts',
+    'apps/console/app/api/auth/send-verification/route.ts',
+    'apps/console/app/api/_lib/security-alerts.ts',
+    'apps/console/app/api/_lib/password-admin.ts',
+  ]
+
+  it.each(ACCOUNT_SCOPED_SENDERS)(
+    'account-scoped sender brands from configuration, not a literal: %s',
+    (file) => {
+      const source = stripComments(read(file))
+      expect(
+        source.includes('PLATFORM_BRAND_NAME') ||
+          source.includes('renderSystemEmail'),
+      ).toBe(true)
+    },
+  )
+
+  it.each(ACCOUNT_SCOPED_SENDERS)(
+    'account-scoped exemption is still a real gap: %s',
+    (file) => {
+      // If this goes red, AGL-2326 was decided and wired — which is the win.
+      // Move the row up into ORG_EMAIL_SENDERS so the from-name rule applies
+      // to it, rather than deleting this assertion.
+      expect(stripComments(read(file))).not.toContain('resolveBrandingProfile')
+    },
+  )
+
+  /**
+   * The list is CLOSED, so a new sender cannot be invisible the way these
+   * four were.
+   *
+   * Enumerated from `git ls-files` rather than a walk, for the reason the
+   * consumer sweep below gives: build output and untracked scratch files must
+   * not be able to satisfy — or escape — a guard.
+   */
+  it('every auth send-* route is classified as org- or account-scoped', () => {
+    const tracked = execFileSync(
+      'git',
+      ['ls-files', '--', 'apps/console/app/api/auth'],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    )
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /\/send-[^/]+\/route\.ts$/.test(line))
+
+    // Guard the premise: an enumeration that found nothing would classify
+    // nothing and pass.
+    expect(tracked.length).toBeGreaterThanOrEqual(2)
+
+    const classified = new Set([...ORG_EMAIL_SENDERS, ...ACCOUNT_SCOPED_SENDERS])
+    expect(tracked.filter((file) => !classified.has(file))).toEqual([])
+  })
+
+  /**
    * FIELD-LEVEL coverage (AGL-2139) — the half this guard was missing.
    *
    * Everything above asserts that each wired FILE reaches the resolver. That
