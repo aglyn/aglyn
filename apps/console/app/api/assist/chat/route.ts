@@ -63,7 +63,8 @@ import {
  * org (AGL-1934 — the request must NAME the org it meters) → 423 lockdown
  * (platform/org/user + the `ai-assist` feature kill switch) → 429 rate
  * limit → 429 quota (free: N messages/UTC-day; entitled: monthly runaway
- * guard) → the model call.
+ * guard; plus an optional monthly SPEND ceiling on both, off by default —
+ * `assistOrgMonthlyCostLimitUsd`) → the model call.
  *
  * Capability tiers: entitled orgs (`aiAssist`, Pro+) get docs-grounded
  * answers PLUS page-context awareness (level 2 — the current route/host is
@@ -136,6 +137,29 @@ export function assistModel(): string {
 
 const MAX_QUESTION_CHARS = 4000
 const MAX_HISTORY_TURNS = 24
+/**
+ * Prior conversation sent upstream, in characters — a budget shared across
+ * ALL turns, not an allowance granted to each of them.
+ *
+ * The distinction is the whole cost of this constant. It used to be applied
+ * inside the per-turn loop (`text.slice(0, MAX_HISTORY_CHARS)`), so 24 turns
+ * could each carry 8,000 characters: 192,000 characters, ~48,000 input
+ * tokens, against a number the route header and AGL-2264 both describe as
+ * "8,000 chars of history". A client posts its own history, so that ceiling
+ * was reachable on demand rather than only by a very long conversation.
+ *
+ * What it cost, at Sonnet list input rates ($3/MTok): ~$0.14 of input per
+ * message instead of ~$0.006. A free workspace's ten messages a day come to
+ * ~$1.44 rather than the "well under a cent a day" `assistFreeDailyLimit`
+ * claims, and an entitled org's 1,000-message monthly guard bounds ~$144 of
+ * provider spend rather than ~$25 — which is why the monthly COGS alert
+ * (`ASSIST_ORG_MONTHLY_COGS_ALERT_USD`, $25) could not have been calibrated
+ * against the real ceiling: it was calibrated against this documented one.
+ *
+ * Spent newest-first, because the turns nearest the question are the ones
+ * that make it intelligible; the oldest included turn is truncated at its
+ * end and everything past the budget is dropped.
+ */
 const MAX_HISTORY_CHARS = 8000
 const MAX_OUTPUT_TOKENS = 1024
 /** Scoped, latency-sensitive chat: the low rung, deliberately. */
@@ -246,15 +270,24 @@ export function parseAssistBody(payload: unknown): AssistRequestBody | null {
   if (!orgId || !question) return null
   const rawHistory = Array.isArray(body.history) ? body.history : []
   const history: AssistHistoryTurn[] = []
-  for (const turn of rawHistory.slice(-MAX_HISTORY_TURNS)) {
+  // Newest-first, spending ONE budget — see `MAX_HISTORY_CHARS`. Walking
+  // backwards is what makes the budget shared rather than per-turn, and it
+  // is also the right thing to keep: a truncated old turn costs the model
+  // less than a missing recent one.
+  let remainingChars = MAX_HISTORY_CHARS
+  for (const turn of rawHistory.slice(-MAX_HISTORY_TURNS).reverse()) {
+    if (remainingChars <= 0) break
     const role = (turn as Record<string, unknown>)?.role
+    if (role !== 'user' && role !== 'assistant') continue
     const text = String((turn as Record<string, unknown>)?.text ?? '')
       .trim()
-      .slice(0, MAX_HISTORY_CHARS)
-    if ((role === 'user' || role === 'assistant') && text) {
-      history.push({ role, text })
-    }
+      .slice(0, remainingChars)
+    if (!text) continue
+    remainingChars -= text.length
+    history.push({ role, text })
   }
+  // Back into conversational order — the budget was spent in reverse.
+  history.reverse()
   // The conversation MUST open on a user turn or the API 400s the whole
   // request. The client sends a trailing window of its thread, and a window
   // boundary lands mid-exchange as often as not — so a long-running panel
@@ -500,11 +533,20 @@ async function handler(request: Request): Promise<Response> {
     // unbounded provider spend on a workspace that pays nothing.
     const quota = await reserveAssistMessage(firestore, body.orgId, entitled)
     if (!quota.allowed) {
+      // Three refusals, not two. The spend ceiling (AGL-2264) is off by
+      // default, but when an operator turns it on it must not borrow the
+      // message cap's words: "reached its limit for the month" invites the
+      // user to count their messages, and they will find they have plenty
+      // left. Same `reason: 'quota'` either way, so the panel's 429 handling
+      // and its remaining-messages line are unchanged.
       return Response.json(
         {
-          error: entitled
-            ? 'This workspace reached its assistant limit for the month'
-            : `Free workspaces get ${quota.limit} assistant messages a day — upgrade to Pro for more`,
+          error:
+            quota.refusedBy === 'budget'
+              ? 'This workspace reached its assistant spending limit for the month'
+              : entitled
+                ? 'This workspace reached its assistant limit for the month'
+                : `Free workspaces get ${quota.limit} assistant messages a day — upgrade to Pro for more`,
           reason: 'quota',
           quota,
         },

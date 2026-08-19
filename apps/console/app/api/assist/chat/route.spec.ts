@@ -458,6 +458,48 @@ describe('the gate ladder — every guard forced red once', () => {
     await expect(response.json()).resolves.toMatchObject({ reason: 'quota' })
     expect(mockFetch).not.toHaveBeenCalled()
   })
+
+  it('429 spend ceiling, in its OWN words, with messages still in hand', async () => {
+    // AGL-2264's ceiling, off by default and switched on here. The words
+    // matter: this org has 995 of its 1,000 messages left, so borrowing the
+    // message cap's sentence would send the user to count a number that
+    // disagrees with the refusal they just got.
+    process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
+    try {
+      seedOrgs()
+      mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+        messages: 5,
+        estCostUsd: 41.5,
+      })
+      const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+      expect(response.status).toBe(429)
+      const payload = await response.json()
+      expect(payload.reason).toBe('quota')
+      expect(String(payload.error)).toMatch(/spending limit/i)
+      expect(String(payload.error)).not.toMatch(/messages a day/i)
+      expect(payload.quota).toMatchObject({ refusedBy: 'budget' })
+      expect(mockFetch).not.toHaveBeenCalled()
+    } finally {
+      delete process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD
+    }
+  })
+
+  it('THE DEFAULT IS INERT: the same spend answers normally with no ceiling', async () => {
+    // Pricing is locked for Sept 1. The ceiling ships unset, so the identical
+    // fixture must reach the model — this is the test that fails if anyone
+    // later gives the ceiling a default number.
+    expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
+    seedOrgs()
+    armUpstream()
+    mockDocs.set(`orgs/${PRO_ORG}/assistUsage/${MONTH}`, {
+      messages: 5,
+      estCostUsd: 41.5,
+    })
+    const response = await POST(post(QUESTION_BODY(PRO_ORG)))
+    expect(response.status).toBe(200)
+    await response.text()
+    expect(mockFetch).toHaveBeenCalled()
+  })
 })
 
 /**
@@ -1010,6 +1052,106 @@ describe('the green path', () => {
     expect(request.messages[request.messages.length - 1].content).toBe(
       'How do I publish my first screen?',
     )
+  })
+
+  it('THE HISTORY BUDGET IS SHARED, not granted to each turn', async () => {
+    // The margin defect. The clamp used to be applied INSIDE the per-turn
+    // loop, so `MAX_HISTORY_CHARS` was an allowance each of the 24 turns
+    // got: 192,000 characters upstream, ~48,000 input tokens, against a
+    // number the route documents as the size of the history.
+    //
+    // The client posts its own history, so this needed no long conversation
+    // — a scripted caller reached it on the first request. At Sonnet list
+    // input rates that is ~$0.14 a message: a free workspace's ten a day
+    // cost ~$1.44 rather than the "well under a cent a day" the free cap is
+    // justified by, and the entitled tier's 1,000-message guard bounded
+    // ~$144 of provider spend against the $25 the staff alert watches for.
+    seedOrgs()
+    armUpstream()
+    const wall = 'x'.repeat(8000)
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          // Ending user-side: a trailing assistant turn is shifted off as
+          // the conversation opener, which would empty the history for a
+          // reason that has nothing to do with the budget under test.
+          history: Array.from({ length: 24 }, (_, index) => ({
+            role: index % 2 === 0 ? 'assistant' : 'user',
+            text: wall,
+          })),
+        }),
+      )
+    ).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    // Everything except the final turn, which is the question itself.
+    const history = request.messages.slice(0, -1) as Array<{ content: string }>
+    const chars = history.reduce((total, turn) => total + turn.content.length, 0)
+    expect(chars).toBeLessThanOrEqual(8000)
+    // Asserted as a bound AND as a floor: a build that simply dropped the
+    // history would satisfy the line above and quietly break the feature,
+    // and a conversation the model cannot see is the failure users report
+    // as the assistant forgetting what they just said.
+    expect(chars).toBeGreaterThan(7000)
+  })
+
+  it('spends that budget on the NEWEST turns, not the oldest', async () => {
+    // Which end gets truncated is the difference between a slightly clipped
+    // conversation and an assistant answering the question before last.
+    seedOrgs()
+    armUpstream()
+    const filler = 'f'.repeat(8000)
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          history: [
+            { role: 'user', text: `OLDEST ${filler}` },
+            { role: 'assistant', text: `MIDDLE ${filler}` },
+            { role: 'user', text: 'NEWEST and short' },
+          ],
+        }),
+      )
+    ).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    const sent = (request.messages as Array<{ content: string }>)
+      .map((turn) => turn.content)
+      .join('\n')
+    expect(sent).toContain('NEWEST and short')
+    expect(sent).not.toContain('OLDEST')
+    // The conversation still reads forwards: the budget is spent backwards,
+    // but a reversed transcript would be a subtler kind of broken.
+    expect(request.messages[request.messages.length - 1].content).toBe(
+      'How do I publish my first screen?',
+    )
+  })
+
+  it('an ordinary conversation is passed through untouched', async () => {
+    // The paired positive. A budget tight enough to break normal use would
+    // pass both tests above, and the panel's threads are short.
+    seedOrgs()
+    armUpstream()
+    await (
+      await POST(
+        post({
+          ...QUESTION_BODY(FREE_ORG),
+          history: [
+            { role: 'user', text: 'how do domains work' },
+            { role: 'assistant', text: 'you connect one in settings' },
+            { role: 'user', text: 'and a subdomain?' },
+            { role: 'assistant', text: 'same place' },
+          ],
+        }),
+      )
+    ).text()
+    const request = JSON.parse(String(mockFetch.mock.calls[0][1].body))
+    expect(request.messages.map((turn: { content: string }) => turn.content)).toEqual([
+      'how do domains work',
+      'you connect one in settings',
+      'and a subdomain?',
+      'same place',
+      'How do I publish my first screen?',
+    ])
   })
 
   it('a refusal reaches the user as words, not as silence', async () => {
