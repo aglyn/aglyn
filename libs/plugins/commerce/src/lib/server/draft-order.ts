@@ -139,6 +139,44 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
           })}`
         : origin
 
+    // WHAT THE COUNT SAYS, said out loud (AGL-2452).
+    //
+    // This handler contained no `canPurchase` and no `stockShortfall` — no
+    // reference to inventory of any kind. It is the door that mints a LIVE,
+    // payable Stripe link, and it would mint one for a sold-out variant whose
+    // merchant had chosen `oversellPolicy: 'deny'`, with the `commerce-draft`
+    // webhook branch then completing it into a `paid` order. `pos-order.ts`'s
+    // own comment asserts "every storefront door gates on it"; that claim was
+    // false for this one.
+    //
+    // WARN, NEVER BLOCK, matching the register (AGL-2357, Zach's decision).
+    // Both of these are MERCHANT-initiated doors rather than shopper-initiated
+    // ones — the merchant may well be taking a deliberate pre-order or
+    // backorder — so a stale count must not refuse a sale the merchant means to
+    // make. What the merchant is entitled to is to be TOLD, which is the part
+    // that was missing entirely. The refusal variant is a separate decision and
+    // is not taken here.
+    //
+    // Computed from the SERVER's product document, and reported on the same
+    // `stockWarnings` key and in the same `StockShortfall` shape the register
+    // already returns, so one console surface can read either door.
+    const shortfall = CommerceModel.stockShortfall(
+      product,
+      variantId || product.variants[0]?.id,
+      quantity,
+    )
+    const stockWarnings: CommerceModel.StockShortfall[] = shortfall
+      ? [
+          {
+            productId,
+            ...(variantId ? { variantId } : {}),
+            name: product.name,
+            requested: quantity,
+            available: shortfall.available,
+          },
+        ]
+      : []
+
     const unitAmountCents = Math.round(Number(variant.priceUsd) * 100)
     const lineItems: CommerceModel.OrderLineItem[] = [
       {
@@ -433,7 +471,13 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       { checkoutSessionId: session.id, paymentLinkUrl: session.url },
       { merge: true },
     )
-    const payload = { orderId: orderRef.id, url: session.url }
+    // Spread on the same terms as the register's: present only when there is
+    // something to say, so a caller can test the key rather than a length.
+    const payload = {
+      orderId: orderRef.id,
+      url: session.url,
+      ...(stockWarnings.length > 0 ? { stockWarnings } : {}),
+    }
     await claim.record(200, payload)
     return res.status(200).json(payload)
   } catch (error) {

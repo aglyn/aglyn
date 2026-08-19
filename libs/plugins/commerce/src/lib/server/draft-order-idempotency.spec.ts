@@ -506,3 +506,78 @@ describe('who may mint a payment link (AGL-2262)', () => {
   })
 })
 
+/**
+ * The payment link says what the shelf says (AGL-2452).
+ *
+ * This handler had NO reference to inventory of any kind — no `canPurchase`,
+ * no `stockShortfall` — while being the door that mints a live, payable Stripe
+ * link. `pos-order.ts`'s own comment claimed "every storefront door gates on
+ * it", and this was the door where that was false.
+ *
+ * WARN, NEVER BLOCK, matching the register (AGL-2357). Both are
+ * merchant-initiated doors, so a stale count must not refuse a pre-order the
+ * merchant means to take — but the merchant is entitled to be told, and being
+ * told was the part that did not exist. Both directions are pinned below: a
+ * shortfall reports, and stock that covers the order says nothing at all.
+ */
+describe('a draft order reports what the count cannot cover (AGL-2452)', () => {
+  it('warns when the tracked stock is short, and still mints the link', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [{ id: 'default', priceUsd: 900, inventory: 1 }],
+    })
+    const result = await post(
+      { productId: 'product-1', quantity: 3 },
+      { 'idempotency-key': 'attempt-a' },
+    )
+    // The sale is NOT refused — that is the decision, not an oversight.
+    expect(result.status).toBe(200)
+    expect(result.body.url).toContain('checkout.stripe.com')
+    expect(result.body.stockWarnings).toEqual([
+      {
+        productId: 'product-1',
+        name: 'Walnut desk',
+        requested: 3,
+        available: 1,
+      },
+    ])
+  })
+
+  /**
+   * The guard forced red from the other side. An order the count covers must
+   * carry NO warning key at all — a handler that reported a shortfall
+   * unconditionally would pass the case above and fail here, which is what
+   * makes that assertion mean something.
+   */
+  it('says nothing when the count covers the order', async () => {
+    docs.set('hosts/host-1/products/product-1', {
+      name: 'Walnut desk',
+      type: 'physical',
+      status: 'active',
+      oversellPolicy: 'deny',
+      variants: [{ id: 'default', priceUsd: 900, inventory: 10 }],
+    })
+    const result = await post(
+      { productId: 'product-1', quantity: 3 },
+      { 'idempotency-key': 'attempt-b' },
+    )
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+  })
+
+  /**
+   * An untracked variant (`inventory: null`) is not a shortfall and must not be
+   * reported as "0 in stock" — the merchant chose not to count this product.
+   */
+  it('says nothing for a product that does not track stock', async () => {
+    const result = await post(
+      { productId: 'product-1', quantity: 99 },
+      { 'idempotency-key': 'attempt-c' },
+    )
+    expect(result.status).toBe(200)
+    expect(result.body.stockWarnings).toBeUndefined()
+  })
+})
