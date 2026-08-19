@@ -49,7 +49,8 @@ function warnMissingPluginOrigin(): void {
   console.info(
     'Realm plugins are OFF locally: NEXT_PUBLIC_PLUGIN_ORIGIN is unset, so a ' +
       'published site never fetches installed plugin bundles (not a failure). ' +
-      'Set NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com to load them.',
+      // A placeholder, not our origin (AGL-2202) — see the console twin.
+      'Set NEXT_PUBLIC_PLUGIN_ORIGIN=<your plugin origin> to load them.',
   )
 }
 

@@ -227,12 +227,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
   },
   {
-    file: 'apps/console/utils/realm-plugins.client.ts',
-    count: 1,
-    reason:
-      'AGL-2202 — a dev-console hint naming our plugin origin as the example value for NEXT_PUBLIC_PLUGIN_ORIGIN.',
-  },
-  {
     file: 'apps/console/utils/server/org-lockdown.ts',
     count: 1,
     reason:
@@ -273,12 +267,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 10,
     reason:
       'Vercel-only host routing gated on IS_VERCEL, plus the NEXT_PUBLIC_CONSOLE_URL default. The edge bundle cannot import TENANT_APEX; a self-host serves its apex through the AGLYN_TENANT_HOST_CNAME branch above it. Widening that to a wildcard is AGL-2202.',
-  },
-  {
-    file: 'apps/tenant/utils/realm-plugins.client.ts',
-    count: 1,
-    reason:
-      'AGL-2202 — the same dev-console hint on the tenant side.',
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/docs-help.ts',
@@ -330,9 +318,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/shared/util/email/src/lib/system-email-catalog.ts',
-    count: 10,
+    count: 2,
     reason:
-      'AGL-2202 — merge-token SAMPLE values rendered in the staff email designer preview; never sent, but they print our console URL as the example.',
+      'The SAMPLE_CONSOLE_ORIGIN / SAMPLE_SUPPORT_URL defaults for the staff email-designer preview. The ten literal samples now build on them (AGL-2202).',
   },
   {
     file: 'libs/shared/util/next/src/lib/use-continue-url.ts',
@@ -404,7 +392,7 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     file: 'tools/scripts/lib/stripe-webhook-health.mjs',
     count: 1,
     reason:
-      'AGL-2202 — the ops lib copy of the platform webhook URL ignores STRIPE_WEBHOOK_URL, which the app route already reads.',
+      'Reader of STRIPE_WEBHOOK_URL, the same variable the console health route honours; the literal is its default (AGL-2202).',
   },
   {
     file: 'tools/scripts/probe-uptime.mjs',

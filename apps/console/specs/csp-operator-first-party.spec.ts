@@ -27,26 +27,29 @@
  * were refused.
  *
  * The file is plain CommonJS with no imports, because the edge runtime
- * bundles it — so it is `require`d here rather than imported, and the reads
- * happen per call, which is what lets one test process exercise both
- * branches.
+ * bundles it — but it is IMPORTED here rather than `require`d. A `require()`
+ * of it inside this project made `@nx/enforce-module-boundaries` read a
+ * dynamic graph edge and redden `console:lint` on twenty-odd unrelated pages
+ * (the AGL-949 shape); `middleware.ts` and `csp-img-src-report-only.spec.ts`
+ * both import it statically, so this now matches them.
+ *
+ * Both directives are computed per CALL, which is what lets one test process
+ * exercise the configured and unconfigured branches.
  *
  * What this deliberately checks BEYOND "the operator's host appears": that a
  * malformed value contributes nothing. An empty string in a CSP source list
  * becomes a bare `https:`, a scheme-only source matching every https origin
  * on the internet — strictly worse than the missing entry it came from.
  */
-const securityOrigins = require('../../../security-origins.js')
-
-const {
+// The workspace-root module both middlewares read. Same import and same
+// disable as `csp-img-src-report-only.spec.ts` one file over: it is outside
+// any nx project, so the boundary rule has nothing to place it in.
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import {
   PRODUCTION_DOMAINS,
   baseCspDirectives,
   imgSrcDirective,
-} = securityOrigins as {
-  PRODUCTION_DOMAINS: string[]
-  baseCspDirectives: (isProduction: boolean) => string
-  imgSrcDirective: (isProduction: boolean) => string
-}
+} from '../../../security-origins'
 
 const OPERATOR_VARS = [
   'NEXT_PUBLIC_CONSOLE_URL',

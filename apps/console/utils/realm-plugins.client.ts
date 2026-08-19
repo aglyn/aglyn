@@ -107,7 +107,10 @@ function warnMissingPluginOrigin(): void {
   console.info(
     'Realm plugins are OFF locally: NEXT_PUBLIC_PLUGIN_ORIGIN is unset, so ' +
       'installed marketplace plugins are never fetched (this is not a failure).\n' +
-      '  · to load INSTALLED plugins   set NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com\n' +
+      // A placeholder rather than our own origin (AGL-2202): a dev-console
+      // hint is a small thing to copy-paste, and naming a host somebody else
+      // operates is how a self-hoster ends up loading OUR bundles.
+      '  · to load INSTALLED plugins   set NEXT_PUBLIC_PLUGIN_ORIGIN=<your plugin origin>\n' +
       '  · to iterate on YOUR plugin   set NEXT_PUBLIC_PLUGIN_DEV=enabled plus ' +
       'NEXT_PUBLIC_PLUGIN_DEV_BUNDLES=<id>=http://localhost:5173/plugin.bundle.mjs\n' +
       '  see apps/console/.env.development.local.example',

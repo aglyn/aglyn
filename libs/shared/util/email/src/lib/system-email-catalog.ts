@@ -15,6 +15,36 @@
  * limitations under the License.
  */
 
+/**
+ * Origins used as merge-token SAMPLE values in the staff email designer
+ * (AGL-2202).
+ *
+ * These are never sent — they render in the template preview so an author can
+ * see what `{{console.url}}` will become. That still made them wrong on a
+ * self-host install: the preview showed Aglyn's console as the example for a
+ * link that will resolve to the operator's, which is exactly the sort of
+ * quiet mis-teaching that ends up copied into a hand-written template.
+ *
+ * Read from the environment rather than through `@aglyn/aglyn`'s
+ * `platform-brand` / `constants`: `shared-util-email` is tagged `scope:shared`
+ * and `@nx/enforce-module-boundaries` refuses the edge. Same defaults, so a
+ * deployment that configures nothing sees exactly what it saw before.
+ */
+const SAMPLE_CONSOLE_ORIGIN: string =
+  (process.env.NEXT_PUBLIC_CONSOLE_URL || '').trim().replace(/\/+$/, '') ||
+  'https://app.aglyn.com'
+
+/**
+ * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
+ * the operator identity sufficient on its own: a configured support URL, else
+ * the operator's support mailbox as a `mailto:`, else ours.
+ */
+const SAMPLE_SUPPORT_URL: string =
+  (process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL || '').trim() ||
+  ((process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()
+    ? `mailto:${(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()}`
+    : 'https://aglyn.com/support')
+
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 
 /**
@@ -140,7 +170,7 @@ export const BRAND_MERGE_TOKENS: readonly SystemEmailMergeToken[] = [
   {
     name: 'brand.supportUrl',
     description: 'Where the recipient should go for help',
-    sample: 'https://aglyn.com/support',
+    sample: SAMPLE_SUPPORT_URL,
   },
 ]
 
@@ -174,7 +204,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'signInUrl',
           description: 'Console URL to sign in and accept',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in invites/route.ts.
@@ -287,7 +317,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'consoleUrl',
           description: 'Console dashboard URL',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in orgs/create/route.ts.
@@ -334,7 +364,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'signInUrl',
           description: 'Console URL to open the organization',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in orgs/members/route.ts.
@@ -438,7 +468,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'resetUrl',
           description: 'One-time link that opens the reset form',
-          sample: 'https://app.aglyn.com/reset-password?oobCode=…',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/reset-password?oobCode=…`,
         },
         {
           name: 'actor.name',
@@ -485,7 +515,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'signInUrl',
           description: 'Where to sign in with the new password',
-          sample: 'https://app.aglyn.com',
+          sample: SAMPLE_CONSOLE_ORIGIN,
         },
       ],
       // Mirrors the fallbackText in _lib/password-admin.ts.
@@ -546,7 +576,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'accountSecurityUrl',
           description: 'Manage-account page where the password can be changed',
-          sample: 'https://app.aglyn.com/manage/user',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
@@ -601,7 +631,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'accountSecurityUrl',
           description: 'Manage-account page where credentials are reviewed',
-          sample: 'https://app.aglyn.com/manage/user',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user`,
         },
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
@@ -652,7 +682,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'resetUrl',
           description: 'One-time link that opens the choose-a-new-password page',
-          sample: 'https://app.aglyn.com/reset-password?oobCode=\u2026',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/reset-password?oobCode=\u2026`,
         },
       ],
       // Mirrors the fallbackText in the route, so the designed and undesigned
@@ -689,7 +719,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'verifyUrl',
           description: 'One-time link that confirms the address',
-          sample: 'https://app.aglyn.com/verify-email?oobCode=\u2026',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/verify-email?oobCode=\u2026`,
         },
       ],
       defaultBody: [
