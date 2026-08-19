@@ -35,6 +35,12 @@ flowchart LR
 are paid.
 :::
 
+:::tip New to this?
+This page is the reference. If you'd rather be walked through it click by click —
+find something, choose which sites get it, install, upgrade, remove — start with
+**[Install your first marketplace item](../../guides/install-your-first-plugin.md)**.
+:::
+
 ## Install & upgrade
 
 - Open **Marketplace** in the organization navigation and **Browse** the listings. Browse
@@ -107,11 +113,13 @@ behave differently on each site.
 ## Publish your own
 
 The **publish + install pipeline** lets developers ship plugins to the marketplace with
-version pinning. The marketplace marketplace also supports **paid listings**, Stripe Connect
+version pinning. The marketplace also supports **paid listings**, Stripe Connect
 payouts, and a publisher **ledger**.
 
 ## Related
 
+- [Install your first marketplace item](../../guides/install-your-first-plugin.md) —
+  the click-by-click walkthrough of everything on this page
 - [The Besigner](../../building-sites/besigner/overview.md)
 - [Site templates & block library](../../building-sites/site-templates/overview.md)
 - [Building feature plugins](building-feature-plugins.md) — the developer guide to every

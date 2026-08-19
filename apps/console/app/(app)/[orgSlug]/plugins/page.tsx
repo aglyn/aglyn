@@ -33,6 +33,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../hooks/use-current-org'
@@ -326,6 +327,11 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
         <Stack spacing={3}>
           <CardDisplay
             header={'Installed from the marketplace'}
+            // Card-level help, not just the page's (AGL-2129). This is the
+            // card people arrive at looking for a switch, having read in
+            // Marketplace that installing is done there — so it points at the
+            // step of the walkthrough that explains the split.
+            help={docsHelp('installYourFirstPlugin', { anchor: '#step-7-off' })}
             contentGutterX
             contentGutterY
           >
@@ -375,6 +381,10 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
 
           <CardDisplay
             header={'Built in'}
+            help={docsHelp('plugins', {
+              excerpt:
+                'Aglyn’s own plugins. Switching one off removes it from every site in this organization — its navigation, the editor, published pages and the API.',
+            })}
             contentGutterX
             contentGutterY
           >

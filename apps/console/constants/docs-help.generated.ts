@@ -308,6 +308,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Injection zones',
     excerpt: 'Every named console zone a plugin widget can render into, and what each receives.',
   },
+  installYourFirstPlugin: {
+    path: '/guides/install-your-first-plugin',
+    title: 'Install your first marketplace item',
+    excerpt: 'A click-by-click walkthrough of the Marketplace — find something, choose which sites get it, install it, and turn it off again.',
+  },
   interactions: {
     path: '/building-sites/besigner/interactions-and-custom-html',
     title: 'Interactions & custom HTML',
@@ -658,6 +663,7 @@ export const DOCS_HELP_ANCHORS = {
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   importExport: ['#export', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
+  installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#what-to-do-next', '#related'],
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
