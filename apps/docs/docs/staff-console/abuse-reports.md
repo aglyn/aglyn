@@ -391,14 +391,22 @@ incident.
 - **No auto-acknowledgement email to the reporter.** They get the receipt page
   with their reference at submit time and nothing afterwards. If they close the
   tab before reading it, they have no record they reported anything.
-- **`abuse@aglyn.com` and `dmca@aglyn.com` are unconfirmed mailboxes**
-  (AGL-1973). They are named in the published Acceptable Use and Copyright
-  policies, and it is not established that either exists — worse, Gmail default
-  routing can accept mail for a non-existent `@aglyn.com` address and discard it,
-  so a report sent there may be lost while the sender believes it was delivered.
-  **The form is the reliable route.** If someone asks where to send a report,
-  send them to `/api/report-abuse`, and the address printed on the form is
-  `support@aglyn.com` for exactly this reason.
+- **`abuse@aglyn.com` and `dmca@aglyn.com` deliver** — confirmed 2026-08-19
+  (AGL-1911) by reading Google Workspace group configuration, *not* by a test
+  send. Both are Google Groups ("Legal - Abuse", "Legal - DMCA") with
+  *Who can post* = **Anyone on the web**, no moderation, and one member,
+  `zach@aglyn.com`, subscribed **Each email**. A test send could not have
+  established this: AGL-1577's default routing accepts mail for *non-existent*
+  `@aglyn.com` addresses too and suppresses the bounce, so "it didn't bounce" is
+  equally true of an address that was never created. The check that can fail is
+  `groups.google.com/a/aglyn.com/g/<name>` — it returns **404** for an address
+  that does not exist.
+  Each is a single-member group with no auto-acknowledgement, so a report sits
+  unread and unacknowledged whenever Zach is away (AGL-2400).
+  **The form is still the better route** — it captures the §512(c)(3)(A) fields
+  a free-text email will not. If someone asks where to send a report, send them
+  to `/api/report-abuse`; the address printed on the form is
+  `support@aglyn.com`.
 - **No NCMEC mechanics.** See [CSAM](#csam) — preserve, suppress, escalate.
 - **No designated agent is filed with the U.S. Copyright Office.** The
   counter-notice path and the repeat-infringer policy are built; the
