@@ -166,6 +166,14 @@ const MENTIONS_ONLY = new Map<string, string>([
     'apps/console/specs/assist-anthropic-subprocessor-gate.spec.ts',
     'This suite.',
   ],
+  [
+    'tools/scripts/check-provider-key-exposure.mjs',
+    'The AGL-2240 exposure checker. Names the key only inside a regex of provider-credential NAMES it refuses to find in the browser bundle; it never reads `process.env` for one and sends nothing anywhere. The complement of this suite: that one asks which MODULE GRAPH a reader is in, this one asks which FILES read it at all — and a reader can be correctly listed here while shipping to every visitor, which is the hole it closes.',
+  ],
+  [
+    'apps/console/specs/provider-key-exposure.spec.ts',
+    'The spec driving that checker. Names the key in its expected-reader assertions and in the list of env names the pattern must match. A guard, not a flow.',
+  ],
 ])
 
 /** Tracked files naming the env var at all, build output excluded. */
