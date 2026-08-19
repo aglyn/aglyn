@@ -45,6 +45,12 @@ interface UsageBudgetState {
     /** FALSE when no rollup exists for this month yet. */
     meteredFresh: boolean
   }
+  /**
+   * The rule that last fired THIS month, or null (AGL-2239). The server
+   * scopes it to the current month; a guard from a previous period is not an
+   * event about this one.
+   */
+  lastAlert: { month: string; threshold: number } | null
   defaultThresholdPcts: number[]
   minAmountUsd: number
   maxAmountUsd: number
@@ -335,6 +341,28 @@ export default function BillingUsageBudgetCardComponent({
           Your budget still applies from the moment you set it.
         </Typography>
       )}
+
+      {/*
+        WHETHER IT HAS ACTUALLY ALERTED (AGL-2239).
+
+        The ladder above says what we intend to do; this says what we did. It
+        also matters when the email did NOT arrive: the cron records the
+        threshold either way, so that rule then stays silent for the rest of
+        the month, and this line is the only surface that tells the person
+        affected an alert was raised at all.
+
+        Three outcomes, not two: no budget, a budget that has not alerted, and
+        a budget that has.
+      */}
+      {budgetSet ? (
+        <Typography variant="body2" color="text.secondary">
+          {state.lastAlert
+            ? `We alerted your owners and admins at ${state.lastAlert.threshold}% of this month's budget.`
+            : `No budget alert yet this month — we'll email your owners and admins at ${thresholdPcts.join(
+                '%, ',
+              )}%.`}
+        </Typography>
+      ) : null}
 
       <Typography variant="body2" color="text.secondary">
         A budget is a <strong>heads-up, not a limit</strong>. We email your
