@@ -50,10 +50,25 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Only the newest verdict matters, but do NOT cancel in progress on main —
-  # a cancelled run of these reads as "no answer", and the answer is the point.
-  group: emulator-guards-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A push is grouped by its own COMMIT, so two pushes never contend and the
+  # answer — which is the point of these suites — always arrives. Non-push
+  # events share a ref-scoped group and supersede each other, which is right
+  # for a PR and for the daily schedule.
+  #
+  # AGL-2378: declining to cancel in progress was NOT enough, and the measured
+  # result was the exact failure the old comment here was written to prevent.
+  # 39 of 82 push runs on main were cancelled on 2026-08-19 under that guard.
+  # Every one of those 39 had ZERO jobs — they were never cancelled in
+  # progress, because they never got to be in progress. A concurrency group
+  # admits one running run plus at most ONE pending run; the third push
+  # evicts the pending one before a runner ever picks it up. At ~22 pushes an
+  # hour against a 5.2m median that eviction is the common case, not the edge.
+  #
+  # So the group KEY carries the guarantee, not `cancel-in-progress`. The flag
+  # is kept honest below rather than deleted: for a push the group is already
+  # unique, so it is false by construction and cannot regress the invariant.
+  group: emulator-guards-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
