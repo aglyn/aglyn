@@ -93,21 +93,83 @@ function makeDocRef(path: string): any {
   }
 }
 
+interface Filter {
+  field: string
+  op: string
+  value: any
+}
+
+/**
+ * THE QUERY IS MODELLED, NOT WAVED THROUGH (AGL-2159).
+ *
+ * The availability read is an equality, an INEQUALITY on a second field, an
+ * `orderBy` on that field and a `limit`, and every one of the four is
+ * load-bearing: the inequality is what removes the past, the ordering is what
+ * decides which stays survive the limit, and the limit is the cap the old
+ * unordered query let arbitrary history fill. A fake that ignored the operator,
+ * or applied `limit` before ordering, would report the crowd-out as fixed
+ * whatever the handler did — and would equally report a correct handler as
+ * broken. Unsupported operators throw rather than matching everything.
+ */
+function applyFilter(data: any, filter: Filter): boolean {
+  const actual = data?.[filter.field]
+  switch (filter.op) {
+    case '==':
+      return actual === filter.value
+    case '>':
+      return Number(actual) > Number(filter.value)
+    case '>=':
+      return Number(actual) >= Number(filter.value)
+    case '<':
+      return Number(actual) < Number(filter.value)
+    case '<=':
+      return Number(actual) <= Number(filter.value)
+    default:
+      throw new Error(`Unmodelled operator: ${filter.op}`)
+  }
+}
+
+function makeQuery(
+  path: string,
+  filters: Filter[],
+  order: string | null,
+  limit: number | null,
+): any {
+  return {
+    where: (field: string, op: string, value: any) =>
+      makeQuery(path, [...filters, { field, op, value }], order, limit),
+    orderBy: (field: string) => makeQuery(path, filters, field, limit),
+    limit: (count: number) => makeQuery(path, filters, order, count),
+    get: async () => {
+      let keys = childPaths(path).filter((key) =>
+        filters.every((filter) => applyFilter(docs.get(key), filter)),
+      )
+      if (order) {
+        // Firestore also DROPS documents missing the ordered field.
+        keys = keys
+          .filter((key) => (docs.get(key) as any)?.[order] !== undefined)
+          .sort(
+            (a, b) =>
+              Number((docs.get(a) as any)[order]) -
+              Number((docs.get(b) as any)[order]),
+          )
+      }
+      // …and the limit applies AFTER the ordering, which is the whole point.
+      if (limit != null) keys = keys.slice(0, limit)
+      return { docs: keys.map(makeSnapshot) }
+    },
+  }
+}
+
 function makeCollectionRef(path: string): any {
   return {
     doc: (id?: string) =>
       makeDocRef(`${path}/${id ?? `auto-${++autoIdCounter}`}`),
     get: async () => ({ docs: childPaths(path).map(makeSnapshot) }),
-    /** The handler's equality query over reservations, faithfully filtered. */
-    where: (field: string, _op: string, value: any) => ({
-      limit: (_count: number) => ({
-        get: async () => ({
-          docs: childPaths(path)
-            .filter((key) => (docs.get(key) as any)?.[field] === value)
-            .map(makeSnapshot),
-        }),
-      }),
-    }),
+    where: (field: string, op: string, value: any) =>
+      makeQuery(path, [{ field, op, value }], null, null),
+    orderBy: (field: string) => makeQuery(path, [], field, null),
+    limit: (count: number) => makeQuery(path, [], null, count),
   }
 }
 
@@ -491,5 +553,138 @@ describe('a reservation charges no tax, deliberately (AGL-2000)', () => {
       Number(session?.params.get('line_items[0][price_data][unit_amount]')),
     ).toBeGreaterThan(0)
     expect(session?.params.get('metadata[type]')).toBe('commerce-reservation')
+  })
+})
+
+/**
+ * THE 500-DOCUMENT CAP, AND WHAT USED TO FILL IT (AGL-2159).
+ *
+ * The availability read was `.where('resourceId','==',resourceId).limit(500)`
+ * with no ordering, so Firestore answered with 500 documents in `__name__`
+ * order — an arbitrary slice of the resource's ENTIRE booking history. Stays
+ * from three summers ago, which cannot overlap anything a guest is asking for
+ * today, competed for those slots on equal terms with the live reservation
+ * that does. A cottage past 500 lifetime bookings therefore began dropping
+ * real holds out of its own availability check and confirming a second guest
+ * into an occupied room — and the failure is invisible from inside:
+ * `isRangeAvailable` is handed a short list and answers, correctly, that the
+ * range is free.
+ *
+ * These drive the whole handler, so what is measured is whether the SECOND
+ * guest is refused — not whether a query builder was called with particular
+ * arguments.
+ */
+describe('an availability check that must not be crowded out (AGL-2159)', () => {
+  /** Stays that ended long before the requested arrival, so cannot overlap. */
+  function seedPastStays(count: number): void {
+    for (let index = 1; index <= count; index += 1) {
+      // Ids chosen to sort BEFORE the live hold under `__name__`, which is the
+      // order the old unordered query actually returned.
+      docs.set(`hosts/host-1/reservations/aaa-past-${index}`, {
+        resourceId: 'room-1',
+        status: 'checked_out',
+        checkInDayMs: CHECK_IN - DAY_MS * (900 + index),
+        checkOutDayMs: CHECK_IN - DAY_MS * (899 + index),
+        createdAtMs: 1,
+      })
+    }
+  }
+
+  function seedLiveHold(): void {
+    docs.set('hosts/host-1/reservations/zzz-live', {
+      resourceId: 'room-1',
+      status: 'confirmed',
+      checkInDayMs: CHECK_IN,
+      checkOutDayMs: CHECK_OUT,
+      createdAtMs: 1,
+    })
+  }
+
+  /**
+   * THE DEFECT. 600 finished stays plus the one confirmed booking that covers
+   * the requested dates: the old query returned the first 500 by id, the live
+   * hold was not among them, and the second guest was taken.
+   */
+  it('refuses dates a live booking covers even behind 600 finished stays', async () => {
+    seedPastStays(600)
+    seedLiveHold()
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(409)
+    expect(result.body).toEqual({ error: 'Those dates just sold out' })
+    // No second hold, and no charge attempted for a room already taken.
+    expect(holdDocs().filter((hold: any) => hold.status === 'pending')).toEqual(
+      [],
+    )
+    expect(
+      stripeCalls.filter((call) => call.url.includes('/checkout/sessions')),
+    ).toHaveLength(0)
+  })
+
+  /**
+   * THE POSITIVE CONTROL, and the one that stops "refuse everything" passing
+   * the test above: the same 600 finished stays with NO live hold must still
+   * let the booking through.
+   */
+  it('still books when the finished stays are all that is there', async () => {
+    seedPastStays(600)
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+    expect(holdDocs().filter((hold: any) => hold.status === 'pending')).toHaveLength(
+      1,
+    )
+  })
+
+  /**
+   * And the expiry rule still holds under the narrowed query: an abandoned
+   * `pending` hold older than 30 minutes releases its dates. The filter runs in
+   * memory, so this proves the narrowing did not quietly promote expired holds
+   * into blockers by ordering them ahead of the cut.
+   */
+  it('still releases an expired pending hold', async () => {
+    docs.set('hosts/host-1/reservations/stale', {
+      resourceId: 'room-1',
+      status: 'pending',
+      checkInDayMs: CHECK_IN,
+      checkOutDayMs: CHECK_OUT,
+      createdAtMs: Date.now() - 31 * 60 * 1000,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+  })
+
+  /** A stay that ENDS on the requested arrival day is not an overlap. */
+  it('books dates that begin the day a previous stay ends', async () => {
+    docs.set('hosts/host-1/reservations/back-to-back', {
+      resourceId: 'room-1',
+      status: 'confirmed',
+      checkInDayMs: CHECK_IN - 3 * DAY_MS,
+      checkOutDayMs: CHECK_IN,
+      createdAtMs: 1,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
+  })
+
+  /** …and another resource's bookings never block this one. */
+  it('ignores a booking on a different resource', async () => {
+    docs.set('hosts/host-1/reservations/other-room', {
+      resourceId: 'room-2',
+      status: 'confirmed',
+      checkInDayMs: CHECK_IN,
+      checkOutDayMs: CHECK_OUT,
+      createdAtMs: 1,
+    })
+
+    const result = await post({}, { 'idempotency-key': 'attempt-a' })
+
+    expect(result.status).toBe(200)
   })
 })

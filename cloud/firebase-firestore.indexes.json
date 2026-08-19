@@ -649,6 +649,20 @@
       ]
     },
     {
+      "collectionGroup": "reservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "resourceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "checkOutDayMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "screens",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

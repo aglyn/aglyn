@@ -98,11 +98,42 @@ export const reserveHandler: PluginApiHandler = async (req, res) => {
     }
     claim = claimed.claim
 
+    // ONLY STAYS THAT COULD STILL OVERLAP, NEAREST FIRST (AGL-2159).
+    //
+    // This was `.where('resourceId','==',resourceId).limit(500)` with no
+    // ordering, so Firestore returned 500 documents in `__name__` order — an
+    // arbitrary slice of the resource's ENTIRE booking history. Every stay the
+    // resource has ever had competed for those 500 slots on equal terms with
+    // the ones that matter, so a cottage that had taken 500 bookings began
+    // silently dropping LIVE reservations out of its own availability check
+    // and confirming a second guest into an occupied room. Nothing about that
+    // failure is visible: `isRangeAvailable` is handed a short list and
+    // answers, correctly, that the range is free.
+    //
+    // `checkOutDayMs > checkInDayMs` is the one inequality that removes the
+    // whole of the past — a stay that ended before the requested arrival
+    // cannot overlap it — and ordering by the same field puts the stays
+    // nearest the requested window at the front of the limit rather than
+    // whichever ones happen to sort early by id. Needs the composite index
+    // `reservations (resourceId ASC, checkOutDayMs ASC)`, added to
+    // `cloud/firebase-firestore.indexes.json` and pinned by
+    // `reserve-availability-indexes.spec.ts` — an equality plus an `orderBy`
+    // on a second field is exactly the shape that reads as free and is not
+    // (AGL-1793), and here a missing index throws rather than under-reporting.
+    //
+    // RESIDUAL, stated: the cap can still bite when a single resource holds
+    // more than 500 stays that all end between the requested arrival and the
+    // end of a genuinely overlapping one. That is a far narrower window than
+    // "500 bookings in this resource's lifetime", but it is not zero, and the
+    // sweep that would keep expired `pending` holds from filling those slots
+    // is a scheduled job this change does not add (see the commit).
     const [resourceSnapshot, reservationsSnapshot] = await Promise.all([
       hostRef.collection('resources').doc(resourceId).get(),
       hostRef
         .collection('reservations')
         .where('resourceId', '==', resourceId)
+        .where('checkOutDayMs', '>', checkInDayMs)
+        .orderBy('checkOutDayMs')
         .limit(500)
         .get(),
     ])

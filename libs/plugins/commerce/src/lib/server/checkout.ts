@@ -196,7 +196,12 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ) {
         return res.status(400).json({ error: 'Invalid or expired coupon' })
       }
-      // Stripe's charge minimum is 50¢ — never discount below it.
+      // Stripe's charge minimum is 50¢ — never discount below it. The
+      // percentage comes off the ORDER total, matching `cart-checkout.ts`'s
+      // `Math.round(itemsCents * percentOff / 100)`, so the same code takes
+      // the same money whichever button the shopper pressed. What the SESSION
+      // is built from this figure is where the two used to diverge — see the
+      // line-item construction below (AGL-2159).
       amountCents = Math.max(
         50,
         Math.round((amountCents * (100 - percentOff)) / 100),
@@ -428,10 +433,47 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // rather than sent as a Stripe discount, which is why `amount_discount` is
     // 0 on every buy-now session and the discount has to ride the metadata
     // (AGL-1711). Hoisted so the Stripe param and the metadata cannot drift.
-    const chargedUnitAmountCents = Math.round(amountCents / quantity)
+    // THE SESSION CHARGES `amountCents`, EXACTLY (AGL-2159).
+    //
+    // A Stripe line is `quantity` units at ONE integer `unit_amount`, so it can
+    // only express totals divisible by `quantity` — and a percentage coupon
+    // does not respect that. This used to be
+    // `Math.round(amountCents / quantity)` multiplied back by `quantity`, which
+    // missed `amountCents` by up to `quantity / 2` cents in either direction:
+    // the shopper was charged something the storefront never quoted, and the
+    // fee and the manual tax were computed on a base nothing collected.
+    // Rounding UP was worse still — `discountCents` below is
+    // `list - charged` under a `Math.max(0, …)`, so a charge that met or passed
+    // the list price clamped it to ZERO and the order recorded no discount on a
+    // sale the shopper had applied a coupon to. On a 99-unit order of a 50¢
+    // item with 1% off that is not a cent of drift: the shopper paid the full
+    // $49.50 and the promotion vanished from the merchant's own record.
+    //
+    // So when the total does not divide evenly, the line becomes ONE unit at
+    // the exact total, with the count moved into the display name. The
+    // shopper's real quantity was never carried by this field anyway —
+    // `metadata[quantity]` is what `computeBuyNowOrder` builds the order's line
+    // item from, and it is untouched — so nothing downstream can tell the
+    // difference except that the arithmetic now closes.
+    //
+    // The even case (every sale with no coupon, and most with one) keeps the
+    // per-unit shape byte for byte, so the ordinary Stripe checkout page is
+    // unchanged.
+    const evenUnitAmountCents = Math.floor(amountCents / quantity)
+    const remainderCents = amountCents - evenUnitAmountCents * quantity
+    const chargedQuantity = remainderCents === 0 ? quantity : 1
+    const chargedUnitAmountCents =
+      remainderCents === 0 ? evenUnitAmountCents : amountCents
+    const chargedLineName = `${String(product.name ?? 'Product')}${
+      remainderCents === 0 ? '' : ` × ${quantity}`
+    }`.slice(0, 120)
+    // What was ACTUALLY discounted, now that the charge and `amountCents` are
+    // the same number. `Math.max(0, …)` stays as a guard against a future floor
+    // lifting the charge above list; it no longer erases a real discount,
+    // because there is no longer a rounding that can push the charge past it.
     const discountCents = Math.max(
       0,
-      listUnitAmountCents * quantity - chargedUnitAmountCents * quantity,
+      listUnitAmountCents * quantity - amountCents,
     )
 
     // Subscriptions (AGL-303): recurring prices bill on the platform with
@@ -439,12 +481,10 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // `isSubscription` resolved above (AGL-545).
     const params = new URLSearchParams({
       mode: isSubscription ? 'subscription' : 'payment',
-      'line_items[0][quantity]': String(quantity),
+      'line_items[0][quantity]': String(chargedQuantity),
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
-      'line_items[0][price_data][product_data][name]': String(
-        product.name ?? 'Product',
-      ).slice(0, 120),
+      'line_items[0][price_data][product_data][name]': chargedLineName,
       ...(isSubscription
         ? {
             'line_items[0][price_data][recurring][interval]':
