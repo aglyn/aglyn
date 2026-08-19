@@ -167,6 +167,25 @@ queued. Read that row before running again.
 Listing is capped, and the card says so when it hits the cap. Treat the length as a
 floor.
 
+## Idempotency claims {#idempotency-claims}
+
+Money-moving routes take a **claim** before they act and release it after, so a retry —
+Stripe's redelivery, a double-clicked button, a cron that overlapped itself — finds the
+claim held and does nothing rather than charging, refunding or paying out twice.
+
+A claim that is still held long after its work should have finished is **stranded**: the
+process that took it died between claiming and releasing. Nothing is corrupted, but the
+operation it guards is now *blocked* — the retry that would have completed it keeps
+finding the claim and backing off. That is the failure this card exists to make visible,
+because from the outside it looks like nothing happening at all.
+
+Each row carries the claim's kind, the scope and organization it was taken for, and its
+age. Age is the whole signal: a claim seconds old is a request in flight, and one hours
+old is a process that is not coming back. The **stranded** threshold is the card's own,
+not a property of the claim.
+
+Listing is capped, and the card says so when it hits the cap. Treat the count as a floor.
+
 ## Re-checking
 
 **Re-check now** re-runs every probe. The probes memoise their expensive work for five

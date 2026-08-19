@@ -31,6 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 
 export interface IdempotencyClaim {
   id: string
@@ -121,6 +122,11 @@ export default function IdempotencyClaimsCard() {
   return (
     <CardDisplay
       header={'Idempotency claims'}
+      help={docsHelp('platformHealth', {
+        anchor: '#idempotency-claims',
+        excerpt:
+          'A claim still held long after its work should have finished is a process that died between claiming and releasing — the operation it guards is blocked, because every retry finds the claim and backs off.',
+      })}
       contentGutterX
       contentGutterY
     >
