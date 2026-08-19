@@ -172,6 +172,64 @@ describe('renderSystemEmail', () => {
     })
   })
 
+  /**
+   * White-label in a DESIGNED template (AGL-2139).
+   *
+   * Every org-context sender has the shape `designed?.subject ?? <branded
+   * fallback>`, so the designed template wins — and the catalog copy said
+   * "Aglyn". White-label therefore inverted precisely when staff published a
+   * template, which is that feature's normal steady state.
+   */
+  describe('the brand reaches a designed template', () => {
+    beforeEach(() => {
+      mockGet.mockResolvedValue(snapshot({ versionId: 'v1' }))
+      mockVersionGet.mockResolvedValue(snapshot({ nodes: NODES }))
+    })
+
+    it("renders the ORG's brand in the catalog subject", async () => {
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+        'brand.productName': 'Northwind Studio',
+      })
+      expect(result?.subject).toContain('Northwind Studio')
+      expect(result?.subject).not.toContain('Aglyn')
+    })
+
+    it('defaults to Aglyn when a sender supplies no brand at all', async () => {
+      // The platform-scoped senders — password reset, verification, the
+      // security alerts — genuinely have no org. Without a default,
+      // `blankUnresolvedTokens` would delete `{{brand.productName}}` and ship
+      // "You've been invited to Test Org on ", which is worse than the
+      // hard-coded literal this replaced.
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(result?.subject).toContain('Aglyn')
+      expect(result?.subject).not.toContain('{{')
+    })
+
+    it('emits the white-label email logo, with the brand as its alt text', async () => {
+      const result = await renderSystemEmail(
+        'org-invite',
+        { 'org.name': 'Test Org', 'brand.productName': 'Northwind Studio' },
+        { brandLogoUrl: 'https://cdn.example.com/northwind.png' },
+      )
+      expect(result?.html).toContain('https://cdn.example.com/northwind.png')
+      // Most inboxes block images by default, so a logo with no alt is a
+      // blank box where the sender's identity should be.
+      expect(result?.html).toContain('alt="Northwind Studio"')
+    })
+
+    it('emits NOTHING when the org has no email logo', async () => {
+      // A gap where a logo should be reads as a broken email; no logo reads
+      // as a plain one, which is correct for an org that set none.
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(result?.html).not.toContain('<img')
+    })
+  })
+
   // The test-send path renders the effective email — designed if published,
   // else the catalog default — so a test never sends an empty message (AGL-766).
   describe('renderEffectiveSystemEmail', () => {

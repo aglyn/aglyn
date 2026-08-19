@@ -38,6 +38,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../../../../components/staff-only.component'
+import { SuperStaffOnly } from '../../../../../../../components/staff-super-only.component'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../../../constants/docs-links'
@@ -235,19 +236,24 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           helperText={`${subdomain || '…'}.${TENANT_ROOT}`}
                           sx={{ flex: 1 }}
                         />
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={
-                            busy ||
-                            !subdomain.trim() ||
-                            subdomain === (host?.subdomain ?? '')
-                          }
-                          onClick={() => void handleSubdomainSave()}
-                          sx={{ mt: 0.5 }}
-                        >
-                          {'Save'}
-                        </Button>
+                        {/* Retargeting a subdomain is super-only at
+                            /api/admin/host (AGL-2131). Support staff saw a
+                            live Save and got a raw 403. */}
+                        <SuperStaffOnly>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={
+                              busy ||
+                              !subdomain.trim() ||
+                              subdomain === (host?.subdomain ?? '')
+                            }
+                            onClick={() => void handleSubdomainSave()}
+                            sx={{ mt: 0.5 }}
+                          >
+                            {'Save'}
+                          </Button>
+                        </SuperStaffOnly>
                       </Stack>
                     </Stack>
                   </CardDisplay>

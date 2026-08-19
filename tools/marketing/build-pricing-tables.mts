@@ -166,7 +166,13 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Sites (hosts)', value: talk((p) => num(E(p).hostLimit)) },
       { label: 'Pages per site', value: talk((p) => num(E(p).screensPerHost)) },
       { label: 'Storage per site', value: talk((p) => mb(E(p).storagePerHostMb)) },
-      { label: 'Total site size', value: talk((p) => mb(E(p).totalSiteSizeMb)) },
+      // 'Total site size' was emitted here from `totalSiteSizeMb` until
+      // AGL-2133 retired that entitlement: it was enforced by nothing, and
+      // the measurable org total can only reach 2.3-20.9% of it because
+      // AGL-678 caps a node map at 900 KB. There is no number left to emit.
+      // NOTE: the LIVE /pricing compare table still carries the row — it is
+      // click-built, not generated from this file, so removing it there is a
+      // separate act and a pricing-surface decision, not a codegen change.
       { label: 'Bandwidth / mo', value: talk((p) => gb(E(p).bandwidthGb)) },
       { label: 'Custom domain & SSL', value: (p) => bool(F(p).customDomain) },
       { label: 'Remove Aglyn branding', value: (p) => bool(F(p).removeBranding) },

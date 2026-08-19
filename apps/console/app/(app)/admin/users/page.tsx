@@ -44,6 +44,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import {
+  SuperStaffOnlyNotice,
+  useSuperStaffGate,
+} from '../../../../components/staff-super-only.component'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -101,6 +105,10 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [truncatedTenants, setTruncatedTenants] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  // AGL-2131. Every write on this page — grant/revoke staff, set the role,
+  // enable/disable the account — is super-only at
+  // /api/admin/users/manage:93. The lookup and the listing are not.
+  const { blocked: notSuper } = useSuperStaffGate()
 
   const loadPage = useCallback(
     async (pageToken?: string | null, email?: string) => {
@@ -248,6 +256,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <StaffOnly>
+          <SuperStaffOnlyNotice what="Granting staff, setting a role and disabling an account" />
           <CardDisplay
             header={'Accounts'}
             help={docsHelp('staffConsole', {
@@ -392,7 +401,14 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                             select
                             size="small"
                             variant="standard"
-                            value={record.staffRole ?? 'super'}
+                            // A role-less account is `support` everywhere
+                            // that enforces (AGL-495/AGL-2131). Showing it as
+                            // `super` here made the console the last place
+                            // still asserting the old fail-open — and it is
+                            // the screen an operator uses to decide whether
+                            // an account needs fixing.
+                            value={record.staffRole ?? 'support'}
+                            disabled={busy || notSuper}
                             onChange={(event) =>
                               void handleSetRole(record, event.target.value)
                             }
@@ -440,7 +456,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                         </AppLink>
                         <Button
                           size="small"
-                          disabled={busy}
+                          disabled={busy || notSuper}
                           onClick={handleAction(
                             record,
                             record.staff ? 'revokeStaff' : 'grantStaff',
@@ -452,7 +468,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                         <Button
                           size="small"
                           color={record.disabled ? 'success' : 'error'}
-                          disabled={busy}
+                          disabled={busy || notSuper}
                           onClick={handleAction(
                             record,
                             record.disabled ? 'enable' : 'disable',

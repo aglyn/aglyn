@@ -17,7 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
-import { resolveBrandingProfile } from '@aglyn/aglyn/server'
+import { brandMergeTokens, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
@@ -241,12 +241,19 @@ async function handler(request: Request): Promise<Response> {
             `${orgName} and all of its data have been permanently erased ` +
             `from ${branding.productName}, as requested. This is complete and ` +
             'cannot be undone.'
-          const designed = await renderSystemEmail('erasure-confirmation', {
-            'org.name': String(orgName),
-          })
+          const designed = await renderSystemEmail(
+            'erasure-confirmation',
+            { ...brandMergeTokens(branding), 'org.name': String(orgName) },
+            { brandLogoUrl: branding.emailLogoUrl },
+          )
           await sendEmail({
             to: ownerEmail,
-            subject: designed?.subject ?? 'Your Aglyn data has been erased',
+            // AGL-2139: this line read 'Your Aglyn data has been erased' two
+            // lines above a body that already used `branding.productName` —
+            // the confusion inside a single send site.
+            subject:
+              designed?.subject ??
+              `Your ${branding.productName} data has been erased`,
             text: designed?.text || fallbackText,
             ...(designed?.html ? { html: designed.html } : {}),
             fromName: branding.fromName,

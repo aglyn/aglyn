@@ -5,12 +5,17 @@ service cloud.firestore {
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
     function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
-    // Staff RBAC (AGL-206): roles ride a second claim; a missing role
-    // means 'super' so pre-RBAC staff keep full access (migration path).
+    // Staff RBAC (AGL-206): roles ride a second claim. A missing role means
+    // 'support', the LEAST privileged (AGL-2131) — it meant 'super' here
+    // long after AGL-495 inverted that default in every API route, so a
+    // claim-less staff token was super at the rules layer and support at the
+    // handlers. Role-less accounts are found with
+    // tools/scripts/audit-staff-claims.mjs and given an explicit role with
+    // tools/scripts/set-staff-claim.mjs; they are not admitted by a default.
     // support = read-only surfaces; billing = plan/entitlement writes;
     // super = everything including suspension and user management.
     function staffRole() {
-      return request.auth.token.get('staffRole', 'super');
+      return request.auth.token.get('staffRole', 'support');
     }
     function isBillingStaff() {
       return isStaff() && (staffRole() == 'super' || staffRole() == 'billing');
