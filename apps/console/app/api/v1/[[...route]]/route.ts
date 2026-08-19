@@ -24,7 +24,7 @@
 import { buildDocsUrl } from '../../../../constants/docs-links'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
-import { dispatchResource } from '../../../../utils/api-v1-resources'
+import { dispatchResource, handleUsage } from '../../../../utils/api-v1-resources'
 
 // lockdown-423: via apps/console/utils/api-v1.ts — every /v1 dispatch
 // authenticates there, and the verdict runs beside the org-doc read.
@@ -50,7 +50,8 @@ async function dispatch(
   // unknown endpoint — `dispatchResource` would 404 it, which reads as "this
   // path doesn't exist" and sends integrators hunting the wrong bug (AGL-900).
   const isServicePath =
-    segments.length === 0 || (segments.length === 1 && segments[0] === 'me')
+    segments.length === 0 ||
+    (segments.length === 1 && (segments[0] === 'me' || segments[0] === 'usage'))
   if (isServicePath && request.method !== 'GET') {
     return ApiErrors.methodNotAllowed({ headers: { ...headers, Allow: 'GET' } })
   }
@@ -74,6 +75,14 @@ async function dispatch(
       },
       { headers },
     )
+  }
+  // `/v1/usage` (AGL-2277) is a SERVICE path, beside `/v1/me` rather than in
+  // `dispatchResource`: it is not a collection, has no ids, and takes no
+  // scope. Keeping it here is also what gives it the right 405 — the guard
+  // above answers `Allow: GET` on a non-GET, where `dispatchResource` would
+  // 404 it and send an integrator hunting a path that plainly exists (AGL-900).
+  if (segments.length === 1 && segments[0] === 'usage' && request.method === 'GET') {
+    return handleUsage(request, context)
   }
   if (segments.length === 1 && segments[0] === 'me' && request.method === 'GET') {
     return apiJson(

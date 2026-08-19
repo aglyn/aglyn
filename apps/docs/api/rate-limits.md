@@ -68,7 +68,8 @@ to its plan:
 
 Requests beyond the included quota **keep working** and bill as metered overage on the
 monthly invoice — the quota is a meter, not a wall, so it can never break a live
-integration mid-run. Track usage on the **Billing** page's API-requests meter. See
+integration mid-run. Read where you stand from the API itself with
+[`GET /v1/usage`](usage.md), or on the **Billing** page's API-requests meter. See
 [Billing & Plans → API access](/workspace-and-billing/billing-and-plans/overview#api-access).
 
 The month is calendar-based in **UTC**, which may not match your billing timezone at

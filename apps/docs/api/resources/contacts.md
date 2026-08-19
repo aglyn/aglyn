@@ -228,3 +228,5 @@ See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 
 - [Contacts CRM](/content-and-data/contacts/overview) — how contacts are captured, and
   what the audience band means for your plan.
+- [Usage](../usage.md) — how much of the audience band you've used, and whether
+  crossing it bills or refuses.

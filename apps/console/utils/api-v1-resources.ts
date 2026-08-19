@@ -22,7 +22,9 @@
  */
 import {
   type AttemptClaim,
+  checkApiRequestQuota,
   checkContactQuota,
+  checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
@@ -46,7 +48,7 @@ import {
   parseLimit,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
-import { type ApiV1Context, requireScope } from './api-v1'
+import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
@@ -1802,6 +1804,135 @@ async function handleContacts(
   return ApiErrors.methodNotAllowed({
     headers: { ...ctx.headers, Allow: 'GET, PATCH, DELETE' },
   })
+}
+
+// ── Usage (read) ────────────────────────────────────────────────────────────
+
+/**
+ * One metered dimension, as published (AGL-2277).
+ *
+ * `included`/`remaining` are `null` for an UNLIMITED band rather than the
+ * sentinel itself: `UNLIMITED` is `Number.POSITIVE_INFINITY`, which
+ * `JSON.stringify` silently turns into `null` anyway — so the choice is
+ * between a `null` that means "unlimited" on purpose and the same `null`
+ * arriving by accident, indistinguishable from a bug. Stated explicitly, and
+ * documented, so an integrator can branch on it.
+ *
+ * `metered` is the field that actually answers "what happens when I cross
+ * this" — true means the excess bills, false means the next call is refused.
+ * It is read off the plan's own overage rate through the `check*Quota`
+ * helpers rather than re-derived here, because a second copy of that rule
+ * would drift from the one the enforcement path uses, and this endpoint's
+ * whole value is telling a customer what the enforcement path will do.
+ */
+function usageBand(
+  used: number,
+  included: number,
+  remaining: number,
+  overageRateUsd: number | null,
+) {
+  const unlimited = !Number.isFinite(included)
+  return {
+    used,
+    included: unlimited ? null : included,
+    remaining: unlimited ? null : remaining,
+    metered: overageRateUsd !== null,
+  }
+}
+
+/**
+ * `GET /v1/usage` (AGL-2277) — the caller's own meter, for the current
+ * billing month.
+ *
+ * `/v1` is the metered surface: an integration is the thing generating
+ * `apiRequestsPerMonth`, and until this shipped it had no way to ask how much
+ * of the band it had spent. The only signal was the `429` at the end of the
+ * month with a `Retry-After` pointing at the month boundary — a wall with no
+ * approach — and no way at all to check whether a bulk import was about to
+ * cross an audience or storage band.
+ *
+ * NO SCOPE, like `GET /v1/me`. An API key is an organization credential and
+ * this is that organization's own meter; requiring, say, `datasets:read`
+ * would mean a key scoped to contacts could not see the quota that refuses
+ * it. It is metered as one request like everything else, which is why the
+ * number it reports may be one behind — see the note on `apiRequests`.
+ *
+ * `apiRequests` is read from `orgs/{orgId}/apiUsage/{month}` — the LIVE
+ * counter `refuseIfApiQuotaExhausted` enforces from, not the swept monthly
+ * rollup, so what this reports and what refuses a request are the same
+ * number. `dataStorageMb` is the opposite case by necessity: bytes are
+ * measured by the `report-usage` sweep, so the honest field to publish is the
+ * swept one that billing actually prices from, and its staleness is
+ * documented rather than hidden behind a fresh but differently-derived
+ * figure.
+ */
+export async function handleUsage(
+  request: Request,
+  ctx: ApiV1Context,
+): Promise<Response> {
+  if (request.method !== 'GET') {
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: 'GET' },
+    })
+  }
+  const orgRef = ctx.firestore.collection('orgs').doc(ctx.orgId)
+  const month = apiUsageMonth()
+  const [apiSnap, storageSnap, contactsSnap, datasetsSnap] = await Promise.all([
+    orgRef.collection('apiUsage').doc(month).get(),
+    orgRef.collection('usage').doc(month).get(),
+    orgRef.collection('contacts').count().get(),
+    orgRef.collection('datasets').count().get(),
+  ])
+
+  const apiQuota = checkApiRequestQuota(
+    ctx.org as never,
+    Number(apiSnap.get('count') ?? 0),
+  )
+  const contactQuota = checkContactQuota(
+    ctx.org as never,
+    contactsSnap.data().count,
+  )
+  const datasetQuota = checkDatasetQuota(ctx.org, datasetsSnap.data().count)
+  const storageQuota = checkDataStorageQuota(
+    ctx.org as never,
+    Number(storageSnap.get('dataStorageMb') ?? 0),
+  )
+
+  return apiJson(
+    {
+      object: 'usage',
+      month,
+      apiRequests: usageBand(
+        apiQuota.used,
+        apiQuota.included,
+        apiQuota.remaining,
+        apiQuota.overageRateUsd,
+      ),
+      contacts: usageBand(
+        contactQuota.used,
+        contactQuota.included,
+        contactQuota.remaining,
+        contactQuota.overageRateUsd,
+      ),
+      // Datasets are the one band with no overage RATE — extra slots are an
+      // add-on you buy, not usage that meters — so `metered` is always false
+      // and `included` is the effective limit INCLUDING purchased add-ons,
+      // which is the number that actually refuses a create.
+      datasets: usageBand(
+        datasetsSnap.data().count,
+        datasetQuota.limit,
+        datasetQuota.remaining,
+        null,
+      ),
+      dataStorageMb: usageBand(
+        storageQuota.usedMb,
+        storageQuota.includedMb,
+        storageQuota.remainingMb,
+        storageQuota.overageRateUsd,
+      ),
+    },
+    { headers: ctx.headers },
+  )
 }
 
 // ── Dispatch ────────────────────────────────────────────────────────────────

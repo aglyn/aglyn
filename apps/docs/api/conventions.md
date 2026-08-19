@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Conventions
 description: Pagination, ordering, error envelopes, and idempotency — shared behavior across every endpoint.
 ---
