@@ -21,7 +21,11 @@
  * `/api/v1` data plane (which authenticates with the keys themselves). Key
  * creation mints the secret and returns it once; only its hash is stored.
  */
-import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  checkEntitlement,
+  isOrgWideMember,
+  pluginRequestFromWeb,
+} from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -35,7 +39,15 @@ import {
   revokeApiKey,
 } from '@aglyn/tenant-data-admin'
 
-/** Only owners/admins manage keys; any member may view the (metadata) list. */
+/**
+ * Only owners/admins manage keys; any ORG-WIDE member may view the (metadata)
+ * list.
+ *
+ * This said "any member", and the GET honoured it literally — which stopped
+ * being the right rule when AGL-1026 established that a site collaborator is
+ * a real org member whose reach is a list of sites. The word doing the work
+ * is now `isOrgWideMember`, at the GET below.
+ */
 const MANAGER_ROLES = new Set(['owner', 'admin'])
 
 async function handler(request: Request): Promise<Response> {
@@ -95,7 +107,24 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // A site collaborator is an org member — that is what lets them into the
+    // console — but the API keys are an ORG-WIDE resource, and AGL-1026's rule
+    // is that anything org-wide "is not theirs to see". This GET sat ABOVE the
+    // manager check below, so a contractor scoped to one microsite could list
+    // every key the workspace holds: names, prefixes, scopes and timestamps.
+    //
+    // Org-wide membership rather than the manager role, deliberately: listing
+    // is not managing, and an ordinary member's access is unchanged. No secret
+    // was ever exposed (`toPublicApiKey` never returns one), but the metadata
+    // is a map of the workspace's integrations, and the docs tell a
+    // collaborator that Settings "isn't part of their console at all".
     if (method === 'GET') {
+      if (!isStaff && !isOrgWideMember(actor?.member)) {
+        return Response.json(
+          { error: 'API keys are managed at the organization level' },
+          { status: 403 },
+        )
+      }
       return Response.json({ keys: await listApiKeys(orgId) })
     }
 
