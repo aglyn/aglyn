@@ -78,6 +78,7 @@ import {
   scanAbandonedCheckouts,
 } from './server/process-abandoned'
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
+import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
 import { supplierUpdateHandler } from './server/supplier-update'
 
@@ -134,6 +135,40 @@ registerPluginJob({
     if (!isEmailConfigured()) return
     const { sent } = await scanRestockAlerts()
     if (sent) console.info(`commerce: sent ${sent} back-in-stock alerts`)
+  },
+})
+
+/**
+ * The missing-decrement detector (AGL-2358).
+ *
+ * HOURLY, not on the 15-minute recovery beat: it is a detector for a rare
+ * process death, not a queue drain, and nothing it finds gets less true for
+ * waiting an hour. The cost of the beat is what sets the interval — one
+ * collection-group read of the platform's most recent orders, plus two
+ * queries per host that has any — and an hour keeps that off the same tick as
+ * the two scans above.
+ *
+ * NOT gated on `isEmailConfigured()`, unlike its two neighbours. Those send
+ * mail; this writes a console notification and a log line, both of which work
+ * on a self-host with no mail provider at all — and a stock count that is
+ * silently wrong is exactly what a self-hoster least wants suppressed by a
+ * setting about email.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'stock-decrement-reconciliation',
+  intervalMinutes: 60,
+  description:
+    'Report paid orders whose stock decrement never landed (AGL-2358).',
+  handler: async () => {
+    const scan = await scanStockDecrements()
+    if (scan.missingLines || scan.truncatedHosts) {
+      console.warn(
+        `commerce: ${scan.missingLines} order lines across ${scan.hosts} ` +
+          `sites have no sale ledger row (${scan.reportedOrders} newly ` +
+          `reported, ${scan.truncatedHosts} sites' ledger window truncated)`,
+      )
+    }
   },
 })
 
