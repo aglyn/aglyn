@@ -599,6 +599,23 @@ describe('the green path', () => {
     expect(done?.exchangeId).toBeTruthy()
     expect(done?.usage).toMatchObject({ inputTokens: 900, outputTokens: 42 })
 
+    // AGL-2238: the standing the panel renders, pinned against the counter
+    // that was actually moved. Nothing asserted this before, which is how
+    // the route kept re-applying an increment `reserveAssistMessage` had
+    // already made — the free tier's first message reported 8 of 10 left.
+    expect(done?.quota).toMatchObject({
+      period: 'day',
+      limit: 10,
+      used: 1,
+      remaining: 9,
+    })
+    // And the claim is checked against the STORE, not just the payload: a
+    // `done` event describing one message spent while the counter says two
+    // is the same defect wearing the other face.
+    expect(
+      mockDocs.get(`orgs/${FREE_ORG}/counters/assistMessagesDaily`)?.[TODAY],
+    ).toBe((done?.quota as { used: number }).used)
+
     // The exchange carries the prose; the signal carries the numbers
     // (AGL-1972). One id addresses both.
     const exchange = mockDocs.get(

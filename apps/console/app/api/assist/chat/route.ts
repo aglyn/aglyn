@@ -675,7 +675,16 @@ async function handler(request: Request): Promise<Response> {
             // confirm, and confirming navigates — see the write boundary in
             // `assist-view-context.ts`.
             proposal,
-            quota: { ...quota, used: quota.used + 1, remaining: Math.max(0, quota.remaining - 1) },
+            // The reservation VERBATIM (AGL-2238). It already describes the
+            // standing after the message, because it is what moved the
+            // counter — `reserveAssistMessage` returns `used + 1` and
+            // `limit - (used + 1)`. Adjusting again here is a leftover from
+            // `checkAssistQuota`, which reported the standing BEFORE the
+            // message and so had to be advanced by one. Under the
+            // reservation that same `+1` counts the message twice, and the
+            // panel renders the result: a free workspace's first question
+            // came back "8 of 10 free messages left today".
+            quota,
           })
         } catch (error) {
           console.error('assist stream failed', error)
