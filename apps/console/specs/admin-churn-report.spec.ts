@@ -52,8 +52,19 @@ const mockVerifyIdToken = jest.fn()
  * then fails to TRANSFORM, which looks a great deal like a suite that passed.
  */
 let mockGroupDocs: Array<Record<string, unknown>> = []
+/**
+ * The `churnSurveyDetails` collection group (AGL-2294) — a SECOND flat list,
+ * because it is a second scan.
+ *
+ * Kept separate rather than tagged into `mockGroupDocs` on purpose: the route
+ * reads two different collection groups and a double that served one list to
+ * both would make a route reading the wrong group look right.
+ */
+let mockDetailDocs: Array<Record<string, unknown>> = []
 /** The limit the route asked for, so the cap can be asserted as WIRED. */
 let mockRequestedLimit: number | null = null
+/** Same, for the free-text scan — it must be capped too. */
+let mockDetailRequestedLimit: number | null = null
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -65,22 +76,31 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         collectionGroup: (name: string) => ({
           limit: (count: number) => {
-            mockRequestedLimit = count
+            if (name === 'churnSurveyDetails') mockDetailRequestedLimit = count
+            else mockRequestedLimit = count
             return {
               get: async () => {
                 // The double honours the limit. A double that ignored it
                 // would make `capped` untestable and would quietly bless a
                 // route that read the whole collection on every staff page
                 // load.
-                const docs = mockGroupDocs
-                  .filter(() => name === 'retention')
-                  .slice(0, count)
-                  .map((data, index) => ({
-                    id: `doc-${index}`,
-                    exists: true,
-                    data: () => data,
-                    get: (field: string) => data[field],
-                  }))
+                const source =
+                  name === 'churnSurveyDetails'
+                    ? mockDetailDocs
+                    : name === 'retention'
+                      ? mockGroupDocs
+                      : []
+                const docs = source.slice(0, count).map((data, index) => ({
+                  // The detail document SHARES the survey's id (AGL-1978), and
+                  // the join in the route is by that id — so the double has to
+                  // let a fixture set it. A double that minted its own would
+                  // make every join miss and the route would still look like
+                  // it returned comments.
+                  id: String(data['$id'] ?? `doc-${index}`),
+                  exists: true,
+                  data: () => data,
+                  get: (field: string) => data[field],
+                }))
                 return { size: docs.length, empty: docs.length === 0, docs }
               },
             }
@@ -114,6 +134,7 @@ import {
   RETENTION_SURFACES,
 } from '../app/api/_lib/retention'
 import {
+  CHURN_REPORT_COMMENT_LIMIT,
   CHURN_REPORT_SCAN_LIMIT,
   GET,
 } from '../app/api/admin/churn-report/route'
@@ -140,7 +161,9 @@ async function call(
 
 beforeEach(() => {
   mockGroupDocs = []
+  mockDetailDocs = []
   mockRequestedLimit = null
+  mockDetailRequestedLimit = null
   mockVerifyIdToken.mockReset()
   mockVerifyIdToken.mockResolvedValue({
     uid: 'staff-1',
@@ -344,5 +367,159 @@ describe('no retention document falls through the report (AGL-2248)', () => {
     expect(
       body.surveys + body.cancels.total + body.winbacks.reserved,
     ).toBe(1)
+  })
+})
+
+/**
+ * THE FREE TEXT HAS A READER (AGL-2294).
+ *
+ * AGL-2248 gave `orgs/{orgId}/retention` its first reader and left the prose
+ * behind, on the argument that "a rate report is not what anyone reads prose
+ * for". Right about the rate report — and nothing else read it either.
+ * `orgs/{orgId}/churnSurveyDetails` had one writer, no reader anywhere in the
+ * product, and a 365-day TTL, so every sentence a departing customer typed was
+ * deleted unread.
+ *
+ * These assertions drive the ROUTE, not the estimator: a report that returned
+ * a fixed comment, or that scanned the wrong collection group, is red below.
+ * The join is the sharp edge — the detail document shares the survey's id by
+ * design, so a route that minted its own key would return prose with no reason
+ * attached and look almost right.
+ */
+describe('the free-text answers (AGL-2294)', () => {
+  /** A detail document as `/api/billing/retention` writes it, id and all. */
+  function detail(
+    id: string,
+    text: string,
+    atMs: number | null = 1_760_000_000_000,
+  ): Record<string, unknown> {
+    return {
+      $id: id,
+      detail: text,
+      ...(atMs === null
+        ? {}
+        : { createdAt: { toMillis: () => atMs } }),
+    }
+  }
+
+  it('returns what the customer actually typed, joined to their reason', async () => {
+    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[1], RETENTION_SURFACES[0], 'business')]
+    // `doc-0` is the id the double mints for the first retention row, so this
+    // detail belongs to that survey — the join the route performs.
+    mockDetailDocs = [detail('doc-0', 'Your form builder lost my fields twice.')]
+
+    const payload = await (await call()).json()
+    expect(payload.comments).toHaveLength(1)
+    // The VALUE, not merely a non-empty array: a route returning a constant,
+    // or the survey's own fields, cannot produce this sentence.
+    expect(payload.comments[0]).toMatchObject({
+      id: 'doc-0',
+      detail: 'Your form builder lost my fields twice.',
+      reason: CHURN_SURVEY_REASONS[1],
+      surface: RETENTION_SURFACES[0],
+      plan: 'business',
+      atMs: 1_760_000_000_000,
+    })
+  })
+
+  it('carries EACH comment’s own text — not the first one repeated', async () => {
+    mockGroupDocs = [
+      survey(CHURN_SURVEY_REASONS[0]),
+      survey(CHURN_SURVEY_REASONS[2]),
+    ]
+    mockDetailDocs = [
+      detail('doc-0', 'Too expensive for one site.', 1_000),
+      detail('doc-1', 'Moving to an in-house build.', 2_000),
+    ]
+
+    const payload = await (await call()).json()
+    // Newest first, and each row's prose and reason are its own. A map that
+    // reused one context, or a sort that ignored the timestamp, is red.
+    expect(payload.comments.map((row: any) => row.detail)).toEqual([
+      'Moving to an in-house build.',
+      'Too expensive for one site.',
+    ])
+    expect(payload.comments.map((row: any) => row.reason)).toEqual([
+      CHURN_SURVEY_REASONS[2],
+      CHURN_SURVEY_REASONS[0],
+    ])
+  })
+
+  it('keeps a comment whose survey fell outside the scan, with null context', async () => {
+    // The OLDEST prose is exactly what a 365-day window exists to preserve, so
+    // dropping an unjoinable detail would silently hide the half that matters
+    // most. It appears, and says it does not know the reason.
+    mockGroupDocs = []
+    mockDetailDocs = [detail('orphan-1', 'Nobody ever replied to my ticket.')]
+
+    const payload = await (await call()).json()
+    expect(payload.comments).toHaveLength(1)
+    expect(payload.comments[0]).toMatchObject({
+      detail: 'Nobody ever replied to my ticket.',
+      reason: null,
+      surface: null,
+      plan: null,
+    })
+  })
+
+  it('NEGATIVE CONTROL: a detail document with no prose is not a comment', async () => {
+    // The writer only creates one when the trimmed text is non-empty, so these
+    // should not exist — and if one ever does, it must not consume a slot in
+    // a capped list or render as a blank row somebody has to interpret.
+    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[0])]
+    mockDetailDocs = [
+      detail('doc-0', ''),
+      // No `detail` field at all — the other way the document can be empty.
+      { $id: 'doc-1', createdAt: { toMillis: () => 1 } },
+    ]
+    const payload = await (await call()).json()
+    expect(payload.comments).toEqual([])
+    // …and the survey it belonged to is still counted. A filter that dropped
+    // the SURVEY along with the empty prose would understate churn.
+    expect(payload.surveys).toBe(1)
+  })
+
+  it('reads its OWN collection group, capped', async () => {
+    // Asserted as WIRED. A route that scanned `retention` twice would still
+    // return comments-shaped nothing, and a scan without a limit would read
+    // every survey answer on the platform on each staff page load.
+    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[0])]
+    mockDetailDocs = [detail('doc-0', 'A sentence.')]
+    await call()
+    expect(mockDetailRequestedLimit).toBe(CHURN_REPORT_SCAN_LIMIT)
+    expect(mockRequestedLimit).toBe(CHURN_REPORT_SCAN_LIMIT)
+  })
+
+  it('returns at most CHURN_REPORT_COMMENT_LIMIT, and says when there are more', async () => {
+    mockDetailDocs = Array.from(
+      { length: CHURN_REPORT_COMMENT_LIMIT + 25 },
+      (_unused, index) => detail(`d-${index}`, `answer ${index}`, index),
+    )
+    const payload = await (await call()).json()
+    expect(payload.comments).toHaveLength(CHURN_REPORT_COMMENT_LIMIT)
+    // Newest first, so the cap keeps the RECENT ones — a cap that kept the
+    // oldest would quietly show a year-old page forever.
+    expect(payload.comments[0].detail).toBe(
+      `answer ${CHURN_REPORT_COMMENT_LIMIT + 24}`,
+    )
+    // Under the SCAN ceiling, so this slice is not the capped-scan flag.
+    expect(payload.commentsCapped).toBe(false)
+  })
+
+  it('flags commentsCapped when the free-text scan hits the ceiling', async () => {
+    mockDetailDocs = Array.from({ length: CHURN_REPORT_SCAN_LIMIT + 1 }, (_u, i) =>
+      detail(`d-${i}`, `answer ${i}`, i),
+    )
+    const payload = await (await call()).json()
+    expect(payload.commentsCapped).toBe(true)
+  })
+
+  it('NEGATIVE CONTROL: no detail documents means an empty list, not an error', async () => {
+    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[0])]
+    const response = await call()
+    expect(response.status).toBe(200)
+    const payload = await response.json()
+    expect(payload.comments).toEqual([])
+    expect(payload.commentsCapped).toBe(false)
   })
 })

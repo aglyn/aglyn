@@ -18,7 +18,15 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Alert, Stack, Typography } from '@mui/material'
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Alert,
+  Chip,
+  Stack,
+  Typography,
+} from '@mui/material'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useEffect, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
@@ -33,6 +41,15 @@ interface ChurnReportBody {
   winbacks: { reserved: number; applied: number }
   scanned: number
   capped: boolean
+  comments: Array<{
+    id: string
+    detail: string
+    atMs: number | null
+    reason: string | null
+    surface: string | null
+    plan: string | null
+  }>
+  commentsCapped: boolean
 }
 
 /** `too_expensive` → `Too expensive`. The stored value is the closed-set key. */
@@ -56,10 +73,20 @@ function ranked(counts: Record<string, number>): Array<[string, number]> {
  * reachable only by opening the Firebase console one workspace at a time.
  * Zach's rule — a capability is not a feature until the console exposes it.
  *
- * Counts only. The free text lives in `churnSurveyDetails` under its own
- * 365-day TTL (AGL-1978) and is deliberately not surfaced here: a rate report
- * is not what anyone reads prose for, and the shorter the prose's reach the
- * better.
+ * Counts, and — since AGL-2294 — the free text behind a disclosure.
+ *
+ * That text was left out here on the argument that "a rate report is not what
+ * anyone reads prose for". Right about the rate report; the trouble was that
+ * nothing else read it either. `churnSurveyDetails` had one writer and no
+ * reader anywhere in the product, so every sentence a departing customer typed
+ * sat unread until its 365-day TTL (AGL-1978) deleted it — the same shape as
+ * the retention collection this card was built to fix, one document deeper.
+ *
+ * COLLAPSED, and last. The counts are what a rate report is for and they stay
+ * the thing you see; the prose is opened deliberately by someone who has
+ * decided to read it. That is the smallest reach that still makes the write
+ * honest — a textarea the product asks a person to fill in, whose contents
+ * nobody can ever see, is worse than a card with prose on it.
  */
 export default function StaffChurnReportCard() {
   const { data: user } = useUser()
@@ -168,6 +195,72 @@ export default function StaffChurnReportCard() {
             <Alert severity="info">
               {`Showing the first ${report.scanned} retention records — there are more.`}
             </Alert>
+          ) : null}
+          {report.comments?.length ? (
+            <Accordion disableGutters elevation={0}>
+              <AccordionSummary>
+                <Typography variant="body2">
+                  {`What they wrote (${report.comments.length})`}
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Stack spacing={1.5}>
+                  {/*
+                    A standing reminder rather than a one-off note: this is
+                    other people's prose, kept for a year and then deleted, and
+                    the reason it is bounded at all is that a free-text box is
+                    where somebody types a name, an invoice number, or a
+                    grievance about a colleague.
+                  */}
+                  <Typography variant="caption" color="text.secondary">
+                    {'Verbatim customer text, deleted 365 days after it was ' +
+                      'written. Treat as personal data.'}
+                  </Typography>
+                  {report.comments.map((comment) => (
+                    <Stack key={comment.id} spacing={0.5}>
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        {/*
+                          The closed-set reason is what makes a sentence
+                          legible. A survey outside the scanned window leaves
+                          it null, and the row says so rather than implying
+                          the person gave no reason.
+                        */}
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={
+                            comment.reason
+                              ? humanize(comment.reason)
+                              : 'Reason not in this window'
+                          }
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {[
+                            comment.surface ? humanize(comment.surface) : null,
+                            comment.plan,
+                            comment.atMs
+                              ? new Date(comment.atMs).toLocaleDateString()
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="body2">{comment.detail}</Typography>
+                    </Stack>
+                  ))}
+                  {report.commentsCapped ? (
+                    <Alert severity="info">
+                      {'More free-text answers exist than were scanned.'}
+                    </Alert>
+                  ) : null}
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
           ) : null}
         </Stack>
       )}

@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import {
+  CHURN_SURVEY_DETAIL_COLLECTION,
   CHURN_SURVEY_REASONS,
   RETENTION_COLLECTION,
   RETENTION_KINDS,
@@ -38,6 +39,32 @@ import {
  * mistaken for the whole truth.
  */
 export const CHURN_REPORT_SCAN_LIMIT = 2000
+
+/**
+ * How many free-text answers one report returns (AGL-2294).
+ *
+ * The prose is the long tail of the survey — most people pick a reason and
+ * type nothing — so a page of the newest is the whole readable population in
+ * practice, and a bigger number would ship a wall of other people's sentences
+ * to a card nobody would then read.
+ */
+export const CHURN_REPORT_COMMENT_LIMIT = 50
+
+/** One free-text answer, joined to the closed-set survey it was typed on. */
+export interface ChurnComment {
+  /** The survey's id — the detail document shares it (AGL-1978). */
+  id: string
+  /** What the customer typed, verbatim, bounded at write time to 500 chars. */
+  detail: string
+  /** When, in epoch ms; null on a document written without a timestamp. */
+  atMs: number | null
+  /** The closed-set reason this prose elaborates on, when the survey is in the scan. */
+  reason: string | null
+  /** Cancel versus account delete. */
+  surface: string | null
+  /** The tier the org was on when it answered. */
+  plan: string | null
+}
 
 /**
  * The staff churn report (AGL-2248, under AGL-1863 / AGL-1859 §3).
@@ -85,6 +112,24 @@ export interface ChurnReport {
   scanned: number
   /** True when the scan hit {@link CHURN_REPORT_SCAN_LIMIT} — see above. */
   capped: boolean
+  /**
+   * The newest free-text answers, each joined to its survey's reason.
+   *
+   * AGL-2248 left this out on the argument that "a rate report is not what
+   * anyone reads prose for" — right about the rate report, and it turned out
+   * nothing else read it either. `churnSurveyDetails` had one writer and no
+   * reader anywhere in the product, so every sentence a departing customer
+   * typed sat unread until its 365-day TTL deleted it. A textarea the product
+   * asks a person to fill in, whose contents nobody can ever see, is a worse
+   * thing than a rate report with prose in it.
+   *
+   * Joined rather than listed: the closed-set `reason` is what makes a
+   * sentence legible, and the detail document carries only the prose. They
+   * share an id by design (AGL-1978), so the join is free.
+   */
+  comments: ChurnComment[]
+  /** True when the free-text scan hit {@link CHURN_REPORT_SCAN_LIMIT}. */
+  commentsCapped: boolean
 }
 
 /** Every closed-set key at zero, so a missing reason reads as 0, not absent. */
@@ -125,12 +170,25 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
 
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collectionGroup(RETENTION_COLLECTION)
-      .limit(CHURN_REPORT_SCAN_LIMIT)
-      .get()
+    const firestore = firebaseAdmin.app().firestore()
+    /*
+      Two unfiltered capped collection-group scans, in parallel. Same posture
+      as the one above it and for the same reason: a `where` or `orderBy` here
+      would need a declared field override in
+      `cloud/firebase-firestore.indexes.json`, and adding one without deploying
+      it turns `check:index-drift` red. Sorting the newest in memory answers
+      the same question at this volume and needs no index at all.
+    */
+    const [snapshot, detailSnapshot] = await Promise.all([
+      firestore
+        .collectionGroup(RETENTION_COLLECTION)
+        .limit(CHURN_REPORT_SCAN_LIMIT)
+        .get(),
+      firestore
+        .collectionGroup(CHURN_SURVEY_DETAIL_COLLECTION)
+        .limit(CHURN_REPORT_SCAN_LIMIT)
+        .get(),
+    ])
 
     const report: ChurnReport = {
       byReason: zeroedReasons(),
@@ -141,7 +199,19 @@ async function handler(request: Request): Promise<Response> {
       winbacks: { reserved: 0, applied: 0 },
       scanned: snapshot.size,
       capped: snapshot.size >= CHURN_REPORT_SCAN_LIMIT,
+      comments: [],
+      commentsCapped: detailSnapshot.size >= CHURN_REPORT_SCAN_LIMIT,
     }
+
+    /**
+     * Survey context by id, for the join below. Built from the SURVEY rows
+     * only — a cancel or a winback marker shares the collection but never an
+     * id with a detail document.
+     */
+    const surveyById = new Map<
+      string,
+      { reason: string | null; surface: string | null; plan: string | null }
+    >()
 
     for (const doc of snapshot.docs) {
       const kind = String(doc.get('kind') ?? '')
@@ -163,6 +233,11 @@ async function handler(request: Request): Promise<Response> {
         const plan = doc.get('plan')
         const planKey = plan ? String(plan) : 'unknown'
         report.byPlan[planKey] = (report.byPlan[planKey] ?? 0) + 1
+        surveyById.set(doc.id, {
+          reason: reason || null,
+          surface: surface || null,
+          plan: plan ? String(plan) : null,
+        })
         continue
       }
       if (
@@ -187,6 +262,42 @@ async function handler(request: Request): Promise<Response> {
         }
       }
     }
+
+    /*==========================================
+     * THE FREE TEXT, JOINED TO ITS REASON (AGL-2294).
+     *
+     * NEWEST FIRST, and by the detail document's own `createdAt` rather than
+     * the survey's — they are written milliseconds apart, but the detail is
+     * the document that exists here and using the other would make the order
+     * depend on whether the survey happened to be inside the retention scan.
+     *
+     * A detail whose survey fell outside that scan still appears, with nulls
+     * for the context. Dropping it would silently hide the OLDEST prose, which
+     * is the half a 365-day retention window exists to preserve.
+     *=========================================*/
+    const timestampMs = (value: unknown): number | null => {
+      const millis = (value as { toMillis?: () => number } | null)?.toMillis
+      if (typeof millis !== 'function') return null
+      const result = Number(millis.call(value))
+      return Number.isFinite(result) ? result : null
+    }
+    report.comments = detailSnapshot.docs
+      .map((doc) => {
+        const context = surveyById.get(doc.id)
+        return {
+          id: doc.id,
+          detail: String(doc.get('detail') ?? ''),
+          atMs: timestampMs(doc.get('createdAt')),
+          reason: context?.reason ?? null,
+          surface: context?.surface ?? null,
+          plan: context?.plan ?? null,
+        }
+      })
+      // A detail document with no prose in it is a write that should not have
+      // happened; it is not a comment, and it must not consume a slot.
+      .filter((comment) => comment.detail.length > 0)
+      .sort((a, b) => (b.atMs ?? 0) - (a.atMs ?? 0))
+      .slice(0, CHURN_REPORT_COMMENT_LIMIT)
 
     return Response.json(report, { status: 200 })
   } catch (error) {
