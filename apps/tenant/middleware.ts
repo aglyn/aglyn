@@ -295,7 +295,60 @@ export const middleware: NextMiddleware = async (req, event) => {
   // (in the case of "test.vercel.app", "vercel.app" is the root URL)
   let tenantHost: string
 
+  /**
+   * The apex an operator's own site subdomains hang off (AGL-2217).
+   *
+   * WITHOUT this branch a self-host install serves ONE site. With
+   * `AGLYN_TENANT_HOST_CNAME=sites.example.com`, `acme.sites.example.com`
+   * matched the `.${AGLYN_TENANT_HOST_CNAME}` case below — which assigns the
+   * APEX rather than stripping it — so every subdomain resolved to the same
+   * tenant host. Measured through the real middleware:
+   * `acme.sites.example.com` and `bravo.sites.example.com` both rewrote to
+   * `/sites.example.com/`.
+   *
+   * `selfhost-host-resolution.spec.ts` was green throughout, because it
+   * asserted only that a container does not 307 the visitor away. Serving the
+   * wrong site is not a redirect.
+   *
+   * Read from `NEXT_PUBLIC_TENANT_DOMAIN`, and matched ONLY when it is set:
+   * unset — which is how Aglyn's own deployment runs — this case is `false &&
+   * …` and can never fire, so our routing is untouched. Set to `aglyn.app` it
+   * strips exactly what the `IS_VERCEL` branch below already strips, so it is
+   * unchanged in that shape too.
+   *
+   * The port is dropped before the comparison; the branches below compare the
+   * raw `Host`, which quietly excludes an operator terminating TLS on a
+   * non-standard port behind their proxy.
+   */
+  const TENANT_SUBDOMAIN_APEX = process.env.NEXT_PUBLIC_TENANT_DOMAIN?.trim()
+  const reqHostname = reqHost.split(':')[0].toLowerCase()
+
   switch (true) {
+    // An operator's own `{site}.{apex}` (AGL-2217), ahead of the apex case
+    // below because both match and only this one recovers the subdomain.
+    case Boolean(TENANT_SUBDOMAIN_APEX) &&
+      reqHostname.endsWith(`.${TENANT_SUBDOMAIN_APEX}`): {
+      const label = reqHostname.slice(
+        0,
+        -(String(TENANT_SUBDOMAIN_APEX).length + 1),
+      )
+      console.debug(
+        'Tenant Host Switch=',
+        'operator-apex',
+        'TENANT_SUBDOMAIN_APEX=',
+        TENANT_SUBDOMAIN_APEX,
+        'label=',
+        label,
+      )
+      // A multi-label prefix (`a.b.sites.example.com`) is not a site name;
+      // fall through to the custom-domain path rather than inventing one.
+      if (label && !label.includes('.')) {
+        tenantHost = label
+        break
+      }
+      tenantHost = `cname--${reqHostname}`
+      break
+    }
     // Deployment
     case IS_DEPLOYED && reqHost === AGLYN_TENANT_HOST_CNAME:
     case IS_DEPLOYED && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):

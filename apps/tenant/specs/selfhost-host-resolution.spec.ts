@@ -105,6 +105,68 @@ describe('a self-host container serves published sites (AGL-2177)', () => {
     expect(response.headers.get('location')).toBeNull()
   })
 
+  /**
+   * WHICH site, not merely "a site" (AGL-2217).
+   *
+   * Every case in this suite asserted the visitor is not redirected away, and
+   * all of them passed while the operator's whole apex collapsed onto ONE
+   * tenant host: `acme.sites.example.com` and `bravo.sites.example.com` both
+   * rewrote to `/sites.example.com/`, because the `.${AGLYN_TENANT_HOST_CNAME}`
+   * branch ASSIGNS the apex instead of stripping it. Serving the wrong site is
+   * not a redirect, so nothing here could see it.
+   *
+   * So these read the rewrite target. `x-middleware-rewrite` is the only
+   * observable: the resolved host travels as the first path segment.
+   */
+  const rewrittenHostOf = (response: Response): string | undefined => {
+    const rewrite = response.headers.get('x-middleware-rewrite')
+    if (!rewrite) return undefined
+    return new URL(rewrite).pathname.split('/').filter(Boolean)[0]
+  }
+
+  describe('the operator apex resolves each subdomain to its OWN site', () => {
+    beforeEach(() => {
+      // The runbook variable. `AGLYN_TENANT_HOST_CNAME` alone is not enough
+      // and must not be: it names the CNAME target, not the subdomain apex.
+      process.env.NEXT_PUBLIC_TENANT_DOMAIN = APEX
+    })
+
+    it('gives two sites two different tenant hosts', async () => {
+      const acme = rewrittenHostOf(await driveSelfHost(`acme.${APEX}`))
+      const bravo = rewrittenHostOf(await driveSelfHost(`bravo.${APEX}`))
+      expect(acme).toBe('acme')
+      expect(bravo).toBe('bravo')
+      // The failure this exists for: one host for every name.
+      expect(acme).not.toBe(bravo)
+    })
+
+    it('survives a non-standard port behind the operator proxy', async () => {
+      expect(rewrittenHostOf(await driveSelfHost(`acme.${APEX}:8443`))).toBe(
+        'acme',
+      )
+    })
+
+    it('does not invent a site name from a multi-label prefix', async () => {
+      // `a.b.sites.example.com` is not `{site}.{apex}`. Treating it as the
+      // site `a.b` would hand a wildcard-DNS visitor an arbitrary lookup.
+      expect(rewrittenHostOf(await driveSelfHost(`a.b.${APEX}`))).toBe(
+        `cname--a.b.${APEX}`,
+      )
+    })
+
+    it('leaves the bare apex to the apex branch', async () => {
+      expect(rewrittenHostOf(await driveSelfHost(APEX))).toBe(APEX)
+    })
+
+    it("is inert when the variable is unset, which is how Aglyn runs", async () => {
+      delete process.env.NEXT_PUBLIC_TENANT_DOMAIN
+      // Back to the pre-existing behaviour exactly: the apex branch wins and
+      // assigns the CNAME host. Pinned so the new branch cannot start firing
+      // on our own deployment through a default nobody intended.
+      expect(rewrittenHostOf(await driveSelfHost(`acme.${APEX}`))).toBe(APEX)
+    })
+  })
+
   it('the bare operator apex resolves too', async () => {
     const response = await driveSelfHost(APEX)
     expect(response.status).not.toBe(307)
