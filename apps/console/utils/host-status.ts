@@ -101,10 +101,20 @@ export function describeSiteAllowance(options: {
 }): string | undefined {
   const { used, limit, planLabel, ready } = options
   if (!ready || !planLabel) return undefined
+  /*
+   * `Number.isFinite`, not `limit < 0` (AGL-2223).
+   *
+   * `UNLIMITED` is `Number.POSITIVE_INFINITY`, and Enterprise's `hostLimit`
+   * is exactly that — so the `< 0` test was never true for the one plan the
+   * Unlimited branch existed for, and an Enterprise organization read
+   * `4 of Infinity sites · Enterprise plan`. The negative case is kept: an
+   * entitlement override can carry a negative sentinel, and reading that as a
+   * cap of "-1 sites" would be the same class of nonsense.
+   */
   const cap =
     limit === undefined || limit === null
       ? undefined
-      : limit < 0
+      : !Number.isFinite(limit) || limit < 0
         ? 'Unlimited'
         : String(limit)
   const sites =
