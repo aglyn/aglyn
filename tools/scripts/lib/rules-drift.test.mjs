@@ -608,7 +608,7 @@ describe('the checker is wired (workflow + package.json)', () => {
     assert.match(indexDrift, /npm run test:rules-drift/)
   })
 
-  it('the seven homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
+  it('the homeless tools guards run in the ACTIVE tools-guards.yml (AGL-1822)', () => {
     // These suites' only other home is nx-ci.yml, which is `disabled_manually`
     // and runs on no runner (AGL-1816) — text in a file that never executes.
     // tools-guards.yml is their active home. The assertion lives HERE, in a
@@ -632,6 +632,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:manifest-versions', // AGL-2108
+      'check:manifest-versions', // AGL-2108
       // AGL-2025 — the source-side hardcoded-colour ratchet. Registered here
       // for the same reason as the seven above: its only homes are this
       // workflow and a developer's memory.
@@ -658,6 +660,8 @@ describe('the checker is wired (workflow + package.json)', () => {
       'test:standalone-installs',
       'check:standalone-installs',
       'test:release-version', // AGL-2089
+      'test:manifest-versions', // AGL-2108
+      'check:manifest-versions', // AGL-2108
       'test:hardcoded-colours',
       'check:hardcoded-colours',
     ]) {

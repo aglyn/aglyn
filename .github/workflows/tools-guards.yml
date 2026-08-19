@@ -22,6 +22,10 @@ name: Tools guards
 #  - test:release-version     the semver/bump/changelog rules a release
 #                             depends on (AGL-2089) — a wrong bump does not
 #                             throw, it just mints a wrong number forever
+#  - test:manifest-versions   / check:manifest-versions  the package.json vs
+#                             package-lock.json version agreement (AGL-2108) —
+#                             a drift `npm ci` does not read and the promotion
+#                             gate stayed green over for a whole release
 #  - check:standalone-installs  asserts every nested package with its own
 #                             lockfile has an install step in nx-ci.yml. That
 #                             file is currently disabled; the check still
@@ -176,6 +180,17 @@ jobs:
       # crash. Registered in rules-drift.test.mjs's wiring allowlist like the
       # rest, so deleting this step turns both drift workflows red.
       - run: npm run test:release-version
+
+      # AGL-2108. Two steps in the AGL-2021 order: the unit test proves the
+      # comparator can FAIL (a half-repaired lockfile, both fields stale), and
+      # only then is the repo-wide scan's green worth anything. The drift it
+      # reads — package.json vs package-lock.json `version` — is one NOTHING
+      # else reads: `npm ci` validates the dependency set, not the root
+      # version, so the repo carried `1.0.0-alpha.0` through an entire release
+      # with every check green.
+      - run: npm run test:manifest-versions
+
+      - run: npm run check:manifest-versions
 
       # AGL-2021. Two steps, and the order matters: the self-test proves the
       # comparator can still FAIL (it reconstructs the forbidden Webfile number
