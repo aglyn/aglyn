@@ -62,6 +62,8 @@ const APP_ROOT = join(REPO_ROOT, 'apps/console/app')
 const NO_HELP: Record<string, string> = {
   'apps/console/app/(app)/(home)/page.tsx':
     'Org jump page — a workspace picker with no subject of its own. Every destination it offers carries its own help.',
+  'apps/console/app/(app)/admin/assist-signals/page.tsx':
+    'Assist docs-gap board (AGL-2252). Staff-only, and there is no staff-console docs section describing it yet — pointing help= at an unrelated anchor to satisfy this guard would be worse than none. AGL-2257 adds the page and removes this entry.',
 }
 
 /**

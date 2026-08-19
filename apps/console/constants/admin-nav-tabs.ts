@@ -93,6 +93,11 @@ export function adminNavTabItems() {
       href: buildRoute(Route.ADMIN_HEALTH),
     },
     {
+      id: 'nav-tab-admin-assist-signals',
+      label: 'Assist signal',
+      href: buildRoute(Route.ADMIN_ASSIST_SIGNALS),
+    },
+    {
       id: 'nav-tab-admin-tax-return',
       label: 'Sales tax',
       href: buildRoute(Route.ADMIN_TAX_RETURN),

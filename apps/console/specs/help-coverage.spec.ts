@@ -66,6 +66,8 @@ const EXCEPTIONS: Record<string, string> = {
     'Infrastructure wrapper — forwards schema-level help via CardDisplayProps, has no header of its own.',
   'apps/console/app/(app)/(home)/page.tsx':
     'Org jump page — navigational workspace picker, not a documented feature surface.',
+  'apps/console/app/(app)/admin/assist-signals/page.tsx':
+    'Assist docs-gap board (AGL-2252). Staff-only, and no staff-console docs section describes it yet — every help= it could carry would point somewhere that does not document this board, which is worse than an absent icon. AGL-2257 writes the page and removes this entry along with the docs-help-destinations one.',
 }
 
 /**
