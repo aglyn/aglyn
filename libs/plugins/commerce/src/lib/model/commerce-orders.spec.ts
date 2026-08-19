@@ -912,10 +912,26 @@ describe('orderNetCents / orderCreatedAtMs', () => {
 describe('summarizeOrderWindow', () => {
   const DAY = 24 * 60 * 60 * 1000
   const NOW = 1_000 * DAY
+  // A COMPLETE `OrderTotals`, not `{ totalCents }` alone (AGL-2242).
+  // `Partial<HostOrder>` makes `totals` optional but leaves its value type
+  // whole, so a five-field-short literal is a type error — and the fixture
+  // was worth more than a cast either way: `orderNetCents` reads `totalCents`
+  // and `refundedCents`, and a totals object whose parts do not add up to its
+  // own total is a double that could never come out of the checkout it stands
+  // in for. Items carry the whole amount; nothing here ships, taxes,
+  // discounts or takes a platform fee.
+  const totals = (cents: number) => ({
+    itemsCents: cents,
+    shippingCents: 0,
+    taxCents: 0,
+    discountCents: 0,
+    feeCents: 0,
+    totalCents: cents,
+  })
   const order = (agoDays: number, cents: number, extra: object = {}) => ({
     status: 'paid' as const,
     createdAtMs: NOW - agoDays * DAY,
-    totals: { totalCents: cents },
+    totals: totals(cents),
     lineItems: [{ productId: 'p', name: 'P', quantity: 1, unitAmountCents: cents }],
     ...extra,
   })

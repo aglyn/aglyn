@@ -370,8 +370,30 @@ async function deliver(object: any) {
 
 const order = (id: string) => docs.get(`hosts/host-1/orders/${id}`) as any
 
+/**
+ * A license-key document as `claimLicenseKeys` in billing-webhook.ts writes
+ * it: seeded with `productId`/`key`/`assignedAtMs: null`, then stamped with
+ * `orderId`, `email` and an `assignedAtMs` millisecond stamp inside the claim
+ * transaction.
+ *
+ * Spelled out rather than inferred (AGL-2242). Spreading the `Record<string,
+ * any>` the fake Firestore stores does NOT carry its index signature into the
+ * object literal, so `keyRows()` inferred `{ id: string }[]` and every
+ * assertion below — `row.assignedAtMs`, `row.key`, `row.orderId`,
+ * `row.email` — was a type error against a row that had nothing on it.
+ */
+interface LicenseKeyRow {
+  id: string
+  productId?: string
+  key?: string
+  /** `null` while unclaimed; the claim stamp once assigned. */
+  assignedAtMs?: number | null
+  orderId?: string
+  email?: string | null
+}
+
 /** Every key document, with what it was stamped with. */
-function keyRows() {
+function keyRows(): LicenseKeyRow[] {
   return [...docs.entries()]
     .filter(([path]) => path.startsWith('hosts/host-1/licenseKeys/'))
     .map(([path, data]) => ({ id: path.split('/').pop() as string, ...data }))
