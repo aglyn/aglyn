@@ -6,6 +6,24 @@ on:
       - main
   pull_request:
 
+# AGL-2378. A push to main is grouped by its own COMMIT, so pushes never
+# contend and no commit is left without a verdict — this workflow is the only
+# home of `typecheck`, `docs:typecheck`, the three generated-artifact gates,
+# the revenue-truth spec, `check:app-router-graph` and `nx affected`, so a
+# discarded run here is coverage nobody else supplies.
+#
+# Only pull_request runs supersede each other, where superseding is what you
+# want: nobody reads the verdict on a PR's superseded tree.
+#
+# This workflow previously had no concurrency block at all, which gave main
+# the right behaviour by accident and gave PRs the wrong one. Stating it makes
+# the main-branch guarantee survive somebody later adding a group to throttle
+# PRs. The main-branch cost is real and is accepted: 12 runs were in flight
+# simultaneously on 2026-08-19, none of them queued, so the runners absorb it.
+concurrency:
+  group: nx-ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 # The Nx Cloud org is disabled (free-plan quota); with an access token
 # present, nx hard-fails CI at authorization before running any task.
 env:
