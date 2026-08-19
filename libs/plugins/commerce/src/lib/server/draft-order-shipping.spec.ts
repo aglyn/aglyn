@@ -205,7 +205,8 @@ async function runDraft(scenario: Scenario = {}) {
   autoIdCounter = 0
   docs.set('hosts/host-1', {
     name: 'Acme',
-    memberRoles: { 'mgr-1': 'manager' },
+    // `editor` — `projectHostMemberRoles` writes only admin/editor/viewer.
+    memberRoles: { 'mgr-1': 'editor' },
   })
   docs.set('hostIndex/host-1', { subdomain: 'acme' })
   docs.set('profiles/owner-1', {

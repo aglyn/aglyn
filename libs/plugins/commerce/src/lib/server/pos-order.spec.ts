@@ -321,7 +321,9 @@ beforeEach(() => {
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
-  docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'manager' } })
+  // `editor`, not `manager` (AGL-2262): the projection has no such role,
+  // and the register admitted it only because the gate was a denylist.
+  docs.set('hosts/host-1', { memberRoles: { 'cashier-1': 'editor' } })
   docs.set('hosts/host-1/registers/register-1', {
     name: 'Front counter',
     createdAt: { toMillis: () => 1000 },
@@ -1855,6 +1857,47 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
     expect(
       stripeCalls[0].body.get('payment_intent_data[application_fee_amount]'),
     ).toBeNull()
+  })
+})
+
+/**
+ * AGL-2262. Both money routes that the console reaches with a manager's id
+ * token gated on `!role || role === 'viewer'` — a DENYLIST of one value, on
+ * the routes that take cash, mint a card QR, decrement real inventory and
+ * (for drafts) create a live Stripe payment link.
+ *
+ * `cancel-order.ts`, `fulfill-order.ts` and `refund.ts` all use an allowlist,
+ * and the Firestore rules' own host-write predicate is
+ * `hostMemberRole(hostId) in ['admin','editor']`. So the denylist form was
+ * strictly WIDER than the rules it claimed to mirror: any role string that was
+ * not literally `viewer` transacted.
+ */
+describe('who may ring a sale (AGL-2262)', () => {
+  async function postAs(role: unknown) {
+    docs.set('hosts/host-1', { memberRoles: { 'cashier-1': role } })
+    return post({ payment: 'cash', cashReceivedCents: 500 })
+  }
+
+  it('refuses a role the projection could never have written', async () => {
+    // `HostAccessRole` is exactly admin | editor | viewer. Anything else is a
+    // legacy value, a typo, or a role someone adds later — and none of them
+    // is a decision to let that person take money.
+    for (const role of ['manager', 'contributor', 'billing', 'member', '']) {
+      const result = await postAs(role)
+      expect(result.status).toBe(403)
+    }
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('still refuses a viewer and a stranger', async () => {
+    expect((await postAs('viewer')).status).toBe(403)
+    expect((await postAs(undefined)).status).toBe(403)
+    expect(orderDocs()).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: admin and editor still ring the sale', async () => {
+    expect((await postAs('admin')).status).toBe(200)
+    expect((await postAs('editor')).status).toBe(200)
   })
 })
 

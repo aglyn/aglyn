@@ -96,8 +96,15 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
+    // AN ALLOWLIST (AGL-2262), matching `cancel-order.ts`, `fulfill-order.ts`
+    // and the Firestore rules' own `hostMemberRole(hostId) in
+    // ['admin','editor']`. The old `!role || role === 'viewer'` denylist
+    // admitted every string that was not literally `viewer` on the route that
+    // takes cash, mints a card QR and decrements real inventory.
+    // `HostAccessRole` is exactly `admin | editor | viewer`, so this refuses
+    // nothing a real projection can produce.
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole || memberRole === 'viewer') {
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not permitted' })
     }
     const ownerOrg = await getOrgForHost(hostId)

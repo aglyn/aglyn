@@ -265,7 +265,10 @@ beforeEach(() => {
   fetchMock.mockClear()
   mockVerifyIdToken.mockClear()
 
-  docs.set('hosts/host-1', { memberRoles: { 'manager-1': 'manager' } })
+  // `editor`, not `manager` (AGL-2262): `projectHostMemberRoles` can only
+  // ever write `admin | editor | viewer`, and a fixture naming a fourth role
+  // was testing a shape the product cannot produce.
+  docs.set('hosts/host-1', { memberRoles: { 'manager-1': 'editor' } })
   docs.set('hosts/host-1/products/product-1', {
     name: 'Walnut desk',
     type: 'physical',
@@ -473,6 +476,33 @@ describe('a product doc with no type (AGL-2251)', () => {
     expect(
       stripeCalls[0].params.get('payment_intent_data[application_fee_amount]'),
     ).toBe('1800')
+  })
+})
+
+/**
+ * AGL-2262, the draft-order half. Same denylist, on the route that mints a
+ * LIVE Stripe payment link — a URL that takes real money from whoever opens
+ * it. See the POS spec for the full argument.
+ */
+describe('who may mint a payment link (AGL-2262)', () => {
+  async function postAs(role: unknown) {
+    docs.set('hosts/host-1', { memberRoles: { 'manager-1': role } })
+    return post({}, { 'idempotency-key': `role-${String(role)}` })
+  }
+
+  it('refuses a role the projection could never have written', async () => {
+    for (const role of ['manager', 'contributor', 'billing', '']) {
+      const result = await postAs(role)
+      expect(result.status).toBe(403)
+    }
+    // No link was minted for any of them.
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('POSITIVE CONTROL: admin and editor still mint one', async () => {
+    expect((await postAs('admin')).status).toBe(200)
+    expect((await postAs('editor')).status).toBe(200)
+    expect(stripeCalls).toHaveLength(2)
   })
 })
 
