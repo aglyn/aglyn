@@ -42,6 +42,7 @@ export interface GiftCardsCardProps {
 const usd = (cents: number | undefined) => `$${((cents ?? 0) / 100).toFixed(2)}`
 
 const giftCardsHelp = pluginDocsHelp('commerce', {
+  anchor: '#gift-cards',
   title: 'Gift cards',
   excerpt:
     'Every gift card your store has issued, what is left on it, and what ' +
