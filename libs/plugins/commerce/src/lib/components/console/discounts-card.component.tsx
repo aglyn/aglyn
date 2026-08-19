@@ -180,7 +180,7 @@ export function DiscountsCard(props: DiscountsCardProps) {
         anchor: '#4-what-checkout-does',
         excerpt:
           'Discount codes your customers type at your own checkout — not ' +
-          'the coupons Aglyn issues against your subscription.',
+          `the coupons ${Aglyn.PLATFORM_BRAND_NAME} issues against your subscription.`,
       })}
       contentGutterX
       contentGutterY
