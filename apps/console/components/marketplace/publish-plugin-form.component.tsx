@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { marketplacePriceCostNote } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -881,10 +882,14 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
             // send the publisher through Stripe onboarding to sell to
             // themselves.
             disabled={draft.visibility === 'private'}
+            // See `marketplacePriceCostNote` (AGL-2343): the same advisory the
+            // artifact publish dialog shows, from the same function, so the two
+            // forms cannot quote different figures at a publisher.
             helperText={
               draft.visibility === 'private'
                 ? 'Private plugins are free — nobody else can install them.'
-                : '0 for free. Paid listings need payouts set up.'
+                : (marketplacePriceCostNote(draft.priceUsd) ??
+                  '0 for free. Paid listings need payouts set up.')
             }
             type="number"
             value={draft.visibility === 'private' ? '0' : draft.priceUsd}

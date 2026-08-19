@@ -1940,6 +1940,195 @@ export function resolveMarketplaceFeePct(
 }
 
 /**
+ * The marketplace take rate that breaks even LATEST, derived from the plan
+ * table rather than copied from it (AGL-2343).
+ *
+ * The lowest rate is the binding one: a smaller cut of the same price against
+ * the same processing cost needs a dearer listing to cover it, so advice quoted
+ * at this band holds for every publisher on every plan. Derived on each call
+ * because a hand-written second copy of a rate is exactly the artifact that
+ * decays into wrong money copy shown to a publisher — the same reason
+ * `planGrantingFeature` reads the table instead of a map.
+ */
+export function bindingMarketplaceFeePct(): number {
+  return Math.min(
+    ...Object.values(PLAN_ENTITLEMENTS)
+      .map((plan) => plan.marketplaceFeePct)
+      .filter((pct) => Number.isFinite(pct) && pct > 0),
+  )
+}
+
+/**
+ * What one marketplace sale costs the PLATFORM to process (AGL-2343).
+ *
+ * NONE OF THESE IS AN AGLYN PRICE. They are Stripe's published US rates and
+ * the Texas rate the platform remits, and they exist only as inputs to a
+ * figure shown to a publisher while they type. Nothing is billed from them —
+ * the charged amounts are `resolveMarketplaceFeePct` and Stripe's own
+ * invoicing — so changing one changes a sentence, never a bill.
+ *
+ * WHY THE PLATFORM PAYS THE PROCESSING FEE AT ALL. Marketplace checkout is a
+ * DESTINATION charge with a fixed `transfer_data[amount]` and deliberately no
+ * `application_fee_amount`, so that the sales tax stays with the platform that
+ * owes it (AGL-1544). On a destination charge Stripe debits its fee from the
+ * PLATFORM's balance, and it is charged on `amount_total` — the listing price
+ * plus the tax added on top of it.
+ *
+ * So a $1 listing at a 20% take rate is a loss: the buyer pays $1.08, the
+ * seller is transferred $0.80, $0.08 is owed to the state, Aglyn keeps $0.20
+ * and pays Stripe about $0.33. Net −$0.13.
+ *
+ * THE BNPL RATE IS THE ONE THAT BINDS, and it is not hypothetical: the live
+ * default payment method configuration has `klarna` and `affirm` enabled
+ * alongside `card`, `cashapp`, `link`, `amazon_pay` and `apple_pay`, and the
+ * marketplace session pins no `payment_method_types`, so a buyer may pay by
+ * either. Break-even is computed from the dearest enabled method, because a
+ * figure computed from the cheapest would be wrong exactly when it mattered.
+ * IF BNPL IS EVER TURNED OFF FOR MARKETPLACE SESSIONS, this constant is what
+ * has to move with it.
+ */
+export const MARKETPLACE_PROCESSING_PERCENT_CARD = 2.9
+/** Klarna/Affirm, roughly. See the note above — this is the binding one. */
+export const MARKETPLACE_PROCESSING_PERCENT_BNPL = 6
+/** Stripe's per-transaction fixed component, in cents. */
+export const MARKETPLACE_PROCESSING_FIXED_CENTS = 30
+/**
+ * The tax rate the break-even figure assumes. Tax is added ON TOP of the
+ * listing price and enlarges the base Stripe charges its percentage against,
+ * so it makes the platform's cost slightly worse; the real rate is whatever
+ * `automatic_tax` computes for the buyer's address, and this is the
+ * platform's own Texas rate as a representative figure.
+ */
+export const MARKETPLACE_ASSUMED_TAX_PERCENT = 8.25
+
+/** Where the money goes on one sale of a paid listing (AGL-2343). */
+export interface MarketplaceSaleEconomics {
+  /** The listing price. */
+  priceCents: number
+  /** Added on top, and owed to the state. */
+  taxCents: number
+  /** What the buyer is charged. */
+  buyerPaysCents: number
+  /** `transfer_data[amount]` — the seller's share of the pre-tax price. */
+  sellerReceivesCents: number
+  /** The platform's take. */
+  platformFeeCents: number
+  /** Stripe's fee, debited from the platform on a destination charge. */
+  processingCents: number
+  /** `platformFeeCents - processingCents`. Negative is a loss on the sale. */
+  platformNetCents: number
+}
+
+/**
+ * The funds flow for one sale, mirroring what `checkout.ts` actually builds
+ * (AGL-2343): tax exclusive and on top, a fixed transfer of the seller's share
+ * of the PRE-tax price, and Stripe's fee charged on the buyer's total.
+ */
+export function marketplaceSaleEconomics(
+  priceUsd: number,
+  feePercent: number,
+  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
+): MarketplaceSaleEconomics {
+  const priceCents = Math.max(0, Math.round(priceUsd * 100))
+  const taxCents = Math.round(
+    (priceCents * MARKETPLACE_ASSUMED_TAX_PERCENT) / 100,
+  )
+  const buyerPaysCents = priceCents + taxCents
+  const platformFeeCents = Math.round((priceCents * feePercent) / 100)
+  const sellerReceivesCents = priceCents - platformFeeCents
+  // A zero-price listing takes no payment at all, so there is no fee to pay.
+  const processingCents =
+    priceCents === 0
+      ? 0
+      : Math.round(
+          (buyerPaysCents * processingPercent) / 100 +
+            MARKETPLACE_PROCESSING_FIXED_CENTS,
+        )
+  return {
+    priceCents,
+    taxCents,
+    buyerPaysCents,
+    sellerReceivesCents,
+    platformFeeCents,
+    processingCents,
+    platformNetCents: platformFeeCents - processingCents,
+  }
+}
+
+/**
+ * The cheapest WHOLE-DOLLAR price at which the platform does not lose money on
+ * a sale (AGL-2343).
+ *
+ * Whole dollars because every publish route rounds `priceUsd` to one, so a
+ * fractional break-even is not a price anyone can actually set. Searched
+ * rather than solved algebraically so that it can never disagree with
+ * `marketplaceSaleEconomics` — the rounding in there is what decides the
+ * answer at these amounts, and a closed form would drift from it silently.
+ *
+ * THIS IS NOT A FLOOR AND NOTHING ENFORCES IT. Pricing for the September 1
+ * beta is locked, and a minimum price is publisher-facing policy rather than
+ * an implementation detail: it would appear in the publish form's validation
+ * copy and in the publisher handbook, and the right number depends on which
+ * payment methods stay enabled. So this is shown and not imposed; the decision
+ * is recorded on AGL-2343.
+ */
+export function marketplaceBreakEvenUsd(
+  feePercent: number = bindingMarketplaceFeePct(),
+  processingPercent: number = MARKETPLACE_PROCESSING_PERCENT_BNPL,
+): number {
+  // The listing price ceiling is the marketplace plugin's
+  // `MARKETPLACE_MAX_PRICE_USD`, which this library may not import (an app-tier
+  // lib cannot depend on an addon). The loop only needs SOME bound, and the
+  // answer is single digits at every rate the table holds, so a generous local
+  // one costs nothing and cannot drift into a wrong figure.
+  const searchCeilingUsd = 1000
+  for (let priceUsd = 1; priceUsd <= searchCeilingUsd; priceUsd += 1) {
+    if (
+      marketplaceSaleEconomics(priceUsd, feePercent, processingPercent)
+        .platformNetCents >= 0
+    ) {
+      return priceUsd
+    }
+  }
+  return searchCeilingUsd
+}
+
+/**
+ * The sentence a publish form shows under its price field when the price does
+ * not cover the cost of taking the payment (AGL-2343), or `undefined` when
+ * there is nothing to say.
+ *
+ * ADVISORY. It does not disable the publish button and no route refuses the
+ * price — see `marketplaceBreakEvenUsd` for why a floor is not being set here.
+ * Shared by every publish form rather than written into each, because the
+ * figure has to be the same one in all of them and the wording is the only
+ * place a publisher ever sees it.
+ *
+ * Quoted at the 20% take rate, which is the band that breaks even LATEST, so
+ * the advice holds for a free-plan publisher too.
+ */
+export function marketplacePriceCostNote(
+  priceUsd: unknown,
+): string | undefined {
+  const price = Math.round(Number(priceUsd) || 0)
+  const breakEven = marketplaceBreakEvenUsd()
+  // A free listing takes no payment, so it costs nothing to process and has
+  // nothing to warn about — silence there is the point, not an oversight.
+  if (!(price > 0) || price >= breakEven) return undefined
+  const { processingCents, platformFeeCents } = marketplaceSaleEconomics(
+    price,
+    bindingMarketplaceFeePct(),
+  )
+  const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  return (
+    `Processing a $${price} payment costs about ${usd(processingCents)}, ` +
+    `more than the ${usd(platformFeeCents)} platform fee — a price this low ` +
+    `does not cover the cost of taking it. $${breakEven} or more does, and a ` +
+    `free listing takes no payment at all.`
+  )
+}
+
+/**
  * The cheapest plan whose BASE features include `feature`, in ladder order —
  * the answer to "which plan do I need for this?", which is the one thing an
  * upsell has to say and the one thing no gate can hard-code without drifting
