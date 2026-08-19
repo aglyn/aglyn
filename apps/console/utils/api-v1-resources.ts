@@ -946,11 +946,53 @@ async function handleFormSubmissions(
         headers: { ...ctx.headers, Allow: 'GET' },
       })
     }
+    // An EMPTY value means the filter is absent, matching `?email=` and
+    // `?tag=` on contacts and `conventions.md`'s single rule for all three.
+    // A client serializing an unset form field sends `?read=`, and refusing
+    // that while `?email=` accepts it would be an inconsistency an integrator
+    // discovers one filter at a time.
+    const rawRead = url.searchParams.get('read') || null
+    if (rawRead !== null && rawRead !== 'true' && rawRead !== 'false') {
+      return ApiErrors.badRequest({
+        message: 'Form submission filter failed validation',
+        code: 'validation_failed',
+        fields: { read: 'Must be true or false' },
+        headers: ctx.headers,
+      })
+    }
+    const read = rawRead === null ? null : rawRead === 'true'
+
     let query: FirebaseFirestore.Query = collection
     const form = url.searchParams.get('form')
     if (form) query = query.where('formName', '==', form)
+    // `read` goes to FIRESTORE only when it is the sole filter, and is
+    // applied after the read when it joins `form` (AGL-2460).
+    //
+    // Two equality clauses plus the `orderBy(FieldPath.documentId())` every
+    // list here applies is a three-clause query, and Firestore serves that
+    // only from a composite index. Shipping one to serve a filter
+    // COMBINATION is a migration with a backfill, not a feature — and the
+    // failure mode while it builds is this route's documented realistic 500
+    // (see the route's `safeDispatch` docblock). Narrowing on `formName` and
+    // dropping the rest in memory keeps the pre-existing `?form=` query
+    // byte-for-byte what it already was, which is the property worth more
+    // than one saved round trip.
+    //
+    // `read=false` IS exact against Firestore, unlike `?channel=online` on
+    // orders. That filter is applied after the read because older orders
+    // predate the `channel` field and a `where` would silently drop them.
+    // The equivalent question was checked here rather than assumed: the
+    // ONLY writer of this collection is the tenant's form-submit route, and
+    // it has stamped `read: false` on every row since the feature's first
+    // commit (AGL-76/77, `fc149e538`). There is no fieldless generation to
+    // drop, so the cheap query is also the correct one.
+    if (read !== null && !form) query = query.where('read', '==', read)
     const { docs, nextCursor } = await paginate(query, url)
-    return listResponse(docs.map(formSubmissionView), nextCursor, ctx.headers)
+    const matched =
+      read !== null && form
+        ? docs.filter((doc) => Boolean(doc.get('read')) === read)
+        : docs
+    return listResponse(matched.map(formSubmissionView), nextCursor, ctx.headers)
   }
 
   const submissionRef = collection.doc(submissionId)
@@ -1160,6 +1202,34 @@ function orderView(doc: FirebaseFirestore.DocumentSnapshot) {
     disputed: Boolean(data.dispute),
     shippingAddress: serialize(data.shippingAddress) ?? null,
     couponCode: data.couponCode ?? null,
+    // Shipment records — the half of fulfilment an integration can use
+    // without a write (AGL-2460). `status` says an order is `fulfilled`; it
+    // does not say which carrier took it or under what tracking number, so a
+    // 3PL or accounting reconcile could see THAT an order shipped and never
+    // WHICH shipment it was. The console's order dialog shows both, and an
+    // order that has been shipped twice (a split shipment) is indistinguish-
+    // able from one shipped once when only the status is published.
+    //
+    // `atMs` is a number of milliseconds, not a Firestore Timestamp, so
+    // `serialize` passes it through untouched. It is republished as `at` in
+    // ISO 8601 to match `created` and every other time this API emits: one
+    // object publishing two time formats is a bug an integrator finds late,
+    // in their own timezone conversion, and blames on their own code.
+    fulfillments: (Array.isArray(data.fulfillments) ? data.fulfillments : []).map(
+      (entry: Record<string, unknown>) => {
+        const atMs = Number((entry ?? {}).atMs)
+        return {
+          id: (entry ?? {}).id ?? null,
+          lineItemIds: Array.isArray((entry ?? {}).lineItemIds)
+            ? (entry as { lineItemIds: unknown[] }).lineItemIds
+            : [],
+          carrier: (entry ?? {}).carrier ?? null,
+          trackingNumber: (entry ?? {}).trackingNumber ?? null,
+          trackingUrl: (entry ?? {}).trackingUrl ?? null,
+          at: Number.isFinite(atMs) ? new Date(atMs).toISOString() : null,
+        }
+      },
+    ),
     created: serialize(data.createdAt) ?? null,
   }
 }
@@ -1754,6 +1824,92 @@ async function deleteContact(
   }
 }
 
+/**
+ * `GET /v1/contacts` filters (AGL-2460) — the lookup a sync starts with.
+ *
+ * The list was ordered by document id with no filter of any kind, which left
+ * the first question every CRM, mailing tool or migration asks — "do I
+ * already have this person?" — answerable only by paging the whole audience.
+ * That is not a rounding error. Contacts are ORGANIZATION-wide (AGL-237), so
+ * the list is the entire audience band; every page is a BILLED request
+ * (`recordApiRequest`) against a documented 120/min per-key ceiling. Finding
+ * one address in a 50k audience cost ~500 requests and four minutes, and the
+ * integration that gave up and called `POST` instead recovered the id by
+ * regex over the `409 contact_exists` sentence — parsing a human message for
+ * an identifier, which is not a contract this API should have been offering.
+ *
+ * Both filters REDUCE work rather than adding it: one indexed lookup replaces
+ * a full sweep, so this NARROWS the per-request Firestore read amplification
+ * AGL-2414 is about rather than widening it. Neither introduces a new metered
+ * dimension — a filtered list is the same billed request the unfiltered one
+ * always was, and the customer simply needs far fewer of them.
+ *
+ * ## `email` runs through the writer's own normalizer
+ *
+ * `normalizeContactEmail` is the SAME function `createContact` stores
+ * through. Matching the raw query string instead would make
+ * `?email=Avery@Example.com` answer "no such contact" while `POST` with that
+ * identical address answers `409 contact_exists` naming its id — two
+ * endpoints disagreeing about whether a person exists, which an integrator
+ * reasonably reads as our data being corrupt rather than as our having two
+ * spellings of one address.
+ *
+ * A value that cannot normalize is a `400` naming the field, not an empty
+ * page. Every stored email is normalized and pattern-valid, so nothing can
+ * match a malformed one and an empty page would be perfectly TRUE and
+ * perfectly useless: it is indistinguishable from "we don't have them", and
+ * it sends the caller hunting a missing person instead of a typo.
+ *
+ * ## Why the COMBINATION filters after the read
+ *
+ * An equality on `email`, an `array-contains` on `tags` and the
+ * `orderBy(FieldPath.documentId())` every list applies is a three-clause
+ * query, which Firestore serves only from a composite index we would have to
+ * ship and wait on. `email` is unique, so it already selects at most one
+ * document — testing that one row's tags in memory costs nothing and needs no
+ * index. The page can therefore come back empty with `has_more` false, which
+ * is the short-page case `conventions.md` already tells clients to expect and
+ * which `?channel=online` on orders already produces.
+ */
+async function listContacts(
+  ctx: ApiV1Context,
+  collection: FirebaseFirestore.CollectionReference,
+  url: URL,
+): Promise<Response> {
+  const rawEmail = url.searchParams.get('email')
+  let email: string | null = null
+  if (rawEmail !== null && rawEmail.trim() !== '') {
+    email = normalizeContactEmail(rawEmail)
+    if (!email) {
+      return ApiErrors.badRequest({
+        message: 'Contact filter failed validation',
+        code: 'validation_failed',
+        fields: { email: 'Must be a valid email address' },
+        headers: ctx.headers,
+      })
+    }
+  }
+  // Trimmed and capped exactly as `readContactInput` stores a tag, so a
+  // filter cannot ask for a string the write path could never have written.
+  const rawTag = url.searchParams.get('tag')
+  const tag =
+    rawTag === null ? null : rawTag.trim().slice(0, CONTACT_TAG_MAX) || null
+
+  let query: FirebaseFirestore.Query = collection
+  if (email) query = query.where('email', '==', email)
+  else if (tag) query = query.where('tags', 'array-contains', tag)
+
+  const { docs, nextCursor } = await paginate(query, url)
+  const matched =
+    email && tag
+      ? docs.filter((doc) => {
+          const tags = doc.get('tags')
+          return Array.isArray(tags) && tags.includes(tag)
+        })
+      : docs
+  return listResponse(matched.map(contactView), nextCursor, ctx.headers)
+}
+
 async function handleContacts(
   request: Request,
   ctx: ApiV1Context,
@@ -1767,8 +1923,7 @@ async function handleContacts(
     if (request.method === 'GET') {
       const denied = requireScope(ctx, 'contacts:read')
       if (denied) return denied
-      const { docs, nextCursor } = await paginate(collection, url)
-      return listResponse(docs.map(contactView), nextCursor, ctx.headers)
+      return listContacts(ctx, collection, url)
     }
     if (request.method === 'POST') {
       const denied = requireScope(ctx, 'contacts:write')

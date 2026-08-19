@@ -62,6 +62,16 @@ commerce. If your plan doesn't, they answer `403 plan_required` with `code:
     "country": "US"
   },
   "couponCode": null,
+  "fulfillments": [
+    {
+      "id": "f_8c21",
+      "lineItemIds": [0, 1],
+      "carrier": "USPS",
+      "trackingNumber": "9400111899223197428490",
+      "trackingUrl": null,
+      "at": "2026-08-15T14:20:00.000Z"
+    }
+  ],
   "created": "2026-08-14T18:02:11.400Z"
 }
 ```
@@ -82,6 +92,7 @@ commerce. If your plan doesn't, they answer `403 plan_required` with `code:
 | `disputed` | boolean | Whether a card dispute has ever been recorded against this order. |
 | `shippingAddress` | object \| null | Present on orders that collected one. Digital and POS orders usually have none. |
 | `couponCode` | string \| null | The discount code the shopper used, if any. |
+| `fulfillments` | array | Shipments recorded against this order — see [fulfillments](#fulfillments). Always present; `[]` on an order nothing has shipped for. |
 | `created` | string \| null | ISO 8601. For a **subscription renewal** this is the period start Stripe billed for, not the moment the row was written — which is what makes a revenue report line up with the invoice. |
 
 ### Statuses {#statuses}
@@ -97,6 +108,32 @@ commerce. If your plan doesn't, they answer `403 plan_required` with `code:
 | `refunded` | Refunded — check `refundedCents` for how much, and `disputed` for why. |
 
 `refunded` and `cancelled` are terminal. Everything else can still move.
+
+### Fulfillments {#fulfillments}
+
+`status` tells you an order shipped. `fulfillments` tells you **what shipped, when,
+and under whose tracking number** — which is the part a 3PL or accounting reconcile
+needs, and the part a split shipment makes essential: two shipments against one order
+are two entries here and one unchanged `status`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string \| null | Shipment id, unique within the order. |
+| `lineItemIds` | array | **Indexes into `lineItems`**, not product or variant ids. `[0, 1]` means the first two line items on this order. |
+| `carrier` | string \| null | As recorded by whoever shipped it. Free text, not a fixed list. |
+| `trackingNumber` | string \| null | Free text too — validate it against the carrier yourself. |
+| `trackingUrl` | string \| null | Set only when the shipper recorded one. Usually `null`; build your own from the carrier and number. |
+| `at` | string \| null | ISO 8601, like every other time on this object. `null` if the stored timestamp is unusable. |
+
+Fulfillments are **read-only over the API today**. Recording a shipment is a console
+action; see [what isn't here](#not-here).
+
+#### What isn't here {#not-here}
+
+Nothing on this resource is writable. `orders:write` does not exist as a scope, so
+fulfilling an order, cancelling one, or issuing a refund are console actions. Refunds
+and cancellations move money and stock and want their own decision; recording a
+shipment does neither, and is the one we expect to open first.
 
 ### Channels {#channels}
 
