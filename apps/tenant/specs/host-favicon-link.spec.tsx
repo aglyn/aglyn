@@ -62,9 +62,33 @@ jest.mock('../app/[host]/admin-bar/admin-bar-slot', () => ({
   default: () => null,
 }))
 
+/**
+ * The billing doc, which the layout began reading for the white-label favicon
+ * (AGL-2183). Mocked rather than left to the real helper for the reason this
+ * file already mocks the theme providers: `getOrgBilling` reaches
+ * `next/cache`, which this jsdom suite cannot load at all — the import alone
+ * failed every case here with "Class extends value undefined".
+ *
+ * The DEFAULT is a free org, deliberately. That is the shape every assertion
+ * below was written against, and it keeps "a site that configured nothing
+ * borrows nobody's icon" meaning what it always meant: on a free plan the
+ * platform fallback is the deal, so no link is correct. The white-label case
+ * gets its own describe, where the answer is different on purpose.
+ */
+const mockOrg = jest.fn()
+jest.mock('../utils/get-org-billing', () => ({
+  __esModule: true,
+  default: (...args: unknown[]) => mockOrg(...args),
+}))
+
 import HostLayout from '../app/[host]/layout'
 
 const HOST_ID = 'DXnRbPH4CQ'
+
+/** Free plan: platform attribution applies, so the tab may carry our mark. */
+const FREE_ORG = { org: { $id: 'org-free', plan: 'free' } }
+/** Agency: carries `whiteLabel`, so it may not. */
+const AGENCY_ORG = { org: { $id: 'org-agency', plan: 'agency' } }
 
 /**
  * Renders the layout and returns the `href` of the icon link, or `null`.
@@ -100,7 +124,10 @@ const iconHref = async (favicon?: string, hostId = HOST_ID) => {
 }
 
 describe('tenant `<link rel="icon">` (AGL-1421)', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockOrg.mockResolvedValue(FREE_ORG)
+  })
 
   it('emits the SITE’s own icon, not the platform default', async () => {
     expect(await iconHref('media:org:jWmGooWE3L/19G8Ipyfb1')).toBe(
@@ -157,5 +184,52 @@ describe('tenant `<link rel="icon">` (AGL-1421)', () => {
    */
   it('drops the tag for a malformed reference', async () => {
     expect(await iconHref('media:junk')).toBeNull()
+  })
+
+  /**
+   * A white-label site must not borrow OURS either (AGL-2183).
+   *
+   * "Borrows nobody's icon" above resolves to no `<link>`, which makes the
+   * browser fetch the origin's `/favicon.ico` — Aglyn's mark. That is the deal
+   * on a free plan and a broken promise on a customer's own domain, and this
+   * file's own opening comment says a white-label site is not white-label
+   * while our icon is in the tab. These drive the REAL layout, so they pin the
+   * behaviour a visitor gets rather than the pure precedence function.
+   */
+  describe('a white-label site (AGL-2183)', () => {
+    it('suppresses the platform fallback with an empty data URL', async () => {
+      mockOrg.mockResolvedValue(AGENCY_ORG)
+      expect(await iconHref(undefined)).toBe('data:,')
+    })
+
+    it('prefers the org’s own mark over suppressing', async () => {
+      mockOrg.mockResolvedValue({
+        org: {
+          ...AGENCY_ORG.org,
+          brandingProfile: { faviconUrl: 'https://cdn.example/acme.ico' },
+        },
+      })
+      expect(await iconHref(undefined)).toBe('https://cdn.example/acme.ico')
+    })
+
+    it('still lets the SITE’s own icon win over the org’s', async () => {
+      mockOrg.mockResolvedValue({
+        org: {
+          ...AGENCY_ORG.org,
+          brandingProfile: { faviconUrl: 'https://cdn.example/acme.ico' },
+        },
+      })
+      expect(await iconHref('https://cdn.example/site.ico')).toBe(
+        'https://cdn.example/site.ico',
+      )
+    })
+
+    it('suppresses when the org could not be read at all', async () => {
+      // getOrgBilling fails open with org: null, and an absent org resolves to
+      // the FREE plan — so leaning the other way would put our mark back in an
+      // Agency site's tab on any transient Firestore error.
+      mockOrg.mockResolvedValue({ org: null })
+      expect(await iconHref(undefined)).toBe('data:,')
+    })
   })
 })
