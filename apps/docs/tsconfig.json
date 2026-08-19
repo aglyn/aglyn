@@ -4,6 +4,12 @@
   "extends": "@docusaurus/tsconfig",
   "exclude": [".docusaurus", "build"],
   "compilerOptions": {
-    "ignoreDeprecations": "6.0"
+    // "6.0" here was a value TypeScript 5.6 rejects outright (TS5103), so
+    // `npm run typecheck` exited 2 before compiling a single file — and
+    // tools/scripts/typecheck.mjs excludes apps/docs by name while no CI job
+    // runs the nx `docs:typecheck` target, so nothing ever reported it. The
+    // app had a typecheck that had never once run (AGL-2124). Restoring it
+    // immediately surfaced a real error it had been hiding, in status.tsx.
+    "ignoreDeprecations": "5.0"
   }
 }

@@ -51,8 +51,24 @@ export const dynamic = 'force-dynamic'
 
 const MAX_BODY_BYTES = 65_536
 
-/** The one cross-origin caller this collector accepts reports from. */
-const DOCS_ORIGIN = 'https://docs.aglyn.com'
+/**
+ * The one cross-origin caller this collector accepts reports from (AGL-2124).
+ *
+ * Was the bare literal `https://docs.aglyn.com`. This is the receiving half of
+ * the docs error beacon, and pinning it meant an operator running BOTH halves
+ * of the open-source stack still could not have their own docs site report to
+ * their own console: the browser blocked every POST on CORS, so their beacon
+ * was silently inert while ours was the only origin the collector would talk
+ * to.
+ *
+ * Same env name the runbook documents and `assist-retrieval.ts` reads — one
+ * value, one name (AGL-733). Bracket notation is correct here and deliberate:
+ * this module is server-only, and using the dot form would inline the value
+ * into any client bundle that ever imported it.
+ */
+const DOCS_ORIGIN = (
+  process.env['NEXT_PUBLIC_DOCS_ORIGIN'] || 'https://docs.aglyn.com'
+).replace(/\/+$/, '')
 
 // Fixed allowed origin (same-origin console callers never read the response,
 // so a docs-only ACAO costs them nothing); Vary keeps caches honest.

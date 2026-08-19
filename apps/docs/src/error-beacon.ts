@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import siteConfig from '@generated/docusaurus.config'
+
 /**
  * First-party browser error beacon for docs.aglyn.com (AGL-1646).
  *
@@ -64,7 +66,32 @@
  *   stack; those are dropped since they cannot be acted on.
  */
 
-const ENDPOINT = 'https://app.aglyn.com/api/errors'
+/**
+ * Where reports go, or `''` when this build was given no collector.
+ *
+ * Was the bare literal `https://app.aglyn.com/api/errors` (AGL-2124). Docs is
+ * part of the open-source distribution, so every operator who built and
+ * published it shipped a beacon that posted THEIR readers' page URLs, stack
+ * traces and user agents to AGLYN's production console — telemetry about an
+ * install we do not run, arriving at a collector that files it under
+ * `docs-web` as if it were ours. Neither party consented to that and neither
+ * party benefits: they get no error reporting, and our Error Reporting fills
+ * with stacks from code paths on somebody else's deployment.
+ *
+ * Unset means the beacon does not install at all — see the arming gate at the
+ * bottom of this file. That is the only honest default: "no collector
+ * configured" must mean nothing is sent anywhere, never that it is sent to
+ * us. Aglyn's own docs project sets `DOCS_ERROR_BEACON_ENDPOINT` like any
+ * other operator.
+ *
+ * Delivered through `customFields` because Docusaurus inlines those into the
+ * browser bundle; arbitrary `process.env` is not exposed to client code, and
+ * a build-time `undefined` here would silently disarm production.
+ */
+const ENDPOINT = String(
+  (siteConfig.customFields as { errorBeaconEndpoint?: unknown } | undefined)
+    ?.errorBeaconEndpoint ?? '',
+).trim()
 const MAX_MESSAGE = 1_024
 const MAX_STACK = 8_192
 const MAX_PER_PAGE = 10
@@ -189,6 +216,13 @@ function installErrorBeacon(): void {
 
 // Client modules can still be evaluated during the static build; the beacon
 // is browser-only, and dev servers stay disarmed (mirrors the gtag gate).
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+// `ENDPOINT` is the third gate (AGL-2124): a build with no collector
+// configured installs no handlers, so an unconfigured operator's docs site
+// reports to nobody rather than to us.
+if (
+  ENDPOINT &&
+  typeof window !== 'undefined' &&
+  process.env.NODE_ENV === 'production'
+) {
   installErrorBeacon()
 }

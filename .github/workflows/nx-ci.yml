@@ -69,6 +69,18 @@ jobs:
       # and is the only type gate (builds transpile with swc, no type-check).
       - run: npm run typecheck
 
+      # apps/docs is EXCLUDED from the sweep above by name
+      # (tools/scripts/typecheck.mjs) because it is a standalone package with
+      # its own TypeScript, and nothing ran its own target instead — so the
+      # app had a `typecheck` script that had never once executed. It could
+      # not have: apps/docs/tsconfig.json set `ignoreDeprecations: "6.0"`, a
+      # value its TypeScript 5.6 rejects, so the command exited 2 before
+      # compiling a file. Restoring it surfaced a real error it had been
+      # hiding (AGL-2124). Explicit and never affected-scoped, matching the
+      # generated-artifact gates below: the exclusion is by package, not by
+      # what changed.
+      - run: npx nx run docs:typecheck
+
       # Self-test the local ESLint guard rules (not part of the nx graph, so
       # run explicitly on every CI run — never affected-scoped).
       - run: npm run test:eslint-rules

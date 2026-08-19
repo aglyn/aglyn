@@ -35,7 +35,8 @@
  */
 
 import Layout from '@theme/Layout'
-import { useCallback, useEffect, useState } from 'react'
+import siteConfig from '@generated/docusaurus.config'
+import React, { useCallback, useEffect, useState } from 'react'
 
 interface Target {
   name: string
@@ -44,20 +45,46 @@ interface Target {
   base: string
 }
 
-const TARGETS: Target[] = [
-  {
-    name: 'console',
-    label: 'Console',
-    description: 'Sign-in, editing, billing and everything at app.aglyn.com.',
-    base: 'https://app.aglyn.com',
-  },
-  {
-    name: 'tenant',
-    label: 'Published sites',
-    description: 'The runtime that serves every published site and storefront.',
-    base: 'https://demo.aglyn.com',
-  },
-]
+/**
+ * The origins this page probes, or none (AGL-2124).
+ *
+ * These were the bare literals `https://app.aglyn.com` and
+ * `https://demo.aglyn.com`. `apps/docs` ships in the open-source
+ * distribution, so an operator who published their own build got a status
+ * page that live-probed AGLYN's production every 60 seconds from each
+ * reader's browser and presented OUR uptime as theirs. A green tick there
+ * said nothing about whether the operator's own console was up — which is
+ * the one question a status page exists to answer — and a red one would have
+ * had them chasing an outage on infrastructure they do not run.
+ *
+ * Configured as `DOCS_STATUS_TARGETS`: comma-separated `name|label|origin`
+ * triples. Unset means the page probes NOTHING and says so. An empty status
+ * page is a small embarrassment; a status page confidently reporting a
+ * stranger's infrastructure is a false all-clear during the operator's own
+ * outage, and that is the failure worth refusing.
+ */
+function parseTargets(raw: unknown): Target[] {
+  return String(raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [name, label, base] = entry.split('|').map((part) => part.trim())
+      if (!name || !base) return null
+      return {
+        name,
+        label: label || name,
+        description: `Live health check for ${base}.`,
+        base: base.replace(/\/+$/, ''),
+      }
+    })
+    .filter((target): target is Target => target !== null)
+}
+
+const TARGETS: Target[] = parseTargets(
+  (siteConfig.customFields as { statusTargets?: unknown } | undefined)
+    ?.statusTargets,
+)
 
 type Verdict = 'checking' | 'operational' | 'degraded' | 'unreachable'
 
@@ -118,7 +145,10 @@ async function check(target: Target): Promise<Reading> {
   }
 }
 
-export default function StatusPage(): JSX.Element {
+// `React.JSX`, not the bare global `JSX`: the global namespace is gone in the
+// React 18 type definitions this app pins, and the broken typecheck above was
+// the only reason it went unnoticed (AGL-2124).
+export default function StatusPage(): React.JSX.Element {
   const [readings, setReadings] = useState<Record<string, Reading>>(
     Object.fromEntries(TARGETS.map((t) => [t.name, { verdict: 'checking' as Verdict }])),
   )
@@ -139,7 +169,9 @@ export default function StatusPage(): JSX.Element {
   }, [refresh])
 
   const verdicts = TARGETS.map((t) => readings[t.name]?.verdict)
-  const allGood = verdicts.every((v) => v === 'operational')
+  // `every` on an empty list is vacuously TRUE, which would render "All
+  // services are responding normally" on a page that checked nothing.
+  const allGood = verdicts.length > 0 && verdicts.every((v) => v === 'operational')
   const anyChecking = verdicts.some((v) => v === 'checking')
 
   return (
@@ -147,11 +179,15 @@ export default function StatusPage(): JSX.Element {
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '3rem 1rem' }}>
         <h1 style={{ marginBottom: '0.25rem' }}>Status</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-700)', marginTop: 0 }}>
-          {anyChecking
-            ? 'Checking each service from your browser…'
-            : allGood
-              ? 'All services are responding normally.'
-              : 'One or more services are not responding normally.'}
+          {TARGETS.length === 0
+            ? 'This deployment has not been told which services to check, so ' +
+              'this page reports nothing. Set DOCS_STATUS_TARGETS and rebuild ' +
+              '— see docs/SELF_HOSTING.md.'
+            : anyChecking
+              ? 'Checking each service from your browser…'
+              : allGood
+                ? 'All services are responding normally.'
+                : 'One or more services are not responding normally.'}
         </p>
 
         <div style={{ display: 'grid', gap: '1rem', marginTop: '2rem' }}>
