@@ -207,6 +207,14 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['app/(app)/admin/abuse-reports/page.tsx'],
     via: /staff role/,
   },
+  // The marketplace half of the same job (AGL-2310). Like `abuse-reports` it
+  // REDACTS rather than refuses — triage is open to every staff role and the
+  // reporter's account is not — so the surface it maps to is the sentence
+  // that says so, not a disabled control.
+  'marketplace-reports/route.ts': {
+    ui: ['app/(app)/admin/marketplace-reports/page.tsx'],
+    via: /access level/,
+  },
   'media-quarantine/route.ts': {
     ui: ['app/(app)/admin/media-quarantine/page.tsx'],
     via: /useStaffRole/,

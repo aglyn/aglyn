@@ -42,6 +42,12 @@ export enum Route {
   // was one. Reports arrive from the unauthenticated form the tenant runtime
   // serves at /api/report-abuse on every origin.
   ADMIN_ABUSE_REPORTS = '/admin/abuse-reports',
+  // The same input, one collection over (AGL-2310). The marketplace's own
+  // report button wrote `marketplaceReports` from the day it shipped and
+  // nothing read it — every report filed, acknowledged, and unreachable. This
+  // is that queue, deliberately shaped like the abuse one rather than as a
+  // second vocabulary for the same act.
+  ADMIN_MARKETPLACE_REPORTS = '/admin/marketplace-reports',
   // The probes, on a screen (AGL-1900). /api/health/{backups,rate-limits,
   // signups} and /api/admin/email-health each answered a bad-day question to
   // a curl and to nothing else; this is where an operator reads them.
@@ -224,6 +230,7 @@ export interface RoutePayload {
   [Route.ADMIN_LOCKDOWN]: undefined
   [Route.ADMIN_MEDIA_QUARANTINE]: undefined
   [Route.ADMIN_ABUSE_REPORTS]: undefined
+  [Route.ADMIN_MARKETPLACE_REPORTS]: undefined
   [Route.ADMIN_HEALTH]: undefined
   [Route.ADMIN_ASSIST_SIGNALS]: undefined
   [Route.ADMIN_TAX_RETURN]: undefined
