@@ -31,8 +31,19 @@ export interface MediaPickerContextValue {
    * that have no CDN path. The designer writes it through verbatim — what
    * the persisted form means is the host app's and the renderer's business,
    * which is the same reason this context exists at all.
+   *
+   * `asset` carries the chosen asset's own authored metadata (AGL-1896) so a
+   * surface can DEFAULT a companion attribute from it — today only `alt`,
+   * which the DAM has stored since AGL-173 and which nothing ever read back.
+   * Structural and optional on purpose: the designer stays storage-agnostic,
+   * a host that supplies no metadata is unchanged, and this stays one extra
+   * argument rather than a second picker mechanism. Use
+   * `Aglyn.inheritedMediaAlt` to decide what to do with it — never inline the
+   * rule, or the override precedence drifts per surface.
    */
-  onPickMedia?: (onPick: (value: string) => void) => void
+  onPickMedia?: (
+    onPick: (value: string, asset?: { alt?: string }) => void,
+  ) => void
 }
 
 export const MediaPickerContext = createContext<MediaPickerContextValue>({})

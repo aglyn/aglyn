@@ -71,6 +71,7 @@ export function ConsoleMediaPickerProvider(
             cdnPath?: string
             fileName?: string
             contentType?: string
+            alt?: string
           }
           // Same precedence as the besigner picker (AGL-1215): the stable
           // media-id-keyed CDN path first, the raw storage URL only when
@@ -82,6 +83,12 @@ export function ConsoleMediaPickerProvider(
                   url: src,
                   fileName: picked.fileName,
                   contentType: picked.contentType,
+                  // The asset's authored alt (AGL-1896) — a plugin console
+                  // page can default a blank alt field from it rather than
+                  // making the author retype it per placement. Passed
+                  // through raw; `inheritedMediaAlt` at the call site is
+                  // what decides whether it may win.
+                  alt: picked.alt,
                 }
               : null,
           )

@@ -108,6 +108,12 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
       ...(headline ? { headline } : {}),
       body,
       ...(popupConfig.imageUrl ? { imageUrl: popupConfig.imageUrl } : {}),
+      // Only alongside an image, and only when non-empty (AGL-1896) — same
+      // bytes-on-every-request rule as `oncePerSession` below. An absent
+      // `imageAlt` renders `alt=""`, which is what the popup always did.
+      ...(popupConfig.imageUrl && popupConfig.imageAlt
+        ? { imageAlt: popupConfig.imageAlt }
+        : {}),
       ...(popupConfig.ctaLabel ? { ctaLabel: popupConfig.ctaLabel } : {}),
       ...(popupConfig.ctaHref ? { ctaHref: popupConfig.ctaHref } : {}),
       trigger: popupConfig.trigger ?? 'delay',

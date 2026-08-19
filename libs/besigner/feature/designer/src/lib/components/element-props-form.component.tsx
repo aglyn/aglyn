@@ -296,6 +296,57 @@ export function buildInstancePropFields(
 }
 
 /**
+ * What a "Browse media" pick should ALSO write for `alt` (AGL-1896).
+ *
+ * The DAM has stored per-asset alt text since AGL-173 and nothing ever read
+ * it back, so an author placing the same logo on eight pages typed its alt
+ * eight times — and a field that must be retyped per placement is a field
+ * that ships blank, on the customer's published site.
+ *
+ * Exported and pure so the decision is testable on real inputs; the handler
+ * that calls it is inside a component wired to the live canvas.
+ *
+ * Two narrowings, both deliberate:
+ *
+ * * **`src` only.** The Browse button is offered on every media-ish
+ *   attribute — `poster`, `background`, `thumbnail`, `logo`. A poster
+ *   frame's description is not the element's alt text, and no attribute
+ *   pairing anywhere says which of those an `alt` belongs to. Guessing would
+ *   put the wrong sentence on the element and look like a bug.
+ * * **Only where the SCHEMA declares an `alt`.** Read off the element's own
+ *   attributes rather than assumed, so a component without one is never
+ *   handed a prop its renderer would drop on the floor.
+ *
+ * Returns `{}` — not `{ alt: undefined }` — whenever nothing should change,
+ * because the caller spreads the result into a props object that
+ * `updateNodeProps` REPLACES wholesale. An `alt` key present with an
+ * undefined value is indistinguishable from an authored empty alt to
+ * everything downstream, and would silently clear one.
+ */
+export function inheritedAltPatch(options: {
+  /** The attribute the Browse button was pressed for. */
+  propName: string
+  /** Whether this element's schema declares an `alt` attribute at all. */
+  declaresAlt: boolean
+  /** The node's CURRENT props, snapshotted from the canvas. */
+  props?: Record<string, unknown> | null
+  /** The chosen DAM asset's own stored alt. */
+  assetAlt?: unknown
+}): { alt?: string } {
+  const { propName, declaresAlt, props, assetAlt } = options ?? ({} as never)
+  if (!declaresAlt || propName !== 'src') return {}
+  const alt = Aglyn.inheritedMediaAlt({
+    placementAlt: props?.['alt'],
+    // The author's explicit "screen readers should skip this" (AGL-1305).
+    // `image.tsx` forces `alt=""` over any alt text when it is on, so
+    // inheriting into such a node writes text the renderer discards.
+    decorative: props?.['decorative'],
+    assetAlt,
+  })
+  return alt ? { alt } : {}
+}
+
+/**
  * The two visibility fields every node inside a component definition gets
  * (AGL-1314), so "this part is optional" is something an author declares by
  * clicking rather than something the component hard-codes.
@@ -770,21 +821,36 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         ),
       [rawAttributes],
     )
+    /**
+     * True when this element declares an `alt` attribute of its own — Image
+     * and Email image today. Read off the SCHEMA rather than assumed, so a
+     * component without one is never handed a prop its renderer would drop.
+     */
+    const declaresAlt = useMemo(
+      () => (rawAttributes ?? []).some((field: any) => field?.name === 'alt'),
+      [rawAttributes],
+    )
     const handleBrowseMedia = useCallback(
       (propName: string) => () => {
         // Written through verbatim: the host app decides the persisted form
         // (today a media reference — AGL-1215), the renderer resolves it.
-        onPickMedia?.((value) => {
+        onPickMedia?.((value, asset) => {
           const current = (
             Aglyn.canvas.toJSON().nodes as Record<string, any>
           )[node?.$id]
           Aglyn.canvas.updateNodeProps(node, {
             ...current?.props,
             [propName]: value,
+            ...inheritedAltPatch({
+              propName,
+              declaresAlt,
+              props: current?.props,
+              assetAlt: asset?.alt,
+            }),
           })
         })
       },
-      [onPickMedia, node],
+      [onPickMedia, node, declaresAlt],
     )
 
     // The same picker for an instance's image-typed declared prop, writing

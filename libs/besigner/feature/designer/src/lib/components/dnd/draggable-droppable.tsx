@@ -340,18 +340,52 @@ export const DraggableDroppable = observer(
         )
         if (src?.boundProp && onPickMedia) {
           const propName = src.boundProp
-          onPickMedia((value) => {
+          // The SAME leaf's `alt`, if the component author bound one to a
+          // declared prop too (AGL-1896). Resolvable here and nowhere else
+          // in the instance pipeline: this path starts from a concrete leaf
+          // in the definition tree, so "which declared prop feeds this
+          // image's alt" is a lookup rather than a guess. The attributes
+          // panel only ever sees a declared prop's NAME, and no convention
+          // says which other prop is its alt — so it does not try.
+          const altBinding = Aglyn.resolveInstanceLeafBinding(
+            hit.graftedId,
+            node.$id,
+            definition,
+            'alt',
+          )
+          onPickMedia((value, asset) => {
             // Written through verbatim (media reference or raw URL — the
             // host app decides; AGL-1215). Snapshot via toJSON like the
             // panel: updateNodeProps REPLACES the props object.
             const current = (
               Aglyn.canvas.toJSON().nodes as Record<string, any>
             )[node.$id]
+            // What the instance renders for the alt prop TODAY — its own
+            // override, else the component's default. Not the raw override:
+            // a component whose default alt is already a real sentence must
+            // not have it replaced just because this instance never set one.
+            const altPropName = altBinding?.boundProp
+            const effectiveAlt = altPropName
+              ? Aglyn.getInstanceEffectivePropText(
+                  current?.props,
+                  definition.props,
+                  altPropName,
+                )
+              : undefined
+            const inheritedAlt = altPropName
+              ? Aglyn.inheritedMediaAlt({
+                  placementAlt: effectiveAlt,
+                  assetAlt: asset?.alt,
+                })
+              : undefined
             Aglyn.canvas.updateNodeProps(node, {
               ...current?.props,
               [Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY]: {
                 ...current?.props?.[Aglyn.REUSABLE_INSTANCE_PROP_VALUES_KEY],
                 [propName]: value,
+                ...(inheritedAlt && altPropName
+                  ? { [altPropName]: inheritedAlt }
+                  : {}),
               },
             })
           })

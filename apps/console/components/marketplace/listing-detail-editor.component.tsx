@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // The stored preview may be a `media:` reference (AGL-1424), which is not a
 // URL. Resolved where it is DISPLAYED, never in `values`.
 import { mediaNodeSrc, resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   Box,
   Button,
@@ -123,7 +124,11 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
   const set = (key: keyof typeof values) => (event: any) =>
     setValues((current) => ({ ...current, [key]: event.target.value }))
 
-  const onPickMedia = (media: { url?: string; cdnPath?: string }) => {
+  const onPickMedia = (media: {
+    url?: string
+    cdnPath?: string
+    alt?: string
+  }) => {
     const url = mediaSrc(media)
     const target = pickTarget
     setPickTarget(null)
@@ -152,7 +157,15 @@ export function ListingDetailEditor(props: ListingDetailEditorProps) {
       // at. Same bytes over the same route, minus a baked-in origin and a
       // baked-in route shape that cannot be changed without a migration.
       const src = mediaNodeSrc(media) ?? url
-      editorRef.current?.insertImage('', src)
+      // The alt was a hardcoded '' (AGL-1896). This surface offers no alt
+      // prompt at all, so the asset's own alt was the only description that
+      // could ever have reached the row — and a markdown-lite image row's
+      // alt cannot be edited after insertion, so '' was permanent. Still ''
+      // for an asset nobody has described; never a fabricated one.
+      editorRef.current?.insertImage(
+        inheritedMediaAlt({ assetAlt: media.alt }) ?? '',
+        src,
+      )
     } else if (target === 'screenshot')
       setScreenshots((current) =>
         current.length >= MAX_SCREENSHOTS || current.includes(url)

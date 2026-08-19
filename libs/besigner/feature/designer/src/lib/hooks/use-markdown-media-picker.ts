@@ -93,14 +93,26 @@ export function useMarkdownMediaPicker(): MarkdownMediaPicker {
   const onPickImageFromMedia = useMemo(() => {
     if (!onPickMedia) return undefined
     return (alt: string) => {
-      onPickMedia((stored) => {
+      onPickMedia((stored, asset) => {
         // Gated on what the PARSER keeps, not on what resolves: a value the
         // editor accepts and the parser drops is an image that disappears on
         // the next load with nothing logged, which is exactly how AGL-1645
         // shipped broken. `insertImage` re-checks with the same predicate, so
         // this is the early, reportable refusal rather than the guard.
         if (!stored || !Aglyn.isSupportedImageSrc(stored)) return
-        handleRef.current?.insertImage(alt, stored)
+        // The asset's stored alt fills a blank dialog field (AGL-1896).
+        // This surface needs the default MORE than the others, not less: an
+        // image row's alt is fixed at insert time and the editor offers no
+        // way to edit it afterwards, so an alt left empty here is
+        // unrepairable short of deleting the row and inserting it again.
+        // A typed alt still wins — `inheritedMediaAlt` returns undefined for
+        // one, and the `?? alt` below keeps it verbatim.
+        const resolvedAlt =
+          Aglyn.inheritedMediaAlt({
+            placementAlt: alt,
+            assetAlt: asset?.alt,
+          }) ?? alt
+        handleRef.current?.insertImage(resolvedAlt, stored)
       })
     }
   }, [onPickMedia])

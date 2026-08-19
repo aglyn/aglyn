@@ -49,6 +49,7 @@ import {
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import { docsHelp } from '../../constants/docs-links'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import mediaSrc from '../../utils/media-src'
 import { buildRoute, Route } from '../../constants/route-links'
 
@@ -1045,7 +1046,17 @@ export function PublishPluginForm(props: PublishPluginFormProps) {
           // nothing was relying on the baked-in origin. `?? mediaSrc` keeps
           // the free-tier fallback, where no `cdnPath` is minted.
           const src = mediaNodeSrc(media ?? {}) ?? mediaSrc(media ?? {})
-          if (src) readmeEditorRef.current?.insertImage('', src)
+          // Was a hardcoded '' (AGL-1896). Same reasoning as the listing
+          // detail editor: no alt prompt exists on this surface, and a
+          // markdown-lite image row's alt is fixed at insert time — so the
+          // asset's own alt is the only description that could ever land
+          // here, and '' was otherwise permanent.
+          if (src)
+            readmeEditorRef.current?.insertImage(
+              inheritedMediaAlt({ assetAlt: (media as { alt?: string })?.alt }) ??
+                '',
+              src,
+            )
         }}
       />
     </Stack>

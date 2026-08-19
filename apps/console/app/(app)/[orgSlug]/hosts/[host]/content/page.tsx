@@ -1658,9 +1658,20 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           // entitlement, and an org without one still degrades to `url`.
           const src = Aglyn.mediaNodeSrc(media)
           if (src) {
-            const alt = String(
-              (media as any).alt ?? (media as any).fileName ?? '',
-            )
+            // The asset's alt, through the one shared rule (AGL-1896).
+            //
+            // The `?? fileName` fallback that used to sit here is GONE, and
+            // its removal is the point rather than a side effect. A file
+            // name is not a description: "IMG_4021.jpg" announced by a
+            // screen reader is worse than the silence it replaced, and this
+            // editor is one of the surfaces where an image row's alt is
+            // fixed at insert time and cannot be edited afterwards — so the
+            // fabricated value was the one hardest to get rid of later.
+            // An asset with no alt now inserts `![](src)`, which is the
+            // honest "nobody has described this yet".
+            const alt = Aglyn.inheritedMediaAlt({
+              assetAlt: (media as any).alt,
+            }) ?? ''
             if (pickerTarget === 'cover') {
               setEditor((prev) => (prev ? { ...prev, coverImage: src } : prev))
             } else if (bodyTab === 'visual') {

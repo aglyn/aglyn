@@ -110,6 +110,12 @@ export interface HostPopup {
   body?: string
   /** Media-library image URL shown above the copy. */
   imageUrl?: string
+  /**
+   * Alt text for {@link imageUrl} (AGL-1896). Defaults from the chosen DAM
+   * asset's own alt when the author picks through "Browse media"; empty
+   * still renders `alt=""`, which is correct for a decorative banner.
+   */
+  imageAlt?: string
   ctaLabel?: string
   ctaHref?: string
   /** Render an email-capture field posting into the forms pipeline. */

@@ -844,7 +844,12 @@ function PopupOverlay(props: {
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={popup.imageUrl}
-            alt=""
+            // AGL-1896. This was a hardcoded `alt=""` with no field behind
+            // it. Still empty when the author left it empty — a decorative
+            // banner beside its own headline is the case `alt=""` exists for
+            // — but it is now their choice rather than ours, and picking the
+            // image from the library fills it in from the asset.
+            alt={popup.imageAlt ?? ''}
             style={{
               width: '100%',
               maxHeight: 200,

@@ -196,10 +196,20 @@ describe('marketplace README writers (AGL-1705)', () => {
     'publish-plugin-form.component.tsx',
   )
 
+  /**
+   * The alt argument is no longer the literal `''` (AGL-1896) — it is the
+   * asset's own alt through `inheritedMediaAlt` — so these patterns pin the
+   * SECOND argument, which is what AGL-1705 was ever about: the README body
+   * takes a media REFERENCE, never `media.url`, whose folder move 404s it.
+   *
+   * Re-pinning `''` here would have made this guard assert the accessibility
+   * hole rather than the storage form, which is how a guard outlives the
+   * question it was written to answer.
+   */
   it('inserts a reference into the listing README body', () => {
     expect(listingCode).toMatch(/mediaNodeSrc\(media\)/)
-    expect(listingCode).toMatch(/insertImage\('',\s*src\)/)
-    expect(listingCode).not.toMatch(/insertImage\('',\s*url\)/)
+    expect(listingCode).toMatch(/insertImage\([\s\S]{0,120}?,\s*src,?\s*\)/)
+    expect(listingCode).not.toMatch(/insertImage\([^)]*,\s*url\s*\)/)
   })
 
   /**
@@ -217,8 +227,9 @@ describe('marketplace README writers (AGL-1705)', () => {
 
   it('inserts a reference into the publish form README', () => {
     expect(publishCode).toMatch(/mediaNodeSrc\(media/)
-    expect(publishCode).toMatch(/insertImage\('',\s*src\)/)
-    expect(publishCode).not.toMatch(/insertImage\('',\s*url\)/)
+    // Second argument only — see the listing case above (AGL-1896).
+    expect(publishCode).toMatch(/insertImage\([\s\S]{0,160}?,\s*src,?\s*\)/)
+    expect(publishCode).not.toMatch(/insertImage\([^)]*,\s*url\s*\)/)
   })
 
   /**

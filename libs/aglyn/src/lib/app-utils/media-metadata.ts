@@ -44,6 +44,62 @@ export function normalizeMediaTags(input: string | string[]): string[] {
   return tags
 }
 
+/**
+ * What a placement should store for `alt` once the asset's own alt text is
+ * taken into account (AGL-1896) — the DAM asset is the DEFAULT, the
+ * placement keeps the override.
+ *
+ * `AglynHostMedia.alt` has existed since AGL-173 and the library drawer has
+ * always been able to set it; what never existed is anybody READING it. Every
+ * placement surface asked the author to type alt again from scratch, so the
+ * same logo on eight pages needed its alt typed eight times and in practice
+ * shipped blank — on a customer's published site.
+ *
+ * ONE function, called at pick time by every surface, rather than a rule
+ * re-derived per surface. The three refusals are the whole contract:
+ *
+ * * **`decorative` wins outright.** It is the field AGL-1305 added to record
+ *   "screen readers should skip this", and `image.tsx` already forces
+ *   `alt=""` over any alt text when it is on. Inheriting into a node that has
+ *   declared itself decorative would put text on a node whose renderer
+ *   discards it — invisible, and misleading to the next author who opens the
+ *   panel.
+ * * **A non-blank placement alt wins.** That is the per-placement override,
+ *   and clobbering it is the one failure that would make this feature worse
+ *   than not having it: the author's sentence about THIS placement is better
+ *   than the asset's generic one by construction.
+ * * **A blank asset alt yields nothing.** Never a fabricated default. The
+ *   file name is not alt text ("IMG_4021.jpg" announced to a screen reader is
+ *   worse than silence), and nothing here has seen the image. Returning
+ *   `undefined` is what lets callers omit the key entirely rather than
+ *   writing `alt: ''`, which on a besigner node is itself an authored value.
+ *
+ * A blank placement alt DOES inherit, deliberately. Presets ship `alt: ''`
+ * (see `card.tsx`), so requiring an absent key would have skipped the single
+ * commonest authoring path — dropping a preset and pointing its image at a
+ * library asset — and left the issue open for the case it was filed about.
+ *
+ * @returns the alt to store, or `undefined` when the caller should write
+ * nothing at all.
+ */
+export function inheritedMediaAlt(options: {
+  /** The alt already on the placement — a node prop, a config field. */
+  placementAlt?: unknown
+  /** The placement's explicit "skip me" intent, when it has one. */
+  decorative?: unknown
+  /** The chosen DAM asset's stored alt text. */
+  assetAlt?: unknown
+}): string | undefined {
+  const { placementAlt, decorative, assetAlt } = options ?? {}
+  if (decorative === true) return undefined
+  if (typeof placementAlt === 'string' && placementAlt.trim()) return undefined
+  const inherited = typeof assetAlt === 'string' ? assetAlt.trim() : ''
+  if (!inherited) return undefined
+  // Capped at the same length the library drawer saves through, so an alt
+  // that reaches a placement is one the DAM would also have stored.
+  return inherited.slice(0, MEDIA_ALT_MAX_LENGTH)
+}
+
 export interface ImageDimensions {
   width: number
   height: number

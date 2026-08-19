@@ -239,7 +239,13 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
     },
     {
       name: 'alt',
-      description: 'Describes the image for screen readers and search engines.',
+      // AGL-1896: "Browse media" now fills this in from the asset's own alt
+      // text when it is empty, so the description says where the value came
+      // from — otherwise a field that populates itself reads as a bug.
+      description:
+        'Describes the image for screen readers and search engines. ' +
+        'Filled in from the media library when you pick a file that has ' +
+        'alt text; anything you type here wins for this placement only.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Alt text',
       // Hidden while Decorative is on — the renderer forces alt="" then,

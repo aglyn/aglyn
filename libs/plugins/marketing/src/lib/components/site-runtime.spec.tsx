@@ -365,4 +365,40 @@ describe('the popup image refuses the http: scheme (AGL-1725)', () => {
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
     expect(screen.getByRole('dialog').querySelector('img')).toBeNull()
   })
+
+  /**
+   * AGL-1896. This image rendered with a HARDCODED `alt=""` and there was no
+   * field anywhere that could have changed it — an author-chosen banner, on
+   * a paying customer's published site, invisible to a screen reader by
+   * construction. Not a default anyone chose; simply the only alt the markup
+   * could produce.
+   *
+   * Read through `getAttribute`, not `getByAltText`/`innerText`: the
+   * assertion is about the attribute that reaches the customer's HTML.
+   */
+  it('renders the popup image alt the author stored', async () => {
+    mountWithPopup({
+      ...popupWith('https://cdn.example/hero.png'),
+      imageAlt: 'Two people unpacking a delivery box',
+    })
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    const img = screen.getByRole('dialog').querySelector('img')
+    expect(img?.getAttribute('alt')).toBe(
+      'Two people unpacking a delivery box',
+    )
+  })
+
+  /**
+   * The unchanged half. An empty alt is the CORRECT markup for a genuinely
+   * decorative banner sitting beside its own headline, so a popup whose
+   * author stored none must keep emitting `alt=""` — present and empty, not
+   * missing, which is a different thing to a screen reader.
+   */
+  it('still emits an empty alt when the author stored none', async () => {
+    mountWithPopup(popupWith('https://cdn.example/hero.png'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    const img = screen.getByRole('dialog').querySelector('img')
+    expect(img?.hasAttribute('alt')).toBe(true)
+    expect(img?.getAttribute('alt')).toBe('')
+  })
 })
