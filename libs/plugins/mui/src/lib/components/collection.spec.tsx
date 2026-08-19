@@ -382,6 +382,23 @@ describe('Entry body block (AGL-551)', () => {
     expect(container.querySelectorAll('li')).toHaveLength(2)
   })
 
+  it('stamps heading ANCHORS, so an article can carry a contents aside (AGL-1162)', () => {
+    // The anchor work reached the Markdown element and stopped there, which
+    // made "On this page" beside a blog post impossible: the aside emits
+    // `#slug` links and the post had nothing for them to land on.
+    const { container } = render(
+      <CollectionEntryBody
+        markdown={'## The **fine** print\n\nbody\n\n### Notice\n\n### Notice'}
+      />,
+    )
+    expect(container.querySelector('h2')?.id).toBe('the-fine-print')
+    // Derived through the shared numbering, so two identical headings do NOT
+    // collide — a hand-rolled slugify per renderer is how they would.
+    expect(
+      [...container.querySelectorAll('h3')].map((node) => node.id),
+    ).toEqual(['notice', 'notice-2'])
+  })
+
   it('renders a `> ` line as a styled blockquote, not literal text (AGL-1315)', () => {
     const { container } = render(
       <CollectionEntryBody markdown={'Before.\n\n> Pull **this** quote.'} />,

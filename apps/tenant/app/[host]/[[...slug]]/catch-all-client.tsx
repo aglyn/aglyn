@@ -430,6 +430,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     const entryCover = Aglyn.resolveMediaSrc((entry as any)?.coverImage, {
       hostId: host?.$id,
     })
+    // Parsed once, so the heading anchors below are derived from the same
+    // block list they are stamped onto (AGL-1162). Plain consts, not
+    // `useMemo`: this branch sits after several early returns, so a hook here
+    // would be conditional.
+    const entryBodyBlocks = Aglyn.parseMarkdownLite(entry?.body ?? '')
+    const entryBodySlugs = Aglyn.markdownHeadingSlugs(entryBodyBlocks)
     return (
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px' }}>
         {entry ? (
@@ -444,7 +450,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                 style={{ maxWidth: '100%', borderRadius: 8 }}
               />
             ) : null}
-            {Aglyn.parseMarkdownLite(entry.body ?? '').map((block, index) => {
+            {entryBodyBlocks.map((block, index) => {
               const inline = (inlines: Aglyn.MarkdownInline[]) =>
                 inlines.map((item, i) =>
                   item.type === 'bold' ? (
@@ -460,10 +466,22 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   ),
                 )
               if (block.type === 'heading') {
+                // The same anchor ids the besigner-rendered entry body
+                // stamps (AGL-1162). This fallback renders the SAME post, so
+                // a `#slug` link that works on one and not the other would
+                // break exactly when a site falls back.
+                const id = entryBodySlugs[index]
+                const style = {
+                  scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+                }
                 return block.level === 2 ? (
-                  <h2 key={index}>{inline(block.inlines)}</h2>
+                  <h2 key={index} id={id} style={style}>
+                    {inline(block.inlines)}
+                  </h2>
                 ) : (
-                  <h3 key={index}>{inline(block.inlines)}</h3>
+                  <h3 key={index} id={id} style={style}>
+                    {inline(block.inlines)}
+                  </h3>
                 )
               }
               if (block.type === 'image') {

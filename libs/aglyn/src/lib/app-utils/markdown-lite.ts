@@ -524,6 +524,36 @@ export function collectMarkdownHeadings(
   return headings
 }
 
+/**
+ * The same headings keyed by block index, which is the shape every renderer
+ * actually wants (AGL-1162).
+ *
+ * A renderer maps over `blocks` and needs the slug for the block in hand;
+ * {@link collectMarkdownHeadings} returns a list, so each of them had to
+ * rebuild this map. There were six markdown renderers and one of them did —
+ * five published headings a table of contents could never link to, and the
+ * one that worked did it with a private `useMemo` nobody else could reach.
+ * Living here means a new renderer gets the numbering, the fallback and the
+ * duplicate-suffix rules for free rather than approximating them.
+ */
+export function markdownHeadingSlugs(
+  blocks: MarkdownBlock[],
+): Record<number, string> {
+  const map: Record<number, string> = {}
+  for (const heading of collectMarkdownHeadings(blocks)) {
+    map[heading.index] = heading.slug
+  }
+  return map
+}
+
+/**
+ * How far below a heading's anchor the viewport stops (AGL-1162) — enough to
+ * clear a sticky site header, so a `#slug` link does not land with the
+ * heading hidden underneath the nav. Shared so the published page, the entry
+ * body and the console preview all scroll to the same place.
+ */
+export const HEADING_ANCHOR_SCROLL_MARGIN = 96
+
 /** Newlines cannot exist inside an inline run — flatten them to a space. */
 const flattenInlineText = (text: string): string =>
   text.replace(/\s*\n+\s*/g, ' ')

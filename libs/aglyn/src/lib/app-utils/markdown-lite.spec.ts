@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   collectMarkdownHeadings,
   isInternalMarkdownHref,
   isSupportedImageSrc,
   isSupportedLinkHref,
+  markdownHeadingSlugs,
   markdownInlinesToText,
   parseMarkdownInlines,
   parseMarkdownLite,
@@ -814,5 +818,146 @@ describe('markdown-lite heading anchors (AGL-1162)', () => {
 
   it('finds nothing in a document with no headings', () => {
     expect(collectMarkdownHeadings(parseMarkdownLite('just prose'))).toEqual([])
+  })
+})
+
+describe('markdownHeadingSlugs', () => {
+  it('keys the slugs by the block index a renderer maps over', () => {
+    const blocks = parseMarkdownLite('intro\n\n## Top\n\nbody\n\n### Sub')
+    expect(markdownHeadingSlugs(blocks)).toEqual({ 1: 'top', 3: 'sub' })
+  })
+
+  it('carries the duplicate suffixes through, not just the first hit', () => {
+    // The reason this is shared rather than re-derived per renderer: a
+    // renderer that slugified `block.inlines` on its own would hand the same
+    // id to both, and the second link would silently jump to the first.
+    const blocks = parseMarkdownLite('## Notice\n\n## Notice')
+    expect(markdownHeadingSlugs(blocks)).toEqual({
+      0: 'notice',
+      1: 'notice-2',
+    })
+  })
+
+  it('leaves non-heading blocks out of the map entirely', () => {
+    expect(markdownHeadingSlugs(parseMarkdownLite('just prose'))).toEqual({})
+  })
+})
+
+/**
+ * Heading-anchor coverage across EVERY markdown-lite renderer (AGL-1162).
+ *
+ * The anchor work shipped to one renderer of six and was accepted as done.
+ * That is possible because the renderers share a parser and nothing else —
+ * there is no interface a new one has to satisfy, so a partial rollout looks
+ * identical to a complete one from inside any single file.
+ *
+ * So this enumerates the renderers FROM SOURCE rather than from a list
+ * somebody has to remember to extend: every tracked file that calls
+ * `parseMarkdownLite` and renders a heading block is a renderer, and each one
+ * must either derive its ids from `markdownHeadingSlugs` or appear below with
+ * a reason. A seventh renderer added tomorrow is red on the commit that adds
+ * it.
+ *
+ * `git ls-files` and not a directory walk: a filesystem walk sweeps build
+ * output, so the answer depends on whether the machine running it has built
+ * the docs (AGL-2116).
+ */
+describe('heading-anchor coverage across the markdown renderers (AGL-1162)', () => {
+  /**
+   * Renderers that deliberately stamp no anchors, each with the reason.
+   *
+   * Kept honest from both directions: a file here that starts anchoring fails
+   * this suite too, so an exemption cannot outlive the argument for it.
+   */
+  const NOT_ANCHORED: Record<string, string> = {
+    'libs/aglyn-markdown-editor/src/lib/markdown-visual-editor.component.tsx':
+      'an EDITING surface, not a document: its headings are contentEditable ' +
+      'rows keyed by an ephemeral row id, they re-render on every keystroke, ' +
+      'and it renders beside its own preview — two live copies of the same ' +
+      'document, so a shared anchor id would be duplicated in the DOM by ' +
+      'construction.',
+    'libs/plugins/marketplace/src/lib/components/listing-content.component.tsx':
+      'a listing README rendered as a TRUNCATED excerpt inside a console ' +
+      'card (LISTING_README_MAX_CHARS). No table of contents points at it ' +
+      'and no URL addresses its headings, while the console page around it ' +
+      'owns the document id space — minting ids from third-party README ' +
+      'text into it would collide with the console’s own.',
+  }
+
+  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    encoding: 'utf8',
+  }).trim()
+
+  const tracked = execFileSync(
+    'git',
+    ['ls-files', '--', 'apps/*.ts', 'apps/*.tsx', 'libs/*.ts', 'libs/*.tsx'],
+    { encoding: 'utf8', cwd: repoRoot, maxBuffer: 32 * 1024 * 1024 },
+  )
+    .split('\n')
+    .filter(Boolean)
+    .filter((file) => !/\.spec\.tsx?$/.test(file))
+
+  /** Renders a heading block — `case 'heading':` or `=== 'heading'`. */
+  const RENDERS_A_HEADING = /(?:case|===)\s*'heading'/
+  const CALLS_THE_PARSER = /parseMarkdownLite\(/
+  /** The module that DECLARES the parser is not one of its consumers. */
+  const DECLARES_THE_PARSER = /export function parseMarkdownLite\(/
+
+  const renderers = tracked
+    .map((file) => ({
+      file,
+      source: readFileSync(join(repoRoot, file), 'utf8'),
+    }))
+    .filter(
+      ({ source }) =>
+        CALLS_THE_PARSER.test(source) &&
+        RENDERS_A_HEADING.test(source) &&
+        !DECLARES_THE_PARSER.test(source),
+    )
+
+  it('finds the renderers at all — the enumeration is not vacuously empty', () => {
+    // An empty sweep would make every assertion below pass while checking
+    // nothing, which is the exact shape that let a one-of-six fix read as
+    // complete. Six is what the reopening counted; the floor is deliberately
+    // stated as a MINIMUM so adding a renderer does not fail this line
+    // instead of the coverage line that should catch it.
+    expect(renderers.length).toBeGreaterThanOrEqual(6)
+    // And the sweep must actually reach the two surfaces a published post is
+    // rendered by, or the coverage assertion is checking the wrong files.
+    const files = renderers.map((entry) => entry.file)
+    expect(files).toContain(
+      'libs/plugins/mui/src/lib/components/collection.tsx',
+    )
+    expect(files).toContain(
+      'apps/tenant/app/[host]/[[...slug]]/catch-all-client.tsx',
+    )
+  })
+
+  it('every renderer derives its ids from markdownHeadingSlugs', () => {
+    const unanchored = renderers
+      .filter(({ source }) => !source.includes('markdownHeadingSlugs'))
+      .map(({ file }) => file)
+      .filter((file) => !(file in NOT_ANCHORED))
+    expect(unanchored).toEqual([])
+  })
+
+  it('no exemption outlives its reason', () => {
+    // A declared exemption whose file now anchors is stale, and a stale
+    // exemption is how the NEXT partial rollout hides: it reads as a
+    // considered decision when it is just an entry nobody revisited.
+    const stale = Object.keys(NOT_ANCHORED).filter((file) => {
+      const entry = renderers.find((candidate) => candidate.file === file)
+      return entry?.source.includes('markdownHeadingSlugs')
+    })
+    expect(stale).toEqual([])
+  })
+
+  it('every exempt path is still a renderer that exists', () => {
+    // The other way an exemption rots: the file is renamed or deleted and the
+    // entry silently starts excusing nothing.
+    const files = new Set(renderers.map((entry) => entry.file))
+    expect(
+      Object.keys(NOT_ANCHORED).filter((file) => !files.has(file)),
+    ).toEqual([])
   })
 })

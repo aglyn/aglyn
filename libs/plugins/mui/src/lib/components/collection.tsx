@@ -460,6 +460,11 @@ const CollectionEntryBody = forwardRef<
     () => (unresolved ? [] : Aglyn.parseMarkdownLite(source)),
     [source, unresolved],
   )
+  // Heading anchors, on the same terms as the Markdown element (AGL-1162).
+  // Without them a blog article could not carry an "On this page" aside at
+  // all: the Table of Contents element emits `#slug` links, and there was
+  // nothing on this page for them to land on.
+  const slugs = useMemo(() => Aglyn.markdownHeadingSlugs(blocks), [blocks])
   if (unresolved) {
     // Editing surfaces get an affordance; the published site renders
     // nothing rather than a literal token.
@@ -488,12 +493,17 @@ const CollectionEntryBody = forwardRef<
     <Box ref={ref} {...rest}>
       {blocks.map((block, index) => {
         if (block.type === 'heading') {
-          return block.level === 2 ? (
-            <Typography key={index} variant="h4" component="h2" gutterBottom>
-              {renderInlines(block.inlines, suppressNavigation)}
-            </Typography>
-          ) : (
-            <Typography key={index} variant="h5" component="h3" gutterBottom>
+          return (
+            <Typography
+              key={index}
+              id={slugs[index]}
+              variant={block.level === 2 ? 'h4' : 'h5'}
+              component={block.level === 2 ? 'h2' : 'h3'}
+              gutterBottom
+              sx={{
+                scrollMarginTop: `${Aglyn.HEADING_ANCHOR_SCROLL_MARGIN}px`,
+              }}
+            >
               {renderInlines(block.inlines, suppressNavigation)}
             </Typography>
           )
