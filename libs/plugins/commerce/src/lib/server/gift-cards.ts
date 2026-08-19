@@ -17,7 +17,12 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { randomBytes } from 'crypto'
-import { firebaseAdmin, getOrgForHost, renderHostEmailWithTokens } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  meterHostEmail,
+  renderHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
@@ -155,7 +160,7 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
         'gift-card',
         { 'giftcard.code': code, 'giftcard.value': value },
       )
-      await sendEmail({
+      const sent = await sendEmail({
         to: recipientEmail,
         subject: designed?.subject ?? 'Your gift card',
         text:
@@ -165,8 +170,23 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
         ...(designed?.html ? { html: designed.html } : {}),
         fromName: Aglyn.resolveBrandingProfile(owner?.org as never).fromName,
         context: 'gift card',
-      }).catch(() => undefined)
-      emailed = true
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (sent) {
+        // Cost meter (AGL-1438). Transactional: the card has already been
+        // minted and the recipient is owed the code, so a quota may count
+        // this send but never refuse it. Metered on the SUCCESS path only,
+        // matching every other sender — a send the provider rejected costs
+        // nothing, and a meter that counted it would inflate the COGS figure
+        // exactly when mail was broken.
+        await meterHostEmail(hostId)
+      }
+      // The truth, not the intent: the console shows this back to whoever
+      // issued the card, and reporting a delivered email for a send that
+      // threw is how a customer ends up waiting for a code that is not
+      // coming.
+      emailed = sent
     }
 
     return res.status(200).json({ ok: true, code, emailed })
